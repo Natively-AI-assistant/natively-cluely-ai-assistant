@@ -1,4 +1,4 @@
-# Natively · 🚀 1000+ Downloads
+# Natively ·   1000+ Downloads
 
 
 Natively - The invisible desktop assistant that provides real-time insights, answers, and support during meetings, interviews, presentations, and professional conversations.
