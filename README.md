@@ -42,10 +42,17 @@ This demo shows **a complete live meeting scenario**:
 
 Download the latest prebuilt version from **[Releases](https://github.com/evinjohnn/natively-cluely-ai-assistant/releases)**.
 
-### [Windows (v1.1.2)](https://github.com/evinjohnn/natively-cluely-ai-assistant/releases/tag/v1.1.2)
-### [macOS (v1.1.1)](https://github.com/evinjohnn/natively-cluely-ai-assistant/releases/tag/v1.1.1)
+### [Windows (v1.1.3)](https://github.com/evinjohnn/natively-cluely-ai-assistant/releases/tag/v1.1.2)
+### [macOS (v1.1.3)](https://github.com/evinjohnn/natively-cluely-ai-assistant/releases/tag/v1.1.3)
 
 No build steps required.
+
+### What's New in v1.1.3
+- **Smarter AI Fallback:** The system now intelligently rotates through all configured providers (Gemini, OpenAI, Claude, Groq) to ensure you always get an answer.
+- **Improved Reliability:** Added a relentless retry mechanism with exponential backoff—if one provider fails, Natively automatically tries the next.
+- **Better Response Quality:** Optimized prompts and message formatting for OpenAI and Claude to ensure higher quality, more consistent responses.
+- **Multimodal Upgrades:** Enhanced handling for image-based queries with improved stability.
+- **Reduced Latency:** Optimized token streaming for faster real-time responses.
 
 ---
 
