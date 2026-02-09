@@ -227,12 +227,12 @@ npm run dist
 - Text-only in this implementation
 
 ### OpenAI
-- **GPT-4o** supported
+- **GPT-5.2** supported
 - Excellent reasoning and multimodal capabilities
 - Requires API key
 
 ### Anthropic Claude
-- **Sonnet 3.5** supported
+- **Sonnet 4.5** supported
 - Top-tier coding and reasoning
 - Requires API key
 
@@ -324,9 +324,9 @@ No raw audio, screenshots, or transcripts are stored or transmitted unless expli
 - **SQLite** (local storage)
 
 ### Supported Models
-- **Gemini 1.5** (Flash / Pro)
-- **OpenAI** (GPT-4o)
-- **Claude** (Sonnet 3.5)
+- **Gemini 3.0** (Flash / Pro)
+- **OpenAI** (GPT-5.2)
+- **Claude** (Sonnet 4.5)
 - **Ollama** (Llama, Mistral, CodeLlama)
 - **Groq** (Llama, Mixtral)
 
