@@ -2,7 +2,9 @@ import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell } from "ele
 import path from "path"
 import fs from "fs"
 import { autoUpdater } from "electron-updater"
-require('dotenv').config();
+if (!app.isPackaged) {
+  require('dotenv').config();
+}
 
 // Handle stdout/stderr errors at the process level to prevent EIO crashes
 // This is critical for Electron apps that may have their terminal detached
@@ -55,6 +57,7 @@ console.error = (...args: any[]) => {
 import { initializeIpcHandlers } from "./ipcHandlers"
 import { WindowHelper } from "./WindowHelper"
 import { SettingsWindowHelper } from "./SettingsWindowHelper"
+import { ModelSelectorWindowHelper } from "./ModelSelectorWindowHelper"
 import { ScreenshotHelper } from "./ScreenshotHelper"
 import { ShortcutsHelper } from "./shortcuts"
 import { ProcessingHelper } from "./ProcessingHelper"
@@ -75,6 +78,7 @@ export class AppState {
 
   private windowHelper: WindowHelper
   public settingsWindowHelper: SettingsWindowHelper
+  public modelSelectorWindowHelper: ModelSelectorWindowHelper
   private screenshotHelper: ScreenshotHelper
   public shortcutsHelper: ShortcutsHelper
   public processingHelper: ProcessingHelper
@@ -100,6 +104,7 @@ export class AppState {
 
   private hasDebugged: boolean = false
   private isMeetingActive: boolean = false; // Guard for session state leaks
+  private visibilityMode: 'normal' | 'stealth' = 'normal';
 
   // Processing events
   public readonly PROCESSING_EVENTS = {
@@ -123,6 +128,7 @@ export class AppState {
     // Initialize WindowHelper with this
     this.windowHelper = new WindowHelper(this)
     this.settingsWindowHelper = new SettingsWindowHelper()
+    this.modelSelectorWindowHelper = new ModelSelectorWindowHelper()
 
     // Initialize ScreenshotHelper
     this.screenshotHelper = new ScreenshotHelper(this.view)
@@ -132,6 +138,8 @@ export class AppState {
 
     // Initialize ShortcutsHelper
     this.shortcutsHelper = new ShortcutsHelper(this)
+
+
 
 
 
@@ -700,7 +708,30 @@ export class AppState {
     // 4. Reset Intelligence Context & Save
     await this.intelligenceManager.stopMeeting();
 
-    // 5. Process meeting for RAG (embeddings)
+    // 5. Revert to Default Model (One-Way Sync Revert)
+    // This ensures next meeting starts with default, not the temporary one used in this session
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      const defaultModel = cm.getDefaultModel();
+      // Re-fetch custom providers to ensure context correctness
+      const curlProviders = cm.getCurlProviders();
+      const legacyProviders = cm.getCustomProviders();
+      const all = [...(curlProviders || []), ...(legacyProviders || [])];
+
+      console.log(`[Main] Reverting model to default: ${defaultModel}`);
+      this.processingHelper.getLLMHelper().setModel(defaultModel, all);
+
+      // Broadcast revert to UI
+      BrowserWindow.getAllWindows().forEach(win => {
+        if (!win.isDestroyed()) win.webContents.send('model-changed', defaultModel);
+      });
+
+    } catch (e) {
+      console.error("[Main] Failed to revert model:", e);
+    }
+
+    // 6. Process meeting for RAG (embeddings)
     await this.processCompletedMeetingForRAG();
   }
 
@@ -731,7 +762,7 @@ export class AppState {
         ].join('. ');
       }
 
-      // Process meeting for RAG
+      // I will delay this implementation until I see the file contenteting for RAG
       const result = await this.ragManager.processMeeting(meeting.id, segments, summary);
       console.log(`[AppState] RAG processed meeting ${meeting.id}: ${result.chunkCount} chunks`);
 
@@ -1172,7 +1203,7 @@ export class AppState {
     this.windowHelper.setContentProtection(state)
     this.settingsWindowHelper.setContentProtection(state)
 
-    // Broadcast change to all relevant windows
+    // Broadcast state change to all relevant windows
     const mainWindow = this.windowHelper.getMainWindow();
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('undetectable-changed', state);
@@ -1189,61 +1220,8 @@ export class AppState {
       settingsWin.webContents.send('undetectable-changed', state);
     }
 
-    // --- STEALTH MODE LOGIC ---
-    // If True (Stealth Mode): Hide Dock, Hide Tray (or standard 'stealth' behavior)
-    // If False (Visible Mode): Show Dock, Show Tray
-
     if (process.platform === 'darwin') {
-      const activeWindow = this.windowHelper.getMainWindow();
-
-      // Determine the truly active window to restore focus to
-      // Priority: Settings > Main Window
-      const settingsWin = this.settingsWindowHelper.getSettingsWindow();
-      let targetFocusWindow = activeWindow;
-
-      if (settingsWin && !settingsWin.isDestroyed() && settingsWin.isVisible()) {
-        targetFocusWindow = settingsWin;
-      }
-
-      // Temporarily ignore blur to prevent settings from closing during dock hide/show
-      if (targetFocusWindow && (targetFocusWindow === settingsWin)) {
-        this.settingsWindowHelper.setIgnoreBlur(true);
-      }
-
-      if (state) {
-        app.dock.hide();
-        this.hideTray(); // User said: "Tray Hidden in 'stealth'"
-
-        // Apply the selected disguise when entering undetectable mode
-        this._applyDisguise(this.disguiseMode);
-
-        // Critical Fix: Force focus back to the active window to prevent it from being backgrounded
-        // When Dock icon is hidden, macOS treats app as "accessory", potentially losing focus
-        if (targetFocusWindow && !targetFocusWindow.isDestroyed() && targetFocusWindow.isVisible()) {
-          // Attempt immediate focus to prevent background flash
-          targetFocusWindow.show();
-          targetFocusWindow.focus();
-        }
-      } else {
-        app.dock.show();
-        this.showTray();
-
-        // Revert to "Natively" appearance when exiting undetectable mode
-        // But do NOT reset this.disguiseMode so it's remembered for next time
-        this._applyDisguise('none');
-
-        // Restore focus when coming back to foreground/dock mode
-        if (targetFocusWindow && !targetFocusWindow.isDestroyed() && targetFocusWindow.isVisible()) {
-          targetFocusWindow.focus();
-        }
-      }
-
-      // Re-enable blur handling after the transition logic has settled
-      if (targetFocusWindow && (targetFocusWindow === settingsWin)) {
-        setTimeout(() => {
-          this.settingsWindowHelper.setIgnoreBlur(false);
-        }, 500);
-      }
+      this.applyVisibilityMode(state ? 'stealth' : 'normal');
     }
   }
 
@@ -1313,7 +1291,10 @@ export class AppState {
       const image = nativeImage.createFromPath(iconPath);
 
       if (process.platform === 'darwin') {
-        app.dock.setIcon(image);
+        // Only set dock icon if NOT in stealth/accessory mode
+        if (!this.isUndetectable) {
+          app.dock.setIcon(image);
+        }
       } else {
         // Windows/Linux: Update all window icons
         this.windowHelper.getLauncherWindow()?.setIcon(image);
@@ -1359,6 +1340,36 @@ export class AppState {
   public getDisguise(): string {
     return this.disguiseMode;
   }
+
+  private applyVisibilityMode(mode: 'normal' | 'stealth') {
+    if (process.platform !== 'darwin') return;
+
+    if (mode === 'stealth') {
+      app.setActivationPolicy('accessory');
+
+      // Microtask delay to allow macOS to process policy change
+      setTimeout(() => {
+        const win = this.getMainWindow();
+        if (win && !win.isDestroyed()) {
+          // Explicitly active the app and focus the window
+          // This prevents the window from losing focus when dock icon disappears
+          app.focus({ steal: true });
+          win.focus();
+        }
+      }, 10);
+
+    } else {
+      app.setActivationPolicy('regular');
+      // No delay needed for regular mode, but good practice to ensure focus
+      const win = this.getMainWindow();
+      if (win && !win.isDestroyed()) {
+        win.show();
+        win.focus();
+      }
+    }
+
+    this.visibilityMode = mode;
+  }
 }
 
 // Application initialization
@@ -1366,6 +1377,12 @@ export class AppState {
 // Canonical Dock Icon Setup (dev + prod safe) - MUST be called before any window is created
 function setMacDockIcon() {
   if (process.platform !== "darwin") return;
+
+  const appState = AppState.getInstance();
+  if (appState && appState.getUndetectable()) {
+    console.log("[DockIcon] Skipping dock icon setup due to stealth mode");
+    return;
+  }
 
   const iconPath = app.isPackaged
     ? path.join(process.resourcesPath, "natively.icns")
@@ -1421,19 +1438,21 @@ async function initializeApp() {
 
     appState.createWindow()
 
+    appState.createWindow()
+
     // Apply initial stealth state based on isUndetectable setting
-    // Default isUndetectable = false, so dock is visible and tray is shown
-    if (appState.getUndetectable()) {
-      // Stealth mode: hide dock and tray
-      if (process.platform === 'darwin') {
-        app.dock.hide();
+    if (process.platform === 'darwin') {
+      if (appState.getUndetectable()) {
+        app.setActivationPolicy('accessory');
+      } else {
+        app.setActivationPolicy('regular');
       }
-      // Tray is hidden by default when in stealth
     } else {
-      // Normal mode: show dock and tray
-      appState.showTray();
-      if (process.platform === 'darwin') {
-        app.dock.show();
+      // Non-macOS explicit handling if needed (mostly handled via window skipTaskbar)
+      if (appState.getUndetectable()) {
+        // ...
+      } else {
+        appState.showTray();
       }
     }
     // Register global shortcuts using ShortcutsHelper
@@ -1479,11 +1498,6 @@ async function initializeApp() {
   app.on("activate", () => {
     console.log("App activated")
     console.log("App activated")
-    if (process.platform === 'darwin') {
-      if (!appState.getUndetectable()) {
-        app.dock.show();
-      }
-    }
     if (appState.getMainWindow() === null) {
       appState.createWindow()
     }

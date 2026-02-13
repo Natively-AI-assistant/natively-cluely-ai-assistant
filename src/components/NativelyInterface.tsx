@@ -30,7 +30,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { dracula } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { ModelSelector } from './ui/ModelSelector';
+// import { ModelSelector } from './ui/ModelSelector'; // REMOVED
 import TopPill from './ui/TopPill';
 import RollingTranscript from './ui/RollingTranscript';
 import ReactMarkdown from 'react-markdown';
@@ -108,23 +108,36 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting }) =
     const [currentModel, setCurrentModel] = useState<string>('gemini-3-flash-preview');
 
     useEffect(() => {
-        // Fetch initial model
+        // Load the persisted default model (not the runtime model)
+        // Each new meeting starts with the default from settings
         if (window.electronAPI?.invoke) {
-            window.electronAPI.invoke('get-current-llm-config')
-                .then((config: any) => {
-                    if (config && config.model) {
-                        setCurrentModel(config.model);
+            window.electronAPI.invoke('get-default-model')
+                .then((result: any) => {
+                    if (result && result.model) {
+                        setCurrentModel(result.model);
+                        // Also set the runtime model to the default
+                        window.electronAPI.invoke('set-model', result.model).catch(() => { });
                     }
                 })
-                .catch((err: any) => console.error("Failed to fetch model config:", err));
+                .catch((err: any) => console.error("Failed to fetch default model:", err));
         }
     }, []);
 
     const handleModelSelect = (modelId: string) => {
         setCurrentModel(modelId);
+        // Session-only: update runtime but don't persist as default
         window.electronAPI.invoke('set-model', modelId)
             .catch((err: any) => console.error("Failed to set model:", err));
     };
+
+    // Listen for default model changes from Settings
+    useEffect(() => {
+        if (!window.electronAPI?.onModelChanged) return;
+        const unsubscribe = window.electronAPI.onModelChanged((modelId: string) => {
+            setCurrentModel(prev => prev === modelId ? prev : modelId);
+        });
+        return () => unsubscribe();
+    }, []);
 
     // Global State Sync
     useEffect(() => {
@@ -1471,10 +1484,41 @@ Provide only the answer, nothing else.`;
                                 {/* Bottom Row */}
                                 <div className="flex items-center justify-between mt-3 px-0.5">
                                     <div className="flex items-center gap-1.5">
-                                        <ModelSelector
-                                            currentModel={currentModel}
-                                            onSelectModel={handleModelSelect}
-                                        />
+                                        <button
+                                            onClick={(e) => {
+                                                // Calculate position for detached window
+                                                if (!contentRef.current) return;
+                                                const contentRect = contentRef.current.getBoundingClientRect();
+                                                const buttonRect = e.currentTarget.getBoundingClientRect();
+                                                const GAP = 8;
+
+                                                const x = window.screenX + buttonRect.left;
+                                                const y = window.screenY + contentRect.bottom + GAP;
+
+                                                window.electronAPI.invoke('toggle-model-selector', { x, y });
+                                            }}
+                                            className={`
+                                                flex items-center gap-2 px-3 py-1.5 
+                                                border border-white/10 rounded-lg transition-colors 
+                                                text-xs font-medium w-[140px]
+                                                interaction-base interaction-press
+                                                bg-black/20 text-white/70 hover:bg-white/5 hover:text-white
+                                            `}
+                                        >
+                                            <span className="truncate min-w-0 flex-1">
+                                                {(() => {
+                                                    const m = currentModel;
+                                                    if (m.startsWith('ollama-')) return m.replace('ollama-', '');
+                                                    if (m === 'gemini-3-flash-preview') return 'Gemini 3 Flash';
+                                                    if (m === 'gemini-3-pro-preview') return 'Gemini 3 Pro';
+                                                    if (m === 'llama-3.3-70b-versatile') return 'Groq Llama 3.3';
+                                                    if (m === 'gpt-5.2-chat-latest') return 'GPT 5.2';
+                                                    if (m === 'claude-sonnet-4-5') return 'Sonnet 4.5';
+                                                    return m;
+                                                })()}
+                                            </span>
+                                            <ChevronDown size={14} className="shrink-0 transition-transform" />
+                                        </button>
 
                                         <div className="w-px h-3 bg-white/10 mx-1" />
 

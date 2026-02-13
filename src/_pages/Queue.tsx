@@ -158,17 +158,34 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
     }
   }
 
-  // Load current model configuration on mount
+  // Load persisted default model on mount (each session starts with the default)
   useEffect(() => {
-    const loadCurrentModel = async () => {
+    const loadDefaultModel = async () => {
       try {
-        const config = await window.electronAPI.getCurrentLlmConfig();
-        if (config && config.model) setCurrentModel(config.model);
+        // @ts-ignore
+        const result = await window.electronAPI.invoke('get-default-model');
+        if (result && result.model) {
+          setCurrentModel(result.model);
+          // Set runtime model to the default
+          // @ts-ignore
+          window.electronAPI.invoke('set-model', result.model).catch(() => { });
+        }
       } catch (error) {
-        console.error('Error loading current model config:', error);
+        console.error('Error loading default model:', error);
       }
     };
-    loadCurrentModel();
+    loadDefaultModel();
+  }, []);
+
+  // Listen for default model changes from Settings
+  useEffect(() => {
+    // @ts-ignore
+    if (!window.electronAPI?.onModelChanged) return;
+    // @ts-ignore
+    const unsubscribe = window.electronAPI.onModelChanged((modelId: string) => {
+      setCurrentModel(prev => prev === modelId ? prev : modelId);
+    });
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {

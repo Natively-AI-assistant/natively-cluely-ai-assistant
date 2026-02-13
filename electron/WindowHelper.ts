@@ -348,12 +348,7 @@ export class WindowHelper {
       this.launcherWindow.show();
       this.launcherWindow.focus();
       this.isWindowVisible = true;
-      if (process.platform === 'darwin') {
-        // Only show dock if NOT in stealth mode
-        if (!this.appState.getUndetectable()) {
-          app.dock.show();
-        }
-      }
+
     }
 
     // Hide Overlay SECOND

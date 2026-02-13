@@ -15,6 +15,13 @@ export interface CustomProvider {
     curlCommand: string;
 }
 
+export interface CurlProvider {
+    id: string;
+    name: string;
+    curlCommand: string;
+    responsePath: string; // e.g. "choices[0].message.content"
+}
+
 export interface StoredCredentials {
     geminiApiKey?: string;
     groqApiKey?: string;
@@ -22,6 +29,8 @@ export interface StoredCredentials {
     claudeApiKey?: string;
     googleServiceAccountPath?: string;
     customProviders?: CustomProvider[];
+    curlProviders?: CurlProvider[];
+    defaultModel?: string;
     // STT Provider settings
     sttProvider?: 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson';
     groqSttApiKey?: string;
@@ -127,6 +136,10 @@ export class CredentialsManager {
         return this.credentials.ibmWatsonRegion || 'us-south';
     }
 
+    public getDefaultModel(): string {
+        return this.credentials.defaultModel || 'gemini-3-flash-preview';
+    }
+
     public getAllCredentials(): StoredCredentials {
         return { ...this.credentials };
     }
@@ -225,6 +238,12 @@ export class CredentialsManager {
         console.log(`[CredentialsManager] IBM Watson Region set to: ${region}`);
     }
 
+    public setDefaultModel(model: string): void {
+        this.credentials.defaultModel = model;
+        this.saveCredentials();
+        console.log(`[CredentialsManager] Default Model set to: ${model}`);
+    }
+
     public saveCustomProvider(provider: CustomProvider): void {
         if (!this.credentials.customProviders) {
             this.credentials.customProviders = [];
@@ -245,6 +264,31 @@ export class CredentialsManager {
         this.credentials.customProviders = this.credentials.customProviders.filter(p => p.id !== id);
         this.saveCredentials();
         console.log(`[CredentialsManager] Custom Provider '${id}' deleted`);
+    }
+
+    public getCurlProviders(): CurlProvider[] {
+        return this.credentials.curlProviders || [];
+    }
+
+    public saveCurlProvider(provider: CurlProvider): void {
+        if (!this.credentials.curlProviders) {
+            this.credentials.curlProviders = [];
+        }
+        const index = this.credentials.curlProviders.findIndex(p => p.id === provider.id);
+        if (index !== -1) {
+            this.credentials.curlProviders[index] = provider;
+        } else {
+            this.credentials.curlProviders.push(provider);
+        }
+        this.saveCredentials();
+        console.log(`[CredentialsManager] Curl Provider '${provider.name}' saved`);
+    }
+
+    public deleteCurlProvider(id: string): void {
+        if (!this.credentials.curlProviders) return;
+        this.credentials.curlProviders = this.credentials.curlProviders.filter(p => p.id !== id);
+        this.saveCredentials();
+        console.log(`[CredentialsManager] Curl Provider '${id}' deleted`);
     }
 
     public clearAll(): void {

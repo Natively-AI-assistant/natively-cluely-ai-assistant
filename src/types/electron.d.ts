@@ -111,6 +111,7 @@ export interface ElectronAPI {
   on: (channel: string, callback: (...args: any[]) => void) => () => void;
 
   onUndetectableChanged: (callback: (state: boolean) => void) => () => void;
+  onModelChanged: (callback: (modelId: string) => void) => () => void;
 
   onMeetingsUpdated: (callback: () => void) => () => void
 

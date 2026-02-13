@@ -3,9 +3,12 @@
 import { AppState } from "./main"
 import { LLMHelper } from "./LLMHelper"
 import { CredentialsManager } from "./services/CredentialsManager"
-import dotenv from "dotenv"
+import { app } from "electron"
+// import dotenv from "dotenv" // Removed static import
 
-dotenv.config()
+if (!app.isPackaged) {
+  require("dotenv").config()
+}
 
 const isDev = process.env.NODE_ENV === "development"
 const isDevTest = process.env.IS_DEV_TEST === "true"
@@ -97,6 +100,16 @@ export class ProcessingHelper {
 
       // CRITICAL: Cleanup stale queue items to prevent "Chunk not found" errors
       ragManager.cleanupStaleQueueItems();
+    }
+
+    // NEW: Load Default Model Config
+    const defaultModel = credManager.getDefaultModel();
+    if (defaultModel) {
+      console.log(`[ProcessingHelper] Loading stored Default Model: ${defaultModel}`);
+      const customProviders = credManager.getCustomProviders();
+      const curlProviders = credManager.getCurlProviders();
+      const allProviders = [...(customProviders || []), ...(curlProviders || [])];
+      this.llmHelper.setModel(defaultModel, allProviders);
     }
   }
 

@@ -11,10 +11,15 @@ import { AudioDevices } from "./audio/AudioDevices";
 import { ENGLISH_VARIANTS } from "./config/languages"
 
 export function initializeIpcHandlers(appState: AppState): void {
-  ipcMain.handle("get-recognition-languages", async () => {
+  const safeHandle = (channel: string, listener: (event: any, ...args: any[]) => Promise<any> | any) => {
+    ipcMain.removeHandler(channel);
+    ipcMain.handle(channel, listener);
+  };
+
+  safeHandle("get-recognition-languages", async () => {
     return ENGLISH_VARIANTS;
   });
-  ipcMain.handle(
+  safeHandle(
     "update-content-dimensions",
     async (event, { width, height }: { width: number; height: number }) => {
       if (!width || !height) return
@@ -35,16 +40,16 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   )
 
-  ipcMain.handle("set-window-mode", async (event, mode: 'launcher' | 'overlay') => {
+  safeHandle("set-window-mode", async (event, mode: 'launcher' | 'overlay') => {
     appState.getWindowHelper().setWindowMode(mode);
     return { success: true };
   })
 
-  ipcMain.handle("delete-screenshot", async (event, path: string) => {
+  safeHandle("delete-screenshot", async (event, path: string) => {
     return appState.deleteScreenshot(path)
   })
 
-  ipcMain.handle("take-screenshot", async () => {
+  safeHandle("take-screenshot", async () => {
     try {
       const screenshotPath = await appState.takeScreenshot()
       const preview = await appState.getImagePreview(screenshotPath)
@@ -55,7 +60,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   })
 
-  ipcMain.handle("get-screenshots", async () => {
+  safeHandle("get-screenshots", async () => {
     // console.log({ view: appState.getView() })
     try {
       let previews = []
@@ -82,20 +87,20 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   })
 
-  ipcMain.handle("toggle-window", async () => {
+  safeHandle("toggle-window", async () => {
     appState.toggleMainWindow()
   })
 
-  ipcMain.handle("show-window", async () => {
+  safeHandle("show-window", async () => {
     // Default show main window (Launcher usually)
     appState.showMainWindow()
   })
 
-  ipcMain.handle("hide-window", async () => {
+  safeHandle("hide-window", async () => {
     appState.hideMainWindow()
   })
 
-  ipcMain.handle("reset-queues", async () => {
+  safeHandle("reset-queues", async () => {
     try {
       appState.clearQueues()
       // console.log("Screenshot queues have been cleared.")
@@ -109,7 +114,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
 
   // Generate suggestion from transcript - Natively-style text-only reasoning
-  ipcMain.handle("generate-suggestion", async (event, context: string, lastQuestion: string) => {
+  safeHandle("generate-suggestion", async (event, context: string, lastQuestion: string) => {
     try {
       const suggestion = await appState.processingHelper.getLLMHelper().generateSuggestion(context, lastQuestion)
       return { suggestion }
@@ -120,7 +125,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   })
 
   // IPC handler for analyzing image from file path
-  ipcMain.handle("analyze-image-file", async (event, path: string) => {
+  safeHandle("analyze-image-file", async (event, path: string) => {
     try {
       const result = await appState.processingHelper.getLLMHelper().analyzeImageFile(path)
       return result
@@ -130,7 +135,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   })
 
-  ipcMain.handle("gemini-chat", async (event, message: string, imagePath?: string, context?: string, options?: { skipSystemPrompt?: boolean }) => {
+  safeHandle("gemini-chat", async (event, message: string, imagePath?: string, context?: string, options?: { skipSystemPrompt?: boolean }) => {
     try {
       const result = await appState.processingHelper.getLLMHelper().chatWithGemini(message, imagePath, context, options?.skipSystemPrompt);
 
@@ -171,7 +176,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Streaming IPC Handler
-  ipcMain.handle("gemini-chat-stream", async (event, message: string, imagePath?: string, context?: string, options?: { skipSystemPrompt?: boolean }) => {
+  safeHandle("gemini-chat-stream", async (event, message: string, imagePath?: string, context?: string, options?: { skipSystemPrompt?: boolean }) => {
     try {
       console.log("[IPC] gemini-chat-stream started using LLMHelper.streamChat");
       const llmHelper = appState.processingHelper.getLLMHelper();
@@ -233,74 +238,74 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("quit-app", () => {
+  safeHandle("quit-app", () => {
     app.quit()
   })
 
-  ipcMain.handle("quit-and-install-update", () => {
+  safeHandle("quit-and-install-update", () => {
     console.log('[IPC] quit-and-install-update handler called')
     appState.quitAndInstallUpdate()
   })
 
-  ipcMain.handle("delete-meeting", async (_, id: string) => {
+  safeHandle("delete-meeting", async (_, id: string) => {
     return DatabaseManager.getInstance().deleteMeeting(id);
   });
 
-  ipcMain.handle("check-for-updates", async () => {
+  safeHandle("check-for-updates", async () => {
     await appState.checkForUpdates()
   })
 
-  ipcMain.handle("download-update", async () => {
+  safeHandle("download-update", async () => {
     appState.downloadUpdate()
   })
 
   // Window movement handlers
-  ipcMain.handle("move-window-left", async () => {
+  safeHandle("move-window-left", async () => {
     appState.moveWindowLeft()
   })
 
-  ipcMain.handle("move-window-right", async () => {
+  safeHandle("move-window-right", async () => {
     appState.moveWindowRight()
   })
 
-  ipcMain.handle("move-window-up", async () => {
+  safeHandle("move-window-up", async () => {
     appState.moveWindowUp()
   })
 
-  ipcMain.handle("move-window-down", async () => {
+  safeHandle("move-window-down", async () => {
     appState.moveWindowDown()
   })
 
-  ipcMain.handle("center-and-show-window", async () => {
+  safeHandle("center-and-show-window", async () => {
     appState.centerAndShowWindow()
   })
 
   // Settings Window
-  ipcMain.handle("toggle-settings-window", (event, { x, y } = {}) => {
+  safeHandle("toggle-settings-window", (event, { x, y } = {}) => {
     appState.settingsWindowHelper.toggleWindow(x, y)
   })
 
-  ipcMain.handle("close-settings-window", () => {
+  safeHandle("close-settings-window", () => {
     appState.settingsWindowHelper.closeWindow()
   })
 
 
 
-  ipcMain.handle("set-undetectable", async (_, state: boolean) => {
+  safeHandle("set-undetectable", async (_, state: boolean) => {
     appState.setUndetectable(state)
     return { success: true }
   })
 
-  ipcMain.handle("set-disguise", async (_, mode: 'terminal' | 'settings' | 'activity' | 'none') => {
+  safeHandle("set-disguise", async (_, mode: 'terminal' | 'settings' | 'activity' | 'none') => {
     appState.setDisguise(mode)
     return { success: true }
   })
 
-  ipcMain.handle("get-undetectable", async () => {
+  safeHandle("get-undetectable", async () => {
     return appState.getUndetectable()
   })
 
-  ipcMain.handle("set-open-at-login", async (_, openAtLogin: boolean) => {
+  safeHandle("set-open-at-login", async (_, openAtLogin: boolean) => {
     app.setLoginItemSettings({
       openAtLogin,
       openAsHidden: false,
@@ -309,13 +314,13 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
-  ipcMain.handle("get-open-at-login", async () => {
+  safeHandle("get-open-at-login", async () => {
     const settings = app.getLoginItemSettings();
     return settings.openAtLogin;
   });
 
   // LLM Model Management Handlers
-  ipcMain.handle("get-current-llm-config", async () => {
+  safeHandle("get-current-llm-config", async () => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
       return {
@@ -329,7 +334,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("get-available-ollama-models", async () => {
+  safeHandle("get-available-ollama-models", async () => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
       const models = await llmHelper.getOllamaModels();
@@ -340,7 +345,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("switch-to-ollama", async (_, model?: string, url?: string) => {
+  safeHandle("switch-to-ollama", async (_, model?: string, url?: string) => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
       await llmHelper.switchToOllama(model, url);
@@ -351,7 +356,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("force-restart-ollama", async () => {
+  safeHandle("force-restart-ollama", async () => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
       const success = await llmHelper.forceRestartOllama();
@@ -361,7 +366,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("switch-to-gemini", async (_, apiKey?: string, modelId?: string) => {
+  safeHandle("switch-to-gemini", async (_, apiKey?: string, modelId?: string) => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
       await llmHelper.switchToGemini(apiKey, modelId);
@@ -380,7 +385,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Dedicated API key setters (for Settings UI Save buttons)
-  ipcMain.handle("set-gemini-api-key", async (_, apiKey: string) => {
+  safeHandle("set-gemini-api-key", async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setGeminiApiKey(apiKey);
@@ -399,7 +404,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("set-groq-api-key", async (_, apiKey: string) => {
+  safeHandle("set-groq-api-key", async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setGroqApiKey(apiKey);
@@ -418,7 +423,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("set-openai-api-key", async (_, apiKey: string) => {
+  safeHandle("set-openai-api-key", async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setOpenaiApiKey(apiKey);
@@ -437,7 +442,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("set-claude-api-key", async (_, apiKey: string) => {
+  safeHandle("set-claude-api-key", async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setClaudeApiKey(apiKey);
@@ -457,20 +462,26 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Custom Provider Handlers
-  ipcMain.handle("get-custom-providers", async () => {
+  safeHandle("get-custom-providers", async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
-      return CredentialsManager.getInstance().getCustomProviders();
+      const cm = CredentialsManager.getInstance();
+      // Merge new Curl Providers with legacy Custom Providers
+      // New ones take precedence if IDs conflict (though unlikely as UUIDs)
+      const curlProviders = cm.getCurlProviders();
+      const legacyProviders = cm.getCustomProviders() || [];
+      return [...curlProviders, ...legacyProviders];
     } catch (error: any) {
       console.error("Error getting custom providers:", error);
       return [];
     }
   });
 
-  ipcMain.handle("save-custom-provider", async (_, provider: any) => {
+  safeHandle("save-custom-provider", async (_, provider: any) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().saveCustomProvider(provider);
+      // Save as CurlProvider (supports responsePath)
+      CredentialsManager.getInstance().saveCurlProvider(provider);
       return { success: true };
     } catch (error: any) {
       console.error("Error saving custom provider:", error);
@@ -478,9 +489,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("delete-custom-provider", async (_, id: string) => {
+  safeHandle("delete-custom-provider", async (_, id: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
+      // Try deleting from both storages to be safe
+      CredentialsManager.getInstance().deleteCurlProvider(id);
       CredentialsManager.getInstance().deleteCustomProvider(id);
       return { success: true };
     } catch (error: any) {
@@ -489,7 +502,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("switch-to-custom-provider", async (_, providerId: string) => {
+  safeHandle("switch-to-custom-provider", async (_, providerId: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const provider = CredentialsManager.getInstance().getCustomProviders().find((p: any) => p.id === providerId);
@@ -511,28 +524,85 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // cURL Provider Handlers
+  safeHandle("get-curl-providers", async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      return CredentialsManager.getInstance().getCurlProviders();
+    } catch (error: any) {
+      console.error("Error getting curl providers:", error);
+      return [];
+    }
+  });
+
+  safeHandle("save-curl-provider", async (_, provider: any) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      CredentialsManager.getInstance().saveCurlProvider(provider);
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error saving curl provider:", error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle("delete-curl-provider", async (_, id: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      CredentialsManager.getInstance().deleteCurlProvider(id);
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error deleting curl provider:", error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle("switch-to-curl-provider", async (_, providerId: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const provider = CredentialsManager.getInstance().getCurlProviders().find((p: any) => p.id === providerId);
+
+      if (!provider) {
+        throw new Error("Provider not found");
+      }
+
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      await llmHelper.switchToCurl(provider);
+
+      // Re-init IntelligenceManager (optional, but good for consistency)
+      appState.getIntelligenceManager().initializeLLMs();
+
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error switching to curl provider:", error);
+      return { success: false, error: error.message };
+    }
+  });
+
   // Get stored API keys (masked for UI display)
-  ipcMain.handle("get-stored-credentials", async () => {
+  safeHandle("get-stored-credentials", async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const creds = CredentialsManager.getInstance().getAllCredentials();
 
       // Return masked versions for security (just indicate if set)
+      const hasKey = (key?: string) => !!(key && key.trim().length > 0);
+
       return {
-        hasGeminiKey: !!creds.geminiApiKey,
-        hasGroqKey: !!creds.groqApiKey,
-        hasOpenaiKey: !!creds.openaiApiKey,
-        hasClaudeKey: !!creds.claudeApiKey,
+        hasGeminiKey: hasKey(creds.geminiApiKey),
+        hasGroqKey: hasKey(creds.groqApiKey),
+        hasOpenaiKey: hasKey(creds.openaiApiKey),
+        hasClaudeKey: hasKey(creds.claudeApiKey),
         googleServiceAccountPath: creds.googleServiceAccountPath || null,
         sttProvider: creds.sttProvider || 'google',
         groqSttModel: creds.groqSttModel || 'whisper-large-v3-turbo',
-        hasSttGroqKey: !!creds.groqSttApiKey,
-        hasSttOpenaiKey: !!creds.openAiSttApiKey,
-        hasDeepgramKey: !!creds.deepgramApiKey,
-        hasElevenLabsKey: !!creds.elevenLabsApiKey,
-        hasAzureKey: !!creds.azureApiKey,
+        hasSttGroqKey: hasKey(creds.groqSttApiKey),
+        hasSttOpenaiKey: hasKey(creds.openAiSttApiKey),
+        hasDeepgramKey: hasKey(creds.deepgramApiKey),
+        hasElevenLabsKey: hasKey(creds.elevenLabsApiKey),
+        hasAzureKey: hasKey(creds.azureApiKey),
         azureRegion: creds.azureRegion || 'eastus',
-        hasIbmWatsonKey: !!creds.ibmWatsonApiKey,
+        hasIbmWatsonKey: hasKey(creds.ibmWatsonApiKey),
         ibmWatsonRegion: creds.ibmWatsonRegion || 'us-south',
       };
     } catch (error: any) {
@@ -544,7 +614,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // STT Provider Management Handlers
   // ==========================================
 
-  ipcMain.handle("set-stt-provider", async (_, provider: 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson') => {
+  safeHandle("set-stt-provider", async (_, provider: 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson') => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setSttProvider(provider);
@@ -559,7 +629,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("get-stt-provider", async () => {
+  safeHandle("get-stt-provider", async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       return CredentialsManager.getInstance().getSttProvider();
@@ -568,7 +638,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("set-groq-stt-api-key", async (_, apiKey: string) => {
+  safeHandle("set-groq-stt-api-key", async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setGroqSttApiKey(apiKey);
@@ -579,7 +649,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("set-openai-stt-api-key", async (_, apiKey: string) => {
+  safeHandle("set-openai-stt-api-key", async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setOpenAiSttApiKey(apiKey);
@@ -590,7 +660,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("set-deepgram-api-key", async (_, apiKey: string) => {
+  safeHandle("set-deepgram-api-key", async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setDeepgramApiKey(apiKey);
@@ -601,7 +671,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("set-groq-stt-model", async (_, model: string) => {
+  safeHandle("set-groq-stt-model", async (_, model: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setGroqSttModel(model);
@@ -616,7 +686,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("set-elevenlabs-api-key", async (_, apiKey: string) => {
+  safeHandle("set-elevenlabs-api-key", async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setElevenLabsApiKey(apiKey);
@@ -627,7 +697,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("set-azure-api-key", async (_, apiKey: string) => {
+  safeHandle("set-azure-api-key", async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setAzureApiKey(apiKey);
@@ -638,7 +708,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("set-azure-region", async (_, region: string) => {
+  safeHandle("set-azure-region", async (_, region: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setAzureRegion(region);
@@ -653,7 +723,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("set-ibmwatson-api-key", async (_, apiKey: string) => {
+  safeHandle("set-ibmwatson-api-key", async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setIbmWatsonApiKey(apiKey);
@@ -664,7 +734,14 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("test-stt-connection", async (_, provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson', apiKey: string, region?: string) => {
+  // Helper to sanitize error messages (remove API key references)
+  const sanitizeErrorMessage = (msg: string): string => {
+    // Remove patterns like ": sk-***...***" or ": sdasdada***...dwwC"
+    return msg.replace(/:\s*[a-zA-Z0-9*]+\*+[a-zA-Z0-9*]+\.?$/g, '').trim();
+  };
+
+  safeHandle("test-stt-connection", async (_, provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson', apiKey: string, region?: string) => {
+    console.log(`[IPC] Received test-stt-connection request for provider: ${provider}`);
     try {
       if (provider === 'deepgram') {
         // Test Deepgram via WebSocket connection
@@ -772,13 +849,80 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       return { success: true };
     } catch (error: any) {
-      const msg = error?.response?.data?.error?.message || error?.response?.data?.message || error.message || 'Connection failed';
+      const rawMsg = error?.response?.data?.error?.message || error?.response?.data?.message || error.message || 'Connection failed';
+      const msg = sanitizeErrorMessage(rawMsg);
       console.error("STT connection test failed:", msg);
       return { success: false, error: msg };
     }
   });
 
-  ipcMain.handle("set-model-preference", (_, type: "flash" | "pro") => {
+  safeHandle("test-llm-connection", async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude', apiKey?: string) => {
+    console.log(`[IPC] Received test-llm-connection request for provider: ${provider}`);
+    try {
+      if (!apiKey || !apiKey.trim()) {
+        const { CredentialsManager } = require('./services/CredentialsManager');
+        const creds = CredentialsManager.getInstance();
+        if (provider === 'gemini') apiKey = creds.getGeminiApiKey();
+        else if (provider === 'groq') apiKey = creds.getGroqApiKey();
+        else if (provider === 'openai') apiKey = creds.getOpenaiApiKey();
+        else if (provider === 'claude') apiKey = creds.getClaudeApiKey();
+      }
+
+      if (!apiKey || !apiKey.trim()) {
+        return { success: false, error: 'No API key provided' };
+      }
+
+      const axios = require('axios');
+      let response;
+
+      if (provider === 'gemini') {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+        response = await axios.post(url, {
+          contents: [{ parts: [{ text: "Hello" }] }]
+        });
+      } else if (provider === 'groq') {
+        response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
+          model: "llama3-8b-8192",
+          messages: [{ role: "user", content: "Hello" }]
+        }, {
+          headers: { Authorization: `Bearer ${apiKey}` }
+        });
+      } else if (provider === 'openai') {
+        response = await axios.post('https://api.openai.com/v1/chat/completions', {
+          model: "gpt-3.5-turbo",
+          messages: [{ role: "user", content: "Hello" }]
+        }, {
+          headers: { Authorization: `Bearer ${apiKey}` }
+        });
+      } else if (provider === 'claude') {
+        response = await axios.post('https://api.anthropic.com/v1/messages', {
+          model: "claude-3-haiku-20240307",
+          max_tokens: 10,
+          messages: [{ role: "user", content: "Hello" }]
+        }, {
+          headers: {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json'
+          }
+        });
+      }
+
+      if (response && (response.status === 200 || response.status === 201)) {
+        return { success: true };
+      } else {
+        return { success: false, error: 'Request failed with status ' + response?.status };
+      }
+
+    } catch (error: any) {
+      console.error("LLM connection test failed:", error);
+      const rawMsg = error?.response?.data?.error?.message || error?.response?.data?.message || (error.response?.data?.error?.type ? `${error.response.data.error.type}: ${error.response.data.error.message}` : error.message) || 'Connection failed';
+      const msg = sanitizeErrorMessage(rawMsg);
+      return { success: false, error: msg };
+    }
+  });
+
+  safeHandle("set-model-preference", (_, type: "flash" | "pro") => {
     try {
       const im = appState.getIntelligenceManager();
       const model = type === 'pro' ? GEMINI_PRO_MODEL : GEMINI_FLASH_MODEL;
@@ -789,12 +933,29 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("set-model", async (_, modelId: string) => {
+  safeHandle("set-model", async (_, modelId: string) => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
       const { CredentialsManager } = require('./services/CredentialsManager');
-      const customProviders = CredentialsManager.getInstance().getCustomProviders();
-      llmHelper.setModel(modelId, customProviders);
+      const cm = CredentialsManager.getInstance();
+
+      // Get all providers (Curl + Custom)
+      const curlProviders = cm.getCurlProviders();
+      const legacyProviders = cm.getCustomProviders() || [];
+      const allProviders = [...curlProviders, ...legacyProviders];
+
+      llmHelper.setModel(modelId, allProviders);
+
+      // Close the selector window if open
+      appState.modelSelectorWindowHelper.hideWindow();
+
+      // Broadcast to all windows so NativelyInterface can update its selector (session-only update)
+      BrowserWindow.getAllWindows().forEach(win => {
+        if (!win.isDestroyed()) {
+          win.webContents.send('model-changed', modelId);
+        }
+      });
+
       return { success: true };
     } catch (error: any) {
       console.error("Error setting model:", error);
@@ -802,7 +963,64 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("test-llm-connection", async () => {
+  // Persist default model (from Settings) + update runtime + broadcast to all windows
+  safeHandle("set-default-model", async (_, modelId: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      cm.setDefaultModel(modelId);
+
+      // Also update the runtime model
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      const curlProviders = cm.getCurlProviders();
+      const legacyProviders = cm.getCustomProviders() || [];
+      const allProviders = [...curlProviders, ...legacyProviders];
+      llmHelper.setModel(modelId, allProviders);
+
+      // Close the selector window if open
+      appState.modelSelectorWindowHelper.hideWindow();
+
+      // Broadcast to all windows so NativelyInterface can update its selector
+      BrowserWindow.getAllWindows().forEach(win => {
+        if (!win.isDestroyed()) {
+          win.webContents.send('model-changed', modelId);
+        }
+      });
+
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error setting default model:", error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Read the persisted default model
+  safeHandle("get-default-model", async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      return { model: cm.getDefaultModel() };
+    } catch (error: any) {
+      console.error("Error getting default model:", error);
+      return { model: 'gemini-3-flash-preview' };
+    }
+  });
+
+  // --- Model Selector Window IPC ---
+
+  safeHandle("show-model-selector", (_, coords: { x: number; y: number }) => {
+    appState.modelSelectorWindowHelper.showWindow(coords.x, coords.y);
+  });
+
+  safeHandle("hide-model-selector", () => {
+    appState.modelSelectorWindowHelper.hideWindow();
+  });
+
+  safeHandle("toggle-model-selector", (_, coords: { x: number; y: number }) => {
+    appState.modelSelectorWindowHelper.toggleWindow(coords.x, coords.y);
+  });
+
+  safeHandle("test-llm-connection", async () => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
       const result = await llmHelper.testConnection();
@@ -815,30 +1033,30 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   // Native Audio Service Handlers
   // Native Audio handlers removed as part of migration to driverless architecture
-  ipcMain.handle("native-audio-status", async () => {
+  safeHandle("native-audio-status", async () => {
     // Always return true or pseudo-status since it's "driverless"
     return { connected: true };
   });
 
-  ipcMain.handle("get-input-devices", async () => {
+  safeHandle("get-input-devices", async () => {
     return AudioDevices.getInputDevices();
   });
 
-  ipcMain.handle("get-output-devices", async () => {
+  safeHandle("get-output-devices", async () => {
     return AudioDevices.getOutputDevices();
   });
 
-  ipcMain.handle("start-audio-test", async (event, deviceId?: string) => {
+  safeHandle("start-audio-test", async (event, deviceId?: string) => {
     appState.startAudioTest(deviceId);
     return { success: true };
   });
 
-  ipcMain.handle("stop-audio-test", async () => {
+  safeHandle("stop-audio-test", async () => {
     appState.stopAudioTest();
     return { success: true };
   });
 
-  ipcMain.handle("set-recognition-language", async (_, key: string) => {
+  safeHandle("set-recognition-language", async (_, key: string) => {
     appState.setRecognitionLanguage(key);
     return { success: true };
   });
@@ -847,7 +1065,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Meeting Lifecycle Handlers
   // ==========================================
 
-  ipcMain.handle("start-meeting", async (event, metadata?: any) => {
+  safeHandle("start-meeting", async (event, metadata?: any) => {
     try {
       await appState.startMeeting(metadata);
       return { success: true };
@@ -857,7 +1075,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("end-meeting", async () => {
+  safeHandle("end-meeting", async () => {
     try {
       await appState.endMeeting();
       return { success: true };
@@ -867,25 +1085,25 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("get-recent-meetings", async () => {
+  safeHandle("get-recent-meetings", async () => {
     // Fetch from SQLite (limit 50)
     return DatabaseManager.getInstance().getRecentMeetings(50);
   });
 
-  ipcMain.handle("get-meeting-details", async (event, id) => {
+  safeHandle("get-meeting-details", async (event, id) => {
     // Helper to fetch full details
     return DatabaseManager.getInstance().getMeetingDetails(id);
   });
 
-  ipcMain.handle("update-meeting-title", async (_, { id, title }: { id: string; title: string }) => {
+  safeHandle("update-meeting-title", async (_, { id, title }: { id: string; title: string }) => {
     return DatabaseManager.getInstance().updateMeetingTitle(id, title);
   });
 
-  ipcMain.handle("update-meeting-summary", async (_, { id, updates }: { id: string; updates: any }) => {
+  safeHandle("update-meeting-summary", async (_, { id, updates }: { id: string; updates: any }) => {
     return DatabaseManager.getInstance().updateMeetingSummary(id, updates);
   });
 
-  ipcMain.handle("seed-demo", async () => {
+  safeHandle("seed-demo", async () => {
     DatabaseManager.getInstance().seedDemoMeeting();
 
     // Trigger RAG processing for the new demo meeting
@@ -897,12 +1115,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
-  ipcMain.handle("flush-database", async () => {
+  safeHandle("flush-database", async () => {
     const result = DatabaseManager.getInstance().clearAllData();
     return { success: result };
   });
 
-  ipcMain.handle("open-external", async (event, url: string) => {
+  safeHandle("open-external", async (event, url: string) => {
     try {
       const parsed = new URL(url);
       if (['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
@@ -920,7 +1138,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // ==========================================
 
   // MODE 1: Assist (Passive observation)
-  ipcMain.handle("generate-assist", async () => {
+  safeHandle("generate-assist", async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const insight = await intelligenceManager.runAssistMode();
@@ -931,7 +1149,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // MODE 2: What Should I Say (Primary auto-answer)
-  ipcMain.handle("generate-what-to-say", async (_, question?: string, imagePath?: string) => {
+  safeHandle("generate-what-to-say", async (_, question?: string, imagePath?: string) => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       // Question and imagePath are now optional - IntelligenceManager infers from transcript
@@ -946,7 +1164,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // MODE 3: Follow-Up (Refinement)
-  ipcMain.handle("generate-follow-up", async (_, intent: string, userRequest?: string) => {
+  safeHandle("generate-follow-up", async (_, intent: string, userRequest?: string) => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const refined = await intelligenceManager.runFollowUp(intent, userRequest);
@@ -957,7 +1175,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // MODE 4: Recap (Summary)
-  ipcMain.handle("generate-recap", async () => {
+  safeHandle("generate-recap", async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const summary = await intelligenceManager.runRecap();
@@ -968,7 +1186,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // MODE 6: Follow-Up Questions
-  ipcMain.handle("generate-follow-up-questions", async () => {
+  safeHandle("generate-follow-up-questions", async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const questions = await intelligenceManager.runFollowUpQuestions();
@@ -979,7 +1197,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // MODE 5: Manual Answer (Fallback)
-  ipcMain.handle("submit-manual-question", async (_, question: string) => {
+  safeHandle("submit-manual-question", async (_, question: string) => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const answer = await intelligenceManager.runManualAnswer(question);
@@ -990,7 +1208,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Get current intelligence context
-  ipcMain.handle("get-intelligence-context", async () => {
+  safeHandle("get-intelligence-context", async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       return {
@@ -1004,7 +1222,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Reset intelligence state
-  ipcMain.handle("reset-intelligence", async () => {
+  safeHandle("reset-intelligence", async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       intelligenceManager.reset();
@@ -1016,7 +1234,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
 
   // Service Account Selection
-  ipcMain.handle("select-service-account", async () => {
+  safeHandle("select-service-account", async () => {
     try {
       const result: any = await dialog.showOpenDialog({
         properties: ['openFile'],
@@ -1047,7 +1265,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Theme System Handlers
   // ==========================================
 
-  ipcMain.handle("theme:get-mode", () => {
+  safeHandle("theme:get-mode", () => {
     const tm = appState.getThemeManager();
     return {
       mode: tm.getMode(),
@@ -1055,7 +1273,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     };
   });
 
-  ipcMain.handle("theme:set-mode", (_, mode: 'system' | 'light' | 'dark') => {
+  safeHandle("theme:set-mode", (_, mode: 'system' | 'light' | 'dark') => {
     appState.getThemeManager().setMode(mode);
     return { success: true };
   });
@@ -1064,7 +1282,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Calendar Integration Handlers
   // ==========================================
 
-  ipcMain.handle("calendar-connect", async () => {
+  safeHandle("calendar-connect", async () => {
     try {
       const { CalendarManager } = require('./services/CalendarManager');
       await CalendarManager.getInstance().startAuthFlow();
@@ -1075,23 +1293,23 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("calendar-disconnect", async () => {
+  safeHandle("calendar-disconnect", async () => {
     const { CalendarManager } = require('./services/CalendarManager');
     await CalendarManager.getInstance().disconnect();
     return { success: true };
   });
 
-  ipcMain.handle("get-calendar-status", async () => {
+  safeHandle("get-calendar-status", async () => {
     const { CalendarManager } = require('./services/CalendarManager');
     return CalendarManager.getInstance().getConnectionStatus();
   });
 
-  ipcMain.handle("get-upcoming-events", async () => {
+  safeHandle("get-upcoming-events", async () => {
     const { CalendarManager } = require('./services/CalendarManager');
     return CalendarManager.getInstance().getUpcomingEvents();
   });
 
-  ipcMain.handle("calendar-refresh", async () => {
+  safeHandle("calendar-refresh", async () => {
     const { CalendarManager } = require('./services/CalendarManager');
     await CalendarManager.getInstance().refreshState();
     return { success: true };
@@ -1101,7 +1319,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Follow-up Email Handlers
   // ==========================================
 
-  ipcMain.handle("generate-followup-email", async (_, input: any) => {
+  safeHandle("generate-followup-email", async (_, input: any) => {
     try {
       const { FOLLOWUP_EMAIL_PROMPT, GROQ_FOLLOWUP_EMAIL_PROMPT } = require('./llm/prompts');
       const { buildFollowUpEmailPromptInput } = require('./utils/emailUtils');
@@ -1125,7 +1343,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("extract-emails-from-transcript", async (_, transcript: Array<{ text: string }>) => {
+  safeHandle("extract-emails-from-transcript", async (_, transcript: Array<{ text: string }>) => {
     try {
       const { extractEmailsFromTranscript } = require('./utils/emailUtils');
       return extractEmailsFromTranscript(transcript);
@@ -1135,7 +1353,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("get-calendar-attendees", async (_, eventId: string) => {
+  safeHandle("get-calendar-attendees", async (_, eventId: string) => {
     try {
       const { CalendarManager } = require('./services/CalendarManager');
       const cm = CalendarManager.getInstance();
@@ -1158,7 +1376,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("open-mailto", async (_, { to, subject, body }: { to: string; subject: string; body: string }) => {
+  safeHandle("open-mailto", async (_, { to, subject, body }: { to: string; subject: string; body: string }) => {
     try {
       const { buildMailtoLink } = require('./utils/emailUtils');
       const mailtoUrl = buildMailtoLink(to, subject, body);
@@ -1178,7 +1396,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   const activeRAGQueries = new Map<string, AbortController>();
 
   // Query meeting with RAG (meeting-scoped)
-  ipcMain.handle("rag:query-meeting", async (event, { meetingId, query }: { meetingId: string; query: string }) => {
+  safeHandle("rag:query-meeting", async (event, { meetingId, query }: { meetingId: string; query: string }) => {
     const ragManager = appState.getRAGManager();
 
     if (!ragManager || !ragManager.isReady()) {
@@ -1227,7 +1445,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Query global (cross-meeting search)
-  ipcMain.handle("rag:query-global", async (event, { query }: { query: string }) => {
+  safeHandle("rag:query-global", async (event, { query }: { query: string }) => {
     const ragManager = appState.getRAGManager();
 
     if (!ragManager || !ragManager.isReady()) {
@@ -1260,7 +1478,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Cancel active RAG query
-  ipcMain.handle("rag:cancel-query", async (_, { meetingId, global }: { meetingId?: string; global?: boolean }) => {
+  safeHandle("rag:cancel-query", async (_, { meetingId, global }: { meetingId?: string; global?: boolean }) => {
     const queryKey = global ? 'global' : `meeting-${meetingId}`;
 
     // Cancel any matching key
@@ -1275,21 +1493,21 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Check if meeting has RAG embeddings
-  ipcMain.handle("rag:is-meeting-processed", async (_, meetingId: string) => {
+  safeHandle("rag:is-meeting-processed", async (_, meetingId: string) => {
     const ragManager = appState.getRAGManager();
     if (!ragManager) return false;
     return ragManager.isMeetingProcessed(meetingId);
   });
 
   // Get RAG queue status
-  ipcMain.handle("rag:get-queue-status", async () => {
+  safeHandle("rag:get-queue-status", async () => {
     const ragManager = appState.getRAGManager();
     if (!ragManager) return { pending: 0, processing: 0, completed: 0, failed: 0 };
     return ragManager.getQueueStatus();
   });
 
   // Retry pending embeddings
-  ipcMain.handle("rag:retry-embeddings", async () => {
+  safeHandle("rag:retry-embeddings", async () => {
     const ragManager = appState.getRAGManager();
     if (!ragManager) return { success: false };
     await ragManager.retryPendingEmbeddings();

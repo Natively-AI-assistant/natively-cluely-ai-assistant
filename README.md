@@ -42,18 +42,30 @@ This demo shows **a complete live meeting scenario**:
 
 Download the latest prebuilt version from **[Releases](https://github.com/evinjohnn/natively-cluely-ai-assistant/releases)**.
 
-### [Windows (v1.1.4)](https://github.com/evinjohnn/natively-cluely-ai-assistant/releases/tag/v1.1.4)
-### [macOS (v1.1.4)](https://github.com/evinjohnn/natively-cluely-ai-assistant/releases/tag/v1.1.4)
+### [Windows (v1.1.2)](https://github.com/evinjohnn/natively-cluely-ai-assistant/releases/tag/v1.1.2)
+### [macOS (v1.1.5)](https://github.com/evinjohnn/natively-cluely-ai-assistant/releases/tag/v1.1.5)
 
 No build steps required.
 
-### What's New in v1.1.4
-- **Custom LLM Providers:** Connect to any OpenAI-compatible API (OpenRouter, DeepSeek, commercial endpoints) simply by pasting a cURL command.
-- **Smart Local AI:** Enhanced Ollama integration that automatically detects and lists your available local models—no configuration required.
-- **Refined Human Persona:** Major updates to system prompts (`prompts.ts`) to ensure responses are concise, conversational, and indistinguishable from a real candidate.
-- **Anti-Chatbot Logic:** Specific negative constraints to prevent "AI-like" lectures, distinct "robot" preambles, and over-explanation.
-- **Global Spotlight Search:** Access AI chat instantly with `Cmd+K` / `Ctrl+K`.
-- **Masquerading (Undetectable Mode):** Stealth capability to disguise the app as common utility processes (Terminal, Activity Monitor) for discreet usage.
+> [!NOTE]
+> **macOS Users:**
+> 
+> 1.  **"Unidentified Developer"**: If you see this, Right-click the app > Select **Open** > Click **Open**.
+> 2.  **"App is Damaged"**: If you see this (common with DMGs), run this in Terminal:
+>     ```bash
+>     xattr -cr /Applications/Natively.app
+>     ```
+>     *(Or point to wherever you installed the app)*
+
+### What's New in v1.1.5
+- **Expanded Speech Providers:** Native support for Deepgram, Groq, and OpenAI.
+- **Custom LLM Providers:** Connect to any OpenAI-compatible API (OpenRouter, DeepSeek) using cURL.
+- **Smart Local AI:** Auto-detection of available Ollama models.
+- **Global Spotlight Search:** Toggle chat overlay with Cmd+K (macOS) or Ctrl+K (Windows/Linux).
+- **Masquerading:** Disguise as system processes like Terminal or Activity Monitor.
+- **Stealth Mode:** Improved activation and window focus transitions.
+- **Refined Persona:** System prompts updated for concise, human-like responses.
+- **Performance:** Better UI scaling and reduced STT latency.
 
 ---
 

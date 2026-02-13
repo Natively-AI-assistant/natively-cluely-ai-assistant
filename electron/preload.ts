@@ -43,7 +43,7 @@ interface ElectronAPI {
   getAvailableOllamaModels: () => Promise<string[]>
   switchToOllama: (model?: string, url?: string) => Promise<{ success: boolean; error?: string }>
   switchToGemini: (apiKey?: string, modelId?: string) => Promise<{ success: boolean; error?: string }>
-  testLlmConnection: () => Promise<{ success: boolean; error?: string }>
+  testLlmConnection: (provider: 'gemini' | 'groq' | 'openai' | 'claude', apiKey?: string) => Promise<{ success: boolean; error?: string }>
   selectServiceAccount: () => Promise<{ success: boolean; path?: string; cancelled?: boolean; error?: string }>
 
   // API Key Management
@@ -121,6 +121,7 @@ interface ElectronAPI {
   on: (channel: string, callback: (...args: any[]) => void) => () => void
 
   onUndetectableChanged: (callback: (state: boolean) => void) => () => void
+  onModelChanged: (callback: (modelId: string) => void) => () => void
 
   // Theme API
   getThemeMode: () => Promise<{ mode: 'system' | 'light' | 'dark', resolved: 'light' | 'dark' }>
@@ -340,7 +341,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getAvailableOllamaModels: () => ipcRenderer.invoke("get-available-ollama-models"),
   switchToOllama: (model?: string, url?: string) => ipcRenderer.invoke("switch-to-ollama", model, url),
   switchToGemini: (apiKey?: string, modelId?: string) => ipcRenderer.invoke("switch-to-gemini", apiKey, modelId),
-  testLlmConnection: () => ipcRenderer.invoke("test-llm-connection"),
+  testLlmConnection: (provider: 'gemini' | 'groq' | 'openai' | 'claude', apiKey: string) => ipcRenderer.invoke("test-llm-connection", provider, apiKey),
   selectServiceAccount: () => ipcRenderer.invoke("select-service-account"),
 
   // API Key Management
@@ -594,6 +595,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on('undetectable-changed', subscription)
     return () => {
       ipcRenderer.removeListener('undetectable-changed', subscription)
+    }
+  },
+
+  onModelChanged: (callback: (modelId: string) => void) => {
+    const subscription = (_: any, modelId: string) => callback(modelId)
+    ipcRenderer.on('model-changed', subscription)
+    return () => {
+      ipcRenderer.removeListener('model-changed', subscription)
     }
   },
 

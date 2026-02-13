@@ -1,6 +1,6 @@
 {
   "name": "natively",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "main": "./dist-electron/main.js",
   "description": "Natively is a meeting notes app that uses AI to generate notes from your meetings.",
   "scripts": {
@@ -20,6 +20,7 @@
   },
   "build": {
     "appId": "com.electron.meeting-notes",
+    "afterPack": "./scripts/ad-hoc-sign.js",
     "productName": "Natively",
     "files": [
       "dist/**/*",
@@ -63,8 +64,8 @@
         }
       ],
       "icon": "assets/natively.icns",
-      "hardenedRuntime": true,
-      "entitlements": "assets/entitlements.mac.plist"
+      "identity": null,
+      "hardenedRuntime": false
     },
     "win": {
       "target": [
@@ -122,6 +123,7 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@electron/notarize": "^3.1.1",
     "@electron/rebuild": "^4.0.3",
     "@napi-rs/cli": "^3.5.1",
     "@types/better-sqlite3": "^7.6.13",
@@ -141,6 +143,7 @@
     "autoprefixer": "^10.4.20",
     "concurrently": "^9.1.0",
     "cross-env": "^7.0.3",
+    "dotenv": "^17.3.1",
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8",
     "electron-is-dev": "^3.0.1",
@@ -169,7 +172,6 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "diff": "^7.0.0",
-    "dotenv": "^17.2.3",
     "electron-updater": "^6.7.3",
     "form-data": "^4.0.1",
     "framer-motion": "^12.29.2",

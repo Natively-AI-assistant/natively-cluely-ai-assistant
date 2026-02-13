@@ -12,11 +12,12 @@ import {
   CUSTOM_SYSTEM_PROMPT, CUSTOM_ANSWER_PROMPT, CUSTOM_WHAT_TO_ANSWER_PROMPT,
   CUSTOM_RECAP_PROMPT, CUSTOM_FOLLOWUP_PROMPT, CUSTOM_FOLLOW_UP_QUESTIONS_PROMPT, CUSTOM_ASSIST_PROMPT
 } from "./llm/prompts"
-import { deepVariableReplacer } from './utils/curlUtils';
+import { deepVariableReplacer, getByPath } from './utils/curlUtils';
 import curl2Json from "@bany/curl-to-json";
-import { CustomProvider } from './services/CredentialsManager';
+import { CustomProvider, CurlProvider } from './services/CredentialsManager';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import axios from 'axios';
 const execAsync = promisify(exec);
 
 interface OllamaResponse {
@@ -49,6 +50,7 @@ export class LLMHelper {
   private ollamaUrl: string = "http://localhost:11434"
   private geminiModel: string = GEMINI_FLASH_MODEL
   private customProvider: CustomProvider | null = null;
+  private activeCurlProvider: CurlProvider | null = null;
 
   constructor(apiKey?: string, useOllama: boolean = false, ollamaModel?: string, ollamaUrl?: string, groqApiKey?: string, openaiApiKey?: string, claudeApiKey?: string) {
     this.useOllama = useOllama
@@ -122,7 +124,7 @@ export class LLMHelper {
 
   private currentModelId: string = GEMINI_FLASH_MODEL;
 
-  public setModel(modelId: string, customProviders: CustomProvider[] = []) {
+  public setModel(modelId: string, customProviders: (CustomProvider | CurlProvider)[] = []) {
     // Map UI short codes to internal Model IDs
     let targetModelId = modelId;
     if (modelId === 'gemini') targetModelId = GEMINI_FLASH_MODEL;
@@ -135,6 +137,7 @@ export class LLMHelper {
       this.useOllama = true;
       this.ollamaModel = targetModelId.replace('ollama-', '');
       this.customProvider = null;
+      this.activeCurlProvider = null;
       console.log(`[LLMHelper] Switched to Ollama: ${this.ollamaModel}`);
       return;
     }
@@ -142,8 +145,10 @@ export class LLMHelper {
     const custom = customProviders.find(p => p.id === targetModelId);
     if (custom) {
       this.useOllama = false;
-      this.customProvider = custom;
-      console.log(`[LLMHelper] Switched to Custom Provider: ${custom.name}`);
+      this.customProvider = null;
+      // Treat text-only custom providers as CurlProviders (responsePath optional)
+      this.activeCurlProvider = custom as CurlProvider;
+      console.log(`[LLMHelper] Switched to cURL Provider: ${custom.name}`);
       return;
     }
 
@@ -157,6 +162,13 @@ export class LLMHelper {
     if (targetModelId === GEMINI_FLASH_MODEL) this.geminiModel = GEMINI_FLASH_MODEL;
 
     console.log(`[LLMHelper] Switched to Cloud Model: ${targetModelId}`);
+  }
+
+  public switchToCurl(provider: CurlProvider) {
+    this.useOllama = false;
+    this.customProvider = null;
+    this.activeCurlProvider = provider;
+    console.log(`[LLMHelper] Switched to cURL provider: ${provider.name}`);
   }
 
   private cleanJsonResponse(text: string): string {
@@ -645,8 +657,11 @@ ANSWER DIRECTLY:`;
       const claudeSystemPrompt = skipSystemPrompt ? undefined : CLAUDE_SYSTEM_PROMPT;
 
       if (this.useOllama) {
-        // Use streaming if available via streamChat, but for non-streaming call:
         return await this.callOllama(combinedMessages.gemini);
+      }
+
+      if (this.activeCurlProvider) {
+        return await this.chatWithCurl(message, skipSystemPrompt ? undefined : CUSTOM_SYSTEM_PROMPT);
       }
 
       if (this.customProvider) {
@@ -841,6 +856,54 @@ ANSWER DIRECTLY:`;
     });
 
     return response.choices[0]?.message?.content || "";
+  }
+
+  // The handler for cURL requests
+  public async chatWithCurl(userMessage: string, systemPrompt?: string): Promise<string> {
+    if (!this.activeCurlProvider) throw new Error("No cURL provider active");
+
+    const { curlCommand, responsePath } = this.activeCurlProvider;
+
+    // 1. Parse cURL to config object
+    // @ts-ignore
+    const curlConfig = curl2Json(curlCommand);
+
+    // 2. Prepare Variables
+    // We combine System Prompt + User Message into {{TEXT}} for simplicity in raw mode, 
+    // or you can support {{SYSTEM}} if you want to get fancy later.
+    const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${userMessage}` : userMessage;
+
+    const variables = {
+      TEXT: fullPrompt.replace(/\n/g, "\\n").replace(/"/g, '\\"') // Basic escaping
+    };
+
+    // 3. Inject Variables into URL, Headers, and Body
+    const url = deepVariableReplacer(curlConfig.url, variables);
+    const headers = deepVariableReplacer(curlConfig.header || {}, variables);
+    const data = deepVariableReplacer(curlConfig.data || {}, variables);
+
+    // 4. Execute
+    try {
+      const response = await axios({
+        method: curlConfig.method || 'POST',
+        url: url,
+        headers: headers,
+        data: data
+      });
+
+      // 5. Extract Answer
+      // If user didn't specify a path, try to guess or dump string
+      if (!responsePath) return JSON.stringify(response.data);
+
+      const answer = getByPath(response.data, responsePath);
+
+      if (typeof answer === 'string') return answer;
+      return JSON.stringify(answer); // Fallback if they pointed to an object
+
+    } catch (error: any) {
+      console.error("[LLMHelper] cURL Execution Error:", error.message);
+      return `Error: ${error.message}`;
+    }
   }
 
   /**
@@ -1182,11 +1245,10 @@ ANSWER DIRECTLY:`;
       return;
     }
 
-    // 2. Custom Provider Streaming
-    // Custom providers can be any cloud model, so use richer CUSTOM_* prompts
-    if (this.customProvider) {
-      const customPrompt = this.mapToCustomPrompt(finalSystemPrompt);
-      yield* this.streamWithCustom(message, context, imagePath, customPrompt);
+    // 2. Custom Provider Streaming (via cURL - Non-streaming fallback for now)
+    if (this.activeCurlProvider) {
+      const response = await this.chatWithCurl(message, finalSystemPrompt);
+      yield response;
       return;
     }
 
@@ -1687,7 +1749,8 @@ ANSWER DIRECTLY:`;
 
   public getCurrentModel(): string {
     if (this.customProvider) return this.customProvider.name;
-    return this.useOllama ? this.ollamaModel : this.geminiModel;
+    if (this.activeCurlProvider) return this.activeCurlProvider.id;
+    return this.useOllama ? this.ollamaModel : this.currentModelId;
   }
 
   /**

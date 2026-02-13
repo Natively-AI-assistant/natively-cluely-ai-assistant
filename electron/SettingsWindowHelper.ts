@@ -113,7 +113,7 @@ export class SettingsWindowHelper {
 
     private createWindow(x?: number, y?: number, showWhenReady: boolean = true): void {
         const windowSettings: Electron.BrowserWindowConstructorOptions = {
-            width: 225, // Match React component width
+            width: 200, // Match React component width
             height: 238, // Increased to accommodate new Transcript toggle
             frame: false,
             transparent: true,

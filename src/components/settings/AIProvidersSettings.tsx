@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit2, AlertCircle, CheckCircle, Save, ChevronDown, Check, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Edit2, AlertCircle, CheckCircle, Save, ChevronDown, Check, RefreshCw, ExternalLink, Loader2 } from 'lucide-react';
 import { validateCurl } from '../../lib/curl-validator';
 
 interface CustomProvider {
     id: string;
     name: string;
     curlCommand: string;
+    responsePath: string;
 }
 
 interface ModelOption {
@@ -85,6 +86,8 @@ export const AIProvidersSettings: React.FC = () => {
     const [savedStatus, setSavedStatus] = useState<Record<string, boolean>>({});
     const [savingStatus, setSavingStatus] = useState<Record<string, boolean>>({});
     const [hasStoredKey, setHasStoredKey] = useState<Record<string, boolean>>({});
+    const [testStatus, setTestStatus] = useState<Record<string, 'idle' | 'testing' | 'success' | 'error'>>({});
+    const [testError, setTestError] = useState<Record<string, string>>({});
 
     // --- Custom Providers ---
     const [customProviders, setCustomProviders] = useState<CustomProvider[]>([]);
@@ -92,6 +95,7 @@ export const AIProvidersSettings: React.FC = () => {
     const [editingProvider, setEditingProvider] = useState<CustomProvider | null>(null);
     const [customName, setCustomName] = useState('');
     const [customCurl, setCustomCurl] = useState('');
+    const [customResponsePath, setCustomResponsePath] = useState('');
     const [curlError, setCurlError] = useState<string | null>(null);
 
     // --- Local (Ollama) ---
@@ -101,7 +105,7 @@ export const AIProvidersSettings: React.FC = () => {
     const [isRefreshingOllama, setIsRefreshingOllama] = useState(false);
 
     // --- Default Model ---
-    const [defaultModel, setDefaultModel] = useState<string>('gemini'); // Default to Gemini
+    const [defaultModel, setDefaultModel] = useState<string>('gemini-3-flash-preview');
 
     // Load Initial Data
     useEffect(() => {
@@ -122,6 +126,13 @@ export const AIProvidersSettings: React.FC = () => {
                 const custom = await window.electronAPI?.invoke('get-custom-providers');
                 if (custom) {
                     setCustomProviders(custom);
+                }
+
+                // Load persisted default model
+                // @ts-ignore
+                const result = await window.electronAPI?.invoke('get-default-model');
+                if (result && result.model) {
+                    setDefaultModel(result.model);
                 }
 
                 // Check Ollama
@@ -204,6 +215,41 @@ export const AIProvidersSettings: React.FC = () => {
         }
     };
 
+    const handleTestConnection = async (provider: string, key: string) => {
+        // Allow testing if key is provided OR if we have a stored key
+        if (!key.trim() && !hasStoredKey[provider]) {
+            return;
+        }
+        setTestStatus(prev => ({ ...prev, [provider]: 'testing' }));
+        setTestError(prev => ({ ...prev, [provider]: '' }));
+
+        try {
+            // @ts-ignore
+            const result = await window.electronAPI.testLlmConnection(provider, key);
+            if (result.success) {
+                setTestStatus(prev => ({ ...prev, [provider]: 'success' }));
+                setTimeout(() => setTestStatus(prev => ({ ...prev, [provider]: 'idle' })), 3000);
+            } else {
+                setTestStatus(prev => ({ ...prev, [provider]: 'error' }));
+                setTestError(prev => ({ ...prev, [provider]: result.error || 'Connection failed' }));
+            }
+        } catch (e: any) {
+            setTestStatus(prev => ({ ...prev, [provider]: 'error' }));
+            setTestError(prev => ({ ...prev, [provider]: e.message || 'Connection failed' }));
+        }
+    };
+
+    const openKeyUrl = (provider: string) => {
+        const urls: Record<string, string> = {
+            gemini: 'https://aistudio.google.com/app/apikey',
+            groq: 'https://console.groq.com/keys',
+            openai: 'https://platform.openai.com/api-keys',
+            claude: 'https://console.anthropic.com/settings/keys'
+        };
+        // @ts-ignore
+        window.electronAPI?.openExternal(urls[provider]);
+    };
+
 
     // --- Custom Provider Handlers ---
 
@@ -211,6 +257,7 @@ export const AIProvidersSettings: React.FC = () => {
         setEditingProvider(provider);
         setCustomName(provider.name);
         setCustomCurl(provider.curlCommand);
+        setCustomResponsePath(provider.responsePath || '');
         setIsEditingCustom(true);
         setCurlError(null);
     };
@@ -219,6 +266,7 @@ export const AIProvidersSettings: React.FC = () => {
         setEditingProvider(null);
         setCustomName('');
         setCustomCurl('');
+        setCustomResponsePath('');
         setIsEditingCustom(true);
         setCurlError(null);
     };
@@ -239,7 +287,8 @@ export const AIProvidersSettings: React.FC = () => {
         const newProvider: CustomProvider = {
             id: editingProvider ? editingProvider.id : crypto.randomUUID(),
             name: customName,
-            curlCommand: customCurl
+            curlCommand: customCurl,
+            responsePath: customResponsePath
         };
 
         try {
@@ -291,17 +340,17 @@ export const AIProvidersSettings: React.FC = () => {
                     <ModelSelect
                         value={defaultModel}
                         options={[
-                            ...(hasStoredKey.gemini ? [{ id: 'gemini', name: 'Gemini 3 Flash' }, { id: 'gemini-pro', name: 'Gemini 3 Pro' }] : []),
-                            ...(hasStoredKey.openai ? [{ id: 'gpt-4o', name: 'GPT 5.2' }] : []),
-                            ...(hasStoredKey.claude ? [{ id: 'claude', name: 'Sonnet 4.5' }] : []),
-                            ...(hasStoredKey.groq ? [{ id: 'llama', name: 'Groq Llama 3.3' }] : []),
+                            ...(hasStoredKey.gemini ? [{ id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash' }, { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro' }] : []),
+                            ...(hasStoredKey.openai ? [{ id: 'gpt-5.2-chat-latest', name: 'GPT 5.2' }] : []),
+                            ...(hasStoredKey.claude ? [{ id: 'claude-sonnet-4-5', name: 'Sonnet 4.5' }] : []),
+                            ...(hasStoredKey.groq ? [{ id: 'llama-3.3-70b-versatile', name: 'Groq Llama 3.3' }] : []),
                             ...customProviders.map(p => ({ id: p.id, name: p.name })),
                             ...ollamaModels.map(m => ({ id: `ollama-${m}`, name: `${m} (Local)` }))
                         ]}
                         onChange={(val) => {
                             setDefaultModel(val);
-                            // @ts-ignore
-                            window.electronAPI?.invoke('set-model', val).catch(console.error);
+                            // @ts-ignore - persist as default + update runtime + broadcast
+                            window.electronAPI?.invoke('set-default-model', val).catch(console.error);
                         }}
                     />
                 </div>
@@ -318,11 +367,13 @@ export const AIProvidersSettings: React.FC = () => {
 
                     {/* Gemini */}
                     <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle">
-                        <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-1">
-                            Gemini API Key
-                            {hasStoredKey.gemini && <span className="ml-2 text-green-500 normal-case">✓ Saved</span>}
-                        </label>
-                        <div className="flex gap-3">
+                        <div className="mb-2">
+                            <label className="block text-xs font-medium text-text-primary uppercase tracking-wide">
+                                Gemini API Key
+                                {hasStoredKey.gemini && <span className="ml-2 text-green-500 normal-case">✓ Saved</span>}
+                            </label>
+                        </div>
+                        <div className="flex gap-2 mb-3">
                             <input
                                 type="password"
                                 value={apiKey}
@@ -341,15 +392,41 @@ export const AIProvidersSettings: React.FC = () => {
                                 {savingStatus.gemini ? 'Saving...' : savedStatus.gemini ? 'Saved!' : 'Save'}
                             </button>
                         </div>
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => handleTestConnection('gemini', apiKey)}
+                                disabled={(!apiKey.trim() && !hasStoredKey.gemini) || testStatus.gemini === 'testing'}
+                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors border border-border-subtle flex items-center gap-2 ${testStatus.gemini === 'success' ? 'bg-green-500/10 text-green-500 border-green-500/20' :
+                                    testStatus.gemini === 'error' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                                        'bg-bg-input hover:bg-bg-elevated text-text-primary'
+                                    }`}
+                                title={testError.gemini || "Test Connection"}
+                            >
+                                {testStatus.gemini === 'testing' ? <><Loader2 size={12} className="animate-spin" /> Testing...</> :
+                                    testStatus.gemini === 'success' ? <><CheckCircle size={12} /> Connected</> :
+                                        testStatus.gemini === 'error' ? <><AlertCircle size={12} /> Error</> :
+                                            <>{/* No Icon */} Test Connection</>}
+                            </button>
+                            <button
+                                onClick={() => openKeyUrl('gemini')}
+                                className="text-xs text-text-tertiary hover:text-text-primary flex items-center gap-1 transition-colors"
+                                title="Get API Key"
+                            >
+                                <ExternalLink size={12} />
+                            </button>
+                        </div>
+                        {testError.gemini && <p className="text-[10px] text-red-400 mt-1.5">{testError.gemini}</p>}
                     </div>
 
                     {/* Groq */}
                     <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle">
-                        <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-1">
-                            Groq API Key
-                            {hasStoredKey.groq && <span className="ml-2 text-green-500 normal-case">✓ Saved</span>}
-                        </label>
-                        <div className="flex gap-3">
+                        <div className="mb-2">
+                            <label className="block text-xs font-medium text-text-primary uppercase tracking-wide">
+                                Groq API Key
+                                {hasStoredKey.groq && <span className="ml-2 text-green-500 normal-case">✓ Saved</span>}
+                            </label>
+                        </div>
+                        <div className="flex gap-2 mb-3">
                             <input
                                 type="password"
                                 value={groqApiKey}
@@ -368,15 +445,41 @@ export const AIProvidersSettings: React.FC = () => {
                                 {savingStatus.groq ? 'Saving...' : savedStatus.groq ? 'Saved!' : 'Save'}
                             </button>
                         </div>
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => handleTestConnection('groq', groqApiKey)}
+                                disabled={(!groqApiKey.trim() && !hasStoredKey.groq) || testStatus.groq === 'testing'}
+                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors border border-border-subtle flex items-center gap-2 ${testStatus.groq === 'success' ? 'bg-green-500/10 text-green-500 border-green-500/20' :
+                                    testStatus.groq === 'error' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                                        'bg-bg-input hover:bg-bg-elevated text-text-primary'
+                                    }`}
+                                title={testError.groq || "Test Connection"}
+                            >
+                                {testStatus.groq === 'testing' ? <><Loader2 size={12} className="animate-spin" /> Testing...</> :
+                                    testStatus.groq === 'success' ? <><CheckCircle size={12} /> Connected</> :
+                                        testStatus.groq === 'error' ? <><AlertCircle size={12} /> Error</> :
+                                            <>{/* No Icon */} Test Connection</>}
+                            </button>
+                            <button
+                                onClick={() => openKeyUrl('groq')}
+                                className="text-xs text-text-tertiary hover:text-text-primary flex items-center gap-1 transition-colors"
+                                title="Get API Key"
+                            >
+                                <ExternalLink size={12} />
+                            </button>
+                        </div>
+                        {testError.groq && <p className="text-[10px] text-red-400 mt-1.5">{testError.groq}</p>}
                     </div>
 
                     {/* OpenAI */}
                     <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle">
-                        <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-1">
-                            OpenAI API Key
-                            {hasStoredKey.openai && <span className="ml-2 text-green-500 normal-case">✓ Saved</span>}
-                        </label>
-                        <div className="flex gap-3">
+                        <div className="mb-2">
+                            <label className="block text-xs font-medium text-text-primary uppercase tracking-wide">
+                                OpenAI API Key
+                                {hasStoredKey.openai && <span className="ml-2 text-green-500 normal-case">✓ Saved</span>}
+                            </label>
+                        </div>
+                        <div className="flex gap-2 mb-3">
                             <input
                                 type="password"
                                 value={openaiApiKey}
@@ -395,15 +498,41 @@ export const AIProvidersSettings: React.FC = () => {
                                 {savingStatus.openai ? 'Saving...' : savedStatus.openai ? 'Saved!' : 'Save'}
                             </button>
                         </div>
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => handleTestConnection('openai', openaiApiKey)}
+                                disabled={(!openaiApiKey.trim() && !hasStoredKey.openai) || testStatus.openai === 'testing'}
+                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors border border-border-subtle flex items-center gap-2 ${testStatus.openai === 'success' ? 'bg-green-500/10 text-green-500 border-green-500/20' :
+                                    testStatus.openai === 'error' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                                        'bg-bg-input hover:bg-bg-elevated text-text-primary'
+                                    }`}
+                                title={testError.openai || "Test Connection"}
+                            >
+                                {testStatus.openai === 'testing' ? <><Loader2 size={12} className="animate-spin" /> Testing...</> :
+                                    testStatus.openai === 'success' ? <><CheckCircle size={12} /> Connected</> :
+                                        testStatus.openai === 'error' ? <><AlertCircle size={12} /> Error</> :
+                                            <>{/* No Icon */} Test Connection</>}
+                            </button>
+                            <button
+                                onClick={() => openKeyUrl('openai')}
+                                className="text-xs text-text-tertiary hover:text-text-primary flex items-center gap-1 transition-colors"
+                                title="Get API Key"
+                            >
+                                <ExternalLink size={12} />
+                            </button>
+                        </div>
+                        {testError.openai && <p className="text-[10px] text-red-400 mt-1.5">{testError.openai}</p>}
                     </div>
 
                     {/* Claude */}
                     <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle">
-                        <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-1">
-                            Claude API Key
-                            {hasStoredKey.claude && <span className="ml-2 text-green-500 normal-case">✓ Saved</span>}
-                        </label>
-                        <div className="flex gap-3">
+                        <div className="mb-2">
+                            <label className="block text-xs font-medium text-text-primary uppercase tracking-wide">
+                                Claude API Key
+                                {hasStoredKey.claude && <span className="ml-2 text-green-500 normal-case">✓ Saved</span>}
+                            </label>
+                        </div>
+                        <div className="flex gap-2 mb-3">
                             <input
                                 type="password"
                                 value={claudeApiKey}
@@ -422,6 +551,30 @@ export const AIProvidersSettings: React.FC = () => {
                                 {savingStatus.claude ? 'Saving...' : savedStatus.claude ? 'Saved!' : 'Save'}
                             </button>
                         </div>
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => handleTestConnection('claude', claudeApiKey)}
+                                disabled={(!claudeApiKey.trim() && !hasStoredKey.claude) || testStatus.claude === 'testing'}
+                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors border border-border-subtle flex items-center gap-2 ${testStatus.claude === 'success' ? 'bg-green-500/10 text-green-500 border-green-500/20' :
+                                    testStatus.claude === 'error' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                                        'bg-bg-input hover:bg-bg-elevated text-text-primary'
+                                    }`}
+                                title={testError.claude || "Test Connection"}
+                            >
+                                {testStatus.claude === 'testing' ? <><Loader2 size={12} className="animate-spin" /> Testing...</> :
+                                    testStatus.claude === 'success' ? <><CheckCircle size={12} /> Connected</> :
+                                        testStatus.claude === 'error' ? <><AlertCircle size={12} /> Error</> :
+                                            <>{/* No Icon */} Test Connection</>}
+                            </button>
+                            <button
+                                onClick={() => openKeyUrl('claude')}
+                                className="text-xs text-text-tertiary hover:text-text-primary flex items-center gap-1 transition-colors"
+                                title="Get API Key"
+                            >
+                                <ExternalLink size={12} />
+                            </button>
+                        </div>
+                        {testError.claude && <p className="text-[10px] text-red-400 mt-1.5">{testError.claude}</p>}
                     </div>
 
                 </div>
@@ -555,10 +708,26 @@ export const AIProvidersSettings: React.FC = () => {
                                 </div>
                             </div>
 
+                            <div>
+                                <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-1">
+                                    Response JSON Path <span className="text-text-tertiary normal-case font-normal">(Optional)</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    value={customResponsePath}
+                                    onChange={(e) => setCustomResponsePath(e.target.value)}
+                                    placeholder="e.g. choices[0].message.content"
+                                    className="w-full bg-bg-input border border-border-subtle rounded-lg px-4 py-2.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary transition-colors font-mono"
+                                />
+                                <p className="text-[10px] text-text-secondary mt-1">
+                                    Dot notation path to the answer text in the JSON response. If empty, the full JSON is returned.
+                                </p>
+                            </div>
+
                             <div className="bg-bg-elevated/30 rounded-lg overflow-hidden border border-border-subtle mt-4">
                                 <div className="px-4 py-3 bg-bg-elevated/50 border-b border-border-subtle flex items-center justify-between">
-                                    <h5 className="font-bold text-text-primary text-xs flex items-center gap-2">
-                                        <span className="text-accent-primary">ℹ️</span> Configuration Guide
+                                    <h5 className="block text-xs font-medium text-text-primary uppercase tracking-wide">
+                                        Configuration Guide
                                     </h5>
                                 </div>
 
@@ -655,6 +824,11 @@ export const AIProvidersSettings: React.FC = () => {
                                             <p className="text-[10px] text-text-tertiary font-mono truncate max-w-[200px] opacity-60">
                                                 {provider.curlCommand.substring(0, 30)}...
                                             </p>
+                                            {provider.responsePath && (
+                                                <p className="text-[9px] text-text-tertiary font-mono opacity-40 mt-0.5">
+                                                    path: {provider.responsePath}
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
