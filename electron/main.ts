@@ -2,7 +2,9 @@ import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell } from "ele
 import path from "path"
 import fs from "fs"
 import { autoUpdater } from "electron-updater"
-require('dotenv').config();
+if (!app.isPackaged) {
+  require('dotenv').config();
+}
 
 // Handle stdout/stderr errors at the process level to prevent EIO crashes
 // This is critical for Electron apps that may have their terminal detached
