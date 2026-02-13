@@ -3,6 +3,8 @@ import Groq from "groq-sdk"
 import OpenAI from "openai"
 import Anthropic from "@anthropic-ai/sdk"
 import fs from "fs"
+import sharp from "sharp"
+
 import {
   HARD_SYSTEM_PROMPT, GROQ_SYSTEM_PROMPT, OPENAI_SYSTEM_PROMPT, CLAUDE_SYSTEM_PROMPT,
   UNIVERSAL_SYSTEM_PROMPT, UNIVERSAL_ANSWER_PROMPT, UNIVERSAL_WHAT_TO_ANSWER_PROMPT,
@@ -497,27 +499,70 @@ export class LLMHelper {
 
 
 
+  /**
+   * Helper to process image: resize to max 1536px and compress to JPEG 80%
+   */
+  private async processImage(path: string): Promise<{ mimeType: string, data: string }> {
+    try {
+      const imageBuffer = await fs.promises.readFile(path);
+      
+      // Resize and compress
+      const processedBuffer = await sharp(imageBuffer)
+        .resize({
+          width: 1536,
+          height: 1536,
+          fit: 'inside', // Maintain aspect ratio, max dimension 1536
+          withoutEnlargement: true 
+        })
+        .jpeg({ quality: 80 }) // 80% quality JPEG is much smaller than PNG
+        .toBuffer();
+
+      return {
+        mimeType: "image/jpeg",
+        data: processedBuffer.toString("base64")
+      };
+    } catch (error) {
+      console.error("[LLMHelper] Failed to process image with sharp:", error);
+      // Fallback to raw read if sharp fails
+      const data = await fs.promises.readFile(path);
+      return {
+        mimeType: "image/png", // Assuming PNG for raw screenshot
+        data: data.toString("base64")
+      };
+    }
+  }
+
   public async analyzeImageFile(imagePath: string) {
     try {
-      const imageData = await fs.promises.readFile(imagePath);
+      // Process image (resize/compress)
+      const { mimeType, data } = await this.processImage(imagePath);
+
       const prompt = `${HARD_SYSTEM_PROMPT}\n\nDescribe the content of this image in a short, concise answer. If it contains code or a problem, solve it. \n\n${IMAGE_ANALYSIS_PROMPT}`;
 
       const contents = [
         { text: prompt },
         {
           inlineData: {
-            mimeType: "image/png",
-            data: imageData.toString("base64"),
+            mimeType: mimeType,
+            data: data,
           }
         }
       ]
 
-      // Use Flash for multimodal
-      const text = await this.generateWithFlash(contents)
-      return { text, timestamp: Date.now() };
-    } catch (error) {
-      // console.error("Error analyzing image file:", error);
-      throw error;
+      // Use Flash for multimodal with timeout protection (30s)
+      const text = await this.withTimeout(
+        this.generateWithFlash(contents),
+        30000,
+        "Image Analysis"
+      );
+      
+      return { text: this.processResponse(text), timestamp: Date.now() };
+    } catch (error: any) {
+      console.error("Error analyzing image file:", error);
+      return { 
+        text: `I couldn't analyze the screen right now (${error.message || "Timeout"}). Please try again.`, 
+        timestamp: Date.now() 
+      };
     }
   }
 
@@ -806,14 +851,13 @@ ANSWER DIRECTLY:`;
 
     const content: any[] = [];
     if (imagePath) {
-      const imageData = await fs.promises.readFile(imagePath);
-      const base64Image = imageData.toString("base64");
+      const { mimeType, data } = await this.processImage(imagePath);
       content.push({
         type: "image",
         source: {
           type: "base64",
-          media_type: "image/png",
-          data: base64Image
+          media_type: mimeType as any,
+          data: data
         }
       });
     }
@@ -849,8 +893,8 @@ ANSWER DIRECTLY:`;
     let base64Image = "";
     if (imagePath) {
       try {
-        const imageData = await fs.promises.readFile(imagePath);
-        base64Image = imageData.toString("base64");
+        const result = await this.processImage(imagePath);
+        base64Image = result.data;
       } catch (e) {
         console.warn("Failed to read image for Custom Provider:", e);
       }
@@ -950,13 +994,13 @@ ANSWER DIRECTLY:`;
     let rawResponse: string;
 
     if (imagePath) {
-      const imageData = await fs.promises.readFile(imagePath);
+      const { mimeType, data } = await this.processImage(imagePath);
       const contents = [
         { text: fullMessage },
         {
           inlineData: {
-            mimeType: "image/png",
-            data: imageData.toString("base64")
+            mimeType: mimeType,
+            data: data
           }
         }
       ];
@@ -1277,8 +1321,8 @@ ANSWER DIRECTLY:`;
   private async * streamWithOpenaiMultimodal(userMessage: string, imagePath: string, systemPrompt?: string): AsyncGenerator<string, void, unknown> {
     if (!this.openaiClient) throw new Error("OpenAI client not initialized");
 
-    const imageData = await fs.promises.readFile(imagePath);
-    const base64Image = imageData.toString("base64");
+    const { mimeType, data } = await this.processImage(imagePath);
+    // const base64Image = imageData.toString("base64");
 
     const messages: any[] = [];
     if (systemPrompt) {
@@ -1288,7 +1332,7 @@ ANSWER DIRECTLY:`;
       role: "user",
       content: [
         { type: "text", text: userMessage },
-        { type: "image_url", image_url: { url: `data:image/png;base64,${base64Image}` } }
+        { type: "image_url", image_url: { url: `data:${mimeType};base64,${data}` } }
       ]
     });
 
@@ -1314,8 +1358,8 @@ ANSWER DIRECTLY:`;
   private async * streamWithClaudeMultimodal(userMessage: string, imagePath: string, systemPrompt?: string): AsyncGenerator<string, void, unknown> {
     if (!this.claudeClient) throw new Error("Claude client not initialized");
 
-    const imageData = await fs.promises.readFile(imagePath);
-    const base64Image = imageData.toString("base64");
+    const { mimeType, data } = await this.processImage(imagePath);
+    // const base64Image = imageData.toString("base64");
 
     const stream = await this.claudeClient.messages.stream({
       model: CLAUDE_MODEL,
@@ -1328,8 +1372,8 @@ ANSWER DIRECTLY:`;
             type: "image",
             source: {
               type: "base64",
-              media_type: "image/png",
-              data: base64Image
+              media_type: mimeType as any,
+              data: data
             }
           },
           { type: "text", text: userMessage }
@@ -1476,8 +1520,8 @@ ANSWER DIRECTLY:`;
     let base64Image = "";
     if (imagePath) {
       try {
-        const data = await fs.promises.readFile(imagePath);
-        base64Image = data.toString("base64");
+        const result = await this.processImage(imagePath);
+        base64Image = result.data;
       } catch (e) { }
     }
 
