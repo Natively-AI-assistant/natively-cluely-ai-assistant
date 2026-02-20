@@ -9,7 +9,7 @@
   ![Repo Views](https://img.shields.io/badge/Views-19.4k-lightgrey?style=flat-square)
   [![Stars](https://img.shields.io/github/stars/evinjohnn/natively-cluely-ai-assistant?style=flat-square)](https://github.com/evinjohnn/natively-cluely-ai-assistant)
   ![Status](https://img.shields.io/badge/Status-active-success?style=flat-square)
-  [![Website](https://img.shields.io/badge/Website-nativelyai.vercel.app-blue?style=flat-square&logo=google-chrome&logoColor=white)](https://nativelyai.vercel.app/)
+ 
 
 </div>
 
@@ -64,6 +64,7 @@ This demo shows **a complete live meeting scenario**:
 ### Download Natively
 *The privacy-first AI assistant for meetings.*
 
+[![Website](https://img.shields.io/badge/Website-nativelyai.vercel.app-blue?style=flat-square&logo=google-chrome&logoColor=white))
 [![Download for macOS](https://img.shields.io/badge/Download_for-macOS-white?style=for-the-badge&logo=apple&logoColor=black)](https://github.com/evinjohnn/natively-cluely-ai-assistant/releases/latest)
 [![Download for Windows](https://img.shields.io/badge/Download_for-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/evinjohnn/natively-cluely-ai-assistant/releases/latest)
 
