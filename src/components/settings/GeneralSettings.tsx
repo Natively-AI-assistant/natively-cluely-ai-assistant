@@ -5,9 +5,12 @@ interface GeneralSettingsProps { }
 
 export const GeneralSettings: React.FC<GeneralSettingsProps> = () => {
     // Recognition Language
-    const [recognitionLanguage, setRecognitionLanguage] = useState('');
+    const [recognitionLanguage, setRecognitionLanguage] = useState('english-us');
     const [availableLanguages, setAvailableLanguages] = useState<Record<string, any>>({});
-    const [languageOptions, setLanguageOptions] = useState<any[]>([]);
+    
+    // AI Response Language
+    const [aiResponseLanguage, setAiResponseLanguage] = useState('English');
+    const [availableAiLanguages, setAvailableAiLanguages] = useState<any[]>([]);
 
     // Google Service Account
     const [serviceAccountPath, setServiceAccountPath] = useState('');
@@ -25,72 +28,38 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = () => {
                 console.error("Failed to load stored credentials:", e);
             }
 
-            // Load Languages
+            // Load STT Languages
             if (window.electronAPI?.getRecognitionLanguages) {
                 const langs = await window.electronAPI.getRecognitionLanguages();
                 setAvailableLanguages(langs);
 
-                const desiredOrder = [
-                    { key: 'english-india', label: 'English (India)' },
-                    { key: 'english-us', label: 'English (United States)' },
-                    { key: 'english-uk', label: 'English (United Kingdom)' },
-                    { key: 'english-au', label: 'English (Australia)' },
-                    { key: 'english-ca', label: 'English (Canada)' },
-                ];
+                const storedStt = await window.electronAPI.getSttLanguage();
+                setRecognitionLanguage(storedStt || 'english-us');
+            }
 
-                const options = [
-                    { value: 'auto', label: 'Auto (Recommended)' }
-                ];
+            // Load AI Response Languages
+            if (window.electronAPI?.getAiResponseLanguages) {
+                const aiLangs = await window.electronAPI.getAiResponseLanguages();
+                setAvailableAiLanguages(aiLangs);
 
-                desiredOrder.forEach(({ key, label }) => {
-                    if (langs[key]) {
-                        options.push({ value: key, label: label });
-                    }
-                });
-
-                setLanguageOptions(options);
-
-                const stored = localStorage.getItem('natively_recognition_language');
-                if (!stored || stored === 'auto') {
-                    setRecognitionLanguage('auto');
-                    applyAutoLanguage(langs);
-                } else if (langs[stored]) {
-                    setRecognitionLanguage(stored);
-                } else {
-                    setRecognitionLanguage('auto');
-                    applyAutoLanguage(langs);
-                }
+                const storedAi = await window.electronAPI.getAiResponseLanguage();
+                setAiResponseLanguage(storedAi || 'English');
             }
         };
         loadInitialData();
     }, []);
 
-    const applyAutoLanguage = (langs: any) => {
-        const systemLocale = navigator.language;
-        let match = 'english-us';
-        for (const [key, config] of Object.entries(langs)) {
-            if ((config as any).primary === systemLocale || (config as any).alternates.includes(systemLocale)) {
-                match = key;
-                break;
-            }
-        }
-        if (systemLocale === 'en-IN') match = 'english-india';
-
+    const handleLanguageChange = async (key: string) => {
+        setRecognitionLanguage(key);
         if (window.electronAPI?.setRecognitionLanguage) {
-            window.electronAPI.setRecognitionLanguage(match);
+            await window.electronAPI.setRecognitionLanguage(key);
         }
     };
 
-    const handleLanguageChange = (key: string) => {
-        setRecognitionLanguage(key);
-        localStorage.setItem('natively_recognition_language', key);
-
-        if (key === 'auto') {
-            applyAutoLanguage(availableLanguages);
-        } else {
-            if (window.electronAPI?.setRecognitionLanguage) {
-                window.electronAPI.setRecognitionLanguage(key);
-            }
+    const handleAiLanguageChange = async (key: string) => {
+        setAiResponseLanguage(key);
+        if (window.electronAPI?.setAiResponseLanguage) {
+            await window.electronAPI.setAiResponseLanguage(key);
         }
     };
 
@@ -131,22 +100,42 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = () => {
 
                     {/* Recognition Language */}
                     <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle">
-                        <label className="block text-xs font-medium text-text-secondary uppercase tracking-wide mb-2">Recognition Language</label>
+                        <label className="block text-xs font-medium text-text-secondary uppercase tracking-wide mb-2">Recognition Language (STT)</label>
                         <div className="relative">
                             <select
                                 value={recognitionLanguage}
                                 onChange={(e) => handleLanguageChange(e.target.value)}
                                 className="w-full appearance-none bg-bg-input border border-border-subtle rounded-lg px-4 py-2.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary transition-colors cursor-pointer"
                             >
-                                {languageOptions.map((opt) => (
-                                    <option key={opt.value} value={opt.value}>
-                                        {opt.label}
+                                {Object.entries(availableLanguages).map(([key, lang]) => (
+                                    <option key={key} value={key}>
+                                        {lang.label}
                                     </option>
                                 ))}
                             </select>
                             <Globe size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none" />
                         </div>
-                        <p className="text-xs text-text-tertiary mt-2">Select your preferred accent for better recognition accuracy.</p>
+                        <p className="text-xs text-text-tertiary mt-2">The language you and the interviewer are speaking.</p>
+                    </div>
+
+                    {/* AI Response Language */}
+                    <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle">
+                        <label className="block text-xs font-medium text-text-secondary uppercase tracking-wide mb-2">AI Response Language</label>
+                        <div className="relative">
+                            <select
+                                value={aiResponseLanguage}
+                                onChange={(e) => handleAiLanguageChange(e.target.value)}
+                                className="w-full appearance-none bg-bg-input border border-border-subtle rounded-lg px-4 py-2.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary transition-colors cursor-pointer"
+                            >
+                                {availableAiLanguages.map((lang) => (
+                                    <option key={lang.code} value={lang.code}>
+                                        {lang.label}
+                                    </option>
+                                ))}
+                            </select>
+                            <Info size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none" />
+                        </div>
+                        <p className="text-xs text-text-tertiary mt-2">The language in which the AI will provide its suggestions.</p>
                     </div>
                 </div>
             </div>
