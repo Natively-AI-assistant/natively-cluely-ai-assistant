@@ -11,6 +11,7 @@
 
 import { EventEmitter } from 'events';
 import WebSocket from 'ws';
+import { RECOGNITION_LANGUAGES } from '../config/languages';
 
 const RECONNECT_BASE_DELAY_MS = 1000;
 const RECONNECT_MAX_DELAY_MS = 30000;
@@ -24,6 +25,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
 
     private sampleRate = 16000;
     private numChannels = 1;
+    private languageCode = 'en'; // Default to English
 
     private reconnectAttempts = 0;
     private reconnectTimer: NodeJS.Timeout | null = null;
@@ -48,8 +50,20 @@ export class DeepgramStreamingSTT extends EventEmitter {
         console.log(`[DeepgramStreaming] Channel count set to ${count}`);
     }
 
-    /** No-op — Deepgram language is auto-detected or set via query param */
-    public setRecognitionLanguage(_key: string): void { }
+    /** Set recognition language using ISO-639-1 code */
+    public setRecognitionLanguage(key: string): void {
+        const config = RECOGNITION_LANGUAGES[key];
+        if (config) {
+            this.languageCode = config.iso639;
+            console.log(`[DeepgramStreaming] Language set to ${this.languageCode}`);
+
+            if (this.isActive) {
+                console.log('[DeepgramStreaming] Language changed while active. Restarting...');
+                this.stop();
+                this.start();
+            }
+        }
+    }
 
     /** No-op — no Google credentials needed */
     public setCredentials(_path: string): void { }
@@ -113,6 +127,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
             `&encoding=linear16` +
             `&sample_rate=${this.sampleRate}` +
             `&channels=${this.numChannels}` +
+            `&language=${this.languageCode}` +
             `&smart_format=true` +
             `&interim_results=true`;
 

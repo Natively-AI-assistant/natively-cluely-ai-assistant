@@ -14,6 +14,7 @@
 import { EventEmitter } from 'events';
 import axios from 'axios';
 import FormData from 'form-data';
+import { RECOGNITION_LANGUAGES } from '../config/languages';
 
 export type RestSttProvider = 'groq' | 'openai' | 'elevenlabs' | 'azure' | 'ibmwatson';
 
@@ -27,34 +28,43 @@ interface RestSttProviderConfig {
     extractTranscript: (data: any) => string;
 }
 
-type ProviderConfigFactory = (apiKey: string, region?: string) => RestSttProviderConfig;
+type ProviderConfigFactory = (apiKey: string, region?: string, languageKey?: string) => RestSttProviderConfig;
 
 const PROVIDER_CONFIGS: Record<RestSttProvider, ProviderConfigFactory> = {
-    groq: (apiKey) => ({
-        endpoint: 'https://api.groq.com/openai/v1/audio/transcriptions',
-        model: 'whisper-large-v3-turbo',
-        authHeader: { Authorization: `Bearer ${apiKey}` },
-        uploadType: 'multipart',
-        extraFormFields: {
-            temperature: '0',
-            response_format: 'json',
-            language: 'en',
-        },
-        extractTranscript: (data: any) => {
-            if (typeof data === 'string') return data;
-            return data?.text ?? '';
-        },
-    }),
-    openai: (apiKey) => ({
-        endpoint: 'https://api.openai.com/v1/audio/transcriptions',
-        model: 'whisper-1',
-        authHeader: { Authorization: `Bearer ${apiKey}` },
-        uploadType: 'multipart',
-        extractTranscript: (data: any) => {
-            if (typeof data === 'string') return data;
-            return data?.text ?? '';
-        },
-    }),
+    groq: (apiKey, region, languageKey) => {
+        const lang = languageKey ? RECOGNITION_LANGUAGES[languageKey]?.iso639 : undefined;
+        return {
+            endpoint: 'https://api.groq.com/openai/v1/audio/transcriptions',
+            model: 'whisper-large-v3-turbo',
+            authHeader: { Authorization: `Bearer ${apiKey}` },
+            uploadType: 'multipart',
+            extraFormFields: {
+                temperature: '0',
+                response_format: 'json',
+                ...(lang ? { language: lang } : {})
+            },
+            extractTranscript: (data: any) => {
+                if (typeof data === 'string') return data;
+                return data?.text ?? '';
+            },
+        };
+    },
+    openai: (apiKey, region, languageKey) => {
+        const lang = languageKey ? RECOGNITION_LANGUAGES[languageKey]?.iso639 : undefined;
+        return {
+            endpoint: 'https://api.openai.com/v1/audio/transcriptions',
+            model: 'whisper-1',
+            authHeader: { Authorization: `Bearer ${apiKey}` },
+            uploadType: 'multipart',
+            extraFormFields: {
+                ...(lang ? { language: lang } : {})
+            },
+            extractTranscript: (data: any) => {
+                if (typeof data === 'string') return data;
+                return data?.text ?? '';
+            },
+        };
+    },
     elevenlabs: (apiKey) => ({
         endpoint: 'https://api.elevenlabs.io/v1/speech-to-text',
         model: 'scribe_v1',
@@ -65,28 +75,36 @@ const PROVIDER_CONFIGS: Record<RestSttProvider, ProviderConfigFactory> = {
             return data?.text ?? '';
         },
     }),
-    azure: (apiKey, region = 'eastus') => ({
-        endpoint: `https://${region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=en-US`,
-        model: '',
-        authHeader: { 'Ocp-Apim-Subscription-Key': apiKey },
-        uploadType: 'binary',
-        extractTranscript: (data: any) => {
-            return data?.DisplayText ?? '';
-        },
-    }),
-    ibmwatson: (apiKey, region = 'us-south') => ({
-        endpoint: `https://api.${region}.speech-to-text.watson.cloud.ibm.com/v1/recognize`,
-        model: '',
-        authHeader: { Authorization: `Basic ${Buffer.from(`apikey:${apiKey}`).toString('base64')}` },
-        uploadType: 'binary',
-        extractTranscript: (data: any) => {
-            try {
-                return data?.results?.[0]?.alternatives?.[0]?.transcript ?? '';
-            } catch {
-                return '';
-            }
-        },
-    }),
+    azure: (apiKey, region = 'eastus', languageKey) => {
+        const lang = languageKey ? RECOGNITION_LANGUAGES[languageKey]?.bcp47 : undefined;
+        const finalLang = lang || 'en-US';
+        return {
+            endpoint: `https://${region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=${finalLang}`,
+            model: '',
+            authHeader: { 'Ocp-Apim-Subscription-Key': apiKey },
+            uploadType: 'binary',
+            extractTranscript: (data: any) => {
+                return data?.DisplayText ?? '';
+            },
+        };
+    },
+    ibmwatson: (apiKey, region = 'us-south', languageKey) => {
+        const lang = languageKey ? RECOGNITION_LANGUAGES[languageKey]?.bcp47 : undefined;
+        const finalLang = lang || 'en-US';
+        return {
+            endpoint: `https://api.${region}.speech-to-text.watson.cloud.ibm.com/v1/recognize?language=${finalLang}`,
+            model: '',
+            authHeader: { Authorization: `Basic ${Buffer.from(`apikey:${apiKey}`).toString('base64')}` },
+            uploadType: 'binary',
+            extractTranscript: (data: any) => {
+                try {
+                    return data?.results?.[0]?.alternatives?.[0]?.transcript ?? '';
+                } catch {
+                    return '';
+                }
+            },
+        };
+    },
 };
 
 // Minimum buffer size before sending (avoid sending tiny fragments)
@@ -156,11 +174,11 @@ export class RestSTT extends EventEmitter {
     }
 
     /**
-     * No-op for RestSTT (language is handled by the REST API)
+     * Update recognition language
      */
-    public setRecognitionLanguage(_key: string): void {
-        // REST providers handle language automatically or via config
-        console.log(`[RestSTT] setRecognitionLanguage called (no-op for REST)`);
+    public setRecognitionLanguage(key: string): void {
+        console.log(`[RestSTT] Updating recognition language to: ${key}`);
+        this.config = PROVIDER_CONFIGS[this.provider](this.apiKey, this.region, key);
     }
 
     /**

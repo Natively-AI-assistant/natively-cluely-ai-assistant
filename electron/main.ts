@@ -76,6 +76,7 @@ import { MicrophoneCapture } from "./audio/MicrophoneCapture"
 import { GoogleSTT } from "./audio/GoogleSTT"
 import { RestSTT } from "./audio/RestSTT"
 import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
+import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
 import { ThemeManager } from "./ThemeManager"
 import { RAGManager } from "./rag/RAGManager"
 import { DatabaseManager } from "./db/DatabaseManager"
@@ -462,8 +463,8 @@ export class AppState {
   private systemAudioCapture: SystemAudioCapture | null = null;
   private microphoneCapture: MicrophoneCapture | null = null;
   private audioTestCapture: MicrophoneCapture | null = null; // For audio settings test
-  private googleSTT: GoogleSTT | RestSTT | DeepgramStreamingSTT | null = null; // Interviewer
-  private googleSTT_User: GoogleSTT | RestSTT | DeepgramStreamingSTT | null = null; // User
+  private googleSTT: GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | null = null; // Interviewer
+  private googleSTT_User: GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | null = null; // User
 
   private setupSystemAudioPipeline(): void {
     // REMOVED EARLY RETURN: if (this.systemAudioCapture && this.microphoneCapture) return; // Already initialized
@@ -498,15 +499,29 @@ export class AppState {
         // Check which provider to use
         const { CredentialsManager } = require('./services/CredentialsManager');
         const sttProvider = CredentialsManager.getInstance().getSttProvider();
+        const sttLanguage = CredentialsManager.getInstance().getSttLanguage();
 
         if (sttProvider === 'deepgram') {
           const apiKey = CredentialsManager.getInstance().getDeepgramApiKey();
           if (apiKey) {
             console.log(`[Main] Using DeepgramStreamingSTT for Interviewer`);
             this.googleSTT = new DeepgramStreamingSTT(apiKey);
+            this.googleSTT.setRecognitionLanguage(sttLanguage);
           } else {
             console.warn(`[Main] No API key for Deepgram STT, falling back to GoogleSTT`);
             this.googleSTT = new GoogleSTT();
+            this.googleSTT.setRecognitionLanguage(sttLanguage);
+          }
+        } else if (sttProvider === 'soniox') {
+          const apiKey = CredentialsManager.getInstance().getSonioxApiKey();
+          if (apiKey) {
+            console.log(`[Main] Using SonioxStreamingSTT for Interviewer`);
+            this.googleSTT = new SonioxStreamingSTT(apiKey);
+            this.googleSTT.setRecognitionLanguage(sttLanguage);
+          } else {
+            console.warn(`[Main] No API key for Soniox STT, falling back to GoogleSTT`);
+            this.googleSTT = new GoogleSTT();
+            this.googleSTT.setRecognitionLanguage(sttLanguage);
           }
         } else if (sttProvider === 'groq' || sttProvider === 'openai' || sttProvider === 'elevenlabs' || sttProvider === 'azure' || sttProvider === 'ibmwatson') {
           let apiKey: string | undefined;
@@ -531,12 +546,15 @@ export class AppState {
           if (apiKey) {
             console.log(`[Main] Using RestSTT (${sttProvider}) for Interviewer`);
             this.googleSTT = new RestSTT(sttProvider, apiKey, modelOverride, region);
+            this.googleSTT.setRecognitionLanguage(sttLanguage);
           } else {
             console.warn(`[Main] No API key for ${sttProvider} STT, falling back to GoogleSTT`);
             this.googleSTT = new GoogleSTT();
+            this.googleSTT.setRecognitionLanguage(sttLanguage);
           }
         } else {
           this.googleSTT = new GoogleSTT();
+          this.googleSTT.setRecognitionLanguage(sttLanguage);
         }
 
         // Wire Transcript Events
@@ -575,15 +593,29 @@ export class AppState {
         // Check which provider to use
         const { CredentialsManager } = require('./services/CredentialsManager');
         const sttProvider = CredentialsManager.getInstance().getSttProvider();
+        const sttLanguage = CredentialsManager.getInstance().getSttLanguage();
 
         if (sttProvider === 'deepgram') {
           const apiKey = CredentialsManager.getInstance().getDeepgramApiKey();
           if (apiKey) {
             console.log(`[Main] Using DeepgramStreamingSTT for User`);
             this.googleSTT_User = new DeepgramStreamingSTT(apiKey);
+            this.googleSTT_User.setRecognitionLanguage(sttLanguage);
           } else {
             console.warn(`[Main] No API key for Deepgram STT, falling back to GoogleSTT`);
             this.googleSTT_User = new GoogleSTT();
+            this.googleSTT_User.setRecognitionLanguage(sttLanguage);
+          }
+        } else if (sttProvider === 'soniox') {
+          const apiKey = CredentialsManager.getInstance().getSonioxApiKey();
+          if (apiKey) {
+            console.log(`[Main] Using SonioxStreamingSTT for User`);
+            this.googleSTT_User = new SonioxStreamingSTT(apiKey);
+            this.googleSTT_User.setRecognitionLanguage(sttLanguage);
+          } else {
+            console.warn(`[Main] No API key for Soniox STT, falling back to GoogleSTT`);
+            this.googleSTT_User = new GoogleSTT();
+            this.googleSTT_User.setRecognitionLanguage(sttLanguage);
           }
         } else if (sttProvider === 'groq' || sttProvider === 'openai' || sttProvider === 'elevenlabs' || sttProvider === 'azure' || sttProvider === 'ibmwatson') {
           let apiKey: string | undefined;
@@ -608,12 +640,15 @@ export class AppState {
           if (apiKey) {
             console.log(`[Main] Using RestSTT (${sttProvider}) for User`);
             this.googleSTT_User = new RestSTT(sttProvider, apiKey, modelOverride, region);
+            this.googleSTT_User.setRecognitionLanguage(sttLanguage);
           } else {
             console.warn(`[Main] No API key for ${sttProvider} STT, falling back to GoogleSTT`);
             this.googleSTT_User = new GoogleSTT();
+            this.googleSTT_User.setRecognitionLanguage(sttLanguage);
           }
         } else {
           this.googleSTT_User = new GoogleSTT();
+          this.googleSTT_User.setRecognitionLanguage(sttLanguage);
         }
 
         // Wire Transcript Events
@@ -1068,8 +1103,11 @@ export class AppState {
 
   public setRecognitionLanguage(key: string): void {
     console.log(`[AppState] Setting recognition language to: ${key}`);
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    CredentialsManager.getInstance().setSttLanguage(key);
     this.googleSTT?.setRecognitionLanguage(key);
     this.googleSTT_User?.setRecognitionLanguage(key);
+    this.processingHelper.getLLMHelper().setSttLanguage(key);
   }
 
   public static getInstance(): AppState {
