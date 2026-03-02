@@ -656,10 +656,10 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings }) =
                                                         <motion.div
                                                             key={m.id}
                                                             layoutId={`meeting-${m.id}`}
-                                                            className="group relative flex items-center justify-between px-3 py-2 rounded-lg bg-transparent hover:bg-[#18181B] transition-colors cursor-pointer"
+                                                            className="group relative flex items-center justify-between px-3 py-2 rounded-lg bg-transparent hover:bg-bg-elevated transition-colors cursor-pointer"
                                                             onClick={() => handleOpenMeeting(m)}
                                                         >
-                                                            <div className={`font-medium text-[14px] max-w-[60%] truncate ${m.title === 'Processing...' ? 'text-blue-400 italic animate-pulse' : 'text-[#F4F4F5]'}`}>
+                                                            <div className={`font-medium text-[14px] max-w-[60%] truncate ${m.title === 'Processing...' ? 'text-blue-400 italic animate-pulse' : 'text-text-primary'}`}>
                                                                 {m.title}
                                                             </div>
 
@@ -672,12 +672,12 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings }) =
                                                                     </div>
                                                                 ) : (
                                                                     <>
-                                                                        <span className="relative z-10 bg-[#242426] text-[#9F9FAA] text-[9px] px-1.5 py-0.5 rounded-full font-medium min-w-[35px] text-center tracking-wide">
+                                                                        <span className="relative z-10 bg-bg-elevated text-text-secondary text-[9px] px-1.5 py-0.5 rounded-full font-medium min-w-[35px] text-center tracking-wide">
                                                                             {formatDurationPill(m.duration)}
                                                                         </span>
 
                                                                         {/* Time Text (Should fade out on hover) */}
-                                                                        <span className="text-[13px] text-[#D4D4D8] font-medium min-w-[60px] text-right transition-all duration-200 ease-out group-hover:opacity-0 group-hover:translate-x-2 delayed-hover-exit">
+                                                                        <span className="text-[13px] text-text-secondary font-medium min-w-[60px] text-right transition-all duration-200 ease-out group-hover:opacity-0 group-hover:translate-x-2 delayed-hover-exit">
                                                                             {formatTime(m.date)}
                                                                         </span>
                                                                     </>
