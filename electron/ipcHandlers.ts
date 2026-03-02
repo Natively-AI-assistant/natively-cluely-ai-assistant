@@ -8,7 +8,7 @@ import * as path from "path";
 import * as fs from "fs";
 import { AudioDevices } from "./audio/AudioDevices";
 
-import { ENGLISH_VARIANTS } from "./config/languages"
+import { RECOGNITION_LANGUAGES, AI_RESPONSE_LANGUAGES } from "./config/languages"
 
 export function initializeIpcHandlers(appState: AppState): void {
   const safeHandle = (channel: string, listener: (event: any, ...args: any[]) => Promise<any> | any) => {
@@ -46,8 +46,30 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle("get-recognition-languages", async () => {
-    return ENGLISH_VARIANTS;
+    return RECOGNITION_LANGUAGES;
   });
+
+  safeHandle("get-ai-response-languages", async () => {
+    return AI_RESPONSE_LANGUAGES;
+  });
+
+  safeHandle("set-ai-response-language", async (_, language: string) => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    CredentialsManager.getInstance().setAiResponseLanguage(language);
+    appState.processingHelper.getLLMHelper().setAiResponseLanguage(language);
+    return { success: true };
+  });
+
+  safeHandle("get-stt-language", async () => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    return CredentialsManager.getInstance().getSttLanguage();
+  });
+
+  safeHandle("get-ai-response-language", async () => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    return CredentialsManager.getInstance().getAiResponseLanguage();
+  });
+
   safeHandle(
     "update-content-dimensions",
     async (event, { width, height }: { width: number; height: number }) => {

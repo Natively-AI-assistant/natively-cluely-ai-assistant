@@ -79,6 +79,10 @@ interface ElectronAPI {
   getInputDevices: () => Promise<Array<{ id: string; name: string }>>
   getOutputDevices: () => Promise<Array<{ id: string; name: string }>>
   setRecognitionLanguage: (key: string) => Promise<{ success: boolean; error?: string }>
+  getAiResponseLanguages: () => Promise<Array<{ label: string; code: string }>>
+  setAiResponseLanguage: (language: string) => Promise<{ success: boolean; error?: string }>
+  getSttLanguage: () => Promise<string>
+  getAiResponseLanguage: () => Promise<string>
 
   // Intelligence Mode IPC
   generateAssist: () => Promise<{ insight: string | null }>
@@ -454,6 +458,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getInputDevices: () => ipcRenderer.invoke("get-input-devices"),
   getOutputDevices: () => ipcRenderer.invoke("get-output-devices"),
   setRecognitionLanguage: (key: string) => ipcRenderer.invoke("set-recognition-language", key),
+  getAiResponseLanguages: () => ipcRenderer.invoke("get-ai-response-languages"),
+  setAiResponseLanguage: (language: string) => ipcRenderer.invoke("set-ai-response-language", language),
+  getSttLanguage: () => ipcRenderer.invoke("get-stt-language"),
+  getAiResponseLanguage: () => ipcRenderer.invoke("get-ai-response-language"),
 
   // Intelligence Mode IPC
   generateAssist: () => ipcRenderer.invoke("generate-assist"),

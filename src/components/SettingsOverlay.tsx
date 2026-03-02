@@ -5,7 +5,7 @@ import {
     ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
     ChevronDown, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Settings, Activity, ExternalLink, Trash2,
-    Sparkles, Pencil, Briefcase, Building2, Search
+    Sparkles, Pencil, Briefcase, Building2, Search, MapPin
 } from 'lucide-react';
 import { analytics } from '../lib/analytics/analytics.service';
 import { AboutSection } from './AboutSection';
@@ -230,8 +230,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose }) =>
     const [openOnLogin, setOpenOnLogin] = useState(false);
     const [themeMode, setThemeMode] = useState<'system' | 'light' | 'dark'>('system');
     const [isThemeDropdownOpen, setIsThemeDropdownOpen] = useState(false);
+    const [isAiLangDropdownOpen, setIsAiLangDropdownOpen] = useState(false);
     const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'uptodate' | 'error'>('idle');
     const themeDropdownRef = React.useRef<HTMLDivElement>(null);
+    const aiLangDropdownRef = React.useRef<HTMLDivElement>(null);
 
     // Profile Engine State
     const [profileStatus, setProfileStatus] = useState<{
@@ -279,16 +281,19 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose }) =>
             if (themeDropdownRef.current && !themeDropdownRef.current.contains(event.target as Node)) {
                 setIsThemeDropdownOpen(false);
             }
+            if (aiLangDropdownRef.current && !aiLangDropdownRef.current.contains(event.target as Node)) {
+                setIsAiLangDropdownOpen(false);
+            }
         };
 
-        if (isThemeDropdownOpen) {
+        if (isThemeDropdownOpen || isAiLangDropdownOpen) {
             document.addEventListener('mousedown', handleClickOutside);
         }
 
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
         };
-    }, [isThemeDropdownOpen]);
+    }, [isThemeDropdownOpen, isAiLangDropdownOpen]);
 
     const [showTranscript, setShowTranscript] = useState(() => {
         const stored = localStorage.getItem('natively_interviewer_transcript');
@@ -297,8 +302,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose }) =>
 
     // Recognition Language
     const [recognitionLanguage, setRecognitionLanguage] = useState('');
+    const [selectedSttGroup, setSelectedSttGroup] = useState('');
     const [availableLanguages, setAvailableLanguages] = useState<Record<string, any>>({});
     const [languageOptions, setLanguageOptions] = useState<any[]>([]);
+    
+    // AI Response Language
+    const [aiResponseLanguage, setAiResponseLanguage] = useState('English');
+    const [availableAiLanguages, setAvailableAiLanguages] = useState<any[]>([]);
 
     useEffect(() => {
         const loadLanguages = async () => {
@@ -306,92 +316,97 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose }) =>
                 const langs = await window.electronAPI.getRecognitionLanguages();
                 setAvailableLanguages(langs);
 
-                // Define the specific order and labels requested by user
-                const desiredOrder = [
-                    { key: 'english-india', label: 'English (India)' },
-                    { key: 'english-us', label: 'English (United States)' },
-                    { key: 'english-uk', label: 'English (United Kingdom)' },
-                    { key: 'english-au', label: 'English (Australia)' },
-                    { key: 'english-ca', label: 'English (Canada)' },
-                ];
+                // Load stored preference or auto-detect
+                const storedStt = await window.electronAPI.getSttLanguage();
+                let currentLangKey = storedStt;
 
-                // Create options list starting with Auto
-                const options = [
-                    {
-                        deviceId: 'auto',
-                        label: 'Auto (Recommended)',
-                        kind: 'audioinput' as MediaDeviceKind,
-                        groupId: '',
-                        toJSON: () => ({})
+                if (!currentLangKey) {
+                    const systemLocale = navigator.language;
+                    // Try to find exact match or primary match
+                    const match = Object.entries(langs).find(([key, config]: [string, any]) => 
+                        config.bcp47 === systemLocale || 
+                        config.iso639 === systemLocale ||
+                        (config.alternates && config.alternates.includes(systemLocale))
+                    );
+                    
+                    currentLangKey = match ? match[0] : 'english-us';
+                    
+                    // Save the auto-detected default
+                    if (window.electronAPI?.setRecognitionLanguage) {
+                        window.electronAPI.setRecognitionLanguage(currentLangKey);
                     }
-                ];
-
-                // Add the rest if they exist in backend response
-                desiredOrder.forEach(({ key, label }) => {
-                    if (langs[key]) {
-                        options.push({
-                            deviceId: key,
-                            label: label, // Use requested label
-                            kind: 'audioinput' as MediaDeviceKind,
-                            groupId: '',
-                            toJSON: () => ({})
-                        });
-                    }
-                });
-
-                setLanguageOptions(options);
-
-                // Load stored preference
-                const stored = localStorage.getItem('natively_recognition_language');
-
-                // If stored is 'auto' or not set, default to 'auto'
-                if (!stored || stored === 'auto') {
-                    setRecognitionLanguage('auto');
-                    // We still need to set the actual backend language based on system locale
-                    // But for UI, we show 'auto'
-                    applyAutoLanguage(langs);
-                } else if (langs[stored]) {
-                    setRecognitionLanguage(stored);
-                } else {
-                    // Fallback if stored key no longer exists
-                    setRecognitionLanguage('auto');
-                    applyAutoLanguage(langs);
                 }
+
+                setRecognitionLanguage(currentLangKey);
+
+                // Initialize Group based on current language
+                if (langs[currentLangKey]) {
+                    setSelectedSttGroup(langs[currentLangKey].group);
+                } else {
+                    setSelectedSttGroup('English');
+                }
+            }
+
+            if (window.electronAPI?.getAiResponseLanguages) {
+                const aiLangs = await window.electronAPI.getAiResponseLanguages();
+                // Sort: English first, then alphabetical
+                const sortedAiLangs = [...aiLangs].sort((a, b) => {
+                    if (a.label === 'English') return -1;
+                    if (b.label === 'English') return 1;
+                    return a.label.localeCompare(b.label);
+                });
+                setAvailableAiLanguages(sortedAiLangs);
+
+                const storedAi = await window.electronAPI.getAiResponseLanguage();
+                setAiResponseLanguage(storedAi || 'English');
             }
         };
         loadLanguages();
     }, []);
 
-    const applyAutoLanguage = (langs: any) => {
-        const systemLocale = navigator.language;
-        let match = 'english-us';
-
-        // Logic to find best match from available langs
-        for (const [key, config] of Object.entries(langs)) {
-            if ((config as any).primary === systemLocale || (config as any).alternates.includes(systemLocale)) {
-                match = key;
-                break;
-            }
+    const handleLanguageChange = async (key: string) => {
+        setRecognitionLanguage(key);
+        if (availableLanguages[key]) {
+            setSelectedSttGroup(availableLanguages[key].group);
         }
-        if (systemLocale === 'en-IN') match = 'english-india';
-
-        // Send actual code to backend, but keep UI as 'auto' (handled by separating state if needed, 
-        // but here 'recognitionLanguage' state tracks the dropdown value)
         if (window.electronAPI?.setRecognitionLanguage) {
-            window.electronAPI.setRecognitionLanguage(match);
+            await window.electronAPI.setRecognitionLanguage(key);
         }
     };
 
-    const handleLanguageChange = (key: string) => {
-        setRecognitionLanguage(key);
-        localStorage.setItem('natively_recognition_language', key);
-
-        if (key === 'auto') {
-            applyAutoLanguage(availableLanguages);
-        } else {
-            if (window.electronAPI?.setRecognitionLanguage) {
-                window.electronAPI.setRecognitionLanguage(key);
+        const handleGroupChange = (group: string) => {
+            setSelectedSttGroup(group);
+            // Find default variant for this group (first one)
+            const firstVariant = Object.entries(availableLanguages).find(([_, lang]) => lang.group === group);   
+            if (firstVariant) {
+                handleLanguageChange(firstVariant[0]);
             }
+        };
+    
+        // Helper to get unique groups
+        const languageGroups = Array.from(new Set(Object.values(availableLanguages).map((l: any) => l.group)))
+            .sort((a, b) => {
+                if (a === 'English') return -1;
+                if (b === 'English') return 1;
+                return a.localeCompare(b);
+            });
+        
+        // Helper to get variants for current group
+        const currentGroupVariants = Object.entries(availableLanguages)
+    
+        .filter(([_, lang]) => lang.group === selectedSttGroup)
+        .map(([key, lang]) => ({
+            deviceId: key,
+            label: lang.label,
+            kind: 'audioinput' as MediaDeviceKind,
+            groupId: '',
+            toJSON: () => ({})
+        }));
+
+    const handleAiLanguageChange = async (key: string) => {
+        setAiResponseLanguage(key);
+        if (window.electronAPI?.setAiResponseLanguage) {
+            await window.electronAPI.setAiResponseLanguage(key);
         }
     };
 
@@ -1098,6 +1113,49 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose }) =>
                                                                         className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${themeMode === option.mode ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
                                                                     >
                                                                         <span className={themeMode === option.mode ? 'text-text-primary' : 'text-text-secondary group-hover:text-text-primary'}>{option.icon}</span>
+                                                                        <span className="font-medium">{option.label}</span>
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* AI Response Language */}
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle flex items-center justify-center text-text-tertiary">
+                                                            <Globe size={20} />
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="text-sm font-bold text-text-primary">AI Response Language</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">Language for AI suggestions and notes</p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="relative" ref={aiLangDropdownRef}>
+                                                        <button
+                                                            onClick={() => setIsAiLangDropdownOpen(!isAiLangDropdownOpen)}
+                                                            className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[140px] justify-between"
+                                                        >
+                                                            <span className="capitalize text-ellipsis overflow-hidden whitespace-nowrap">
+                                                                {aiResponseLanguage}
+                                                            </span>
+                                                            <ChevronDown size={12} className={`shrink-0 transition-transform ${isAiLangDropdownOpen ? 'rotate-180' : ''}`} />
+                                                        </button>
+
+                                                        {/* Dropdown Menu */}
+                                                        {isAiLangDropdownOpen && (
+                                                            <div className="absolute right-0 top-full mt-1 w-full min-w-[160px] bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 animated fadeIn select-none max-h-60 overflow-y-auto custom-scrollbar">
+                                                                {availableAiLanguages.map((option) => (
+                                                                    <button
+                                                                        key={option.code}
+                                                                        onClick={() => {
+                                                                            handleAiLanguageChange(option.code);
+                                                                            setIsAiLangDropdownOpen(false);
+                                                                        }}
+                                                                        className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${aiResponseLanguage === option.code ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
+                                                                    >
                                                                         <span className="font-medium">{option.label}</span>
                                                                     </button>
                                                                 ))}
@@ -2077,19 +2135,40 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose }) =>
                                                 </div>
                                             )}
 
-                                            {/* Accent Preference */}
+                                            {/* Recognition Language Family */}
                                             <CustomSelect
-                                                label="Preferred English Accent"
-                                                icon={null}
-                                                value={recognitionLanguage}
-                                                options={languageOptions}
-                                                onChange={handleLanguageChange}
-                                                placeholder="Select Accent"
+                                                label="Language"
+                                                icon={<Globe size={14} />}
+                                                value={selectedSttGroup}
+                                                options={languageGroups.map(g => ({
+                                                    deviceId: g,
+                                                    label: g,
+                                                    kind: 'audioinput' as MediaDeviceKind,
+                                                    groupId: '',
+                                                    toJSON: () => ({})
+                                                }))}
+                                                onChange={handleGroupChange}
+                                                placeholder="Select Language"
                                             />
-                                            <div className="flex gap-2 items-center -mt-2 px-1">
+
+                                            {/* Variant/Accent Selector (Conditional) */}
+                                            {currentGroupVariants.length > 1 && (
+                                                <div className="mt-3 animated fadeIn">
+                                                    <CustomSelect
+                                                        label="Accent / Region"
+                                                        icon={<MapPin size={14} />}
+                                                        value={recognitionLanguage}
+                                                        options={currentGroupVariants}
+                                                        onChange={handleLanguageChange}
+                                                        placeholder="Select Region"
+                                                    />
+                                                </div>
+                                            )}
+
+                                            <div className="flex gap-2 items-center mt-2 px-1">
                                                 <Info size={14} className="text-text-secondary shrink-0" />
-                                                <p className="text-xs text-text-secondary whitespace-nowrap">
-                                                    Improves accuracy by prioritizing your accent. Other English accents are still supported.
+                                                <p className="text-xs text-text-secondary">
+                                                    Select the primary language being spoken in the meeting.
                                                 </p>
                                             </div>
                                         </div>

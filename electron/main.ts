@@ -498,15 +498,18 @@ export class AppState {
         // Check which provider to use
         const { CredentialsManager } = require('./services/CredentialsManager');
         const sttProvider = CredentialsManager.getInstance().getSttProvider();
+        const sttLanguage = CredentialsManager.getInstance().getSttLanguage();
 
         if (sttProvider === 'deepgram') {
           const apiKey = CredentialsManager.getInstance().getDeepgramApiKey();
           if (apiKey) {
             console.log(`[Main] Using DeepgramStreamingSTT for Interviewer`);
             this.googleSTT = new DeepgramStreamingSTT(apiKey);
+            this.googleSTT.setRecognitionLanguage(sttLanguage);
           } else {
             console.warn(`[Main] No API key for Deepgram STT, falling back to GoogleSTT`);
             this.googleSTT = new GoogleSTT();
+            this.googleSTT.setRecognitionLanguage(sttLanguage);
           }
         } else if (sttProvider === 'groq' || sttProvider === 'openai' || sttProvider === 'elevenlabs' || sttProvider === 'azure' || sttProvider === 'ibmwatson') {
           let apiKey: string | undefined;
@@ -531,12 +534,15 @@ export class AppState {
           if (apiKey) {
             console.log(`[Main] Using RestSTT (${sttProvider}) for Interviewer`);
             this.googleSTT = new RestSTT(sttProvider, apiKey, modelOverride, region);
+            this.googleSTT.setRecognitionLanguage(sttLanguage);
           } else {
             console.warn(`[Main] No API key for ${sttProvider} STT, falling back to GoogleSTT`);
             this.googleSTT = new GoogleSTT();
+            this.googleSTT.setRecognitionLanguage(sttLanguage);
           }
         } else {
           this.googleSTT = new GoogleSTT();
+          this.googleSTT.setRecognitionLanguage(sttLanguage);
         }
 
         // Wire Transcript Events
@@ -575,15 +581,18 @@ export class AppState {
         // Check which provider to use
         const { CredentialsManager } = require('./services/CredentialsManager');
         const sttProvider = CredentialsManager.getInstance().getSttProvider();
+        const sttLanguage = CredentialsManager.getInstance().getSttLanguage();
 
         if (sttProvider === 'deepgram') {
           const apiKey = CredentialsManager.getInstance().getDeepgramApiKey();
           if (apiKey) {
             console.log(`[Main] Using DeepgramStreamingSTT for User`);
             this.googleSTT_User = new DeepgramStreamingSTT(apiKey);
+            this.googleSTT_User.setRecognitionLanguage(sttLanguage);
           } else {
             console.warn(`[Main] No API key for Deepgram STT, falling back to GoogleSTT`);
             this.googleSTT_User = new GoogleSTT();
+            this.googleSTT_User.setRecognitionLanguage(sttLanguage);
           }
         } else if (sttProvider === 'groq' || sttProvider === 'openai' || sttProvider === 'elevenlabs' || sttProvider === 'azure' || sttProvider === 'ibmwatson') {
           let apiKey: string | undefined;
@@ -608,12 +617,15 @@ export class AppState {
           if (apiKey) {
             console.log(`[Main] Using RestSTT (${sttProvider}) for User`);
             this.googleSTT_User = new RestSTT(sttProvider, apiKey, modelOverride, region);
+            this.googleSTT_User.setRecognitionLanguage(sttLanguage);
           } else {
             console.warn(`[Main] No API key for ${sttProvider} STT, falling back to GoogleSTT`);
             this.googleSTT_User = new GoogleSTT();
+            this.googleSTT_User.setRecognitionLanguage(sttLanguage);
           }
         } else {
           this.googleSTT_User = new GoogleSTT();
+          this.googleSTT_User.setRecognitionLanguage(sttLanguage);
         }
 
         // Wire Transcript Events
@@ -1068,8 +1080,11 @@ export class AppState {
 
   public setRecognitionLanguage(key: string): void {
     console.log(`[AppState] Setting recognition language to: ${key}`);
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    CredentialsManager.getInstance().setSttLanguage(key);
     this.googleSTT?.setRecognitionLanguage(key);
     this.googleSTT_User?.setRecognitionLanguage(key);
+    this.processingHelper.getLLMHelper().setSttLanguage(key);
   }
 
   public static getInstance(): AppState {

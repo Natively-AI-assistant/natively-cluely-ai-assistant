@@ -1,7 +1,7 @@
 import { SpeechClient } from '@google-cloud/speech';
 import { EventEmitter } from 'events';
 import * as path from 'path';
-import { ENGLISH_VARIANTS } from '../config/languages';
+import { RECOGNITION_LANGUAGES, EnglishVariant } from '../config/languages';
 
 /**
  * GoogleSTT
@@ -81,20 +81,28 @@ export class GoogleSTT extends EventEmitter {
         }
 
         this.pendingLanguageChange = setTimeout(() => {
-            const config = ENGLISH_VARIANTS[key];
+            const config = RECOGNITION_LANGUAGES[key];
             if (!config) {
                 console.warn(`[GoogleSTT] Unknown language key: ${key}`);
                 return;
             }
 
-            console.log(`[GoogleSTT] Updating recognition language to: ${key} (${config.primary})`);
+            console.log(`[GoogleSTT] Updating recognition language to: ${key} (${config.bcp47})`);
 
             // Update state
-            this.languageCode = config.primary;
-            this.alternativeLanguageCodes = config.alternates;
+            this.languageCode = config.bcp47;
+            
+            // Handle variants (English specifically)
+            if ('alternates' in config) {
+                this.alternativeLanguageCodes = (config as EnglishVariant).alternates;
+            } else {
+                this.alternativeLanguageCodes = [];
+            }
 
             console.log('[GoogleSTT] Primary:', this.languageCode);
-            console.log('[GoogleSTT] Alternates:', this.alternativeLanguageCodes.join(', '));
+            if (this.alternativeLanguageCodes.length > 0) {
+                console.log('[GoogleSTT] Alternates:', this.alternativeLanguageCodes.join(', '));
+            }
 
             // Restart if streaming
             if (this.isStreaming) {

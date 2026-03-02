@@ -42,6 +42,8 @@ export interface StoredCredentials {
     azureRegion?: string;
     ibmWatsonApiKey?: string;
     ibmWatsonRegion?: string;
+    sttLanguage?: string;
+    aiResponseLanguage?: string;
     // Google Custom Search
     googleSearchApiKey?: string;
     googleSearchCseId?: string;
@@ -145,6 +147,14 @@ export class CredentialsManager {
 
     public getGoogleSearchCseId(): string | undefined {
         return this.credentials.googleSearchCseId;
+    }
+
+    public getSttLanguage(): string {
+        return this.credentials.sttLanguage || 'english-us';
+    }
+
+    public getAiResponseLanguage(): string {
+        return this.credentials.aiResponseLanguage || 'English';
     }
 
     public getDefaultModel(): string {
@@ -259,6 +269,18 @@ export class CredentialsManager {
         this.credentials.googleSearchCseId = cseId;
         this.saveCredentials();
         console.log('[CredentialsManager] Google Search CSE ID updated');
+    }
+
+    public setSttLanguage(language: string): void {
+        this.credentials.sttLanguage = language;
+        this.saveCredentials();
+        console.log(`[CredentialsManager] STT Language set to: ${language}`);
+    }
+
+    public setAiResponseLanguage(language: string): void {
+        this.credentials.aiResponseLanguage = language;
+        this.saveCredentials();
+        console.log(`[CredentialsManager] AI Response Language set to: ${language}`);
     }
 
     public setDefaultModel(model: string): void {

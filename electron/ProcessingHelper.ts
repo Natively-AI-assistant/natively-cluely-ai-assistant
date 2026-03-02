@@ -111,6 +111,18 @@ export class ProcessingHelper {
       const allProviders = [...(customProviders || []), ...(curlProviders || [])];
       this.llmHelper.setModel(defaultModel, allProviders);
     }
+
+    // Load Languages
+    const sttLanguage = credManager.getSttLanguage();
+    const aiResponseLanguage = credManager.getAiResponseLanguage();
+    
+    if (sttLanguage) {
+      this.llmHelper.setSttLanguage(sttLanguage);
+    }
+    
+    if (aiResponseLanguage) {
+      this.llmHelper.setAiResponseLanguage(aiResponseLanguage);
+    }
   }
 
   public async processScreenshots(): Promise<void> {

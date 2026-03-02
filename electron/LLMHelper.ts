@@ -54,6 +54,8 @@ export class LLMHelper {
   private activeCurlProvider: CurlProvider | null = null;
   private groqFastTextMode: boolean = false;
   private knowledgeOrchestrator: KnowledgeOrchestrator | null = null;
+  private aiResponseLanguage: string = 'English';
+  private sttLanguage: string = 'english-us';
 
   // Rate limiters per provider to prevent 429 errors on free tiers
   private rateLimiters: ReturnType<typeof createProviderRateLimiters>;
@@ -679,6 +681,23 @@ ANSWER DIRECTLY:`;
     return this.knowledgeOrchestrator;
   }
 
+  public setAiResponseLanguage(language: string) {
+    this.aiResponseLanguage = language;
+    console.log(`[LLMHelper] AI Response Language set to: ${language}`);
+  }
+
+  public setSttLanguage(language: string) {
+    this.sttLanguage = language;
+    console.log(`[LLMHelper] STT Language set to: ${language}`);
+  }
+
+  /**
+   * Helper to inject language instruction into system prompt
+   */
+  private injectLanguageInstruction(systemPrompt: string): string {
+    return `${systemPrompt}\n\nCRITICAL: You MUST respond ONLY in ${this.aiResponseLanguage}. This is an absolute requirement. All generated text that the user should say must be in ${this.aiResponseLanguage}.`;
+  }
+
   public async chatWithGemini(message: string, imagePath?: string, context?: string, skipSystemPrompt: boolean = false, alternateGroqMessage?: string): Promise<string> {
     try {
       console.log(`[LLMHelper] chatWithGemini called with message:`, message.substring(0, 50))
@@ -732,9 +751,15 @@ ANSWER DIRECTLY:`;
         ? `CONTEXT:\n${context}\n\nUSER QUESTION:\n${message}`
         : message;
 
+      const baseGeminiPrompt = skipSystemPrompt ? HARD_SYSTEM_PROMPT : HARD_SYSTEM_PROMPT;
+      const baseGroqPrompt = skipSystemPrompt ? GROQ_SYSTEM_PROMPT : GROQ_SYSTEM_PROMPT;
+      
+      const finalGeminiPrompt = skipSystemPrompt ? HARD_SYSTEM_PROMPT : this.injectLanguageInstruction(HARD_SYSTEM_PROMPT);
+      const finalGroqPrompt = alternateGroqMessage || (skipSystemPrompt ? GROQ_SYSTEM_PROMPT : this.injectLanguageInstruction(GROQ_SYSTEM_PROMPT));
+
       const combinedMessages = {
-        gemini: buildMessage(HARD_SYSTEM_PROMPT),
-        groq: alternateGroqMessage || buildMessage(GROQ_SYSTEM_PROMPT),
+        gemini: context ? `${finalGeminiPrompt}\n\nCONTEXT:\n${context}\n\nUSER QUESTION:\n${message}` : `${finalGeminiPrompt}\n\n${message}`,
+        groq: finalGroqPrompt,
       };
 
       // GROQ FAST TEXT OVERRIDE (Text-Only)
@@ -749,8 +774,8 @@ ANSWER DIRECTLY:`;
       }
 
       // System prompts for OpenAI/Claude (skipped if skipSystemPrompt)
-      const openaiSystemPrompt = skipSystemPrompt ? undefined : OPENAI_SYSTEM_PROMPT;
-      const claudeSystemPrompt = skipSystemPrompt ? undefined : CLAUDE_SYSTEM_PROMPT;
+      const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(OPENAI_SYSTEM_PROMPT);
+      const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(CLAUDE_SYSTEM_PROMPT);
 
       if (this.useOllama) {
         return await this.callOllama(combinedMessages.gemini);
@@ -1211,14 +1236,15 @@ ANSWER DIRECTLY:`;
 
     // Build single-string messages for Groq/Gemini (which use combined prompts)
     const buildCombinedMessage = (systemPrompt: string) => {
+      const finalPrompt = skipSystemPrompt ? systemPrompt : this.injectLanguageInstruction(systemPrompt);
       if (skipSystemPrompt) {
         return context
           ? `CONTEXT:\n${context}\n\nUSER QUESTION:\n${message}`
           : message;
       }
       return context
-        ? `${systemPrompt}\n\nCONTEXT:\n${context}\n\nUSER QUESTION:\n${message}`
-        : `${systemPrompt}\n\n${message}`;
+        ? `${finalPrompt}\n\nCONTEXT:\n${context}\n\nUSER QUESTION:\n${message}`
+        : `${finalPrompt}\n\n${message}`;
     };
 
     // For OpenAI/Claude: separate system prompt + user message (proper API pattern)
@@ -1247,8 +1273,8 @@ ANSWER DIRECTLY:`;
     const providers: ProviderAttempt[] = [];
 
     // System prompts for OpenAI/Claude (skipped if skipSystemPrompt)
-    const openaiSystemPrompt = skipSystemPrompt ? undefined : OPENAI_SYSTEM_PROMPT;
-    const claudeSystemPrompt = skipSystemPrompt ? undefined : CLAUDE_SYSTEM_PROMPT;
+    const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(OPENAI_SYSTEM_PROMPT);
+    const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(CLAUDE_SYSTEM_PROMPT);
 
     if (isMultimodal) {
       // MULTIMODAL PROVIDER ORDER: Gemini Flash → OpenAI → Claude → Gemini Pro
@@ -1363,7 +1389,8 @@ ANSWER DIRECTLY:`;
 
     // Determine the system prompt to use
     // logic: if override provided, use it. otherwise use HARD_SYSTEM_PROMPT (which is the universal base)
-    const finalSystemPrompt = systemPromptOverride || HARD_SYSTEM_PROMPT;
+    const baseSystemPrompt = systemPromptOverride || HARD_SYSTEM_PROMPT;
+    const finalSystemPrompt = this.injectLanguageInstruction(baseSystemPrompt);
 
     // Helper to build combined user message
     const userContent = context
@@ -1375,7 +1402,8 @@ ANSWER DIRECTLY:`;
       console.log(`[LLMHelper] ⚡️ Groq Fast Text Mode Active (Streaming). Routing to Groq...`);
       try {
         const groqSystem = systemPromptOverride || GROQ_SYSTEM_PROMPT;
-        const groqFullMessage = `${groqSystem}\n\n${userContent}`;
+        const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
+        const groqFullMessage = `${finalGroqSystem}\n\n${userContent}`;
         yield* this.streamWithGroq(groqFullMessage);
         return;
       } catch (e: any) {
@@ -1402,10 +1430,11 @@ ANSWER DIRECTLY:`;
     // OpenAI
     if (this.currentModelId === OPENAI_MODEL && this.openaiClient) {
       const openAiSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
+      const finalOpenAiSystem = this.injectLanguageInstruction(openAiSystem);
       if (isMultimodal && imagePath) {
-        yield* this.streamWithOpenaiMultimodal(userContent, imagePath, openAiSystem);
+        yield* this.streamWithOpenaiMultimodal(userContent, imagePath, finalOpenAiSystem);
       } else {
-        yield* this.streamWithOpenai(userContent, openAiSystem);
+        yield* this.streamWithOpenai(userContent, finalOpenAiSystem);
       }
       return;
     }
@@ -1413,10 +1442,11 @@ ANSWER DIRECTLY:`;
     // Claude
     if (this.currentModelId === CLAUDE_MODEL && this.claudeClient) {
       const claudeSystem = systemPromptOverride || CLAUDE_SYSTEM_PROMPT;
+      const finalClaudeSystem = this.injectLanguageInstruction(claudeSystem);
       if (isMultimodal && imagePath) {
-        yield* this.streamWithClaudeMultimodal(userContent, imagePath, claudeSystem);
+        yield* this.streamWithClaudeMultimodal(userContent, imagePath, finalClaudeSystem);
       } else {
-        yield* this.streamWithClaude(userContent, claudeSystem);
+        yield* this.streamWithClaude(userContent, finalClaudeSystem);
       }
       return;
     }
@@ -1424,8 +1454,9 @@ ANSWER DIRECTLY:`;
     // Groq (Text Only)
     if (this.currentModelId === GROQ_MODEL && this.groqClient && !isMultimodal) {
       // Build Groq message
-      const groqSystem = systemPromptOverride ? finalSystemPrompt : GROQ_SYSTEM_PROMPT;
-      const groqFullMessage = `${groqSystem}\n\n${userContent}`;
+      const groqSystem = systemPromptOverride ? baseSystemPrompt : GROQ_SYSTEM_PROMPT;
+      const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
+      const groqFullMessage = `${finalGroqSystem}\n\n${userContent}`;
       yield* this.streamWithGroq(groqFullMessage);
       return;
     }
