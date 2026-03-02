@@ -678,9 +678,12 @@ export function initializeIpcHandlers(appState: AppState): void {
         azureRegion: creds.azureRegion || 'eastus',
         hasIbmWatsonKey: hasKey(creds.ibmWatsonApiKey),
         ibmWatsonRegion: creds.ibmWatsonRegion || 'us-south',
+        hasSonioxKey: hasKey(creds.sonioxApiKey),
+        hasGoogleSearchKey: hasKey(creds.googleSearchApiKey),
+        hasGoogleSearchCseId: hasKey(creds.googleSearchCseId),
       };
     } catch (error: any) {
-      return { hasGeminiKey: false, hasGroqKey: false, hasOpenaiKey: false, hasClaudeKey: false, googleServiceAccountPath: null, sttProvider: 'google', groqSttModel: 'whisper-large-v3-turbo', hasSttGroqKey: false, hasSttOpenaiKey: false, hasDeepgramKey: false, hasElevenLabsKey: false, hasAzureKey: false, azureRegion: 'eastus', hasIbmWatsonKey: false, ibmWatsonRegion: 'us-south' };
+      return { hasGeminiKey: false, hasGroqKey: false, hasOpenaiKey: false, hasClaudeKey: false, googleServiceAccountPath: null, sttProvider: 'google', groqSttModel: 'whisper-large-v3-turbo', hasSttGroqKey: false, hasSttOpenaiKey: false, hasDeepgramKey: false, hasElevenLabsKey: false, hasAzureKey: false, azureRegion: 'eastus', hasIbmWatsonKey: false, ibmWatsonRegion: 'us-south', hasSonioxKey: false, hasGoogleSearchKey: false, hasGoogleSearchCseId: false };
     }
   });
 
@@ -688,7 +691,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // STT Provider Management Handlers
   // ==========================================
 
-  safeHandle("set-stt-provider", async (_, provider: 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson') => {
+  safeHandle("set-stt-provider", async (_, provider: 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox') => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setSttProvider(provider);
@@ -808,13 +811,24 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle("set-soniox-api-key", async (_, apiKey: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      CredentialsManager.getInstance().setSonioxApiKey(apiKey);
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error saving Soniox API key:", error);
+      return { success: false, error: error.message };
+    }
+  });
+
   // Helper to sanitize error messages (remove API key references)
   const sanitizeErrorMessage = (msg: string): string => {
     // Remove patterns like ": sk-***...***" or ": sdasdada***...dwwC"
     return msg.replace(/:\s*[a-zA-Z0-9*]+\*+[a-zA-Z0-9*]+\.?$/g, '').trim();
   };
 
-  safeHandle("test-stt-connection", async (_, provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson', apiKey: string, region?: string) => {
+  safeHandle("test-stt-connection", async (_, provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox', apiKey: string, region?: string) => {
     console.log(`[IPC] Received test - stt - connection request for provider: ${provider} `);
     try {
       if (provider === 'deepgram') {
@@ -836,6 +850,50 @@ export function initializeIpcHandlers(appState: AppState): void {
             try { ws.send(JSON.stringify({ type: 'CloseStream' })); } catch { }
             ws.close();
             resolve({ success: true });
+          });
+
+          ws.on('error', (err: any) => {
+            clearTimeout(timeout);
+            resolve({ success: false, error: err.message || 'Connection failed' });
+          });
+        });
+      }
+
+      if (provider === 'soniox') {
+        // Test Soniox via WebSocket connection
+        const WebSocket = require('ws');
+        return await new Promise<{ success: boolean; error?: string }>((resolve) => {
+          const ws = new WebSocket('wss://stt-rt.soniox.com/transcribe-websocket');
+
+          const timeout = setTimeout(() => {
+            ws.close();
+            resolve({ success: false, error: 'Connection timed out' });
+          }, 15000);
+
+          ws.on('open', () => {
+            // Send a minimal config to validate the API key
+            ws.send(JSON.stringify({
+              api_key: apiKey,
+              model: 'stt-rt-v4',
+              audio_format: 'pcm_s16le',
+              sample_rate: 16000,
+              num_channels: 1,
+            }));
+          });
+
+          ws.on('message', (msg: any) => {
+            clearTimeout(timeout);
+            try {
+              const res = JSON.parse(msg.toString());
+              if (res.error_code) {
+                resolve({ success: false, error: `${res.error_code}: ${res.error_message}` });
+              } else {
+                resolve({ success: true });
+              }
+            } catch {
+              resolve({ success: true });
+            }
+            ws.close();
           });
 
           ws.on('error', (err: any) => {

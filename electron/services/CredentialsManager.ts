@@ -32,7 +32,7 @@ export interface StoredCredentials {
     curlProviders?: CurlProvider[];
     defaultModel?: string;
     // STT Provider settings
-    sttProvider?: 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson';
+    sttProvider?: 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox';
     groqSttApiKey?: string;
     groqSttModel?: string;
     openAiSttApiKey?: string;
@@ -42,6 +42,12 @@ export interface StoredCredentials {
     azureRegion?: string;
     ibmWatsonApiKey?: string;
     ibmWatsonRegion?: string;
+    sonioxApiKey?: string;
+    sttLanguage?: string;
+    aiResponseLanguage?: string;
+    // Google Custom Search
+    googleSearchApiKey?: string;
+    googleSearchCseId?: string;
 }
 
 export class CredentialsManager {
@@ -96,7 +102,7 @@ export class CredentialsManager {
         return this.credentials.customProviders || [];
     }
 
-    public getSttProvider(): 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' {
+    public getSttProvider(): 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' {
         return this.credentials.sttProvider || 'google';
     }
 
@@ -136,6 +142,25 @@ export class CredentialsManager {
         return this.credentials.ibmWatsonRegion || 'us-south';
     }
 
+    public getSonioxApiKey(): string | undefined {
+        return this.credentials.sonioxApiKey;
+    }
+
+    public getGoogleSearchApiKey(): string | undefined {
+        return this.credentials.googleSearchApiKey;
+    }
+
+    public getGoogleSearchCseId(): string | undefined {
+        return this.credentials.googleSearchCseId;
+    }
+
+    public getSttLanguage(): string {
+        return this.credentials.sttLanguage || 'english-us';
+    }
+
+    public getAiResponseLanguage(): string {
+        return this.credentials.aiResponseLanguage || 'English';
+    }
     public getDefaultModel(): string {
         return this.credentials.defaultModel || 'gemini-3-flash-preview';
     }
@@ -178,7 +203,7 @@ export class CredentialsManager {
         console.log('[CredentialsManager] Google Service Account path updated');
     }
 
-    public setSttProvider(provider: 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson'): void {
+    public setSttProvider(provider: 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox'): void {
         this.credentials.sttProvider = provider;
         this.saveCredentials();
         console.log(`[CredentialsManager] STT Provider set to: ${provider}`);
@@ -238,6 +263,35 @@ export class CredentialsManager {
         console.log(`[CredentialsManager] IBM Watson Region set to: ${region}`);
     }
 
+    public setSonioxApiKey(key: string): void {
+        this.credentials.sonioxApiKey = key;
+        this.saveCredentials();
+        console.log('[CredentialsManager] Soniox API Key updated');
+    }
+
+    public setGoogleSearchApiKey(key: string): void {
+        this.credentials.googleSearchApiKey = key;
+        this.saveCredentials();
+        console.log('[CredentialsManager] Google Search API Key updated');
+    }
+
+    public setGoogleSearchCseId(cseId: string): void {
+        this.credentials.googleSearchCseId = cseId;
+        this.saveCredentials();
+        console.log('[CredentialsManager] Google Search CSE ID updated');
+    }
+
+    public setSttLanguage(language: string): void {
+        this.credentials.sttLanguage = language;
+        this.saveCredentials();
+        console.log(`[CredentialsManager] STT Language set to: ${language}`);
+    }
+
+    public setAiResponseLanguage(language: string): void {
+        this.credentials.aiResponseLanguage = language;
+        this.saveCredentials();
+        console.log(`[CredentialsManager] AI Response Language set to: ${language}`);
+    }
     public setDefaultModel(model: string): void {
         this.credentials.defaultModel = model;
         this.saveCredentials();
