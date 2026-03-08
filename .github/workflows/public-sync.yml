@@ -8,6 +8,9 @@ on:
 
 jobs:
   sync:
+    # Only run this action in the private repository to prevent infinite loops
+    # when the workflow file is synced to the public repository
+    if: github.repository == 'evinjohnn/openCluely'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Private Repository
