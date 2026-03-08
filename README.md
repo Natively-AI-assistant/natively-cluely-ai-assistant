@@ -368,9 +368,19 @@ Natively understands that _listening_ to a meeting and _talking_ to an AI are di
 ### Local RAG & Long-Term Memory
 
 - **Full Offline RAG:** All vector embeddings and retrieval happen locally (SQLite).
+- **Live Meeting RAG:** Instant, intelligent retrieval of context directly during live meetings using local vector embeddings.
 - **Semantic Search:** innovative "Smart Scope" detects if you are asking about the current meeting or a past one.
 - **Global Knowledge:** Ask questions across _all_ your past meetings ("What did we decide about the API last month?").
 - **Automatic Indexing:** Meetings are automatically chunked, embedded, and indexed in the background.
+
+### Soniox & Multilingual Support
+
+- **Ultra-fast STT:** First-class support for streaming Speech-to-Text with Soniox.
+- **Accent & Dialect Control:** Set speech recognition specific to accents, dialects, and varied AI response languages.
+
+### Hybrid Intelligence
+
+Seamlessly routes queries between ultra-fast models for instant speed and reasoning models (Gemini, OpenAI, Claude) for complex tasks.
 
 ### Advanced Privacy & Stealth
 
