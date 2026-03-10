@@ -635,18 +635,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                 await window.electronAPI?.setIbmWatsonApiKey?.('');
                 setSttIbmKey('');
                 setHasStoredIbmWatsonKey(false);
+            } else if (provider === 'soniox') {
+                // @ts-ignore
+                await window.electronAPI?.setSonioxApiKey?.('');
+                setSttSonioxKey('');
+                setHasStoredSonioxKey(false);
             } else {
                 // @ts-ignore
                 await window.electronAPI?.setDeepgramApiKey?.('');
                 setSttDeepgramKey('');
                 setHasStoredDeepgramKey(false);
-            }
-
-            if (provider === 'soniox') {
-                // @ts-ignore
-                await window.electronAPI?.setSonioxApiKey?.('');
-                setSttSonioxKey('');
-                setHasStoredSonioxKey(false);
             }
         } catch (e) {
             console.error(`Failed to remove ${provider} STT key:`, e);
@@ -2086,6 +2084,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                 const keyMap: Record<string, string> = {
                                                                     groq: sttGroqKey, openai: sttOpenaiKey, deepgram: sttDeepgramKey,
                                                                     elevenlabs: sttElevenLabsKey, azure: sttAzureKey, ibmwatson: sttIbmKey,
+                                                                    soniox: sttSonioxKey,
                                                                 };
                                                                 handleSttKeySubmit(sttProvider as any, keyMap[sttProvider] || '');
                                                             }}
