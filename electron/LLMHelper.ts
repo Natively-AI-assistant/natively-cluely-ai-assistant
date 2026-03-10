@@ -48,6 +48,7 @@ export class LLMHelper {
   private useOllama: boolean = false
   private ollamaModel: string = "llama3.2"
   private ollamaUrl: string = "http://localhost:11434"
+  private ollamaStartedByApp: boolean = false;
   private geminiModel: string = GEMINI_FLASH_MODEL
   private customProvider: CustomProvider | null = null;
   private activeCurlProvider: CurlProvider | null = null;
@@ -1931,6 +1932,7 @@ ANSWER DIRECTLY:`;
       // We use exec but don't await the result endlessly as it's a server
       const child = exec('ollama serve');
       child.unref(); // Detach
+      this.ollamaStartedByApp = true;
 
       // 3. Wait a bit for it to come up
       await new Promise(resolve => setTimeout(resolve, 3000));
@@ -1958,6 +1960,7 @@ ANSWER DIRECTLY:`;
       console.log("[LLMHelper] Ollama not detected. Starting 'ollama serve'...");
       const child = exec('ollama serve');
       child.unref(); // Detach process so it persists
+      this.ollamaStartedByApp = true;
 
       // 3. Wait/Poll for it to come up (max 5s)
       for (let i = 0; i < 10; i++) {
@@ -1975,6 +1978,45 @@ ANSWER DIRECTLY:`;
     } catch (error: any) {
       console.error("[LLMHelper] Failed to ensure Ollama running:", error);
       return { success: false, message: error.message };
+    }
+  }
+
+  /**
+   * Check if Ollama is running on app start. If not, start it.
+   */
+  public async checkAndStartOllamaOnAppStart(): Promise<void> {
+    try {
+      const isRunning = await this.checkOllamaAvailable();
+      if (isRunning) {
+        console.log("[LLMHelper] Ollama was already running on app start. App will not manage its lifecycle.");
+        this.ollamaStartedByApp = false;
+        return;
+      }
+      console.log("[LLMHelper] Ollama not running on app start. Starting and managing its lifecycle.");
+      await this.ensureOllamaRunning();
+    } catch (e: any) {
+      console.warn("[LLMHelper] Failed to check/start Ollama on app start:", e.message);
+    }
+  }
+
+  /**
+   * Shutdown Ollama if it was started by the app
+   */
+  public async shutdownOllamaIfStartedByApp(): Promise<void> {
+    if (!this.ollamaStartedByApp) {
+      return;
+    }
+    console.log("[LLMHelper] Shutting down Ollama (started by app)...");
+    try {
+      const { stdout } = await execAsync(`lsof -t -i:11434`);
+      const pid = stdout.trim();
+      if (pid) {
+        // Send SIGTERM for graceful shutdown
+        await execAsync(`kill -15 ${pid}`);
+        console.log(`[LLMHelper] Successfully stopped Ollama (PID: ${pid})`);
+      }
+    } catch (error: any) {
+      console.log("[LLMHelper] Could not find or stop Ollama process:", error.message);
     }
   }
 

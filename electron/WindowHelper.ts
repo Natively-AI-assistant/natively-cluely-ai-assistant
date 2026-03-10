@@ -14,7 +14,7 @@ const isDev = isEnvDev && !isPackaged;
 
 const startUrl = isDev
   ? "http://localhost:5180"
-  : `file://${path.join(__dirname, "../dist/index.html")}`
+  : `file://${path.join(__dirname, "../../dist/index.html")}`
 
 export class WindowHelper {
   private launcherWindow: BrowserWindow | null = null
@@ -146,7 +146,7 @@ export class WindowHelper {
       center: true,
       icon: app.isPackaged
         ? path.join(process.resourcesPath, "natively.icns")
-        : path.resolve(__dirname, "../assets/natively.icns")
+        : path.resolve(__dirname, "../../assets/natively.icns")
     }
 
     console.log(`[WindowHelper] Icon Path: ${launcherSettings.icon}`);

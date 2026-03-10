@@ -25,13 +25,7 @@ export class MicrophoneCapture extends EventEmitter {
             console.error('[MicrophoneCapture] Rust class implementation not found.');
         } else {
             console.log(`[MicrophoneCapture] Initialized wrapper. Device ID: ${this.deviceId || 'default'}`);
-            try {
-                console.log('[MicrophoneCapture] Creating native monitor (Eager Init)...');
-                this.monitor = new RustMicCapture(this.deviceId);
-            } catch (e) {
-                console.error('[MicrophoneCapture] Failed to create native monitor:', e);
-                // We don't throw here to allow app to start, but start() will fail
-            }
+            // Removed eager initialization to prevent blocking the main thread during app launch
         }
     }
 
@@ -51,37 +45,39 @@ export class MicrophoneCapture extends EventEmitter {
             return;
         }
 
-        // Monitor should be ready from constructor
-        // Monitor should be ready from constructor
-        if (!this.monitor) {
-            console.log('[MicrophoneCapture] Monitor not initialized. Re-initializing...');
-            try {
-                this.monitor = new RustMicCapture(this.deviceId);
-            } catch (e) {
-                this.emit('error', e);
-                return;
-            }
-        }
-
-        try {
-            console.log('[MicrophoneCapture] Starting native capture...');
-
-            this.monitor.start((chunk: Uint8Array) => {
-                if (chunk && chunk.length > 0) {
-                    // Debug: log occasionally
-                    if (Math.random() < 0.05) {
-                        console.log(`[MicrophoneCapture] Emitting chunk: ${chunk.length} bytes to JS`);
-                    }
-                    this.emit('data', Buffer.from(chunk));
+        // Use setImmediate to yield to the event loop before doing heavy native initialization.
+        // This prevents the UI from freezing when start() is called synchronously.
+        setImmediate(() => {
+            if (!this.monitor) {
+                console.log('[MicrophoneCapture] Monitor not initialized. Re-initializing lazily...');
+                try {
+                    this.monitor = new RustMicCapture(this.deviceId);
+                } catch (e) {
+                    this.emit('error', e);
+                    return;
                 }
-            });
+            }
 
-            this.isRecording = true;
-            this.emit('start');
-        } catch (error) {
-            console.error('[MicrophoneCapture] Failed to start:', error);
-            this.emit('error', error);
-        }
+            try {
+                console.log('[MicrophoneCapture] Starting native capture...');
+
+                this.monitor.start((chunk: Uint8Array) => {
+                    if (chunk && chunk.length > 0) {
+                        // Debug: log occasionally
+                        if (Math.random() < 0.05) {
+                            console.log(`[MicrophoneCapture] Emitting chunk: ${chunk.length} bytes to JS`);
+                        }
+                        this.emit('data', Buffer.from(chunk));
+                    }
+                });
+
+                this.isRecording = true;
+                this.emit('start');
+            } catch (error) {
+                console.error('[MicrophoneCapture] Failed to start:', error);
+                this.emit('error', error);
+            }
+        });
     }
 
     /**

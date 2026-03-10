@@ -34,12 +34,10 @@ const ModelSelectorWindow = () => {
             }
             try {
                 // 1. Get Stored Credentials (to know which Cloud providers are active)
-                // @ts-ignore
                 const creds = await window.electronAPI?.getStoredCredentials?.();
 
                 // 2. Get Custom Providers
-                // @ts-ignore
-                const customProviders = await window.electronAPI?.invoke('get-custom-providers') || [];
+                const customProviders = await window.electronAPI?.getCustomProviders?.() || [];
 
                 // 3. Get Ollama Models (if any available/checked previously)
                 // We won't trigger a fresh check here to avoid startup delay, just check if we have any cached?
@@ -47,23 +45,23 @@ const ModelSelectorWindow = () => {
                 // Or maybe we do a quick check if they have used it before?
                 // Let's rely on what the backend might know or just skip for now if not easy.
                 // The implementation plan said "unified list of connected models".
-                // Let's invoke 'get-available-ollama-models' - active check?
                 // It's fast if Ollama server is running.
                 let ollamaModels: string[] = [];
                 try {
-                    // @ts-ignore
-                    let oModels = await window.electronAPI?.invoke('get-available-ollama-models');
+                    let oModels = await window.electronAPI?.getAvailableOllamaModels?.();
 
                     // If no models found, try to fix/restart Ollama (server might be down)
                     if (!oModels || oModels.length === 0) {
                         try {
                             // @ts-ignore
-                            await window.electronAPI?.invoke('force-restart-ollama');
-                            // Wait a moment for server to come up
-                            await new Promise(resolve => setTimeout(resolve, 1500));
-                            // Retry fetch
-                            // @ts-ignore
-                            oModels = await window.electronAPI?.invoke('get-available-ollama-models');
+                            if (window.electronAPI?.forceRestartOllama) {
+                                // @ts-ignore
+                                await window.electronAPI.forceRestartOllama();
+                                // Wait a moment for server to come up
+                                await new Promise(resolve => setTimeout(resolve, 1500));
+                                // Retry fetch
+                                oModels = await window.electronAPI?.getAvailableOllamaModels?.();
+                            }
                         } catch (e) {
                             console.warn("Retrying Ollama failed", e);
                         }
@@ -106,8 +104,7 @@ const ModelSelectorWindow = () => {
                 setAvailableModels(models);
 
                 // 4. Get Current Active Model
-                // @ts-ignore
-                const config = await window.electronAPI?.invoke('get-current-llm-config'); // Get runtime model
+                const config = await window.electronAPI?.getCurrentLlmConfig?.(); // Get runtime model
                 if (config && config.model) {
                     setCurrentModel(config.model);
                     localStorage.setItem('cached-current-model', config.model);
@@ -123,7 +120,6 @@ const ModelSelectorWindow = () => {
         loadModels();
 
         // Listen for changes
-        // @ts-ignore
         const unsubscribe = window.electronAPI?.onModelChanged?.((modelId: string) => {
             setCurrentModel(modelId);
         });
@@ -133,8 +129,8 @@ const ModelSelectorWindow = () => {
     const handleSelectFn = (modelId: string) => {
         setCurrentModel(modelId);
         localStorage.setItem('cached-current-model', modelId);
-        // @ts-ignore - this will set model + close window
-        window.electronAPI?.invoke('set-model', modelId)
+        
+        window.electronAPI?.setModel(modelId)
             .catch((err: any) => console.error("Failed to set model:", err));
     };
 

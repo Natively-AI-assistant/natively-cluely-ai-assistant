@@ -47,40 +47,43 @@ export class SystemAudioCapture extends EventEmitter {
             return;
         }
 
-        // LAZY INIT: Create monitor here when meeting starts (not in constructor)
-        // This prevents the 1-second audio mute + quality drop at app launch
-        if (!this.monitor) {
-            console.log('[SystemAudioCapture] Creating native monitor (lazy init)...');
-            try {
-                this.monitor = new RustAudioCapture(this.deviceId);
-            } catch (e) {
-                console.error('[SystemAudioCapture] Failed to create native monitor:', e);
-                this.emit('error', e);
-                return;
-            }
-        }
-
-        try {
-            console.log('[SystemAudioCapture] Starting native capture...');
-
-            this.monitor.start((chunk: Uint8Array) => {
-                // The native module sends raw PCM bytes (Uint8Array)
-                if (chunk && chunk.length > 0) {
-                    const buffer = Buffer.from(chunk);
-                    if (Math.random() < 0.05) {
-                        const prefix = buffer.slice(0, 10).toString('hex');
-                        console.log(`[SystemAudioCapture] Chunk: ${buffer.length}b, Rate: ${this.detectedSampleRate}, Data(hex): ${prefix}...`);
-                    }
-                    this.emit('data', buffer);
+        // Use setImmediate to yield to the event loop before doing heavy native initialization.
+        setImmediate(() => {
+            // LAZY INIT: Create monitor here when meeting starts (not in constructor)
+            // This prevents the 1-second audio mute + quality drop at app launch
+            if (!this.monitor) {
+                console.log('[SystemAudioCapture] Creating native monitor (lazy init)...');
+                try {
+                    this.monitor = new RustAudioCapture(this.deviceId);
+                } catch (e) {
+                    console.error('[SystemAudioCapture] Failed to create native monitor:', e);
+                    this.emit('error', e);
+                    return;
                 }
-            });
+            }
 
-            this.isRecording = true;
-            this.emit('start');
-        } catch (error) {
-            console.error('[SystemAudioCapture] Failed to start:', error);
-            this.emit('error', error);
-        }
+            try {
+                console.log('[SystemAudioCapture] Starting native capture...');
+
+                this.monitor.start((chunk: Uint8Array) => {
+                    // The native module sends raw PCM bytes (Uint8Array)
+                    if (chunk && chunk.length > 0) {
+                        const buffer = Buffer.from(chunk);
+                        if (Math.random() < 0.05) {
+                            const prefix = buffer.slice(0, 10).toString('hex');
+                            console.log(`[SystemAudioCapture] Chunk: ${buffer.length}b, Rate: ${this.detectedSampleRate}, Data(hex): ${prefix}...`);
+                        }
+                        this.emit('data', buffer);
+                    }
+                });
+
+                this.isRecording = true;
+                this.emit('start');
+            } catch (error) {
+                console.error('[SystemAudioCapture] Failed to start:', error);
+                this.emit('error', error);
+            }
+        });
     }
 
     /**

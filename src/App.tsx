@@ -10,7 +10,12 @@ import StartupSequence from "./components/StartupSequence"
 import { AnimatePresence, motion } from "framer-motion"
 import UpdateBanner from "./components/UpdateBanner"
 import { SupportToaster } from "./components/SupportToaster"
-import { ProfileFeatureToaster, JDAwarenessToaster, PremiumPromoToaster, PremiumUpgradeModal, useAdCampaigns } from "./premium"
+import { JDAwarenessToaster } from '../premium/src/JDAwarenessToaster'
+import { ProfileFeatureToaster } from '../premium/src/ProfileFeatureToaster'
+import { PremiumPromoToaster } from '../premium/src/PremiumPromoToaster'
+import { RemoteCampaignToaster } from '../premium/src/RemoteCampaignToaster'
+import { PremiumUpgradeModal } from '../premium/src/PremiumUpgradeModal'
+import { useAdCampaigns } from '../premium/src/useAdCampaigns'
 import { analytics } from "./lib/analytics/analytics.service"
 
 const queryClient = new QueryClient()
@@ -69,8 +74,17 @@ const App: React.FC = () => {
   const [hasProfile, setHasProfile] = useState(false);
 
   // Initialize Ads Campaign Manager
+  const [appStartTime] = useState<number>(Date.now());
+  const [lastMeetingEndTime, setLastMeetingEndTime] = useState<number | null>(null);
+  
   const isAppReady = !isSettingsWindow && !isOverlayWindow && !isModelSelectorWindow && !showStartup;
-  const { activeAd, dismissAd } = useAdCampaigns(isPremiumActive, hasProfile, isAppReady);
+  const { activeAd, dismissAd } = useAdCampaigns(
+    isPremiumActive, 
+    hasProfile, 
+    isAppReady,
+    appStartTime,
+    lastMeetingEndTime
+  );
 
   useEffect(() => {
     // Basic status check for campaign targeting
@@ -132,6 +146,7 @@ const App: React.FC = () => {
       }
 
       // Switch back to Native Launcher Mode
+      setLastMeetingEndTime(Date.now());
       await window.electronAPI.setWindowMode('launcher');
     } catch (err) {
       console.error("Failed to end meeting:", err);
@@ -254,6 +269,14 @@ const App: React.FC = () => {
           setShowPremiumModal(true);
         }} 
       />
+      
+      {/* Remote Campaigns Render Logic */}
+      <RemoteCampaignToaster
+        isOpen={typeof activeAd === 'object' && activeAd !== null}
+        campaign={typeof activeAd === 'object' && activeAd !== null ? activeAd : undefined as any}
+        onDismiss={dismissAd}
+      />
+
       <PremiumUpgradeModal
         isOpen={showPremiumModal}
         onClose={() => setShowPremiumModal(false)}

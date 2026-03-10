@@ -173,3 +173,4 @@ native-module/*.node
 native-module/target/
 native-module/*.node
 
+.github/RepoGuide.md
