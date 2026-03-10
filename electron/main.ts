@@ -81,6 +81,12 @@ import { ThemeManager } from "./ThemeManager"
 import { RAGManager } from "./rag/RAGManager"
 import { DatabaseManager } from "./db/DatabaseManager"
 
+/** Unified type for all STT providers with optional extended capabilities */
+type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT) & {
+  finalize?: () => void;
+  setAudioChannelCount?: (count: number) => void;
+};
+
 // Premium: Knowledge modules loaded conditionally
 let KnowledgeOrchestratorClass: any = null;
 let KnowledgeDatabaseManagerClass: any = null;
@@ -471,15 +477,15 @@ export class AppState {
   private systemAudioCapture: SystemAudioCapture | null = null;
   private microphoneCapture: MicrophoneCapture | null = null;
   private audioTestCapture: MicrophoneCapture | null = null; // For audio settings test
-  private googleSTT: GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | null = null; // Interviewer
-  private googleSTT_User: GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | null = null; // User
+  private googleSTT: STTProvider | null = null; // Interviewer
+  private googleSTT_User: STTProvider | null = null; // User
 
-  private createSTTProvider(speaker: 'interviewer' | 'user'): GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT {
+  private createSTTProvider(speaker: 'interviewer' | 'user'): STTProvider {
     const { CredentialsManager } = require('./services/CredentialsManager');
     const sttProvider = CredentialsManager.getInstance().getSttProvider();
     const sttLanguage = CredentialsManager.getInstance().getSttLanguage();
 
-    let stt: GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT;
+    let stt: STTProvider;
 
     if (sttProvider === 'deepgram') {
       const apiKey = CredentialsManager.getInstance().getDeepgramApiKey();
@@ -618,17 +624,13 @@ export class AppState {
       const sysRate = this.systemAudioCapture?.getSampleRate() || 16000;
       console.log(`[Main] Configuring Interviewer STT to ${sysRate}Hz`);
       this.googleSTT?.setSampleRate(sysRate);
-      if ('setAudioChannelCount' in this.googleSTT!) {
-        (this.googleSTT as any).setAudioChannelCount(1);
-      }
+      this.googleSTT?.setAudioChannelCount?.(1);
 
       // 2. Sync Mic Rate
       const micRate = this.microphoneCapture?.getSampleRate() || 16000;
       console.log(`[Main] Configuring User STT to ${micRate}Hz`);
       this.googleSTT_User?.setSampleRate(micRate);
-      if ('setAudioChannelCount' in this.googleSTT_User!) {
-        (this.googleSTT_User as any).setAudioChannelCount(1);
-      }
+      this.googleSTT_User?.setAudioChannelCount?.(1);
 
       console.log('[Main] Full Audio Pipeline (System + Mic) Initialized (Ready)');
 
@@ -800,6 +802,14 @@ export class AppState {
       console.log('[Main] Stopping Audio Test');
       this.audioTestCapture.stop();
       this.audioTestCapture = null;
+    }
+  }
+
+  public finalizeMicSTT(): void {
+    // We only want to finalize the user microphone, because the context is Manual Answer
+    if (this.googleSTT_User?.finalize) {
+      console.log('[Main] Finalizing STT');
+      this.googleSTT_User.finalize();
     }
   }
 
