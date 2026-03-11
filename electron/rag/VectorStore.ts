@@ -37,8 +37,8 @@ export class VectorStore {
             this.db.prepare("SELECT count(*) as cnt FROM vec_chunks LIMIT 1").get();
             console.log('[VectorStore] Using native sqlite-vec for vector search');
             return true;
-        } catch (e) {
-            console.warn('[VectorStore] sqlite-vec not available, using JS cosine similarity fallback');
+        } catch (e: any) {
+            console.warn('[VectorStore] sqlite-vec not available, using JS cosine similarity fallback. Reason:', e.message);
             return false;
         }
     }
@@ -83,9 +83,10 @@ export class VectorStore {
         // Also insert into vec0 virtual table for native search
         if (this.useNativeVec) {
             try {
+                // sqlite-vec requires primary key to be a strict integer
                 this.db.prepare(
                     'INSERT OR REPLACE INTO vec_chunks(chunk_id, embedding) VALUES (?, ?)'
-                ).run(chunkId, blob);
+                ).run(BigInt(chunkId), blob);
             } catch (e) {
                 console.warn('[VectorStore] Failed to insert into vec_chunks:', e);
             }
@@ -312,9 +313,10 @@ export class VectorStore {
                 ).get(meetingId) as any;
 
                 if (row) {
+                    // sqlite-vec requires primary key to be a strict integer
                     this.db.prepare(
                         'INSERT OR REPLACE INTO vec_summaries(summary_id, embedding) VALUES (?, ?)'
-                    ).run(row.id, blob);
+                    ).run(BigInt(row.id), blob);
                 }
             } catch (e) {
                 console.warn('[VectorStore] Failed to insert into vec_summaries:', e);

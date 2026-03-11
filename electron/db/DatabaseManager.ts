@@ -225,19 +225,18 @@ export class DatabaseManager {
         if (version < 3) {
             console.log('[DatabaseManager] Applying migration v2 → v3: vec0 virtual tables');
             try {
-                // Create vec0 virtual table for chunk embeddings (dynamic dimension)
                 this.db.exec(`
                     CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
                         chunk_id INTEGER PRIMARY KEY,
-                        embedding float
+                        embedding float[768]
                     );
                 `);
 
-                // Create vec0 virtual table for summary embeddings (dynamic dimension)
+                // Create vec0 virtual table for summary embeddings
                 this.db.exec(`
                     CREATE VIRTUAL TABLE IF NOT EXISTS vec_summaries USING vec0(
                         summary_id INTEGER PRIMARY KEY,
-                        embedding float
+                        embedding float[768]
                     );
                 `);
 
@@ -262,26 +261,61 @@ export class DatabaseManager {
                 this.db.exec(`
                     CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
                         chunk_id INTEGER PRIMARY KEY,
-                        embedding float
+                        embedding float[768]
                     );
                 `);
 
                 this.db.exec(`
                     CREATE VIRTUAL TABLE IF NOT EXISTS vec_summaries USING vec0(
                         summary_id INTEGER PRIMARY KEY,
-                        embedding float
+                        embedding float[768]
                     );
                 `);
 
                 this.migrateExistingEmbeddings();
                 console.log('[DatabaseManager] vec0 virtual tables recreated for flexible dimensions');
+                this.db.pragma('user_version = 4');
             } catch (e) {
                 console.error('[DatabaseManager] vec0 migration v4 failed:', e);
             }
-            this.db.pragma('user_version = 4');
         }
 
+        // Schema Repair: Ensure vec0 tables exist even if migration was skipped or partially failed
+        this.ensureVecTablesExist();
+
         console.log('[DatabaseManager] Migrations completed.');
+    }
+
+    /**
+     * Ensure sqlite-vec virtual tables exist.
+     * This repairs the schema if migrations were interrupted or failed.
+     */
+    private ensureVecTablesExist(): void {
+        if (!this.db) return;
+        try {
+            // Check if vec_chunks exists
+            const tableExists = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='vec_chunks'").get();
+            
+            if (!tableExists) {
+                console.log('[DatabaseManager] vec_chunks table missing, repairing schema...');
+                this.db.exec(`
+                    CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
+                        chunk_id INTEGER PRIMARY KEY,
+                        embedding float[768]
+                    );
+                `);
+                this.db.exec(`
+                    CREATE VIRTUAL TABLE IF NOT EXISTS vec_summaries USING vec0(
+                        summary_id INTEGER PRIMARY KEY,
+                        embedding float[768]
+                    );
+                `);
+                this.migrateExistingEmbeddings();
+                console.log('[DatabaseManager] Schema repaired: vec0 tables created.');
+            }
+        } catch (e) {
+            console.error('[DatabaseManager] Failed to ensure/repair vec0 tables:', e);
+        }
     }
 
     /**
