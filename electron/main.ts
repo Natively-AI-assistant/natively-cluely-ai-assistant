@@ -285,12 +285,16 @@ export class AppState {
           this.knowledgeOrchestrator.setEmbedFn(async (text: string) => {
             const result = await genAI.models.embedContent({
               model: 'models/gemini-embedding-001',
-              contents: [{ parts: [{ text }] }]
-            });
+              contents: [text],
+              config: {
+                outputDimensionality: 768
+              }
+            } as any);
             if (!result.embeddings || !result.embeddings[0]) {
               throw new Error('No embedding returned from API');
             }
-            return result.embeddings[0].values as number[];
+            const values = (result.embeddings[0] as any).values || result.embeddings[0];
+            return values as number[];
           });
         }
 
@@ -1253,13 +1257,13 @@ export class AppState {
     if (this.tray) return;
 
     // Try to find a template image first for macOS
-    const resourcesPath = app.isPackaged ? process.resourcesPath : path.join(__dirname, '..');
+    const resourcesPath = app.isPackaged ? process.resourcesPath : app.getAppPath();
 
     // Potential paths for tray icon
     const templatePath = path.join(resourcesPath, 'assets', 'iconTemplate.png');
     const defaultIconPath = app.isPackaged
       ? path.join(resourcesPath, 'src/components/icon.png')
-      : path.join(__dirname, '../src/components/icon.png');
+      : path.join(app.getAppPath(), 'src/components/icon.png');
 
     let iconToUse = defaultIconPath;
 
@@ -1270,7 +1274,7 @@ export class AppState {
         console.log('[Tray] Using template icon:', templatePath);
       } else {
         // Also check src/components for dev
-        const devTemplatePath = path.join(__dirname, '../src/components/iconTemplate.png');
+        const devTemplatePath = path.join(app.getAppPath(), 'src/components/iconTemplate.png');
         if (require('fs').existsSync(devTemplatePath)) {
           iconToUse = devTemplatePath;
           console.log('[Tray] Using dev template icon:', devTemplatePath);
@@ -1445,25 +1449,25 @@ export class AppState {
         appName = "Terminal ";
         iconPath = app.isPackaged
           ? path.join(process.resourcesPath, "assets/fakeicon/terminal.png")
-          : path.resolve(__dirname, "../assets/fakeicon/terminal.png");
+          : path.join(app.getAppPath(), "assets/fakeicon/terminal.png");
         break;
       case 'settings':
         appName = "System Settings ";
         iconPath = app.isPackaged
           ? path.join(process.resourcesPath, "assets/fakeicon/settings.png")
-          : path.resolve(__dirname, "../assets/fakeicon/settings.png");
+          : path.join(app.getAppPath(), "assets/fakeicon/settings.png");
         break;
       case 'activity':
         appName = "Activity Monitor ";
         iconPath = app.isPackaged
           ? path.join(process.resourcesPath, "assets/fakeicon/activity.png")
-          : path.resolve(__dirname, "../assets/fakeicon/activity.png");
+          : path.join(app.getAppPath(), "assets/fakeicon/activity.png");
         break;
       case 'none':
         appName = "Natively";
         iconPath = app.isPackaged
           ? path.join(process.resourcesPath, "natively.icns")
-          : path.resolve(__dirname, "../assets/natively.icns");
+          : path.join(app.getAppPath(), "assets/natively.icns");
         break;
     }
 
@@ -1588,7 +1592,7 @@ function setMacDockIcon() {
 
   const iconPath = app.isPackaged
     ? path.join(process.resourcesPath, "natively.icns")
-    : path.resolve(__dirname, "../assets/natively.icns");
+    : path.join(app.getAppPath(), "assets/natively.icns");
 
   console.log("[DockIcon] Using:", iconPath);
   app.dock.setIcon(nativeImage.createFromPath(iconPath));
