@@ -68,6 +68,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting }) =
     const [isManualRecording, setIsManualRecording] = useState(false);
     const isRecordingRef = useRef(false);  // Ref to track recording state (avoids stale closure)
     const [manualTranscript, setManualTranscript] = useState('');
+    const manualTranscriptRef = useRef<string>('');
     const [showTranscript, setShowTranscript] = useState(() => {
         const stored = localStorage.getItem('natively_interviewer_transcript');
         return stored !== 'false';
@@ -303,9 +304,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting }) =
                         return updated;
                     });
                     setManualTranscript('');  // Clear partial preview
+                    manualTranscriptRef.current = '';
                 } else {
                     // Show live partial transcript
                     setManualTranscript(transcript.text);
+                    manualTranscriptRef.current = transcript.text;
                 }
                 return;  // Don't add to messages while recording
             }
@@ -843,12 +846,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting }) =
             setIsManualRecording(false);
             setManualTranscript('');  // Clear live preview
 
+            // Send manual finalization signal to STT Providers
+            window.electronAPI.finalizeMicSTT().catch(err => console.error('[NativelyInterface] Failed to send finalizeMicSTT:', err));
+
             const currentAttachment = attachedContext;
             setAttachedContext(null); // Clear context immediately on send
 
-            const question = voiceInputRef.current.trim();
+            const question = (voiceInputRef.current + (manualTranscriptRef.current ? ' ' + manualTranscriptRef.current : '')).trim();
             setVoiceInput('');
             voiceInputRef.current = '';
+            setManualTranscript('');
+            manualTranscriptRef.current = '';
 
             if (!question && !currentAttachment) {
                 // No voice input and no image
