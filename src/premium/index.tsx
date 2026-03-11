@@ -14,7 +14,10 @@ const NullComponent: React.FC<any> = () => null;
 const nullAdCampaigns = (
   _isPremium: boolean,
   _hasProfile: boolean,
-  _isAppReady: boolean
+  _isAppReady: boolean,
+  _appStartTime?: number,
+  _lastMeetingEndTime?: number | null,
+  _isProcessingMeeting?: boolean
 ) => ({
   activeAd: null as string | null,
   dismissAd: () => {},
@@ -39,6 +42,10 @@ const _profileToaster = import.meta.glob<any>(
 );
 const _jdToaster = import.meta.glob<any>(
   '../../premium/src/JDAwarenessToaster.tsx',
+  { eager: true }
+);
+const _remoteCampaignToaster = import.meta.glob<any>(
+  '../../premium/src/RemoteCampaignToaster.tsx',
   { eager: true }
 );
 const _adHook = import.meta.glob<any>(
@@ -67,6 +74,9 @@ export const ProfileFeatureToaster: React.FC<any> =
 
 export const JDAwarenessToaster: React.FC<any> =
   get(_jdToaster, 'JDAwarenessToaster', NullComponent);
+
+export const RemoteCampaignToaster: React.FC<any> =
+  get(_remoteCampaignToaster, 'RemoteCampaignToaster', NullComponent);
 
 export const useAdCampaigns: typeof nullAdCampaigns =
   get(_adHook, 'useAdCampaigns', nullAdCampaigns);

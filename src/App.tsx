@@ -10,12 +10,14 @@ import StartupSequence from "./components/StartupSequence"
 import { AnimatePresence, motion } from "framer-motion"
 import UpdateBanner from "./components/UpdateBanner"
 import { SupportToaster } from "./components/SupportToaster"
-import { JDAwarenessToaster } from '../premium/src/JDAwarenessToaster'
-import { ProfileFeatureToaster } from '../premium/src/ProfileFeatureToaster'
-import { PremiumPromoToaster } from '../premium/src/PremiumPromoToaster'
-import { RemoteCampaignToaster } from '../premium/src/RemoteCampaignToaster'
-import { PremiumUpgradeModal } from '../premium/src/PremiumUpgradeModal'
-import { useAdCampaigns } from '../premium/src/useAdCampaigns'
+import {
+  JDAwarenessToaster,
+  ProfileFeatureToaster,
+  PremiumPromoToaster,
+  RemoteCampaignToaster,
+  PremiumUpgradeModal,
+  useAdCampaigns
+} from './premium'
 import { analytics } from "./lib/analytics/analytics.service"
 
 const queryClient = new QueryClient()
