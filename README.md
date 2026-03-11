@@ -518,6 +518,10 @@ Contributions are welcome:
 
 Quality pull requests will be reviewed and merged.
 
+### Maintainers
+
+- **Windows Build:** [@razllivan](https://github.com/razllivan)
+
 ---
 
 ## License
