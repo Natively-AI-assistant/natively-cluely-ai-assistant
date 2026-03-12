@@ -228,22 +228,9 @@ export class AppState {
     // Setup Ollama IPC
     this.setupOllamaIpcHandlers()
 
-    // --- SYSTEM AUDIO PRE-WARMUP ---
-    // Create the TS/Rust objects now (instant, no blocking).
-    // Then schedule SCK warmup for 2s after launch, when the RunLoop is idle.
-    // By the time the user clicks "Start Natively", SCK is already initialized.
-    this.systemAudioCapture = new SystemAudioCapture();
-    // Wire data handler (will start emitting once start() is called with callback)
-    this.systemAudioCapture.on('data', (chunk: Buffer) => {
-      this.googleSTT?.write(chunk);
-    });
-    this.systemAudioCapture.on('error', (err: Error) => {
-      console.error('[Main] SystemAudioCapture Error:', err);
-    });
-    setTimeout(() => {
-      console.log('[Main] Triggering SCK pre-warmup...');
-      this.systemAudioCapture?.warmup();
-    }, 2000);
+    // --- NEW SYSTEM AUDIO PIPELINE (SOX + NODE GOOGLE STT) ---
+    // LAZY INIT: Do not setup pipeline here to prevent launch volume surge.
+    // this.setupSystemAudioPipeline()
 
     // Initialize Auto-Updater
     this.setupAutoUpdater()
@@ -657,7 +644,7 @@ export class AppState {
 
     // 1. System Audio (Output Capture)
     if (this.systemAudioCapture) {
-      this.systemAudioCapture.destroy();
+      this.systemAudioCapture.stop();
       this.systemAudioCapture = null;
     }
 
@@ -834,32 +821,40 @@ export class AppState {
       this.intelligenceManager.setMeetingMetadata(metadata);
     }
 
-    // Emit session reset to clear UI state synchronously
+    // Emit session reset to clear UI state immediately
     this.getWindowHelper().getOverlayWindow()?.webContents.send('session-reset');
     this.getWindowHelper().getLauncherWindow()?.webContents.send('session-reset');
 
-    // Defer the heavy native audio/capture initializations
-    // This allows the IPC call to return instantly, avoiding UI freeze on Start Natively
-    setImmediate(async () => {
-      // Check for audio configuration preference
-      if (metadata && metadata.audio) {
-        await this.reconfigureAudio(metadata.audio.inputDeviceId, metadata.audio.outputDeviceId);
-      }
+    // ★ ASYNC AUDIO INIT: Return INSTANTLY so the IPC response goes back
+    // to the renderer immediately, allowing the UI to switch to overlay
+    // without waiting for SCK/audio initialization (which takes 5-7 seconds).
+    // setTimeout(100) ensures setWindowMode IPC is processed first.
+    setTimeout(async () => {
+      try {
+        // Check for audio configuration preference
+        if (metadata?.audio) {
+          await this.reconfigureAudio(metadata.audio.inputDeviceId, metadata.audio.outputDeviceId);
+        }
 
-      // LAZY INIT: Ensure pipeline is ready (if not reconfigured above)
-      this.setupSystemAudioPipeline();
+        // LAZY INIT: Ensure pipeline is ready (if not reconfigured above)
+        this.setupSystemAudioPipeline();
 
-      // 3. Start System Audio
-      this.systemAudioCapture?.start();
-      this.googleSTT?.start();
+        // Start System Audio
+        this.systemAudioCapture?.start();
+        this.googleSTT?.start();
 
-      // 4. Start Microphone
-      this.microphoneCapture?.start();
-      this.googleSTT_User?.start();
+        // Start Microphone
+        this.microphoneCapture?.start();
+        this.googleSTT_User?.start();
 
-      // 5. Start JIT RAG live indexing
-      if (this.ragManager) {
-        this.ragManager.startLiveIndexing('live-meeting-current');
+        // Start JIT RAG live indexing
+        if (this.ragManager) {
+          this.ragManager.startLiveIndexing('live-meeting-current');
+        }
+
+        console.log('[Main] Audio pipeline started successfully.');
+      } catch (err) {
+        console.error('[Main] Error initializing audio pipeline:', err);
       }
     });
   }

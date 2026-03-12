@@ -21,7 +21,6 @@ pub mod silence_suppression;
 
 // Keep old resampler module for compatibility
 pub mod resampler;
-pub mod license;
 
 use crate::streaming_resampler::StreamingResampler;
 use crate::audio_config::{FRAME_SAMPLES, DSP_POLL_MS};
@@ -39,7 +38,6 @@ pub struct SystemAudioCapture {
     capture_thread: Option<thread::JoinHandle<()>>,
     sample_rate: u32,
     device_id: Option<String>,
-    tsfn_slot: Arc<std::sync::Mutex<Option<ThreadsafeFunction<Vec<i16>, ErrorStrategy::Fatal>>>>,
 }
 
 #[napi]
@@ -53,7 +51,6 @@ impl SystemAudioCapture {
             capture_thread: None,
             sample_rate: 16000,
             device_id,
-            tsfn_slot: Arc::new(std::sync::Mutex::new(None)),
         })
     }
 
@@ -62,23 +59,6 @@ impl SystemAudioCapture {
         self.sample_rate
     }
 
-    /// Pre-warm SCK: spawn the background thread to do the slow ScreenCaptureKit
-    /// initialization (ShareableContent + stream start). Audio data is captured
-    /// but discarded until a callback is provided via start().
-    /// Call this early (e.g. 2s after app launch via setTimeout) so SCK is ready
-    /// before the user ever clicks "Start Natively".
-    #[napi]
-    pub fn warmup(&mut self) {
-        if self.capture_thread.is_some() {
-            println!("[SystemAudioCapture] Already warmed up, skipping.");
-            return;
-        }
-        println!("[SystemAudioCapture] Warming up SCK in background...");
-        self.spawn_dsp_thread();
-    }
-
-    /// Set the JS callback for audio data. If warmup() was called earlier,
-    /// audio will start flowing immediately. If not, this also triggers warmup.
     #[napi]
     pub fn start(&mut self, callback: JsFunction) -> napi::Result<()> {
         let tsfn: ThreadsafeFunction<Vec<i16>, ErrorStrategy::Fatal> = callback
@@ -91,39 +71,24 @@ impl SystemAudioCapture {
                 Ok(vec![pcm_bytes])
             })?;
 
-        // Set the callback — the DSP thread will pick this up immediately
-        if let Ok(mut slot) = self.tsfn_slot.lock() {
-            *slot = Some(tsfn);
-        }
-
-        // If warmup wasn't called yet, spawn now (fallback)
-        if self.capture_thread.is_none() {
-            println!("[SystemAudioCapture] No warmup — spawning DSP thread on start().");
-            self.spawn_dsp_thread();
-        } else {
-            println!("[SystemAudioCapture] SCK already warm — callback set, audio flowing.");
-        }
-
-        Ok(())
-    }
-
-    /// Internal: spawn the background thread that initializes SCK and runs the DSP loop.
-    fn spawn_dsp_thread(&mut self) {
         self.stop_signal.store(false, Ordering::SeqCst);
         let stop_signal = self.stop_signal.clone();
-        let device_id_clone = self.device_id.take();
-        let tsfn_slot_clone = self.tsfn_slot.clone();
+        let device_id = self.device_id.take();
         
+        // ★ ALL init + DSP runs in background thread — start() returns INSTANTLY
+        // This prevents the 5-7 second main-thread block from SCK initialization.
+        // GCD completion handlers in SpeakerInput::new() work from background threads.
         self.capture_thread = Some(thread::spawn(move || {
-            println!("[SystemAudioCapture] Background thread: initializing ScreenCaptureKit...");
-            let input = match speaker::SpeakerInput::new(device_id_clone) {
+            // 1. SCK Init (takes 5-7 seconds — runs OFF main thread)
+            println!("[SystemAudioCapture] Background init starting...");
+            let input = match speaker::SpeakerInput::new(device_id) {
                 Ok(i) => i,
                 Err(e) => {
-                    println!("[SystemAudioCapture] Failed: {}. Trying default...", e);
+                    println!("[SystemAudioCapture] Init failed: {}. Trying default...", e);
                     match speaker::SpeakerInput::new(None) {
                         Ok(i) => i,
                         Err(e2) => {
-                            eprintln!("[SystemAudioCapture] Final initialization failed: {}", e2);
+                            eprintln!("[SystemAudioCapture] FATAL: All init attempts failed: {}", e2);
                             return;
                         }
                     }
@@ -135,13 +100,14 @@ impl SystemAudioCapture {
             let mut consumer = match stream.take_consumer() {
                 Some(c) => c,
                 None => {
-                    eprintln!("[SystemAudioCapture] Failed to get consumer");
+                    eprintln!("[SystemAudioCapture] FATAL: Failed to get consumer");
                     return;
                 }
             };
+            
+            println!("[SystemAudioCapture] Background init complete. Rate: {}Hz. DSP starting.", input_sample_rate);
 
-            println!("[SystemAudioCapture] SCK ready. DSP loop running.");
-
+            // 2. DSP loop with silence suppression
             let mut resampler = StreamingResampler::new(input_sample_rate, 16000.0);
             let mut frame_buffer: Vec<i16> = Vec::with_capacity(FRAME_SAMPLES * 4);
             let mut raw_batch: Vec<f32> = Vec::with_capacity(4096);
@@ -155,7 +121,7 @@ impl SystemAudioCapture {
                     break;
                 }
                 
-                // 1. Drain ring buffer (lock-free)
+                // Drain ring buffer (lock-free)
                 while let Some(sample) = consumer.try_pop() {
                     raw_batch.push(sample);
                     if raw_batch.len() >= 480 {
@@ -163,50 +129,40 @@ impl SystemAudioCapture {
                     }
                 }
                 
-                // 2. Resample
+                // Resample
                 if !raw_batch.is_empty() {
                     let resampled = resampler.resample(&raw_batch);
                     frame_buffer.extend(resampled);
                     raw_batch.clear();
                 }
 
-                // 3. Process frames — only deliver if callback is set
+                // Process frames with Silence Suppression
                 while frame_buffer.len() >= FRAME_SAMPLES {
                     let frame: Vec<i16> = frame_buffer.drain(0..FRAME_SAMPLES).collect();
                     match suppressor.process(&frame) {
                         FrameAction::Send(audio) => {
-                            if let Ok(slot) = tsfn_slot_clone.lock() {
-                                if let Some(tsfn) = slot.as_ref() {
-                                    tsfn.call(audio, ThreadsafeFunctionCallMode::NonBlocking);
-                                }
-                            }
+                             tsfn.call(audio, ThreadsafeFunctionCallMode::NonBlocking);
                         },
                         FrameAction::SendSilence => {
-                            if let Ok(slot) = tsfn_slot_clone.lock() {
-                                if let Some(tsfn) = slot.as_ref() {
-                                    tsfn.call(generate_silence_frame(FRAME_SAMPLES), ThreadsafeFunctionCallMode::NonBlocking);
-                                }
-                            }
+                             tsfn.call(generate_silence_frame(FRAME_SAMPLES), ThreadsafeFunctionCallMode::NonBlocking);
                         },
-                        FrameAction::Suppress => {}
+                        FrameAction::Suppress => {
+                            // Do nothing (bandwidth saving)
+                        }
                     }
                 }
                 
-                // 4. Short sleep when buffer is starved
+                // Short sleep
                 if frame_buffer.len() < FRAME_SAMPLES {
                     thread::sleep(Duration::from_millis(DSP_POLL_MS));
                 }
             }
             
             println!("[SystemAudioCapture] DSP thread stopped.");
+            // stream is dropped here → SpeakerStream::Drop calls stop_with_ch
         }));
-    }
 
-    #[napi]
-    pub fn pause_capture(&mut self) {
-        if let Ok(mut slot) = self.tsfn_slot.lock() {
-            *slot = None;
-        }
+        Ok(())
     }
 
     #[napi]
@@ -297,8 +253,10 @@ impl MicrophoneCapture {
                 }
                 
                 // 1. Drain ring buffer (lock-free)
+                let mut batch_count = 0;
                 while let Some(sample) = consumer.try_pop() {
                     raw_batch.push(sample);
+                    batch_count += 1;
                     if raw_batch.len() >= 480 {
                         break;
                     }
@@ -327,7 +285,7 @@ impl MicrophoneCapture {
                     }
                 }
                 
-                // 4. Short sleep when buffer is starved
+                // 4. Short sleep
                 if frame_buffer.len() < FRAME_SAMPLES {
                     thread::sleep(Duration::from_millis(DSP_POLL_MS));
                 }

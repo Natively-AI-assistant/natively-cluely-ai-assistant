@@ -5,7 +5,6 @@ use anyhow::Result;
 use cidre::{arc, sc, cm, dispatch, ns, objc, define_obj_type};
 use cidre::sc::StreamOutput;
 use ringbuf::{traits::{Producer, Split}, HeapProd, HeapRb, HeapCons};
-use std::sync::Arc;
 
 // keep for compatibility
 use cidre::core_audio as ca;
@@ -179,7 +178,7 @@ impl SpeakerInput {
         
         let stream = sc::Stream::new(&self.filter, &self.cfg);
         
-        // Initialize handler without Condvar
+        // Initialize handler
         let inner = AudioHandlerInner { producer };
         let handler = AudioHandler::with(inner);
         
@@ -232,7 +231,7 @@ impl SpeakerInput {
             stream,
             _handler: handler,
             _filter: self.filter,
-            _queue: queue.retained(),
+            _cfg: self.cfg,
         }
     }
 }
@@ -242,12 +241,12 @@ pub struct SpeakerStream {
     stream: arc::R<sc::Stream>,
     _handler: arc::R<AudioHandler>,
     _filter: arc::R<sc::ContentFilter>,
-    _queue: arc::R<dispatch::Queue>,
+    _cfg: arc::R<sc::StreamCfg>,
 }
 
 impl SpeakerStream {
-    pub fn sample_rate(&self) -> f64 {
-        16000.0 // Currently hardcoded to 16kHz
+    pub fn sample_rate(&self) -> u32 {
+        48000
     }
     
     pub fn take_consumer(&mut self) -> Option<HeapCons<f32>> {

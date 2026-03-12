@@ -2,7 +2,7 @@ use anyhow::Result;
 use cidre::{arc, av, cat, cf, core_audio as ca, ns, os};
 use ringbuf::{traits::{Producer, Split}, HeapProd, HeapRb, HeapCons};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Arc, Mutex, Condvar};
+use std::sync::{Arc, Mutex};
 use std::task::{Waker};
 use ca::aggregate_device_keys as agg_keys;
 
@@ -18,8 +18,6 @@ struct Ctx {
     current_sample_rate: Arc<AtomicU32>,
     consecutive_drops: Arc<AtomicU32>,
     should_terminate: Arc<AtomicBool>,
-    /// Condvar to notify DSP thread when audio data arrives
-    data_ready: Arc<(Mutex<bool>, Condvar)>,
 }
 
 pub struct SpeakerInput {
@@ -162,8 +160,6 @@ impl SpeakerInput {
 
         let current_sample_rate = Arc::new(AtomicU32::new(asbd.sample_rate as u32));
 
-        let data_ready = Arc::new((Mutex::new(false), Condvar::new()));
-
         let mut ctx = Box::new(Ctx {
             format,
             producer,
@@ -171,7 +167,6 @@ impl SpeakerInput {
             current_sample_rate: current_sample_rate.clone(),
             consecutive_drops: Arc::new(AtomicU32::new(0)),
             should_terminate: Arc::new(AtomicBool::new(false)),
-            data_ready: data_ready.clone(),
         });
 
         // Start!
@@ -179,7 +174,6 @@ impl SpeakerInput {
 
         SpeakerStream {
             consumer: Some(consumer),
-            data_ready,
             _device: device,
             _ctx: ctx,
             _tap: self.tap,
@@ -238,19 +232,10 @@ fn process_audio_data(ctx: &mut Ctx, data: &[f32]) {
     if let Some(waker) = should_wake {
         waker.wake();
     }
-
-    // Signal DSP thread via Condvar
-    let (lock, cvar) = &*ctx.data_ready;
-    if let Ok(mut ready) = lock.lock() {
-        *ready = true;
-        cvar.notify_one();
-    }
 }
 
 pub struct SpeakerStream {
-    consumer: Option<HeapCons<f32>>,
-    /// Condvar for DSP thread to wait on audio data
-    data_ready: Arc<(Mutex<bool>, Condvar)>,
+    consumer: Option<HeapCons<f32>>, // Option so we can take it
     _device: ca::hardware::StartedDevice<ca::AggregateDevice>,
     _ctx: Box<Ctx>,
     _tap: ca::TapGuard,
@@ -264,11 +249,6 @@ impl SpeakerStream {
 
     pub fn take_consumer(&mut self) -> Option<HeapCons<f32>> {
         self.consumer.take()
-    }
-
-    /// Get the Condvar for DSP thread to wait on audio data
-    pub fn data_ready_signal(&self) -> Arc<(Mutex<bool>, Condvar)> {
-        self.data_ready.clone()
     }
 }
 

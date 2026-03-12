@@ -17,7 +17,6 @@ export class SystemAudioCapture extends EventEmitter {
     private isRecording: boolean = false;
     private deviceId: string | null = null;
     private detectedSampleRate: number = 16000;
-    private isWarmedUp: boolean = false;
 
     constructor(deviceId?: string | null) {
         super();
@@ -25,42 +24,20 @@ export class SystemAudioCapture extends EventEmitter {
         if (!RustAudioCapture) {
             console.error('[SystemAudioCapture] Rust class implementation not found.');
         } else {
-            // Create the native object immediately (instant — just stores device_id)
-            try {
-                this.monitor = new RustAudioCapture(this.deviceId);
-                console.log(`[SystemAudioCapture] Created. Device ID: ${this.deviceId || 'default'}`);
-            } catch (e) {
-                console.error('[SystemAudioCapture] Failed to create native monitor:', e);
-            }
+            // LAZY INIT: Don't create native monitor here - it causes 1-second audio mute + quality drop
+            // The monitor will be created in start() when the meeting actually begins
+            console.log(`[SystemAudioCapture] Initialized (lazy). Device ID: ${this.deviceId || 'default'}`);
         }
     }
 
     public getSampleRate(): number {
+        // Return 16000 default as we effectively downsample to this now
+        // Force return 16000 to avoid stale binary issues reporting device rate
         return 16000;
     }
 
     /**
-     * Pre-warm SCK: triggers ScreenCaptureKit initialization in a background thread.
-     * Call this early (e.g. via setTimeout after app launch) so SCK is fully ready
-     * before the user clicks "Start Natively". Audio is captured but discarded
-     * until start() is called with the real callback.
-     */
-    public warmup(): void {
-        if (!this.monitor) return;
-        if (this.isWarmedUp) return;
-        
-        try {
-            console.log('[SystemAudioCapture] Calling native warmup()...');
-            this.monitor.warmup();
-            this.isWarmedUp = true;
-        } catch (e) {
-            console.error('[SystemAudioCapture] Warmup failed:', e);
-        }
-    }
-
-    /**
-     * Start capturing audio. If warmup() was called, this is instant.
-     * If not, this will also trigger SCK initialization (slower).
+     * Start capturing audio
      */
     public start(): void {
         if (this.isRecording) return;
@@ -70,9 +47,10 @@ export class SystemAudioCapture extends EventEmitter {
             return;
         }
 
-        // Only create if destroyed or failed previously
+        // LAZY INIT: Create monitor here when meeting starts (not in constructor)
+        // This prevents the 1-second audio mute + quality drop at app launch
         if (!this.monitor) {
-            console.log('[SystemAudioCapture] Recreating native monitor...');
+            console.log('[SystemAudioCapture] Creating native monitor (lazy init)...');
             try {
                 this.monitor = new RustAudioCapture(this.deviceId);
             } catch (e) {
@@ -86,6 +64,7 @@ export class SystemAudioCapture extends EventEmitter {
             console.log('[SystemAudioCapture] Starting native capture...');
 
             this.monitor.start((chunk: Uint8Array) => {
+                // The native module sends raw PCM bytes (Uint8Array)
                 if (chunk && chunk.length > 0) {
                     const buffer = Buffer.from(chunk);
                     if (Math.random() < 0.05) {
@@ -97,7 +76,6 @@ export class SystemAudioCapture extends EventEmitter {
             });
 
             this.isRecording = true;
-            this.isWarmedUp = true;
             this.emit('start');
         } catch (error) {
             console.error('[SystemAudioCapture] Failed to start:', error);
@@ -106,38 +84,21 @@ export class SystemAudioCapture extends EventEmitter {
     }
 
     /**
-     * Stop capturing (keeps stream warm for next meeting)
+     * Stop capturing
      */
     public stop(): void {
         if (!this.isRecording) return;
 
-        console.log('[SystemAudioCapture] Pausing native capture (keeping stream warm)...');
+        console.log('[SystemAudioCapture] Stopping capture...');
         try {
-            if (this.monitor && this.monitor.pauseCapture) {
-                this.monitor.pauseCapture();
-            }
+            this.monitor?.stop();
         } catch (e) {
-            console.error('[SystemAudioCapture] Error pausing:', e);
+            console.error('[SystemAudioCapture] Error stopping:', e);
         }
 
-        this.isRecording = false;
-        this.emit('stop');
-    }
-
-    /**
-     * Completely destroy the native stream.
-     */
-    public destroy(): void {
-        console.log('[SystemAudioCapture] Destroying native monitor completely...');
-        try {
-            if (this.monitor && this.monitor.stop) {
-                this.monitor.stop();
-            }
-        } catch (e) {}
+        // Destroy monitor
         this.monitor = null;
         this.isRecording = false;
-        this.isWarmedUp = false;
         this.emit('stop');
-        this.removeAllListeners();
     }
 }
