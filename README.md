@@ -520,7 +520,9 @@ Quality pull requests will be reviewed and merged.
 
 ### Maintainers
 
-- **Windows Build:** [@razllivan](https://github.com/razllivan)
+| Maintainer | Role | Support |
+|------------|------|---------|
+| [@razllivan](https://github.com/razllivan) | Windows Build | [![Buy Me a Coffee](https://img.shields.io/badge/-buy_me_a_coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://app.lava.top/razllivan) |
 
 ---
 
