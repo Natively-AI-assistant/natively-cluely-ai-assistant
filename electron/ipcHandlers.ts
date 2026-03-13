@@ -256,7 +256,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // IPC handler for analyzing image from file path
   safeHandle("analyze-image-file", async (event, path: string) => {
     try {
-      const result = await appState.processingHelper.getLLMHelper().analyzeImageFile(path)
+      const result = await appState.processingHelper.getLLMHelper().analyzeImageFiles([path])
       return result
     } catch (error: any) {
       // console.error("Error in analyze-image-file handler:", error)
@@ -264,9 +264,9 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   })
 
-  safeHandle("gemini-chat", async (event, message: string, imagePath?: string, context?: string, options?: { skipSystemPrompt?: boolean }) => {
+  safeHandle("gemini-chat", async (event, message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean }) => {
     try {
-      const result = await appState.processingHelper.getLLMHelper().chatWithGemini(message, imagePath, context, options?.skipSystemPrompt);
+      const result = await appState.processingHelper.getLLMHelper().chatWithGemini(message, imagePaths, context, options?.skipSystemPrompt);
 
       console.log(`[IPC] gemini - chat response: `, result ? result.substring(0, 50) : "(empty)");
 
@@ -305,7 +305,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Streaming IPC Handler
-  safeHandle("gemini-chat-stream", async (event, message: string, imagePath?: string, context?: string, options?: { skipSystemPrompt?: boolean }) => {
+  safeHandle("gemini-chat-stream", async (event, message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean }) => {
     try {
       console.log("[IPC] gemini-chat-stream started using LLMHelper.streamChat");
       const llmHelper = appState.processingHelper.getLLMHelper();
@@ -338,7 +338,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       try {
         // USE streamChat which handles routing
-        const stream = llmHelper.streamChat(message, imagePath, context, options?.skipSystemPrompt ? "" : undefined);
+        const stream = llmHelper.streamChat(message, imagePaths, context, options?.skipSystemPrompt ? "" : undefined);
 
         for await (const token of stream) {
           event.sender.send("gemini-stream-token", token);
@@ -1417,11 +1417,11 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // MODE 2: What Should I Say (Primary auto-answer)
-  safeHandle("generate-what-to-say", async (_, question?: string, imagePath?: string) => {
+  safeHandle("generate-what-to-say", async (_, question?: string, imagePaths?: string[]) => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
-      // Question and imagePath are now optional - IntelligenceManager infers from transcript
-      const answer = await intelligenceManager.runWhatShouldISay(question, 0.8, imagePath);
+      // Question and imagePaths are now optional - IntelligenceManager infers from transcript
+      const answer = await intelligenceManager.runWhatShouldISay(question, 0.8, imagePaths);
       return { answer, question: question || 'inferred from context' };
     } catch (error: any) {
       // Return graceful fallback instead of throwing

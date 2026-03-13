@@ -101,7 +101,7 @@ export interface ElectronAPI {
 
   // Intelligence Mode IPC
   generateAssist: () => Promise<{ insight: string | null }>
-  generateWhatToSay: (question?: string, imagePath?: string) => Promise<{ answer: string | null; question?: string; error?: string }>
+  generateWhatToSay: (question?: string, imagePaths?: string[]) => Promise<{ answer: string | null; question?: string; error?: string }>
   generateFollowUp: (intent: string, userRequest?: string) => Promise<{ refined: string | null; intent: string }>
   generateFollowUpQuestions: () => Promise<{ questions: string | null }>
   generateRecap: () => Promise<{ summary: string | null }>
@@ -138,7 +138,7 @@ export interface ElectronAPI {
   onSessionReset: (callback: () => void) => () => void;
 
   // Streaming listeners
-  streamGeminiChat: (message: string, imagePath?: string, context?: string, options?: { skipSystemPrompt?: boolean }) => Promise<void>
+  streamGeminiChat: (message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean }) => Promise<void>
   onGeminiStreamToken: (callback: (token: string) => void) => () => void
   onGeminiStreamDone: (callback: () => void) => () => void
   onGeminiStreamError: (callback: (error: string) => void) => () => void;

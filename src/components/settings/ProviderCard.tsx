@@ -179,19 +179,19 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                                 <>{/* No Icon */} Test Connection</>}
                 </button>
 
-                {/* Inline Model Dropdown (shows only when models are fetched) */}
-                {fetchedModels.length > 0 ? (
+                {/* Inline Model Dropdown */}
+                {fetchedModels.length > 0 || preferredModel ? (
                     <div className="relative flex-1 max-w-[200px] mx-4" ref={dropdownRef}>
                         <button
-                            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                            className="w-full bg-bg-input border border-border-subtle rounded-md px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary flex items-center justify-between hover:bg-bg-elevated transition-colors"
+                            onClick={() => fetchedModels.length > 0 && setIsDropdownOpen(!isDropdownOpen)}
+                            className={`w-full bg-bg-input border border-border-subtle rounded-md px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary flex items-center justify-between transition-colors ${fetchedModels.length > 0 ? 'hover:bg-bg-elevated' : 'opacity-80 cursor-default'}`}
                             type="button"
                         >
-                            <span className="truncate pr-2">{selectedOption ? selectedOption.label : 'Select model'}</span>
-                            <ChevronDown size={14} className={`text-text-secondary transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                            <span className="truncate pr-2">{selectedOption ? selectedOption.label : (preferredModel || 'Select model')}</span>
+                            <ChevronDown size={14} className={`text-text-secondary transition-transform ${isDropdownOpen ? 'rotate-180' : ''} ${fetchedModels.length === 0 ? 'opacity-50' : ''}`} />
                         </button>
 
-                        {isDropdownOpen && (
+                        {isDropdownOpen && fetchedModels.length > 0 && (
                             <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 w-full min-w-[200px] bg-bg-elevated border border-border-subtle rounded-lg shadow-xl z-50 max-h-60 overflow-y-auto animated fadeIn">
                                 <div className="p-1 space-y-0.5">
                                     {fetchedModels.map((model) => (
@@ -208,11 +208,6 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                                 </div>
                             </div>
                         )}
-                    </div>
-                ) : preferredModel ? (
-                    <div className="flex-1 flex justify-center items-center gap-2 text-[10px] text-text-secondary mx-4 truncate">
-                        <span className="shrink-0 text-text-tertiary">Current model:</span>
-                        <span className="font-mono bg-bg-input px-1.5 py-0.5 border border-border-subtle rounded truncate text-text-primary" title={preferredModel}>{preferredModel}</span>
                     </div>
                 ) : (
                     <div className="flex-1 mx-4" />

@@ -87,7 +87,7 @@ interface ElectronAPI {
 
   // Intelligence Mode IPC
   generateAssist: () => Promise<{ insight: string | null }>
-  generateWhatToSay: (question?: string, imagePath?: string) => Promise<{ answer: string | null; question?: string; error?: string }>
+  generateWhatToSay: (question?: string, imagePaths?: string[]) => Promise<{ answer: string | null; question?: string; error?: string }>
   generateFollowUp: (intent: string, userRequest?: string) => Promise<{ refined: string | null; intent: string }>
   generateRecap: () => Promise<{ summary: string | null }>
   submitManualQuestion: (question: string) => Promise<{ answer: string | null; question: string }>
@@ -155,7 +155,7 @@ interface ElectronAPI {
   toggleAdvancedSettings: () => Promise<void>
 
   // Streaming listeners
-  streamGeminiChat: (message: string, imagePath?: string, context?: string, options?: { skipSystemPrompt?: boolean }) => Promise<void>
+  streamGeminiChat: (message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean }) => Promise<void>
   onGeminiStreamToken: (callback: (token: string) => void) => () => void
   onGeminiStreamDone: (callback: () => void) => () => void
   onGeminiStreamError: (callback: (error: string) => void) => () => void
@@ -506,7 +506,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   // Intelligence Mode IPC
   generateAssist: () => ipcRenderer.invoke("generate-assist"),
-  generateWhatToSay: (question?: string, imagePath?: string) => ipcRenderer.invoke("generate-what-to-say", question, imagePath),
+  generateWhatToSay: (question?: string, imagePaths?: string[]) => ipcRenderer.invoke("generate-what-to-say", question, imagePaths),
   generateFollowUp: (intent: string, userRequest?: string) => ipcRenderer.invoke("generate-follow-up", intent, userRequest),
   generateFollowUpQuestions: () => ipcRenderer.invoke("generate-follow-up-questions"),
   generateRecap: () => ipcRenderer.invoke("generate-recap"),
@@ -637,7 +637,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
 
   // Streaming Chat
-  streamGeminiChat: (message: string, imagePath?: string, context?: string, options?: { skipSystemPrompt?: boolean }) => ipcRenderer.invoke("gemini-chat-stream", message, imagePath, context, options),
+  streamGeminiChat: (message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean }) => ipcRenderer.invoke("gemini-chat-stream", message, imagePaths, context, options),
 
   onGeminiStreamToken: (callback: (token: string) => void) => {
     const subscription = (_: any, token: string) => callback(token)

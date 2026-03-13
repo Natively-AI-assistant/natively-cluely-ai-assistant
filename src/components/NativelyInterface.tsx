@@ -98,8 +98,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting }) =
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     // const settingsButtonRef = useRef<HTMLButtonElement>(null);
 
-    // Latent Context State (Screenshot attached but not sent)
-    const [attachedContext, setAttachedContext] = useState<{ path: string, preview: string } | null>(null);
+    // Latent Context State (Screenshots attached but not sent)
+    const [attachedContext, setAttachedContext] = useState<Array<{ path: string, preview: string }>>([]);
 
     // Settings State with Persistence
     const [isUndetectable, setIsUndetectable] = useState(false);
@@ -187,6 +187,20 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting }) =
         return () => observer.disconnect();
     }, []);
 
+    // Force resize when attachedContext changes (screenshots added/removed)
+    useEffect(() => {
+        if (!contentRef.current) return;
+        // Let the DOM settle, then measure and push new dimensions
+        requestAnimationFrame(() => {
+            if (!contentRef.current) return;
+            const rect = contentRef.current.getBoundingClientRect();
+            window.electronAPI?.updateContentDimensions({
+                width: Math.ceil(rect.width),
+                height: Math.ceil(rect.height)
+            });
+        });
+    }, [attachedContext]);
+
     // Force initial sizing safety check
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -255,7 +269,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting }) =
             console.log('[NativelyInterface] Resetting session state...');
             setMessages([]);
             setInputValue('');
-            setAttachedContext(null);
+            setAttachedContext([]);
             setManualTranscript('');
             setVoiceInput('');
             setIsProcessing(false);
@@ -272,7 +286,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting }) =
 
     const handleScreenshotAttach = (data: { path: string; preview: string }) => {
         setIsExpanded(true);
-        setAttachedContext(data);
+        setAttachedContext(prev => {
+            // Prevent duplicates and cap at 5
+            if (prev.some(s => s.path === data.path)) return prev;
+            const updated = [...prev, data];
+            return updated.slice(-5); // Keep last 5
+        });
     };
 
     // Connect to Native Audio Backend
@@ -615,22 +634,22 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting }) =
         analytics.trackCommandExecuted('what_to_say');
 
         // Capture and clear attached image context
-        const currentAttachment = attachedContext;
-        if (currentAttachment) {
-            setAttachedContext(null);
+        const currentAttachments = attachedContext;
+        if (currentAttachments.length > 0) {
+            setAttachedContext([]);
             // Show the attached image in chat
             setMessages(prev => [...prev, {
                 id: Date.now().toString(),
                 role: 'user',
                 text: 'What should I say about this?',
                 hasScreenshot: true,
-                screenshotPreview: currentAttachment.preview
+                screenshotPreview: currentAttachments[0].preview
             }]);
         }
 
         try {
             // Pass imagePath if attached
-            await window.electronAPI.generateWhatToSay(undefined, currentAttachment?.path);
+            await window.electronAPI.generateWhatToSay(undefined, currentAttachments.length > 0 ? currentAttachments.map(s => s.path) : undefined);
         } catch (err) {
             setMessages(prev => [...prev, {
                 id: Date.now().toString(),
@@ -849,8 +868,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting }) =
             // Send manual finalization signal to STT Providers
             window.electronAPI.finalizeMicSTT().catch(err => console.error('[NativelyInterface] Failed to send finalizeMicSTT:', err));
 
-            const currentAttachment = attachedContext;
-            setAttachedContext(null); // Clear context immediately on send
+            const currentAttachments = attachedContext;
+            setAttachedContext([]); // Clear context immediately on send
 
             const question = (voiceInputRef.current + (manualTranscriptRef.current ? ' ' + manualTranscriptRef.current : '')).trim();
             setVoiceInput('');
@@ -858,7 +877,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting }) =
             setManualTranscript('');
             manualTranscriptRef.current = '';
 
-            if (!question && !currentAttachment) {
+            if (!question && currentAttachments.length === 0) {
                 // No voice input and no image
                 setMessages(prev => [...prev, {
                     id: Date.now().toString(),
@@ -873,8 +892,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting }) =
                 id: Date.now().toString(),
                 role: 'user',
                 text: question,
-                hasScreenshot: !!currentAttachment,
-                screenshotPreview: currentAttachment?.preview
+                hasScreenshot: currentAttachments.length > 0,
+                screenshotPreview: currentAttachments[0]?.preview
             }]);
 
             // Add placeholder for streaming response
@@ -890,7 +909,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting }) =
             try {
                 let prompt = '';
 
-                if (currentAttachment) {
+                if (currentAttachments.length > 0) {
                     // Image + Voice Context
                     prompt = `You are a helper. The user has provided a screenshot and a spoken question/command.
 User said: "${question}"
@@ -921,7 +940,7 @@ Provide only the answer, nothing else.`;
 
                 // Call Streaming API: message = question, context = instructions
                 requestStartTimeRef.current = Date.now();
-                await window.electronAPI.streamGeminiChat(question, currentAttachment?.path, prompt, { skipSystemPrompt: true });
+                await window.electronAPI.streamGeminiChat(question, currentAttachments.length > 0 ? currentAttachments.map(s => s.path) : undefined, prompt, { skipSystemPrompt: true });
 
             } catch (err) {
                 // Initial invocation failing (e.g. IPC error before stream starts)
@@ -963,21 +982,21 @@ Provide only the answer, nothing else.`;
     };
 
     const handleManualSubmit = async () => {
-        if (!inputValue.trim() && !attachedContext) return;
+        if (!inputValue.trim() && attachedContext.length === 0) return;
 
         const userText = inputValue;
-        const currentAttachment = attachedContext;
+        const currentAttachments = attachedContext;
 
         // Clear inputs immediately
         setInputValue('');
-        setAttachedContext(null);
+        setAttachedContext([]);
 
         setMessages(prev => [...prev, {
             id: Date.now().toString(),
             role: 'user',
-            text: userText || (currentAttachment ? 'Analyze this screenshot' : ''),
-            hasScreenshot: !!currentAttachment,
-            screenshotPreview: currentAttachment?.preview
+            text: userText || (currentAttachments.length > 0 ? 'Analyze this screenshot' : ''),
+            hasScreenshot: currentAttachments.length > 0,
+            screenshotPreview: currentAttachments[0]?.preview
         }]);
 
         // Add placeholder for streaming response
@@ -993,7 +1012,7 @@ Provide only the answer, nothing else.`;
 
         try {
             // JIT RAG pre-flight: try to use indexed meeting context first
-            if (!currentAttachment) {
+            if (currentAttachments.length === 0) {
                 const ragResult = await window.electronAPI.ragQueryLive?.(userText || '');
                 if (ragResult?.success) {
                     // JIT RAG handled it — response streamed via rag:stream-chunk events
@@ -1005,7 +1024,7 @@ Provide only the answer, nothing else.`;
             requestStartTimeRef.current = Date.now();
             await window.electronAPI.streamGeminiChat(
                 userText || 'Analyze this screenshot',
-                currentAttachment?.path,
+                currentAttachments.length > 0 ? currentAttachments.map(s => s.path) : undefined,
                 conversationContext // Pass context so "answer this" works
             );
         } catch (err) {
@@ -1368,7 +1387,7 @@ Provide only the answer, nothing else.`;
             } else {
                 await window.electronAPI.resetIntelligence();
                 setMessages([]);
-                setAttachedContext(null);
+                setAttachedContext([]);
                 setInputValue('');
             }
         },
@@ -1404,7 +1423,7 @@ Provide only the answer, nothing else.`;
             } else {
                 await window.electronAPI.resetIntelligence();
                 setMessages([]);
-                setAttachedContext(null);
+                setAttachedContext([]);
                 setInputValue('');
             }
         },
@@ -1616,28 +1635,39 @@ Provide only the answer, nothing else.`;
                             {/* Input Area */}
                             <div className="p-3 pt-0">
                                 {/* Latent Context Preview (Attached Screenshot) */}
-                                {attachedContext && (
-                                    <div className="mb-2 flex items-center justify-between bg-white/5 border border-white/10 rounded-lg p-2 animate-in fade-in slide-in-from-bottom-1">
-                                        <div className="flex items-center gap-3">
-                                            <div className="relative group">
-                                                <img
-                                                    src={attachedContext.preview}
-                                                    alt="Context"
-                                                    className="h-10 w-auto rounded border border-white/20"
-                                                />
-                                                <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors rounded" />
-                                            </div>
-                                            <div className="flex flex-col">
-                                                <span className="text-[11px] font-medium text-white">Screenshot attached</span>
-                                                <span className="text-[10px] text-slate-400">Ask a question or click Answer</span>
-                                            </div>
+                                {attachedContext.length > 0 && (
+                                    <div className="mb-2 bg-white/5 border border-white/10 rounded-lg p-2 transition-all duration-200">
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <span className="text-[11px] font-medium text-white">
+                                                {attachedContext.length} screenshot{attachedContext.length > 1 ? 's' : ''} attached
+                                            </span>
+                                            <button
+                                                onClick={() => setAttachedContext([])}
+                                                className="p-1 hover:bg-white/10 rounded-full text-slate-400 hover:text-white transition-colors"
+                                                title="Remove all"
+                                            >
+                                                <X className="w-3.5 h-3.5" />
+                                            </button>
                                         </div>
-                                        <button
-                                            onClick={() => setAttachedContext(null)}
-                                            className="p-1 hover:bg-white/10 rounded-full text-slate-400 hover:text-white transition-colors"
-                                        >
-                                            <X className="w-3.5 h-3.5" />
-                                        </button>
+                                        <div className="flex gap-1.5 overflow-x-auto max-w-full pb-1">
+                                            {attachedContext.map((ctx, idx) => (
+                                                <div key={ctx.path} className="relative group/thumb flex-shrink-0">
+                                                    <img
+                                                        src={ctx.preview}
+                                                        alt={`Screenshot ${idx + 1}`}
+                                                        className="h-10 w-auto rounded border border-white/20"
+                                                    />
+                                                    <button
+                                                        onClick={() => setAttachedContext(prev => prev.filter((_, i) => i !== idx))}
+                                                        className="absolute -top-1 -right-1 w-4 h-4 bg-red-500/80 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity"
+                                                        title="Remove"
+                                                    >
+                                                        <X className="w-2.5 h-2.5 text-white" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <span className="text-[10px] text-slate-400">Ask a question or click Answer</span>
                                     </div>
                                 )}
 

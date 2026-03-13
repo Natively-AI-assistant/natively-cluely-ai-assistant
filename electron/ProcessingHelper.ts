@@ -145,14 +145,13 @@ export class ProcessingHelper {
 
 
       const allPaths = this.appState.getScreenshotHelper().getScreenshotQueue();
-      const lastPath = allPaths[allPaths.length - 1];
 
       // NEW: Handle screenshot as plain text (like audio)
       mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.INITIAL_START)
       this.appState.setView("solutions")
       this.currentProcessingAbortController = new AbortController()
       try {
-        const imageResult = await this.llmHelper.analyzeImageFile(lastPath);
+        const imageResult = await this.llmHelper.analyzeImageFiles(allPaths);
         const problemInfo = {
           problem_statement: imageResult.text,
           input_format: { description: "Generated from screenshot", parameters: [] as any[] },

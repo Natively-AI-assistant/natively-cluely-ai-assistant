@@ -209,7 +209,7 @@ export class IntelligenceEngine extends EventEmitter {
      * Manual trigger - uses clean transcript pipeline for question inference
      * NEVER returns null - always provides a usable response
      */
-    async runWhatShouldISay(question?: string, confidence: number = 0.8, imagePath?: string): Promise<string | null> {
+    async runWhatShouldISay(question?: string, confidence: number = 0.8, imagePaths?: string[]): Promise<string | null> {
         const now = Date.now();
 
         if (now - this.lastTriggerTime < this.triggerCooldown) {
@@ -281,10 +281,10 @@ export class IntelligenceEngine extends EventEmitter {
                 this.session.getAssistantResponseHistory().length
             );
 
-            console.log(`[IntelligenceEngine] Temporal RAG: ${temporalContext.previousResponses.length} responses, tone: ${temporalContext.toneSignals[0]?.type || 'neutral'}, intent: ${intentResult.intent}${imagePath ? ', with image' : ''}`);
+            console.log(`[IntelligenceEngine] Temporal RAG: ${temporalContext.previousResponses.length} responses, tone: ${temporalContext.toneSignals[0]?.type || 'neutral'}, intent: ${intentResult.intent}${imagePaths?.length ? `, with ${imagePaths.length} image(s)` : ''}`);
 
             let fullAnswer = "";
-            const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePath);
+            const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePaths);
 
             for await (const token of stream) {
                 this.emit('suggested_answer_token', token, question || 'inferred', confidence);

@@ -32,6 +32,7 @@ const GROQ_MODEL = "llama-3.3-70b-versatile"
 const OPENAI_MODEL = "gpt-5.2-chat-latest"
 const CLAUDE_MODEL = "claude-sonnet-4-5"
 const MAX_OUTPUT_TOKENS = 65536
+const CLAUDE_MAX_OUTPUT_TOKENS = 64000
 
 // Simple prompt for image analysis (not interview copilot - kept separate)
 const IMAGE_ANALYSIS_PROMPT = `Analyze concisely. Be direct. No markdown formatting. Return plain text only.`
@@ -609,35 +610,35 @@ export class LLMHelper {
     }
   }
 
-  public async analyzeImageFile(imagePath: string) {
+  public async analyzeImageFiles(imagePaths: string[]) {
     try {
-      // CHANGED: Use the new optimization helper
-      const { mimeType, data } = await this.processImage(imagePath);
+      // Build prompt
+      const prompt = `${HARD_SYSTEM_PROMPT}\n\nDescribe the content of ${imagePaths.length > 1 ? 'these images' : 'this image'} in a short, concise answer. If it contains code or a problem, solve it.`;
 
-      // Use the generic image analysis prompt
-      const prompt = `${HARD_SYSTEM_PROMPT}\n\nDescribe the content of this image in a short, concise answer. If it contains code or a problem, solve it.`;
-
-      const contents = [
+      const contents: any[] = [
         { role: "user", parts: [{ text: prompt }] },
-        {
-          role: "user",
-          parts: [{
-            inlineData: {
-              mimeType: mimeType,
-              data: data,
-            }
-          }]
-        }
       ];
 
-      // Use Flash for multimodal with timeout protection (30s)
-      // Assuming you have a generateWithFlash or similar method referencing your Gemini client
-      const text = await this.generateWithFlash(contents); // Fixed argument based on existing method signature
+      // Add all images as inline data parts
+      const imageParts: any[] = [];
+      for (const p of imagePaths) {
+        if (fs.existsSync(p)) {
+          const { mimeType, data } = await this.processImage(p);
+          imageParts.push({ inlineData: { mimeType, data } });
+        }
+      }
+
+      if (imageParts.length > 0) {
+        contents.push({ role: "user", parts: imageParts });
+      }
+
+      // Use Flash for multimodal
+      const text = await this.generateWithFlash(contents);
 
       return { text: text, timestamp: Date.now() };
 
     } catch (error: any) {
-      console.error("Error analyzing image file:", error);
+      console.error("Error analyzing image files:", error);
       return {
         text: `I couldn't analyze the screen right now (${error.message}). Please try again.`,
         timestamp: Date.now()
@@ -717,7 +718,7 @@ ANSWER DIRECTLY:`;
     return `${systemPrompt}\n\nCRITICAL: You MUST respond ONLY in ${this.aiResponseLanguage}. This is an absolute requirement. All generated text that the user should say must be in ${this.aiResponseLanguage}.`;
   }
 
-  public async chatWithGemini(message: string, imagePath?: string, context?: string, skipSystemPrompt: boolean = false, alternateGroqMessage?: string): Promise<string> {
+  public async chatWithGemini(message: string, imagePaths?: string[], context?: string, skipSystemPrompt: boolean = false, alternateGroqMessage?: string): Promise<string> {
     try {
       console.log(`[LLMHelper] chatWithGemini called with message:`, message.substring(0, 50))
 
@@ -755,7 +756,7 @@ ANSWER DIRECTLY:`;
         }
       }
 
-      const isMultimodal = !!imagePath;
+      const isMultimodal = !!(imagePaths?.length);
 
       // Helper to build combined prompts for Groq/Gemini
       const buildMessage = (systemPrompt: string) => {
@@ -814,17 +815,17 @@ ANSWER DIRECTLY:`;
           skipSystemPrompt ? "" : CUSTOM_SYSTEM_PROMPT,
           message,
           context || "",
-          imagePath
+          imagePaths?.[0]
         );
         return this.processResponse(response);
       }
 
       // --- Direct Routing based on Selected Model ---
       if (this.isOpenAiModel(this.currentModelId) && this.openaiClient) {
-        return await this.generateWithOpenai(userContent, openaiSystemPrompt, imagePath);
+        return await this.generateWithOpenai(userContent, openaiSystemPrompt, imagePaths);
       }
       if (this.isClaudeModel(this.currentModelId) && this.claudeClient) {
-        return await this.generateWithClaude(userContent, claudeSystemPrompt, imagePath);
+        return await this.generateWithClaude(userContent, claudeSystemPrompt, imagePaths);
       }
       if (this.isGroqModel(this.currentModelId) && this.groqClient && !isMultimodal) {
         return await this.generateWithGroq(combinedMessages.groq);
@@ -844,13 +845,13 @@ ANSWER DIRECTLY:`;
       if (isMultimodal) {
         // MULTIMODAL: Only vision-capable providers (NO Groq)
         if (this.client) {
-          providers.push({ name: `Gemini Flash`, execute: () => this.tryGenerateResponse(combinedMessages.gemini, imagePath) });
+          providers.push({ name: `Gemini Flash`, execute: () => this.tryGenerateResponse(combinedMessages.gemini, imagePaths) });
         }
         if (this.openaiClient) {
-          providers.push({ name: `OpenAI (${OPENAI_MODEL})`, execute: () => this.generateWithOpenai(userContent, openaiSystemPrompt, imagePath) });
+          providers.push({ name: `OpenAI (${OPENAI_MODEL})`, execute: () => this.generateWithOpenai(userContent, openaiSystemPrompt, imagePaths) });
         }
         if (this.claudeClient) {
-          providers.push({ name: `Claude (${CLAUDE_MODEL})`, execute: () => this.generateWithClaude(userContent, claudeSystemPrompt, imagePath) });
+          providers.push({ name: `Claude (${CLAUDE_MODEL})`, execute: () => this.generateWithClaude(userContent, claudeSystemPrompt, imagePaths) });
         }
         if (this.client) {
           providers.push({
@@ -859,7 +860,7 @@ ANSWER DIRECTLY:`;
               const orig = this.geminiModel;
               this.geminiModel = GEMINI_PRO_MODEL;
               try {
-                const r = await this.tryGenerateResponse(combinedMessages.gemini, imagePath);
+                const r = await this.tryGenerateResponse(combinedMessages.gemini, imagePaths);
                 this.geminiModel = orig;
                 return r;
               } catch (e) {
@@ -1039,7 +1040,7 @@ ANSWER DIRECTLY:`;
   /**
    * Non-streaming OpenAI generation with proper system/user separation
    */
-  private async generateWithOpenai(userMessage: string, systemPrompt?: string, imagePath?: string): Promise<string> {
+  private async generateWithOpenai(userMessage: string, systemPrompt?: string, imagePaths?: string[]): Promise<string> {
     if (!this.openaiClient) throw new Error("OpenAI client not initialized");
 
     await this.rateLimiters.openai.acquire();
@@ -1049,16 +1050,15 @@ ANSWER DIRECTLY:`;
       messages.push({ role: "system", content: systemPrompt });
     }
 
-    if (imagePath) {
-      const imageData = await fs.promises.readFile(imagePath);
-      const base64Image = imageData.toString("base64");
-      messages.push({
-        role: "user",
-        content: [
-          { type: "text", text: userMessage },
-          { type: "image_url", image_url: { url: `data:image/png;base64,${base64Image}` } }
-        ]
-      });
+    if (imagePaths?.length) {
+      const contentParts: any[] = [{ type: "text", text: userMessage }];
+      for (const p of imagePaths) {
+        if (fs.existsSync(p)) {
+          const imageData = await fs.promises.readFile(p);
+          contentParts.push({ type: "image_url", image_url: { url: `data:image/png;base64,${imageData.toString("base64")}` } });
+        }
+      }
+      messages.push({ role: "user", content: contentParts });
     } else {
       messages.push({ role: "user", content: userMessage });
     }
@@ -1123,29 +1123,32 @@ ANSWER DIRECTLY:`;
   /**
    * Non-streaming Claude generation with proper system/user separation
    */
-  private async generateWithClaude(userMessage: string, systemPrompt?: string, imagePath?: string): Promise<string> {
+  private async generateWithClaude(userMessage: string, systemPrompt?: string, imagePaths?: string[]): Promise<string> {
     if (!this.claudeClient) throw new Error("Claude client not initialized");
 
     await this.rateLimiters.claude.acquire();
 
     const content: any[] = [];
-    if (imagePath) {
-      const imageData = await fs.promises.readFile(imagePath);
-      const base64Image = imageData.toString("base64");
-      content.push({
-        type: "image",
-        source: {
-          type: "base64",
-          media_type: "image/png",
-          data: base64Image
+    if (imagePaths?.length) {
+      for (const p of imagePaths) {
+        if (fs.existsSync(p)) {
+          const imageData = await fs.promises.readFile(p);
+          content.push({
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: "image/png",
+              data: imageData.toString("base64")
+            }
+          });
         }
-      });
+      }
     }
     content.push({ type: "text", text: userMessage });
 
     const response = await this.claudeClient.messages.create({
       model: CLAUDE_MODEL,
-      max_tokens: MAX_OUTPUT_TOKENS,
+      max_tokens: CLAUDE_MAX_OUTPUT_TOKENS,
       ...(systemPrompt ? { system: systemPrompt } : {}),
       messages: [{ role: "user", content }],
     });
@@ -1270,20 +1273,22 @@ ANSWER DIRECTLY:`;
     return prompt;
   }
 
-  private async tryGenerateResponse(fullMessage: string, imagePath?: string): Promise<string> {
+  private async tryGenerateResponse(fullMessage: string, imagePaths?: string[]): Promise<string> {
     let rawResponse: string;
 
-    if (imagePath) {
-      const imageData = await fs.promises.readFile(imagePath);
-      const contents = [
-        { text: fullMessage },
-        {
-          inlineData: {
-            mimeType: "image/png",
-            data: imageData.toString("base64")
-          }
+    if (imagePaths?.length) {
+      const contents: any[] = [{ text: fullMessage }];
+      for (const p of imagePaths) {
+        if (fs.existsSync(p)) {
+          const imageData = await fs.promises.readFile(p);
+          contents.push({
+            inlineData: {
+              mimeType: "image/png",
+              data: imageData.toString("base64")
+            }
+          });
         }
-      ];
+      }
 
       // Use current model for multimodal (allows Pro fallback)
       if (this.client) {
@@ -1319,10 +1324,10 @@ ANSWER DIRECTLY:`;
    * 
    * MULTIMODAL: Gemini-only (existing logic)
    */
-  public async * streamChatWithGemini(message: string, imagePath?: string, context?: string, skipSystemPrompt: boolean = false): AsyncGenerator<string, void, unknown> {
+  public async * streamChatWithGemini(message: string, imagePaths?: string[], context?: string, skipSystemPrompt: boolean = false): AsyncGenerator<string, void, unknown> {
     console.log(`[LLMHelper] streamChatWithGemini called with message:`, message.substring(0, 50));
 
-    const isMultimodal = !!imagePath;
+    const isMultimodal = !!(imagePaths?.length);
 
     // Build single-string messages for Groq/Gemini (which use combined prompts)
     const buildCombinedMessage = (systemPrompt: string) => {
@@ -1370,16 +1375,16 @@ ANSWER DIRECTLY:`;
       // MULTIMODAL PROVIDER ORDER: Gemini Flash → OpenAI → Claude → Gemini Pro
       // Groq does NOT support vision
       if (this.client) {
-        providers.push({ name: `Gemini Flash (${GEMINI_FLASH_MODEL})`, execute: () => this.streamWithGeminiModel(combinedMessages.gemini, GEMINI_FLASH_MODEL, imagePath) });
+        providers.push({ name: `Gemini Flash (${GEMINI_FLASH_MODEL})`, execute: () => this.streamWithGeminiModel(combinedMessages.gemini, GEMINI_FLASH_MODEL, imagePaths) });
       }
       if (this.openaiClient) {
-        providers.push({ name: `OpenAI (${OPENAI_MODEL})`, execute: () => this.streamWithOpenaiMultimodal(userContent, imagePath!, openaiSystemPrompt) });
+        providers.push({ name: `OpenAI (${OPENAI_MODEL})`, execute: () => this.streamWithOpenaiMultimodal(userContent, imagePaths!, openaiSystemPrompt) });
       }
       if (this.claudeClient) {
-        providers.push({ name: `Claude (${CLAUDE_MODEL})`, execute: () => this.streamWithClaudeMultimodal(userContent, imagePath!, claudeSystemPrompt) });
+        providers.push({ name: `Claude (${CLAUDE_MODEL})`, execute: () => this.streamWithClaudeMultimodal(userContent, imagePaths!, claudeSystemPrompt) });
       }
       if (this.client) {
-        providers.push({ name: `Gemini Pro (${GEMINI_PRO_MODEL})`, execute: () => this.streamWithGeminiModel(combinedMessages.gemini, GEMINI_PRO_MODEL, imagePath) });
+        providers.push({ name: `Gemini Pro (${GEMINI_PRO_MODEL})`, execute: () => this.streamWithGeminiModel(combinedMessages.gemini, GEMINI_PRO_MODEL, imagePaths) });
       }
     } else {
       // TEXT-ONLY PROVIDER ORDER: Groq → OpenAI → Claude → Gemini Flash → Gemini Pro
@@ -1440,7 +1445,7 @@ ANSWER DIRECTLY:`;
    */
   public async * streamChat(
     message: string,
-    imagePath?: string,
+    imagePaths?: string[],
     context?: string,
     systemPromptOverride?: string // Optional override (defaults to HARD_SYSTEM_PROMPT)
   ): AsyncGenerator<string, void, unknown> {
@@ -1475,7 +1480,7 @@ ANSWER DIRECTLY:`;
     }
 
     // Preparation
-    const isMultimodal = !!imagePath;
+    const isMultimodal = !!(imagePaths?.length);
 
     // Determine the system prompt to use
     // logic: if override provided, use it. otherwise use HARD_SYSTEM_PROMPT (which is the universal base)
@@ -1516,7 +1521,7 @@ ANSWER DIRECTLY:`;
         finalSystemPrompt,
         message,
         context || "",
-        imagePath
+        imagePaths?.[0]
       );
       yield response;
       return;
@@ -1528,8 +1533,8 @@ ANSWER DIRECTLY:`;
     if (this.isOpenAiModel(this.currentModelId) && this.openaiClient) {
       const openAiSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
       const finalOpenAiSystem = this.injectLanguageInstruction(openAiSystem);
-      if (isMultimodal && imagePath) {
-        yield* this.streamWithOpenaiMultimodal(userContent, imagePath, finalOpenAiSystem);
+      if (isMultimodal && imagePaths) {
+        yield* this.streamWithOpenaiMultimodal(userContent, imagePaths, finalOpenAiSystem);
       } else {
         yield* this.streamWithOpenai(userContent, finalOpenAiSystem);
       }
@@ -1540,8 +1545,8 @@ ANSWER DIRECTLY:`;
     if (this.isClaudeModel(this.currentModelId) && this.claudeClient) {
       const claudeSystem = systemPromptOverride || CLAUDE_SYSTEM_PROMPT;
       const finalClaudeSystem = this.injectLanguageInstruction(claudeSystem);
-      if (isMultimodal && imagePath) {
-        yield* this.streamWithClaudeMultimodal(userContent, imagePath, finalClaudeSystem);
+      if (isMultimodal && imagePaths) {
+        yield* this.streamWithClaudeMultimodal(userContent, imagePaths, finalClaudeSystem);
       } else {
         yield* this.streamWithClaude(userContent, finalClaudeSystem);
       }
@@ -1563,13 +1568,13 @@ ANSWER DIRECTLY:`;
       // Direct model use if specified
       if (this.isGeminiModel(this.currentModelId)) {
         const fullMsg = `${finalSystemPrompt}\n\n${userContent}`;
-        yield* this.streamWithGeminiModel(fullMsg, this.currentModelId, imagePath);
+        yield* this.streamWithGeminiModel(fullMsg, this.currentModelId, imagePaths);
         return;
       }
 
       // Race strategy (default)
       const raceMsg = `${finalSystemPrompt}\n\n${userContent}`;
-      yield* this.streamWithGeminiParallelRace(raceMsg, imagePath);
+      yield* this.streamWithGeminiParallelRace(raceMsg, imagePaths);
     } else {
       throw new Error("No LLM provider available");
     }
@@ -1632,7 +1637,7 @@ ANSWER DIRECTLY:`;
 
     const stream = await this.claudeClient.messages.stream({
       model: CLAUDE_MODEL,
-      max_tokens: MAX_OUTPUT_TOKENS,
+      max_tokens: CLAUDE_MAX_OUTPUT_TOKENS,
       ...(systemPrompt ? { system: systemPrompt } : {}),
       messages: [{ role: "user", content: userMessage }],
     });
@@ -1647,23 +1652,22 @@ ANSWER DIRECTLY:`;
   /**
    * Stream multimodal (image + text) response from OpenAI with system/user separation
    */
-  private async * streamWithOpenaiMultimodal(userMessage: string, imagePath: string, systemPrompt?: string): AsyncGenerator<string, void, unknown> {
+  private async * streamWithOpenaiMultimodal(userMessage: string, imagePaths: string[], systemPrompt?: string): AsyncGenerator<string, void, unknown> {
     if (!this.openaiClient) throw new Error("OpenAI client not initialized");
-
-    const imageData = await fs.promises.readFile(imagePath);
-    const base64Image = imageData.toString("base64");
 
     const messages: any[] = [];
     if (systemPrompt) {
       messages.push({ role: "system", content: systemPrompt });
     }
-    messages.push({
-      role: "user",
-      content: [
-        { type: "text", text: userMessage },
-        { type: "image_url", image_url: { url: `data:image/png;base64,${base64Image}` } }
-      ]
-    });
+
+    const contentParts: any[] = [{ type: "text", text: userMessage }];
+    for (const p of imagePaths) {
+      if (fs.existsSync(p)) {
+        const imageData = await fs.promises.readFile(p);
+        contentParts.push({ type: "image_url", image_url: { url: `data:image/png;base64,${imageData.toString("base64")}` } });
+      }
+    }
+    messages.push({ role: "user", content: contentParts });
 
     const stream = await this.openaiClient.chat.completions.create({
       model: OPENAI_MODEL,
@@ -1683,27 +1687,32 @@ ANSWER DIRECTLY:`;
   /**
    * Stream multimodal (image + text) response from Claude with system/user separation
    */
-  private async * streamWithClaudeMultimodal(userMessage: string, imagePath: string, systemPrompt?: string): AsyncGenerator<string, void, unknown> {
+  private async * streamWithClaudeMultimodal(userMessage: string, imagePaths: string[], systemPrompt?: string): AsyncGenerator<string, void, unknown> {
     if (!this.claudeClient) throw new Error("Claude client not initialized");
 
-    const imageData = await fs.promises.readFile(imagePath);
-    const base64Image = imageData.toString("base64");
+    const imageContentParts: any[] = [];
+    for (const p of imagePaths) {
+      if (fs.existsSync(p)) {
+        const imageData = await fs.promises.readFile(p);
+        imageContentParts.push({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: "image/png",
+            data: imageData.toString("base64")
+          }
+        });
+      }
+    }
 
     const stream = await this.claudeClient.messages.stream({
       model: CLAUDE_MODEL,
-      max_tokens: MAX_OUTPUT_TOKENS,
+      max_tokens: CLAUDE_MAX_OUTPUT_TOKENS,
       ...(systemPrompt ? { system: systemPrompt } : {}),
       messages: [{
         role: "user",
         content: [
-          {
-            type: "image",
-            source: {
-              type: "base64",
-              media_type: "image/png",
-              data: base64Image
-            }
-          },
+          ...imageContentParts,
           { type: "text", text: userMessage }
         ]
       }],
@@ -1719,18 +1728,22 @@ ANSWER DIRECTLY:`;
   /**
    * Stream response from a specific Gemini model
    */
-  private async * streamWithGeminiModel(fullMessage: string, model: string, imagePath?: string): AsyncGenerator<string, void, unknown> {
+  private async * streamWithGeminiModel(fullMessage: string, model: string, imagePaths?: string[]): AsyncGenerator<string, void, unknown> {
     if (!this.client) throw new Error("Gemini client not initialized");
 
     const contents: any[] = [{ text: fullMessage }];
-    if (imagePath) {
-      const imageData = await fs.promises.readFile(imagePath);
-      contents.push({
-        inlineData: {
-          mimeType: "image/png",
-          data: imageData.toString("base64")
+    if (imagePaths?.length) {
+      for (const p of imagePaths) {
+        if (fs.existsSync(p)) {
+          const imageData = await fs.promises.readFile(p);
+          contents.push({
+            inlineData: {
+              mimeType: "image/png",
+              data: imageData.toString("base64")
+            }
+          });
         }
-      });
+      }
     }
 
     const streamResult = await this.client.models.generateContentStream({
@@ -1763,12 +1776,12 @@ ANSWER DIRECTLY:`;
   /**
    * Race Flash and Pro streams, return whichever succeeds first
    */
-  private async * streamWithGeminiParallelRace(fullMessage: string, imagePath?: string): AsyncGenerator<string, void, unknown> {
+  private async * streamWithGeminiParallelRace(fullMessage: string, imagePaths?: string[]): AsyncGenerator<string, void, unknown> {
     if (!this.client) throw new Error("Gemini client not initialized");
 
     // Start both streams
-    const flashPromise = this.collectStreamResponse(fullMessage, GEMINI_FLASH_MODEL, imagePath);
-    const proPromise = this.collectStreamResponse(fullMessage, GEMINI_PRO_MODEL, imagePath);
+    const flashPromise = this.collectStreamResponse(fullMessage, GEMINI_FLASH_MODEL, imagePaths);
+    const proPromise = this.collectStreamResponse(fullMessage, GEMINI_PRO_MODEL, imagePaths);
 
     // Race - whoever finishes first wins
     const result = await Promise.any([flashPromise, proPromise]);
@@ -1784,18 +1797,22 @@ ANSWER DIRECTLY:`;
   /**
    * Collect full response from a Gemini model (non-streaming for race)
    */
-  private async collectStreamResponse(fullMessage: string, model: string, imagePath?: string): Promise<string> {
+  private async collectStreamResponse(fullMessage: string, model: string, imagePaths?: string[]): Promise<string> {
     if (!this.client) throw new Error("Gemini client not initialized");
 
     const contents: any[] = [{ text: fullMessage }];
-    if (imagePath) {
-      const imageData = await fs.promises.readFile(imagePath);
-      contents.push({
-        inlineData: {
-          mimeType: "image/png",
-          data: imageData.toString("base64")
+    if (imagePaths?.length) {
+      for (const p of imagePaths) {
+        if (fs.existsSync(p)) {
+          const imageData = await fs.promises.readFile(p);
+          contents.push({
+            inlineData: {
+              mimeType: "image/png",
+              data: imageData.toString("base64")
+            }
+          });
         }
-      });
+      }
     }
 
     const response = await this.client.models.generateContent({
@@ -1853,7 +1870,7 @@ ANSWER DIRECTLY:`;
   }
 
   // --- CUSTOM PROVIDER STREAMING ---
-  private async * streamWithCustom(message: string, context?: string, imagePath?: string, systemPrompt: string = UNIVERSAL_SYSTEM_PROMPT): AsyncGenerator<string, void, unknown> {
+  private async * streamWithCustom(message: string, context?: string, imagePaths?: string[], systemPrompt: string = UNIVERSAL_SYSTEM_PROMPT): AsyncGenerator<string, void, unknown> {
     if (!this.customProvider) return;
     // We reuse the executeCustomProvider logic but we need it to stream.
     // If the user provided a curl command, it might support streaming (SSE) or not.
@@ -1868,9 +1885,10 @@ ANSWER DIRECTLY:`;
     const requestConfig = curl2Json(curlCommand);
 
     let base64Image = "";
-    if (imagePath) {
+    if (imagePaths?.length) {
       try {
-        const data = await fs.promises.readFile(imagePath);
+        // Use the first image for custom providers (they typically only support one)
+        const data = await fs.promises.readFile(imagePaths[0]);
         base64Image = data.toString("base64");
       } catch (e) { }
     }
@@ -2471,9 +2489,9 @@ ANSWER DIRECTLY:`;
   /**
    * Universal Chat (Non-streaming)
    */
-  public async chat(message: string, imagePath?: string, context?: string, systemPromptOverride?: string): Promise<string> {
+  public async chat(message: string, imagePaths?: string[], context?: string, systemPromptOverride?: string): Promise<string> {
     let fullResponse = "";
-    for await (const chunk of this.streamChat(message, imagePath, context, systemPromptOverride)) {
+    for await (const chunk of this.streamChat(message, imagePaths, context, systemPromptOverride)) {
       fullResponse += chunk;
     }
     return fullResponse;

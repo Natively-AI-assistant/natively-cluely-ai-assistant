@@ -241,21 +241,25 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
   // Seamless screenshot-to-LLM flow
   useEffect(() => {
     // Listen for screenshot taken event
-    const unsubscribe = window.electronAPI.onScreenshotTaken(async (data) => {
+    const unsubscribe = window.electronAPI.onScreenshotTaken(async () => {
       // Refetch screenshots to update the queue
-      await refetch();
+      const updatedScreenshots = await refetch();
       // Show loading in chat
       setChatLoading(true);
       try {
-        // Get the latest screenshot path
-        const latest = data?.path || (Array.isArray(data) && data.length > 0 && data[data.length - 1]?.path);
-        if (latest) {
-          // Call the LLM to process the screenshot
-          // Use streaming for this too!
-          setChatMessages((msgs) => [...msgs, { role: "user", text: "📷 Analyzing screenshot..." }]);
+        // Gather all screenshot paths
+        const allScreenshots = updatedScreenshots.data || [];
+        const allPaths = allScreenshots.map((s: { path: string }) => s.path);
+        if (allPaths.length > 0) {
+          // Call the LLM to process all screenshots
+          const count = allPaths.length;
+          setChatMessages((msgs) => [...msgs, { role: "user", text: `📷 Analyzing ${count} screenshot${count > 1 ? 's' : ''}...` }]);
           setChatMessages((msgs) => [...msgs, { role: "gemini", text: "..." }]);
 
-          await window.electronAPI.streamGeminiChat("Describe this image and solve any problem in it.", latest);
+          await window.electronAPI.streamGeminiChat(
+            `Describe ${count > 1 ? 'these images' : 'this image'} and solve any problem in ${count > 1 ? 'them' : 'it'}.`,
+            allPaths
+          );
         }
       } catch (err) {
         setChatMessages((msgs) => [...msgs, { role: "gemini", text: "Error: " + String(err) }]);
