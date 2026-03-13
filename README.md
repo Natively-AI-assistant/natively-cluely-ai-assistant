@@ -87,7 +87,7 @@ _The privacy-first AI assistant for meetings._
   <a href="https://github.com/evinjohnn/natively-cluely-ai-assistant/releases/latest">
     <img src="https://img.shields.io/badge/Download-macOS-000000?style=for-the-badge&logo=apple&logoColor=white" />
   </a>
-  <a href="https://github.com/evinjohnn/natively-cluely-ai-assistant/releases/tag/v2.0.2">
+  <a href="https://github.com/evinjohnn/natively-cluely-ai-assistant/releases/tag/v2.0.3">
     <img src="https://img.shields.io/badge/Download-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white" />
   </a>
 </p>
@@ -122,13 +122,13 @@ _The privacy-first AI assistant for meetings._
 >     2. Install the natively.dmg
 >     3. Open Terminal and run: `xattr -cr /Applications/Natively.app`
 
-### What's New in v2.0.1
+### What's New in v2.0.3
 
-- **Premium Profile Intelligence**: Context awareness with Job Description (JD) and Resume integration, advanced company research, and real-time negotiation assistance.
-- **Live Meeting RAG**: Instant, intelligent retrieval of context directly during live meetings using local vector embeddings.
-- **Soniox Speech Provider**: First-class support for ultra-fast, high-accuracy streaming Speech-to-Text with Soniox, joining Google, Groq, OpenAI, Deepgram, ElevenLabs, Azure, and IBM Watson.
-- **Multilingual & Accent Support**: Full control over AI response language and highly specific speech recognition for various accents and dialects.
-- **Stability & Fixes**: Resolved numerous issues and merged 3 community pull requests for enhanced performance.
+- **Dynamic AI Model Selection**: Your preferred models synced from providers (like OpenAI, Anthropic, Google) now automatically appear across the entire app.
+- **Multimodal Resilience**: Added a "Smart Dynamic Fallback" using Groq Llama 4 Scout. If default vision models fail during screen analysis, Natively instantly reroutes the image to ensure uninterrupted performance.
+- **Multiple Screenshot Support**: The interface can now handle and process multiple attached screenshots simultaneously.
+- **Improved Embeddings Architecture**: Migrated to a completely new, more robust local embedding architecture for semantic search.
+- **Settings UX & Fixes**: API keys now auto-save after 5 seconds, Claude context limitations are fixed, and UI state syncs instantly without reloads.
 
 ---
 
@@ -301,7 +301,7 @@ OLLAMA_MODEL=llama3.2
 OLLAMA_URL=http://localhost:11434
 
 # Default Model Configuration
-DEFAULT_MODEL=gemini-3-flash-preview
+DEFAULT_MODEL=gemini-3.1-flash-lite-preview
 ```
 
 ### Run (Development)
@@ -467,9 +467,9 @@ No raw audio, screenshots, or transcripts are stored or transmitted unless expli
 
 ### Supported Models
 
-- **Gemini 3** (Flash / Pro)
-- **OpenAI** (GPT-5.2)
-- **Claude** (Sonnet 4.5)
+- **Gemini 3.1** (Flash / Pro)
+- **OpenAI** (GPT-5.3)
+- **Claude** (Sonnet 4.6)
 - **Ollama** (Llama, Mistral, CodeLlama)
 - **Groq** (Llama, Mixtral)
 
