@@ -1,0 +1,43 @@
+{
+  "_name_or_path": "typeform/mobilebert-uncased-mnli",
+  "architectures": [
+    "MobileBertForSequenceClassification"
+  ],
+  "attention_probs_dropout_prob": 0.1,
+  "classifier_activation": false,
+  "classifier_dropout": null,
+  "embedding_size": 128,
+  "finetuning_task": "mnli",
+  "hidden_act": "relu",
+  "hidden_dropout_prob": 0.0,
+  "hidden_size": 512,
+  "id2label": {
+    "0": "ENTAILMENT",
+    "1": "NEUTRAL",
+    "2": "CONTRADICTION"
+  },
+  "initializer_range": 0.02,
+  "intermediate_size": 512,
+  "intra_bottleneck_size": 128,
+  "key_query_shared_bottleneck": true,
+  "label2id": {
+    "CONTRADICTION": 2,
+    "ENTAILMENT": 0,
+    "NEUTRAL": 1
+  },
+  "layer_norm_eps": 1e-12,
+  "max_position_embeddings": 512,
+  "model_type": "mobilebert",
+  "normalization_type": "no_norm",
+  "num_attention_heads": 4,
+  "num_feedforward_networks": 4,
+  "num_hidden_layers": 24,
+  "pad_token_id": 0,
+  "transformers_version": "4.29.2",
+  "trigram_input": true,
+  "true_hidden_size": 128,
+  "type_vocab_size": 2,
+  "use_bottleneck": true,
+  "use_bottleneck_attention": false,
+  "vocab_size": 30522
+}
