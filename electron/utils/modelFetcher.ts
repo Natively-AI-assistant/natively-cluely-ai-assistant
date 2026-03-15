@@ -4,20 +4,19 @@
  */
 
 import axios from 'axios';
+import type { FetchableProvider } from '../types/providers';
 
 export interface ProviderModel {
     id: string;
     label: string;
 }
 
-type Provider = 'gemini' | 'groq' | 'openai' | 'claude';
-
 /**
  * Fetch available models from a provider's API.
  * Returns a filtered, sorted array of { id, label } objects.
  */
 export async function fetchProviderModels(
-    provider: Provider,
+    provider: FetchableProvider,
     apiKey: string
 ): Promise<ProviderModel[]> {
     switch (provider) {

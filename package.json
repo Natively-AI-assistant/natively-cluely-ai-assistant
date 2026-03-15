@@ -1,7 +1,7 @@
 {
   "name": "natively",
   "version": "2.0.5",
-  "main": "./dist-electron/electron/main.js",
+  "main": "./dist-electron/main.js",
   "description": "Natively is a meeting notes app that uses AI to generate notes from your meetings.",
   "scripts": {
     "clean": "rimraf dist dist-electron",
@@ -167,6 +167,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.1009.0",
     "@bany/curl-to-json": "^1.2.10",
     "@google-cloud/speech": "^7.2.1",
     "@google/genai": "^1.44.0",

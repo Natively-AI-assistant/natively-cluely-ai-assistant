@@ -9,6 +9,7 @@ import * as fs from "fs";
 import { AudioDevices } from "./audio/AudioDevices";
 
 import { RECOGNITION_LANGUAGES, AI_RESPONSE_LANGUAGES } from "./config/languages"
+import type { FetchableProvider, LLMProvider } from './types/providers'
 
 export function initializeIpcHandlers(appState: AppState): void {
   const safeHandle = (channel: string, listener: (event: any, ...args: any[]) => Promise<any> | any) => {
@@ -740,11 +741,30 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // AWS Bedrock credentials
+  safeHandle("set-bedrock-credentials", async (_, bearerToken: string, region?: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      cm.setBedrockBearerToken(bearerToken);
+      if (region) cm.setBedrockRegion(region);
+
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      llmHelper.setBedrockCredentials(bearerToken, region || cm.getBedrockRegion());
+
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error saving Bedrock credentials:", error);
+      return { success: false, error: error.message };
+    }
+  });
+
   // Get stored API keys (masked for UI display)
   safeHandle("get-stored-credentials", async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
-      const creds = CredentialsManager.getInstance().getAllCredentials();
+      const credManager = CredentialsManager.getInstance();
+      const creds = credManager.getAllCredentials();
 
       // Return masked versions for security (just indicate if set)
       const hasKey = (key?: string) => !!(key && key.trim().length > 0);
@@ -773,9 +793,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         groqPreferredModel: creds.groqPreferredModel || undefined,
         openaiPreferredModel: creds.openaiPreferredModel || undefined,
         claudePreferredModel: creds.claudePreferredModel || undefined,
+        // AWS Bedrock
+        hasBedrockKey: hasKey(creds.bedrockBearerToken),
+        bedrockRegion: credManager.getBedrockRegion(),
+        bedrockPreferredModel: creds.bedrockPreferredModel || undefined,
       };
     } catch (error: any) {
-      return { hasGeminiKey: false, hasGroqKey: false, hasOpenaiKey: false, hasClaudeKey: false, googleServiceAccountPath: null, sttProvider: 'google', groqSttModel: 'whisper-large-v3-turbo', hasSttGroqKey: false, hasSttOpenaiKey: false, hasDeepgramKey: false, hasElevenLabsKey: false, hasAzureKey: false, azureRegion: 'eastus', hasIbmWatsonKey: false, ibmWatsonRegion: 'us-south', hasSonioxKey: false, hasGoogleSearchKey: false, hasGoogleSearchCseId: false };
+      return { hasGeminiKey: false, hasGroqKey: false, hasOpenaiKey: false, hasClaudeKey: false, googleServiceAccountPath: null, sttProvider: 'google', groqSttModel: 'whisper-large-v3-turbo', hasSttGroqKey: false, hasSttOpenaiKey: false, hasDeepgramKey: false, hasElevenLabsKey: false, hasAzureKey: false, azureRegion: 'eastus', hasIbmWatsonKey: false, ibmWatsonRegion: 'us-south', hasSonioxKey: false, hasGoogleSearchKey: false, hasGoogleSearchCseId: false, hasBedrockKey: false, bedrockRegion: 'us-east-1' };
     }
   });
 
@@ -783,7 +807,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Dynamic Model Discovery Handlers
   // ==========================================
 
-  safeHandle("fetch-provider-models", async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude', apiKey: string) => {
+  safeHandle("fetch-provider-models", async (_, provider: FetchableProvider, apiKey: string) => {
     try {
       // Fall back to stored key if no key was explicitly provided
       let key = apiKey?.trim();
@@ -810,7 +834,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("set-provider-preferred-model", async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude', modelId: string) => {
+  safeHandle("set-provider-preferred-model", async (_, provider: LLMProvider, modelId: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setPreferredModel(provider, modelId);
@@ -1120,9 +1144,30 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("test-llm-connection", async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude', apiKey?: string) => {
+  safeHandle("test-llm-connection", async (_, provider: LLMProvider, apiKey?: string) => {
     console.log(`[IPC] Received test-llm-connection request for provider: ${provider}`);
     try {
+      if (provider === 'bedrock') {
+        const { CredentialsManager } = require('./services/CredentialsManager');
+        const cm = CredentialsManager.getInstance();
+        const bearerToken = cm.getBedrockBearerToken();
+        const region = cm.getBedrockRegion();
+        if (!bearerToken) {
+          return { success: false, error: 'No AWS bearer token configured' };
+        }
+        const { BedrockRuntimeClient, ConverseCommand } = require('@aws-sdk/client-bedrock-runtime');
+        const client = new BedrockRuntimeClient({
+          region,
+          token: async () => ({ token: bearerToken })
+        });
+        await client.send(new ConverseCommand({
+          modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
+          messages: [{ role: 'user', content: [{ text: 'Hello' }] }],
+          inferenceConfig: { maxTokens: 10 }
+        }));
+        return { success: true };
+      }
+
       if (!apiKey || !apiKey.trim()) {
         const { CredentialsManager } = require('./services/CredentialsManager');
         const creds = CredentialsManager.getInstance();
