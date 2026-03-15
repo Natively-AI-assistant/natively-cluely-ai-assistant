@@ -11,12 +11,17 @@ import type { WindowHelper } from "./WindowHelper"
 
 export class ModelSelectorWindowHelper {
     private window: BrowserWindow | null = null
+    private contentProtection: boolean = false
 
     // Store offsets relative to main window if needed, but absolute positioning is simpler for dropdowns
     private lastBlurTime: number = 0
     private ignoreBlur: boolean = false;
 
     constructor() { }
+
+    public setIgnoreBlur(ignore: boolean): void {
+        this.ignoreBlur = ignore;
+    }
 
     private windowHelper: WindowHelper | null = null;
 
@@ -131,6 +136,10 @@ export class ModelSelectorWindowHelper {
             this.window.setHiddenInMissionControl(true)
         }
 
+        // Apply content protection for Undetectable Mode
+        console.log(`[ModelSelectorWindowHelper] Creating window with Content Protection: ${this.contentProtection}`);
+        this.window.setContentProtection(this.contentProtection)
+
         // Load with query param for routing
         const url = isDev
             ? `${startUrl}?window=model-selector`
@@ -178,5 +187,13 @@ export class ModelSelectorWindowHelper {
         }
 
         this.window.setPosition(newX, newY);
+    }
+
+    public setContentProtection(enable: boolean): void {
+        console.log(`[ModelSelectorWindowHelper] Setting content protection to: ${enable}`);
+        this.contentProtection = enable;
+        if (this.window && !this.window.isDestroyed()) {
+            this.window.setContentProtection(enable);
+        }
     }
 }

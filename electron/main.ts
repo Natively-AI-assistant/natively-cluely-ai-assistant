@@ -1484,6 +1484,7 @@ export class AppState {
     this.isUndetectable = state
     this.windowHelper.setContentProtection(state)
     this.settingsWindowHelper.setContentProtection(state)
+    this.modelSelectorWindowHelper.setContentProtection(state)
 
     // Cancel all pending disguise timers to prevent their app.setName() calls
     // from re-registering the dock icon after we hide it
@@ -1509,9 +1510,15 @@ export class AppState {
         targetFocusWindow = settingsWindow;
       }
 
-      // Temporarily ignore blur to prevent settings from closing during dock hide/show
+      // Temporarily ignore blur to prevent popups from closing during dock hide/show
+      const modelSelectorWindow = this.modelSelectorWindowHelper.getWindow();
+      const isModelSelectorVisible = modelSelectorWindow && !modelSelectorWindow.isDestroyed() && modelSelectorWindow.isVisible();
+
       if (targetFocusWindow && (targetFocusWindow === settingsWindow)) {
         this.settingsWindowHelper.setIgnoreBlur(true);
+      }
+      if (isModelSelectorVisible) {
+        this.modelSelectorWindowHelper.setIgnoreBlur(true);
       }
 
       if (state) {
@@ -1539,6 +1546,11 @@ export class AppState {
       if (targetFocusWindow && (targetFocusWindow === settingsWindow)) {
         setTimeout(() => {
           this.settingsWindowHelper.setIgnoreBlur(false);
+        }, 500);
+      }
+      if (isModelSelectorVisible) {
+        setTimeout(() => {
+          this.modelSelectorWindowHelper.setIgnoreBlur(false);
         }, 500);
       }
     }
@@ -1675,6 +1687,7 @@ export class AppState {
       this.windowHelper.getLauncherWindow(),
       this.windowHelper.getOverlayWindow(),
       this.settingsWindowHelper.getSettingsWindow(),
+      this.modelSelectorWindowHelper.getWindow(),
     ];
     const sent = new Set<number>();
     for (const win of windows) {
