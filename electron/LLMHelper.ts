@@ -2,6 +2,7 @@ import { GoogleGenAI } from "@google/genai"
 import Groq from "groq-sdk"
 import OpenAI from "openai"
 import Anthropic from "@anthropic-ai/sdk"
+import { BedrockRuntimeClient, ConverseStreamCommand } from "@aws-sdk/client-bedrock-runtime"
 import fs from "fs"
 import sharp from "sharp"
 import {
@@ -13,7 +14,7 @@ import {
 } from "./llm/prompts"
 import { deepVariableReplacer, getByPath } from './utils/curlUtils';
 import curl2Json from "@bany/curl-to-json";
-import { CustomProvider, CurlProvider } from './services/CredentialsManager';
+import type { CustomProvider, CurlProvider } from './services/CredentialsManager';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import axios from 'axios';
@@ -42,10 +43,13 @@ export class LLMHelper {
   private groqClient: Groq | null = null
   private openaiClient: OpenAI | null = null
   private claudeClient: Anthropic | null = null
+  private bedrockClient: BedrockRuntimeClient | null = null
   private apiKey: string | null = null
   private groqApiKey: string | null = null
   private openaiApiKey: string | null = null
   private claudeApiKey: string | null = null
+  private bedrockBearerToken: string | null = null
+  private bedrockRegion: string = 'us-east-1'
   private useOllama: boolean = false
   private ollamaModel: string = "llama3.2"
   private ollamaUrl: string = "http://localhost:11434"
@@ -134,6 +138,16 @@ export class LLMHelper {
     console.log("[LLMHelper] Claude API Key updated.");
   }
 
+  public setBedrockCredentials(bearerToken: string, region: string = 'us-east-1') {
+    this.bedrockBearerToken = bearerToken;
+    this.bedrockRegion = region;
+    this.bedrockClient = new BedrockRuntimeClient({
+      region,
+      token: async () => ({ token: bearerToken })
+    });
+    console.log(`[LLMHelper] Bedrock client initialized for region: ${region}`);
+  }
+
   /**
    * Scrub all API keys from memory to minimize exposure window.
    * Called on app quit.
@@ -143,10 +157,12 @@ export class LLMHelper {
     this.groqApiKey = null;
     this.openaiApiKey = null;
     this.claudeApiKey = null;
+    this.bedrockBearerToken = null;
     this.client = null;
     this.groqClient = null;
     this.openaiClient = null;
     this.claudeClient = null;
+    this.bedrockClient = null;
     // Destroy rate limiters
     if (this.rateLimiters) {
       Object.values(this.rateLimiters).forEach(rl => rl.destroy());
@@ -1532,6 +1548,14 @@ ANSWER DIRECTLY:`;
 
     // 3. Cloud Provider Routing
 
+    // Bedrock
+    if (this.currentModelId.startsWith('bedrock-') && this.bedrockClient) {
+      const claudeSystem = systemPromptOverride || CLAUDE_SYSTEM_PROMPT;
+      const finalBedrockSystem = this.injectLanguageInstruction(claudeSystem);
+      yield* this.streamWithBedrock(userContent, finalBedrockSystem, imagePaths?.[0]);
+      return;
+    }
+
     // OpenAI
     if (this.isOpenAiModel(this.currentModelId) && this.openaiClient) {
       const openAiSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
@@ -1580,6 +1604,44 @@ ANSWER DIRECTLY:`;
       yield* this.streamWithGeminiParallelRace(raceMsg, imagePaths);
     } else {
       throw new Error("No LLM provider available");
+    }
+  }
+
+  /**
+   * Stream response from AWS Bedrock using the Converse API
+   */
+  private async * streamWithBedrock(userMessage: string, systemPrompt?: string, imageBase64?: string): AsyncGenerator<string, void, unknown> {
+    if (!this.bedrockClient) throw new Error("Bedrock client not initialized");
+
+    // Strip the 'bedrock-' prefix to get the real Bedrock model ID
+    const modelId = this.currentModelId.replace(/^bedrock-/, '');
+
+    const messages: any[] = [];
+    if (imageBase64) {
+      messages.push({
+        role: 'user',
+        content: [
+          { image: { format: 'jpeg', source: { bytes: Buffer.from(imageBase64, 'base64') } } },
+          { text: userMessage }
+        ]
+      });
+    } else {
+      messages.push({ role: 'user', content: [{ text: userMessage }] });
+    }
+
+    const command = new ConverseStreamCommand({
+      modelId,
+      messages,
+      ...(systemPrompt ? { system: [{ text: systemPrompt }] } : {}),
+      inferenceConfig: { maxTokens: 8192, temperature: 0.7 }
+    });
+
+    const response = await this.bedrockClient.send(command);
+    if (!response.stream) throw new Error("No stream in Bedrock response");
+
+    for await (const event of response.stream) {
+      const text = event.contentBlockDelta?.delta?.text;
+      if (text) yield text;
     }
   }
 

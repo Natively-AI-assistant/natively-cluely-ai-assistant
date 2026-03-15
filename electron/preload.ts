@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron"
+import type { FetchableProvider, LLMProvider } from './types/providers'
 
 // Types for the exposed Electron API
 interface ElectronAPI {
@@ -44,7 +45,8 @@ interface ElectronAPI {
   getAvailableOllamaModels: () => Promise<string[]>
   switchToOllama: (model?: string, url?: string) => Promise<{ success: boolean; error?: string }>
   switchToGemini: (apiKey?: string, modelId?: string) => Promise<{ success: boolean; error?: string }>
-  testLlmConnection: (provider: 'gemini' | 'groq' | 'openai' | 'claude', apiKey?: string) => Promise<{ success: boolean; error?: string }>
+  testLlmConnection: (provider: LLMProvider, apiKey?: string) => Promise<{ success: boolean; error?: string }>
+  setBedrockCredentials: (bearerToken: string, region?: string) => Promise<{ success: boolean; error?: string }>
   selectServiceAccount: () => Promise<{ success: boolean; path?: string; cancelled?: boolean; error?: string }>
 
   // API Key Management
@@ -419,7 +421,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getAvailableOllamaModels: () => ipcRenderer.invoke("get-available-ollama-models"),
   switchToOllama: (model?: string, url?: string) => ipcRenderer.invoke("switch-to-ollama", model, url),
   switchToGemini: (apiKey?: string, modelId?: string) => ipcRenderer.invoke("switch-to-gemini", apiKey, modelId),
-  testLlmConnection: (provider: 'gemini' | 'groq' | 'openai' | 'claude', apiKey: string) => ipcRenderer.invoke("test-llm-connection", provider, apiKey),
+  testLlmConnection: (provider: LLMProvider, apiKey: string) => ipcRenderer.invoke("test-llm-connection", provider, apiKey),
+  setBedrockCredentials: (bearerToken: string, region?: string) => ipcRenderer.invoke("set-bedrock-credentials", bearerToken, region),
   selectServiceAccount: () => ipcRenderer.invoke("select-service-account"),
 
   // API Key Management
@@ -890,8 +893,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   setGoogleSearchCseId: (cseId: string) => ipcRenderer.invoke('set-google-search-cse-id', cseId),
 
   // Dynamic Model Discovery
-  fetchProviderModels: (provider: 'gemini' | 'groq' | 'openai' | 'claude', apiKey: string) => ipcRenderer.invoke('fetch-provider-models', provider, apiKey),
-  setProviderPreferredModel: (provider: 'gemini' | 'groq' | 'openai' | 'claude', modelId: string) => ipcRenderer.invoke('set-provider-preferred-model', provider, modelId),
+  fetchProviderModels: (provider: FetchableProvider, apiKey: string) => ipcRenderer.invoke('fetch-provider-models', provider, apiKey),
+  setProviderPreferredModel: (provider: LLMProvider, modelId: string) => ipcRenderer.invoke('set-provider-preferred-model', provider, modelId),
 
   // License Management
   licenseActivate: (key: string) => ipcRenderer.invoke('license:activate', key),

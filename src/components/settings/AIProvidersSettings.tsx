@@ -84,6 +84,10 @@ export const AIProvidersSettings: React.FC = () => {
     const [openaiApiKey, setOpenaiApiKey] = useState('');
     const [claudeApiKey, setClaudeApiKey] = useState('');
 
+    // --- AWS Bedrock ---
+    const [bedrockBearerToken, setBedrockBearerToken] = useState('');
+    const [bedrockRegion, setBedrockRegion] = useState('us-east-1');
+
     // Status
     const [savedStatus, setSavedStatus] = useState<Record<string, boolean>>({});
     const [savingStatus, setSavingStatus] = useState<Record<string, boolean>>({});
@@ -127,14 +131,17 @@ export const AIProvidersSettings: React.FC = () => {
                         gemini: creds.hasGeminiKey,
                         groq: creds.hasGroqKey,
                         openai: creds.hasOpenaiKey,
-                        claude: creds.hasClaudeKey
+                        claude: creds.hasClaudeKey,
+                        bedrock: !!creds.hasBedrockKey
                     });
+                    if (creds.bedrockRegion) setBedrockRegion(creds.bedrockRegion);
                     // Load preferred models
                     const pm: Record<string, string> = {};
                     if (creds.geminiPreferredModel) pm.gemini = creds.geminiPreferredModel;
                     if (creds.groqPreferredModel) pm.groq = creds.groqPreferredModel;
                     if (creds.openaiPreferredModel) pm.openai = creds.openaiPreferredModel;
                     if (creds.claudePreferredModel) pm.claude = creds.claudePreferredModel;
+                    if (creds.bedrockPreferredModel) pm.bedrock = creds.bedrockPreferredModel;
                     setPreferredModels(pm);
                 }
 
@@ -277,6 +284,37 @@ export const AIProvidersSettings: React.FC = () => {
             console.error(`Failed to save ${provider} key:`, e);
         } finally {
             setSavingStatus(prev => ({ ...prev, [provider]: false }));
+        }
+    };
+
+    const handleSaveBedrockCredentials = async () => {
+        if (!bedrockBearerToken.trim()) return;
+        setSavingStatus(prev => ({ ...prev, bedrock: true }));
+        try {
+            // @ts-ignore
+            const result = await window.electronAPI.setBedrockCredentials(bedrockBearerToken, bedrockRegion);
+            if (result && result.success) {
+                setSavedStatus(prev => ({ ...prev, bedrock: true }));
+                setHasStoredKey(prev => ({ ...prev, bedrock: true }));
+                setBedrockBearerToken('');
+                setTimeout(() => setSavedStatus(prev => ({ ...prev, bedrock: false })), 2000);
+            }
+        } catch (e) {
+            console.error('Failed to save Bedrock credentials:', e);
+        } finally {
+            setSavingStatus(prev => ({ ...prev, bedrock: false }));
+        }
+    };
+
+    const handleRemoveBedrockCredentials = async () => {
+        if (!confirm('Are you sure you want to remove the AWS Bedrock credentials?')) return;
+        try {
+            // @ts-ignore
+            await window.electronAPI.setBedrockCredentials('', bedrockRegion);
+            setHasStoredKey(prev => ({ ...prev, bedrock: false }));
+            setBedrockBearerToken('');
+        } catch (e) {
+            console.error('Failed to remove Bedrock credentials:', e);
         }
     };
 
@@ -574,6 +612,85 @@ export const AIProvidersSettings: React.FC = () => {
                         keyUrl="https://console.anthropic.com/settings/keys"
                         onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, claude: model }))}
                     />
+
+                    {/* AWS Bedrock */}
+                    <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h4 className="text-sm font-semibold text-text-primary">AWS Bedrock</h4>
+                                <p className="text-xs text-text-secondary mt-0.5">Access foundation models via AWS bearer token</p>
+                            </div>
+                            {hasStoredKey.bedrock && (
+                                <div className="flex items-center gap-1.5 text-xs text-green-500">
+                                    <CheckCircle size={14} />
+                                    <span>Configured</span>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="space-y-2">
+                            <div>
+                                <label className="block text-xs font-medium text-text-secondary mb-1">Bearer Token</label>
+                                <input
+                                    type="password"
+                                    value={bedrockBearerToken}
+                                    onChange={(e) => setBedrockBearerToken(e.target.value)}
+                                    placeholder={hasStoredKey.bedrock ? '••••••••••••••••' : 'aws_bedrock_...'}
+                                    className="w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-text-secondary mb-1">AWS Region</label>
+                                <select
+                                    value={bedrockRegion}
+                                    onChange={(e) => setBedrockRegion(e.target.value)}
+                                    className="w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-accent-primary"
+                                >
+                                    <option value="us-east-1">us-east-1 (N. Virginia)</option>
+                                    <option value="us-west-2">us-west-2 (Oregon)</option>
+                                    <option value="eu-west-1">eu-west-1 (Ireland)</option>
+                                    <option value="eu-central-1">eu-central-1 (Frankfurt)</option>
+                                    <option value="ap-southeast-1">ap-southeast-1 (Singapore)</option>
+                                    <option value="ap-northeast-1">ap-northeast-1 (Tokyo)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={handleSaveBedrockCredentials}
+                                disabled={!bedrockBearerToken.trim() || !!savingStatus.bedrock}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-xs font-medium transition-colors"
+                            >
+                                {savingStatus.bedrock ? <Loader2 size={12} className="animate-spin" /> : savedStatus.bedrock ? <CheckCircle size={12} /> : <Save size={12} />}
+                                {savedStatus.bedrock ? 'Saved!' : 'Save'}
+                            </button>
+
+                            {hasStoredKey.bedrock && (
+                                <>
+                                    <button
+                                        onClick={() => handleTestConnection('bedrock', '')}
+                                        disabled={testStatus.bedrock === 'testing'}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-input hover:bg-bg-elevated border border-border-subtle disabled:opacity-50 text-text-primary rounded-lg text-xs font-medium transition-colors"
+                                    >
+                                        {testStatus.bedrock === 'testing' ? <Loader2 size={12} className="animate-spin" /> : testStatus.bedrock === 'success' ? <CheckCircle size={12} className="text-green-500" /> : testStatus.bedrock === 'error' ? <AlertCircle size={12} className="text-red-500" /> : null}
+                                        {testStatus.bedrock === 'testing' ? 'Testing...' : testStatus.bedrock === 'success' ? 'Connected!' : testStatus.bedrock === 'error' ? 'Failed' : 'Test Connection'}
+                                    </button>
+                                    <button
+                                        onClick={handleRemoveBedrockCredentials}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-input hover:bg-red-500/10 border border-border-subtle hover:border-red-500/30 text-text-secondary hover:text-red-500 rounded-lg text-xs font-medium transition-colors"
+                                    >
+                                        <Trash2 size={12} />
+                                        Remove
+                                    </button>
+                                </>
+                            )}
+                        </div>
+
+                        {testStatus.bedrock === 'error' && testError.bedrock && (
+                            <p className="text-xs text-red-500 mt-1">{testError.bedrock}</p>
+                        )}
+                    </div>
 
                 </div>
             </div>

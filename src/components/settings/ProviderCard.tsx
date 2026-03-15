@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import  { useState, useEffect, useRef } from 'react';
 import { Trash2, AlertCircle, CheckCircle, ExternalLink, Loader2, ChevronDown, Check, RefreshCw } from 'lucide-react';
+import type { FetchableProvider } from '../../types/providers';
 
 interface FetchedModel {
     id: string;
@@ -7,7 +8,7 @@ interface FetchedModel {
 }
 
 interface ProviderCardProps {
-    providerId: 'gemini' | 'groq' | 'openai' | 'claude';
+    providerId: FetchableProvider;
     providerName: string;
     apiKey: string;
     preferredModel?: string;
@@ -48,7 +49,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     const [fetchError, setFetchError] = useState<string | null>(null);
     const [selectedModel, setSelectedModel] = useState<string>(preferredModel || '');
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-    const dropdownRef = React.useRef<HTMLDivElement>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
 
     // Refs to avoid stale closures in the auto-save timer
     const savedRef = useRef(savedStatus);

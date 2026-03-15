@@ -6,6 +6,7 @@
 import { app, safeStorage } from 'electron';
 import fs from 'fs';
 import path from 'path';
+import type { LLMProvider } from '../types/providers';
 
 const CREDENTIALS_PATH = path.join(app.getPath('userData'), 'credentials.enc');
 
@@ -53,6 +54,10 @@ export interface StoredCredentials {
     groqPreferredModel?: string;
     openaiPreferredModel?: string;
     claudePreferredModel?: string;
+    bedrockPreferredModel?: string;
+    // AWS Bedrock
+    bedrockBearerToken?: string;
+    bedrockRegion?: string;
 }
 
 export class CredentialsManager {
@@ -303,12 +308,32 @@ export class CredentialsManager {
         console.log(`[CredentialsManager] Default Model set to: ${model}`);
     }
 
-    public getPreferredModel(provider: 'gemini' | 'groq' | 'openai' | 'claude'): string | undefined {
+    public getBedrockBearerToken(): string | undefined {
+        return this.credentials.bedrockBearerToken;
+    }
+
+    public setBedrockBearerToken(token: string): void {
+        this.credentials.bedrockBearerToken = token;
+        this.saveCredentials();
+        console.log('[CredentialsManager] Bedrock Bearer Token updated');
+    }
+
+    public getBedrockRegion(): string {
+        return this.credentials.bedrockRegion || 'eu-west-1';
+    }
+
+    public setBedrockRegion(region: string): void {
+        this.credentials.bedrockRegion = region;
+        this.saveCredentials();
+        console.log(`[CredentialsManager] Bedrock Region set to: ${region}`);
+    }
+
+    public getPreferredModel(provider: LLMProvider): string | undefined {
         const key = `${provider}PreferredModel` as keyof StoredCredentials;
         return this.credentials[key] as string | undefined;
     }
 
-    public setPreferredModel(provider: 'gemini' | 'groq' | 'openai' | 'claude', modelId: string): void {
+    public setPreferredModel(provider: LLMProvider, modelId: string): void {
         const key = `${provider}PreferredModel` as keyof StoredCredentials;
         (this.credentials as any)[key] = modelId;
         this.saveCredentials();

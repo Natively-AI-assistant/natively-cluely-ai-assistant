@@ -79,6 +79,12 @@ export class ProcessingHelper {
       this.llmHelper.setClaudeApiKey(claudeKey);
     }
 
+    const bedrockBearerToken = credManager.getBedrockBearerToken();
+    if (bedrockBearerToken) {
+      console.log("[ProcessingHelper] Loading stored Bedrock credentials from CredentialsManager");
+      this.llmHelper.setBedrockCredentials(bedrockBearerToken, credManager.getBedrockRegion());
+    }
+
     // CRITICAL: Re-initialize IntelligenceManager now that keys are loaded
     // This fixes the issue where buttons don't work in production because of late key loading
     this.appState.getIntelligenceManager().initializeLLMs();
