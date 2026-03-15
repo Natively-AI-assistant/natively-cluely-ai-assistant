@@ -63,6 +63,37 @@ Version 2.0.4 introduces a massive architectural overhaul to the native audio pi
 - **Better Embeddings:** Migrated from Gemini Embedding to a completely new and more robust embedding architecture.
 - **Claude Fixes:** Resolved max_tokens and context limits issues specific to Anthropic Claude interactions.
 - **DRY Refactoring:** Centralized model configuration strings across the codebase to ensure easier future updates.
+
+## [2.0.2] - 2026-03-10
+
+### Summary
+
+v2.0.2 focuses on fixing Windows system audio capture, improving RAG stability, and resolving critical Soniox STT configuration issues.
+
+### What's New
+
+- Fully functional system audio capture for Windows
+- Introduced system for manual transcript finalization and interim/final bridging during recordings
+
+### Improvements
+
+- Migrated to `app.getAppPath()` for reliable cross-platform resource discovery
+- Ensured `sqlite-vec` compatibility and fixed embedding queue management
+- Upgraded `@google/genai` and optimized embedding dimensionality for lower latency
+
+### Fixes
+
+- Improved Soniox STT streaming reliability, manual flushing, and configuration persistence
+- Resolved application entry point and module resolution issues in production builds
+- Fixed transcript bridging for manual recording mode
+- Corrected stealth activation and window focus inconsistencies
+
+### Technical
+
+- Dependency updates for `@google/genai`
+- Cleaned up native compiler warnings for Windows
+- Fixed module resolution for internal Electron paths
+
 ## [2.0.1] - 2026-03-06
 
 ### New Features
@@ -75,6 +106,63 @@ Version 2.0.4 introduces a massive architectural overhaul to the native audio pi
 ### Improvements & Fixes
 
 - Fixed numerous issues and merged 3 community pull requests to improve overall stability.
+
+## [1.1.8] - 2026-02-23
+
+### Summary
+
+Patch update addressing OpenAI GPT 5.x compatibility and increasing token output limits for all providers.
+
+### What's New
+
+- Replaced deprecated `max_tokens` parameter with `max_completion_tokens` required by GPT 5.x models.
+- Increased max output tokens for OpenAI (GPT 5.2) and Claude (Sonnet 4.5) to 65,536.
+- Increased max output tokens for Groq (Llama 3.3 70B) to 32,768.
+
+### Improvements
+
+- Improved response length capabilities across all text-generation AI models.
+- Updated connection test model to use `gpt-5.2-chat-latest` instead of the deprecated `gpt-3.5-turbo`.
+
+### Fixes
+
+- Fixed 400 error when using OpenAI GPT 5.x models for text queries and toggle actions.
+
+### Technical
+
+- Replaced `max_tokens` with `max_completion_tokens` in `LLMHelper.ts` and `ipcHandlers.ts`.
+
+## [1.1.7] - 2026-02-20
+
+### Summary
+
+Security hardening, memory optimization, and stability improvements for a more robust and reliable experience.
+
+### What's New
+
+- API rate limiting to prevent 429 errors on free-tier plans (Gemini, Groq, OpenAI, Claude)
+- Cross-platform screenshot support (macOS, Linux, Windows)
+- Official website link added to the About section
+
+### Improvements
+
+- Smarter transcript memory management with epoch summarization instead of hard truncation — no more losing early meeting context
+- API keys are now scrubbed from memory on app quit to minimize exposure window
+- Credentials manager now overwrites key data before disposal for enhanced security
+- Helper process renaming for improved stealth in Activity Monitor
+
+### Fixes
+
+- Fixed V8/Electron entitlements crash on Intel Macs by including entitlements.mac.plist during ad-hoc signing
+- Fixed process disguise not applying correctly when undetectable mode is toggled on
+- Fixed usage array capping with dedicated helper method to prevent unbounded growth
+
+### Technical
+
+- Added `RateLimiter` service (token bucket algorithm with configurable burst and refill rates)
+- Added `PRIVACY.md` and `SECURITY.md` policy documents
+- Refactored ad-hoc signing script with helper renaming and proper entitlements flow
+- Version bump to 1.1.7
 
 ## [1.1.6] - 2026-02-15
 

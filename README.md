@@ -226,10 +226,10 @@ Connect Natively to **any** leading model or local inference engine.
 
 | Provider                   | Best For                                                    |
 | :------------------------- | :---------------------------------------------------------- |
-| **Gemini 3 Pro/Flash**     | Recommended: Massive context window (2M tokens) & low cost. |
+| **Gemini 3.1 Pro/Flash**   | Recommended: Massive context window (2M tokens) & low cost. |
 | **OpenAI (GPT-5.2)**       | High reasoning capabilities.                                |
 | **Anthropic (Claude 4.5)** | Coding & complex nuanced tasks.                             |
-| **Groq / Llama 3**         | insane speed (near-instant answers).                        |
+| **Groq / Llama 3.3**       | Insane speed (near-instant answers).                        |
 | **Ollama / LocalAI**       | 100% Offline & Private (No API keys needed).                |
 | **OpenAI-Compatible**      | Connect to _any_ custom endpoint (vLLM, LM Studio, etc.)    |
 
@@ -325,10 +325,11 @@ npm run dist
 
 - **Custom (BYO Endpoint):** Paste any cURL command to use OpenRouter, DeepSeek, or private endpoints.
 - **Ollama (Local):** Zero-setup detection of local models (Llama 3, Mistral, Gemma).
-- **Google Gemini:** First-class support for Gemini 3.0 Pro/Flash.
+- **Dynamic Model Selection:** Preferred models (OpenAI, Anthropic, Google) now automatically appear across the app.
+- **Google Gemini:** First-class support for Gemini 1.5 Pro/Flash.
 - **OpenAI:** GPT-5.2 support with optimized system prompts.
-- **Anthropic:** Claude 4.5 Sonnet support for complex reasoning.
-- **Groq:** Ultra-fast inference with Llama 3 models.
+- **Anthropic:** Claude 3.5/4.5 Sonnet support with corrected max_tokens.
+- **Groq:** Ultra-fast inference with Llama 3.3 models.
 
 ---
 
@@ -342,16 +343,20 @@ npm run dist
 
 ### Real-time Interview Copilot & Coding Help
 
-- Real-time speech-to-text
+- Real-time speech-to-text (**<500ms latency**)
+- **Fast Response Mode**: Ultra-fast text responses using Groq Llama 3.
 - Context-aware Memory (RAG) for Past Meetings
 - Instant answers as questions are asked
+- **Interim/Final Bridging**: Manual transcript finalization and interim bridging during recordings for higher accuracy.
 - Smart recap and summaries
 
 ### Instant Screen & Slide Analysis (OCR)
 
 - Capture any screen content
+- **Multiple Screenshot Support**: Handle and process multiple attached screenshots simultaneously.
 - Analyze slides, documents, code, or problems
 - Immediate explanations and solutions
+- **Smart Dynamic Fallback**: Multimodal resilience ensures uninterrupted performance using Groq Llama 4 Scout if default vision models fail.
 
 ### Premium Profile Intelligence
 
@@ -372,25 +377,32 @@ npm run dist
 Natively understands that _listening_ to a meeting and _talking_ to an AI are different tasks. We treat them separately:
 
 - **System Audio (The Meeting):** Captures high-fidelity audio directly from your OS (Zoom, Teams, Meet). It "hears" what your colleagues are saying without interference from your room noise.
+- **Two-Stage Silence Processing**: Combines adaptive RMS thresholds with **WebRTC Machine Learning VAD** to reject typing and fan noise.
 - **Microphone Input (Your Voice):** A dedicated channel for your voice commands and dictation. Toggle it instantly to ask Natively a private question without muting your meeting software.
 
-### Spotlight Search & Calendar
+### Spotlight Search & Customization
 
-- Global activation shortcut
+- Global activation shortcut (`Cmd+K` / `Ctrl+K`)
+- **Custom Key Bindings**: Customize global shortcuts for easier control.
 - Instant answer overlay
 - Upcoming meeting readiness
 
 ### Local RAG & Long-Term Memory
 
-- **Full Offline RAG:** All vector embeddings and retrieval happen locally (SQLite).
+- **Full Offline RAG:** All vector embeddings and retrieval happen locally (SQLite + `sqlite-vec`).
 - **Semantic Search:** innovative "Smart Scope" detects if you are asking about the current meeting or a past one.
+- **Sliding-Window RAG**: 50-token semantic overlap to prevent context loss across chunk boundaries.
+- **Epoch Summarization**: Smarter transcript memory management instead of hard truncation — no more losing early meeting context.
 - **Global Knowledge:** Ask questions across _all_ your past meetings ("What did we decide about the API last month?").
 - **Automatic Indexing:** Meetings are automatically chunked, embedded, and indexed in the background.
 
 ### Advanced Privacy & Stealth
 
-- **Undetectable Mode:** Instantly hide from dock/taskbar.
+- **Undetectable Mode:** Instantly hide from dock/taskbar with visually locked selector to prevent state mismatches.
+- **Cross-Window State Sync**: Real-time state synchronization across Settings, Launcher, and Overlay windows.
 - **Masquerading:** Disguise process names and window titles as harmless system utilities.
+- **Security Hardening**: API keys are scrubbed from memory on app quit and credentials manager overwrites key data before disposal.
+- **API Rate Limiting**: Token-bucket algorithm (burst/refill) to prevent 429 errors on free-tier providers.
 - **Local-Only Processing:** All data stays on your machine.
 
 ---
@@ -465,8 +477,8 @@ No raw audio, screenshots, or transcripts are stored or transmitted unless expli
 
 - **React, Vite, TypeScript, TailwindCSS**
 - **Electron**
-- **Rust** (native audio)
-- **SQLite** (local storage)
+- **Rust** (native audio with **Zero-Copy ABI Transfers** via `napi::Buffer`)
+- **SQLite** (local storage with `sqlite-vec`)
 
 ### Supported Models
 
