@@ -1474,6 +1474,10 @@ export class AppState {
   }
 
   public setUndetectable(state: boolean): void {
+    // Guard: skip if state hasn't actually changed to prevent
+    // duplicate dock hide/show cycles from renderer feedback loops
+    if (this.isUndetectable === state) return;
+
     this.isUndetectable = state
     this.windowHelper.setContentProtection(state)
     this.settingsWindowHelper.setContentProtection(state)
@@ -1558,7 +1562,10 @@ export class AppState {
     process.title = appName;
 
     // 1b. Update app name (critical for macOS Dock / Activity Monitor display)
-    app.setName(appName);
+    // Dynamic changes to app.setName after launch cause multiple Dock icons/processes on macOS.
+    if (!app.isReady()) {
+      app.setName(appName);
+    }
 
     // 2. Update CFBundleName (helps with some macOS API interactions)
     if (process.platform === 'darwin') {
@@ -1611,7 +1618,7 @@ export class AppState {
     // Force periodic updates as seen in reference to ensure it sticks
     const forceUpdate = () => {
       process.title = appName;
-      if (process.platform === 'darwin') {
+      if (process.platform === 'darwin' && !app.isReady()) {
         app.setName(appName);
       }
     };
@@ -1629,7 +1636,7 @@ export class AppState {
     if (process.platform !== 'darwin') return;
 
     if (mode === 'stealth') {
-      app.setActivationPolicy('accessory');
+      app.dock.hide();
 
       // Microtask delay to allow macOS to process policy change
       setTimeout(() => {
@@ -1645,7 +1652,12 @@ export class AppState {
       this.hideTray();
 
     } else {
-      app.setActivationPolicy('regular');
+      try {
+        const p = app.dock.show() as any;
+        if (p && typeof p.catch === 'function') {
+          p.catch((e: any) => console.log(e));
+        }
+      } catch(e) {}
       // No delay needed for regular mode, but good practice to ensure focus
       const win = this.getMainWindow();
       if (win && !win.isDestroyed()) {
@@ -1742,9 +1754,14 @@ async function initializeApp() {
     // Apply initial stealth state based on isUndetectable setting
     if (process.platform === 'darwin') {
       if (appState.getUndetectable()) {
-        app.setActivationPolicy('accessory');
+        app.dock.hide();
       } else {
-        app.setActivationPolicy('regular');
+        try {
+          const p = app.dock.show() as any;
+          if (p && typeof p.catch === 'function') {
+            p.catch((e: any) => console.log(e));
+          }
+        } catch(e) {}
         appState.showTray();
       }
     } else {

@@ -60,10 +60,14 @@ const SettingsPopup = () => {
         return () => window.removeEventListener('focus', handleFocus);
     }, []);
 
+    // Track whether a state change came from IPC (to avoid feedback loop)
+    const isFromIpcRef = React.useRef(false);
+
     // Sync with global state changes
     useEffect(() => {
         if (window.electronAPI?.onUndetectableChanged) {
             const unsubscribe = window.electronAPI.onUndetectableChanged((newState: boolean) => {
+                isFromIpcRef.current = true;
                 setIsUndetectable(newState);
             });
             return () => unsubscribe();
@@ -71,14 +75,14 @@ const SettingsPopup = () => {
     }, []);
 
     useEffect(() => {
-        // Skip initial render if needed, or just allow it to sync once.
-        // We need to differentiate between "user toggled here" and "state came from backend"
-        // But since we are setting state via API, and API broadcasts back, we might get loops?
-        // Actually, if we set state to X, backend broadcasts X. Frontend receives X.
-        // If frontend state is already X, no re-render. So safe.
-
         if (isFirstUndetectableRender.current) {
             isFirstUndetectableRender.current = false;
+            return;
+        }
+
+        // If this change came from an IPC broadcast, don't echo it back
+        if (isFromIpcRef.current) {
+            isFromIpcRef.current = false;
             return;
         }
 

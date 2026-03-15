@@ -13,7 +13,7 @@ import path from 'path';
 
 // Dynamic import from the Rust native module — graceful fallback if not compiled
 let getHardwareId: (() => string) | undefined;
-let verifyGumroadKey: ((key: string) => string) | undefined;
+let verifyGumroadKey: ((key: string) => Promise<string>) | undefined;
 try {
     const nativeModule = require('natively-audio');
     getHardwareId = nativeModule.getHardwareId;
@@ -49,7 +49,7 @@ export class LicenseManager {
      * 2. Encrypts { key, hwid } using OS Keychain
      * 3. Writes to license.enc
      */
-    public activateLicense(key: string): { success: boolean; error?: string } {
+    public async activateLicense(key: string): Promise<{ success: boolean; error?: string }> {
         if (!verifyGumroadKey || !getHardwareId) {
             return { success: false, error: 'Premium features not available in this build.' };
         }
@@ -61,7 +61,7 @@ export class LicenseManager {
             }
 
             // Verify with Gumroad through compiled Rust (machine code)
-            const result = verifyGumroadKey(trimmedKey);
+            const result = await verifyGumroadKey(trimmedKey);
             console.log('[LicenseManager] Gumroad verify result:', result);
             if (result !== 'OK') {
                 const errMsg = result.startsWith('ERR:gumroad:')

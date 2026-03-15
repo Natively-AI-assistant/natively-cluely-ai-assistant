@@ -2,8 +2,8 @@ import { IEmbeddingProvider } from './IEmbeddingProvider';
 
 export class GeminiEmbeddingProvider implements IEmbeddingProvider {
   readonly name = 'gemini';
-  readonly dimensions = 768;
-  
+  readonly dimensions = 768; // Using output_dimensionality=768 to save storage
+
   constructor(private apiKey: string, private model = 'models/gemini-embedding-001') {}
 
   async isAvailable(): Promise<boolean> {
@@ -15,7 +15,10 @@ export class GeminiEmbeddingProvider implements IEmbeddingProvider {
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: { parts: [{ text }] } })
+      body: JSON.stringify({
+        content: { parts: [{ text }] },
+        outputDimensionality: 768 // Request 768-dim embeddings to save storage
+      })
     });
     if (!res.ok) throw new Error(`Gemini embedding failed: ${res.statusText}`);
     const data = await res.json();
