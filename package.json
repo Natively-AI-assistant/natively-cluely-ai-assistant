@@ -168,6 +168,8 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
     "@bany/curl-to-json": "^1.2.10",
+    "@elevenlabs/client": "^0.15.1",
+    "@elevenlabs/elevenlabs-js": "^2.39.0",
     "@google-cloud/speech": "^7.2.1",
     "@google/genai": "^1.44.0",
     "@grpc/grpc-js": "^1.14.3",

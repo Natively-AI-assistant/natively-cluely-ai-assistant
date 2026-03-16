@@ -52,7 +52,8 @@ const SettingsPopup = () => {
                 // Check premium status
                 const premium = await window.electronAPI?.licenseCheckPremium?.();
                 setIsPremium(!!premium);
-            } catch (e) { /* ignore */ }
+            } catch (e) { console.warn('[SettingsPopup] Failed to load profile/premium status:', e); }
+
         };
         loadProfile();
 

@@ -96,7 +96,9 @@ export class KeybindManager {
                 id: kb.id,
                 accelerator: kb.accelerator
             }));
-            fs.writeFileSync(this.filePath, JSON.stringify(data, null, 2));
+            const tmpPath = this.filePath + '.tmp';
+            fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2));
+            fs.renameSync(tmpPath, this.filePath);
         } catch (error) {
             console.error('[KeybindManager] Failed to save keybinds:', error);
         }

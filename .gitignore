@@ -5,8 +5,10 @@ release
 /release
 .release
 demo.mp4
-
-
+tmp
+.cursorrules
+.windsurfrules
+change.md
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

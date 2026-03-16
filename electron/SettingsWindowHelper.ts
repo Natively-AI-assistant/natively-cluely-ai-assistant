@@ -11,6 +11,7 @@ const startUrl = isDev
 export class SettingsWindowHelper {
     private settingsWindow: BrowserWindow | null = null
     private windowHelper: WindowHelper | null = null;
+    private opacityTimeout: NodeJS.Timeout | null = null;
 
     public getSettingsWindow(): BrowserWindow | null {
         return this.settingsWindow
@@ -95,8 +96,25 @@ export class SettingsWindowHelper {
 
         // Ensure fully visible on screen
         this.ensureVisibleOnScreen();
-        this.settingsWindow.show()
-        this.settingsWindow.focus()
+
+        if (process.platform === 'win32' && this.contentProtection) {
+            this.settingsWindow.setOpacity(0);
+            this.settingsWindow.show();
+            this.settingsWindow.setContentProtection(true);
+            
+            if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
+            this.opacityTimeout = setTimeout(() => {
+                if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
+                    this.settingsWindow.setOpacity(1);
+                    this.settingsWindow.focus();
+                }
+            }, 60);
+        } else {
+            this.settingsWindow.setContentProtection(this.contentProtection);
+            this.settingsWindow.show();
+            this.settingsWindow.focus();
+        }
+        
         this.emitVisibilityChange(true);
     }
 
@@ -165,11 +183,13 @@ export class SettingsWindowHelper {
             ? `${startUrl}?window=settings`
             : `${startUrl}?window=settings` // file url also works with search params in modern Electron
 
-        this.settingsWindow.loadURL(settingsUrl)
+        this.settingsWindow.loadURL(settingsUrl).catch(e => {
+            console.error('[SettingsWindowHelper] Failed to load URL:', e);
+        });
 
         this.settingsWindow.once('ready-to-show', () => {
             if (showWhenReady) {
-                this.settingsWindow?.show()
+                this.showWindow(this.settingsWindow?.getBounds().x || 0, this.settingsWindow?.getBounds().y || 0)
             }
         })
 

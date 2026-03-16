@@ -399,13 +399,18 @@ export class CredentialsManager {
             if (!safeStorage.isEncryptionAvailable()) {
                 console.warn('[CredentialsManager] Encryption not available, falling back to plaintext');
                 // Fallback: save as plaintext (less secure, but functional)
-                fs.writeFileSync(CREDENTIALS_PATH + '.json', JSON.stringify(this.credentials));
+                const plainPath = CREDENTIALS_PATH + '.json';
+                const tmpPlain = plainPath + '.tmp';
+                fs.writeFileSync(tmpPlain, JSON.stringify(this.credentials));
+                fs.renameSync(tmpPlain, plainPath);
                 return;
             }
 
             const data = JSON.stringify(this.credentials);
             const encrypted = safeStorage.encryptString(data);
-            fs.writeFileSync(CREDENTIALS_PATH, encrypted);
+            const tmpEnc = CREDENTIALS_PATH + '.tmp';
+            fs.writeFileSync(tmpEnc, encrypted);
+            fs.renameSync(tmpEnc, CREDENTIALS_PATH);
         } catch (error) {
             console.error('[CredentialsManager] Failed to save credentials:', error);
         }
@@ -424,6 +429,17 @@ export class CredentialsManager {
                 const decrypted = safeStorage.decryptString(encrypted);
                 this.credentials = JSON.parse(decrypted);
                 console.log('[CredentialsManager] Loaded encrypted credentials');
+
+                // Fix #6: Clean up any leftover plaintext fallback file to eliminate the data leak
+                const plaintextPath = CREDENTIALS_PATH + '.json';
+                if (fs.existsSync(plaintextPath)) {
+                    try {
+                        fs.unlinkSync(plaintextPath);
+                        console.log('[CredentialsManager] Removed stale plaintext credential file');
+                    } catch (cleanupErr) {
+                        console.warn('[CredentialsManager] Could not remove stale plaintext file:', cleanupErr);
+                    }
+                }
                 return;
             }
 

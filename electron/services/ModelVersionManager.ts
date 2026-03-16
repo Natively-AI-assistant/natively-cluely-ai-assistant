@@ -85,7 +85,7 @@ interface PersistedState {
 
 /** Hardcoded baseline models for vision Tier 1 (initial pinned stable) */
 const BASELINE_MODELS: Record<ModelFamily, string> = {
-  [ModelFamily.OPENAI]: 'gpt-5.3-chat-latest',
+  [ModelFamily.OPENAI]: 'gpt-5.4-chat',
   [ModelFamily.GEMINI_FLASH]: 'gemini-3.1-flash-lite-preview',
   [ModelFamily.GEMINI_PRO]: 'gemini-3.1-pro-preview',
   [ModelFamily.CLAUDE]: 'claude-sonnet-4-6',
@@ -94,7 +94,7 @@ const BASELINE_MODELS: Record<ModelFamily, string> = {
 
 /** Hardcoded baseline models for text Tier 1 */
 const TEXT_BASELINE_MODELS: Record<TextModelFamily, string> = {
-  [TextModelFamily.OPENAI]: 'gpt-5.3-chat-latest',
+  [TextModelFamily.OPENAI]: 'gpt-5.4-chat',
   [TextModelFamily.GEMINI_FLASH]: 'gemini-3.1-flash-lite-preview',
   [TextModelFamily.GEMINI_PRO]: 'gemini-3.1-pro-preview',
   [TextModelFamily.CLAUDE]: 'claude-sonnet-4-6',
@@ -1020,15 +1020,18 @@ export class ModelVersionManager {
     return this.createDefaultState();
   }
 
-  private persistState(): void {
+  private persistState() {
+    if (!this.persistPath) return;
     try {
       const dir = path.dirname(this.persistPath);
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-      fs.writeFileSync(this.persistPath, JSON.stringify(this.state, null, 2), 'utf-8');
-    } catch (err: any) {
-      console.error(`[ModelVersionManager] Failed to persist state: ${err.message}`);
+      const tmpPath = this.persistPath + '.tmp';
+      fs.writeFileSync(tmpPath, JSON.stringify(this.state, null, 2), 'utf-8');
+      fs.renameSync(tmpPath, this.persistPath);
+    } catch (e) {
+      console.error('[ModelVersionManager] Failed to save state to disk', e);
     }
   }
 

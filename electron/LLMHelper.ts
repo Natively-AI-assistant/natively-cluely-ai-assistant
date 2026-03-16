@@ -30,7 +30,7 @@ interface OllamaResponse {
 const GEMINI_FLASH_MODEL = "gemini-3.1-flash-lite-preview"
 const GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 const GROQ_MODEL = "llama-3.3-70b-versatile"
-const OPENAI_MODEL = "gpt-5.3-chat-latest"
+const OPENAI_MODEL = "gpt-5.4-chat"
 const CLAUDE_MODEL = "claude-sonnet-4-6"
 const MAX_OUTPUT_TOKENS = 65536
 const CLAUDE_MAX_OUTPUT_TOKENS = 64000
@@ -429,15 +429,16 @@ export class LLMHelper {
   /**
    * Generate content using the currently selected model
    */
-  private async generateContent(contents: any[]): Promise<string> {
+  private async generateContent(contents: any[], modelIdOverride?: string): Promise<string> {
     if (!this.client) throw new Error("Gemini client not initialized")
 
-    console.log(`[LLMHelper] Calling ${this.geminiModel}...`)
+    const targetModel = modelIdOverride || this.geminiModel;
+    console.log(`[LLMHelper] Calling ${targetModel}...`)
 
     return this.withRetry(async () => {
       // @ts-ignore
       const response = await this.client!.models.generateContent({
-        model: this.geminiModel,
+        model: targetModel,
         contents: contents,
         config: {
           maxOutputTokens: MAX_OUTPUT_TOKENS,
@@ -827,18 +828,7 @@ ANSWER DIRECTLY:`;
         if (this.client) {
           providers.push({
             name: `Gemini Flash (${textGeminiFlash})`,
-            execute: async () => {
-              const orig = this.geminiModel;
-              this.geminiModel = textGeminiFlash;
-              try {
-                const r = await this.tryGenerateResponse(combinedMessages.gemini, imagePaths);
-                this.geminiModel = orig;
-                return r;
-              } catch (e) {
-                this.geminiModel = orig;
-                throw e;
-              }
-            }
+            execute: () => this.tryGenerateResponse(combinedMessages.gemini, imagePaths, textGeminiFlash)
           });
         }
         if (this.claudeClient) {
@@ -847,18 +837,7 @@ ANSWER DIRECTLY:`;
         if (this.client) {
           providers.push({
             name: `Gemini Pro (${textGeminiPro})`,
-            execute: async () => {
-              const orig = this.geminiModel;
-              this.geminiModel = textGeminiPro;
-              try {
-                const r = await this.tryGenerateResponse(combinedMessages.gemini, imagePaths);
-                this.geminiModel = orig;
-                return r;
-              } catch (e) {
-                this.geminiModel = orig;
-                throw e;
-              }
-            }
+            execute: () => this.tryGenerateResponse(combinedMessages.gemini, imagePaths, textGeminiPro)
           });
         }
         if (this.groqClient) {
@@ -875,33 +854,11 @@ ANSWER DIRECTLY:`;
         if (this.client) {
           providers.push({
             name: `Gemini Flash (${textGeminiFlash})`,
-            execute: async () => {
-              const orig = this.geminiModel;
-              this.geminiModel = textGeminiFlash;
-              try {
-                const r = await this.tryGenerateResponse(combinedMessages.gemini);
-                this.geminiModel = orig;
-                return r;
-              } catch (e) {
-                this.geminiModel = orig;
-                throw e;
-              }
-            }
+            execute: () => this.tryGenerateResponse(combinedMessages.gemini, undefined, textGeminiFlash)
           });
           providers.push({
             name: `Gemini Pro (${textGeminiPro})`,
-            execute: async () => {
-              const orig = this.geminiModel;
-              this.geminiModel = textGeminiPro;
-              try {
-                const r = await this.tryGenerateResponse(combinedMessages.gemini);
-                this.geminiModel = orig;
-                return r;
-              } catch (e) {
-                this.geminiModel = orig;
-                throw e;
-              }
-            }
+            execute: () => this.tryGenerateResponse(combinedMessages.gemini, undefined, textGeminiPro)
           });
         }
         if (this.openaiClient) {
@@ -1284,7 +1241,7 @@ ANSWER DIRECTLY:`;
     return prompt;
   }
 
-  private async tryGenerateResponse(fullMessage: string, imagePaths?: string[]): Promise<string> {
+  private async tryGenerateResponse(fullMessage: string, imagePaths?: string[], modelIdOverride?: string): Promise<string> {
     let rawResponse: string;
 
     if (imagePaths?.length) {
@@ -1303,7 +1260,7 @@ ANSWER DIRECTLY:`;
 
       // Use current model for multimodal (allows Pro fallback)
       if (this.client) {
-        rawResponse = await this.generateContent(contents);
+        rawResponse = await this.generateContent(contents, modelIdOverride);
       } else {
         throw new Error("No LLM provider configured");
       }
@@ -1312,7 +1269,7 @@ ANSWER DIRECTLY:`;
       if (this.useOllama) {
         rawResponse = await this.callOllama(fullMessage);
       } else if (this.client) {
-        rawResponse = await this.generateContent([{ text: fullMessage }])
+        rawResponse = await this.generateContent([{ text: fullMessage }], modelIdOverride);
       } else {
         throw new Error("No LLM provider configured");
       }
@@ -1346,7 +1303,7 @@ ANSWER DIRECTLY:`;
       model: "meta-llama/llama-4-scout-17b-16e-instruct",
       messages,
       temperature: 1,
-      max_completion_tokens: 1024,
+      max_completion_tokens: 28672,
       top_p: 1,
       stream: false,
       stop: null
@@ -1393,13 +1350,13 @@ ANSWER DIRECTLY:`;
                     contents.push({ inlineData: { mimeType, data } });
                   }
                 }
-                return await this.generateContent(contents);
+                return await this.generateContent(contents, modelId);
               }
             };
           }
           return {
             name: `Gemini Flash (${modelId})`,
-            execute: () => this.generateContent([{ text: `${systemPrompt}\n\n${userPrompt}` }])
+            execute: () => this.generateContent([{ text: `${systemPrompt}\n\n${userPrompt}` }], modelId)
           };
 
         case ModelFamily.CLAUDE:
@@ -1415,40 +1372,20 @@ ANSWER DIRECTLY:`;
             return {
               name: `Gemini Pro (${modelId})`,
               execute: async () => {
-                const orig = this.geminiModel;
-                this.geminiModel = modelId;
-                try {
-                  const contents: any[] = [{ text: `${systemPrompt}\n\n${userPrompt}` }];
-                  for (const p of imagePaths) {
-                    if (fs.existsSync(p)) {
-                      const { mimeType, data } = await this.processImage(p);
-                      contents.push({ inlineData: { mimeType, data } });
-                    }
+                const contents: any[] = [{ text: `${systemPrompt}\n\n${userPrompt}` }];
+                for (const p of imagePaths) {
+                  if (fs.existsSync(p)) {
+                    const { mimeType, data } = await this.processImage(p);
+                    contents.push({ inlineData: { mimeType, data } });
                   }
-                  const r = await this.generateContent(contents);
-                  this.geminiModel = orig;
-                  return r;
-                } catch (e) {
-                  this.geminiModel = orig;
-                  throw e;
                 }
+                return await this.generateContent(contents, modelId);
               }
             };
           }
           return {
             name: `Gemini Pro (${modelId})`,
-            execute: async () => {
-              const orig = this.geminiModel;
-              this.geminiModel = modelId;
-              try {
-                const r = await this.generateContent([{ text: `${systemPrompt}\n\n${userPrompt}` }]);
-                this.geminiModel = orig;
-                return r;
-              } catch (e) {
-                this.geminiModel = orig;
-                throw e;
-              }
-            }
+            execute: () => this.generateContent([{ text: `${systemPrompt}\n\n${userPrompt}` }], modelId)
           };
 
         case ModelFamily.GROQ_LLAMA:
@@ -1931,7 +1868,7 @@ ANSWER DIRECTLY:`;
       model: "meta-llama/llama-4-scout-17b-16e-instruct",
       messages,
       stream: true,
-      max_tokens: 1024,
+      max_tokens: 28672,
       temperature: 1,
       top_p: 1,
       stop: null

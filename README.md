@@ -276,15 +276,17 @@ While Natively is **free and open-source forever**, we also offer a **Pro Editio
 
 ---
 
-### What's New in v2.0.5
+### What's New in v2.0.6
 
-Version 2.0.5 delivers major reliability fixes to Stealth Mode and Process Disguise.
+Version 2.0.6 delivers massive upgrades to vision processing, model rotation stability, and critical bug fixes found during a comprehensive senior engineering audit.
 
-- **Eliminated Feedback Loops**: Completely eliminated the bug where toggling Undetectable mode would sometimes cause the app to rapidly toggle itself on and off due to React state feedback.
-- **Process Disguise Reliability**: Fixed a regression where the macOS dock icon would mysteriously reappear several seconds after entering stealth mode if a disguise had recently been applied.
-- **Disabled Interaction in Stealth**: The Process Disguise selector is now visually disabled and locked while Undetectable mode is active, preventing accidental state mismatches.
-- **Settings Init Fix**: Fixed an issue where the Settings UI would briefly show incorrect stealth/disguise toggle states when first opened.
-- **Hardened Background Activation**: The app is now protected against macOS `activate` events (like clicking the app in Finder) accidentally breaking stealth mode and re-showing the dock icon.
+- **Multimodal Groq Support**: Integrated `meta-llama/llama-4-scout-17b-16e-instruct` into the ecosystem for ultra-fast screenshot analysis capability, with increased vision max completion tokens (up to 28672) to properly support full code generation.
+- **Model Roster Update**: Updated baseline architecture natively to default to `gpt-5.4-chat`, `gemini-3.1`, and `claude-sonnet-4-6`.
+- **Model Rotation Engine**: Fortified the 3-tier fallback mechanisms and auto-upgrade logic for Gemini, Claude, GPT, and Groq models.
+- **SQLite-Vec Dimension Fix**: Resolved a critical silent data-corruption bug in vector storage by provisioning per-dimension table pairs (`vec_chunks_768`, `vec_chunks_1536`, `vec_chunks_3072`), directly fixing a bug that dropped 100% of Ollama embeddings in local native search.
+- **Thread Safety & Race Conditions**: Eliminated fatal global state mutation risks during API fallback loops and patched `SettingsManager` early-access crashes on boot.
+- **Memory Leaks Eliminated**: Patched multiple memory leak vectors including unbounded process disguise timers and dangling opacity shield timers during rapid focus toggles.
+- **Cross-Platform Stability**: Resolved unhandled promise rejections on React dev-server drops, corrected hardcoded Windows icon paths, and refined process disguise routing for Windows and macOS contexts.
 
 ---
 
@@ -297,12 +299,13 @@ Version 2.0.5 delivers major reliability fixes to Stealth Mode and Process Disgu
 - [Why Natively wins](#why-natively-wins)
 - [Why Natively?](#why-natively)
 - [Natively Pro](#natively-pro)
-- [What's New in v2.0.5](#whats-new-in-v205)
+- [What's New in v2.0.6](#whats-new-in-v206)
 - [Privacy & Security](#privacy--security-core-design-principle)
 - [Installation](#installation-developers--contributors)
 - [AI Providers](#ai-providers)
 - [Key Features](#key-features)
 - [Meeting Intelligence Dashboard](#meeting-intelligence-dashboard)
+- [Roadmap](#roadmap)
 - [Use Cases](#use-cases)
 - [Technical Details](#technical-details)
 - [Known Limitations](#known-limitations)
@@ -600,6 +603,32 @@ Natively includes a powerful, local-first meeting management system to review, s
 - **Usage Statistics:** Track your token usage and API costs in real-time. Know exactly how much you are spending on Gemini, OpenAI, or Claude.
 - **Audio Separation:** Distinct controls for **System Audio** (what they say) vs. **Microphone** (what you dictate).
 - **Session Management:** Rename, organize, or delete past sessions to keep your workspace clean.
+
+---
+
+## Roadmap
+
+```mermaid
+timeline
+    title Natively Product Roadmap
+    section Short-term (1-3 mos)
+        System Design : Visualization MVP
+        Personas : Basic system (3-5 personas)
+        Tokens : Integration POC
+    section Medium-term (3-6 mos)
+        Personas : Full library
+        System Design : Advanced diagram types
+        Tokens : Community features
+        Platform : Mobile app development
+    section Long-term (6+ mos)
+        Collaboration : Collaborative features
+        Ecosystem : Plugin ecosystem
+        Platform : Multi-language support
+```
+
+<div align="center">
+  <em>For detailed feature descriptions, see our full <a href="ROADMAP.md">ROADMAP.md</a>.</em>
+</div>
 
 ---
 

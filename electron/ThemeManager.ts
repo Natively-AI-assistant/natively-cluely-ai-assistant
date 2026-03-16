@@ -44,9 +44,11 @@ export class ThemeManager {
     private saveConfig() {
         try {
             const config: ThemeConfig = { mode: this.mode };
-            fs.writeFileSync(this.configPath, JSON.stringify(config, null, 2));
+            const tmpPath = this.configPath + '.tmp';
+            fs.writeFileSync(tmpPath, JSON.stringify(config, null, 2));
+            fs.renameSync(tmpPath, this.configPath);
         } catch (error) {
-            console.error('Failed to save theme config:', error);
+            console.error('[ThemeManager] Failed to save config:', error);
         }
     }
 

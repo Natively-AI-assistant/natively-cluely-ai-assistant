@@ -226,7 +226,9 @@ export class CalendarManager extends EventEmitter {
         });
 
         const encrypted = safeStorage.encryptString(data);
-        fs.writeFileSync(TOKEN_PATH, encrypted);
+        const tmpPath = TOKEN_PATH + '.tmp';
+        fs.writeFileSync(tmpPath, encrypted);
+        fs.renameSync(tmpPath, TOKEN_PATH);
     }
 
     private loadTokens() {

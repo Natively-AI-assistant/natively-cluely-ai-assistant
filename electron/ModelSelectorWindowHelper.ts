@@ -12,6 +12,7 @@ import type { WindowHelper } from "./WindowHelper"
 export class ModelSelectorWindowHelper {
     private window: BrowserWindow | null = null
     private contentProtection: boolean = false
+    private opacityTimeout: NodeJS.Timeout | null = null;
 
     // Store offsets relative to main window if needed, but absolute positioning is simpler for dropdowns
     private lastBlurTime: number = 0
@@ -63,10 +64,25 @@ export class ModelSelectorWindowHelper {
 
         // Standard dropdown positioning
         this.window.setPosition(Math.round(x), Math.round(y))
-
         this.ensureVisibleOnScreen();
-        this.window.show()
-        this.window.focus()
+
+        if (process.platform === 'win32' && this.contentProtection) {
+            this.window.setOpacity(0);
+            this.window.show();
+            this.window.setContentProtection(true);
+            
+            if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
+            this.opacityTimeout = setTimeout(() => {
+                if (this.window && !this.window.isDestroyed()) {
+                    this.window.setOpacity(1);
+                    this.window.focus();
+                }
+            }, 60);
+        } else {
+            this.window.setContentProtection(this.contentProtection);
+            this.window.show();
+            this.window.focus();
+        }
     }
 
     public hideWindow(): void {
@@ -145,11 +161,13 @@ export class ModelSelectorWindowHelper {
             ? `${startUrl}?window=model-selector`
             : `${startUrl}?window=model-selector`
 
-        this.window.loadURL(url)
+        this.window.loadURL(url).catch(e => {
+            console.error('[ModelSelectorWindowHelper] Failed to load URL:', e);
+        });
 
         this.window.once('ready-to-show', () => {
             if (showWhenReady) {
-                this.window?.show()
+                this.showWindow(this.window?.getBounds().x || 0, this.window?.getBounds().y || 0)
             }
         })
 

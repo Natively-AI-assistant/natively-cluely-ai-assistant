@@ -20,6 +20,7 @@ import {
   useAdCampaigns
 } from './premium'
 import { analytics } from "./lib/analytics/analytics.service"
+import { ErrorBoundary } from "./components/ErrorBoundary"
 
 const queryClient = new QueryClient()
 
@@ -221,49 +222,56 @@ const App: React.FC = () => {
   // Render Logic
   if (isSettingsWindow) {
     return (
-      <div className="h-full min-h-0 w-full">
-        <QueryClientProvider client={queryClient}>
-          <ToastProvider>
-            <SettingsPopup />
-            <ToastViewport />
-          </ToastProvider>
-        </QueryClientProvider>
-      </div>
+      <ErrorBoundary context="SettingsPopup">
+        <div className="h-full min-h-0 w-full">
+          <QueryClientProvider client={queryClient}>
+            <ToastProvider>
+              <SettingsPopup />
+              <ToastViewport />
+            </ToastProvider>
+          </QueryClientProvider>
+        </div>
+      </ErrorBoundary>
     );
   }
 
   if (isModelSelectorWindow) {
     return (
-      <div className="h-full min-h-0 w-full overflow-hidden">
-        <QueryClientProvider client={queryClient}>
-          <ToastProvider>
-            <ModelSelectorWindow />
-            <ToastViewport />
-          </ToastProvider>
-        </QueryClientProvider>
-      </div>
+      <ErrorBoundary context="ModelSelector">
+        <div className="h-full min-h-0 w-full overflow-hidden">
+          <QueryClientProvider client={queryClient}>
+            <ToastProvider>
+              <ModelSelectorWindow />
+              <ToastViewport />
+            </ToastProvider>
+          </QueryClientProvider>
+        </div>
+      </ErrorBoundary>
     );
   }
 
   // --- OVERLAY WINDOW (Meeting Interface) ---
   if (isOverlayWindow) {
     return (
-      <div className="w-full relative bg-transparent">
-        <QueryClientProvider client={queryClient}>
-          <ToastProvider>
-            <NativelyInterface
-              onEndMeeting={handleEndMeeting}
-            />
-            <ToastViewport />
-          </ToastProvider>
-        </QueryClientProvider>
-      </div>
+      <ErrorBoundary context="Overlay">
+        <div className="w-full relative bg-transparent">
+          <QueryClientProvider client={queryClient}>
+            <ToastProvider>
+              <NativelyInterface
+                onEndMeeting={handleEndMeeting}
+              />
+              <ToastViewport />
+            </ToastProvider>
+          </QueryClientProvider>
+        </div>
+      </ErrorBoundary>
     );
   }
 
   // --- LAUNCHER WINDOW (Default) ---
   // Renders if window=launcher OR no param
   return (
+    <ErrorBoundary context="Launcher">
     <div className="h-full min-h-0 w-full relative">
       <AnimatePresence>
         {showStartup ? (
@@ -404,6 +412,7 @@ const App: React.FC = () => {
         onDeactivated={() => setIsPremiumActive(false)}
       />
     </div>
+    </ErrorBoundary>
   )
 }
 

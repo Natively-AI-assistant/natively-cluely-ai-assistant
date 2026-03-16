@@ -10,10 +10,10 @@
 export declare function getHardwareId(): string
 /**
  * Validates a Gumroad license key by calling the Gumroad Licenses API.
- * Returns "OK" on success, or an error message string on failure.
- * Calls are made in a background thread to prevent blocking the Node.js event loop.
+ * Returns a Promise that resolves to "OK" on success, or an error message string on failure.
+ * The HTTP call runs on a libuv worker thread to prevent blocking the Node.js event loop.
  */
-export declare function verifyGumroadKey(licenseKey: string, callback: (...args: any[]) => any): void
+export declare function verifyGumroadKey(licenseKey: string): Promise<unknown>
 export interface AudioDeviceInfo {
   id: string
   name: string

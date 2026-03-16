@@ -65,16 +65,22 @@ const PROVIDER_CONFIGS: Record<RestSttProvider, ProviderConfigFactory> = {
             },
         };
     },
-    elevenlabs: (apiKey) => ({
-        endpoint: 'https://api.elevenlabs.io/v1/speech-to-text',
-        model: 'scribe_v2',
-        authHeader: { 'xi-api-key': apiKey },
-        uploadType: 'multipart',
-        extractTranscript: (data: any) => {
-            if (typeof data === 'string') return data;
-            return data?.text ?? '';
-        },
-    }),
+    elevenlabs: (apiKey, region, languageKey) => {
+        const lang = languageKey ? RECOGNITION_LANGUAGES[languageKey]?.iso639 : undefined;
+        return {
+            endpoint: 'https://api.elevenlabs.io/v1/speech-to-text',
+            model: 'scribe_v2',
+            authHeader: { 'xi-api-key': apiKey },
+            uploadType: 'multipart',
+            extraFormFields: {
+                ...(lang ? { language_code: lang } : {})
+            },
+            extractTranscript: (data: any) => {
+                if (typeof data === 'string') return data;
+                return data?.text ?? '';
+            },
+        };
+    },
     azure: (apiKey, region = 'eastus', languageKey) => {
         const lang = languageKey ? RECOGNITION_LANGUAGES[languageKey]?.bcp47 : undefined;
         const finalLang = lang || 'en-US';

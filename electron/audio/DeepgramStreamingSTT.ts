@@ -30,6 +30,8 @@ export class DeepgramStreamingSTT extends EventEmitter {
     private reconnectAttempts = 0;
     private reconnectTimer: NodeJS.Timeout | null = null;
     private keepAliveTimer: NodeJS.Timeout | null = null;
+    private buffer: Buffer[] = [];
+    private isConnecting = false;
 
     constructor(apiKey: string) {
         super();
@@ -97,6 +99,8 @@ export class DeepgramStreamingSTT extends EventEmitter {
         }
 
         this.isActive = false;
+        this.isConnecting = false;
+        this.buffer = [];
         console.log('[DeepgramStreaming] Stopped');
     }
 
@@ -104,16 +108,21 @@ export class DeepgramStreamingSTT extends EventEmitter {
     // Audio Data
     // =========================================================================
 
-    /**
-     * Write raw PCM audio data (linear16, 16-bit LE).
-     * Do NOT include a WAV header — Deepgram WebSocket expects raw PCM.
-     */
     public write(chunk: Buffer): void {
-        if (!this.isActive || !this.ws) return;
+        if (!this.isActive) return;
 
-        if (this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(chunk);
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            this.buffer.push(chunk);
+            if (this.buffer.length > 500) this.buffer.shift(); // Cap buffer size
+            
+            if (!this.isConnecting && this.shouldReconnect && !this.reconnectTimer) {
+                console.log('[DeepgramStreaming] WS not ready. Lazy connecting on new audio...');
+                this.connect();
+            }
+            return;
         }
+
+        this.ws.send(chunk);
     }
 
     // =========================================================================
@@ -121,6 +130,9 @@ export class DeepgramStreamingSTT extends EventEmitter {
     // =========================================================================
 
     private connect(): void {
+        if (this.isConnecting) return;
+        this.isConnecting = true;
+
         const url =
             `wss://api.deepgram.com/v1/listen` +
             `?model=nova-3` +
@@ -129,7 +141,8 @@ export class DeepgramStreamingSTT extends EventEmitter {
             `&channels=${this.numChannels}` +
             `&language=${this.languageCode}` +
             `&smart_format=true` +
-            `&interim_results=true`;
+            `&interim_results=true` +
+            `&keepalive=true`;
 
         console.log(`[DeepgramStreaming] Connecting (rate=${this.sampleRate}, ch=${this.numChannels})...`);
 
@@ -141,8 +154,17 @@ export class DeepgramStreamingSTT extends EventEmitter {
 
         this.ws.on('open', () => {
             this.isActive = true;
+            this.isConnecting = false;
             this.reconnectAttempts = 0;
             console.log('[DeepgramStreaming] Connected');
+
+            // Send buffered audio
+            while (this.buffer.length > 0) {
+                const chunk = this.buffer.shift();
+                if (chunk && this.ws?.readyState === WebSocket.OPEN) {
+                    this.ws.send(chunk);
+                }
+            }
 
             // Start keep-alive pings
             this.startKeepAlive();
@@ -175,11 +197,12 @@ export class DeepgramStreamingSTT extends EventEmitter {
         });
 
         this.ws.on('close', (code: number, reason: Buffer) => {
-            this.isActive = false;
+            // Do not force isActive=false; let write() trigger reconnect if isActive is still true
+            this.isConnecting = false;
             this.clearKeepAlive();
             console.log(`[DeepgramStreaming] Closed (code=${code}, reason=${reason.toString()})`);
 
-            // Auto-reconnect on unexpected close
+            // Auto-reconnect on unexpected close (excluding silence timeout 1000)
             if (this.shouldReconnect && code !== 1000) {
                 this.scheduleReconnect();
             }
@@ -202,6 +225,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
         console.log(`[DeepgramStreaming] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})...`);
 
         this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = null;
             if (this.shouldReconnect) {
                 this.connect();
             }
@@ -217,8 +241,8 @@ export class DeepgramStreamingSTT extends EventEmitter {
         this.keepAliveTimer = setInterval(() => {
             if (this.ws?.readyState === WebSocket.OPEN) {
                 try {
-                    // Send a WebSocket ping frame to keep the connection alive
-                    this.ws.ping();
+                    // Send KeepAlive JSON instead of raw ping frame for Deepgram API idle prevention
+                    this.ws.send(JSON.stringify({ type: 'KeepAlive' }));
                 } catch {
                     // Ignore errors
                 }

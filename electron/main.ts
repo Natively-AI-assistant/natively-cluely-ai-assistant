@@ -77,13 +77,14 @@ import { GoogleSTT } from "./audio/GoogleSTT"
 import { RestSTT } from "./audio/RestSTT"
 import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
 import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
+import { ElevenLabsStreamingSTT } from "./audio/ElevenLabsStreamingSTT"
 import { ThemeManager } from "./ThemeManager"
 import { RAGManager } from "./rag/RAGManager"
 import { DatabaseManager } from "./db/DatabaseManager"
 import { warmupIntentClassifier } from "./llm"
 
 /** Unified type for all STT providers with optional extended capabilities */
-type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT) & {
+type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | ElevenLabsStreamingSTT) & {
   finalize?: () => void;
   setAudioChannelCount?: (count: number) => void;
   notifySpeechEnded?: () => void;
@@ -100,6 +101,7 @@ try {
 }
 
 import { CredentialsManager } from "./services/CredentialsManager"
+import { SettingsManager } from "./services/SettingsManager"
 import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
 
@@ -134,7 +136,8 @@ export class AppState {
 
   private hasDebugged: boolean = false
   private isMeetingActive: boolean = false; // Guard for session state leaks
-  private _disguiseTimers: ReturnType<typeof setTimeout>[] = []; // Track forceUpdate timeouts
+  private _disguiseTimers: NodeJS.Timeout[] = []; // Track forceUpdate timeouts
+  private _ollamaBootstrapPromise: Promise<void> | null = null;
 
 
   // Processing events
@@ -156,16 +159,23 @@ export class AppState {
   } as const
 
   constructor() {
-    // Initialize WindowHelper with this
+    // 1. Load boot-critical settings first (used by WindowHelpers)
+    const settingsManager = SettingsManager.getInstance();
+    this.isUndetectable = settingsManager.get('isUndetectable') || false;
+    this.disguiseMode = settingsManager.get('disguiseMode') || 'terminal';
+
+    // 2. Initialize Helpers with loaded state
     this.windowHelper = new WindowHelper(this)
     this.settingsWindowHelper = new SettingsWindowHelper()
     this.modelSelectorWindowHelper = new ModelSelectorWindowHelper()
 
-    // Initialize ScreenshotHelper
+    // 3. Initialize other helpers
     this.screenshotHelper = new ScreenshotHelper(this.view)
-
-    // Initialize ProcessingHelper
     this.processingHelper = new ProcessingHelper(this)
+
+    this.windowHelper.setContentProtection(this.isUndetectable);
+    this.settingsWindowHelper.setContentProtection(this.isUndetectable);
+    this.modelSelectorWindowHelper.setContentProtection(this.isUndetectable);
 
     // Initialize KeybindManager
     const keybindManager = KeybindManager.getInstance();
@@ -255,33 +265,35 @@ export class AppState {
   }
 
   private async bootstrapOllamaEmbeddings() {
-    try {
-      const { OllamaBootstrap } = require('./rag/OllamaBootstrap');
-      const bootstrap = new OllamaBootstrap();
+    this._ollamaBootstrapPromise = (async () => {
+      try {
+        const { OllamaBootstrap } = require('./rag/OllamaBootstrap');
+        const bootstrap = new OllamaBootstrap();
 
-      // Fire and forget — don't await this before showing the window
-      const result = await bootstrap.bootstrap('nomic-embed-text', (status: string, percent: number) => {
-        // Send progress to renderer via IPC
-        this.broadcast('ollama:pull-progress', { status, percent });
-      });
+        // Fire and forget — don't await this before showing the window
+        const result = await bootstrap.bootstrap('nomic-embed-text', (status: string, percent: number) => {
+          // Send progress to renderer via IPC
+          this.broadcast('ollama:pull-progress', { status, percent });
+        });
 
-      if (result === 'pulled' || result === 'already_pulled') {
-        this.broadcast('ollama:pull-complete');
-        // Re-resolve the embedding provider given that Ollama might now be available
-        if (this.ragManager) {
-           console.log('[AppState] Ollama model ready, re-evaluating RAG pipeline provider');
-           const { CredentialsManager } = require('./services/CredentialsManager');
-           const cm = CredentialsManager.getInstance();
-           this.ragManager.initializeEmbeddings({
-              openaiKey: cm.getOpenaiApiKey() || process.env.OPENAI_API_KEY || undefined,
-              geminiKey: cm.getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || undefined,
-              ollamaUrl: process.env.OLLAMA_URL || "http://localhost:11434"
-           });
+        if (result === 'pulled' || result === 'already_pulled') {
+          this.broadcast('ollama:pull-complete');
+          // Re-resolve the embedding provider given that Ollama might now be available
+          if (this.ragManager) {
+             console.log('[AppState] Ollama model ready, re-evaluating RAG pipeline provider');
+             const { CredentialsManager } = require('./services/CredentialsManager');
+             const cm = CredentialsManager.getInstance();
+             this.ragManager.initializeEmbeddings({
+                openaiKey: cm.getOpenaiApiKey() || process.env.OPENAI_API_KEY || undefined,
+                geminiKey: cm.getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || undefined,
+                ollamaUrl: process.env.OLLAMA_URL || "http://localhost:11434"
+             });
+          }
         }
+      } catch (err) {
+         console.error('[AppState] Failed to bootstrap Ollama:', err);
       }
-    } catch (err) {
-       console.error('[AppState] Failed to bootstrap Ollama:', err);
-    }
+    })();
   }
 
   private initializeRAGManager(): void {
@@ -297,6 +309,8 @@ export class AppState {
         
         this.ragManager = new RAGManager({ 
             db: sqliteDb, 
+            dbPath: db.getDbPath(),
+            extPath: db.getExtPath(),
             openaiKey,
             geminiKey,
             ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434'
@@ -552,7 +566,16 @@ export class AppState {
         console.warn(`[Main] No API key for Soniox STT, falling back to GoogleSTT`);
         stt = new GoogleSTT();
       }
-    } else if (sttProvider === 'groq' || sttProvider === 'openai' || sttProvider === 'elevenlabs' || sttProvider === 'azure' || sttProvider === 'ibmwatson') {
+    } else if (sttProvider === 'elevenlabs') {
+      const apiKey = CredentialsManager.getInstance().getElevenLabsApiKey();
+      if (apiKey) {
+        console.log(`[Main] Using ElevenLabsStreamingSTT for ${speaker}`);
+        stt = new ElevenLabsStreamingSTT(apiKey);
+      } else {
+        console.warn(`[Main] No API key for ElevenLabs STT, falling back to GoogleSTT`);
+        stt = new GoogleSTT();
+      }
+    } else if (sttProvider === 'groq' || sttProvider === 'openai' || sttProvider === 'azure' || sttProvider === 'ibmwatson') {
       let apiKey: string | undefined;
       let region: string | undefined;
       let modelOverride: string | undefined;
@@ -562,8 +585,6 @@ export class AppState {
         modelOverride = CredentialsManager.getInstance().getGroqSttModel();
       } else if (sttProvider === 'openai') {
         apiKey = CredentialsManager.getInstance().getOpenAiSttApiKey();
-      } else if (sttProvider === 'elevenlabs') {
-        apiKey = CredentialsManager.getInstance().getElevenLabsApiKey();
       } else if (sttProvider === 'azure') {
         apiKey = CredentialsManager.getInstance().getAzureApiKey();
         region = CredentialsManager.getInstance().getAzureRegion();
@@ -919,8 +940,10 @@ export class AppState {
         console.log('[Main] Audio pipeline started successfully.');
       } catch (err) {
         console.error('[Main] Error initializing audio pipeline:', err);
+        // Notify UI so user knows microphone/audio failed to start
+        this.broadcast('meeting-audio-error', (err as Error).message || 'Audio pipeline failed to start');
       }
-    });
+    }, 100); // 100ms to ensure setWindowMode IPC resolves first
   }
 
   public async endMeeting(): Promise<void> {
@@ -949,6 +972,7 @@ export class AppState {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
       const defaultModel = cm.getDefaultModel();
+      
       // Re-fetch custom providers to ensure context correctness
       const curlProviders = cm.getCurlProviders();
       const legacyProviders = cm.getCustomProviders();
@@ -1486,6 +1510,9 @@ export class AppState {
     this.settingsWindowHelper.setContentProtection(state)
     this.modelSelectorWindowHelper.setContentProtection(state)
 
+    // Persist state via SettingsManager
+    SettingsManager.getInstance().set('isUndetectable', state);
+
     // Cancel all pending disguise timers to prevent their app.setName() calls
     // from re-registering the dock icon after we hide it
     if (state) {
@@ -1562,6 +1589,7 @@ export class AppState {
 
   public setDisguise(mode: 'terminal' | 'settings' | 'activity' | 'none'): void {
     this.disguiseMode = mode;
+    SettingsManager.getInstance().set('disguiseMode', mode);
 
     // Apply the disguise regardless of undetectable state
     // (disguise affects Activity Monitor name via process.title,
@@ -1569,38 +1597,73 @@ export class AppState {
     this._applyDisguise(mode);
   }
 
+  public applyInitialDisguise(): void {
+    this._applyDisguise(this.disguiseMode);
+  }
+
   private _applyDisguise(mode: 'terminal' | 'settings' | 'activity' | 'none'): void {
     let appName = "Natively";
     let iconPath = "";
 
+    const isWin = process.platform === 'win32';
+    const isMac = process.platform === 'darwin';
+
     switch (mode) {
       case 'terminal':
-        appName = "Terminal ";
-        iconPath = app.isPackaged
-          ? path.join(process.resourcesPath, "assets/fakeicon/terminal.png")
-          : path.join(app.getAppPath(), "assets/fakeicon/terminal.png");
+        appName = isWin ? "Command Prompt " : "Terminal ";
+        if (isWin) {
+          iconPath = app.isPackaged
+            ? path.join(process.resourcesPath, "assets/fakeicon/win/terminal.png")
+            : path.join(app.getAppPath(), "assets/fakeicon/win/terminal.png");
+        } else {
+          iconPath = app.isPackaged
+            ? path.join(process.resourcesPath, "assets/fakeicon/mac/terminal.png")
+            : path.join(app.getAppPath(), "assets/fakeicon/mac/terminal.png");
+        }
         break;
       case 'settings':
-        appName = "System Settings ";
-        iconPath = app.isPackaged
-          ? path.join(process.resourcesPath, "assets/fakeicon/settings.png")
-          : path.join(app.getAppPath(), "assets/fakeicon/settings.png");
+        appName = isWin ? "Settings " : "System Settings ";
+        if (isWin) {
+          iconPath = app.isPackaged
+            ? path.join(process.resourcesPath, "assets/fakeicon/win/settings.png")
+            : path.join(app.getAppPath(), "assets/fakeicon/win/settings.png");
+        } else {
+          iconPath = app.isPackaged
+            ? path.join(process.resourcesPath, "assets/fakeicon/mac/settings.png")
+            : path.join(app.getAppPath(), "assets/fakeicon/mac/settings.png");
+        }
         break;
       case 'activity':
-        appName = "Activity Monitor ";
-        iconPath = app.isPackaged
-          ? path.join(process.resourcesPath, "assets/fakeicon/activity.png")
-          : path.join(app.getAppPath(), "assets/fakeicon/activity.png");
+        appName = isWin ? "Task Manager " : "Activity Monitor ";
+        if (isWin) {
+          iconPath = app.isPackaged
+            ? path.join(process.resourcesPath, "assets/fakeicon/win/activity.png")
+            : path.join(app.getAppPath(), "assets/fakeicon/win/activity.png");
+        } else {
+          iconPath = app.isPackaged
+            ? path.join(process.resourcesPath, "assets/fakeicon/mac/activity.png")
+            : path.join(app.getAppPath(), "assets/fakeicon/mac/activity.png");
+        }
         break;
       case 'none':
         appName = "Natively";
-        iconPath = app.isPackaged
-          ? path.join(process.resourcesPath, "natively.icns")
-          : path.join(app.getAppPath(), "assets/natively.icns");
+        if (isMac) {
+          iconPath = app.isPackaged
+            ? path.join(process.resourcesPath, "natively.icns")
+            : path.join(app.getAppPath(), "assets/natively.icns");
+        } else if (isWin) {
+          iconPath = app.isPackaged
+            ? path.join(process.resourcesPath, "assets/icons/win/icon.ico")
+            : path.join(app.getAppPath(), "assets/icons/win/icon.ico");
+        } else {
+          iconPath = app.isPackaged
+            ? path.join(process.resourcesPath, "icon.png")
+            : path.join(app.getAppPath(), "assets/icon.png");
+        }
         break;
     }
 
-    console.log(`[AppState] Applying disguise: ${mode} (${appName})`);
+    console.log(`[AppState] Applying disguise: ${mode} (${appName}) on ${process.platform}`);
 
     // 1. Update process title (affects Activity Monitor / Task Manager)
     process.title = appName;
@@ -1611,20 +1674,22 @@ export class AppState {
     if (!this.isUndetectable) {
       app.setName(appName);
     }
-    if (process.platform === 'darwin') {
+
+    if (isMac) {
       process.env.CFBundleName = appName.trim();
     }
 
     // 3. Update App User Model ID (Windows Taskbar grouping)
-    if (process.platform === 'win32') {
-      app.setAppUserModelId(`${appName.trim()}-${mode}`);
+    if (isWin) {
+      // Use unique AUMID per disguise to avoid grouping with the real app
+      app.setAppUserModelId(`com.natively.assistant.${mode}`);
     }
 
     // 4. Update Icons
     if (fs.existsSync(iconPath)) {
       const image = nativeImage.createFromPath(iconPath);
 
-      if (process.platform === 'darwin') {
+      if (isMac) {
         // Skip dock icon update when dock is hidden to avoid potential flicker
         if (!this.isUndetectable) {
           app.dock.setIcon(image);
@@ -1668,16 +1733,23 @@ export class AppState {
     const forceUpdate = () => {
       process.title = appName;
       // Only call app.setName when NOT in stealth — it causes dock to re-show
-      if (process.platform === 'darwin' && !this.isUndetectable) {
+      if (isMac && !this.isUndetectable) {
         app.setName(appName);
       }
     };
 
-    this._disguiseTimers.push(
-      setTimeout(forceUpdate, 200),
-      setTimeout(forceUpdate, 1000),
-      setTimeout(forceUpdate, 5000)
-    );
+    // Helper to queue a timeout and remove it from array once executed smoothly
+    const scheduleUpdate = (ms: number) => {
+      const ts = setTimeout(() => {
+        forceUpdate();
+        this._disguiseTimers = this._disguiseTimers.filter(t => t !== ts);
+      }, ms);
+      this._disguiseTimers.push(ts);
+    };
+
+    scheduleUpdate(200);
+    scheduleUpdate(1000);
+    scheduleUpdate(5000);
   }
 
   // Helper: broadcast an IPC event to all windows
@@ -1705,32 +1777,17 @@ export class AppState {
 
 // Application initialization
 
-// Canonical Dock Icon Setup (dev + prod safe) - MUST be called before any window is created
-function setMacDockIcon() {
-  if (process.platform !== "darwin") return;
-
-  const appState = AppState.getInstance();
-  if (appState && appState.getUndetectable()) {
-    console.log("[DockIcon] Skipping dock icon setup due to stealth mode");
-    return;
-  }
-
-  const iconPath = app.isPackaged
-    ? path.join(process.resourcesPath, "natively.icns")
-    : path.join(app.getAppPath(), "assets/natively.icns");
-
-  console.log("[DockIcon] Using:", iconPath);
-  app.dock.setIcon(nativeImage.createFromPath(iconPath));
-}
-
 async function initializeApp() {
+  // 2. Wait for app to be ready
   await app.whenReady()
 
+  // 3. Initialize Managers
   // Initialize CredentialsManager and load keys explicitly
   // This fixes the issue where keys (especially in production) aren't loaded in time for RAG/LLM
   const { CredentialsManager } = require('./services/CredentialsManager');
   CredentialsManager.getInstance().init();
 
+  // 4. Initialize State
   const appState = AppState.getInstance()
 
   // Explicitly load credentials into helpers
@@ -1739,44 +1796,26 @@ async function initializeApp() {
   // Initialize IPC handlers before window creation
   initializeIpcHandlers(appState)
 
-  // Set initial app name — apply disguise name early if configured
-  const initialDisguise = appState.getDisguise();
-  const initialAppName = (() => {
-    switch (initialDisguise) {
-      case 'terminal': return 'Terminal ';
-      case 'settings': return 'System Settings ';
-      case 'activity': return 'Activity Monitor ';
-      default: return 'Natively';
-    }
-  })();
-  app.setName(initialAppName);
-  process.title = initialAppName;
+  // Apply the full disguise payload (names, dock icon, AUMID) early
+  appState.applyInitialDisguise();
 
   app.whenReady().then(() => {
     // Start the Ollama lifecycle manager
     OllamaManager.getInstance().init().catch(console.error);
 
-    CredentialsManager.getInstance().init();
+    // NOTE: CredentialsManager.init() and loadStoredCredentials() are already called
+    // above before this block — do NOT call them again here to avoid double key-load.
 
     // Anonymous install ping - one-time, non-blocking
     // See electron/services/InstallPingManager.ts for privacy details
     const { sendAnonymousInstallPing } = require('./services/InstallPingManager');
     sendAnonymousInstallPing();
 
-    // Load stored API keys into ProcessingHelper/LLMHelper
-    appState.processingHelper.loadStoredCredentials();
-
     // Load stored Google Service Account path (for Speech-to-Text)
     const storedServiceAccountPath = CredentialsManager.getInstance().getGoogleServiceAccountPath();
     if (storedServiceAccountPath) {
       console.log("[Init] Loading stored Google Service Account path");
       appState.updateGoogleCredentials(storedServiceAccountPath);
-    }
-
-    try {
-      setMacDockIcon(); // 🔴 MUST be first, before any window
-    } catch (e) {
-      console.error("Failed to set dock icon:", e);
     }
 
     console.log("App is ready")

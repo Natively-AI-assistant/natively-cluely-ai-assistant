@@ -48,8 +48,12 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle("license:activate", async (event, key: string) => {
     try {
       const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      return LicenseManager.getInstance().activateLicense(key);
-    } catch {
+      return await LicenseManager.getInstance().activateLicense(key);
+    } catch (err: any) {
+      // Only show generic message if the premium module itself is missing.
+      // activateLicense() returns {success:false, error} for all expected failures
+      // (bad key, network error, etc.) — it should never throw in normal operation.
+      console.error('[IPC] license:activate unexpected error:', err);
       return { success: false, error: 'Premium features not available in this build.' };
     }
   });
@@ -135,8 +139,16 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   })
 
-  safeHandle("delete-screenshot", async (event, path: string) => {
-    return appState.deleteScreenshot(path)
+
+  safeHandle("delete-screenshot", async (event, filePath: string) => {
+    // Guard: only allow deletion of files within the app's own userData directory
+    const userDataDir = app.getPath('userData');
+    const resolved = path.resolve(filePath);
+    if (!resolved.startsWith(userDataDir + path.sep)) {
+      console.warn('[IPC] delete-screenshot: path outside userData rejected:', filePath);
+      return { success: false, error: 'Path not allowed' };
+    }
+    return appState.deleteScreenshot(resolved);
   })
 
   safeHandle("take-screenshot", async () => {
@@ -254,12 +266,18 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // IPC handler for analyzing image from file path
-  safeHandle("analyze-image-file", async (event, path: string) => {
+  safeHandle("analyze-image-file", async (event, filePath: string) => {
+    // Guard: only allow reading files within the app's own userData directory
+    const userDataDir = app.getPath('userData');
+    const resolved = path.resolve(filePath);
+    if (!resolved.startsWith(userDataDir + path.sep)) {
+      console.warn('[IPC] analyze-image-file: path outside userData rejected:', filePath);
+      throw new Error('Path not allowed');
+    }
     try {
-      const result = await appState.processingHelper.getLLMHelper().analyzeImageFiles([path])
+      const result = await appState.processingHelper.getLLMHelper().analyzeImageFiles([resolved])
       return result
     } catch (error: any) {
-      // console.error("Error in analyze-image-file handler:", error)
       throw error
     }
   })
@@ -1058,14 +1076,23 @@ export function initializeIpcHandlers(appState: AppState): void {
       const testWav = Buffer.concat([wavHeader, pcmData]);
 
       if (provider === 'elevenlabs') {
-        // ElevenLabs: multipart with xi-api-key header
-        const form = new FormData();
-        form.append('file', testWav, { filename: 'test.wav', contentType: 'audio/wav' });
-        form.append('model_id', 'scribe_v2');
-        await axios.post('https://api.elevenlabs.io/v1/speech-to-text', form, {
-          headers: { 'xi-api-key': apiKey, ...form.getHeaders() },
-          timeout: 15000,
-        });
+        // ElevenLabs: Use /v1/voices to validate the API key (minimal scope required).
+        // Scoped keys may lack speech_to_text or user_read but still be usable once permissions are added.
+        try {
+          await axios.get('https://api.elevenlabs.io/v1/voices', {
+            headers: { 'xi-api-key': apiKey },
+            timeout: 10000,
+          });
+        } catch (elErr: any) {
+          const elStatus = elErr?.response?.data?.detail?.status;
+          // If the error is "invalid_api_key", the key itself is wrong — fail.
+          // Any other error (missing permission, etc.) means the key IS valid, just possibly scoped.
+          if (elStatus === 'invalid_api_key') {
+            throw elErr;
+          }
+          // Key is valid but scoped — pass with a warning
+          console.log('[IPC] ElevenLabs key is valid but may have restricted scopes. Saving key.');
+        }
       } else if (provider === 'azure') {
         // Azure: raw binary with subscription key
         const azureRegion = region || 'eastus';
@@ -1113,7 +1140,8 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       return { success: true };
     } catch (error: any) {
-      const rawMsg = error?.response?.data?.error?.message || error?.response?.data?.message || error.message || 'Connection failed';
+      const respData = error?.response?.data;
+      const rawMsg = respData?.error?.message || respData?.detail?.message || respData?.message || error.message || 'Connection failed';
       const msg = sanitizeErrorMessage(rawMsg);
       console.error("STT connection test failed:", msg);
       return { success: false, error: msg };
@@ -1144,21 +1172,24 @@ export function initializeIpcHandlers(appState: AppState): void {
         response = await axios.post(url, {
           contents: [{ parts: [{ text: "Hello" }] }]
         }, {
-          headers: { 'x-goog-api-key': apiKey }
+          headers: { 'x-goog-api-key': apiKey },
+          timeout: 15000
         });
       } else if (provider === 'groq') {
         response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
           model: "llama-3.3-70b-versatile",
           messages: [{ role: "user", content: "Hello" }]
         }, {
-          headers: { Authorization: `Bearer ${apiKey}` }
+          headers: { Authorization: `Bearer ${apiKey}` },
+          timeout: 15000
         });
       } else if (provider === 'openai') {
         response = await axios.post('https://api.openai.com/v1/chat/completions', {
           model: "gpt-5.3-chat-latest",
           messages: [{ role: "user", content: "Hello" }]
         }, {
-          headers: { Authorization: `Bearer ${apiKey}` }
+          headers: { Authorization: `Bearer ${apiKey}` },
+          timeout: 15000
         });
       } else if (provider === 'claude') {
         response = await axios.post('https://api.anthropic.com/v1/messages', {
@@ -1170,7 +1201,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             'x-api-key': apiKey,
             'anthropic-version': '2023-06-01',
             'content-type': 'application/json'
-          }
+          },
+          timeout: 15000
         });
       }
 

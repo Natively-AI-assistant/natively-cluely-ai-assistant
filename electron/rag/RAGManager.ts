@@ -14,6 +14,8 @@ import { buildRAGPrompt, NO_CONTEXT_FALLBACK, NO_GLOBAL_CONTEXT_FALLBACK } from 
 
 export interface RAGManagerConfig {
     db: Database.Database;
+    dbPath: string;       // Passed to VectorStore so worker can open its own read-only connection
+    extPath: string;      // Resolved sqlite-vec extension path (no platform suffix)
     openaiKey?: string;
     geminiKey?: string;
     ollamaUrl?: string;
@@ -37,7 +39,7 @@ export class RAGManager {
 
     constructor(config: RAGManagerConfig) {
         this.db = config.db;
-        this.vectorStore = new VectorStore(config.db);
+        this.vectorStore = new VectorStore(config.db, config.dbPath, config.extPath);
         this.embeddingPipeline = new EmbeddingPipeline(config.db, this.vectorStore);
         this.retriever = new RAGRetriever(this.vectorStore, this.embeddingPipeline);
         this.liveIndexer = new LiveRAGIndexer(this.vectorStore, this.embeddingPipeline);

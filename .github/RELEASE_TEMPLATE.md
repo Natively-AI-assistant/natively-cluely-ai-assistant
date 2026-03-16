@@ -44,3 +44,11 @@ If you see "App is damaged":
      ```
   2. Install the natively.dmg
   3. Open Terminal and run: `xattr -cr /Applications/Natively.app`
+
+## ⚠️Windows Installation (Unsigned Build)
+
+When running the installer on Windows, you might see a "Windows protected your PC" warning from Microsoft Defender SmartScreen saying it prevented an unrecognized app from starting. 
+
+Since this is an unsigned build, this is expected. You can safely ignore it by clicking **More info** and then **Run anyway**.
+
+\\ refer to change.md for detailed changes

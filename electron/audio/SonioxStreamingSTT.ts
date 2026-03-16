@@ -41,6 +41,9 @@ export class SonioxStreamingSTT extends EventEmitter {
 
     // Accumulated final tokens for building transcript text
     private pendingFinalText = '';
+    
+    private buffer: Buffer[] = [];
+    private isConnecting = false;
 
     constructor(apiKey: string) {
         super();
@@ -119,8 +122,10 @@ export class SonioxStreamingSTT extends EventEmitter {
         }
 
         this.isActive = false;
+        this.isConnecting = false;
         this.configSent = false;
         this.pendingFinalText = '';
+        this.buffer = [];
         console.log('[SonioxStreaming] Stopped');
     }
 
@@ -128,16 +133,21 @@ export class SonioxStreamingSTT extends EventEmitter {
     // Audio Data
     // =========================================================================
 
-    /**
-     * Write raw PCM audio data (linear16, 16-bit LE).
-     * Do NOT include a WAV header — Soniox WebSocket expects raw PCM.
-     */
     public write(chunk: Buffer): void {
-        if (!this.isActive || !this.ws || !this.configSent) return;
+        if (!this.isActive) return;
 
-        if (this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(chunk);
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.configSent) {
+            this.buffer.push(chunk);
+            if (this.buffer.length > 500) this.buffer.shift(); // Cap buffer size
+
+            if (!this.isConnecting && this.shouldReconnect && !this.reconnectTimer) {
+                console.log('[SonioxStreaming] WS not ready. Lazy connecting on new audio...');
+                this.connect();
+            }
+            return;
         }
+
+        this.ws.send(chunk);
     }
 
     public finalize(): void {
@@ -158,6 +168,9 @@ export class SonioxStreamingSTT extends EventEmitter {
     // =========================================================================
 
     private connect(): void {
+        if (this.isConnecting) return;
+        this.isConnecting = true;
+        
         console.log(`[SonioxStreaming] Connecting (rate=${this.sampleRate}, ch=${this.numChannels})...`);
 
         this.configSent = false;
@@ -187,9 +200,19 @@ export class SonioxStreamingSTT extends EventEmitter {
             try {
                 this.ws!.send(JSON.stringify(config));
                 this.configSent = true;
+                this.isConnecting = false;
                 console.log('[SonioxStreaming] Config sent');
+                
+                // Flush buffer after config is sent
+                while (this.buffer.length > 0) {
+                    const chunk = this.buffer.shift();
+                    if (chunk && this.ws?.readyState === WebSocket.OPEN) {
+                        this.ws.send(chunk);
+                    }
+                }
             } catch (err) {
                 console.error('[SonioxStreaming] Failed to send config:', err);
+                this.isConnecting = false;
             }
 
             // Start keep-alive pings
@@ -255,7 +278,12 @@ export class SonioxStreamingSTT extends EventEmitter {
                 // Session finished
                 if (msg.finished) {
                     console.log('[SonioxStreaming] Session finished');
-                    this.stop();
+                    // We don't stop entirely, just clear WS so it can lazily reconnect on next audio
+                    if (this.ws) {
+                        this.ws.close();
+                        this.ws = null;
+                        this.configSent = false;
+                    }
                 }
             } catch (err) {
                 console.error('[SonioxStreaming] Parse error:', err);
@@ -268,7 +296,8 @@ export class SonioxStreamingSTT extends EventEmitter {
         });
 
         this.ws.on('close', (code: number, reason: Buffer) => {
-            this.isActive = false;
+            // Do not force isActive=false; let write() trigger reconnect if isActive is still true
+            this.isConnecting = false;
             this.configSent = false;
             this.clearKeepAlive();
             console.log(`[SonioxStreaming] Closed (code=${code}, reason=${reason.toString()})`);
@@ -296,6 +325,7 @@ export class SonioxStreamingSTT extends EventEmitter {
         console.log(`[SonioxStreaming] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})...`);
 
         this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = null;
             if (this.shouldReconnect) {
                 this.connect();
             }

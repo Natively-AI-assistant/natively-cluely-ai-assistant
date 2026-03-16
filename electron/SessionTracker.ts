@@ -130,7 +130,10 @@ export class SessionTracker {
             // Add to session transcript
             this.fullTranscript.push(segment);
             // Compact transcript with summarization instead of losing early context
-            this.compactTranscriptIfNeeded();
+            // Fire-and-forget: sync context; errors are caught internally
+            void this.compactTranscriptIfNeeded().catch(e =>
+                console.warn('[SessionTracker] compactTranscript error (non-fatal):', e)
+            );
         }
 
         return { role };
@@ -172,7 +175,10 @@ export class SessionTracker {
         });
 
         // Compact transcript with summarization instead of losing early context
-        this.compactTranscriptIfNeeded();
+        // Fire-and-forget: sync context; errors are caught internally
+        void this.compactTranscriptIfNeeded().catch(e =>
+            console.warn('[SessionTracker] compactTranscript error (non-fatal):', e)
+        );
 
         this.lastAssistantMessage = cleanText;
 

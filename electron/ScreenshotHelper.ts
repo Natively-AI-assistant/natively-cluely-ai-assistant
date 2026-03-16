@@ -40,18 +40,26 @@ export class ScreenshotHelper {
    * Supports macOS (screencapture), Linux (gnome-screenshot/scrot/import), and Windows (PowerShell).
    */
   private getScreenshotCommand(outputPath: string, interactive: boolean): string {
+    // Safety: outputPath must be within our controlled directories.
+    // Since we always construct paths using path.join(this.screenshotDir, uuidv4()),
+    // this assertion guards against any future regression where external input could reach here.
+    const userDataDir = app.getPath('userData');
+    if (!outputPath.startsWith(userDataDir)) {
+      throw new Error(`[ScreenshotHelper] Refusing shell command for path outside userData: ${outputPath}`);
+    }
+    // Escape double-quotes within the path as a defense-in-depth measure
+    const safePath = outputPath.replace(/"/g, '\\"');
     const platform = process.platform;
     if (platform === 'darwin') {
       return interactive
-        ? `screencapture -i -x "${outputPath}"`
-        : `screencapture -x -C "${outputPath}"`;
+        ? `screencapture -i -x "${safePath}"`
+        : `screencapture -x -C "${safePath}"`;
     } else if (platform === 'linux') {
       return interactive
-        ? `gnome-screenshot -a -f "${outputPath}" 2>/dev/null || scrot -s "${outputPath}" 2>/dev/null || import "${outputPath}"`
-        : `gnome-screenshot -f "${outputPath}" 2>/dev/null || scrot "${outputPath}" 2>/dev/null || import -window root "${outputPath}"`;
+        ? `gnome-screenshot -a -f "${safePath}" 2>/dev/null || scrot -s "${safePath}" 2>/dev/null || import "${safePath}"`
+        : `gnome-screenshot -f "${safePath}" 2>/dev/null || scrot "${safePath}" 2>/dev/null || import -window root "${safePath}"`;
     } else if (platform === 'win32') {
-      // PowerShell full-screen screenshot
-      const psScript = `Add-Type -AssemblyName System.Windows.Forms; $b = [System.Drawing.Bitmap]::new([System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width, [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height); $g = [System.Drawing.Graphics]::FromImage($b); $g.CopyFromScreen(0,0,0,0,$b.Size); $b.Save('${outputPath.replace(/'/g, "''")}'); $g.Dispose(); $b.Dispose()`;
+      const psScript = `Add-Type -AssemblyName System.Windows.Forms; $b = [System.Drawing.Bitmap]::new([System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width, [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height); $g = [System.Drawing.Graphics]::FromImage($b); $g.CopyFromScreen(0,0,0,0,$b.Size); $b.Save('${safePath.replace(/'/g, "''")}'); $g.Dispose(); $b.Dispose()`;
       return `powershell -NoProfile -Command "${psScript}"`;
     }
     throw new Error(`Unsupported platform for screenshots: ${platform}`);
