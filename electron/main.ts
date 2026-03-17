@@ -78,13 +78,14 @@ import { RestSTT } from "./audio/RestSTT"
 import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
 import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
 import { ElevenLabsStreamingSTT } from "./audio/ElevenLabsStreamingSTT"
+import { OpenAIStreamingSTT } from "./audio/OpenAIStreamingSTT"
 import { ThemeManager } from "./ThemeManager"
 import { RAGManager } from "./rag/RAGManager"
 import { DatabaseManager } from "./db/DatabaseManager"
 import { warmupIntentClassifier } from "./llm"
 
 /** Unified type for all STT providers with optional extended capabilities */
-type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | ElevenLabsStreamingSTT) & {
+type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | ElevenLabsStreamingSTT | OpenAIStreamingSTT) & {
   finalize?: () => void;
   setAudioChannelCount?: (count: number) => void;
   notifySpeechEnded?: () => void;
@@ -576,7 +577,17 @@ export class AppState {
         console.warn(`[Main] No API key for ElevenLabs STT, falling back to GoogleSTT`);
         stt = new GoogleSTT();
       }
-    } else if (sttProvider === 'groq' || sttProvider === 'openai' || sttProvider === 'azure' || sttProvider === 'ibmwatson') {
+    } else if (sttProvider === 'openai') {
+      // OpenAI: WebSocket Realtime (gpt-4o-transcribe → gpt-4o-mini-transcribe) with whisper-1 REST fallback
+      const apiKey = CredentialsManager.getInstance().getOpenAiSttApiKey();
+      if (apiKey) {
+        console.log(`[Main] Using OpenAIStreamingSTT (WebSocket+REST fallback) for ${speaker}`);
+        stt = new OpenAIStreamingSTT(apiKey);
+      } else {
+        console.warn(`[Main] No API key for OpenAI STT, falling back to GoogleSTT`);
+        stt = new GoogleSTT();
+      }
+    } else if (sttProvider === 'groq' || sttProvider === 'azure' || sttProvider === 'ibmwatson') {
       let apiKey: string | undefined;
       let region: string | undefined;
       let modelOverride: string | undefined;
@@ -584,8 +595,6 @@ export class AppState {
       if (sttProvider === 'groq') {
         apiKey = CredentialsManager.getInstance().getGroqSttApiKey();
         modelOverride = CredentialsManager.getInstance().getGroqSttModel();
-      } else if (sttProvider === 'openai') {
-        apiKey = CredentialsManager.getInstance().getOpenAiSttApiKey();
       } else if (sttProvider === 'azure') {
         apiKey = CredentialsManager.getInstance().getAzureApiKey();
         region = CredentialsManager.getInstance().getAzureRegion();

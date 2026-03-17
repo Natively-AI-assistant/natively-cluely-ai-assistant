@@ -6,14 +6,15 @@ Version 2.0.6 introduces critical stealth mode enhancements, an upgraded model r
 
 - **Multimodal Groq Support**: Integrated `meta-llama/llama-4-scout-17b-16e-instruct` into the ecosystem for screenshot analysis capability.
 - **Model Roster Update**: Updated baseline architecture natively to default to `gpt-5.4-chat`, `gemini-3.1`, and `claude-sonnet-4-6`.
-- **Token Limits**: Increased Groq max completion tokens to 8192 (the API maximum for context windows) to better support full code generation.
+- **Token Limits**: Increased Groq max completion tokens to 8192 (the API maximum for context windows) to better support full code generation while preventing `BadRequestError`.
 - **Model Rotation Engine**: Fortified the 3-tier fallback mechanisms and auto-upgrade logic for Gemini, Claude, GPT, and Groq models.
+- **OpenAI Streaming STT**: Implemented a brand new low-latency WebSocket integration via the OpenAI Realtime API. Uses a 3-tier priority rotation (`gpt-4o-transcribe` → `gpt-4o-mini-transcribe` → `whisper-1` REST) with server-side VAD, noise reduction, and uninterrupted audio buffering.
 
 ## Improvements
 
 - **SEO & Documentation**: Optimized `README.md` for search engines with hidden targeted keywords.
 - **Code Quality**: Performed a senior-level code review across modified files to address potential race conditions, edge cases, and empty references.
-- **STT Providers**: Refactored Google, Deepgram, Soniox, and ElevenLabs streaming implementations with lazy connection and automatic reconnection logic. Added smart audio buffering to ensure no data is lost during stream initialization or network jitter.
+- **STT Providers Architecture**: Refactored Google, Deepgram, Soniox, and ElevenLabs streaming implementations. Specifically engineered the OpenAI module with custom ring-buffers, a 10s dark-drop timeout, a 5s zombie-session timeout, and 250ms audio chunk limiters to eradicate API rate-limits.
 - **Stealth Boot Refactor**: Centralized platform disguise and dock icon management into `AppState` for consistent stealth behavior across reboots.
 
 ## Fixes
