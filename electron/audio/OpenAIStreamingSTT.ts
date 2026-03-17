@@ -37,8 +37,8 @@ const RECONNECT_MAX_MS  = 30_000;
 /** Keep-alive ping interval (ms) — prevents idle disconnects */
 const KEEPALIVE_INTERVAL_MS = 20_000;
 
-/** Rolling audio ring-buffer: max ~30 seconds at 16kHz mono 16-bit */
-const MAX_RING_BUFFER_BYTES = 16_000 * 2 * 30; // 960 000 bytes
+/** Rolling audio ring-buffer: max ~30 seconds at 24kHz mono 16-bit (WS path) */
+const MAX_RING_BUFFER_BYTES = 24_000 * 2 * 30; // 1 440 000 bytes
 
 /** REST safety-net flush interval when in REST fallback mode */
 const REST_SAFETY_NET_MS = 10_000;
@@ -46,14 +46,15 @@ const REST_SAFETY_NET_MS = 10_000;
 /** Minimum buffered bytes before attempting a REST upload */
 const REST_MIN_UPLOAD_BYTES = 4_000;
 
-/** WebSocket Audio Batching: Number of 16kHz samples to accumulate before sending to prevent rate limits (~250ms) */
-const SEND_THRESHOLD_SAMPLES = 4000;
+/** WebSocket Audio Batching: Number of 24kHz samples to accumulate before sending to prevent rate limits (~250ms) */
+const SEND_THRESHOLD_SAMPLES = 6000;
 
 /** Silence RMS threshold — skip REST uploads for silent buffers */
 const SILENCE_RMS_THRESHOLD = 50;
 
-/** PCM parameters (must match SystemAudioCapture / MicrophoneCapture output) */
-const TARGET_SAMPLE_RATE  = 16_000; // OpenAI Realtime requires 16 kHz
+/** PCM parameters */
+const WS_SAMPLE_RATE      = 24_000; // OpenAI Realtime API requires 24 kHz for pcm16
+const REST_SAMPLE_RATE    = 16_000; // whisper-1 REST accepts 16 kHz
 const BITS_PER_SAMPLE     = 16;
 const NUM_CHANNELS        = 1;
 
@@ -272,22 +273,24 @@ export class OpenAIStreamingSTT extends EventEmitter {
 
             this.ws!.send(JSON.stringify({
                 type: 'transcription_session.update',
-                input_audio_format: 'pcm16',
-                input_audio_transcription: {
-                    model,
-                    prompt: '',
-                    language: lang || '',
-                },
-                // Server VAD — offload voice activity detection entirely to the server
-                turn_detection: {
-                    type:                'server_vad',
-                    threshold:           0.5,
-                    prefix_padding_ms:   300,
-                    silence_duration_ms: 500,
-                },
-                // Server-side noise reduction
-                input_audio_noise_reduction: {
-                    type: 'near_field',
+                session: {
+                    input_audio_format: 'pcm16',
+                    input_audio_transcription: {
+                        model,
+                        prompt: '',
+                        language: lang || '',
+                    },
+                    // Server VAD — offload voice activity detection entirely to the server
+                    turn_detection: {
+                        type:                'server_vad',
+                        threshold:           0.5,
+                        prefix_padding_ms:   300,
+                        silence_duration_ms: 500,
+                    },
+                    // Server-side noise reduction
+                    input_audio_noise_reduction: {
+                        type: 'near_field',
+                    },
                 },
             }));
         });
@@ -415,8 +418,8 @@ export class OpenAIStreamingSTT extends EventEmitter {
     private _sendWsAudioChunk(pcmChunk: Buffer): void {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
-        // Downsample if necessary (e.g. 48kHz → 16kHz)
-        const pcm16 = this._toPcm16At16kHz(pcmChunk);
+        // Downsample if necessary (e.g. 48kHz → 24kHz for Realtime API)
+        const pcm16 = this._resamplePcm16(pcmChunk, WS_SAMPLE_RATE);
 
         const inputS16 = new Int16Array(pcm16.buffer, pcm16.byteOffset, pcm16.byteLength / 2);
         
@@ -617,7 +620,9 @@ export class OpenAIStreamingSTT extends EventEmitter {
             return;
         }
 
-        const wavBuffer = this._addWavHeader(rawPcm);
+        // Downsample to 16kHz mono before creating WAV (input may be 48kHz)
+        const pcm16k = this._resamplePcm16(rawPcm, REST_SAMPLE_RATE);
+        const wavBuffer = this._addWavHeader(pcm16k);
         this.restIsUploading = true;
 
         try {
@@ -671,10 +676,10 @@ export class OpenAIStreamingSTT extends EventEmitter {
     // ─── Audio Utilities ──────────────────────────────────────────────────────
 
     /**
-     * Convert raw PCM buffer from the capture pipeline into 16-bit PCM at 16kHz.
+     * Convert raw PCM buffer from the capture pipeline into 16-bit PCM at the given target rate.
      * The pipeline outputs Int16LE PCM, potentially at a higher sample rate (e.g. 48kHz).
      */
-    private _toPcm16At16kHz(chunk: Buffer): Buffer {
+    private _resamplePcm16(chunk: Buffer, targetRate: number): Buffer {
         // Safe read from unaligned memory
         const numSamples = chunk.length / 2;
         const inputS16 = new Int16Array(numSamples);
@@ -682,8 +687,8 @@ export class OpenAIStreamingSTT extends EventEmitter {
             inputS16[i] = chunk.readInt16LE(i * 2);
         }
 
-        if (this.inputSampleRate === TARGET_SAMPLE_RATE && this.numChannels === 1) {
-            return Buffer.from(inputS16.buffer); 
+        if (this.inputSampleRate === targetRate && this.numChannels === 1) {
+            return Buffer.from(inputS16.buffer);
         }
 
         // Mix down multi-channel to mono first, then downsample
@@ -703,11 +708,11 @@ export class OpenAIStreamingSTT extends EventEmitter {
         }
 
         // Downsample
-        if (this.inputSampleRate === TARGET_SAMPLE_RATE) {
+        if (this.inputSampleRate === targetRate) {
             return Buffer.from(monoS16.buffer);
         }
 
-        const factor       = this.inputSampleRate / TARGET_SAMPLE_RATE;
+        const factor       = this.inputSampleRate / targetRate;
         const outputLength = Math.floor(monoS16.length / factor);
         const outputS16    = new Int16Array(outputLength);
         for (let i = 0; i < outputLength; i++) {
@@ -738,8 +743,8 @@ export class OpenAIStreamingSTT extends EventEmitter {
         buf.writeUInt32LE(16, 16);
         buf.writeUInt16LE(1, 20);                                                                   // PCM
         buf.writeUInt16LE(NUM_CHANNELS, 22);
-        buf.writeUInt32LE(TARGET_SAMPLE_RATE, 24);
-        buf.writeUInt32LE(TARGET_SAMPLE_RATE * NUM_CHANNELS * (BITS_PER_SAMPLE / 8), 28);
+        buf.writeUInt32LE(REST_SAMPLE_RATE, 24);
+        buf.writeUInt32LE(REST_SAMPLE_RATE * NUM_CHANNELS * (BITS_PER_SAMPLE / 8), 28);
         buf.writeUInt16LE(NUM_CHANNELS * (BITS_PER_SAMPLE / 8), 32);
         buf.writeUInt16LE(BITS_PER_SAMPLE, 34);
         buf.write('data', 36);
