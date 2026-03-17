@@ -576,7 +576,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                 await window.electronAPI?.setGroqSttApiKey?.(key.trim());
             } else if (provider === 'openai') {
                 // @ts-ignore
-                await window.electronAPI?.setOpenaiSttApiKey?.(key.trim());
+                await window.electronAPI?.setOpenAiSttApiKey?.(key.trim());
             } else if (provider === 'elevenlabs') {
                 // @ts-ignore
                 await window.electronAPI?.setElevenLabsApiKey?.(key.trim());
@@ -623,7 +623,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                 setHasStoredSttGroqKey(false);
             } else if (provider === 'openai') {
                 // @ts-ignore
-                await window.electronAPI?.setOpenaiSttApiKey?.('');
+                await window.electronAPI?.setOpenAiSttApiKey?.('');
                 setSttOpenaiKey('');
                 setHasStoredSttOpenaiKey(false);
             } else if (provider === 'elevenlabs') {
