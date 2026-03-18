@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 
 interface RollingTranscriptProps {
     text: string;
@@ -16,6 +17,7 @@ interface RollingTranscriptProps {
  */
 const RollingTranscript: React.FC<RollingTranscriptProps> = ({ text, isActive = true }) => {
     const containerRef = useRef<HTMLDivElement>(null);
+    const isLightTheme = useResolvedTheme() === 'light';
 
     // Auto-scroll to the end when text updates
     useEffect(() => {
@@ -36,7 +38,7 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({ text, isActive = 
                     maskImage: 'linear-gradient(to right, transparent, black 10%, black 90%, transparent)'
                 }}
             >
-                <span className="inline-flex items-center text-[13px] text-white/40 italic leading-7 transition-all duration-300">
+                <span className={`inline-flex items-center text-[13px] italic leading-7 transition-all duration-300 ${isLightTheme ? 'text-slate-500' : 'text-white/40'}`}>
                     {text}
                     {isActive && (
                         <span className="inline-flex items-center ml-2">

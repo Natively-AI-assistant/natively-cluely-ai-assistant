@@ -12,6 +12,7 @@ import { AboutSection } from './AboutSection';
 import { AIProvidersSettings } from './settings/AIProvidersSettings';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useShortcuts } from '../hooks/useShortcuts';
+import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { KeyRecorder } from './ui/KeyRecorder';
 import { ProfileVisualizer, PremiumUpgradeModal } from '../premium';
 import icon from './icon.png';
@@ -19,101 +20,114 @@ import icon from './icon.png';
 // ---------------------------------------------------------------------------
 // MockupNativelyInterface — fake in-meeting widget for the opacity preview
 // ---------------------------------------------------------------------------
-const MockupNativelyInterface = ({ opacity }: { opacity: number }) => (
-    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none bg-transparent">
-        {/* NativelyInterface Widget — opacity controlled by the slider */}
-        <div
-            id="mockup-natively-interface"
-            style={{ opacity, transition: 'opacity 75ms ease' }}
-            className="flex flex-col items-center pointer-events-none -mt-56"
-        >
-            {/* TopPill Replica */}
-            <div className="flex justify-center mb-2 select-none z-50">
-                <div className="flex items-center gap-2 rounded-full bg-[#1E1E1E]/80 backdrop-blur-md border border-white/10 shadow-lg shadow-black/20 pl-1.5 pr-1.5 py-1.5">
-                    <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center overflow-hidden">
-                        <img
-                            src={icon}
-                            alt="Natively"
-                            className="w-[24px] h-[24px] object-contain opacity-90 scale-105"
-                            draggable="false"
-                        />
-                    </div>
-                    <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 text-[12px] font-medium text-slate-200 border border-white/0">
-                        <ChevronUp className="w-3.5 h-3.5 opacity-70" />
-                        <span className="opacity-80 tracking-wide">Hide</span>
-                    </div>
-                    <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white">
-                        <div className="w-3.5 h-3.5 rounded-[3px] bg-red-400 opacity-80" />
-                    </div>
-                </div>
-            </div>
+const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
+    const isLightTheme = useResolvedTheme() === 'light';
 
-            {/* Main Interface Window Replica */}
-            <div className="relative w-[600px] max-w-full bg-[#1E1E1E]/95 backdrop-blur-2xl border border-white/10 shadow-2xl shadow-black/40 rounded-[24px] overflow-hidden flex flex-col pt-2 pb-3">
-                
-                {/* Rolling Transcript Bar */}
-                <div className="w-full flex justify-center py-2 px-4 border-b border-white/5 bg-[#1E1E1E]/50 mb-1">
-                    <p className="text-[13px] text-white/90 truncate max-w-[90%] font-medium">
-                        <span className="text-blue-400 mr-2 font-semibold">Interviewer</span>
-                        <span className="opacity-80">So how would you optimize the current algorithm?</span>
-                    </p>
-                </div>
-
-                {/* Chat History Mock */}
-                <div className="flex-1 overflow-y-auto px-4 py-2 space-y-3">
-                    <div className="flex justify-start">
-                        <div className="max-w-[85%] px-4 py-3 text-[14px] leading-relaxed text-slate-200 font-normal">
-                            <span className="font-semibold text-emerald-400 block mb-1">Suggestion</span>
-                            A good approach would be to use a hash map to cache the intermediate results, which brings the time complexity down from O(n²) to O(n).
-                        </div>
-                    </div>
-                </div>
-
-                {/* Quick Actions */}
-                <div className="flex flex-nowrap justify-center items-center gap-1.5 px-4 pb-3 pt-3">
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium text-slate-400 bg-white/5 border border-white/0 shrink-0">
-                        <Pencil className="w-3 h-3 opacity-70" /> What to answer?
-                    </div>
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium text-slate-400 bg-white/5 border border-white/0 shrink-0">
-                        <MessageSquare className="w-3 h-3 opacity-70" /> Shorten
-                    </div>
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium text-slate-400 bg-white/5 border border-white/0 shrink-0">
-                        <RefreshCw className="w-3 h-3 opacity-70" /> Recap
-                    </div>
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium text-slate-400 bg-white/5 border border-white/0 shrink-0">
-                        <HelpCircle className="w-3 h-3 opacity-70" /> Follow Up Question
-                    </div>
-                    <div className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium bg-white/5 text-slate-400 min-w-[74px] shrink-0">
-                        <Zap className="w-3 h-3 opacity-70" /> Answer
-                    </div>
-                </div>
-
-                {/* Input Area */}
-                <div className="px-3">
-                    <div className="relative group">
-                        <div className="w-full bg-[#1E1E1E] border border-white/5 rounded-xl pl-3 pr-10 py-2.5 h-[38px] flex items-center">
-                            <span className="text-[13px] text-slate-500">Ask anything on screen or conversation</span>
-                        </div>
-                    </div>
-
-                    {/* Bottom Row */}
-                    <div className="flex items-center justify-between mt-3 px-0.5">
-                        <div className="flex items-center gap-1.5">
-                            <div className="flex items-center gap-2 px-3 py-1.5 border border-white/10 rounded-lg text-xs font-medium w-[140px] bg-black/20 text-white/70">
-                                <span className="truncate min-w-0 flex-1">Gemini 3 Flash</span>
-                                <ChevronDown size={14} className="shrink-0" />
+    return (
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none bg-transparent">
+                {/* NativelyInterface Widget — opacity controlled by the slider */}
+                <div
+                    id="mockup-natively-interface"
+                    style={{ opacity, transition: 'opacity 75ms ease' }}
+                    className="flex flex-col items-center pointer-events-none -mt-56"
+                >
+                    {/* TopPill Replica */}
+                    <div className="flex justify-center mb-2 select-none z-50">
+                        <div
+                            className="flex items-center gap-2 rounded-full backdrop-blur-md pl-1.5 pr-1.5 py-1.5"
+                            style={{
+                                backgroundColor: isLightTheme ? 'rgba(243, 244, 246, 0.88)' : 'rgba(30, 30, 30, 0.8)',
+                                border: `1px solid ${isLightTheme ? 'rgba(15, 23, 42, 0.08)' : 'rgba(255, 255, 255, 0.1)'}`,
+                                boxShadow: isLightTheme
+                                    ? '0 12px 28px rgba(15, 23, 42, 0.10)'
+                                    : '0 12px 28px rgba(0, 0, 0, 0.2)'
+                            }}
+                        >
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center overflow-hidden ${isLightTheme ? 'bg-black/[0.04]' : 'bg-white/5'}`}>
+                                <img
+                                    src={icon}
+                                    alt="Natively"
+                                    className="w-[24px] h-[24px] object-contain opacity-90 scale-105"
+                                    draggable="false"
+                                />
                             </div>
-                            <div className="w-px h-3 bg-white/10 mx-1" />
-                            <div className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-500 bg-white/5">
-                                <SlidersHorizontal className="w-3.5 h-3.5" />
+                            <div className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-[12px] font-medium border ${isLightTheme ? 'bg-black/[0.04] border-black/0 text-slate-700' : 'bg-white/5 border-white/0 text-slate-200'}`}>
+                                <ChevronUp className="w-3.5 h-3.5 opacity-70" />
+                                <span className="opacity-80 tracking-wide">Hide</span>
+                            </div>
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isLightTheme ? 'bg-black/[0.04] text-slate-900' : 'bg-white/5 text-white'}`}>
+                                <div className="w-3.5 h-3.5 rounded-[3px] bg-red-400 opacity-80" />
                             </div>
                         </div>
                     </div>
+
+                    {/* Main Interface Window Replica */}
+                    <div className={`relative w-[600px] max-w-full backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col pt-2 pb-3 ${isLightTheme ? 'bg-[#F3F4F6]/95 border-black/10 shadow-2xl shadow-black/10' : 'bg-[#1E1E1E]/95 border-white/10 shadow-2xl shadow-black/40'}`}>
+
+                        {/* Rolling Transcript Bar */}
+                        <div className={`w-full flex justify-center py-2 px-4 border-b mb-1 ${isLightTheme ? 'border-black/[0.05] bg-black/[0.03]' : 'border-white/5 bg-[#1E1E1E]/50'}`}>
+                            <p className={`text-[13px] truncate max-w-[90%] font-medium ${isLightTheme ? 'text-slate-700' : 'text-white/90'}`}>
+                                <span className="text-blue-400 mr-2 font-semibold">Interviewer</span>
+                                <span className="opacity-80">So how would you optimize the current algorithm?</span>
+                            </p>
+                        </div>
+
+                        {/* Chat History Mock */}
+                        <div className="flex-1 overflow-y-auto px-4 py-2 space-y-3">
+                            <div className="flex justify-start">
+                                <div className={`max-w-[85%] px-4 py-3 text-[14px] leading-relaxed font-normal ${isLightTheme ? 'text-slate-800' : 'text-slate-200'}`}>
+                                    <span className="font-semibold text-emerald-500 block mb-1">Suggestion</span>
+                                    A good approach would be to use a hash map to cache the intermediate results, which brings the time complexity down from O(n²) to O(n).
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Quick Actions */}
+                        <div className="flex flex-nowrap justify-center items-center gap-1.5 px-4 pb-3 pt-3">
+                            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 ${isLightTheme ? 'text-slate-600 bg-black/[0.04] border-black/0' : 'text-slate-400 bg-white/5 border-white/0'}`}>
+                                <Pencil className="w-3 h-3 opacity-70" /> What to answer?
+                            </div>
+                            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 ${isLightTheme ? 'text-slate-600 bg-black/[0.04] border-black/0' : 'text-slate-400 bg-white/5 border-white/0'}`}>
+                                <MessageSquare className="w-3 h-3 opacity-70" /> Shorten
+                            </div>
+                            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 ${isLightTheme ? 'text-slate-600 bg-black/[0.04] border-black/0' : 'text-slate-400 bg-white/5 border-white/0'}`}>
+                                <RefreshCw className="w-3 h-3 opacity-70" /> Recap
+                            </div>
+                            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 ${isLightTheme ? 'text-slate-600 bg-black/[0.04] border-black/0' : 'text-slate-400 bg-white/5 border-white/0'}`}>
+                                <HelpCircle className="w-3 h-3 opacity-70" /> Follow Up Question
+                            </div>
+                            <div className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium min-w-[74px] shrink-0 border ${isLightTheme ? 'bg-black/[0.04] text-slate-600 border-black/0' : 'bg-white/5 text-slate-400 border-white/0'}`}>
+                                <Zap className="w-3 h-3 opacity-70" /> Answer
+                            </div>
+                        </div>
+
+                        {/* Input Area */}
+                        <div className="px-3">
+                            <div className="relative group">
+                                <div className={`w-full border rounded-xl pl-3 pr-10 py-2.5 h-[38px] flex items-center ${isLightTheme ? 'bg-white/80 border-black/[0.06]' : 'bg-[#1E1E1E] border-white/5'}`}>
+                                    <span className={`text-[13px] ${isLightTheme ? 'text-slate-500' : 'text-slate-500'}`}>Ask anything on screen or conversation</span>
+                                </div>
+                            </div>
+
+                            {/* Bottom Row */}
+                            <div className="flex items-center justify-between mt-3 px-0.5">
+                                <div className="flex items-center gap-1.5">
+                                    <div className={`flex items-center gap-2 px-3 py-1.5 border rounded-lg text-xs font-medium w-[140px] ${isLightTheme ? 'bg-black/[0.04] border-black/10 text-slate-700' : 'bg-black/20 border-white/10 text-white/70'}`}>
+                                        <span className="truncate min-w-0 flex-1">Gemini 3 Flash</span>
+                                        <ChevronDown size={14} className="shrink-0" />
+                                    </div>
+                                    <div className={`w-px h-3 mx-1 ${isLightTheme ? 'bg-black/10' : 'bg-white/10'}`} />
+                                    <div className={`w-7 h-7 flex items-center justify-center rounded-lg ${isLightTheme ? 'text-slate-500 bg-black/[0.04]' : 'text-slate-500 bg-white/5'}`}>
+                                        <SlidersHorizontal className="w-3.5 h-3.5" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            </div>
         </div>
-    </div>
-);
+    );
+};
 
 interface CustomSelectProps {
     label: string;

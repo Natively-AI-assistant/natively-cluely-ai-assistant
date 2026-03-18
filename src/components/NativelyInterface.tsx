@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 // import { ModelSelector } from './ui/ModelSelector'; // REMOVED
 import TopPill from './ui/TopPill';
 import RollingTranscript from './ui/RollingTranscript';
@@ -40,6 +40,7 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import { analytics, detectProviderType } from '../lib/analytics/analytics.service';
 import { useShortcuts } from '../hooks/useShortcuts';
+import { useResolvedTheme } from '../hooks/useResolvedTheme';
 
 interface Message {
     id: string;
@@ -57,6 +58,7 @@ interface NativelyInterfaceProps {
 }
 
 const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting }) => {
+    const isLightTheme = useResolvedTheme() === 'light';
     const [isExpanded, setIsExpanded] = useState(true);
     const [inputValue, setInputValue] = useState('');
     const { shortcuts, isShortcutPressed } = useShortcuts();
@@ -110,6 +112,25 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting }) =
 
     // Model Selection State
     const [currentModel, setCurrentModel] = useState<string>('gemini-3-flash-preview');
+
+    const codeTheme = isLightTheme ? oneLight : vscDarkPlus;
+    const codeLineNumberColor = isLightTheme ? 'rgba(15,23,42,0.35)' : 'rgba(255,255,255,0.2)';
+    const overlayPanelClass = isLightTheme
+        ? 'bg-[#F3F4F6]/95 border-black/10 shadow-black/10 text-slate-900'
+        : 'bg-[#1E1E1E]/95 border-white/10 shadow-black/40 text-slate-200';
+    const subtleSurfaceClass = isLightTheme ? 'bg-black/[0.035] border-black/10' : 'bg-white/5 border-white/10';
+    const codeBlockClass = isLightTheme ? 'border-black/10 bg-white/75' : 'border-white/[0.08] bg-zinc-800/60';
+    const codeHeaderClass = isLightTheme ? 'bg-black/[0.03] border-black/10' : 'bg-white/[0.04] border-white/[0.08]';
+    const codeHeaderTextClass = isLightTheme ? 'text-slate-500' : 'text-white/40';
+    const quickActionClass = isLightTheme
+        ? 'text-slate-600 bg-black/[0.04] border-black/0 hover:text-slate-900 hover:bg-black/[0.06] hover:border-black/5'
+        : 'text-slate-400 bg-white/5 border-white/0 hover:text-slate-200 hover:bg-white/10 hover:border-white/5';
+    const inputClass = isLightTheme
+        ? 'bg-white/80 hover:bg-white focus:bg-white border-black/[0.06] focus:border-black/10 focus:ring-black/10 text-slate-900 placeholder:text-slate-400'
+        : 'bg-[#1E1E1E] hover:bg-[#252525] focus:bg-[#1E1E1E] border-white/5 focus:border-white/10 focus:ring-white/10 text-slate-200 placeholder:text-slate-500';
+    const controlSurfaceClass = isLightTheme
+        ? 'bg-black/[0.04] text-slate-700 border-black/10 hover:bg-black/[0.06] hover:text-slate-900'
+        : 'bg-black/20 text-white/70 border-white/10 hover:bg-white/5 hover:text-white';
 
     useEffect(() => {
         // Load the persisted default model (not the runtime model)
@@ -1062,12 +1083,12 @@ Provide only the answer, nothing else.`;
         if (msg.isCode || (msg.role === 'system' && msg.text.includes('```'))) {
             const parts = msg.text.split(/(```[\s\S]*?```)/g);
             return (
-                <div className="bg-white/5 border border-white/10 rounded-lg p-3 my-1">
-                    <div className="flex items-center gap-2 mb-2 text-purple-300 font-semibold text-xs uppercase tracking-wide">
+                <div className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`}>
+                    <div className={`flex items-center gap-2 mb-2 font-semibold text-xs uppercase tracking-wide ${isLightTheme ? 'text-violet-600' : 'text-purple-300'}`}>
                         <Code className="w-3.5 h-3.5" />
                         <span>Code Solution</span>
                     </div>
-                    <div className="space-y-2 text-slate-200 text-[13px] leading-relaxed">
+                    <div className={`space-y-2 text-[13px] leading-relaxed ${isLightTheme ? 'text-slate-800' : 'text-slate-200'}`}>
                         {parts.map((part, i) => {
                             if (part.startsWith('```')) {
                                 const match = part.match(/```(\w+)?\n?([\s\S]*?)```/);
@@ -1075,17 +1096,17 @@ Provide only the answer, nothing else.`;
                                     const lang = match[1] || 'python';
                                     const code = match[2].trim();
                                     return (
-                                        <div key={i} className="my-3 rounded-xl overflow-hidden border border-white/[0.08] shadow-lg bg-zinc-800/60 backdrop-blur-md">
+                                        <div key={i} className={`my-3 rounded-xl overflow-hidden border shadow-lg backdrop-blur-md ${codeBlockClass}`}>
                                             {/* Minimalist Apple Header */}
-                                            <div className="bg-white/[0.04] px-3 py-1.5 border-b border-white/[0.08]">
-                                                <span className="text-[10px] uppercase tracking-widest font-semibold text-white/40 font-mono">
+                                            <div className={`px-3 py-1.5 border-b ${codeHeaderClass}`}>
+                                                <span className={`text-[10px] uppercase tracking-widest font-semibold font-mono ${codeHeaderTextClass}`}>
                                                     {lang || 'CODE'}
                                                 </span>
                                             </div>
                                             <div className="bg-transparent">
                                                 <SyntaxHighlighter
                                                     language={lang}
-                                                    style={vscDarkPlus}
+                                                    style={codeTheme}
                                                     customStyle={{
                                                         margin: 0,
                                                         borderRadius: 0,
@@ -1097,7 +1118,7 @@ Provide only the answer, nothing else.`;
                                                     }}
                                                     wrapLongLines={true}
                                                     showLineNumbers={true}
-                                                    lineNumberStyle={{ minWidth: '2.5em', paddingRight: '1.2em', color: 'rgba(255,255,255,0.2)', textAlign: 'right', fontSize: '11px' }}
+                                                    lineNumberStyle={{ minWidth: '2.5em', paddingRight: '1.2em', color: codeLineNumberColor, textAlign: 'right', fontSize: '11px' }}
                                                 >
                                                     {code}
                                                 </SyntaxHighlighter>
@@ -1114,17 +1135,17 @@ Provide only the answer, nothing else.`;
                                         rehypePlugins={[rehypeKatex]}
                                         components={{
                                             p: ({ node, ...props }: any) => <p className="mb-2 last:mb-0 whitespace-pre-wrap" {...props} />,
-                                            strong: ({ node, ...props }: any) => <strong className="font-bold text-white" {...props} />,
-                                            em: ({ node, ...props }: any) => <em className="italic text-slate-300" {...props} />,
+                                            strong: ({ node, ...props }: any) => <strong className={`font-bold ${isLightTheme ? 'text-slate-950' : 'text-white'}`} {...props} />,
+                                            em: ({ node, ...props }: any) => <em className={`italic ${isLightTheme ? 'text-slate-600' : 'text-slate-300'}`} {...props} />,
                                             ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mb-2 space-y-1" {...props} />,
                                             ol: ({ node, ...props }: any) => <ol className="list-decimal ml-4 mb-2 space-y-1" {...props} />,
                                             li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
-                                            h1: ({ node, ...props }: any) => <h1 className="text-lg font-bold text-white mb-2 mt-3" {...props} />,
-                                            h2: ({ node, ...props }: any) => <h2 className="text-base font-bold text-white mb-2 mt-3" {...props} />,
-                                            h3: ({ node, ...props }: any) => <h3 className="text-sm font-bold text-white mb-1 mt-2" {...props} />,
-                                            code: ({ node, ...props }: any) => <code className="bg-slate-700/50 rounded px-1 py-0.5 text-xs font-mono text-purple-200 whitespace-pre-wrap" {...props} />,
-                                            blockquote: ({ node, ...props }: any) => <blockquote className="border-l-2 border-purple-500/50 pl-3 italic text-slate-400 my-2" {...props} />,
-                                            a: ({ node, ...props }: any) => <a className="text-blue-400 hover:text-blue-300 hover:underline" target="_blank" rel="noopener noreferrer" {...props} />,
+                                            h1: ({ node, ...props }: any) => <h1 className={`text-lg font-bold mb-2 mt-3 ${isLightTheme ? 'text-slate-950' : 'text-white'}`} {...props} />,
+                                            h2: ({ node, ...props }: any) => <h2 className={`text-base font-bold mb-2 mt-3 ${isLightTheme ? 'text-slate-950' : 'text-white'}`} {...props} />,
+                                            h3: ({ node, ...props }: any) => <h3 className={`text-sm font-bold mb-1 mt-2 ${isLightTheme ? 'text-slate-900' : 'text-white'}`} {...props} />,
+                                            code: ({ node, ...props }: any) => <code className={`rounded px-1 py-0.5 text-xs font-mono whitespace-pre-wrap ${isLightTheme ? 'bg-black/[0.06] text-violet-700' : 'bg-slate-700/50 text-purple-200'}`} {...props} />,
+                                            blockquote: ({ node, ...props }: any) => <blockquote className={`border-l-2 pl-3 italic my-2 ${isLightTheme ? 'border-violet-500/30 text-slate-600' : 'border-purple-500/50 text-slate-400'}`} {...props} />,
+                                            a: ({ node, ...props }: any) => <a className={`hover:underline ${isLightTheme ? 'text-blue-600 hover:text-blue-700' : 'text-blue-400 hover:text-blue-300'}`} target="_blank" rel="noopener noreferrer" {...props} />,
                                         }}
                                     >
                                         {part}
@@ -1140,15 +1161,15 @@ Provide only the answer, nothing else.`;
         // Custom Styled Labels (Shorten, Recap, Follow-up) - also use Markdown for content
         if (msg.intent === 'shorten') {
             return (
-                <div className="bg-white/5 border border-white/10 rounded-lg p-3 my-1">
-                    <div className="flex items-center gap-2 mb-2 text-cyan-300 font-semibold text-xs uppercase tracking-wide">
+                <div className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`}>
+                    <div className={`flex items-center gap-2 mb-2 font-semibold text-xs uppercase tracking-wide ${isLightTheme ? 'text-cyan-700' : 'text-cyan-300'}`}>
                         <MessageSquare className="w-3.5 h-3.5" />
                         <span>Shortened</span>
                     </div>
-                    <div className="text-slate-200 text-[13px] leading-relaxed markdown-content">
+                    <div className={`text-[13px] leading-relaxed markdown-content ${isLightTheme ? 'text-slate-800' : 'text-slate-200'}`}>
                         <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={{
                             p: ({ node, ...props }: any) => <p className="mb-2 last:mb-0" {...props} />,
-                            strong: ({ node, ...props }: any) => <strong className="font-bold text-cyan-100" {...props} />,
+                            strong: ({ node, ...props }: any) => <strong className={`font-bold ${isLightTheme ? 'text-cyan-800' : 'text-cyan-100'}`} {...props} />,
                             ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mb-2" {...props} />,
                             li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
                         }}>
@@ -1161,15 +1182,15 @@ Provide only the answer, nothing else.`;
 
         if (msg.intent === 'recap') {
             return (
-                <div className="bg-white/5 border border-white/10 rounded-lg p-3 my-1">
-                    <div className="flex items-center gap-2 mb-2 text-indigo-300 font-semibold text-xs uppercase tracking-wide">
+                <div className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`}>
+                    <div className={`flex items-center gap-2 mb-2 font-semibold text-xs uppercase tracking-wide ${isLightTheme ? 'text-indigo-700' : 'text-indigo-300'}`}>
                         <RefreshCw className="w-3.5 h-3.5" />
                         <span>Recap</span>
                     </div>
-                    <div className="text-slate-200 text-[13px] leading-relaxed markdown-content">
+                    <div className={`text-[13px] leading-relaxed markdown-content ${isLightTheme ? 'text-slate-800' : 'text-slate-200'}`}>
                         <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={{
                             p: ({ node, ...props }: any) => <p className="mb-2 last:mb-0" {...props} />,
-                            strong: ({ node, ...props }: any) => <strong className="font-bold text-indigo-100" {...props} />,
+                            strong: ({ node, ...props }: any) => <strong className={`font-bold ${isLightTheme ? 'text-indigo-800' : 'text-indigo-100'}`} {...props} />,
                             ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mb-2" {...props} />,
                             li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
                         }}>
@@ -1182,15 +1203,15 @@ Provide only the answer, nothing else.`;
 
         if (msg.intent === 'follow_up_questions') {
             return (
-                <div className="bg-white/5 border border-white/10 rounded-lg p-3 my-1">
-                    <div className="flex items-center gap-2 mb-2 text-[#FFD60A] font-semibold text-xs uppercase tracking-wide">
+                <div className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`}>
+                    <div className={`flex items-center gap-2 mb-2 font-semibold text-xs uppercase tracking-wide ${isLightTheme ? 'text-amber-700' : 'text-[#FFD60A]'}`}>
                         <HelpCircle className="w-3.5 h-3.5" />
                         <span>Follow-Up Questions</span>
                     </div>
-                    <div className="text-slate-200 text-[13px] leading-relaxed markdown-content">
+                    <div className={`text-[13px] leading-relaxed markdown-content ${isLightTheme ? 'text-slate-800' : 'text-slate-200'}`}>
                         <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={{
                             p: ({ node, ...props }: any) => <p className="mb-2 last:mb-0" {...props} />,
-                            strong: ({ node, ...props }: any) => <strong className="font-bold text-[#FFF9C4]" {...props} />,
+                            strong: ({ node, ...props }: any) => <strong className={`font-bold ${isLightTheme ? 'text-amber-800' : 'text-[#FFF9C4]'}`} {...props} />,
                             ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mb-2" {...props} />,
                             li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
                         }}>
@@ -1206,11 +1227,11 @@ Provide only the answer, nothing else.`;
             const parts = msg.text.split(/(```[\s\S]*?(?:```|$))/g);
 
             return (
-                <div className="bg-white/5 border border-white/10 rounded-lg p-3 my-1">
+                <div className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`}>
                     <div className="flex items-center gap-2 mb-2 text-emerald-400 font-semibold text-xs uppercase tracking-wide">
                         <span>Say this</span>
                     </div>
-                    <div className="text-slate-100 text-[14px] leading-relaxed">
+                    <div className={`text-[14px] leading-relaxed ${isLightTheme ? 'text-slate-900' : 'text-slate-100'}`}>
                         {parts.map((part, i) => {
                             if (part.startsWith('```')) {
                                 // Robust matching: handles unclosed blocks for streaming (```...$)
@@ -1229,10 +1250,10 @@ Provide only the answer, nothing else.`;
                                     }
 
                                     return (
-                                        <div key={i} className="my-3 rounded-xl overflow-hidden border border-white/[0.08] shadow-lg bg-zinc-800/60 backdrop-blur-md">
+                                        <div key={i} className={`my-3 rounded-xl overflow-hidden border shadow-lg backdrop-blur-md ${codeBlockClass}`}>
                                             {/* Minimalist Apple Header */}
-                                            <div className="bg-white/[0.04] px-3 py-1.5 border-b border-white/[0.08]">
-                                                <span className="text-[10px] uppercase tracking-widest font-semibold text-white/40 font-mono">
+                                            <div className={`px-3 py-1.5 border-b ${codeHeaderClass}`}>
+                                                <span className={`text-[10px] uppercase tracking-widest font-semibold font-mono ${codeHeaderTextClass}`}>
                                                     {lang || 'CODE'}
                                                 </span>
                                             </div>
@@ -1240,7 +1261,7 @@ Provide only the answer, nothing else.`;
                                             <div className="bg-transparent">
                                                 <SyntaxHighlighter
                                                     language={lang}
-                                                    style={vscDarkPlus}
+                                                    style={codeTheme}
                                                     customStyle={{
                                                         margin: 0,
                                                         borderRadius: 0,
@@ -1252,7 +1273,7 @@ Provide only the answer, nothing else.`;
                                                     }}
                                                     wrapLongLines={true}
                                                     showLineNumbers={true}
-                                                    lineNumberStyle={{ minWidth: '2.5em', paddingRight: '1.2em', color: 'rgba(255,255,255,0.2)', textAlign: 'right', fontSize: '11px' }}
+                                                    lineNumberStyle={{ minWidth: '2.5em', paddingRight: '1.2em', color: codeLineNumberColor, textAlign: 'right', fontSize: '11px' }}
                                                 >
                                                     {code}
                                                 </SyntaxHighlighter>
@@ -1269,8 +1290,8 @@ Provide only the answer, nothing else.`;
                                         rehypePlugins={[rehypeKatex]}
                                         components={{
                                             p: ({ node, ...props }: any) => <p className="mb-2 last:mb-0" {...props} />,
-                                            strong: ({ node, ...props }: any) => <strong className="font-bold text-emerald-100" {...props} />,
-                                            em: ({ node, ...props }: any) => <em className="italic text-emerald-200/80" {...props} />,
+                                            strong: ({ node, ...props }: any) => <strong className={`font-bold ${isLightTheme ? 'text-emerald-700' : 'text-emerald-100'}`} {...props} />,
+                                            em: ({ node, ...props }: any) => <em className={`italic ${isLightTheme ? 'text-emerald-700/80' : 'text-emerald-200/80'}`} {...props} />,
                                             ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mb-2 space-y-1" {...props} />,
                                             ol: ({ node, ...props }: any) => <ol className="list-decimal ml-4 mb-2 space-y-1" {...props} />,
                                             li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
@@ -1300,7 +1321,7 @@ Provide only the answer, nothing else.`;
                         ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mb-2 space-y-1" {...props} />,
                         ol: ({ node, ...props }: any) => <ol className="list-decimal ml-4 mb-2 space-y-1" {...props} />,
                         li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
-                        code: ({ node, ...props }: any) => <code className="bg-black/20 rounded px-1 py-0.5 text-xs font-mono" {...props} />,
+                        code: ({ node, ...props }: any) => <code className={`rounded px-1 py-0.5 text-xs font-mono ${isLightTheme ? 'bg-black/[0.06] text-slate-800' : 'bg-black/20'}`} {...props} />,
                         a: ({ node, ...props }: any) => <a className="underline hover:opacity-80" target="_blank" rel="noopener noreferrer" {...props} />,
                     }}
                 >
@@ -1482,7 +1503,7 @@ Provide only the answer, nothing else.`;
     }, [isShortcutPressed]);
 
     return (
-        <div ref={contentRef} className="flex flex-col items-center w-fit mx-auto h-fit min-h-0 bg-transparent p-0 rounded-[24px] font-sans text-slate-200 gap-2">
+        <div ref={contentRef} className={`flex flex-col items-center w-fit mx-auto h-fit min-h-0 bg-transparent p-0 rounded-[24px] font-sans gap-2 ${isLightTheme ? 'text-slate-900' : 'text-slate-200'}`}>
 
             <AnimatePresence>
                 {isExpanded && (
@@ -1498,17 +1519,7 @@ Provide only the answer, nothing else.`;
                             onToggle={() => setIsExpanded(!isExpanded)}
                             onQuit={() => onEndMeeting ? onEndMeeting() : window.electronAPI.quitApp()}
                         />
-                        <div className="
-                    relative w-[600px] max-w-full
-                    bg-[#1E1E1E]/95
-                    backdrop-blur-2xl
-                    border border-white/10
-                    shadow-2xl shadow-black/40
-                    rounded-[24px] 
-                    overflow-hidden 
-                    flex flex-col
-                    draggable-area
-                ">
+                        <div className={`relative w-[600px] max-w-full backdrop-blur-2xl border shadow-2xl rounded-[24px] overflow-hidden flex flex-col draggable-area ${overlayPanelClass}`}>
 
 
 
@@ -1529,26 +1540,28 @@ Provide only the answer, nothing else.`;
                                             <div className={`
                       ${msg.role === 'user' ? 'max-w-[72.25%] px-[13.6px] py-[10.2px]' : 'max-w-[85%] px-4 py-3'} text-[14px] leading-relaxed relative group whitespace-pre-wrap
                       ${msg.role === 'user'
-                                                    ? 'bg-blue-600/20 backdrop-blur-md border border-blue-500/30 text-blue-100 rounded-[20px] rounded-tr-[4px] shadow-sm font-medium'
+                                                    ? (isLightTheme
+                                                        ? 'bg-blue-500/10 backdrop-blur-md border border-blue-500/20 text-blue-900 rounded-[20px] rounded-tr-[4px] shadow-sm font-medium'
+                                                        : 'bg-blue-600/20 backdrop-blur-md border border-blue-500/30 text-blue-100 rounded-[20px] rounded-tr-[4px] shadow-sm font-medium')
                                                     : ''
                                                 }
                       ${msg.role === 'system'
-                                                    ? 'text-slate-200 font-normal'
+                                                    ? (isLightTheme ? 'text-slate-800 font-normal' : 'text-slate-200 font-normal')
                                                     : ''
                                                 }
                       ${msg.role === 'interviewer'
-                                                    ? 'text-white/40 italic pl-0 text-[13px]'
+                                                    ? (isLightTheme ? 'text-slate-500 italic pl-0 text-[13px]' : 'text-white/40 italic pl-0 text-[13px]')
                                                     : ''
                                                 }
                     `}>
                                                 {msg.role === 'interviewer' && (
-                                                    <div className="flex items-center gap-1.5 mb-1 text-[10px] text-slate-600 font-medium uppercase tracking-wider">
+                                                    <div className={`flex items-center gap-1.5 mb-1 text-[10px] font-medium uppercase tracking-wider ${isLightTheme ? 'text-slate-500' : 'text-slate-600'}`}>
                                                         Interviewer
                                                         {msg.isStreaming && <span className="w-1 h-1 bg-green-500 rounded-full animate-pulse" />}
                                                     </div>
                                                 )}
                                                 {msg.role === 'user' && msg.hasScreenshot && (
-                                                    <div className="flex items-center gap-1 text-[10px] opacity-70 mb-1 border-b border-white/10 pb-1">
+                                                    <div className={`flex items-center gap-1 text-[10px] opacity-70 mb-1 border-b pb-1 ${isLightTheme ? 'border-black/10' : 'border-white/10'}`}>
                                                         <Image className="w-2.5 h-2.5" />
                                                         <span>Screenshot attached</span>
                                                     </div>
@@ -1556,7 +1569,7 @@ Provide only the answer, nothing else.`;
                                                 {msg.role === 'system' && !msg.isStreaming && (
                                                     <button
                                                         onClick={() => handleCopy(msg.text)}
-                                                        className="absolute top-2 right-2 p-1.5 bg-black/40 hover:bg-black/60 text-slate-400 hover:text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
+                                                        className={`absolute top-2 right-2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity ${isLightTheme ? 'bg-black/[0.06] hover:bg-black/[0.12] text-slate-500 hover:text-slate-900' : 'bg-black/40 hover:bg-black/60 text-slate-400 hover:text-white'}`}
                                                         title="Copy to clipboard"
                                                     >
                                                         <Copy className="w-3.5 h-3.5" />
@@ -1602,23 +1615,23 @@ Provide only the answer, nothing else.`;
 
                             {/* Quick Actions - Minimal & Clean */}
                             <div className={`flex flex-nowrap justify-center items-center gap-1.5 px-4 pb-3 overflow-x-hidden ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3'}`}>
-                                <button onClick={handleWhatToSay} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium text-slate-400 bg-white/5 border border-white/0 hover:text-slate-200 hover:bg-white/10 hover:border-white/5 transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0">
+                                <button onClick={handleWhatToSay} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}>
                                     <Pencil className="w-3 h-3 opacity-70" /> What to answer?
                                 </button>
-                                <button onClick={() => handleFollowUp('shorten')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium text-slate-400 bg-white/5 border border-white/0 hover:text-slate-200 hover:bg-white/10 hover:border-white/5 transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0">
+                                <button onClick={() => handleFollowUp('shorten')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}>
                                     <MessageSquare className="w-3 h-3 opacity-70" /> Shorten
                                 </button>
-                                <button onClick={handleRecap} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium text-slate-400 bg-white/5 border border-white/0 hover:text-slate-200 hover:bg-white/10 hover:border-white/5 transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0">
+                                <button onClick={handleRecap} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}>
                                     <RefreshCw className="w-3 h-3 opacity-70" /> Recap
                                 </button>
-                                <button onClick={handleFollowUpQuestions} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium text-slate-400 bg-white/5 border border-white/0 hover:text-slate-200 hover:bg-white/10 hover:border-white/5 transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0">
+                                <button onClick={handleFollowUpQuestions} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}>
                                     <HelpCircle className="w-3 h-3 opacity-70" /> Follow Up Question
                                 </button>
                                 <button
                                     onClick={handleAnswerNow}
                                     className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium transition-all active:scale-95 duration-200 interaction-base interaction-press min-w-[74px] whitespace-nowrap shrink-0 ${isManualRecording
                                         ? 'bg-red-500/10 text-red-400 ring-1 ring-red-500/20'
-                                        : 'bg-white/5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10'
+                                        : (isLightTheme ? 'bg-black/[0.04] text-slate-600 hover:text-emerald-600 hover:bg-emerald-500/10' : 'bg-white/5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10')
                                         }`}
                                 >
                                     {isManualRecording ? (
@@ -1636,14 +1649,14 @@ Provide only the answer, nothing else.`;
                             <div className="p-3 pt-0">
                                 {/* Latent Context Preview (Attached Screenshot) */}
                                 {attachedContext.length > 0 && (
-                                    <div className="mb-2 bg-white/5 border border-white/10 rounded-lg p-2 transition-all duration-200">
+                                    <div className={`mb-2 rounded-lg p-2 transition-all duration-200 border ${subtleSurfaceClass}`}>
                                         <div className="flex items-center justify-between mb-1.5">
-                                            <span className="text-[11px] font-medium text-white">
+                                            <span className={`text-[11px] font-medium ${isLightTheme ? 'text-slate-900' : 'text-white'}`}>
                                                 {attachedContext.length} screenshot{attachedContext.length > 1 ? 's' : ''} attached
                                             </span>
                                             <button
                                                 onClick={() => setAttachedContext([])}
-                                                className="p-1 hover:bg-white/10 rounded-full text-slate-400 hover:text-white transition-colors"
+                                                className={`p-1 rounded-full transition-colors ${isLightTheme ? 'hover:bg-black/[0.06] text-slate-500 hover:text-slate-900' : 'hover:bg-white/10 text-slate-400 hover:text-white'}`}
                                                 title="Remove all"
                                             >
                                                 <X className="w-3.5 h-3.5" />
@@ -1655,7 +1668,7 @@ Provide only the answer, nothing else.`;
                                                     <img
                                                         src={ctx.preview}
                                                         alt={`Screenshot ${idx + 1}`}
-                                                        className="h-10 w-auto rounded border border-white/20"
+                                                        className={`h-10 w-auto rounded border ${isLightTheme ? 'border-black/15' : 'border-white/20'}`}
                                                     />
                                                     <button
                                                         onClick={() => setAttachedContext(prev => prev.filter((_, i) => i !== idx))}
@@ -1667,7 +1680,7 @@ Provide only the answer, nothing else.`;
                                                 </div>
                                             ))}
                                         </div>
-                                        <span className="text-[10px] text-slate-400">Ask a question or click Answer</span>
+                                        <span className={`text-[10px] ${isLightTheme ? 'text-slate-500' : 'text-slate-400'}`}>Ask a question or click Answer</span>
                                     </div>
                                 )}
 
@@ -1679,33 +1692,18 @@ Provide only the answer, nothing else.`;
                                         onChange={(e) => setInputValue(e.target.value)}
                                         onKeyDown={(e) => e.key === 'Enter' && handleManualSubmit()}
 
-                                        className="
-                                    w-full 
-                                    bg-[#1E1E1E] 
-                                    hover:bg-[#252525] 
-                                    focus:bg-[#1E1E1E]
-                                    border border-white/5 
-                                    focus:border-white/10
-                                    focus:ring-1 focus:ring-white/10
-                                    rounded-xl 
-                                    pl-3 pr-10 py-2.5 
-                                    text-slate-200 
-                                    focus:outline-none 
-                                    transition-all duration-200 ease-sculpted
-                                    text-[13px] leading-relaxed
-                                    placeholder:text-slate-500
-                                "
+                                        className={`w-full border focus:ring-1 rounded-xl pl-3 pr-10 py-2.5 focus:outline-none transition-all duration-200 ease-sculpted text-[13px] leading-relaxed ${inputClass}`}
                                     />
 
                                     {/* Custom Rich Placeholder */}
                                     {!inputValue && (
-                                        <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none text-[13px] text-slate-400">
+                                        <div className={`absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none text-[13px] ${isLightTheme ? 'text-slate-500' : 'text-slate-400'}`}>
                                             <span>Ask anything on screen or conversation, or</span>
                                             <div className="flex items-center gap-1 opacity-80">
                                                 {(shortcuts.selectiveScreenshot || ['⌘', 'Shift', 'H']).map((key, i) => (
                                                     <React.Fragment key={i}>
                                                         {i > 0 && <span className="text-[10px]">+</span>}
-                                                        <kbd className="px-1.5 py-0.5 rounded border border-white/10 bg-white/5 text-[10px] font-sans min-w-[20px] text-center">{key}</kbd>
+                                                        <kbd className={`px-1.5 py-0.5 rounded border text-[10px] font-sans min-w-[20px] text-center ${isLightTheme ? 'border-black/10 bg-black/[0.04]' : 'border-white/10 bg-white/5'}`}>{key}</kbd>
                                                     </React.Fragment>
                                                 ))}
                                             </div>
@@ -1738,10 +1736,10 @@ Provide only the answer, nothing else.`;
                                             }}
                                             className={`
                                                 flex items-center gap-2 px-3 py-1.5 
-                                                border border-white/10 rounded-lg transition-colors 
+                                                border rounded-lg transition-colors 
                                                 text-xs font-medium w-[140px]
                                                 interaction-base interaction-press
-                                                bg-black/20 text-white/70 hover:bg-white/5 hover:text-white
+                                                ${controlSurfaceClass}
                                             `}
                                         >
                                             <span className="truncate min-w-0 flex-1">
@@ -1759,7 +1757,7 @@ Provide only the answer, nothing else.`;
                                             <ChevronDown size={14} className="shrink-0 transition-transform" />
                                         </button>
 
-                                        <div className="w-px h-3 bg-white/10 mx-1" />
+                                        <div className={`w-px h-3 mx-1 ${isLightTheme ? 'bg-black/10' : 'bg-white/10'}`} />
 
                                         {/* Settings Gear */}
                                         <div className="relative">
@@ -1790,7 +1788,9 @@ Provide only the answer, nothing else.`;
                                                 className={`
                                             w-7 h-7 flex items-center justify-center rounded-lg 
                                             interaction-base interaction-press
-                                            ${isSettingsOpen ? 'text-white bg-white/10' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'}
+                                            ${isSettingsOpen
+                                                    ? (isLightTheme ? 'text-slate-900 bg-black/[0.08]' : 'text-white bg-white/10')
+                                                    : (isLightTheme ? 'text-slate-500 hover:text-slate-900 hover:bg-black/[0.05]' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5')}
                                         `}
                                                 title="Settings"
                                             >
@@ -1803,12 +1803,12 @@ Provide only the answer, nothing else.`;
                                     <button
                                         onClick={handleManualSubmit}
                                         disabled={!inputValue.trim()}
-                                        className={`
+                                    className={`
                                     w-7 h-7 rounded-full flex items-center justify-center 
                                     interaction-base interaction-press
                                     ${inputValue.trim()
                                                 ? 'bg-[#007AFF] text-white shadow-lg shadow-blue-500/20 hover:bg-[#0071E3]'
-                                                : 'bg-white/5 text-white/10 cursor-not-allowed'
+                                                : (isLightTheme ? 'bg-black/[0.04] text-slate-400 cursor-not-allowed' : 'bg-white/5 text-white/10 cursor-not-allowed')
                                             }
                                 `}
                                     >
