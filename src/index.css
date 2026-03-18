@@ -61,6 +61,28 @@
   /* Specific legacy value */
 
   --overlay-bg: rgba(30, 30, 30, 0.65);
+
+  --overlay-opacity: 0.65;
+  --overlay-border: rgba(255, 255, 255, 0.1);
+  --overlay-border-soft: rgba(255, 255, 255, 0.08);
+  --overlay-panel-bg: rgb(30 30 30 / calc(0.12 + (var(--overlay-opacity) * 0.78)));
+  --overlay-pill-bg: rgb(30 30 30 / calc(0.08 + (var(--overlay-opacity) * 0.72)));
+  --overlay-transcript-bg: rgb(30 30 30 / calc(0.06 + (var(--overlay-opacity) * 0.42)));
+  --overlay-chip-bg: rgba(255, 255, 255, 0.035);
+  --overlay-chip-hover-bg: rgba(255, 255, 255, 0.07);
+  --overlay-input-bg: rgba(255, 255, 255, 0.04);
+  --overlay-input-hover-bg: rgba(255, 255, 255, 0.06);
+  --overlay-input-focus-bg: rgba(255, 255, 255, 0.08);
+  --overlay-control-bg: rgba(255, 255, 255, 0.04);
+  --overlay-control-hover-bg: rgba(255, 255, 255, 0.08);
+  --overlay-code-bg: rgba(255, 255, 255, 0.03);
+  --overlay-code-border: rgba(255, 255, 255, 0.08);
+  --overlay-code-header-bg: rgba(255, 255, 255, 0.05);
+  --overlay-inline-code-bg: rgba(255, 255, 255, 0.07);
+  --overlay-icon-bg: rgba(255, 255, 255, 0.04);
+  --overlay-icon-hover-bg: rgba(255, 255, 255, 0.08);
+  --overlay-panel-shadow: rgb(0 0 0 / calc(0.10 + (var(--overlay-opacity) * 0.28)));
+  --overlay-pill-shadow: rgb(0 0 0 / calc(0.06 + (var(--overlay-opacity) * 0.18)));
 }
 
 [data-theme='light'] {
@@ -114,6 +136,27 @@
   --overlay-bg: rgba(245, 245, 247, 0.85);
   /* Frosted matte glass */
 
+  --overlay-border: rgba(15, 23, 42, 0.08);
+  --overlay-border-soft: rgba(15, 23, 42, 0.06);
+  --overlay-panel-bg: rgb(243 244 246 / calc(0.42 + (var(--overlay-opacity) * 0.48)));
+  --overlay-pill-bg: rgb(243 244 246 / calc(0.36 + (var(--overlay-opacity) * 0.52)));
+  --overlay-transcript-bg: rgb(15 23 42 / calc(0.015 + (var(--overlay-opacity) * 0.045)));
+  --overlay-chip-bg: rgba(255, 255, 255, 0.14);
+  --overlay-chip-hover-bg: rgba(255, 255, 255, 0.22);
+  --overlay-input-bg: rgba(255, 255, 255, 0.16);
+  --overlay-input-hover-bg: rgba(255, 255, 255, 0.22);
+  --overlay-input-focus-bg: rgba(255, 255, 255, 0.28);
+  --overlay-control-bg: rgba(255, 255, 255, 0.16);
+  --overlay-control-hover-bg: rgba(255, 255, 255, 0.24);
+  --overlay-code-bg: rgba(255, 255, 255, 0.12);
+  --overlay-code-border: rgba(15, 23, 42, 0.08);
+  --overlay-code-header-bg: rgba(255, 255, 255, 0.18);
+  --overlay-inline-code-bg: rgba(255, 255, 255, 0.22);
+  --overlay-icon-bg: rgba(255, 255, 255, 0.14);
+  --overlay-icon-hover-bg: rgba(255, 255, 255, 0.24);
+  --overlay-panel-shadow: rgb(15 23 42 / calc(0.03 + (var(--overlay-opacity) * 0.12)));
+  --overlay-pill-shadow: rgb(15 23 42 / calc(0.025 + (var(--overlay-opacity) * 0.10)));
+
   .force-black-icon {
     filter: brightness(0) !important;
   }
@@ -166,6 +209,83 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
   position: relative;
   overflow: hidden;
+}
+
+.overlay-shell-surface {
+  background: var(--overlay-panel-bg);
+  border-color: var(--overlay-border);
+  box-shadow: 0 24px 48px var(--overlay-panel-shadow);
+}
+
+.overlay-pill-surface {
+  background: var(--overlay-pill-bg);
+  border-color: var(--overlay-border);
+  box-shadow: 0 12px 28px var(--overlay-pill-shadow);
+}
+
+.overlay-transcript-surface {
+  background: var(--overlay-transcript-bg);
+  border-bottom-color: var(--overlay-border-soft);
+}
+
+.overlay-subtle-surface {
+  background: var(--overlay-chip-bg);
+  border-color: var(--overlay-border-soft);
+}
+
+.overlay-code-block-surface {
+  background: var(--overlay-code-bg);
+  border-color: var(--overlay-code-border);
+}
+
+.overlay-code-header-surface {
+  background: var(--overlay-code-header-bg);
+  border-bottom-color: var(--overlay-code-border);
+}
+
+.overlay-chip-surface {
+  background: var(--overlay-chip-bg);
+  border-color: transparent;
+}
+
+.overlay-chip-surface:hover {
+  background: var(--overlay-chip-hover-bg);
+  border-color: var(--overlay-border-soft);
+}
+
+.overlay-input-surface {
+  background: var(--overlay-input-bg);
+  border-color: var(--overlay-border-soft);
+}
+
+.overlay-input-surface:hover {
+  background: var(--overlay-input-hover-bg);
+}
+
+.overlay-input-surface:focus {
+  background: var(--overlay-input-focus-bg);
+  border-color: var(--overlay-border);
+}
+
+.overlay-control-surface {
+  background: var(--overlay-control-bg);
+  border-color: var(--overlay-border);
+}
+
+.overlay-control-surface:hover {
+  background: var(--overlay-control-hover-bg);
+}
+
+.overlay-icon-surface {
+  background: var(--overlay-icon-bg);
+}
+
+.overlay-icon-surface-hover:hover {
+  background: var(--overlay-icon-hover-bg);
+}
+
+.overlay-inline-code-surface {
+  background: var(--overlay-inline-code-bg);
 }
 
 /* Interaction Utilities - Reusable */

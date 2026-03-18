@@ -275,7 +275,12 @@ const App: React.FC = () => {
         <div className="w-full relative bg-transparent">
           <QueryClientProvider client={queryClient}>
             <ToastProvider>
-              <div style={{ opacity: overlayOpacity, transition: 'opacity 75ms ease' }}>
+              <div
+                style={{
+                  ['--overlay-opacity' as '--overlay-opacity']: String(overlayOpacity),
+                  transition: 'background-color 75ms ease, border-color 75ms ease, box-shadow 75ms ease'
+                } as React.CSSProperties}
+              >
                 <NativelyInterface
                   onEndMeeting={handleEndMeeting}
                 />

@@ -116,21 +116,21 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting }) =
     const codeTheme = isLightTheme ? oneLight : vscDarkPlus;
     const codeLineNumberColor = isLightTheme ? 'rgba(15,23,42,0.35)' : 'rgba(255,255,255,0.2)';
     const overlayPanelClass = isLightTheme
-        ? 'bg-[#F3F4F6]/95 border-black/10 shadow-black/10 text-slate-900'
-        : 'bg-[#1E1E1E]/95 border-white/10 shadow-black/40 text-slate-200';
-    const subtleSurfaceClass = isLightTheme ? 'bg-black/[0.035] border-black/10' : 'bg-white/5 border-white/10';
-    const codeBlockClass = isLightTheme ? 'border-black/10 bg-white/75' : 'border-white/[0.08] bg-zinc-800/60';
-    const codeHeaderClass = isLightTheme ? 'bg-black/[0.03] border-black/10' : 'bg-white/[0.04] border-white/[0.08]';
+        ? 'text-slate-900'
+        : 'text-slate-200';
+    const subtleSurfaceClass = 'overlay-subtle-surface';
+    const codeBlockClass = 'overlay-code-block-surface';
+    const codeHeaderClass = 'overlay-code-header-surface';
     const codeHeaderTextClass = isLightTheme ? 'text-slate-500' : 'text-white/40';
     const quickActionClass = isLightTheme
-        ? 'text-slate-600 bg-black/[0.04] border-black/0 hover:text-slate-900 hover:bg-black/[0.06] hover:border-black/5'
-        : 'text-slate-400 bg-white/5 border-white/0 hover:text-slate-200 hover:bg-white/10 hover:border-white/5';
+        ? 'overlay-chip-surface text-slate-600 hover:text-slate-900'
+        : 'overlay-chip-surface text-slate-400 hover:text-slate-200';
     const inputClass = isLightTheme
-        ? 'bg-white/80 hover:bg-white focus:bg-white border-black/[0.06] focus:border-black/10 focus:ring-black/10 text-slate-900 placeholder:text-slate-400'
-        : 'bg-[#1E1E1E] hover:bg-[#252525] focus:bg-[#1E1E1E] border-white/5 focus:border-white/10 focus:ring-white/10 text-slate-200 placeholder:text-slate-500';
+        ? 'overlay-input-surface focus:ring-black/10 text-slate-900 placeholder:text-slate-400'
+        : 'overlay-input-surface focus:ring-white/10 text-slate-200 placeholder:text-slate-500';
     const controlSurfaceClass = isLightTheme
-        ? 'bg-black/[0.04] text-slate-700 border-black/10 hover:bg-black/[0.06] hover:text-slate-900'
-        : 'bg-black/20 text-white/70 border-white/10 hover:bg-white/5 hover:text-white';
+        ? 'overlay-control-surface text-slate-700 hover:text-slate-900'
+        : 'overlay-control-surface text-white/70 hover:text-white';
 
     useEffect(() => {
         // Load the persisted default model (not the runtime model)
@@ -1096,7 +1096,7 @@ Provide only the answer, nothing else.`;
                                     const lang = match[1] || 'python';
                                     const code = match[2].trim();
                                     return (
-                                        <div key={i} className={`my-3 rounded-xl overflow-hidden border shadow-lg backdrop-blur-md ${codeBlockClass}`}>
+                                        <div key={i} className={`my-3 rounded-xl overflow-hidden border shadow-lg ${codeBlockClass}`}>
                                             {/* Minimalist Apple Header */}
                                             <div className={`px-3 py-1.5 border-b ${codeHeaderClass}`}>
                                                 <span className={`text-[10px] uppercase tracking-widest font-semibold font-mono ${codeHeaderTextClass}`}>
@@ -1143,7 +1143,7 @@ Provide only the answer, nothing else.`;
                                             h1: ({ node, ...props }: any) => <h1 className={`text-lg font-bold mb-2 mt-3 ${isLightTheme ? 'text-slate-950' : 'text-white'}`} {...props} />,
                                             h2: ({ node, ...props }: any) => <h2 className={`text-base font-bold mb-2 mt-3 ${isLightTheme ? 'text-slate-950' : 'text-white'}`} {...props} />,
                                             h3: ({ node, ...props }: any) => <h3 className={`text-sm font-bold mb-1 mt-2 ${isLightTheme ? 'text-slate-900' : 'text-white'}`} {...props} />,
-                                            code: ({ node, ...props }: any) => <code className={`rounded px-1 py-0.5 text-xs font-mono whitespace-pre-wrap ${isLightTheme ? 'bg-black/[0.06] text-violet-700' : 'bg-slate-700/50 text-purple-200'}`} {...props} />,
+                                            code: ({ node, ...props }: any) => <code className={`overlay-inline-code-surface rounded px-1 py-0.5 text-xs font-mono whitespace-pre-wrap ${isLightTheme ? 'text-violet-700' : 'text-purple-200'}`} {...props} />,
                                             blockquote: ({ node, ...props }: any) => <blockquote className={`border-l-2 pl-3 italic my-2 ${isLightTheme ? 'border-violet-500/30 text-slate-600' : 'border-purple-500/50 text-slate-400'}`} {...props} />,
                                             a: ({ node, ...props }: any) => <a className={`hover:underline ${isLightTheme ? 'text-blue-600 hover:text-blue-700' : 'text-blue-400 hover:text-blue-300'}`} target="_blank" rel="noopener noreferrer" {...props} />,
                                         }}
@@ -1250,7 +1250,7 @@ Provide only the answer, nothing else.`;
                                     }
 
                                     return (
-                                        <div key={i} className={`my-3 rounded-xl overflow-hidden border shadow-lg backdrop-blur-md ${codeBlockClass}`}>
+                                        <div key={i} className={`my-3 rounded-xl overflow-hidden border shadow-lg ${codeBlockClass}`}>
                                             {/* Minimalist Apple Header */}
                                             <div className={`px-3 py-1.5 border-b ${codeHeaderClass}`}>
                                                 <span className={`text-[10px] uppercase tracking-widest font-semibold font-mono ${codeHeaderTextClass}`}>
@@ -1321,7 +1321,7 @@ Provide only the answer, nothing else.`;
                         ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mb-2 space-y-1" {...props} />,
                         ol: ({ node, ...props }: any) => <ol className="list-decimal ml-4 mb-2 space-y-1" {...props} />,
                         li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
-                        code: ({ node, ...props }: any) => <code className={`rounded px-1 py-0.5 text-xs font-mono ${isLightTheme ? 'bg-black/[0.06] text-slate-800' : 'bg-black/20'}`} {...props} />,
+                        code: ({ node, ...props }: any) => <code className={`overlay-inline-code-surface rounded px-1 py-0.5 text-xs font-mono ${isLightTheme ? 'text-slate-800' : ''}`} {...props} />,
                         a: ({ node, ...props }: any) => <a className="underline hover:opacity-80" target="_blank" rel="noopener noreferrer" {...props} />,
                     }}
                 >
@@ -1519,7 +1519,7 @@ Provide only the answer, nothing else.`;
                             onToggle={() => setIsExpanded(!isExpanded)}
                             onQuit={() => onEndMeeting ? onEndMeeting() : window.electronAPI.quitApp()}
                         />
-                        <div className={`relative w-[600px] max-w-full backdrop-blur-2xl border shadow-2xl rounded-[24px] overflow-hidden flex flex-col draggable-area ${overlayPanelClass}`}>
+                        <div className={`relative w-[600px] max-w-full backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col draggable-area overlay-shell-surface ${overlayPanelClass}`}>
 
 
 
@@ -1569,7 +1569,7 @@ Provide only the answer, nothing else.`;
                                                 {msg.role === 'system' && !msg.isStreaming && (
                                                     <button
                                                         onClick={() => handleCopy(msg.text)}
-                                                        className={`absolute top-2 right-2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity ${isLightTheme ? 'bg-black/[0.06] hover:bg-black/[0.12] text-slate-500 hover:text-slate-900' : 'bg-black/40 hover:bg-black/60 text-slate-400 hover:text-white'}`}
+                                                        className={`absolute top-2 right-2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity overlay-icon-surface overlay-icon-surface-hover ${isLightTheme ? 'text-slate-500 hover:text-slate-900' : 'text-slate-400 hover:text-white'}`}
                                                         title="Copy to clipboard"
                                                     >
                                                         <Copy className="w-3.5 h-3.5" />
@@ -1656,7 +1656,7 @@ Provide only the answer, nothing else.`;
                                             </span>
                                             <button
                                                 onClick={() => setAttachedContext([])}
-                                                className={`p-1 rounded-full transition-colors ${isLightTheme ? 'hover:bg-black/[0.06] text-slate-500 hover:text-slate-900' : 'hover:bg-white/10 text-slate-400 hover:text-white'}`}
+                                                className={`p-1 rounded-full transition-colors overlay-icon-surface overlay-icon-surface-hover ${isLightTheme ? 'text-slate-500 hover:text-slate-900' : 'text-slate-400 hover:text-white'}`}
                                                 title="Remove all"
                                             >
                                                 <X className="w-3.5 h-3.5" />
@@ -1703,7 +1703,7 @@ Provide only the answer, nothing else.`;
                                                 {(shortcuts.selectiveScreenshot || ['⌘', 'Shift', 'H']).map((key, i) => (
                                                     <React.Fragment key={i}>
                                                         {i > 0 && <span className="text-[10px]">+</span>}
-                                                        <kbd className={`px-1.5 py-0.5 rounded border text-[10px] font-sans min-w-[20px] text-center ${isLightTheme ? 'border-black/10 bg-black/[0.04]' : 'border-white/10 bg-white/5'}`}>{key}</kbd>
+                                                        <kbd className={`px-1.5 py-0.5 rounded border text-[10px] font-sans min-w-[20px] text-center overlay-control-surface ${isLightTheme ? 'text-slate-600' : 'text-slate-300'}`}>{key}</kbd>
                                                     </React.Fragment>
                                                 ))}
                                             </div>
@@ -1789,8 +1789,8 @@ Provide only the answer, nothing else.`;
                                             w-7 h-7 flex items-center justify-center rounded-lg 
                                             interaction-base interaction-press
                                             ${isSettingsOpen
-                                                    ? (isLightTheme ? 'text-slate-900 bg-black/[0.08]' : 'text-white bg-white/10')
-                                                    : (isLightTheme ? 'text-slate-500 hover:text-slate-900 hover:bg-black/[0.05]' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5')}
+                                                    ? (isLightTheme ? 'overlay-icon-surface overlay-icon-surface-hover text-slate-900' : 'overlay-icon-surface overlay-icon-surface-hover text-white')
+                                                    : (isLightTheme ? 'overlay-icon-surface overlay-icon-surface-hover text-slate-500 hover:text-slate-900' : 'overlay-icon-surface overlay-icon-surface-hover text-slate-500 hover:text-slate-300')}
                                         `}
                                                 title="Settings"
                                             >
@@ -1808,7 +1808,7 @@ Provide only the answer, nothing else.`;
                                     interaction-base interaction-press
                                     ${inputValue.trim()
                                                 ? 'bg-[#007AFF] text-white shadow-lg shadow-blue-500/20 hover:bg-[#0071E3]'
-                                                : (isLightTheme ? 'bg-black/[0.04] text-slate-400 cursor-not-allowed' : 'bg-white/5 text-white/10 cursor-not-allowed')
+                                                : (isLightTheme ? 'overlay-icon-surface text-slate-400 cursor-not-allowed' : 'overlay-icon-surface text-white/10 cursor-not-allowed')
                                             }
                                 `}
                                     >
