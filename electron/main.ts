@@ -197,9 +197,34 @@ export class AppState {
 
     keybindManager.onShortcutTriggered(async (actionId) => {
       console.log(`[Main] Global shortcut triggered: ${actionId}`);
+      const overlayWindow = this.windowHelper.getOverlayWindow();
+      const shortcutTargetWindow = actionId.startsWith('chat:')
+        ? overlayWindow
+        : this.getMainWindow();
+
       try {
+        if (shortcutTargetWindow && !shortcutTargetWindow.isDestroyed()) {
+          shortcutTargetWindow.webContents.send('shortcut-action', actionId);
+        }
+
         if (actionId === 'general:toggle-visibility') {
           this.toggleMainWindow();
+        } else if (actionId === 'chat:whatToAnswer') {
+          await this.intelligenceManager.runWhatShouldISay(undefined, 0.8);
+        } else if (actionId === 'chat:shorten') {
+          await this.intelligenceManager.runFollowUp('shorten');
+        } else if (actionId === 'chat:followUp') {
+          await this.intelligenceManager.runFollowUpQuestions();
+        } else if (actionId === 'chat:recap') {
+          await this.intelligenceManager.runRecap();
+        } else if (actionId === 'window:move-up') {
+          this.moveWindowUp();
+        } else if (actionId === 'window:move-down') {
+          this.moveWindowDown();
+        } else if (actionId === 'window:move-left') {
+          this.moveWindowLeft();
+        } else if (actionId === 'window:move-right') {
+          this.moveWindowRight();
         } else if (actionId === 'general:take-screenshot') {
           const screenshotPath = await this.takeScreenshot();
           const preview = await this.getImagePreview(screenshotPath);
@@ -225,6 +250,12 @@ export class AppState {
       } catch (e: any) {
         if (e.message !== "Selection cancelled") {
           console.error(`[Main] Error handling global shortcut ${actionId}:`, e);
+          if (shortcutTargetWindow && !shortcutTargetWindow.isDestroyed() && actionId.startsWith('chat:')) {
+            shortcutTargetWindow.webContents.send('intelligence-error', {
+              error: e.message || 'Shortcut action failed',
+              mode: actionId
+            });
+          }
         }
       }
     });
@@ -1475,7 +1506,9 @@ export class AppState {
     if (!this.tray) return;
 
     const keybindManager = KeybindManager.getInstance();
-    const screenshotAccel = keybindManager.getKeybind('general:take-screenshot') || 'CommandOrControl+H';
+    const screenshotConfig = keybindManager.getKeybindConfig('general:take-screenshot');
+    const toggleConfig = keybindManager.getKeybindConfig('general:toggle-visibility');
+    const screenshotAccel = screenshotConfig?.accelerator || 'CommandOrControl+H';
 
     console.log('[Main] updateTrayMenu called. Screenshot Accelerator:', screenshotAccel);
 
@@ -1484,19 +1517,18 @@ export class AppState {
 
     // Helper to format accelerator for display (e.g. CommandOrControl+H -> Cmd+H)
     const formatAccel = (accel: string) => {
+      const commandOrControlLabel = process.platform === 'darwin' ? 'Cmd' : 'Ctrl';
+
       return accel
-        .replace('CommandOrControl', 'Cmd')
+        .replace('CommandOrControl', commandOrControlLabel)
         .replace('Command', 'Cmd')
         .replace('Control', 'Ctrl')
         .replace('OrControl', '') // Cleanup just in case
         .replace(/\+/g, '+');
     };
 
-    const displayScreenshot = formatAccel(screenshotAccel);
-    // We can also get the toggle visibility shortcut if desired
-    const toggleKb = keybindManager.getKeybind('general:toggle-visibility');
-    const toggleAccel = toggleKb || 'CommandOrControl+B';
-    const displayToggle = formatAccel(toggleAccel);
+    const displayScreenshot = screenshotConfig?.enabled ? formatAccel(screenshotAccel) : null;
+    const displayToggle = toggleConfig?.enabled ? formatAccel(toggleConfig.accelerator) : null;
 
     const contextMenu = Menu.buildFromTemplate([
       {
@@ -1506,7 +1538,7 @@ export class AppState {
         }
       },
       {
-        label: `Toggle Window (${displayToggle})`,
+        label: displayToggle ? `Toggle Window (${displayToggle})` : 'Toggle Window',
         click: () => {
           this.toggleMainWindow()
         }
@@ -1515,8 +1547,7 @@ export class AppState {
         type: 'separator'
       },
       {
-        label: `Take Screenshot (${displayScreenshot})`,
-        accelerator: screenshotAccel,
+        label: displayScreenshot ? `Take Screenshot (${displayScreenshot})` : 'Take Screenshot',
         click: async () => {
           try {
             const screenshotPath = await this.takeScreenshot()

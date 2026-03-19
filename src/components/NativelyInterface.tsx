@@ -59,7 +59,7 @@ interface NativelyInterfaceProps {
 const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting }) => {
     const [isExpanded, setIsExpanded] = useState(true);
     const [inputValue, setInputValue] = useState('');
-    const { shortcuts, isShortcutPressed } = useShortcuts();
+    const { shortcuts } = useShortcuts();
     const [messages, setMessages] = useState<Message[]>([]);
     const [isConnected, setIsConnected] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -1309,12 +1309,8 @@ Provide only the answer, nothing else.`;
             </div>
         );
     };
-
-
-    // Keyboard Shortcuts
-
-    // Keyboard Shortcuts
-    // We use a ref to hold the latest handlers to avoid re-binding the event listener on every render
+    // Global shortcut actions are dispatched from the main process so the overlay can respond
+    // without taking focus away from the active browser window.
     const handlersRef = useRef({
         handleWhatToSay,
         handleFollowUp,
@@ -1332,54 +1328,7 @@ Provide only the answer, nothing else.`;
         handleAnswerNow
     };
 
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            const { handleWhatToSay, handleFollowUp, handleFollowUpQuestions, handleRecap, handleAnswerNow } = handlersRef.current;
-
-            // Chat Shortcuts (Scope: Local to Chat/Overlay usually, but we allow them here if focused)
-            if (isShortcutPressed(e, 'whatToAnswer')) {
-                e.preventDefault();
-                handleWhatToSay();
-            } else if (isShortcutPressed(e, 'shorten')) {
-                e.preventDefault();
-                handleFollowUp('shorten');
-            } else if (isShortcutPressed(e, 'followUp')) {
-                e.preventDefault();
-                handleFollowUpQuestions();
-            } else if (isShortcutPressed(e, 'recap')) {
-                e.preventDefault();
-                handleRecap();
-            } else if (isShortcutPressed(e, 'answer')) {
-                e.preventDefault();
-                handleAnswerNow();
-            } else if (isShortcutPressed(e, 'scrollUp')) {
-                e.preventDefault();
-                scrollContainerRef.current?.scrollBy({ top: -100, behavior: 'smooth' });
-            } else if (isShortcutPressed(e, 'scrollDown')) {
-                e.preventDefault();
-                scrollContainerRef.current?.scrollBy({ top: 100, behavior: 'smooth' });
-            } else if (isShortcutPressed(e, 'moveWindowUp') || isShortcutPressed(e, 'moveWindowDown')) {
-                // Prevent default scrolling when moving window
-                e.preventDefault();
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isShortcutPressed]);
-
-    // General Global Shortcuts (Rebindable)
-    // We listen here to handle them when the window is focused (renderer side)
-    // Global shortcuts (when window blurred) are handled by Main process -> GlobalShortcuts
-    // But Main process events might not reach here if we don't listen, or we want unified handling.
-    // Actually, KeybindManager registers global shortcuts. If they are registered as global, 
-    // Electron might consume them before they reach here?
-    // 'toggle-app' is Global.
-    // 'toggle-visibility' is NOT Global in default config (isGlobal: false), so it depends on focus.
-    // So we MUST listen for them here.
-
     const generalHandlersRef = useRef({
-        toggleVisibility: () => window.electronAPI.toggleWindow(),
         processScreenshots: handleWhatToSay,
         resetCancel: async () => {
             if (isProcessing) {
@@ -1389,33 +1338,12 @@ Provide only the answer, nothing else.`;
                 setMessages([]);
                 setAttachedContext([]);
                 setInputValue('');
-            }
-        },
-        takeScreenshot: async () => {
-            try {
-                const data = await window.electronAPI.takeScreenshot();
-                if (data && data.path) {
-                    handleScreenshotAttach(data as { path: string; preview: string });
-                }
-            } catch (err) {
-                console.error("Error triggering screenshot:", err);
-            }
-        },
-        selectiveScreenshot: async () => {
-            try {
-                const data = await window.electronAPI.takeSelectiveScreenshot();
-                if (data && !data.cancelled && data.path) {
-                    handleScreenshotAttach(data as { path: string; preview: string });
-                }
-            } catch (err) {
-                console.error("Error triggering selective screenshot:", err);
             }
         }
     });
 
     // Update ref
     generalHandlersRef.current = {
-        toggleVisibility: () => window.electronAPI.toggleWindow(),
         processScreenshots: handleWhatToSay,
         resetCancel: async () => {
             if (isProcessing) {
@@ -1426,60 +1354,44 @@ Provide only the answer, nothing else.`;
                 setAttachedContext([]);
                 setInputValue('');
             }
-        },
-        takeScreenshot: async () => {
-            try {
-                const data = await window.electronAPI.takeScreenshot();
-                if (data && data.path) {
-                    handleScreenshotAttach(data as { path: string; preview: string });
-                }
-            } catch (err) {
-                console.error("Error triggering screenshot:", err);
-            }
-        },
-        selectiveScreenshot: async () => {
-            try {
-                const data = await window.electronAPI.takeSelectiveScreenshot();
-                if (data && !data.cancelled && data.path) {
-                    handleScreenshotAttach(data as { path: string; preview: string });
-                }
-            } catch (err) {
-                console.error("Error triggering selective screenshot:", err);
-            }
         }
     };
 
     useEffect(() => {
-        const handleGeneralKeyDown = (e: KeyboardEvent) => {
-            const handlers = generalHandlersRef.current;
-            const target = e.target as HTMLElement;
-            const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+        if (!window.electronAPI?.onShortcutAction) return;
 
-            if (isShortcutPressed(e, 'toggleVisibility')) {
-                // Always allow toggling visibility
-                e.preventDefault();
-                handlers.toggleVisibility();
-            } else if (isShortcutPressed(e, 'processScreenshots')) {
-                if (!isInput) {
-                    e.preventDefault();
-                    handlers.processScreenshots();
-                }
-                // If input focused, let default behavior (Enter) happen or handle it via onKeyDown in Input
-            } else if (isShortcutPressed(e, 'resetCancel')) {
-                e.preventDefault();
-                handlers.resetCancel();
-            } else if (isShortcutPressed(e, 'takeScreenshot')) {
-                e.preventDefault();
-                handlers.takeScreenshot();
-            } else if (isShortcutPressed(e, 'selectiveScreenshot')) {
-                e.preventDefault();
-                handlers.selectiveScreenshot();
+        const unsubscribe = window.electronAPI.onShortcutAction((actionId) => {
+            const { handleAnswerNow } = handlersRef.current;
+            const generalHandlers = generalHandlersRef.current;
+
+            if (actionId === 'chat:whatToAnswer') {
+                setIsExpanded(true);
+                setIsProcessing(true);
+            } else if (actionId === 'chat:shorten') {
+                setIsExpanded(true);
+                setIsProcessing(true);
+            } else if (actionId === 'chat:followUp') {
+                setIsExpanded(true);
+                setIsProcessing(true);
+            } else if (actionId === 'chat:recap') {
+                setIsExpanded(true);
+                setIsProcessing(true);
+            } else if (actionId === 'chat:answer') {
+                handleAnswerNow();
+            } else if (actionId === 'chat:scrollUp') {
+                scrollContainerRef.current?.scrollBy({ top: -100, behavior: 'smooth' });
+            } else if (actionId === 'chat:scrollDown') {
+                scrollContainerRef.current?.scrollBy({ top: 100, behavior: 'smooth' });
+            } else if (actionId === 'general:process-screenshots') {
+                setIsExpanded(true);
+                generalHandlers.processScreenshots();
+            } else if (actionId === 'general:reset-cancel') {
+                generalHandlers.resetCancel();
             }
-        };
+        });
 
-        window.addEventListener('keydown', handleGeneralKeyDown);
-        return () => window.removeEventListener('keydown', handleGeneralKeyDown);
-    }, [isShortcutPressed]);
+        return unsubscribe;
+    }, []);
 
     return (
         <div ref={contentRef} className="flex flex-col items-center w-fit mx-auto h-fit min-h-0 bg-transparent p-0 rounded-[24px] font-sans text-slate-200 gap-2">
