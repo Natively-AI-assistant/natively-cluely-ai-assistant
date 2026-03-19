@@ -7,31 +7,68 @@ export interface KeybindConfig {
     label: string;
     accelerator: string; // Electron Accelerator string
     isGlobal: boolean;   // Registered with globalShortcut
+    enabled: boolean;
+    defaultEnabled: boolean;
     defaultAccelerator: string;
 }
 
+const createKeybind = (
+    id: string,
+    label: string,
+    accelerator: string,
+    defaultEnabled: boolean,
+    isGlobal: boolean = true
+): KeybindConfig => ({
+    id,
+    label,
+    accelerator,
+    isGlobal,
+    enabled: defaultEnabled,
+    defaultEnabled,
+    defaultAccelerator: accelerator
+});
+
+const AUTO_MIGRATED_ACCELERATORS: Partial<Record<string, string[]>> = {
+    'general:toggle-visibility': ['CommandOrControl+B', 'Control+Alt+Shift+B'],
+    'general:process-screenshots': ['CommandOrControl+Enter', 'Control+Alt+Enter'],
+    'general:reset-cancel': ['CommandOrControl+R', 'Control+Alt+Shift+R'],
+    'general:take-screenshot': ['CommandOrControl+H', 'Control+Alt+Shift+C'],
+    'general:selective-screenshot': ['CommandOrControl+Shift+H', 'Control+Alt+Shift+X'],
+    'chat:whatToAnswer': ['CommandOrControl+1', 'Control+Alt+Shift+Q', 'Control+Alt+Q'],
+    'chat:shorten': ['CommandOrControl+2', 'Control+Alt+Shift+1'],
+    'chat:followUp': ['CommandOrControl+3', 'Control+Alt+Shift+2'],
+    'chat:recap': ['CommandOrControl+4', 'Control+Alt+Shift+3'],
+    'chat:answer': ['CommandOrControl+5', 'Control+Alt+Shift+4'],
+    'chat:scrollUp': ['CommandOrControl+Up'],
+    'chat:scrollDown': ['CommandOrControl+Down'],
+    'window:move-up': ['CommandOrControl+Up', 'Control+Alt+Shift+W'],
+    'window:move-down': ['CommandOrControl+Down', 'Control+Alt+Shift+S'],
+    'window:move-left': ['CommandOrControl+Left', 'Control+Alt+Shift+A'],
+    'window:move-right': ['CommandOrControl+Right', 'Control+Alt+Shift+D']
+};
+
 export const DEFAULT_KEYBINDS: KeybindConfig[] = [
     // General
-    { id: 'general:toggle-visibility', label: 'Toggle Visibility', accelerator: 'CommandOrControl+B', isGlobal: true, defaultAccelerator: 'CommandOrControl+B' },
-    { id: 'general:process-screenshots', label: 'Process Screenshots', accelerator: 'CommandOrControl+Enter', isGlobal: false, defaultAccelerator: 'CommandOrControl+Enter' },
-    { id: 'general:reset-cancel', label: 'Reset / Cancel', accelerator: 'CommandOrControl+R', isGlobal: false, defaultAccelerator: 'CommandOrControl+R' },
-    { id: 'general:take-screenshot', label: 'Take Screenshot', accelerator: 'CommandOrControl+H', isGlobal: true, defaultAccelerator: 'CommandOrControl+H' },
-    { id: 'general:selective-screenshot', label: 'Selective Screenshot', accelerator: 'CommandOrControl+Shift+H', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+H' },
+    createKeybind('general:toggle-visibility', 'Toggle Visibility', 'Control+Alt+B', true),
+    createKeybind('general:process-screenshots', 'Process Screenshots', 'CommandOrControl+Shift+Enter', false),
+    createKeybind('general:reset-cancel', 'Reset / Cancel', 'Control+Alt+R', false),
+    createKeybind('general:take-screenshot', 'Take Screenshot', 'Control+Alt+C', true),
+    createKeybind('general:selective-screenshot', 'Selective Screenshot', 'Control+Alt+X', true),
 
-    // Chat - Window Local (Handled via Menu or Renderer logic, but centralized here)
-    { id: 'chat:whatToAnswer', label: 'What to Answer', accelerator: 'CommandOrControl+1', isGlobal: false, defaultAccelerator: 'CommandOrControl+1' },
-    { id: 'chat:shorten', label: 'Shorten', accelerator: 'CommandOrControl+2', isGlobal: false, defaultAccelerator: 'CommandOrControl+2' },
-    { id: 'chat:followUp', label: 'Follow Up', accelerator: 'CommandOrControl+3', isGlobal: false, defaultAccelerator: 'CommandOrControl+3' },
-    { id: 'chat:recap', label: 'Recap', accelerator: 'CommandOrControl+4', isGlobal: false, defaultAccelerator: 'CommandOrControl+4' },
-    { id: 'chat:answer', label: 'Answer / Record', accelerator: 'CommandOrControl+5', isGlobal: false, defaultAccelerator: 'CommandOrControl+5' },
-    { id: 'chat:scrollUp', label: 'Scroll Up', accelerator: 'CommandOrControl+Up', isGlobal: false, defaultAccelerator: 'CommandOrControl+Up' },
-    { id: 'chat:scrollDown', label: 'Scroll Down', accelerator: 'CommandOrControl+Down', isGlobal: false, defaultAccelerator: 'CommandOrControl+Down' },
+    // Chat
+    createKeybind('chat:whatToAnswer', 'What to Answer', 'CommandOrControl+Enter', true),
+    createKeybind('chat:shorten', 'Shorten', 'Control+Alt+1', false),
+    createKeybind('chat:followUp', 'Follow Up', 'Control+Alt+2', false),
+    createKeybind('chat:recap', 'Recap', 'Control+Alt+3', false),
+    createKeybind('chat:answer', 'Answer / Record', 'Control+Alt+4', false),
+    createKeybind('chat:scrollUp', 'Scroll Up', 'Control+Alt+I', false),
+    createKeybind('chat:scrollDown', 'Scroll Down', 'Control+Alt+K', false),
 
     // Window Movement
-    { id: 'window:move-up', label: 'Move Window Up', accelerator: 'CommandOrControl+Up', isGlobal: false, defaultAccelerator: 'CommandOrControl+Up' },
-    { id: 'window:move-down', label: 'Move Window Down', accelerator: 'CommandOrControl+Down', isGlobal: false, defaultAccelerator: 'CommandOrControl+Down' },
-    { id: 'window:move-left', label: 'Move Window Left', accelerator: 'CommandOrControl+Left', isGlobal: false, defaultAccelerator: 'CommandOrControl+Left' },
-    { id: 'window:move-right', label: 'Move Window Right', accelerator: 'CommandOrControl+Right', isGlobal: false, defaultAccelerator: 'CommandOrControl+Right' },
+    createKeybind('window:move-up', 'Move Window Up', 'Control+Alt+W', true),
+    createKeybind('window:move-down', 'Move Window Down', 'Control+Alt+S', true),
+    createKeybind('window:move-left', 'Move Window Left', 'Control+Alt+A', true),
+    createKeybind('window:move-right', 'Move Window Right', 'Control+Alt+D', true),
 ];
 
 export class KeybindManager {
@@ -45,6 +82,52 @@ export class KeybindManager {
     private constructor() {
         this.filePath = path.join(app.getPath('userData'), 'keybinds.json');
         this.load();
+    }
+
+    private normalizeAccelerator(accelerator: string): string {
+        return accelerator.trim().toLowerCase();
+    }
+
+    private resolveEnabledConflicts(preferredId?: string) {
+        if (preferredId) {
+            const preferred = this.keybinds.get(preferredId);
+            if (!preferred?.enabled || !preferred.accelerator.trim()) {
+                return;
+            }
+
+            const normalizedPreferred = this.normalizeAccelerator(preferred.accelerator);
+            this.keybinds.forEach((kb, id) => {
+                if (
+                    id !== preferredId &&
+                    kb.enabled &&
+                    kb.accelerator.trim() !== '' &&
+                    this.normalizeAccelerator(kb.accelerator) === normalizedPreferred
+                ) {
+                    kb.enabled = false;
+                    this.keybinds.set(id, kb);
+                    console.warn(`[KeybindManager] Disabled conflicting shortcut ${id} in favor of ${preferredId}`);
+                }
+            });
+            return;
+        }
+
+        const seen = new Map<string, string>();
+        this.keybinds.forEach((kb, id) => {
+            if (!kb.enabled || kb.accelerator.trim() === '') {
+                return;
+            }
+
+            const normalized = this.normalizeAccelerator(kb.accelerator);
+            const owner = seen.get(normalized);
+            if (!owner) {
+                seen.set(normalized, id);
+                return;
+            }
+
+            kb.enabled = false;
+            this.keybinds.set(id, kb);
+            console.warn(`[KeybindManager] Disabled conflicting shortcut ${id} while loading settings; ${owner} keeps ${kb.accelerator}`);
+        });
     }
 
     public onUpdate(callback: () => void) {
@@ -80,11 +163,23 @@ export class KeybindManager {
                 for (const fileKb of data) {
                     if (this.keybinds.has(fileKb.id)) {
                         const current = this.keybinds.get(fileKb.id)!;
-                        current.accelerator = fileKb.accelerator;
+                        if (typeof fileKb.accelerator === 'string') {
+                            const legacyDefaults = AUTO_MIGRATED_ACCELERATORS[fileKb.id] || [];
+                            const shouldPreserveNewDefault =
+                                legacyDefaults.includes(fileKb.accelerator);
+
+                            if (!shouldPreserveNewDefault) {
+                                current.accelerator = fileKb.accelerator;
+                            }
+                        }
+                        if (typeof fileKb.enabled === 'boolean') {
+                            current.enabled = fileKb.enabled;
+                        }
                         this.keybinds.set(fileKb.id, current);
                     }
                 }
             }
+            this.resolveEnabledConflicts();
         } catch (error) {
             console.error('[KeybindManager] Failed to load keybinds:', error);
         }
@@ -94,7 +189,8 @@ export class KeybindManager {
         try {
             const data = Array.from(this.keybinds.values()).map(kb => ({
                 id: kb.id,
-                accelerator: kb.accelerator
+                accelerator: kb.accelerator,
+                enabled: kb.enabled
             }));
             const tmpPath = this.filePath + '.tmp';
             fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2));
@@ -108,6 +204,14 @@ export class KeybindManager {
         return this.keybinds.get(id)?.accelerator;
     }
 
+    public getKeybindConfig(id: string): KeybindConfig | undefined {
+        return this.keybinds.get(id);
+    }
+
+    public isKeybindEnabled(id: string): boolean {
+        return this.keybinds.get(id)?.enabled ?? false;
+    }
+
     public getAllKeybinds(): KeybindConfig[] {
         return Array.from(this.keybinds.values());
     }
@@ -118,15 +222,33 @@ export class KeybindManager {
         const kb = this.keybinds.get(id)!;
         kb.accelerator = accelerator;
         this.keybinds.set(id, kb);
+        this.resolveEnabledConflicts(id);
 
         this.save();
-        this.registerGlobalShortcuts(); // Re-register if it was a global one
+        this.registerGlobalShortcuts();
+        this.broadcastUpdate();
+    }
+
+    public setKeybindEnabled(id: string, enabled: boolean) {
+        if (!this.keybinds.has(id)) return;
+
+        const kb = this.keybinds.get(id)!;
+        kb.enabled = enabled;
+        this.keybinds.set(id, kb);
+
+        if (enabled) {
+            this.resolveEnabledConflicts(id);
+        }
+
+        this.save();
+        this.registerGlobalShortcuts();
         this.broadcastUpdate();
     }
 
     public resetKeybinds() {
         this.keybinds.clear();
         DEFAULT_KEYBINDS.forEach(kb => this.keybinds.set(kb.id, { ...kb }));
+        this.resolveEnabledConflicts();
         this.save();
         this.registerGlobalShortcuts();
         this.broadcastUpdate();
@@ -137,11 +259,14 @@ export class KeybindManager {
 
         // Register global shortcuts
         this.keybinds.forEach(kb => {
-            if (kb.isGlobal && kb.accelerator && kb.accelerator.trim() !== '') {
+            if (kb.isGlobal && kb.enabled && kb.accelerator && kb.accelerator.trim() !== '') {
                 try {
                     globalShortcut.register(kb.accelerator, () => {
                         this.onShortcutTriggeredCallbacks.forEach(cb => cb(kb.id));
                     });
+                    if (!globalShortcut.isRegistered(kb.accelerator)) {
+                        console.error(`[KeybindManager] Failed to register global shortcut ${kb.accelerator}`);
+                    }
                 } catch (e) {
                     console.error(`[KeybindManager] Failed to register global shortcut ${kb.accelerator}:`, e);
                 }
@@ -152,9 +277,6 @@ export class KeybindManager {
     }
 
     public updateMenu() {
-        const toggleKb = this.keybinds.get('general:toggle-visibility');
-        const toggleAccelerator = toggleKb ? toggleKb.accelerator : 'CommandOrControl+B';
-
         const template: any[] = [
             {
                 label: app.name,
@@ -178,7 +300,6 @@ export class KeybindManager {
                 submenu: [
                     {
                         label: 'Toggle Visibility',
-                        accelerator: toggleAccelerator,
                         click: () => {
                             // Require AppState dynamically to avoid circular dependencies
                             const { AppState } = require('../main');
@@ -188,22 +309,18 @@ export class KeybindManager {
                     { type: 'separator' },
                     {
                         label: 'Move Window Up',
-                        accelerator: this.getKeybind('window:move-up') || 'CommandOrControl+Up',
                         click: () => this.windowHelper?.moveWindowUp()
                     },
                     {
                         label: 'Move Window Down',
-                        accelerator: this.getKeybind('window:move-down') || 'CommandOrControl+Down',
                         click: () => this.windowHelper?.moveWindowDown()
                     },
                     {
                         label: 'Move Window Left',
-                        accelerator: this.getKeybind('window:move-left') || 'CommandOrControl+Left',
                         click: () => this.windowHelper?.moveWindowLeft()
                     },
                     {
                         label: 'Move Window Right',
-                        accelerator: this.getKeybind('window:move-right') || 'CommandOrControl+Right',
                         click: () => this.windowHelper?.moveWindowRight()
                     },
                     { type: 'separator' },
@@ -261,6 +378,12 @@ export class KeybindManager {
         ipcMain.handle('keybinds:set', (_, id: string, accelerator: string) => {
             console.log(`[KeybindManager] Set ${id} -> ${accelerator}`);
             this.setKeybind(id, accelerator);
+            return true;
+        });
+
+        ipcMain.handle('keybinds:set-enabled', (_, id: string, enabled: boolean) => {
+            console.log(`[KeybindManager] Set enabled ${id} -> ${enabled}`);
+            this.setKeybindEnabled(id, enabled);
             return true;
         });
 

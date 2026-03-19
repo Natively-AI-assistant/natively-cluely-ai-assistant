@@ -2,6 +2,14 @@
  * Converts an Electron Accelerator string to an array of keys for the frontend.
  * Example: "CommandOrControl+Shift+Space" -> ["Meta", "Shift", "Space"]
  */
+const isMacPlatform = () => {
+    if (typeof navigator === 'undefined') {
+        return false;
+    }
+
+    return /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+};
+
 export function acceleratorToKeys(accelerator: string): string[] {
     if (!accelerator) return [];
 
@@ -9,6 +17,7 @@ export function acceleratorToKeys(accelerator: string): string[] {
     return parts.map(part => {
         switch (part.toLowerCase()) {
             case 'commandorcontrol':
+                return isMacPlatform() ? '⌘' : '⌃';
             case 'cmd':
             case 'command':
             case 'meta':

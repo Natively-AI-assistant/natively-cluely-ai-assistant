@@ -417,6 +417,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.removeListener("toggle-expand", subscription)
     }
   },
+  onShortcutAction: (callback: (actionId: string) => void) => {
+    const subscription = (_: any, actionId: string) => callback(actionId)
+    ipcRenderer.on("shortcut-action", subscription)
+    return () => {
+      ipcRenderer.removeListener("shortcut-action", subscription)
+    }
+  },
 
   // LLM Model Management
   getCurrentLlmConfig: () => ipcRenderer.invoke("get-current-llm-config"),
@@ -861,6 +868,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Keybind Management
   getKeybinds: () => ipcRenderer.invoke('keybinds:get-all'),
   setKeybind: (id: string, accelerator: string) => ipcRenderer.invoke('keybinds:set', id, accelerator),
+  setKeybindEnabled: (id: string, enabled: boolean) => ipcRenderer.invoke('keybinds:set-enabled', id, enabled),
   resetKeybinds: () => ipcRenderer.invoke('keybinds:reset'),
   onKeybindsUpdate: (callback: (keybinds: Array<any>) => void) => {
     const subscription = (_: any, keybinds: any) => callback(keybinds)

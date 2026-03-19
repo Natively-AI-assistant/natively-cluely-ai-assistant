@@ -15,6 +15,7 @@ export interface ElectronAPI {
   onScreenshotAttached: (
     callback: (data: { path: string; preview: string }) => void
   ) => () => void
+  onShortcutAction: (callback: (actionId: string) => void) => () => void
   onSolutionsReady: (callback: (solutions: string) => void) => () => void
   onResetView: (callback: () => void) => () => void
   onSolutionStart: (callback: () => void) => () => void
@@ -235,9 +236,10 @@ export interface ElectronAPI {
   setDonationComplete: () => Promise<{ success: boolean }>;
 
   // Keybind Management
-  getKeybinds: () => Promise<Array<{ id: string; label: string; accelerator: string; isGlobal: boolean; defaultAccelerator: string }>>
+  getKeybinds: () => Promise<Array<{ id: string; label: string; accelerator: string; isGlobal: boolean; enabled: boolean; defaultEnabled: boolean; defaultAccelerator: string }>>
   setKeybind: (id: string, accelerator: string) => Promise<boolean>
-  resetKeybinds: () => Promise<Array<{ id: string; label: string; accelerator: string; isGlobal: boolean; defaultAccelerator: string }>>
+  setKeybindEnabled: (id: string, enabled: boolean) => Promise<boolean>
+  resetKeybinds: () => Promise<Array<{ id: string; label: string; accelerator: string; isGlobal: boolean; enabled: boolean; defaultEnabled: boolean; defaultAccelerator: string }>>
   onKeybindsUpdate: (callback: (keybinds: Array<any>) => void) => () => void
 
   // Profile Engine API

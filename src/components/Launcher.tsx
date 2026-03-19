@@ -11,7 +11,6 @@ import GlobalChatOverlay from './GlobalChatOverlay';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FeatureSpotlight } from './FeatureSpotlight';
 import { analytics } from '../lib/analytics/analytics.service'; // Added analytics import
-import { useShortcuts } from '../hooks/useShortcuts';
 
 interface Meeting {
     id: string;
@@ -123,9 +122,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         }
     };
 
-    // Keybinds
-    const { isShortcutPressed } = useShortcuts();
-
     useEffect(() => {
         console.log("Launcher mounted");
         // Seed demo data if needed (safe to call always)
@@ -159,23 +155,12 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
 
         // Simple polling for events every minute
         const interval = setInterval(fetchEvents, 60000);
-
-        // Global Keydown for Launcher-specific shortcuts (Cmd+B)
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (isShortcutPressed(e, 'toggleVisibility')) {
-                e.preventDefault();
-                window.electronAPI.toggleWindow();
-            }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-
         return () => {
             if (removeMeetingsListener) removeMeetingsListener();
             if (removeUndetectableListener) removeUndetectableListener();
             clearInterval(interval);
-            window.removeEventListener('keydown', handleKeyDown);
         };
-    }, [isShortcutPressed]);
+    }, []);
 
     // Filter next meeting (within 60 mins)
     const nextMeeting = upcomingEvents.find(e => {
