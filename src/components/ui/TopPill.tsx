@@ -1,19 +1,22 @@
 import { ChevronUp, ChevronDown } from "lucide-react";
 import icon from "../icon.png";
 import { useResolvedTheme } from "../../hooks/useResolvedTheme";
+import type { OverlayAppearance } from "../../lib/overlayAppearance";
 
 interface TopPillProps {
     expanded: boolean;
     onToggle: () => void;
     onQuit: () => void;
+    appearance: OverlayAppearance;
 }
 
 export default function TopPill({
     expanded,
     onToggle,
     onQuit,
+    appearance,
 }: TopPillProps) {
-    const isLightTheme = useResolvedTheme() === 'light';
+    useResolvedTheme();
 
     return (
         <div className="flex justify-center mt-2 select-none z-50">
@@ -27,6 +30,7 @@ export default function TopPill({
           pl-1.5 pr-1.5 py-1.5
           transition-all duration-300 ease-sculpted
         "
+                style={appearance.pillStyle}
             >
                 {/* LOGO BUTTON */}
                 <button
@@ -39,11 +43,12 @@ export default function TopPill({
             relative overflow-hidden
             interaction-base interaction-press
           `}
+                    style={appearance.iconStyle}
                 >
                     <img
                         src={icon}
                         alt="Natively"
-                        className="w-[24px] h-[24px] object-contain opacity-90 scale-105"
+                        className="w-[24px] h-[24px] object-contain opacity-95 scale-105 force-black-icon"
                         draggable="false"
                         onDragStart={(e) => e.preventDefault()}
                     />
@@ -59,14 +64,13 @@ export default function TopPill({
             rounded-full
             backdrop-blur-md
             overlay-chip-surface
+            overlay-text-interactive
             text-[12px]
             font-medium
             border
             interaction-base interaction-hover interaction-press
-            ${isLightTheme
-                    ? 'text-slate-700 hover:text-slate-950'
-                    : 'text-slate-200 hover:text-white'}
           `}
+                    style={appearance.chipStyle}
                 >
                     <span className="opacity-70 group-hover:opacity-100 transition-opacity duration-200">
                         {expanded ? (
@@ -85,12 +89,12 @@ export default function TopPill({
             w-8 h-8
             rounded-full
             overlay-icon-surface
+            overlay-text-primary
             flex items-center justify-center
             interaction-base interaction-press
-            ${isLightTheme
-                    ? 'text-slate-800 hover:bg-red-500/10 hover:text-red-500'
-                    : 'text-white hover:bg-red-500/10 hover:text-red-400'}
+            hover:bg-red-500/10 hover:text-red-400
           `}
+                    style={appearance.iconStyle}
                 >
                     <div className="w-3.5 h-3.5 rounded-[3px] bg-current opacity-80" />
                 </button>

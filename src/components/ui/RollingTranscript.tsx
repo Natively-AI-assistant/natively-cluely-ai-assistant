@@ -4,6 +4,7 @@ import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 interface RollingTranscriptProps {
     text: string;
     isActive?: boolean;
+    surfaceStyle?: React.CSSProperties;
 }
 
 /**
@@ -15,9 +16,9 @@ interface RollingTranscriptProps {
  * - Text flows from right to left as new words arrive
  * - Edge fade gradients for visual polish
  */
-const RollingTranscript: React.FC<RollingTranscriptProps> = ({ text, isActive = true }) => {
+const RollingTranscript: React.FC<RollingTranscriptProps> = ({ text, isActive = true, surfaceStyle }) => {
     const containerRef = useRef<HTMLDivElement>(null);
-    const isLightTheme = useResolvedTheme() === 'light';
+    useResolvedTheme();
 
     // Auto-scroll to the end when text updates
     useEffect(() => {
@@ -33,12 +34,13 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({ text, isActive = 
             {/* Scrolling Container */}
             <div
                 ref={containerRef}
-                className="overflow-hidden whitespace-nowrap text-right scroll-smooth"
+                className="overflow-hidden whitespace-nowrap text-right scroll-smooth overlay-transcript-surface"
                 style={{
+                    ...surfaceStyle,
                     maskImage: 'linear-gradient(to right, transparent, black 10%, black 90%, transparent)'
                 }}
             >
-                <span className={`inline-flex items-center text-[13px] italic leading-7 transition-all duration-300 ${isLightTheme ? 'text-slate-500' : 'text-white/40'}`}>
+                <span className="overlay-text-secondary inline-flex items-center text-[13px] italic leading-7 transition-all duration-300">
                     {text}
                     {isActive && (
                         <span className="inline-flex items-center ml-2">

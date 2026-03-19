@@ -13,6 +13,12 @@ import { AIProvidersSettings } from './settings/AIProvidersSettings';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
+import {
+    clampOverlayOpacity,
+    getOverlayAppearance,
+    OVERLAY_OPACITY_DEFAULT,
+    OVERLAY_OPACITY_MIN,
+} from '../lib/overlayAppearance';
 import { KeyRecorder } from './ui/KeyRecorder';
 import { ProfileVisualizer, PremiumUpgradeModal } from '../premium';
 import icon from './icon.png';
@@ -21,13 +27,11 @@ import icon from './icon.png';
 // MockupNativelyInterface — fake in-meeting widget for the opacity preview
 // ---------------------------------------------------------------------------
 const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
-    const isLightTheme = useResolvedTheme() === 'light';
+    const resolvedTheme = useResolvedTheme();
+    const appearance = getOverlayAppearance(opacity, resolvedTheme);
 
     return (
-        <div
-            className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none bg-transparent"
-            style={{ ['--overlay-opacity' as '--overlay-opacity']: String(opacity) } as React.CSSProperties}
-        >
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none bg-transparent">
                 {/* NativelyInterface Widget — opacity controlled by the slider */}
                 <div
                     id="mockup-natively-interface"
@@ -35,40 +39,40 @@ const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
                 >
                     {/* TopPill Replica */}
                     <div className="flex justify-center mb-2 select-none z-50">
-                        <div className="flex items-center gap-2 rounded-full overlay-pill-surface backdrop-blur-md pl-1.5 pr-1.5 py-1.5">
-                            <div className="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden overlay-icon-surface">
+                        <div className="flex items-center gap-2 rounded-full overlay-pill-surface backdrop-blur-md pl-1.5 pr-1.5 py-1.5" style={appearance.pillStyle}>
+                            <div className="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden overlay-icon-surface" style={appearance.iconStyle}>
                                 <img
                                     src={icon}
                                     alt="Natively"
-                                    className="w-[24px] h-[24px] object-contain opacity-90 scale-105"
+                                    className="w-[24px] h-[24px] object-contain opacity-95 scale-105 force-black-icon"
                                     draggable="false"
                                 />
                             </div>
-                            <div className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-[12px] font-medium border overlay-chip-surface ${isLightTheme ? 'text-slate-700' : 'text-slate-200'}`}>
+                            <div className="flex items-center gap-2 px-4 py-1.5 rounded-full text-[12px] font-medium border overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
                                 <ChevronUp className="w-3.5 h-3.5 opacity-70" />
                                 <span className="opacity-80 tracking-wide">Hide</span>
                             </div>
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center overlay-icon-surface ${isLightTheme ? 'text-slate-900' : 'text-white'}`}>
+                            <div className="w-8 h-8 rounded-full flex items-center justify-center overlay-icon-surface overlay-text-primary" style={appearance.iconStyle}>
                                 <div className="w-3.5 h-3.5 rounded-[3px] bg-red-400 opacity-80" />
                             </div>
                         </div>
                     </div>
 
                     {/* Main Interface Window Replica */}
-                    <div className={`relative w-[600px] max-w-full overlay-shell-surface backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col pt-2 pb-3 ${isLightTheme ? 'text-slate-900' : 'text-slate-200'}`}>
+                    <div className="relative w-[600px] max-w-full overlay-shell-surface overlay-text-primary backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col pt-2 pb-3" style={appearance.shellStyle}>
 
                         {/* Rolling Transcript Bar */}
-                        <div className="w-full flex justify-center py-2 px-4 border-b mb-1 overlay-transcript-surface">
-                            <p className={`text-[13px] truncate max-w-[90%] font-medium ${isLightTheme ? 'text-slate-700' : 'text-white/90'}`}>
-                                <span className="text-blue-400 mr-2 font-semibold">Interviewer</span>
-                                <span className="opacity-80">So how would you optimize the current algorithm?</span>
+                        <div className="w-full flex justify-center py-2 px-4 border-b mb-1 overlay-transcript-surface" style={appearance.transcriptStyle}>
+                            <p className="text-[13px] truncate max-w-[90%] font-medium overlay-text-primary">
+                                <span className={`${resolvedTheme === 'light' ? 'text-blue-700' : 'text-blue-400'} mr-2 font-semibold`}>Interviewer</span>
+                                <span className="opacity-95">So how would you optimize the current algorithm?</span>
                             </p>
                         </div>
 
                         {/* Chat History Mock */}
                         <div className="flex-1 overflow-y-auto px-4 py-2 space-y-3">
                             <div className="flex justify-start">
-                                <div className={`max-w-[85%] px-4 py-3 text-[14px] leading-relaxed font-normal ${isLightTheme ? 'text-slate-800' : 'text-slate-200'}`}>
+                                <div className="max-w-[85%] px-4 py-3 text-[14px] leading-relaxed font-normal overlay-text-primary">
                                     <span className="font-semibold text-emerald-500 block mb-1">Suggestion</span>
                                     A good approach would be to use a hash map to cache the intermediate results, which brings the time complexity down from O(n²) to O(n).
                                 </div>
@@ -77,19 +81,19 @@ const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
 
                         {/* Quick Actions */}
                         <div className="flex flex-nowrap justify-center items-center gap-1.5 px-4 pb-3 pt-3">
-                            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 overlay-chip-surface ${isLightTheme ? 'text-slate-600' : 'text-slate-400'}`}>
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
                                 <Pencil className="w-3 h-3 opacity-70" /> What to answer?
                             </div>
-                            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 overlay-chip-surface ${isLightTheme ? 'text-slate-600' : 'text-slate-400'}`}>
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
                                 <MessageSquare className="w-3 h-3 opacity-70" /> Shorten
                             </div>
-                            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 overlay-chip-surface ${isLightTheme ? 'text-slate-600' : 'text-slate-400'}`}>
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
                                 <RefreshCw className="w-3 h-3 opacity-70" /> Recap
                             </div>
-                            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 overlay-chip-surface ${isLightTheme ? 'text-slate-600' : 'text-slate-400'}`}>
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
                                 <HelpCircle className="w-3 h-3 opacity-70" /> Follow Up Question
                             </div>
-                            <div className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium min-w-[74px] shrink-0 border overlay-chip-surface ${isLightTheme ? 'text-slate-600' : 'text-slate-400'}`}>
+                            <div className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium min-w-[74px] shrink-0 border overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
                                 <Zap className="w-3 h-3 opacity-70" /> Answer
                             </div>
                         </div>
@@ -97,20 +101,20 @@ const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
                         {/* Input Area */}
                         <div className="px-3">
                             <div className="relative group">
-                                <div className="w-full border rounded-xl pl-3 pr-10 py-2.5 h-[38px] flex items-center overlay-input-surface">
-                                    <span className={`text-[13px] ${isLightTheme ? 'text-slate-500' : 'text-slate-500'}`}>Ask anything on screen or conversation</span>
+                                <div className="w-full border rounded-xl pl-3 pr-10 py-2.5 h-[38px] flex items-center overlay-input-surface" style={appearance.inputStyle}>
+                                    <span className="text-[13px] overlay-text-muted">Ask anything on screen or conversation</span>
                                 </div>
                             </div>
 
                             {/* Bottom Row */}
                             <div className="flex items-center justify-between mt-3 px-0.5">
                                 <div className="flex items-center gap-1.5">
-                                    <div className={`flex items-center gap-2 px-3 py-1.5 border rounded-lg text-xs font-medium w-[140px] overlay-control-surface ${isLightTheme ? 'text-slate-700' : 'text-white/70'}`}>
+                                    <div className="flex items-center gap-2 px-3 py-1.5 border rounded-lg text-xs font-medium w-[140px] overlay-control-surface overlay-text-interactive" style={appearance.controlStyle}>
                                         <span className="truncate min-w-0 flex-1">Gemini 3 Flash</span>
                                         <ChevronDown size={14} className="shrink-0" />
                                     </div>
-                                    <div className={`w-px h-3 mx-1 ${isLightTheme ? 'bg-black/10' : 'bg-white/10'}`} />
-                                    <div className={`w-7 h-7 flex items-center justify-center rounded-lg overlay-icon-surface ${isLightTheme ? 'text-slate-500' : 'text-slate-500'}`}>
+                                    <div className="w-px h-3 mx-1" style={appearance.dividerStyle} />
+                                    <div className="w-7 h-7 flex items-center justify-center rounded-lg overlay-icon-surface overlay-text-muted" style={appearance.iconStyle}>
                                         <SlidersHorizontal className="w-3.5 h-3.5" />
                                     </div>
                                 </div>
@@ -447,13 +451,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     // Overlay Opacity state
     const [overlayOpacity, setOverlayOpacity] = useState<number>(() => {
         const stored = localStorage.getItem('natively_overlay_opacity');
-        if (!stored) return 0.65;
+        if (!stored) return OVERLAY_OPACITY_DEFAULT;
         const parsed = parseFloat(stored);
-        return !isNaN(parsed) && parsed >= 0.15 && parsed <= 1.0 ? parsed : 0.65;
+        return Number.isFinite(parsed) ? clampOverlayOpacity(parsed) : OVERLAY_OPACITY_DEFAULT;
     });
 
     // Live preview state — true while the user is holding down the slider
     const [isPreviewingOpacity, setIsPreviewingOpacity] = useState(false);
+    const [previewOverlayOpacity, setPreviewOverlayOpacity] = useState(overlayOpacity);
 
     // Ref to hold the latest opacity value without triggering renders during drag
     const latestOpacityRef = React.useRef(overlayOpacity);
@@ -462,8 +467,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         // DOM-direct updates for 0-lag 60fps drag (bypasses React reconciliation)
         const percentText = `${Math.round(val * 100)}%`;
         document.querySelectorAll('.opacity-percent-label').forEach(el => el.textContent = percentText);
-        const mockWrapper = document.getElementById('mockup-natively-interface');
-        if (mockWrapper) mockWrapper.style.opacity = String(val);
+        setPreviewOverlayOpacity(val);
         latestOpacityRef.current = val;
         
         // Broadcast IPC in real-time so actual meeting overlay tracks slider instantly
@@ -475,6 +479,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     // (e.g. on first mount, or if another part of code updates it)
     useEffect(() => {
         latestOpacityRef.current = overlayOpacity;
+        setPreviewOverlayOpacity(overlayOpacity);
     }, [overlayOpacity]);
 
     // Bug fix #3 (close-during-drag): if the overlay closes while the user is still dragging,
@@ -525,6 +530,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
             mockup.style.opacity = '1';
         }
 
+        setPreviewOverlayOpacity(latestOpacityRef.current);
         setIsPreviewingOpacity(true);
     };
 
@@ -568,6 +574,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         setIsPreviewingOpacity(false);
         // Sync final dragged value back to React state (persists to localStorage + IPC via useEffect)
         setOverlayOpacity(latestOpacityRef.current);
+        setPreviewOverlayOpacity(latestOpacityRef.current);
     };
 
     useEffect(() => {
@@ -1561,7 +1568,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
                                                     <input
                                                         type="range"
-                                                        min={0.35}
+                                                        min={OVERLAY_OPACITY_MIN}
                                                         max={1.0}
                                                         step={0.01}
                                                         defaultValue={overlayOpacity}
@@ -2827,7 +2834,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                 className="fixed inset-0 z-[49] pointer-events-none transition-opacity duration-150"
                 style={{ opacity: isPreviewingOpacity ? 1 : 0 }}
             >
-                <MockupNativelyInterface opacity={overlayOpacity} />
+                <MockupNativelyInterface opacity={previewOverlayOpacity} />
             </div>
         </AnimatePresence >
     );

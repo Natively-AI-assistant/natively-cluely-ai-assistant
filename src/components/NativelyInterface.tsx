@@ -41,6 +41,7 @@ import 'katex/dist/katex.min.css';
 import { analytics, detectProviderType } from '../lib/analytics/analytics.service';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
+import { getOverlayAppearance, OVERLAY_OPACITY_DEFAULT } from '../lib/overlayAppearance';
 
 interface Message {
     id: string;
@@ -55,9 +56,10 @@ interface Message {
 
 interface NativelyInterfaceProps {
     onEndMeeting?: () => void;
+    overlayOpacity?: number;
 }
 
-const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting }) => {
+const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, overlayOpacity = OVERLAY_OPACITY_DEFAULT }) => {
     const isLightTheme = useResolvedTheme() === 'light';
     const [isExpanded, setIsExpanded] = useState(true);
     const [inputValue, setInputValue] = useState('');
@@ -115,22 +117,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting }) =
 
     const codeTheme = isLightTheme ? oneLight : vscDarkPlus;
     const codeLineNumberColor = isLightTheme ? 'rgba(15,23,42,0.35)' : 'rgba(255,255,255,0.2)';
-    const overlayPanelClass = isLightTheme
-        ? 'text-slate-900'
-        : 'text-slate-200';
+    const appearance = getOverlayAppearance(overlayOpacity, isLightTheme ? 'light' : 'dark');
+    const overlayPanelClass = 'overlay-text-primary';
     const subtleSurfaceClass = 'overlay-subtle-surface';
     const codeBlockClass = 'overlay-code-block-surface';
     const codeHeaderClass = 'overlay-code-header-surface';
-    const codeHeaderTextClass = isLightTheme ? 'text-slate-500' : 'text-white/40';
-    const quickActionClass = isLightTheme
-        ? 'overlay-chip-surface text-slate-600 hover:text-slate-900'
-        : 'overlay-chip-surface text-slate-400 hover:text-slate-200';
-    const inputClass = isLightTheme
-        ? 'overlay-input-surface focus:ring-black/10 text-slate-900 placeholder:text-slate-400'
-        : 'overlay-input-surface focus:ring-white/10 text-slate-200 placeholder:text-slate-500';
-    const controlSurfaceClass = isLightTheme
-        ? 'overlay-control-surface text-slate-700 hover:text-slate-900'
-        : 'overlay-control-surface text-white/70 hover:text-white';
+    const codeHeaderTextClass = 'overlay-text-muted';
+    const quickActionClass = 'overlay-chip-surface overlay-text-interactive';
+    const inputClass = `${isLightTheme ? 'focus:ring-black/10' : 'focus:ring-white/10'} overlay-input-surface overlay-input-text`;
+    const controlSurfaceClass = 'overlay-control-surface overlay-text-interactive';
 
     useEffect(() => {
         // Load the persisted default model (not the runtime model)
@@ -1083,7 +1078,7 @@ Provide only the answer, nothing else.`;
         if (msg.isCode || (msg.role === 'system' && msg.text.includes('```'))) {
             const parts = msg.text.split(/(```[\s\S]*?```)/g);
             return (
-                <div className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`}>
+                <div className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`} style={appearance.subtleStyle}>
                     <div className={`flex items-center gap-2 mb-2 font-semibold text-xs uppercase tracking-wide ${isLightTheme ? 'text-violet-600' : 'text-purple-300'}`}>
                         <Code className="w-3.5 h-3.5" />
                         <span>Code Solution</span>
@@ -1096,9 +1091,9 @@ Provide only the answer, nothing else.`;
                                     const lang = match[1] || 'python';
                                     const code = match[2].trim();
                                     return (
-                                        <div key={i} className={`my-3 rounded-xl overflow-hidden border shadow-lg ${codeBlockClass}`}>
+                                        <div key={i} className={`my-3 rounded-xl overflow-hidden border shadow-lg ${codeBlockClass}`} style={appearance.codeBlockStyle}>
                                             {/* Minimalist Apple Header */}
-                                            <div className={`px-3 py-1.5 border-b ${codeHeaderClass}`}>
+                                            <div className={`px-3 py-1.5 border-b ${codeHeaderClass}`} style={appearance.codeHeaderStyle}>
                                                 <span className={`text-[10px] uppercase tracking-widest font-semibold font-mono ${codeHeaderTextClass}`}>
                                                     {lang || 'CODE'}
                                                 </span>
@@ -1135,14 +1130,14 @@ Provide only the answer, nothing else.`;
                                         rehypePlugins={[rehypeKatex]}
                                         components={{
                                             p: ({ node, ...props }: any) => <p className="mb-2 last:mb-0 whitespace-pre-wrap" {...props} />,
-                                            strong: ({ node, ...props }: any) => <strong className={`font-bold ${isLightTheme ? 'text-slate-950' : 'text-white'}`} {...props} />,
-                                            em: ({ node, ...props }: any) => <em className={`italic ${isLightTheme ? 'text-slate-600' : 'text-slate-300'}`} {...props} />,
+                                            strong: ({ node, ...props }: any) => <strong className="font-bold overlay-text-strong" {...props} />,
+                                            em: ({ node, ...props }: any) => <em className="italic overlay-text-secondary" {...props} />,
                                             ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mb-2 space-y-1" {...props} />,
                                             ol: ({ node, ...props }: any) => <ol className="list-decimal ml-4 mb-2 space-y-1" {...props} />,
                                             li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
-                                            h1: ({ node, ...props }: any) => <h1 className={`text-lg font-bold mb-2 mt-3 ${isLightTheme ? 'text-slate-950' : 'text-white'}`} {...props} />,
-                                            h2: ({ node, ...props }: any) => <h2 className={`text-base font-bold mb-2 mt-3 ${isLightTheme ? 'text-slate-950' : 'text-white'}`} {...props} />,
-                                            h3: ({ node, ...props }: any) => <h3 className={`text-sm font-bold mb-1 mt-2 ${isLightTheme ? 'text-slate-900' : 'text-white'}`} {...props} />,
+                                            h1: ({ node, ...props }: any) => <h1 className="text-lg font-bold mb-2 mt-3 overlay-text-strong" {...props} />,
+                                            h2: ({ node, ...props }: any) => <h2 className="text-base font-bold mb-2 mt-3 overlay-text-strong" {...props} />,
+                                            h3: ({ node, ...props }: any) => <h3 className="text-sm font-bold mb-1 mt-2 overlay-text-primary" {...props} />,
                                             code: ({ node, ...props }: any) => <code className={`overlay-inline-code-surface rounded px-1 py-0.5 text-xs font-mono whitespace-pre-wrap ${isLightTheme ? 'text-violet-700' : 'text-purple-200'}`} {...props} />,
                                             blockquote: ({ node, ...props }: any) => <blockquote className={`border-l-2 pl-3 italic my-2 ${isLightTheme ? 'border-violet-500/30 text-slate-600' : 'border-purple-500/50 text-slate-400'}`} {...props} />,
                                             a: ({ node, ...props }: any) => <a className={`hover:underline ${isLightTheme ? 'text-blue-600 hover:text-blue-700' : 'text-blue-400 hover:text-blue-300'}`} target="_blank" rel="noopener noreferrer" {...props} />,
@@ -1161,7 +1156,7 @@ Provide only the answer, nothing else.`;
         // Custom Styled Labels (Shorten, Recap, Follow-up) - also use Markdown for content
         if (msg.intent === 'shorten') {
             return (
-                <div className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`}>
+                <div className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`} style={appearance.subtleStyle}>
                     <div className={`flex items-center gap-2 mb-2 font-semibold text-xs uppercase tracking-wide ${isLightTheme ? 'text-cyan-700' : 'text-cyan-300'}`}>
                         <MessageSquare className="w-3.5 h-3.5" />
                         <span>Shortened</span>
@@ -1182,7 +1177,7 @@ Provide only the answer, nothing else.`;
 
         if (msg.intent === 'recap') {
             return (
-                <div className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`}>
+                <div className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`} style={appearance.subtleStyle}>
                     <div className={`flex items-center gap-2 mb-2 font-semibold text-xs uppercase tracking-wide ${isLightTheme ? 'text-indigo-700' : 'text-indigo-300'}`}>
                         <RefreshCw className="w-3.5 h-3.5" />
                         <span>Recap</span>
@@ -1203,7 +1198,7 @@ Provide only the answer, nothing else.`;
 
         if (msg.intent === 'follow_up_questions') {
             return (
-                <div className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`}>
+                <div className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`} style={appearance.subtleStyle}>
                     <div className={`flex items-center gap-2 mb-2 font-semibold text-xs uppercase tracking-wide ${isLightTheme ? 'text-amber-700' : 'text-[#FFD60A]'}`}>
                         <HelpCircle className="w-3.5 h-3.5" />
                         <span>Follow-Up Questions</span>
@@ -1227,11 +1222,11 @@ Provide only the answer, nothing else.`;
             const parts = msg.text.split(/(```[\s\S]*?(?:```|$))/g);
 
             return (
-                <div className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`}>
+                <div className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`} style={appearance.subtleStyle}>
                     <div className="flex items-center gap-2 mb-2 text-emerald-400 font-semibold text-xs uppercase tracking-wide">
                         <span>Say this</span>
                     </div>
-                    <div className={`text-[14px] leading-relaxed ${isLightTheme ? 'text-slate-900' : 'text-slate-100'}`}>
+                    <div className="text-[14px] leading-relaxed overlay-text-primary">
                         {parts.map((part, i) => {
                             if (part.startsWith('```')) {
                                 // Robust matching: handles unclosed blocks for streaming (```...$)
@@ -1250,9 +1245,9 @@ Provide only the answer, nothing else.`;
                                     }
 
                                     return (
-                                        <div key={i} className={`my-3 rounded-xl overflow-hidden border shadow-lg ${codeBlockClass}`}>
+                                        <div key={i} className={`my-3 rounded-xl overflow-hidden border shadow-lg ${codeBlockClass}`} style={appearance.codeBlockStyle}>
                                             {/* Minimalist Apple Header */}
-                                            <div className={`px-3 py-1.5 border-b ${codeHeaderClass}`}>
+                                            <div className={`px-3 py-1.5 border-b ${codeHeaderClass}`} style={appearance.codeHeaderStyle}>
                                                 <span className={`text-[10px] uppercase tracking-widest font-semibold font-mono ${codeHeaderTextClass}`}>
                                                     {lang || 'CODE'}
                                                 </span>
@@ -1316,8 +1311,8 @@ Provide only the answer, nothing else.`;
                     rehypePlugins={[rehypeKatex]}
                     components={{
                         p: ({ node, ...props }: any) => <p className="mb-2 last:mb-0 whitespace-pre-wrap" {...props} />,
-                        strong: ({ node, ...props }: any) => <strong className="font-bold opacity-100" {...props} />,
-                        em: ({ node, ...props }: any) => <em className="italic opacity-90" {...props} />,
+                        strong: ({ node, ...props }: any) => <strong className="font-bold opacity-100 overlay-text-strong" {...props} />,
+                        em: ({ node, ...props }: any) => <em className="italic opacity-90 overlay-text-secondary" {...props} />,
                         ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mb-2 space-y-1" {...props} />,
                         ol: ({ node, ...props }: any) => <ol className="list-decimal ml-4 mb-2 space-y-1" {...props} />,
                         li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
@@ -1503,7 +1498,7 @@ Provide only the answer, nothing else.`;
     }, [isShortcutPressed]);
 
     return (
-        <div ref={contentRef} className={`flex flex-col items-center w-fit mx-auto h-fit min-h-0 bg-transparent p-0 rounded-[24px] font-sans gap-2 ${isLightTheme ? 'text-slate-900' : 'text-slate-200'}`}>
+        <div ref={contentRef} className="flex flex-col items-center w-fit mx-auto h-fit min-h-0 bg-transparent p-0 rounded-[24px] font-sans gap-2 overlay-text-primary">
 
             <AnimatePresence>
                 {isExpanded && (
@@ -1518,8 +1513,12 @@ Provide only the answer, nothing else.`;
                             expanded={isExpanded}
                             onToggle={() => setIsExpanded(!isExpanded)}
                             onQuit={() => onEndMeeting ? onEndMeeting() : window.electronAPI.quitApp()}
+                            appearance={appearance}
                         />
-                        <div className={`relative w-[600px] max-w-full backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col draggable-area overlay-shell-surface ${overlayPanelClass}`}>
+                        <div
+                            className={`relative w-[600px] max-w-full backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col draggable-area overlay-shell-surface ${overlayPanelClass}`}
+                            style={appearance.shellStyle}
+                        >
 
 
 
@@ -1529,6 +1528,7 @@ Provide only the answer, nothing else.`;
                                 <RollingTranscript
                                     text={rollingTranscript}
                                     isActive={isInterviewerSpeaking}
+                                    surfaceStyle={appearance.transcriptStyle}
                                 />
                             )}
 
@@ -1546,16 +1546,16 @@ Provide only the answer, nothing else.`;
                                                     : ''
                                                 }
                       ${msg.role === 'system'
-                                                    ? (isLightTheme ? 'text-slate-800 font-normal' : 'text-slate-200 font-normal')
+                                                    ? 'overlay-text-primary font-normal'
                                                     : ''
                                                 }
                       ${msg.role === 'interviewer'
-                                                    ? (isLightTheme ? 'text-slate-500 italic pl-0 text-[13px]' : 'text-white/40 italic pl-0 text-[13px]')
+                                                    ? 'overlay-text-muted italic pl-0 text-[13px]'
                                                     : ''
                                                 }
                     `}>
                                                 {msg.role === 'interviewer' && (
-                                                    <div className={`flex items-center gap-1.5 mb-1 text-[10px] font-medium uppercase tracking-wider ${isLightTheme ? 'text-slate-500' : 'text-slate-600'}`}>
+                                                    <div className="flex items-center gap-1.5 mb-1 text-[10px] font-medium uppercase tracking-wider overlay-text-muted">
                                                         Interviewer
                                                         {msg.isStreaming && <span className="w-1 h-1 bg-green-500 rounded-full animate-pulse" />}
                                                     </div>
@@ -1569,8 +1569,9 @@ Provide only the answer, nothing else.`;
                                                 {msg.role === 'system' && !msg.isStreaming && (
                                                     <button
                                                         onClick={() => handleCopy(msg.text)}
-                                                        className={`absolute top-2 right-2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity overlay-icon-surface overlay-icon-surface-hover ${isLightTheme ? 'text-slate-500 hover:text-slate-900' : 'text-slate-400 hover:text-white'}`}
+                                                        className="absolute top-2 right-2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive"
                                                         title="Copy to clipboard"
+                                                        style={appearance.iconStyle}
                                                     >
                                                         <Copy className="w-3.5 h-3.5" />
                                                     </button>
@@ -1615,24 +1616,25 @@ Provide only the answer, nothing else.`;
 
                             {/* Quick Actions - Minimal & Clean */}
                             <div className={`flex flex-nowrap justify-center items-center gap-1.5 px-4 pb-3 overflow-x-hidden ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3'}`}>
-                                <button onClick={handleWhatToSay} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}>
+                                <button onClick={handleWhatToSay} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
                                     <Pencil className="w-3 h-3 opacity-70" /> What to answer?
                                 </button>
-                                <button onClick={() => handleFollowUp('shorten')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}>
+                                <button onClick={() => handleFollowUp('shorten')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
                                     <MessageSquare className="w-3 h-3 opacity-70" /> Shorten
                                 </button>
-                                <button onClick={handleRecap} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}>
+                                <button onClick={handleRecap} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
                                     <RefreshCw className="w-3 h-3 opacity-70" /> Recap
                                 </button>
-                                <button onClick={handleFollowUpQuestions} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}>
+                                <button onClick={handleFollowUpQuestions} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
                                     <HelpCircle className="w-3 h-3 opacity-70" /> Follow Up Question
                                 </button>
                                 <button
                                     onClick={handleAnswerNow}
                                     className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium transition-all active:scale-95 duration-200 interaction-base interaction-press min-w-[74px] whitespace-nowrap shrink-0 ${isManualRecording
                                         ? 'bg-red-500/10 text-red-400 ring-1 ring-red-500/20'
-                                        : (isLightTheme ? 'bg-black/[0.04] text-slate-600 hover:text-emerald-600 hover:bg-emerald-500/10' : 'bg-white/5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10')
+                                        : 'overlay-chip-surface overlay-text-interactive hover:text-emerald-500 hover:bg-emerald-500/10'
                                         }`}
+                                    style={isManualRecording ? undefined : appearance.chipStyle}
                                 >
                                     {isManualRecording ? (
                                         <>
@@ -1649,15 +1651,16 @@ Provide only the answer, nothing else.`;
                             <div className="p-3 pt-0">
                                 {/* Latent Context Preview (Attached Screenshot) */}
                                 {attachedContext.length > 0 && (
-                                    <div className={`mb-2 rounded-lg p-2 transition-all duration-200 border ${subtleSurfaceClass}`}>
+                                    <div className={`mb-2 rounded-lg p-2 transition-all duration-200 border ${subtleSurfaceClass}`} style={appearance.subtleStyle}>
                                         <div className="flex items-center justify-between mb-1.5">
-                                            <span className={`text-[11px] font-medium ${isLightTheme ? 'text-slate-900' : 'text-white'}`}>
+                                            <span className="text-[11px] font-medium overlay-text-primary">
                                                 {attachedContext.length} screenshot{attachedContext.length > 1 ? 's' : ''} attached
                                             </span>
                                             <button
                                                 onClick={() => setAttachedContext([])}
-                                                className={`p-1 rounded-full transition-colors overlay-icon-surface overlay-icon-surface-hover ${isLightTheme ? 'text-slate-500 hover:text-slate-900' : 'text-slate-400 hover:text-white'}`}
+                                                className="p-1 rounded-full transition-colors overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive"
                                                 title="Remove all"
+                                                style={appearance.iconStyle}
                                             >
                                                 <X className="w-3.5 h-3.5" />
                                             </button>
@@ -1680,7 +1683,7 @@ Provide only the answer, nothing else.`;
                                                 </div>
                                             ))}
                                         </div>
-                                        <span className={`text-[10px] ${isLightTheme ? 'text-slate-500' : 'text-slate-400'}`}>Ask a question or click Answer</span>
+                                        <span className="text-[10px] overlay-text-muted">Ask a question or click Answer</span>
                                     </div>
                                 )}
 
@@ -1693,17 +1696,18 @@ Provide only the answer, nothing else.`;
                                         onKeyDown={(e) => e.key === 'Enter' && handleManualSubmit()}
 
                                         className={`w-full border focus:ring-1 rounded-xl pl-3 pr-10 py-2.5 focus:outline-none transition-all duration-200 ease-sculpted text-[13px] leading-relaxed ${inputClass}`}
+                                        style={appearance.inputStyle}
                                     />
 
                                     {/* Custom Rich Placeholder */}
                                     {!inputValue && (
-                                        <div className={`absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none text-[13px] ${isLightTheme ? 'text-slate-500' : 'text-slate-400'}`}>
+                                        <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none text-[13px] overlay-text-muted">
                                             <span>Ask anything on screen or conversation, or</span>
                                             <div className="flex items-center gap-1 opacity-80">
                                                 {(shortcuts.selectiveScreenshot || ['⌘', 'Shift', 'H']).map((key, i) => (
                                                     <React.Fragment key={i}>
                                                         {i > 0 && <span className="text-[10px]">+</span>}
-                                                        <kbd className={`px-1.5 py-0.5 rounded border text-[10px] font-sans min-w-[20px] text-center overlay-control-surface ${isLightTheme ? 'text-slate-600' : 'text-slate-300'}`}>{key}</kbd>
+                                                        <kbd className="px-1.5 py-0.5 rounded border text-[10px] font-sans min-w-[20px] text-center overlay-control-surface overlay-text-secondary" style={appearance.controlStyle}>{key}</kbd>
                                                     </React.Fragment>
                                                 ))}
                                             </div>
@@ -1741,6 +1745,7 @@ Provide only the answer, nothing else.`;
                                                 interaction-base interaction-press
                                                 ${controlSurfaceClass}
                                             `}
+                                            style={appearance.controlStyle}
                                         >
                                             <span className="truncate min-w-0 flex-1">
                                                 {(() => {
@@ -1757,7 +1762,7 @@ Provide only the answer, nothing else.`;
                                             <ChevronDown size={14} className="shrink-0 transition-transform" />
                                         </button>
 
-                                        <div className={`w-px h-3 mx-1 ${isLightTheme ? 'bg-black/10' : 'bg-white/10'}`} />
+                                        <div className="w-px h-3 mx-1" style={appearance.dividerStyle} />
 
                                         {/* Settings Gear */}
                                         <div className="relative">
@@ -1789,10 +1794,11 @@ Provide only the answer, nothing else.`;
                                             w-7 h-7 flex items-center justify-center rounded-lg 
                                             interaction-base interaction-press
                                             ${isSettingsOpen
-                                                    ? (isLightTheme ? 'overlay-icon-surface overlay-icon-surface-hover text-slate-900' : 'overlay-icon-surface overlay-icon-surface-hover text-white')
-                                                    : (isLightTheme ? 'overlay-icon-surface overlay-icon-surface-hover text-slate-500 hover:text-slate-900' : 'overlay-icon-surface overlay-icon-surface-hover text-slate-500 hover:text-slate-300')}
+                                                    ? 'overlay-icon-surface overlay-icon-surface-hover overlay-text-primary'
+                                                    : 'overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive'}
                                         `}
                                                 title="Settings"
+                                                style={appearance.iconStyle}
                                             >
                                                 <SlidersHorizontal className="w-3.5 h-3.5" />
                                             </button>
@@ -1808,9 +1814,10 @@ Provide only the answer, nothing else.`;
                                     interaction-base interaction-press
                                     ${inputValue.trim()
                                                 ? 'bg-[#007AFF] text-white shadow-lg shadow-blue-500/20 hover:bg-[#0071E3]'
-                                                : (isLightTheme ? 'overlay-icon-surface text-slate-400 cursor-not-allowed' : 'overlay-icon-surface text-white/10 cursor-not-allowed')
+                                                : 'overlay-icon-surface overlay-text-muted cursor-not-allowed'
                                             }
                                 `}
+                                    style={inputValue.trim() ? undefined : appearance.iconStyle}
                                     >
                                         <ArrowRight className="w-3.5 h-3.5" />
                                     </button>
