@@ -400,9 +400,7 @@ export class AppState {
 
     // Auto-detect update channel based on current version
     const currentVersion = app.getVersion()
-    if (currentVersion.includes('alpha')) {
-      autoUpdater.channel = 'alpha'
-    } else if (currentVersion.includes('beta')) {
+    if (currentVersion.includes('beta')) {
       autoUpdater.channel = 'beta'
     } else {
       autoUpdater.channel = 'stable'
