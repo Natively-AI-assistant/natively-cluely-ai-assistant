@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell } from "electron"
+import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, screen } from "electron"
 import path from "path"
 import fs from "fs"
 import { autoUpdater } from "electron-updater"
@@ -93,12 +93,16 @@ type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreaming
 };
 
 type ScreenshotWindowMode = 'launcher' | 'overlay';
+type ScreenshotCaptureKind = 'full' | 'selective';
 
 interface ScreenshotCaptureSession {
+  captureKind: ScreenshotCaptureKind;
   wasMainWindowVisible: boolean;
   windowMode: ScreenshotWindowMode;
   wasSettingsVisible: boolean;
   wasModelSelectorVisible: boolean;
+  overlayBounds: Electron.Rectangle | null;
+  overlayDisplayId: number | null;
   restoreWithoutFocus: boolean;
 }
 
@@ -1325,17 +1329,38 @@ export class AppState {
     this.setView("queue")
   }
 
-  private createScreenshotCaptureSession(): ScreenshotCaptureSession {
+  private createScreenshotCaptureSession(captureKind: ScreenshotCaptureKind): ScreenshotCaptureSession {
     const settingsWindow = this.settingsWindowHelper.getSettingsWindow();
     const modelSelectorWindow = this.modelSelectorWindowHelper.getWindow();
 
     return {
+      captureKind,
       wasMainWindowVisible: this.windowHelper.isVisible(),
       windowMode: this.windowHelper.getCurrentWindowMode(),
       wasSettingsVisible: !!settingsWindow && !settingsWindow.isDestroyed() && settingsWindow.isVisible(),
       wasModelSelectorVisible: !!modelSelectorWindow && !modelSelectorWindow.isDestroyed() && modelSelectorWindow.isVisible(),
+      overlayBounds: this.windowHelper.getLastOverlayBounds(),
+      overlayDisplayId: this.windowHelper.getLastOverlayDisplayId(),
       restoreWithoutFocus: process.platform === 'darwin'
     };
+  }
+
+  private getDisplayById(displayId: number | null): Electron.Display | undefined {
+    if (displayId === null) return undefined;
+    return screen.getAllDisplays().find(display => display.id === displayId);
+  }
+
+  private getTargetDisplayForFullScreenshot(session: ScreenshotCaptureSession): Electron.Display {
+    if (session.windowMode === 'overlay' && session.overlayBounds) {
+      return screen.getDisplayMatching(session.overlayBounds);
+    }
+
+    const lastOverlayDisplay = this.getDisplayById(session.overlayDisplayId);
+    if (lastOverlayDisplay) {
+      return lastOverlayDisplay;
+    }
+
+    return screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   }
 
   private hideWindowsForScreenshot(session: ScreenshotCaptureSession): void {
@@ -1382,7 +1407,10 @@ export class AppState {
     }
   }
 
-  private async withScreenshotCaptureSession<T>(capture: () => Promise<T>): Promise<T> {
+  private async withScreenshotCaptureSession<T>(
+    captureKind: ScreenshotCaptureKind,
+    capture: (session: ScreenshotCaptureSession) => Promise<T>
+  ): Promise<T> {
     if (!this.getMainWindow()) {
       throw new Error("No main window available");
     }
@@ -1391,13 +1419,13 @@ export class AppState {
       throw new Error("Screenshot capture already in progress");
     }
 
-    const session = this.createScreenshotCaptureSession();
+    const session = this.createScreenshotCaptureSession(captureKind);
     this.screenshotCaptureInProgress = true;
 
     try {
       this.hideWindowsForScreenshot(session);
       await new Promise(resolve => setTimeout(resolve, 50));
-      return await capture();
+      return await capture(session);
     } finally {
       try {
         this.restoreWindowsAfterScreenshot(session);
@@ -1409,11 +1437,13 @@ export class AppState {
 
   // Screenshot management methods
   public async takeScreenshot(): Promise<string> {
-    return this.withScreenshotCaptureSession(() => this.screenshotHelper.takeScreenshot())
+    return this.withScreenshotCaptureSession('full', (session) =>
+      this.screenshotHelper.takeScreenshot(this.getTargetDisplayForFullScreenshot(session))
+    )
   }
 
   public async takeSelectiveScreenshot(): Promise<string> {
-    return this.withScreenshotCaptureSession(async () => {
+    return this.withScreenshotCaptureSession('selective', async () => {
       let captureArea: Electron.Rectangle | undefined;
 
       if (process.platform === 'win32' || process.platform === 'darwin') {

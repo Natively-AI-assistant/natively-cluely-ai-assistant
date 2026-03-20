@@ -7,34 +7,6 @@ import { v4 as uuidv4 } from "uuid"
 import util from "util"
 import sharp from "sharp"
 
-function getCombinedDisplayBounds(): Electron.Rectangle {
-  const displays = screen.getAllDisplays();
-
-  if (displays.length === 0) {
-    return screen.getPrimaryDisplay().bounds;
-  }
-
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-
-  for (const display of displays) {
-    const { x, y, width, height } = display.bounds;
-    minX = Math.min(minX, x);
-    minY = Math.min(minY, y);
-    maxX = Math.max(maxX, x + width);
-    maxY = Math.max(maxY, y + height);
-  }
-
-  return {
-    x: minX,
-    y: minY,
-    width: maxX - minX,
-    height: maxY - minY
-  };
-}
-
 function normalizeDesktopCaptureError(error: unknown): Error {
   if ((error as NodeJS.ErrnoException)?.name === 'NotAllowedError') {
     return new Error(
@@ -425,10 +397,16 @@ export class ScreenshotHelper {
    * @param area Optional rectangle to crop the screenshot (in screen coordinates)
    * @throws Error if screen capture fails or permissions are denied
    */
-  private async captureWithDesktopCapturer(outputPath: string, area?: Electron.Rectangle): Promise<void> {
+  private async captureWithDesktopCapturer(
+    outputPath: string,
+    area?: Electron.Rectangle,
+    preferredDisplay?: Electron.Display
+  ): Promise<void> {
     let targetDisplay: Electron.Display;
     
-    if (area) {
+    if (preferredDisplay) {
+      targetDisplay = preferredDisplay;
+    } else if (area) {
       // Find which display contains the selection area
       targetDisplay = getDisplayContainingRect(area);
     } else {
@@ -547,14 +525,6 @@ export class ScreenshotHelper {
   }
 
   /**
-   * Captures the entire virtual desktop across all displays.
-   */
-  private async captureAllDisplays(outputPath: string): Promise<void> {
-    const virtualBounds = getCombinedDisplayBounds();
-    await this.captureStitchedDesktopArea(outputPath, virtualBounds);
-  }
-
-  /**
    * Linux-only screenshot command builder.
    */
   private getScreenshotCommand(outputPath: string, interactive: boolean): string {
@@ -576,7 +546,7 @@ export class ScreenshotHelper {
     throw new Error(`Unsupported platform for screenshots: ${platform}`);
   }
 
-  public async takeScreenshot(): Promise<string> {
+  public async takeScreenshot(preferredDisplay?: Electron.Display): Promise<string> {
     try {
       console.log('[ScreenshotHelper] Taking screenshot...');
 
@@ -588,7 +558,7 @@ export class ScreenshotHelper {
         screenshotPath = path.join(this.screenshotDir, `${uuidv4()}.png`)
         console.log(`[ScreenshotHelper] Using queue directory: ${screenshotPath}`);
         if (process.platform === 'darwin') {
-          await this.captureAllDisplays(screenshotPath);
+          await this.captureWithDesktopCapturer(screenshotPath, undefined, preferredDisplay);
         } else if (process.platform === 'win32') {
           await this.captureWithDesktopCapturer(screenshotPath);
         } else {
@@ -611,7 +581,7 @@ export class ScreenshotHelper {
         screenshotPath = path.join(this.extraScreenshotDir, `${uuidv4()}.png`)
         console.log(`[ScreenshotHelper] Using extra screenshots directory: ${screenshotPath}`);
         if (process.platform === 'darwin') {
-          await this.captureAllDisplays(screenshotPath);
+          await this.captureWithDesktopCapturer(screenshotPath, undefined, preferredDisplay);
         } else if (process.platform === 'win32') {
           await this.captureWithDesktopCapturer(screenshotPath);
         } else {
