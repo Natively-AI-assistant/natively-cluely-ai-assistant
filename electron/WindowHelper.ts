@@ -16,6 +16,10 @@ const startUrl = isDev
   ? "http://localhost:5180"
   : `file://${path.join(__dirname, "../../dist/index.html")}`
 
+type WindowActivationOptions = {
+  activate?: boolean
+}
+
 export class WindowHelper {
   private launcherWindow: BrowserWindow | null = null
   private overlayWindow: BrowserWindow | null = null
@@ -348,11 +352,24 @@ export class WindowHelper {
     this.launcherWindow?.center();
   }
 
+  private revealWindow(win: BrowserWindow, options: WindowActivationOptions = {}): void {
+    const activate = options.activate ?? true;
+
+    if (activate) {
+      win.show();
+      win.focus();
+      return;
+    }
+
+    win.showInactive();
+  }
+
   // --- Swapping Logic ---
 
-  public switchToOverlay(): void {
+  public switchToOverlay(options: WindowActivationOptions = {}): void {
     console.log('[WindowHelper] Switching to OVERLAY');
     this.currentWindowMode = 'overlay';
+    const activate = options.activate ?? true;
 
     // Show Overlay FIRST
     if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
@@ -378,14 +395,15 @@ export class WindowHelper {
         this.opacityTimeout = setTimeout(() => {
           if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
             this.overlayWindow.setOpacity(1);
-            this.overlayWindow.focus();
+            if (activate) {
+              this.overlayWindow.focus();
+            }
             this.overlayWindow.setAlwaysOnTop(true, "floating");
           }
         }, 60);
       } else {
         this.overlayWindow.setContentProtection(this.contentProtection);
-        this.overlayWindow.show();
-        this.overlayWindow.focus();
+        this.revealWindow(this.overlayWindow, options);
         this.overlayWindow.setAlwaysOnTop(true, "floating");
       }
       this.isWindowVisible = true;
@@ -397,9 +415,10 @@ export class WindowHelper {
     }
   }
 
-  public switchToLauncher(): void {
+  public switchToLauncher(options: WindowActivationOptions = {}): void {
     console.log('[WindowHelper] Switching to LAUNCHER');
     this.currentWindowMode = 'launcher';
+    const activate = options.activate ?? true;
 
     // Show Launcher FIRST
     if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
@@ -413,13 +432,14 @@ export class WindowHelper {
         this.opacityTimeout = setTimeout(() => {
           if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
             this.launcherWindow.setOpacity(1);
-            this.launcherWindow.focus();
+            if (activate) {
+              this.launcherWindow.focus();
+            }
           }
         }, 60);
       } else {
         this.launcherWindow.setContentProtection(this.contentProtection);
-        this.launcherWindow.show();
-        this.launcherWindow.focus();
+        this.revealWindow(this.launcherWindow, options);
       }
       this.isWindowVisible = true;
     }

@@ -1414,7 +1414,9 @@ Provide only the answer, nothing else.`;
                     handleScreenshotAttach(data as { path: string; preview: string });
                 }
             } catch (err) {
-                console.error("Error triggering screenshot:", err);
+                if (!(err instanceof Error) || err.message !== "Screenshot capture already in progress") {
+                    console.error("Error triggering screenshot:", err);
+                }
             }
         },
         selectiveScreenshot: async () => {
@@ -1424,7 +1426,9 @@ Provide only the answer, nothing else.`;
                     handleScreenshotAttach(data as { path: string; preview: string });
                 }
             } catch (err) {
-                console.error("Error triggering selective screenshot:", err);
+                if (!(err instanceof Error) || err.message !== "Screenshot capture already in progress") {
+                    console.error("Error triggering selective screenshot:", err);
+                }
             }
         }
     });
@@ -1450,7 +1454,9 @@ Provide only the answer, nothing else.`;
                     handleScreenshotAttach(data as { path: string; preview: string });
                 }
             } catch (err) {
-                console.error("Error triggering screenshot:", err);
+                if (!(err instanceof Error) || err.message !== "Screenshot capture already in progress") {
+                    console.error("Error triggering screenshot:", err);
+                }
             }
         },
         selectiveScreenshot: async () => {
@@ -1460,7 +1466,9 @@ Provide only the answer, nothing else.`;
                     handleScreenshotAttach(data as { path: string; preview: string });
                 }
             } catch (err) {
-                console.error("Error triggering selective screenshot:", err);
+                if (!(err instanceof Error) || err.message !== "Screenshot capture already in progress") {
+                    console.error("Error triggering selective screenshot:", err);
+                }
             }
         }
     };

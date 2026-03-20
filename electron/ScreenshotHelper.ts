@@ -7,6 +7,48 @@ import { v4 as uuidv4 } from "uuid"
 import util from "util"
 import sharp from "sharp"
 
+function getCombinedDisplayBounds(): Electron.Rectangle {
+  const displays = screen.getAllDisplays();
+
+  if (displays.length === 0) {
+    return screen.getPrimaryDisplay().bounds;
+  }
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const display of displays) {
+    const { x, y, width, height } = display.bounds;
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x + width);
+    maxY = Math.max(maxY, y + height);
+  }
+
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY
+  };
+}
+
+function normalizeDesktopCaptureError(error: unknown): Error {
+  if ((error as NodeJS.ErrnoException)?.name === 'NotAllowedError') {
+    return new Error(
+      'Screen capture permission denied. Please grant screen recording permission in System Settings > Privacy & Security > Screen Recording.'
+    );
+  }
+
+  if ((error as NodeJS.ErrnoException)?.name === 'NotFoundError') {
+    return new Error('No screen sources available. Please ensure at least one display is connected.');
+  }
+
+  return new Error(`Failed to capture screen: ${error instanceof Error ? error.message : String(error)}`);
+}
+
 /**
  * Finds the display that best contains the given rectangle.
  * Used to determine which monitor to capture for a selection area.
@@ -87,7 +129,13 @@ async function getDisplaysIntersectingSelection(
     });
   } catch (error) {
     console.error('[ScreenshotHelper] Failed to get desktop sources:', error);
-    throw error;
+    throw normalizeDesktopCaptureError(error);
+  }
+
+  if (sources.length === 0) {
+    throw new Error(
+      'No screen sources available. Check screen recording permissions in System Settings > Privacy & Security > Screen Recording.'
+    );
   }
   
   console.log(`[ScreenshotHelper] Found ${sources.length} screen sources for ${displays.length} displays`);
@@ -410,16 +458,7 @@ export class ScreenshotHelper {
       console.log(`[ScreenshotHelper] Found ${sources.length} screen source(s)`);
     } catch (error) {
       console.error('[ScreenshotHelper] desktopCapturer.getSources failed:', error);
-      // Handle specific error types
-      if ((error as NodeJS.ErrnoException).name === 'NotAllowedError') {
-        throw new Error(
-          'Screen capture permission denied. Please grant screen recording permission in System Settings > Privacy & Security > Screen Recording.'
-        );
-      }
-      if ((error as NodeJS.ErrnoException).name === 'NotFoundError') {
-        throw new Error('No screen sources available. Please ensure at least one display is connected.');
-      }
-      throw new Error(`Failed to capture screen: ${(error as Error).message}`);
+      throw normalizeDesktopCaptureError(error);
     }
 
     if (sources.length === 0) {
@@ -498,9 +537,25 @@ export class ScreenshotHelper {
   }
 
   /**
-   * Platform-aware screenshot command builder.
-   * Supports macOS (screencapture) and Linux (gnome-screenshot/scrot/import).
-   * Windows uses desktopCapturer API instead (see captureWithDesktopCapturer).
+   * Captures a virtual screen region by reading the intersecting displays and stitching them.
+   */
+  private async captureStitchedDesktopArea(outputPath: string, area: Electron.Rectangle): Promise<void> {
+    const captures = await getDisplaysIntersectingSelection(area);
+    const stitchedBuffer = await stitchImages(captures, area);
+    await fs.promises.writeFile(outputPath, stitchedBuffer);
+    console.log(`[ScreenshotHelper] Stitched screenshot saved to: ${outputPath}`);
+  }
+
+  /**
+   * Captures the entire virtual desktop across all displays.
+   */
+  private async captureAllDisplays(outputPath: string): Promise<void> {
+    const virtualBounds = getCombinedDisplayBounds();
+    await this.captureStitchedDesktopArea(outputPath, virtualBounds);
+  }
+
+  /**
+   * Linux-only screenshot command builder.
    */
   private getScreenshotCommand(outputPath: string, interactive: boolean): string {
     // Safety: outputPath must be within our controlled directories.
@@ -513,11 +568,7 @@ export class ScreenshotHelper {
     }
     const safePath = outputPath.replace(/"/g, '\\"');
     const platform = process.platform;
-    if (platform === 'darwin') {
-      return interactive
-        ? `screencapture -i -x "${safePath}"`
-        : `screencapture -x -C "${safePath}"`;
-    } else if (platform === 'linux') {
+    if (platform === 'linux') {
       return interactive
         ? `gnome-screenshot -a -f "${safePath}" 2>/dev/null || scrot -s "${safePath}" 2>/dev/null || import "${safePath}"`
         : `gnome-screenshot -f "${safePath}" 2>/dev/null || scrot "${safePath}" 2>/dev/null || import -window root "${safePath}"`;
@@ -525,14 +576,9 @@ export class ScreenshotHelper {
     throw new Error(`Unsupported platform for screenshots: ${platform}`);
   }
 
-  public async takeScreenshot(
-    hideMainWindow: () => void,
-    showMainWindow: () => void
-  ): Promise<string> {
+  public async takeScreenshot(): Promise<string> {
     try {
       console.log('[ScreenshotHelper] Taking screenshot...');
-      hideMainWindow()
-      await new Promise(resolve => setTimeout(resolve, 50))
 
       let screenshotPath = ""
 
@@ -541,7 +587,9 @@ export class ScreenshotHelper {
       if (this.view === "queue") {
         screenshotPath = path.join(this.screenshotDir, `${uuidv4()}.png`)
         console.log(`[ScreenshotHelper] Using queue directory: ${screenshotPath}`);
-        if (process.platform === 'win32') {
+        if (process.platform === 'darwin') {
+          await this.captureAllDisplays(screenshotPath);
+        } else if (process.platform === 'win32') {
           await this.captureWithDesktopCapturer(screenshotPath);
         } else {
           await exec(this.getScreenshotCommand(screenshotPath, false))
@@ -562,7 +610,9 @@ export class ScreenshotHelper {
       } else {
         screenshotPath = path.join(this.extraScreenshotDir, `${uuidv4()}.png`)
         console.log(`[ScreenshotHelper] Using extra screenshots directory: ${screenshotPath}`);
-        if (process.platform === 'win32') {
+        if (process.platform === 'darwin') {
+          await this.captureAllDisplays(screenshotPath);
+        } else if (process.platform === 'win32') {
           await this.captureWithDesktopCapturer(screenshotPath);
         } else {
           await exec(this.getScreenshotCommand(screenshotPath, false))
@@ -586,46 +636,30 @@ export class ScreenshotHelper {
       return screenshotPath
     } catch (error) {
       console.error('[ScreenshotHelper] Failed to take screenshot:', error);
-      throw new Error(`Failed to take screenshot: ${error.message}`)
-    } finally {
-      showMainWindow()
-      console.log('[ScreenshotHelper] Main window restored');
+      throw new Error(`Failed to take screenshot: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
-  public async takeSelectiveScreenshot(
-    hideMainWindow: () => void,
-    showMainWindow: () => void,
-    captureArea?: Electron.Rectangle
-  ): Promise<string> {
+  public async takeSelectiveScreenshot(captureArea?: Electron.Rectangle): Promise<string> {
     try {
       console.log('[ScreenshotHelper] Taking selective screenshot...');
       console.log(`[ScreenshotHelper] Capture area: ${captureArea ? JSON.stringify(captureArea) : 'user selection'}`);
-      
-      hideMainWindow()
-      await new Promise(resolve => setTimeout(resolve, 50))
 
       const screenshotPath = path.join(this.screenshotDir, `selective-${uuidv4()}.png`)
 
-      if (process.platform === 'win32' && captureArea) {
+      if ((process.platform === 'win32' || process.platform === 'darwin') && captureArea) {
         // Check if selection spans multiple displays
         const isMulti = isMultiDisplaySelection(captureArea);
         
         if (isMulti) {
           console.log('[ScreenshotHelper] Selection spans multiple displays - using stitched capture');
-          
-          // Capture from all intersecting displays and stitch
-          const captures = await getDisplaysIntersectingSelection(captureArea);
-          const stitchedBuffer = await stitchImages(captures, captureArea);
-          
-          await fs.promises.writeFile(screenshotPath, stitchedBuffer);
-          console.log(`[ScreenshotHelper] Stitched screenshot saved to: ${screenshotPath}`);
+          await this.captureStitchedDesktopArea(screenshotPath, captureArea);
         } else {
           console.log('[ScreenshotHelper] Selection within single display - using standard capture');
           await this.captureWithDesktopCapturer(screenshotPath, captureArea);
         }
-      } else {
-        // macOS/Linux: use interactive selection command
+      } else if (process.platform === 'linux') {
+        // Linux: use interactive selection command
         const exec = util.promisify(require('child_process').exec);
         console.log('[ScreenshotHelper] Using interactive selection');
         try {
@@ -634,6 +668,8 @@ export class ScreenshotHelper {
           console.warn('[ScreenshotHelper] User cancelled selection or error occurred:', e);
           throw new Error("Selection cancelled")
         }
+      } else {
+        throw new Error('Selection bounds are required for this platform');
       }
 
       // Verify file exists (user might have pressed Esc)
@@ -661,9 +697,6 @@ export class ScreenshotHelper {
     } catch (error) {
       console.error('[ScreenshotHelper] Failed to take selective screenshot:', error);
       throw error
-    } finally {
-      showMainWindow()
-      console.log('[ScreenshotHelper] Main window restored after selective screenshot');
     }
   }
 

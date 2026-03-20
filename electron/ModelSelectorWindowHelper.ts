@@ -9,6 +9,14 @@ const startUrl = isDev
 
 import type { WindowHelper } from "./WindowHelper"
 
+type WindowActivationOptions = {
+    activate?: boolean
+}
+
+type HideWindowOptions = {
+    restoreFocus?: boolean
+}
+
 export class ModelSelectorWindowHelper {
     private window: BrowserWindow | null = null
     private contentProtection: boolean = false
@@ -30,6 +38,18 @@ export class ModelSelectorWindowHelper {
         this.windowHelper = wh;
     }
 
+    private revealWindow(win: BrowserWindow, options: WindowActivationOptions = {}): void {
+        const activate = options.activate ?? true;
+
+        if (activate) {
+            win.show();
+            win.focus();
+            return;
+        }
+
+        win.showInactive();
+    }
+
     public getWindow(): BrowserWindow | null {
         return this.window
     }
@@ -40,11 +60,12 @@ export class ModelSelectorWindowHelper {
         }
     }
 
-    public showWindow(x: number, y: number): void {
+    public showWindow(x: number, y: number, options: WindowActivationOptions = {}): void {
         if (!this.window || this.window.isDestroyed()) {
             this.createWindow(x, y)
             return
         }
+        const activate = options.activate ?? true;
 
         // Set parent and align window settings
         const mainWin = this.windowHelper?.getMainWindow();
@@ -75,24 +96,26 @@ export class ModelSelectorWindowHelper {
             this.opacityTimeout = setTimeout(() => {
                 if (this.window && !this.window.isDestroyed()) {
                     this.window.setOpacity(1);
-                    this.window.focus();
+                    if (activate) {
+                        this.window.focus();
+                    }
                 }
             }, 60);
         } else {
             this.window.setContentProtection(this.contentProtection);
-            this.window.show();
-            this.window.focus();
+            this.revealWindow(this.window, options);
         }
     }
 
-    public hideWindow(): void {
+    public hideWindow(options: HideWindowOptions = {}): void {
         if (this.window && !this.window.isDestroyed()) {
+            const restoreFocus = options.restoreFocus ?? true;
             this.window.setParentWindow(null);
             this.window.hide()
 
             // Restore focus
             const mainWin = this.windowHelper?.getMainWindow();
-            if (mainWin && !mainWin.isDestroyed() && mainWin.isVisible()) {
+            if (restoreFocus && mainWin && !mainWin.isDestroyed() && mainWin.isVisible()) {
                 mainWin.focus();
             }
         }

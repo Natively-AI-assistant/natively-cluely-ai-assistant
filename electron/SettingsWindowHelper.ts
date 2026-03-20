@@ -8,6 +8,10 @@ const startUrl = isDev
     ? "http://localhost:5180"
     : `file://${path.join(app.getAppPath(), "dist/index.html")}`
 
+type WindowActivationOptions = {
+    activate?: boolean
+}
+
 export class SettingsWindowHelper {
     private settingsWindow: BrowserWindow | null = null
     private windowHelper: WindowHelper | null = null;
@@ -54,6 +58,18 @@ export class SettingsWindowHelper {
         this.windowHelper = wh;
     }
 
+    private revealWindow(win: BrowserWindow, options: WindowActivationOptions = {}): void {
+        const activate = options.activate ?? true;
+
+        if (activate) {
+            win.show();
+            win.focus();
+            return;
+        }
+
+        win.showInactive();
+    }
+
     public toggleWindow(x?: number, y?: number): void {
         const mainWindow = BrowserWindow.getAllWindows().find(w => !w.isDestroyed() && w !== this.settingsWindow);
         if (mainWindow && x !== undefined && y !== undefined) {
@@ -78,11 +94,12 @@ export class SettingsWindowHelper {
         }
     }
 
-    public showWindow(x?: number, y?: number): void {
+    public showWindow(x?: number, y?: number, options: WindowActivationOptions = {}): void {
         if (!this.settingsWindow || this.settingsWindow.isDestroyed()) {
             this.createWindow(x, y)
             return
         }
+        const activate = options.activate ?? true;
 
         // Set parent to ensure it stays on top of the correct window
         const mainWin = this.windowHelper?.getMainWindow();
@@ -106,13 +123,14 @@ export class SettingsWindowHelper {
             this.opacityTimeout = setTimeout(() => {
                 if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
                     this.settingsWindow.setOpacity(1);
-                    this.settingsWindow.focus();
+                    if (activate) {
+                        this.settingsWindow.focus();
+                    }
                 }
             }, 60);
         } else {
             this.settingsWindow.setContentProtection(this.contentProtection);
-            this.settingsWindow.show();
-            this.settingsWindow.focus();
+            this.revealWindow(this.settingsWindow, options);
         }
         
         this.emitVisibilityChange(true);
