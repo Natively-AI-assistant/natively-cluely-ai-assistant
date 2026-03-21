@@ -9,7 +9,7 @@
     "sourceMap": true,
     "jsx": "react-jsx",
     "baseUrl": ".",
-    "outDir": "../dist-electron",
+    "outDir": "../dist-electron/electron",
     "moduleResolution": "node",
     "resolveJsonModule": true
   },
