@@ -2533,6 +2533,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 </div>
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
+                                                        <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><Sparkles size={14} /></span>
+                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">Capture Screen & Ask AI</span>
+                                                    </div>
+                                                    <KeyRecorder
+                                                        currentKeys={shortcuts.captureAndProcess}
+                                                        onSave={(keys) => updateShortcut('captureAndProcess', keys)}
+                                                    />
+                                                </div>
+                                                <div className="flex items-center justify-between py-1.5 group">
+                                                    <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><RotateCcw size={14} /></span>
                                                         <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">Reset / Cancel</span>
                                                     </div>

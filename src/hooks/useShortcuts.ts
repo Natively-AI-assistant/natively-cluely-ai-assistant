@@ -18,6 +18,7 @@ export interface ShortcutConfig {
     // General
     toggleVisibility: string[];
     processScreenshots: string[];
+    captureAndProcess: string[];
     resetCancel: string[];
     takeScreenshot: string[];
     selectiveScreenshot: string[];
@@ -37,6 +38,7 @@ export const DEFAULT_SHORTCUTS: ShortcutConfig = {
     moveWindowRight: ['⌘', '→'],
     toggleVisibility: ['⌘', 'B'],
     processScreenshots: ['⌘', 'Enter'],
+    captureAndProcess: ['⌘', 'Shift', 'Enter'],
     resetCancel: ['⌘', 'R'],
     takeScreenshot: ['⌘', 'H'],
     selectiveScreenshot: ['⌘', 'Shift', 'H']
@@ -70,6 +72,7 @@ export const useShortcuts = () => {
                 // General
                 else if (kb.id === 'general:toggle-visibility') newShortcuts.toggleVisibility = keys;
                 else if (kb.id === 'general:process-screenshots') newShortcuts.processScreenshots = keys;
+                else if (kb.id === 'general:capture-and-process') newShortcuts.captureAndProcess = keys;
                 else if (kb.id === 'general:reset-cancel') newShortcuts.resetCancel = keys;
                 else if (kb.id === 'general:take-screenshot') newShortcuts.takeScreenshot = keys;
                 else if (kb.id === 'general:selective-screenshot') newShortcuts.selectiveScreenshot = keys;
@@ -124,6 +127,7 @@ export const useShortcuts = () => {
         // General
         else if (actionId === 'toggleVisibility') backendId = 'general:toggle-visibility';
         else if (actionId === 'processScreenshots') backendId = 'general:process-screenshots';
+        else if (actionId === 'captureAndProcess') backendId = 'general:capture-and-process';
         else if (actionId === 'resetCancel') backendId = 'general:reset-cancel';
         else if (actionId === 'takeScreenshot') backendId = 'general:take-screenshot';
         else if (actionId === 'selectiveScreenshot') backendId = 'general:selective-screenshot';
