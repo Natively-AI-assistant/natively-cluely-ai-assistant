@@ -9,6 +9,10 @@ const startUrl = isDev
 
 import type { WindowHelper } from "./WindowHelper"
 
+type WindowActivationOptions = {
+    activate?: boolean
+}
+
 export class ModelSelectorWindowHelper {
     private window: BrowserWindow | null = null
     private contentProtection: boolean = false
@@ -40,11 +44,13 @@ export class ModelSelectorWindowHelper {
         }
     }
 
-    public showWindow(x: number, y: number): void {
+    public showWindow(x: number, y: number, options: WindowActivationOptions = {}): void {
         if (!this.window || this.window.isDestroyed()) {
             this.createWindow(x, y)
             return
         }
+
+        const activate = options.activate ?? true;
 
         // Set parent and align window settings
         const mainWin = this.windowHelper?.getMainWindow();
@@ -73,20 +79,20 @@ export class ModelSelectorWindowHelper {
 
         if (process.platform === 'win32' && this.contentProtection) {
             this.window.setOpacity(0);
-            this.window.show();
+            if (activate) this.window.show(); else this.window.showInactive();
             this.window.setContentProtection(true);
             
             if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
             this.opacityTimeout = setTimeout(() => {
                 if (this.window && !this.window.isDestroyed()) {
                     this.window.setOpacity(1);
-                    this.window.focus();
+                    if (activate) this.window.focus();
                 }
             }, 60);
         } else {
             this.window.setContentProtection(this.contentProtection);
-            this.window.show();
-            this.window.focus();
+            if (activate) this.window.show(); else this.window.showInactive();
+            if (activate) this.window.focus();
         }
     }
 

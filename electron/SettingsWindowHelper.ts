@@ -8,6 +8,10 @@ const startUrl = isDev
     ? "http://localhost:5180"
     : `file://${path.join(app.getAppPath(), "dist/index.html")}`
 
+type WindowActivationOptions = {
+    activate?: boolean
+}
+
 export class SettingsWindowHelper {
     private settingsWindow: BrowserWindow | null = null
     private windowHelper: WindowHelper | null = null;
@@ -78,11 +82,13 @@ export class SettingsWindowHelper {
         }
     }
 
-    public showWindow(x?: number, y?: number): void {
+    public showWindow(x?: number, y?: number, options: WindowActivationOptions = {}): void {
         if (!this.settingsWindow || this.settingsWindow.isDestroyed()) {
             this.createWindow(x, y)
             return
         }
+
+        const activate = options.activate ?? true;
 
         // Set parent to ensure it stays on top of the correct window
         const mainWin = this.windowHelper?.getMainWindow();
@@ -99,20 +105,20 @@ export class SettingsWindowHelper {
 
         if (process.platform === 'win32' && this.contentProtection) {
             this.settingsWindow.setOpacity(0);
-            this.settingsWindow.show();
+            if (activate) this.settingsWindow.show(); else this.settingsWindow.showInactive();
             this.settingsWindow.setContentProtection(true);
             
             if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
             this.opacityTimeout = setTimeout(() => {
                 if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
                     this.settingsWindow.setOpacity(1);
-                    this.settingsWindow.focus();
+                    if (activate) this.settingsWindow.focus();
                 }
             }, 60);
         } else {
             this.settingsWindow.setContentProtection(this.contentProtection);
-            this.settingsWindow.show();
-            this.settingsWindow.focus();
+            if (activate) this.settingsWindow.show(); else this.settingsWindow.showInactive();
+            if (activate) this.settingsWindow.focus();
         }
         
         this.emitVisibilityChange(true);

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPreferences } from "electron"
+import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPreferences, screen } from "electron"
 import path from "path"
 import fs from "fs"
 import { autoUpdater } from "electron-updater"
@@ -109,6 +109,20 @@ type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreaming
   notifySpeechEnded?: () => void;
 };
 
+type ScreenshotWindowMode = 'launcher' | 'overlay';
+type ScreenshotCaptureKind = 'full' | 'selective';
+
+interface ScreenshotCaptureSession {
+  captureKind: ScreenshotCaptureKind;
+  wasMainWindowVisible: boolean;
+  windowMode: ScreenshotWindowMode;
+  wasSettingsVisible: boolean;
+  wasModelSelectorVisible: boolean;
+  overlayBounds: Electron.Rectangle | null;
+  overlayDisplayId: number | null;
+  restoreWithoutFocus: boolean;
+}
+
 // Premium: Knowledge modules loaded conditionally
 let KnowledgeOrchestratorClass: any = null;
 let KnowledgeDatabaseManagerClass: any = null;
@@ -163,6 +177,7 @@ export class AppState {
   private _dockDebounceTimer: NodeJS.Timeout | null = null; // Debounce dock state changes
   private _dockReassertTimers: NodeJS.Timeout[] = []; // Re-assert dock-hidden state after show+focus
   private _ollamaBootstrapPromise: Promise<void> | null = null;
+  private screenshotCaptureInProgress: boolean = false;
 
 
   // Processing events
@@ -321,7 +336,7 @@ export class AppState {
           });
         }
       } catch (e: any) {
-        if (e.message !== "Selection cancelled") {
+        if (e.message !== "Selection cancelled" && e.message !== "Screenshot capture already in progress") {
           console.error(`[Main] Error handling global shortcut ${actionId}:`, e);
         }
       }
@@ -1491,81 +1506,137 @@ export class AppState {
     this.setView("queue")
   }
 
+  private createScreenshotCaptureSession(
+    captureKind: ScreenshotCaptureKind,
+    restoreFocus: boolean
+  ): ScreenshotCaptureSession {
+    const settingsWindow = this.settingsWindowHelper.getSettingsWindow();
+    const modelSelectorWindow = this.modelSelectorWindowHelper.getWindow();
+
+    return {
+      captureKind,
+      wasMainWindowVisible: this.windowHelper.isVisible(),
+      windowMode: this.windowHelper.getCurrentWindowMode(),
+      wasSettingsVisible: !!settingsWindow && !settingsWindow.isDestroyed() && settingsWindow.isVisible(),
+      wasModelSelectorVisible: !!modelSelectorWindow && !modelSelectorWindow.isDestroyed() && modelSelectorWindow.isVisible(),
+      overlayBounds: this.windowHelper.getLastOverlayBounds(),
+      overlayDisplayId: this.windowHelper.getLastOverlayDisplayId(),
+      restoreWithoutFocus: process.platform === 'darwin' || !restoreFocus
+    };
+  }
+
+  private getDisplayById(displayId: number | null): Electron.Display | undefined {
+    if (displayId === null) return undefined;
+    return screen.getAllDisplays().find(display => display.id === displayId);
+  }
+
+  private getTargetDisplayForFullScreenshot(session: ScreenshotCaptureSession): Electron.Display {
+    if (session.windowMode === 'overlay' && session.overlayBounds) {
+      return screen.getDisplayMatching(session.overlayBounds);
+    }
+
+    const lastOverlayDisplay = this.getDisplayById(session.overlayDisplayId);
+    if (lastOverlayDisplay) {
+      return lastOverlayDisplay;
+    }
+
+    return screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  }
+
+  private hideWindowsForScreenshot(session: ScreenshotCaptureSession): void {
+    if (session.wasModelSelectorVisible) {
+      this.modelSelectorWindowHelper.hideWindow();
+    }
+
+    if (session.wasSettingsVisible) {
+      this.settingsWindowHelper.closeWindow();
+    }
+
+    if (session.wasMainWindowVisible) {
+      this.hideMainWindow();
+    }
+  }
+
+  private restoreWindowsAfterScreenshot(session: ScreenshotCaptureSession): void {
+    const activate = !session.restoreWithoutFocus;
+    const shouldRestoreMainWindow =
+      session.wasMainWindowVisible || session.wasSettingsVisible || session.wasModelSelectorVisible;
+
+    if (shouldRestoreMainWindow) {
+      if (session.windowMode === 'overlay') {
+        this.windowHelper.switchToOverlay(!activate);
+      } else {
+        this.windowHelper.switchToLauncher(!activate);
+      }
+    }
+
+    if (session.wasSettingsVisible) {
+      const settingsWindow = this.settingsWindowHelper.getSettingsWindow();
+      if (settingsWindow && !settingsWindow.isDestroyed()) {
+        const { x, y } = settingsWindow.getBounds();
+        this.settingsWindowHelper.showWindow(x, y, { activate });
+      }
+    }
+
+    if (session.wasModelSelectorVisible) {
+      const modelSelectorWindow = this.modelSelectorWindowHelper.getWindow();
+      if (modelSelectorWindow && !modelSelectorWindow.isDestroyed()) {
+        const { x, y } = modelSelectorWindow.getBounds();
+        this.modelSelectorWindowHelper.showWindow(x, y, { activate });
+      }
+    }
+  }
+
+  private async withScreenshotCaptureSession<T>(
+    captureKind: ScreenshotCaptureKind,
+    restoreFocus: boolean,
+    capture: (session: ScreenshotCaptureSession) => Promise<T>
+  ): Promise<T> {
+    if (!this.getMainWindow()) {
+      throw new Error("No main window available");
+    }
+
+    if (this.screenshotCaptureInProgress) {
+      throw new Error("Screenshot capture already in progress");
+    }
+
+    const session = this.createScreenshotCaptureSession(captureKind, restoreFocus);
+    this.screenshotCaptureInProgress = true;
+
+    try {
+      this.hideWindowsForScreenshot(session);
+      await new Promise(resolve => setTimeout(resolve, 50));
+      return await capture(session);
+    } finally {
+      try {
+        this.restoreWindowsAfterScreenshot(session);
+      } finally {
+        this.screenshotCaptureInProgress = false;
+      }
+    }
+  }
+
   // Screenshot management methods
   public async takeScreenshot(restoreFocus: boolean = true): Promise<string> {
-    if (!this.getMainWindow()) throw new Error("No main window available")
-
-    const wasOverlayVisible = this.windowHelper.getOverlayWindow()?.isVisible() ?? false
-
-    const screenshotPath = await this.screenshotHelper.takeScreenshot(
-      () => this.hideMainWindow(),
-      () => {
-        if (wasOverlayVisible) {
-          this.windowHelper.switchToOverlay(!restoreFocus)
-        } else {
-          this.showMainWindow(!restoreFocus)
-        }
-      }
+    return this.withScreenshotCaptureSession('full', restoreFocus, (session) =>
+      this.screenshotHelper.takeScreenshot(this.getTargetDisplayForFullScreenshot(session))
     )
-
-    return screenshotPath
   }
 
   public async takeSelectiveScreenshot(restoreFocus: boolean = true): Promise<string> {
-    if (!this.getMainWindow()) throw new Error("No main window available")
+    return this.withScreenshotCaptureSession('selective', restoreFocus, async () => {
+      let captureArea: Electron.Rectangle | undefined;
 
-    const wasOverlayVisible = this.windowHelper.getOverlayWindow()?.isVisible() ?? false
-
-    // 1. Hide the app windows first so they don't block selection
-    this.hideMainWindow()
-    // Small delay to ensure windows are fully hidden from the screen buffer
-    await new Promise(resolve => setTimeout(resolve, 50))
-
-    let captureArea: Electron.Rectangle | undefined;
-
-    try {
-      if (process.platform === 'win32') {
-        // Use custom cropper for Windows to ensure it's undetectable in screen share
+      if (process.platform === 'win32' || process.platform === 'darwin') {
         captureArea = await this.cropperWindowHelper.showCropper();
-        
-        // Handle cancellation (ESC or invalid selection)
+
         if (!captureArea) {
-          // Restore window state before throwing
-          if (wasOverlayVisible) {
-            this.windowHelper.switchToOverlay(!restoreFocus);
-          } else {
-            this.showMainWindow(!restoreFocus);
-          }
           throw new Error("Selection cancelled");
         }
       }
 
-      const screenshotPath = await this.screenshotHelper.takeSelectiveScreenshot(
-        () => {}, // Already hidden above
-        () => {
-          if (wasOverlayVisible) {
-            this.windowHelper.switchToOverlay(!restoreFocus)
-          } else {
-            this.showMainWindow(!restoreFocus)
-          }
-        },
-        captureArea
-      )
-
-      return screenshotPath
-    } catch (error) {
-      // If selection is cancelled or fails, restore the window state
-      // Check if we already restored (for win32 cancellation case)
-      const isSelectionCancelled = error instanceof Error && error.message === "Selection cancelled";
-      if (!isSelectionCancelled || process.platform !== 'win32') {
-        if (wasOverlayVisible) {
-          this.windowHelper.switchToOverlay(!restoreFocus)
-        } else {
-          this.showMainWindow(!restoreFocus)
-        }
-      }
-      throw error;
-    }
+      return this.screenshotHelper.takeSelectiveScreenshot(captureArea)
+    })
   }
 
   public async getImagePreview(filepath: string): Promise<string> {

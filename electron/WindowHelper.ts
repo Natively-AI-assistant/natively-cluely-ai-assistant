@@ -19,6 +19,8 @@ const startUrl = isDev
 export class WindowHelper {
   private launcherWindow: BrowserWindow | null = null
   private overlayWindow: BrowserWindow | null = null
+  private lastOverlayBounds: Electron.Rectangle | null = null
+  private lastOverlayDisplayId: number | null = null
   private isWindowVisible: boolean = false
   // Position/Size tracking for Launcher
   private launcherPosition: { x: number; y: number } | null = null
@@ -57,6 +59,66 @@ export class WindowHelper {
     });
   }
 
+  private clampBoundsToWorkArea(
+    bounds: Electron.Rectangle,
+    workArea: Electron.Rectangle,
+    minHeight: number
+  ): Electron.Rectangle {
+    const maxAllowedWidth = Math.floor(workArea.width * 0.9)
+    const maxAllowedHeight = Math.floor(workArea.height * 0.9)
+    const width = Math.min(Math.max(bounds.width, 300), maxAllowedWidth)
+    const height = Math.min(Math.max(bounds.height, minHeight), maxAllowedHeight)
+    const maxX = workArea.x + workArea.width - width
+    const maxY = workArea.y + workArea.height - height
+    const x = Math.min(Math.max(bounds.x, workArea.x), maxX)
+    const y = Math.min(Math.max(bounds.y, workArea.y), maxY)
+
+    return { x, y, width, height }
+  }
+
+  private rememberOverlayBounds(bounds?: Electron.Rectangle): void {
+    const targetBounds = bounds ?? this.overlayWindow?.getBounds()
+    if (!targetBounds || targetBounds.width <= 0 || targetBounds.height <= 0) return
+
+    this.lastOverlayBounds = { ...targetBounds }
+    this.lastOverlayDisplayId = screen.getDisplayMatching(targetBounds).id
+  }
+
+  private getDefaultOverlayBounds(): Electron.Rectangle {
+    const primaryDisplay = screen.getPrimaryDisplay()
+    const workArea = primaryDisplay.workArea
+    const currentBounds = this.overlayWindow?.getBounds()
+    const width = Math.max(currentBounds?.width ?? 600, 300)
+    const height = Math.max(currentBounds?.height ?? 216, 216)
+
+    return {
+      x: Math.floor(workArea.x + (workArea.width - width) / 2),
+      y: Math.floor(workArea.y + (workArea.height - height) / 2),
+      width,
+      height
+    }
+  }
+
+  private getOverlayBoundsForShow(): Electron.Rectangle {
+    const desiredBounds = this.lastOverlayBounds
+      ? {
+          ...this.lastOverlayBounds,
+          width: Math.max(this.lastOverlayBounds.width, 300),
+          height: Math.max(this.lastOverlayBounds.height, 216)
+        }
+      : this.getDefaultOverlayBounds()
+    const workArea = screen.getDisplayMatching(desiredBounds).workArea
+    return this.clampBoundsToWorkArea(desiredBounds, workArea, 216)
+  }
+
+  public getLastOverlayBounds(): Electron.Rectangle | null {
+    return this.lastOverlayBounds ? { ...this.lastOverlayBounds } : null
+  }
+
+  public getLastOverlayDisplayId(): number | null {
+    return this.lastOverlayDisplayId
+  }
+
   public setWindowDimensions(width: number, height: number): void {
     const activeWindow = this.getMainWindow(); // Gets currently focused/relevant window
     if (!activeWindow || activeWindow.isDestroyed()) return
@@ -89,20 +151,22 @@ export class WindowHelper {
     if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return
     console.log('[WindowHelper] setOverlayDimensions:', width, height);
 
-    const [currentX, currentY] = this.overlayWindow.getPosition()
-    const primaryDisplay = screen.getPrimaryDisplay()
-    const workArea = primaryDisplay.workAreaSize
-    const maxAllowedWidth = Math.floor(workArea.width * 0.9)
-    const maxAllowedHeight = Math.floor(workArea.height * 0.9)
-    const newWidth = Math.min(Math.max(width, 300), maxAllowedWidth) // min 300, max 90%
-    const newHeight = Math.min(Math.max(height, 1), maxAllowedHeight) // min 1, max 90%
-    const maxX = workArea.width - newWidth
-    const maxY = workArea.height - newHeight
-    const newX = Math.min(Math.max(currentX, 0), maxX)
-    const newY = Math.min(Math.max(currentY, 0), maxY)
+    const currentBounds = this.overlayWindow.getBounds()
+    const workArea = screen.getDisplayMatching(currentBounds).workArea
+    const nextBounds = this.clampBoundsToWorkArea(
+      {
+        x: currentBounds.x,
+        y: currentBounds.y,
+        width,
+        height
+      },
+      workArea,
+      1
+    )
 
-    this.overlayWindow.setContentSize(newWidth, newHeight)
-    this.overlayWindow.setPosition(newX, newY)
+    this.overlayWindow.setContentSize(nextBounds.width, nextBounds.height)
+    this.overlayWindow.setPosition(nextBounds.x, nextBounds.y)
+    this.rememberOverlayBounds(nextBounds)
   }
 
   public createWindow(): void {
@@ -298,6 +362,14 @@ export class WindowHelper {
     // Listen for overlay close (e.g. Cmd+W). Never truly destroy it — either
     // hide it (during a meeting) or switch back to launcher (between meetings).
     if (this.overlayWindow) {
+      this.overlayWindow.on("move", () => {
+        this.rememberOverlayBounds()
+      })
+
+      this.overlayWindow.on("resize", () => {
+        this.rememberOverlayBounds()
+      })
+
       this.overlayWindow.on('close', (e) => {
         if (this.overlayWindow?.isVisible()) {
           e.preventDefault();
@@ -393,16 +465,9 @@ export class WindowHelper {
 
     // Show Overlay FIRST
     if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
-      // Reset overlay position to center or last known? 
-      // For now, center it nicely
-      const primaryDisplay = screen.getPrimaryDisplay()
-      const workArea = primaryDisplay.workArea;
-      const currentBounds = this.overlayWindow.getBounds();
-      const targetHeight = Math.max(currentBounds.height, 216);
-      const x = Math.floor(workArea.x + (workArea.width - 600) / 2)
-      const y = Math.floor(workArea.y + (workArea.height - 600) / 2)
-
-      this.overlayWindow.setBounds({ x, y, width: 600, height: targetHeight });
+      const nextBounds = this.getOverlayBoundsForShow()
+      this.overlayWindow.setBounds(nextBounds);
+      this.rememberOverlayBounds(nextBounds)
 
       if (process.platform === 'win32' && this.contentProtection) {
         // Opacity Shield: Show at 0 opacity first to prevent frame leak
