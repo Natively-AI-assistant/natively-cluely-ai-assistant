@@ -31,6 +31,54 @@ pub fn list_input_devices() -> Result<Vec<(String, String)>> {
     Ok(list)
 }
 
+fn resolve_input_device(
+    host: &cpal::Host,
+    device_id: Option<&str>,
+) -> Result<cpal::Device> {
+    let requested_id = device_id
+        .map(str::trim)
+        .filter(|id| !id.is_empty() && *id != "default");
+
+    if let Some(requested_id) = requested_id {
+        let mut case_insensitive_match = None;
+        let mut available_devices = Vec::new();
+
+        for device in host.input_devices()? {
+            let name = device
+                .name()
+                .unwrap_or_else(|_| "<unknown input>".to_string());
+
+            if name == requested_id {
+                println!("[Microphone] Using requested input device: {}", name);
+                return Ok(device);
+            }
+
+            if case_insensitive_match.is_none() && name.eq_ignore_ascii_case(requested_id) {
+                case_insensitive_match = Some(device);
+            }
+
+            available_devices.push(name);
+        }
+
+        if let Some(device) = case_insensitive_match {
+            println!(
+                "[Microphone] Using case-insensitive match for requested input device: {}",
+                requested_id
+            );
+            return Ok(device);
+        }
+
+        return Err(anyhow::anyhow!(
+            "Input device '{}' not found. Available devices: {}",
+            requested_id,
+            available_devices.join(", ")
+        ));
+    }
+
+    host.default_input_device()
+        .ok_or_else(|| anyhow::anyhow!("No input device found"))
+}
+
 /// Lock-free microphone stream
 /// 
 /// Callback pushes raw f32 samples to ring buffer.
@@ -45,10 +93,9 @@ pub struct MicrophoneStream {
 }
 
 impl MicrophoneStream {
-    pub fn new(_device_id: Option<String>) -> Result<Self> {
+    pub fn new(device_id: Option<String>) -> Result<Self> {
         let host = cpal::default_host();
-        let device = host.default_input_device()
-            .ok_or_else(|| anyhow::anyhow!("No input device found"))?;
+        let device = resolve_input_device(&host, device_id.as_deref())?;
         
         let config = device.default_input_config()
             .map_err(|e| anyhow::anyhow!("Failed to get config: {}", e))?;
