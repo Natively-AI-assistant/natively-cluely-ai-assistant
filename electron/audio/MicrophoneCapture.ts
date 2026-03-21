@@ -17,6 +17,7 @@ export class MicrophoneCapture extends EventEmitter {
     private monitor: any = null;
     private isRecording: boolean = false;
     private deviceId: string | null = null;
+    private detectedSampleRate: number = 48000;
 
     constructor(deviceId?: string | null) {
         super();
@@ -28,6 +29,7 @@ export class MicrophoneCapture extends EventEmitter {
             try {
                 console.log('[MicrophoneCapture] Creating native monitor (Eager Init)...');
                 this.monitor = new RustMicCapture(this.deviceId);
+                this.refreshSampleRate();
             } catch (e) {
                 console.error('[MicrophoneCapture] Failed to create native monitor:', e);
                 // We don't throw here to allow app to start, but start() will fail
@@ -36,12 +38,32 @@ export class MicrophoneCapture extends EventEmitter {
     }
 
     public getSampleRate(): number {
-        if (this.monitor && typeof this.monitor.get_sample_rate === 'function') {
-            const nativeRate = this.monitor.get_sample_rate();
+        this.refreshSampleRate();
+        return this.detectedSampleRate;
+    }
+
+    private refreshSampleRate(): void {
+        const nativeRate = this.readNativeSampleRate();
+        if (nativeRate && nativeRate !== this.detectedSampleRate) {
+            this.detectedSampleRate = nativeRate;
             console.log(`[MicrophoneCapture] Real native rate: ${nativeRate}`);
-            return nativeRate;
         }
-        return 48000; // Safe default for most modern mics before native initialization
+    }
+
+    private readNativeSampleRate(): number | null {
+        if (!this.monitor) return null;
+
+        const getter =
+            typeof this.monitor.getSampleRate === 'function'
+                ? this.monitor.getSampleRate.bind(this.monitor)
+                : typeof this.monitor.get_sample_rate === 'function'
+                    ? this.monitor.get_sample_rate.bind(this.monitor)
+                    : null;
+
+        if (!getter) return null;
+
+        const nativeRate = Number(getter());
+        return Number.isFinite(nativeRate) && nativeRate > 0 ? nativeRate : null;
     }
 
     /**
@@ -60,6 +82,7 @@ export class MicrophoneCapture extends EventEmitter {
             console.log('[MicrophoneCapture] Monitor not initialized. Re-initializing...');
             try {
                 this.monitor = new RustMicCapture(this.deviceId);
+                this.refreshSampleRate();
             } catch (e) {
                 this.emit('error', e);
                 return;

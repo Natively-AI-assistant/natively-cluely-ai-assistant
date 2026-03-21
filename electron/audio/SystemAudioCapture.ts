@@ -31,15 +31,32 @@ export class SystemAudioCapture extends EventEmitter {
     }
 
     public getSampleRate(): number {
-        if (this.monitor && typeof this.monitor.get_sample_rate === 'function') {
-            const nativeRate = this.monitor.get_sample_rate();
-            if (nativeRate !== this.detectedSampleRate) {
-                console.log(`[SystemAudioCapture] Real native rate: ${nativeRate}`);
-                this.detectedSampleRate = nativeRate;
-            }
-            return nativeRate;
-        }
+        this.refreshSampleRate();
         return this.detectedSampleRate;
+    }
+
+    private refreshSampleRate(): void {
+        const nativeRate = this.readNativeSampleRate();
+        if (nativeRate && nativeRate !== this.detectedSampleRate) {
+            console.log(`[SystemAudioCapture] Real native rate: ${nativeRate}`);
+            this.detectedSampleRate = nativeRate;
+        }
+    }
+
+    private readNativeSampleRate(): number | null {
+        if (!this.monitor) return null;
+
+        const getter =
+            typeof this.monitor.getSampleRate === 'function'
+                ? this.monitor.getSampleRate.bind(this.monitor)
+                : typeof this.monitor.get_sample_rate === 'function'
+                    ? this.monitor.get_sample_rate.bind(this.monitor)
+                    : null;
+
+        if (!getter) return null;
+
+        const nativeRate = Number(getter());
+        return Number.isFinite(nativeRate) && nativeRate > 0 ? nativeRate : null;
     }
 
     /**
@@ -59,6 +76,7 @@ export class SystemAudioCapture extends EventEmitter {
             console.log('[SystemAudioCapture] Creating native monitor (lazy init)...');
             try {
                 this.monitor = new RustAudioCapture(this.deviceId);
+                this.refreshSampleRate();
             } catch (e) {
                 console.error('[SystemAudioCapture] Failed to create native monitor:', e);
                 this.emit('error', e);
@@ -69,11 +87,7 @@ export class SystemAudioCapture extends EventEmitter {
         try {
             console.log('[SystemAudioCapture] Starting native capture...');
             
-            // Fetch real sample rate as soon as monitor starts
-            if (typeof this.monitor.get_sample_rate === 'function') {
-                this.detectedSampleRate = this.monitor.get_sample_rate();
-                console.log(`[SystemAudioCapture] Detected sample rate: ${this.detectedSampleRate}`);
-            }
+            this.refreshSampleRate();
 
             this.monitor.start((chunk: Uint8Array) => {
                 // The native module sends raw PCM bytes (Uint8Array) via zero-copy napi::Buffer
