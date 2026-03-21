@@ -1364,7 +1364,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle("start-audio-test", async (event, deviceId?: string) => {
-    appState.startAudioTest(deviceId);
+    await appState.startAudioTest(deviceId);
     return { success: true };
   });
 
@@ -2148,4 +2148,3 @@ export function initializeIpcHandlers(appState: AppState): void {
     return;
   });
 }
-

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell } from "electron"
+import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPreferences } from "electron"
 import path from "path"
 import fs from "fs"
 import { autoUpdater } from "electron-updater"
@@ -25,16 +25,33 @@ const originalLog = console.log;
 const originalWarn = console.warn;
 const originalError = console.error;
 
-const isDev = process.env.NODE_ENV === "development";
-
 function logToFile(msg: string) {
-  // Only log to file in development
-  if (!isDev) return;
-
   try {
-    require('fs').appendFileSync(logFile, new Date().toISOString() + ' ' + msg + '\n');
+    fs.appendFileSync(logFile, new Date().toISOString() + ' ' + msg + '\n');
   } catch (e) {
     // Ignore logging errors
+  }
+}
+
+async function ensureMacMicrophoneAccess(context: string): Promise<boolean> {
+  if (process.platform !== 'darwin') return true;
+
+  try {
+    const currentStatus = systemPreferences.getMediaAccessStatus('microphone');
+    console.log(`[Main] macOS microphone permission before ${context}: ${currentStatus}`);
+
+    if (currentStatus === 'granted') {
+      return true;
+    }
+
+    const granted = await systemPreferences.askForMediaAccess('microphone');
+    console.log(
+      `[Main] macOS microphone permission request during ${context}: ${granted ? 'granted' : 'denied'}`
+    );
+    return granted;
+  } catch (error) {
+    console.error(`[Main] Failed to check macOS microphone permission during ${context}:`, error);
+    return false;
   }
 }
 
@@ -871,20 +888,23 @@ export class AppState {
   }
 
 
-  public startAudioTest(deviceId?: string): void {
+  public async startAudioTest(deviceId?: string): Promise<void> {
     console.log(`[Main] Starting Audio Test on device: ${deviceId || 'default'}`);
     this.stopAudioTest(); // Stop any existing test
 
-    try {
-      this.audioTestCapture = new MicrophoneCapture(deviceId || undefined);
-      this.audioTestCapture.start();
+    if (!(await ensureMacMicrophoneAccess('audio test'))) {
+      throw new Error('Microphone access denied. Please allow microphone access in System Settings and try again.');
+    }
 
-      // Send to settings window if open, else main window
-      const win = this.settingsWindowHelper.getSettingsWindow() || this.getMainWindow();
+    const attachAudioTestListeners = (capture: MicrophoneCapture) => {
+      capture.on('data', (chunk: Buffer) => {
+        const targets = [
+          this.settingsWindowHelper.getSettingsWindow(),
+          this.getWindowHelper().getLauncherWindow(),
+          this.getWindowHelper().getOverlayWindow(),
+        ].filter((win): win is BrowserWindow => !!win && !win.isDestroyed());
 
-      this.audioTestCapture.on('data', (chunk: Buffer) => {
-        // Calculate basic RMS for level meter
-        if (!win || win.isDestroyed()) return;
+        if (targets.length === 0) return;
 
         let sum = 0;
         const step = 10;
@@ -898,18 +918,32 @@ export class AppState {
         const count = len / (2 * step);
         if (count > 0) {
           const rms = Math.sqrt(sum / count);
-          // Normalize 0-1 (heuristic scaling, max comfortable mic input is around 10000-20000)
           const level = Math.min(rms / 10000, 1.0);
-          win.webContents.send('audio-level', level);
+          for (const target of targets) {
+            target.webContents.send('audio-test-level', level);
+          }
         }
       });
 
-      this.audioTestCapture.on('error', (err: Error) => {
+      capture.on('error', (err: Error) => {
         console.error('[Main] AudioTest Error:', err);
       });
+    };
 
+    try {
+      this.audioTestCapture = new MicrophoneCapture(deviceId || undefined);
+      attachAudioTestListeners(this.audioTestCapture);
+      this.audioTestCapture.start();
     } catch (err) {
-      console.error('[Main] Failed to start audio test:', err);
+      console.warn('[Main] Failed to start audio test on preferred device. Falling back to default.', err);
+      try {
+        this.audioTestCapture = new MicrophoneCapture();
+        attachAudioTestListeners(this.audioTestCapture);
+        this.audioTestCapture.start();
+      } catch (fallbackErr) {
+        console.error('[Main] Failed to start audio test:', fallbackErr);
+        throw fallbackErr;
+      }
     }
   }
 
@@ -931,6 +965,12 @@ export class AppState {
 
   public async startMeeting(metadata?: any): Promise<void> {
     console.log('[Main] Starting Meeting...', metadata);
+
+    if (!(await ensureMacMicrophoneAccess('meeting start'))) {
+      const message = 'Microphone access denied. Please allow microphone access in System Settings.';
+      this.broadcast('meeting-audio-error', message);
+      throw new Error(message);
+    }
 
     this.isMeetingActive = true;
     if (metadata) {
