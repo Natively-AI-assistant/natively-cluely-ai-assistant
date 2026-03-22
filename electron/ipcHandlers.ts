@@ -491,6 +491,16 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true }
   })
 
+  safeHandle("set-overlay-mouse-passthrough", async (_, state: boolean) => {
+    appState.setOverlayMousePassthrough(state)
+    return { success: true }
+  })
+
+  safeHandle("toggle-overlay-mouse-passthrough", async () => {
+    const enabled = appState.toggleOverlayMousePassthrough()
+    return { success: true, enabled }
+  })
+
   safeHandle("set-disguise", async (_, mode: 'terminal' | 'settings' | 'activity' | 'none') => {
     appState.setDisguise(mode)
     return { success: true }
@@ -498,6 +508,10 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle("get-undetectable", async () => {
     return appState.getUndetectable()
+  })
+
+  safeHandle("get-overlay-mouse-passthrough", async () => {
+    return appState.getOverlayMousePassthrough()
   })
 
   safeHandle("get-disguise", async () => {
@@ -2215,4 +2229,3 @@ export function initializeIpcHandlers(appState: AppState): void {
     return;
   });
 }
-

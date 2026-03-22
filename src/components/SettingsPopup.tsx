@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { MessageSquare, Link, Camera, Zap, Heart, User } from 'lucide-react';
+import { MessageSquare, Link, Camera, Zap, Heart, User, PointerOff } from 'lucide-react';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 
@@ -7,6 +7,7 @@ const SettingsPopup = () => {
     const { shortcuts } = useShortcuts();
     const isLightTheme = useResolvedTheme() === 'light';
     const [isUndetectable, setIsUndetectable] = useState(false);
+    const [isMousePassthrough, setIsMousePassthrough] = useState(false);
     const [useGroqFastText, setUseGroqFastText] = useState(() => {
         return localStorage.getItem('natively_groq_fast_text') === 'true';
     });
@@ -69,6 +70,11 @@ const SettingsPopup = () => {
                 setIsUndetectable(state);
             });
         }
+        if (window.electronAPI?.getOverlayMousePassthrough) {
+            window.electronAPI.getOverlayMousePassthrough().then((state: boolean) => {
+                setIsMousePassthrough(state);
+            });
+        }
     }, []);
 
     // One-way listener: receive state changes from main process, never echo back
@@ -77,6 +83,15 @@ const SettingsPopup = () => {
             const unsubscribe = window.electronAPI.onUndetectableChanged((newState: boolean) => {
                 setIsUndetectable(newState);
                 localStorage.setItem('natively_undetectable', String(newState));
+            });
+            return () => unsubscribe();
+        }
+    }, []);
+
+    useEffect(() => {
+        if (window.electronAPI?.onOverlayMousePassthroughChanged) {
+            const unsubscribe = window.electronAPI.onOverlayMousePassthroughChanged((enabled: boolean) => {
+                setIsMousePassthrough(enabled);
             });
             return () => unsubscribe();
         }
@@ -198,6 +213,26 @@ const SettingsPopup = () => {
                             : defaultToggleTrackClass}`}
                     >
                         <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${isUndetectable ? 'translate-x-[12px]' : 'translate-x-0'}`} />
+                    </button>
+                </div>
+
+                {/* Mouse Passthrough */}
+                <div className={`flex items-center justify-between px-3 py-2 rounded-lg transition-colors duration-200 group cursor-default ${itemHoverClass}`}>
+                    <div className="flex items-center gap-3">
+                        <PointerOff
+                            className={`w-4 h-4 transition-colors ${isMousePassthrough ? 'text-sky-500' : iconInactiveClass}`}
+                        />
+                        <span className={`text-[12px] font-medium transition-colors ${isMousePassthrough ? (isLightTheme ? 'text-slate-950' : 'text-white') : labelInactiveClass}`}>Mouse Passthrough</span>
+                    </div>
+                    <button
+                        onClick={() => {
+                            const newState = !isMousePassthrough;
+                            setIsMousePassthrough(newState);
+                            window.electronAPI?.setOverlayMousePassthrough(newState);
+                        }}
+                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] transition-all duration-300 ease-spring active:scale-[0.92] ${isMousePassthrough ? 'bg-sky-500 shadow-[0_2px_10px_rgba(14,165,233,0.3)]' : defaultToggleTrackClass}`}
+                    >
+                        <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${isMousePassthrough ? 'translate-x-[12px]' : 'translate-x-0'}`} />
                     </button>
                 </div>
 

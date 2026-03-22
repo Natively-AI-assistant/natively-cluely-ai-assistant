@@ -1,4 +1,4 @@
-import { ChevronUp, ChevronDown } from "lucide-react";
+import { ChevronUp, ChevronDown, PointerOff } from "lucide-react";
 import icon from "../icon.png";
 import type { OverlayAppearance } from "../../lib/overlayAppearance";
 
@@ -8,6 +8,7 @@ interface TopPillProps {
     onQuit: () => void;
     appearance: OverlayAppearance;
     onLogoClick?: () => void;
+    mousePassthroughEnabled?: boolean;
 }
 
 export default function TopPill({
@@ -16,6 +17,7 @@ export default function TopPill({
     onQuit,
     appearance,
     onLogoClick,
+    mousePassthroughEnabled = false,
 }: TopPillProps) {
     return (
         <div className="flex justify-center mt-2 select-none z-50">
@@ -81,6 +83,25 @@ export default function TopPill({
                     </span>
                     <span className="tracking-wide opacity-80 group-hover:opacity-100">{expanded ? "Hide" : "Show"}</span>
                 </button>
+
+                {mousePassthroughEnabled && (
+                    <div
+                        className="
+            flex items-center gap-1.5
+            px-3 py-1.5
+            rounded-full
+            text-[11px]
+            font-medium
+            border
+            overlay-chip-surface
+            overlay-text-primary
+          "
+                        style={appearance.chipStyle}
+                    >
+                        <PointerOff className="w-3.5 h-3.5 opacity-80" />
+                        <span className="tracking-wide opacity-90">Mouse Passthrough</span>
+                    </div>
+                )}
 
                 {/* STOP / QUIT BUTTON */}
                 <button

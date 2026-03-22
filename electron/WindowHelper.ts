@@ -57,6 +57,31 @@ export class WindowHelper {
     });
   }
 
+  private isOverlayMousePassthroughEnabled(): boolean {
+    return this.appState.getOverlayMousePassthrough()
+  }
+
+  private getOverlayShowInactive(inactive?: boolean): boolean {
+    return !!inactive || this.isOverlayMousePassthroughEnabled()
+  }
+
+  private applyOverlayInteractionPolicy(): void {
+    if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return
+
+    const enableMousePassthrough = this.isOverlayMousePassthroughEnabled()
+    this.overlayWindow.setIgnoreMouseEvents(
+      enableMousePassthrough,
+      enableMousePassthrough ? { forward: true } : undefined
+    )
+
+    if (process.platform === 'darwin' || process.platform === 'win32') {
+      this.overlayWindow.setFocusable(!enableMousePassthrough)
+    }
+  }
+
+  public syncOverlayInteractionPolicy(): void {
+    this.applyOverlayInteractionPolicy()
+  }
   public setWindowDimensions(width: number, height: number): void {
     const activeWindow = this.getMainWindow(); // Gets currently focused/relevant window
     if (!activeWindow || activeWindow.isDestroyed()) return
@@ -234,6 +259,7 @@ export class WindowHelper {
 
     this.overlayWindow = new BrowserWindow(overlaySettings)
     this.overlayWindow.setContentProtection(this.contentProtection)
+    this.applyOverlayInteractionPolicy()
 
     if (process.platform === "darwin") {
       this.overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
@@ -340,6 +366,7 @@ export class WindowHelper {
   // Used by IPC handlers to show the overlay independently.
   public showOverlay(): void {
     if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+      this.applyOverlayInteractionPolicy();
       this.overlayWindow.showInactive();
     }
   }
@@ -387,6 +414,7 @@ export class WindowHelper {
   public switchToOverlay(inactive?: boolean): void {
     console.log(`[WindowHelper] Switching to OVERLAY (inactive: ${!!inactive})`);
     this.currentWindowMode = 'overlay';
+    const showInactive = this.getOverlayShowInactive(inactive)
 
     // Tell the overlay renderer to expand to full size (e.g. after being minimised)
     this.overlayWindow?.webContents.send('ensure-expanded');
@@ -403,11 +431,12 @@ export class WindowHelper {
       const y = Math.floor(workArea.y + (workArea.height - 600) / 2)
 
       this.overlayWindow.setBounds({ x, y, width: 600, height: targetHeight });
+      this.applyOverlayInteractionPolicy()
 
       if (process.platform === 'win32' && this.contentProtection) {
         // Opacity Shield: Show at 0 opacity first to prevent frame leak
         this.overlayWindow.setOpacity(0);
-        if (inactive) this.overlayWindow.showInactive(); else this.overlayWindow.show();
+        if (showInactive) this.overlayWindow.showInactive(); else this.overlayWindow.show();
         this.overlayWindow.setContentProtection(true);
         // Small delay to ensure Windows DWM processes the flag before making it opaque
 
@@ -415,15 +444,16 @@ export class WindowHelper {
         this.opacityTimeout = setTimeout(() => {
           if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
             this.overlayWindow.setOpacity(1);
-            if (!inactive) this.overlayWindow.focus();
+            this.applyOverlayInteractionPolicy();
+            if (!showInactive) this.overlayWindow.focus();
             // Note: do NOT call setAlwaysOnTop here — it triggers NSApp activation on macOS
           }
         }, 60);
       } else {
         this.overlayWindow.setContentProtection(this.contentProtection);
-        if (inactive) this.overlayWindow.showInactive(); else this.overlayWindow.show();
+        if (showInactive) this.overlayWindow.showInactive(); else this.overlayWindow.show();
         // Only grab focus for explicit user-initiated shows (not shortcut/ghost shows)
-        if (!inactive) this.overlayWindow.focus();
+        if (!showInactive) this.overlayWindow.focus();
         // Do NOT re-assert setAlwaysOnTop on every show — it was set at creation time and
         // persists across hide/show cycles. Calling it again triggers [NSApp activate] on
         // macOS, stealing focus from Zoom/browser even when showInactive() was used.
