@@ -1,4 +1,13 @@
-const platform = window.electronAPI?.platform ?? navigator.platform?.toLowerCase() ?? '';
+function normalizePlatform(p: string): string {
+  if (p === 'darwin' || p.startsWith('mac')) return 'darwin';
+  if (p === 'win32' || p.startsWith('win')) return 'win32';
+  if (p.includes('linux')) return 'linux';
+  return p;
+}
+
+const platform = normalizePlatform(
+  window.electronAPI?.platform ?? navigator.platform?.toLowerCase() ?? ''
+);
 
 export const isMac = platform === 'darwin';
 export const isWindows = platform === 'win32';
