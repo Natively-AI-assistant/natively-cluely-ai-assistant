@@ -22,6 +22,26 @@ export interface NativeModule {
   };
 }
 
+const REQUIRED_METHODS = ['getHardwareId', 'verifyGumroadKey', 'getInputDevices', 'getOutputDevices'];
+const REQUIRED_CONSTRUCTORS = ['SystemAudioCapture', 'MicrophoneCapture'];
+
+/**
+ * Validates that a loaded native module conforms to the NativeModule interface.
+ * Throws immediately if any required method or constructor is missing.
+ */
+function validateNativeModule(mod: any): asserts mod is NativeModule {
+    for (const fn of REQUIRED_METHODS) {
+        if (typeof mod[fn] !== 'function') {
+            throw new Error(`NativeModule: missing or invalid method "${fn}" (expected function, got ${typeof mod[fn]})`);
+        }
+    }
+    for (const cls of REQUIRED_CONSTRUCTORS) {
+        if (typeof mod[cls] !== 'function') {
+            throw new Error(`NativeModule: missing or invalid constructor "${cls}" (expected constructor, got ${typeof mod[cls]})`);
+        }
+    }
+}
+
 /**
  * Maps platform+arch to the NAPI-RS compiled binary name.
  * These filenames are produced by `npx napi build` in native-module/.
@@ -96,7 +116,9 @@ export function loadNativeModule(): NativeModule | null {
 
     for (const filePath of candidates) {
         try {
-            cached = require(filePath);
+            const mod = require(filePath);
+            validateNativeModule(mod);
+            cached = mod;
             console.log(`[nativeModuleLoader] Loaded ${binary} from: ${filePath}`);
             return cached;
         } catch (err: unknown) {

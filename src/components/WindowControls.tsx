@@ -8,14 +8,21 @@ const WindowControls: React.FC = () => {
   if (isMac) return null;
 
   useEffect(() => {
+    let active = true;
+
     // Query initial maximized state (e.g. app reopened while maximized)
     window.electronAPI?.windowIsMaximized().then((maximized: boolean) => {
-      setIsMaximized(maximized);
+      if (active) setIsMaximized(maximized);
     }).catch(() => {});
 
-    return window.electronAPI?.onWindowMaximizedChanged((maximized: boolean) => {
+    const unsubscribe = window.electronAPI?.onWindowMaximizedChanged((maximized: boolean) => {
       setIsMaximized(maximized);
     });
+
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
   }, []);
 
   const handleMinimize = () => window.electronAPI?.windowMinimize();
