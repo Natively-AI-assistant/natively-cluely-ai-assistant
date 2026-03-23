@@ -241,11 +241,11 @@ body,
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Rounded corners for modern window look */
-html,
-body,
-#root,
-.fixed.inset-0 {
+/* Rounded corners for modern window look (Windows/Linux only — macOS uses native transparent shape) */
+html:not([data-platform="darwin"]),
+html:not([data-platform="darwin"]) body,
+html:not([data-platform="darwin"]) #root,
+html:not([data-platform="darwin"]) .fixed.inset-0 {
   border-radius: 8px !important;
   overflow: hidden;
 }

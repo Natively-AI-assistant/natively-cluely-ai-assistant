@@ -495,6 +495,10 @@ export function initializeIpcHandlers(appState: AppState): void {
     appState.getWindowHelper().closeWindow();
   });
 
+  safeHandle("window-is-maximized", async () => {
+    return appState.getWindowHelper().isMainWindowMaximized();
+  });
+
   // Settings Window
   safeHandle("toggle-settings-window", (event, { x, y } = {}) => {
     appState.settingsWindowHelper.toggleWindow(x, y)

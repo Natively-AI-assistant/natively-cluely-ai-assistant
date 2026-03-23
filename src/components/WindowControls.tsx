@@ -5,6 +5,11 @@ const WindowControls: React.FC = () => {
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
+    // Query initial maximized state (e.g. app reopened while maximized)
+    window.electronAPI?.windowIsMaximized().then((maximized: boolean) => {
+      setIsMaximized(maximized);
+    }).catch(() => {});
+
     return window.electronAPI?.onWindowMaximizedChanged((maximized: boolean) => {
       setIsMaximized(maximized);
     });

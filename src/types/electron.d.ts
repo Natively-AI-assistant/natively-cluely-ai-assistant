@@ -38,6 +38,7 @@ export interface ElectronAPI {
   windowMinimize: () => Promise<void>
   windowMaximize: () => Promise<void>
   windowClose: () => Promise<void>
+  windowIsMaximized: () => Promise<boolean>
 
   analyzeImageFile: (path: string) => Promise<void>
   quitApp: () => Promise<void>

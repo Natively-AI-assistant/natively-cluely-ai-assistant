@@ -3,6 +3,11 @@ import ReactDOM from "react-dom/client"
 import App from "./App"
 import "./index.css"
 
+// Initialize Platform
+if (window.electronAPI?.platform) {
+  document.documentElement.setAttribute('data-platform', window.electronAPI.platform);
+}
+
 const THEME_CACHE_KEY = 'natively_resolved_theme';
 
 // Step 1: Apply cached theme synchronously — before React renders.

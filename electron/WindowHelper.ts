@@ -362,6 +362,11 @@ export class WindowHelper {
     return this.isWindowVisible
   }
 
+  public isMainWindowMaximized(): boolean {
+    const win = this.getMainWindow();
+    return !!win && !win.isDestroyed() && win.isMaximized();
+  }
+
   public hideMainWindow(): void {
     this.launcherWindow?.hide()
     this.overlayWindow?.hide()
@@ -553,14 +558,14 @@ export class WindowHelper {
   public moveWindowUp(): void { this.moveActiveWindow(0, -this.step) }
 
   public minimizeWindow(): void {
-    const win = this.launcherWindow;
+    const win = this.getMainWindow();
     if (!win || win.isDestroyed()) return;
     if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
     win.minimize();
   }
 
   public maximizeWindow(): void {
-    const win = this.launcherWindow;
+    const win = this.getMainWindow();
     if (!win || win.isDestroyed()) return;
     if (win.isMaximized()) {
       win.unmaximize();
