@@ -145,8 +145,7 @@ export class WindowHelper {
       ...(isMac
         ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 } }
         : { frame: false, titleBarOverlay: false, autoHideMenuBar: true }),
-      vibrancy: 'under-window',
-      visualEffectState: 'followWindow',
+      ...(isMac ? { vibrancy: 'under-window', visualEffectState: 'followWindow' } : {}),
       transparent: isMac,
       hasShadow: true,
       backgroundColor: isMac ? "#00000000" : "#000000",
@@ -285,13 +284,15 @@ export class WindowHelper {
       }
     })
 
-    // Sync maximize state to renderer so WindowControls stays in sync
-    this.launcherWindow.on('maximize', () => {
-      this.launcherWindow?.webContents.send('window-maximized-changed', true);
-    });
-    this.launcherWindow.on('unmaximize', () => {
-      this.launcherWindow?.webContents.send('window-maximized-changed', false);
-    });
+    // Sync maximize state to renderer so WindowControls stays in sync (Windows/Linux only)
+    if (process.platform !== 'darwin') {
+      this.launcherWindow.on('maximize', () => {
+        this.launcherWindow?.webContents.send('window-maximized-changed', true);
+      });
+      this.launcherWindow.on('unmaximize', () => {
+        this.launcherWindow?.webContents.send('window-maximized-changed', false);
+      });
+    }
 
     // On Windows/Linux: intercept close and hide to tray instead of quitting,
     // unless the app is actually quitting (e.g. from tray "Quit" menu).
@@ -567,7 +568,6 @@ export class WindowHelper {
     const template: Electron.MenuItemConstructorOptions[] = [
       {
         label: 'Developer Console',
-        accelerator: 'F12',
         click: () => { win.webContents.toggleDevTools(); }
       },
       { type: 'separator' },

@@ -4,6 +4,9 @@ import { Minus, X } from 'lucide-react';
 const WindowControls: React.FC = () => {
   const [isMaximized, setIsMaximized] = useState(false);
 
+  const isMac = typeof window !== 'undefined' && window.electronAPI?.platform === 'darwin';
+  if (isMac) return null;
+
   useEffect(() => {
     // Query initial maximized state (e.g. app reopened while maximized)
     window.electronAPI?.windowIsMaximized().then((maximized: boolean) => {
@@ -14,9 +17,6 @@ const WindowControls: React.FC = () => {
       setIsMaximized(maximized);
     });
   }, []);
-
-  const isMac = typeof window !== 'undefined' && window.electronAPI?.platform === 'darwin';
-  if (isMac) return null;
 
   const handleMinimize = () => window.electronAPI?.windowMinimize();
   const handleMaximize = () => window.electronAPI?.windowMaximize();
