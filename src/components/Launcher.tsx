@@ -8,6 +8,7 @@ import ConnectCalendarButton from './ui/ConnectCalendarButton';
 import MeetingDetails from './MeetingDetails';
 import TopSearchPill from './TopSearchPill';
 import GlobalChatOverlay from './GlobalChatOverlay';
+import WindowControls from './WindowControls';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FeatureSpotlight } from './FeatureSpotlight';
 import { analytics } from '../lib/analytics/analytics.service'; // Added analytics import
@@ -346,10 +347,10 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
     return (
         <div className="h-full w-full flex flex-col bg-bg-primary text-text-primary font-sans overflow-hidden selection:bg-accent-secondary/30">
             {/* 1. Header (Static) */}
-            <header className="relative h-[40px] shrink-0 flex items-center justify-between pl-0 pr-2 drag-region select-none bg-bg-secondary border-b border-border-subtle z-[200]">
+            <header className="relative h-[40px] shrink-0 flex items-center justify-between pl-0 pr-0 drag-region select-none bg-bg-secondary border-b border-border-subtle z-[200]">
                 {/* Left: Spacing for Traffic Lights + Navigation Arrows */}
                 <div className="flex items-center gap-1 no-drag">
-                    <div className="w-[70px]" /> {/* Traffic Light Spacer */}
+                    <div className={`shrink-0 ${typeof navigator !== 'undefined' && navigator.platform?.toLowerCase().includes('mac') ? 'w-[70px]' : 'w-0'}`} /> {/* Traffic Light Spacer - macOS only */}
 
                     {/* Back Button */}
                     <button
@@ -405,18 +406,19 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                     }}
                 />
 
-                {/* Right: Actions */}
-                <div className="flex items-center gap-3 no-drag">
+                {/* Right: Actions + Window Controls */}
+                <div className="flex items-center no-drag">
                     <button
                         onClick={() => {
                             onOpenSettings();
-                            // analytics.trackCommandExecuted('open_settings'); // Optional, high volume
                         }}
-                        className={`p-2 text-text-secondary hover:text-text-primary transition-all duration-300 ${isLight ? 'hover:drop-shadow-[0_0_6px_rgba(0,0,0,0.25)]' : 'hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]'}`}
+                        className={`p-2 mr-1 text-text-secondary hover:text-text-primary transition-all duration-300 ${isLight ? 'hover:drop-shadow-[0_0_6px_rgba(0,0,0,0.25)]' : 'hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]'}`}
                         title="Settings"
                     >
                         <Settings size={18} />
                     </button>
+                    {/* Window Controls - Windows/Linux only */}
+                    <WindowControls />
                 </div>
             </header>
 

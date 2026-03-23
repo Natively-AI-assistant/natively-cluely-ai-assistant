@@ -482,6 +482,19 @@ export function initializeIpcHandlers(appState: AppState): void {
     appState.centerAndShowWindow()
   })
 
+  // Window Controls
+  safeHandle("window-minimize", async () => {
+    appState.getWindowHelper().minimizeWindow();
+  });
+
+  safeHandle("window-maximize", async () => {
+    appState.getWindowHelper().maximizeWindow();
+  });
+
+  safeHandle("window-close", async () => {
+    appState.getWindowHelper().closeWindow();
+  });
+
   // Settings Window
   safeHandle("toggle-settings-window", (event, { x, y } = {}) => {
     appState.settingsWindowHelper.toggleWindow(x, y)

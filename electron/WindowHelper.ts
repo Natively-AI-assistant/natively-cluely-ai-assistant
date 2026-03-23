@@ -124,6 +124,8 @@ export class WindowHelper {
     const y = Math.round(workArea.x + topMargin);
 
     // --- 1. Create Launcher Window ---
+    const isMac = process.platform === "darwin";
+
     const launcherSettings: Electron.BrowserWindowConstructorOptions = {
       width: width,
       height: height,
@@ -139,13 +141,15 @@ export class WindowHelper {
         webSecurity: !isDev, // DEBUG: Disable web security only in dev
       },
       show: false, // DEBUG: Force show -> Fixed white screen, now relies on ready-to-show
-      titleBarStyle: 'hiddenInset',
-      trafficLightPosition: { x: 14, y: 14 },
+      // Platform-specific frame settings
+      ...(isMac
+        ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 } }
+        : { frame: false, titleBarOverlay: false, autoHideMenuBar: true }),
       vibrancy: 'under-window',
       visualEffectState: 'followWindow',
-      transparent: true,
+      transparent: isMac,
       hasShadow: true,
-      backgroundColor: "#00000000",
+      backgroundColor: isMac ? "#00000000" : "#000000",
       focusable: true,
       resizable: true,
       movable: true,
@@ -257,6 +261,11 @@ export class WindowHelper {
   private setupWindowListeners(): void {
     if (!this.launcherWindow) return
 
+    // Suppress Windows system context menu on right-click (title bar)
+    this.launcherWindow.on('system-context-menu', (e) => {
+      e.preventDefault();
+    });
+
     this.launcherWindow.on("move", () => {
       if (this.launcherWindow) {
         const bounds = this.launcherWindow.getBounds()
@@ -272,6 +281,14 @@ export class WindowHelper {
         this.appState.settingsWindowHelper.reposition(bounds)
       }
     })
+
+    // Sync maximize state to renderer so WindowControls stays in sync
+    this.launcherWindow.on('maximize', () => {
+      this.launcherWindow?.webContents.send('window-maximized-changed', true);
+    });
+    this.launcherWindow.on('unmaximize', () => {
+      this.launcherWindow?.webContents.send('window-maximized-changed', false);
+    });
 
     // On Windows/Linux: intercept close and hide to tray instead of quitting,
     // unless the app is actually quitting (e.g. from tray "Quit" menu).
@@ -530,4 +547,33 @@ export class WindowHelper {
   public moveWindowLeft(): void { this.moveActiveWindow(-this.step, 0) }
   public moveWindowDown(): void { this.moveActiveWindow(0, this.step) }
   public moveWindowUp(): void { this.moveActiveWindow(0, -this.step) }
+
+  public minimizeWindow(): void {
+    const win = this.launcherWindow;
+    if (!win || win.isDestroyed()) return;
+    if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
+    win.minimize();
+  }
+
+  public maximizeWindow(): void {
+    const win = this.launcherWindow;
+    if (!win || win.isDestroyed()) return;
+    if (win.isMaximized()) {
+      win.unmaximize();
+    } else {
+      win.maximize();
+    }
+  }
+
+  public closeWindow(): void {
+    const win = this.getMainWindow();
+    if (!win || win.isDestroyed()) return;
+    if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
+
+    // On Windows/Linux the 'close' event listener (line ~282) intercepts this
+    // and hides to tray unless the app is actually quitting.
+    // On macOS, and for the overlay window, the respective 'close' handlers
+    // manage the behavior as well.
+    win.close();
+  }
 }

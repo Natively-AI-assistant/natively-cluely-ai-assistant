@@ -249,6 +249,12 @@ export class KeybindManager {
     }
 
     public updateMenu() {
+        // Don't set application menu on Windows/Linux - hide it completely
+        if (process.platform !== 'darwin') {
+            Menu.setApplicationMenu(null);
+            return;
+        }
+
         const toggleKb = this.keybinds.get('general:toggle-visibility');
         const toggleAccelerator = toggleKb ? toggleKb.accelerator : 'CommandOrControl+B';
 

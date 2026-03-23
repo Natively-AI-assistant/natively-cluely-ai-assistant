@@ -38,6 +38,9 @@ interface ElectronAPI {
   moveWindowRight: () => Promise<void>
   moveWindowUp: () => Promise<void>
   moveWindowDown: () => Promise<void>
+  windowMinimize: () => Promise<void>
+  windowMaximize: () => Promise<void>
+  windowClose: () => Promise<void>
 
   analyzeImageFile: (path: string) => Promise<void>
   quitApp: () => Promise<void>
@@ -160,6 +163,7 @@ interface ElectronAPI {
   hideOverlay: () => Promise<void>
   getMeetingActive: () => Promise<boolean>
   onMeetingStateChanged: (callback: (data: { isActive: boolean }) => void) => () => void
+  onWindowMaximizedChanged: (callback: (isMaximized: boolean) => void) => () => void
   onEnsureExpanded: (callback: () => void) => () => void
   onToggleExpand: (callback: () => void) => () => void
   toggleAdvancedSettings: () => Promise<void>
@@ -417,6 +421,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   moveWindowRight: () => ipcRenderer.invoke("move-window-right"),
   moveWindowUp: () => ipcRenderer.invoke("move-window-up"),
   moveWindowDown: () => ipcRenderer.invoke("move-window-down"),
+  windowMinimize: () => ipcRenderer.invoke("window-minimize"),
+  windowMaximize: () => ipcRenderer.invoke("window-maximize"),
+  windowClose: () => ipcRenderer.invoke("window-close"),
 
   analyzeImageFile: (path: string) => ipcRenderer.invoke("analyze-image-file", path),
   quitApp: () => ipcRenderer.invoke("quit-app"),
@@ -430,6 +437,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     const subscription = (_: any, data: { isActive: boolean }) => callback(data);
     ipcRenderer.on('meeting-state-changed', subscription);
     return () => { ipcRenderer.removeListener('meeting-state-changed', subscription); };
+  },
+  onWindowMaximizedChanged: (callback: (isMaximized: boolean) => void) => {
+    const subscription = (_: any, isMaximized: boolean) => callback(isMaximized);
+    ipcRenderer.on('window-maximized-changed', subscription);
+    return () => { ipcRenderer.removeListener('window-maximized-changed', subscription); };
   },
   onEnsureExpanded: (callback: () => void) => {
     const subscription = () => callback();
