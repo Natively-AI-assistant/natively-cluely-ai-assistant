@@ -7,27 +7,29 @@ Natively supports two update channels:
 | Channel | File | Description |
 |---------|------|-------------|
 | **stable** | `latest.yml` | Production releases for all users |
-| **beta** | `beta-latest.yml` | Pre-release testing for beta testers |
+| **beta** | `beta.yml` | Pre-release testing for beta testers |
 
 ### How It Works
 
-The update channel is **auto-detected** based on the version suffix:
+Users can select their preferred update channel in **Settings → Version** (pill toggle).
+
+Alternatively, the channel is auto-detected based on the version suffix:
 
 ```typescript
 // electron/main.ts - setupAutoUpdater()
-const currentVersion = app.getVersion()
-if (currentVersion.includes('beta')) {
+const savedChannel = settingsManager.get('updateChannel')
+if (savedChannel === 'beta') {
   autoUpdater.channel = 'beta'
 } else {
-  autoUpdater.channel = 'stable'
+  autoUpdater.channel = 'latest'  // stable
 }
 ```
 
 | Version | Channel | Updates to |
 |---------|---------|------------|
-| `2.0.7` | stable | `2.0.8`, `2.1.0` |
-| `2.0.7-beta.1` | beta | `2.0.7-beta.2`, `2.0.8-beta.1` |
-| `2.0.8` | stable | `2.0.9`, `2.1.0` |
+| `2.0.7` (stable) | latest | `2.0.8`, `2.1.0` |
+| `2.0.7-beta.1` (if using version-based) | beta | `2.0.7-beta.2`, `2.0.8-beta.1` |
+| `2.0.8` (stable) | latest | `2.0.9`, `2.1.0` |
 
 ---
 
@@ -47,10 +49,13 @@ npm run dist
 # - Title: Natively v2.0.8-beta.1
 # - Mark as "Pre-release"
 # - Upload files from release/:
-#   - Natively Setup 2.0.8-beta.1.exe
-#   - Natively.2.0.8-beta.1.exe
-#   - beta-latest.yml  <-- important!
+#   - Natively-Setup-2.0.8-beta.1.exe  <-- NSIS installer (dashes)
+#   - Natively 2.0.8-beta.1.exe        <-- portable (space)
+#   - beta.yml  <-- only this, NOT latest.yml!
 #   - *.blockmap files
+
+# IMPORTANT: Do NOT upload latest.yml for beta releases!
+# Stable users must never see beta as an update.
 ```
 
 ### 2. Stable Release (Production)
@@ -66,9 +71,10 @@ npm run dist
 # - Tag: v2.0.8
 # - Title: Natively v2.0.8
 # - Upload files from release/:
-#   - Natively Setup 2.0.8.exe
-#   - Natively.2.0.8.exe
-#   - latest.yml  <-- important!
+#   - Natively-Setup-2.0.8.exe  <-- NSIS installer (dashes)
+#   - Natively 2.0.8.exe        <-- portable (space)
+#   - latest.yml  <-- for stable users
+#   - beta.yml    <-- copy of latest.yml, so beta users also get stable updates
 #   - *.blockmap files
 ```
 
@@ -109,7 +115,7 @@ Examples:
 | File | Purpose |
 |------|---------|
 | `latest.yml` | Stable channel manifest |
-| `beta-latest.yml` | Beta channel manifest |
+| `beta.yml` | Beta channel manifest |
 | `*.exe` | Windows installer |
 | `*.dmg` | macOS installer |
 | `*.blockmap` | Differential update support |
