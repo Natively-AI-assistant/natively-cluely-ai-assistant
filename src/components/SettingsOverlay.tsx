@@ -392,6 +392,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     const [isThemeDropdownOpen, setIsThemeDropdownOpen] = useState(false);
     const [isAiLangDropdownOpen, setIsAiLangDropdownOpen] = useState(false);
     const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'uptodate' | 'error'>('idle');
+    const [updateChannel, setUpdateChannel] = useState<'stable' | 'beta'>('stable');
     const themeDropdownRef = React.useRef<HTMLDivElement>(null);
     const aiLangDropdownRef = React.useRef<HTMLDivElement>(null);
 
@@ -1048,6 +1049,17 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         }
     };
 
+    const handleToggleUpdateChannel = async () => {
+        const newChannel = updateChannel === 'stable' ? 'beta' : 'stable';
+        setUpdateChannel(newChannel);
+        try {
+            await window.electronAPI.setUpdateChannel(newChannel);
+        } catch (error) {
+            console.error("Failed to set update channel:", error);
+            setUpdateChannel(updateChannel); // Revert on error
+        }
+    };
+
     useEffect(() => {
         if (!isOpen) return;
 
@@ -1086,6 +1098,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
             }
             if (window.electronAPI?.getThemeMode) {
                 window.electronAPI.getThemeMode().then(({ mode }) => setThemeMode(mode));
+            }
+            if (window.electronAPI?.getUpdateChannel) {
+                window.electronAPI.getUpdateChannel().then(setUpdateChannel);
             }
 
             // Load settings
@@ -1524,6 +1539,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             <h3 className="text-sm font-bold text-text-primary">Version</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5">
                                                                 You are currently using Natively version {packageJson.version}
+                                                                <button
+                                                                    onClick={handleToggleUpdateChannel}
+                                                                    className={`ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium transition-all cursor-pointer ${
+                                                                        updateChannel === 'beta'
+                                                                            ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20 hover:bg-amber-500/25'
+                                                                            : 'bg-bg-input text-text-tertiary border border-border-subtle hover:bg-bg-item-surface'
+                                                                    }`}
+                                                                >
+                                                                    {updateChannel === 'beta' ? 'beta' : 'stable'}
+                                                                </button>
                                                             </p>
                                                         </div>
                                                     </div>

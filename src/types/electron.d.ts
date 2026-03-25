@@ -54,6 +54,8 @@ export interface ElectronAPI {
   openExternal: (url: string) => Promise<void>
   setUndetectable: (state: boolean) => Promise<{ success: boolean; error?: string }>
   getUndetectable: () => Promise<boolean>
+  setUpdateChannel: (channel: 'stable' | 'beta') => Promise<{ success: boolean }>
+  getUpdateChannel: () => Promise<'stable' | 'beta'>
   setOverlayMousePassthrough: (enabled: boolean) => Promise<{ success: boolean }>
   toggleOverlayMousePassthrough: () => Promise<{ success: boolean; enabled: boolean }>
   getOverlayMousePassthrough: () => Promise<boolean>

@@ -10,6 +10,7 @@ export interface AppSettings {
     disguiseMode?: 'terminal' | 'settings' | 'activity' | 'none';
     verboseLogging?: boolean;
     actionButtonMode?: 'recap' | 'brainstorm';
+    updateChannel?: 'stable' | 'beta';
 }
 
 export class SettingsManager {

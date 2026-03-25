@@ -7,6 +7,7 @@ import { DatabaseManager } from "./db/DatabaseManager"; // Import Database Manag
 import * as path from "path";
 import * as fs from "fs";
 import { AudioDevices } from "./audio/AudioDevices";
+import { SettingsManager } from "./services/SettingsManager";
 
 import { RECOGNITION_LANGUAGES, AI_RESPONSE_LANGUAGES } from "./config/languages"
 
@@ -540,6 +541,18 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle("get-undetectable", async () => {
     return appState.getUndetectable()
+  })
+
+  safeHandle("get-update-channel", async () => {
+    const settingsManager = SettingsManager.getInstance()
+    return settingsManager.get('updateChannel') || 'stable'
+  })
+
+  safeHandle("set-update-channel", async (_, channel: 'stable' | 'beta') => {
+    const settingsManager = SettingsManager.getInstance()
+    settingsManager.set('updateChannel', channel)
+    appState.setUpdateChannel(channel)
+    return { success: true }
   })
 
   // Adapted from public PR #113 — verify premium interaction

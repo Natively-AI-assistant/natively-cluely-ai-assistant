@@ -457,6 +457,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   openExternal: (url: string) => ipcRenderer.invoke("open-external", url),
   setUndetectable: (state: boolean) => ipcRenderer.invoke("set-undetectable", state),
   getUndetectable: () => ipcRenderer.invoke("get-undetectable"),
+  setUpdateChannel: (channel: 'stable' | 'beta') => ipcRenderer.invoke("set-update-channel", channel),
+  getUpdateChannel: () => ipcRenderer.invoke("get-update-channel"),
   setOverlayMousePassthrough: (enabled: boolean) => ipcRenderer.invoke("set-overlay-mouse-passthrough", enabled),
   toggleOverlayMousePassthrough: () => ipcRenderer.invoke("toggle-overlay-mouse-passthrough"),
   getOverlayMousePassthrough: () => ipcRenderer.invoke("get-overlay-mouse-passthrough"),
