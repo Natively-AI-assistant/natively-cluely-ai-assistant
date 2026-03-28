@@ -76,7 +76,7 @@
       ],
       "icon": "assets/natively.icns",
       "identity": null,
-      "hardenedRuntime": false
+      "hardenedRuntime": true
     },
     "win": {
       "target": [

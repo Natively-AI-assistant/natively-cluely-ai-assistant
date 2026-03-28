@@ -56,10 +56,12 @@ export class KeybindManager {
 
     private shouldRegister(actionId: string): boolean {
         if (this.activeMode === 'overlay') return true;
-        
+
         // In launcher mode, only register specific shortcuts
         if (actionId === 'general:toggle-visibility') return true;
         if (actionId === 'general:toggle-mouse-passthrough') return true;
+        if (actionId === 'general:take-screenshot') return true;
+        if (actionId === 'general:selective-screenshot') return true;
         if (actionId.startsWith('window:move-')) return true;
         return false;
     }

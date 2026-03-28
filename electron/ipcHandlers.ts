@@ -178,7 +178,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const preview = await appState.getImagePreview(screenshotPath)
       return { path: screenshotPath, preview }
     } catch (error) {
-      // console.error("Error taking screenshot:", error)
+      console.error("Error taking screenshot:", error)
       throw error
     }
   })
