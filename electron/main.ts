@@ -2309,10 +2309,16 @@ async function initializeApp() {
   sendAnonymousInstallPing();
 
   // Load stored Google Service Account path (for Speech-to-Text)
-  const storedServiceAccountPath = CredentialsManager.getInstance().getGoogleServiceAccountPath();
+  // Fall back to GOOGLE_APPLICATION_CREDENTIALS env var (set in terminal but not Spotlight)
+  const storedServiceAccountPath = CredentialsManager.getInstance().getGoogleServiceAccountPath()
+    || process.env.GOOGLE_APPLICATION_CREDENTIALS;
   if (storedServiceAccountPath) {
     console.log("[Init] Loading stored Google Service Account path");
     appState.updateGoogleCredentials(storedServiceAccountPath);
+    // Persist env-var path so Spotlight launches also work going forward
+    if (!CredentialsManager.getInstance().getGoogleServiceAccountPath()) {
+      CredentialsManager.getInstance().setGoogleServiceAccountPath(storedServiceAccountPath);
+    }
   }
 
   console.log("App is ready")
