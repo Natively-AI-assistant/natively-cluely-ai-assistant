@@ -1033,6 +1033,10 @@ export class AppState {
         const sttProv = CredentialsManager.getInstance().getSttProvider();
         console.log(`[Main] Creating interviewer STT provider: ${sttProv}`);
         this.googleSTT = this.createSTTProvider('interviewer');
+        if (!this.googleSTT) {
+          console.warn('[Main] Interviewer STT is null — transcription will be disabled');
+          this.broadcast('stt-config-changed', { configured: false, reason: 'No API key or service account configured' });
+        }
       }
 
       if (!this.googleSTT_User) {
@@ -1040,6 +1044,10 @@ export class AppState {
         const sttProv = CredentialsManager.getInstance().getSttProvider();
         console.log(`[Main] Creating user STT provider: ${sttProv}`);
         this.googleSTT_User = this.createSTTProvider('user');
+        if (!this.googleSTT_User) {
+          console.warn('[Main] User STT is null — transcription will be disabled');
+          this.broadcast('stt-config-changed', { configured: false, reason: 'No API key or service account configured' });
+        }
       }
 
       // --- CRITICAL FIX: SYNC SAMPLE RATES ---

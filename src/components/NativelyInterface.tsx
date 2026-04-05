@@ -135,6 +135,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         checkSttConfig();
     }, [checkSttConfig]);
 
+    // Listen for real-time STT config changes from main process
+    useEffect(() => {
+        if (!window.electronAPI?.onSttConfigChanged) return;
+        const unsubscribe = window.electronAPI.onSttConfigChanged((data) => {
+            setSttNotConfigured(!data.configured);
+        });
+        return unsubscribe;
+    }, []);
+
     const [rollingTranscript, setRollingTranscript] = useState('');  // For interviewer rolling text bar
     const [isInterviewerSpeaking, setIsInterviewerSpeaking] = useState(false);  // Track if actively speaking
     const [voiceInput, setVoiceInput] = useState('');  // Accumulated user voice input

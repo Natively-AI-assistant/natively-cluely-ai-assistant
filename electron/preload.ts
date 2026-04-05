@@ -85,6 +85,7 @@ interface ElectronAPI {
   onSuggestionGenerated: (callback: (data: { question: string; suggestion: string; confidence: number }) => void) => () => void
   onSuggestionProcessingStart: (callback: () => void) => () => void
   onSuggestionError: (callback: (error: { error: string }) => void) => () => void
+  onSttConfigChanged: (callback: (data: { configured: boolean; reason?: string }) => void) => () => void
   generateSuggestion: (context: string, lastQuestion: string) => Promise<{ suggestion: string }>
   getInputDevices: () => Promise<Array<{ id: string; name: string }>>
   getOutputDevices: () => Promise<Array<{ id: string; name: string }>>
@@ -573,6 +574,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("suggestion-error", subscription)
     return () => {
       ipcRenderer.removeListener("suggestion-error", subscription)
+    }
+  },
+  onSttConfigChanged: (callback: (data: { configured: boolean; reason?: string }) => void) => {
+    const subscription = (_: any, data: any) => callback(data)
+    ipcRenderer.on("stt-config-changed", subscription)
+    return () => {
+      ipcRenderer.removeListener("stt-config-changed", subscription)
     }
   },
   generateSuggestion: (context: string, lastQuestion: string) =>
