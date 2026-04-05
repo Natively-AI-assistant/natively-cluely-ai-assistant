@@ -1239,6 +1239,20 @@ export class AppState {
       }
 
       console.log('[Main] STT Provider reconfigured');
+    } catch (error) {
+      console.error('[Main] STT reconfiguration failed:', error);
+      // Restore audio captures if meeting is still active
+      if (this.isMeetingActive) {
+        try {
+          this.systemAudioCapture?.start();
+          this.microphoneCapture?.start();
+          this.googleSTT?.start();
+          this.googleSTT_User?.start();
+          console.log('[Main] Audio captures restored after failed reconfiguration');
+        } catch (restoreErr) {
+          console.error('[Main] Failed to restore audio captures:', restoreErr);
+        }
+      }
     } finally {
       // Allow recovery handler to fire again after reconfiguration completes (or fails)
       if (wasMeetingActive) {
