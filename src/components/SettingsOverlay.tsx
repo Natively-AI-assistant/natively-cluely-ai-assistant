@@ -202,9 +202,9 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ label, icon, value, options
                 {isOpen && (
                     <div className="absolute top-full left-0 w-full mt-1 bg-bg-elevated border border-border-subtle rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto animated fadeIn">
                         <div className="p-1 space-y-0.5">
-                            {options.map((device) => (
+                            {options.map((device, idx) => (
                                 <button
-                                    key={device.deviceId}
+                                    key={device.deviceId || `device-${idx}`}
                                     onClick={() => {
                                         onChange(device.deviceId);
                                         setIsOpen(false);
@@ -317,6 +317,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
             <AnimatePresence>
                 {isOpen && (
                     <motion.div
+                        key="provider-dropdown"
                         initial={{ opacity: 0, y: 4, scale: 0.98 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 4, scale: 0.98 }}
@@ -805,7 +806,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     const [useExperimentalSck, setUseExperimentalSck] = useState(false);
 
     // STT Provider settings
-    const [sttProvider, setSttProvider] = useState<'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively'>('google');
+    const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively'>('none');
     const [groqSttModel, setGroqSttModel] = useState('whisper-large-v3-turbo');
     const [sttGroqKey, setSttGroqKey] = useState('');
     const [sttOpenaiKey, setSttOpenaiKey] = useState('');
@@ -820,6 +821,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     const [sttSaved, setSttSaved] = useState(false);
     const [googleServiceAccountPath, setGoogleServiceAccountPath] = useState<string | null>(null);
     const [hasNativelyKey, setHasNativelyKey] = useState(false);
+    const [hasGeminiKey, setHasGeminiKey] = useState(false);
+    const [hasGroqAiKey, setHasGroqAiKey] = useState(false);
+    const [hasOpenaiAiKey, setHasOpenaiAiKey] = useState(false);
+    const [hasClaudeAiKey, setHasClaudeAiKey] = useState(false);
+    const anyAiProviderConfigured = hasGeminiKey || hasGroqAiKey || hasOpenaiAiKey || hasClaudeAiKey || hasNativelyKey;
     const [hasStoredSttGroqKey, setHasStoredSttGroqKey] = useState(false);
     const [hasStoredSttOpenaiKey, setHasStoredSttOpenaiKey] = useState(false);
     const [hasStoredDeepgramKey, setHasStoredDeepgramKey] = useState(false);
@@ -851,7 +857,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                 // @ts-ignore
                 const creds = await window.electronAPI?.getStoredCredentials?.();
                 if (creds) {
-                    setSttProvider(creds.sttProvider || 'google');
+                    setSttProvider(creds.sttProvider || 'none');
                     if (creds.groqSttModel) setGroqSttModel(creds.groqSttModel);
                     setGoogleServiceAccountPath(creds.googleServiceAccountPath);
                     setHasStoredSttGroqKey(creds.hasSttGroqKey);
@@ -864,6 +870,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                     setHasStoredSonioxKey(creds.hasSonioxKey || false);
                     setHasStoredTavilyKey(creds.hasTavilyKey || false);
                     setHasNativelyKey(creds.hasNativelyKey || false);
+                    setHasGeminiKey(creds.hasGeminiKey || false);
+                    setHasGroqAiKey(creds.hasGroqKey || false);
+                    setHasOpenaiAiKey(creds.hasOpenaiKey || false);
+                    setHasClaudeAiKey(creds.hasClaudeKey || false);
                     // Populate key fields so switching providers doesn't make saved keys appear gone
                     if (creds.sttGroqKey) setSttGroqKey(creds.sttGroqKey);
                     if (creds.sttOpenaiKey) setSttOpenaiKey(creds.sttOpenaiKey);
@@ -880,7 +890,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         if (isOpen) loadSttSettings();
     }, [isOpen]);
 
-    const handleSttProviderChange = async (provider: 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively') => {
+    const handleSttProviderChange = async (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively') => {
         setSttProvider(provider);
         setIsSttDropdownOpen(false);
         setSttTestStatus('idle');
@@ -1019,7 +1029,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     };
 
     const handleTestSttConnection = async () => {
-        if (sttProvider === 'google' || sttProvider === 'natively') return;
+        if (sttProvider === 'google' || sttProvider === 'natively' || sttProvider === 'none') return;
         const keyMap: Record<string, string> = {
             groq: sttGroqKey, openai: sttOpenaiKey, deepgram: sttDeepgramKey,
             elevenlabs: sttElevenLabsKey, azure: sttAzureKey, ibmwatson: sttIbmKey,
@@ -1201,6 +1211,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         <AnimatePresence>
             {isOpen && (
                 <motion.div
+                    key="settings-overlay"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
@@ -1263,6 +1274,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'ai-providers' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
                                         <FlaskConical size={16} /> AI Providers
+                                        {!anyAiProviderConfigured && (
+                                            <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
+                                        )}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('calendar')}
@@ -1275,6 +1289,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'audio' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
                                         <Mic size={16} /> Audio
+                                        {sttProvider === 'none' && (
+                                            <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
+                                        )}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('keybinds')}
@@ -2763,8 +2780,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     <ProviderSelect
                                                         value={sttProvider}
                                                         onChange={(val) => handleSttProviderChange(val as any)}
-                                                        options={[
-                                                            ...(hasNativelyKey ? [{ id: 'natively', label: 'Natively API', badge: 'Saved' as const, recommended: true, desc: 'Managed transcription via Natively backend', color: 'blue', icon: <Mic size={14} /> }] : []),
+                                                         options={[
+                                                             { id: 'none', label: 'None', desc: 'Transcription disabled', color: 'gray', icon: <Mic size={14} /> },
+                                                             ...(hasNativelyKey ? [{ id: 'natively', label: 'Natively API', badge: 'Saved' as const, recommended: true, desc: 'Managed transcription via Natively backend', color: 'blue', icon: <Mic size={14} /> }] : []),
                                                             { id: 'google', label: 'Google Cloud', badge: googleServiceAccountPath ? 'Saved' : null, recommended: true, desc: 'gRPC streaming via Service Account', color: 'blue', icon: <Mic size={14} /> },
                                                             { id: 'groq', label: 'Groq Whisper', badge: hasStoredSttGroqKey ? 'Saved' : null, recommended: true, desc: 'Ultra-fast REST transcription', color: 'orange', icon: <Mic size={14} /> },
                                                             { id: 'openai', label: 'OpenAI Whisper', badge: hasStoredSttOpenaiKey ? 'Saved' : null, desc: 'OpenAI-compatible Whisper API', color: 'green', icon: <Mic size={14} /> },
@@ -2776,6 +2794,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         ]}
                                                     />
                                                 </div>
+                                                {sttProvider === 'none' && (
+                                                    <p className="text-xs text-text-tertiary mt-1.5">
+                                                        Transcription requires an STT provider — select one and add your API key
+                                                    </p>
+                                                )}
                                             </div>
 
                                             {/* Groq Model Selector */}
@@ -2895,6 +2918,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                 const keyMap: Record<string, string> = {
                                                                     groq: sttGroqKey, openai: sttOpenaiKey, deepgram: sttDeepgramKey,
                                                                     elevenlabs: sttElevenLabsKey, azure: sttAzureKey, ibmwatson: sttIbmKey,
+                                                                    soniox: sttSonioxKey,
                                                                 };
                                                                 handleSttKeySubmit(sttProvider as any, keyMap[sttProvider] || '');
                                                             }}
@@ -3303,6 +3327,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
             {/* ALWAYS MOUNTED to prevent React AnimatePresence lag spikes         */}
             {/* ------------------------------------------------------------------ */}
             <div
+                key="settings-mockup"
                 id="settings-mockup-wrapper"
                 className="fixed inset-0 z-[49] pointer-events-none transition-opacity duration-150"
                 style={{ opacity: isPreviewingOpacity ? 1 : 0 }}

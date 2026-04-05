@@ -17,6 +17,23 @@ export function initializeIpcHandlers(appState: AppState): void {
     ipcMain.handle(channel, listener);
   };
 
+  // Helper: save STT credential and reconfigure the audio pipeline (only if meeting is active)
+  const saveAndReconfigure = async (
+    setter: () => void,
+    errorLabel: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      setter();
+      if (appState.getIsMeetingActive()) {
+        await appState.reconfigureSttProvider();
+      }
+      return { success: true };
+    } catch (error: any) {
+      console.error(`Error saving ${errorLabel}:`, error);
+      return { success: false, error: error.message };
+    }
+  };
+
   // --- NEW Test Helper ---
   safeHandle("test-release-fetch", async () => {
     try {
@@ -997,7 +1014,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasClaudeKey: hasKey(creds.claudeApiKey),
         hasNativelyKey: hasKey(creds.nativelyApiKey),
         googleServiceAccountPath: creds.googleServiceAccountPath || null,
-        sttProvider: creds.sttProvider || 'google',
+        sttProvider: creds.sttProvider || 'none',
         groqSttModel: creds.groqSttModel || 'whisper-large-v3-turbo',
         hasSttGroqKey: hasKey(creds.groqSttApiKey),
         hasSttOpenaiKey: hasKey(creds.openAiSttApiKey),
@@ -1026,7 +1043,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         claudePreferredModel: creds.claudePreferredModel || undefined,
       };
     } catch (error: any) {
-      return { hasGeminiKey: false, hasGroqKey: false, hasOpenaiKey: false, hasClaudeKey: false, hasNativelyKey: false, googleServiceAccountPath: null, sttProvider: 'google', groqSttModel: 'whisper-large-v3-turbo', hasSttGroqKey: false, hasSttOpenaiKey: false, hasDeepgramKey: false, hasElevenLabsKey: false, hasAzureKey: false, azureRegion: 'eastus', hasIbmWatsonKey: false, ibmWatsonRegion: 'us-south', hasSonioxKey: false, hasTavilyKey: false, sttGroqKey: '', sttOpenaiKey: '', sttDeepgramKey: '', sttElevenLabsKey: '', sttAzureKey: '', sttIbmKey: '', sttSonioxKey: '' };
+      return { hasGeminiKey: false, hasGroqKey: false, hasOpenaiKey: false, hasClaudeKey: false, hasNativelyKey: false, googleServiceAccountPath: null, sttProvider: 'none', groqSttModel: 'whisper-large-v3-turbo', hasSttGroqKey: false, hasSttOpenaiKey: false, hasDeepgramKey: false, hasElevenLabsKey: false, hasAzureKey: false, azureRegion: 'eastus', hasIbmWatsonKey: false, ibmWatsonRegion: 'us-south', hasSonioxKey: false, hasTavilyKey: false, sttGroqKey: '', sttOpenaiKey: '', sttDeepgramKey: '', sttElevenLabsKey: '', sttAzureKey: '', sttIbmKey: '', sttSonioxKey: '' };
     }
   });
 
@@ -1074,7 +1091,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // STT Provider Management Handlers
   // ==========================================
 
-  safeHandle("set-stt-provider", async (_, provider: 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively') => {
+  safeHandle("set-stt-provider", async (_, provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively') => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setSttProvider(provider);
@@ -1094,115 +1111,58 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { CredentialsManager } = require('./services/CredentialsManager');
       return CredentialsManager.getInstance().getSttProvider();
     } catch (error: any) {
-      return 'google';
+      return 'none';
     }
   });
 
   safeHandle("set-groq-stt-api-key", async (_, apiKey: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setGroqSttApiKey(apiKey);
-      return { success: true };
-    } catch (error: any) {
-      console.error("Error saving Groq STT API key:", error);
-      return { success: false, error: error.message };
-    }
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    return saveAndReconfigure(() => CredentialsManager.getInstance().setGroqSttApiKey(apiKey), 'Groq STT API key');
   });
 
   safeHandle("set-openai-stt-api-key", async (_, apiKey: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setOpenAiSttApiKey(apiKey);
-      return { success: true };
-    } catch (error: any) {
-      console.error("Error saving OpenAI STT API key:", error);
-      return { success: false, error: error.message };
-    }
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    return saveAndReconfigure(() => CredentialsManager.getInstance().setOpenAiSttApiKey(apiKey), 'OpenAI STT API key');
   });
 
   safeHandle("set-deepgram-api-key", async (_, apiKey: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setDeepgramApiKey(apiKey);
-      return { success: true };
-    } catch (error: any) {
-      console.error("Error saving Deepgram API key:", error);
-      return { success: false, error: error.message };
-    }
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    return saveAndReconfigure(() => CredentialsManager.getInstance().setDeepgramApiKey(apiKey), 'Deepgram API key');
   });
 
   safeHandle("set-groq-stt-model", async (_, model: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setGroqSttModel(model);
-
-      // Reconfigure the audio pipeline to use the new model
-      await appState.reconfigureSttProvider();
-
-      return { success: true };
-    } catch (error: any) {
-      console.error("Error setting Groq STT model:", error);
-      return { success: false, error: error.message };
-    }
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    return saveAndReconfigure(() => CredentialsManager.getInstance().setGroqSttModel(model), 'Groq STT model');
   });
 
   safeHandle("set-elevenlabs-api-key", async (_, apiKey: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setElevenLabsApiKey(apiKey);
-      return { success: true };
-    } catch (error: any) {
-      console.error("Error saving ElevenLabs API key:", error);
-      return { success: false, error: error.message };
-    }
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    return saveAndReconfigure(() => CredentialsManager.getInstance().setElevenLabsApiKey(apiKey), 'ElevenLabs API key');
   });
 
   safeHandle("set-azure-api-key", async (_, apiKey: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setAzureApiKey(apiKey);
-      return { success: true };
-    } catch (error: any) {
-      console.error("Error saving Azure API key:", error);
-      return { success: false, error: error.message };
-    }
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    return saveAndReconfigure(() => CredentialsManager.getInstance().setAzureApiKey(apiKey), 'Azure API key');
   });
 
   safeHandle("set-azure-region", async (_, region: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setAzureRegion(region);
-
-      // Reconfigure the pipeline since region changes the endpoint URL
-      await appState.reconfigureSttProvider();
-
-      return { success: true };
-    } catch (error: any) {
-      console.error("Error setting Azure region:", error);
-      return { success: false, error: error.message };
-    }
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    return saveAndReconfigure(() => CredentialsManager.getInstance().setAzureRegion(region), 'Azure region');
   });
 
   safeHandle("set-ibmwatson-api-key", async (_, apiKey: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setIbmWatsonApiKey(apiKey);
-      return { success: true };
-    } catch (error: any) {
-      console.error("Error saving IBM Watson API key:", error);
-      return { success: false, error: error.message };
-    }
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    return saveAndReconfigure(() => CredentialsManager.getInstance().setIbmWatsonApiKey(apiKey), 'IBM Watson API key');
+  });
+
+  safeHandle("set-ibmwatson-region", async (_, region: string) => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    return saveAndReconfigure(() => CredentialsManager.getInstance().setIbmWatsonRegion(region), 'IBM Watson region');
   });
 
   safeHandle("set-soniox-api-key", async (_, apiKey: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setSonioxApiKey(apiKey);
-      return { success: true };
-    } catch (error: any) {
-      console.error("Error saving Soniox API key:", error);
-      return { success: false, error: error.message };
-    }
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    return saveAndReconfigure(() => CredentialsManager.getInstance().setSonioxApiKey(apiKey), 'Soniox API key');
   });
 
   // Helper to sanitize error messages (remove API key references)

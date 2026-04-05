@@ -48,6 +48,9 @@ pub struct SystemAudioCapture {
     /// native device is initialized. Callers always get the real hardware rate.
     sample_rate: Arc<AtomicU32>,
     device_id: Option<String>,
+    /// Stores the SpeakerInput for recreation on restart.
+    /// Recreated on each start() if None (like MicrophoneCapture.input).
+    input: Option<speaker::SpeakerInput>,
 }
 
 #[napi]
@@ -63,6 +66,7 @@ impl SystemAudioCapture {
             // 48kHz is the standard macOS CoreAudio rate.
             sample_rate: Arc::new(AtomicU32::new(48000)),
             device_id,
+            input: None, // Lazy init — created in start()
         })
     }
 
@@ -77,41 +81,55 @@ impl SystemAudioCapture {
         callback: ThreadsafeFunction<Buffer>,
         on_speech_ended: Option<ThreadsafeFunction<bool>>,
     ) -> napi::Result<()> {
+        // Guard against double-start — prevents spawning concurrent threads
+        if self.capture_thread.is_some() {
+            return Err(napi::Error::from_reason("Capture already running"));
+        }
+
         let tsfn = callback;
         let speech_ended_tsfn = on_speech_ended;
 
         self.stop_signal.store(false, Ordering::SeqCst);
         let stop_signal = self.stop_signal.clone();
-        let device_id = self.device_id.clone();
         let sample_rate_shared = self.sample_rate.clone();
 
-        // ★ ALL init + DSP runs in background thread — start() returns INSTANTLY
-        // This prevents the 5-7 second main-thread block from SCK initialization.
-        self.capture_thread = Some(thread::spawn(move || {
-            // 1. SCK Init (takes 5-7 seconds — runs OFF main thread)
-            println!("[SystemAudioCapture] Background init starting...");
-            let input = match speaker::SpeakerInput::new(device_id) {
-                Ok(i) => i,
+        // Recreate SpeakerInput if it was consumed by a previous start() cycle.
+        // This is the fix for the one-shot take_consumer() bug and WASAPI device contention.
+        if self.input.is_none() {
+            println!("[SystemAudioCapture] Recreating SpeakerInput for restart...");
+            match speaker::SpeakerInput::new(self.device_id.clone()) {
+                Ok(i) => {
+                    self.input = Some(i);
+                }
                 Err(e) => {
-                    println!("[SystemAudioCapture] Init failed: {}. Trying default...", e);
+                    println!(
+                        "[SystemAudioCapture] Recreate failed: {}. Trying default...",
+                        e
+                    );
                     match speaker::SpeakerInput::new(None) {
-                        Ok(i) => i,
+                        Ok(i) => {
+                            self.input = Some(i);
+                        }
                         Err(e2) => {
-                            let msg = format!(
-                                "[SystemAudioCapture] FATAL: All init attempts failed: {}",
+                            return Err(napi::Error::from_reason(format!(
+                                "[SystemAudioCapture] Failed to create SpeakerInput: {}",
                                 e2
-                            );
-                            eprintln!("{}", msg);
-                            // Notify JS so it can emit 'error' and reset isRecording
-                            tsfn.call(
-                                Err(napi::Error::from_reason(msg)),
-                                ThreadsafeFunctionCallMode::NonBlocking,
-                            );
-                            return;
+                            )));
                         }
                     }
                 }
-            };
+            }
+        }
+
+        // Take ownership of the input for the background thread
+        let input = self.input.take().ok_or_else(|| {
+            napi::Error::from_reason("SpeakerInput missing after recreation check")
+        })?;
+
+        // ALL init + DSP runs in background thread — start() returns INSTANTLY
+        self.capture_thread = Some(thread::spawn(move || {
+            // 1. SCK Init (takes 5-7 seconds — runs OFF main thread)
+            println!("[SystemAudioCapture] Background init starting...");
 
             let mut stream = input.stream();
             let mut consumer = match stream.take_consumer() {
@@ -123,7 +141,6 @@ impl SystemAudioCapture {
             };
 
             let native_rate = stream.sample_rate();
-            // Publish the real native rate so JS can read it via get_sample_rate()
             sample_rate_shared.store(native_rate, Ordering::Release);
             println!(
                 "[SystemAudioCapture] Background init complete. Initial Rate: {}Hz. DSP starting.",
@@ -136,7 +153,6 @@ impl SystemAudioCapture {
                 ..SilenceSuppressionConfig::for_system_audio()
             });
 
-            // 20ms chunks at native rate (e.g. 960 samples at 48kHz)
             let chunk_size = (native_rate as usize / 1000) * 20;
             let mut frame_buffer: Vec<i16> = Vec::with_capacity(chunk_size * 4);
             let mut raw_batch: Vec<f32> = Vec::with_capacity(4096);
@@ -146,12 +162,10 @@ impl SystemAudioCapture {
                     break;
                 }
 
-                // Drain ALL available samples from ring buffer (lock-free)
                 while let Some(sample) = consumer.try_pop() {
                     raw_batch.push(sample);
                 }
 
-                // Convert f32 -> i16 at native sample rate
                 if !raw_batch.is_empty() {
                     for &f in &raw_batch {
                         let scaled = (f * 32767.0).clamp(-32768.0, 32767.0);
@@ -160,7 +174,6 @@ impl SystemAudioCapture {
                     raw_batch.clear();
                 }
 
-                // Process in 20ms chunks through the two-stage gate
                 while frame_buffer.len() >= chunk_size {
                     let frame: Vec<i16> = frame_buffer.drain(0..chunk_size).collect();
 
@@ -175,7 +188,6 @@ impl SystemAudioCapture {
                             );
                         }
                         FrameAction::SendSilence => {
-                            // Send zero-filled buffer to keep streaming APIs alive
                             let silence = vec![0u8; chunk_size * 2];
                             tsfn.call(
                                 Ok(Buffer::from(silence)),
@@ -183,11 +195,10 @@ impl SystemAudioCapture {
                             );
                         }
                         FrameAction::Suppress => {
-                            // Do nothing — bandwidth saving
+                            // Do nothing
                         }
                     }
 
-                    // Fire speech_ended callback on the exact transition frame
                     if speech_ended {
                         if let Some(ref se_tsfn) = speech_ended_tsfn {
                             se_tsfn.call(Ok(true), ThreadsafeFunctionCallMode::NonBlocking);
@@ -195,7 +206,6 @@ impl SystemAudioCapture {
                     }
                 }
 
-                // Keep the sleep small so we quickly read the ring buffer
                 thread::sleep(Duration::from_millis(DSP_POLL_MS));
             }
 
@@ -212,6 +222,12 @@ impl SystemAudioCapture {
         if let Some(handle) = self.capture_thread.take() {
             let _ = handle.join();
         }
+    }
+}
+
+impl Drop for SystemAudioCapture {
+    fn drop(&mut self) {
+        self.stop();
     }
 }
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from 'react';
 import {
     Sparkles,
     Pencil,
@@ -26,7 +26,8 @@ import {
     Code,
     Copy,
     Check,
-    PointerOff
+    PointerOff,
+    AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -89,6 +90,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         const stored = localStorage.getItem('natively_interviewer_transcript');
         return stored !== 'false';
     });
+    const [sttNotConfigured, setSttNotConfigured] = useState(false);
 
     // Analytics State
     const requestStartTimeRef = useRef<number | null>(null);
@@ -102,6 +104,36 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         window.addEventListener('storage', handleStorage);
         return () => window.removeEventListener('storage', handleStorage);
     }, []);
+
+    // Check STT configuration — extracted as standalone function so it can be called from multiple places
+    const checkSttConfig = useCallback(async () => {
+        try {
+            const creds = await window.electronAPI?.getStoredCredentials?.();
+            if (!creds || !creds.sttProvider) {
+                setSttNotConfigured(true);
+                return;
+            }
+            const hasKey =
+                creds.sttProvider === 'groq' ? creds.hasSttGroqKey :
+                creds.sttProvider === 'openai' ? creds.hasSttOpenaiKey :
+                creds.sttProvider === 'deepgram' ? creds.hasDeepgramKey :
+                creds.sttProvider === 'elevenlabs' ? creds.hasElevenLabsKey :
+                creds.sttProvider === 'azure' ? creds.hasAzureKey :
+                creds.sttProvider === 'ibmwatson' ? creds.hasIbmWatsonKey :
+                creds.sttProvider === 'soniox' ? creds.hasSonioxKey :
+                creds.sttProvider === 'natively' ? creds.hasNativelyKey :
+                creds.sttProvider === 'google' ? !!creds.googleServiceAccountPath :
+                false;
+            setSttNotConfigured(!hasKey);
+        } catch (e) {
+            setSttNotConfigured(true);
+        }
+    }, []);
+
+    // Check STT configuration on mount
+    useEffect(() => {
+        checkSttConfig();
+    }, [checkSttConfig]);
 
     const [rollingTranscript, setRollingTranscript] = useState('');  // For interviewer rolling text bar
     const [isInterviewerSpeaking, setIsInterviewerSpeaking] = useState(false);  // Track if actively speaking
@@ -338,11 +370,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
             setManualTranscript('');
             setVoiceInput('');
             setIsProcessing(false);
-            // Optionally reset connection status if needed, but connection persists
-
-            // Track new conversation/session if applicable?
-            // Actually 'app_opened' is global, 'assistant_started' is overlay.
-            // Maybe 'conversation_started' event?
+            setRollingTranscript('');
+            setIsInterviewerSpeaking(false);
+            // Re-check STT configuration on new meeting
+            checkSttConfig();
             analytics.trackConversationStarted();
         });
         return () => unsubscribe();
@@ -1924,6 +1955,19 @@ Provide only the answer, nothing else.`;
                                     isActive={isInterviewerSpeaking}
                                     surfaceStyle={appearance.transcriptStyle}
                                 />
+                            )}
+                            {!rollingTranscript && !isInterviewerSpeaking && showTranscript && sttNotConfigured && (
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ duration: 0.3 }}
+                                    className="flex items-center justify-center gap-1.5 py-2 text-text-tertiary"
+                                >
+                                    <AlertCircle size={14} />
+                                    <span className="text-[11px]">
+                                        Transcription not configured — configure STT in Settings
+                                    </span>
+                                </motion.div>
                             )}
 
                             {/* Chat History - Only show if there are messages OR active states */}

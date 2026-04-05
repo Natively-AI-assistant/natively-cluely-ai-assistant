@@ -231,6 +231,8 @@ export class AppState {
   private hasDebugged: boolean = false
   private isMeetingActive: boolean = false; // Guard for session state leaks
   private _isQuitting: boolean = false;
+  private _audioRecoveryInProgress: boolean = false; // Prevent overlapping recovery attempts
+  private _audioRecoveryAttempts: number = 0; // Cap recovery retries per meeting
   private _verboseLogging: boolean = false;
   private _disguiseTimers: NodeJS.Timeout[] = []; // Track forceUpdate timeouts
   private _dockDebounceTimer: NodeJS.Timeout | null = null; // Debounce dock state changes
@@ -798,19 +800,18 @@ export class AppState {
   private googleSTT: STTProvider | null = null; // Interviewer
   private googleSTT_User: STTProvider | null = null; // User
 
-  private createSTTProvider(speaker: 'interviewer' | 'user'): STTProvider {
+  private createSTTProvider(speaker: 'interviewer' | 'user'): STTProvider | null {
     const { CredentialsManager } = require('./services/CredentialsManager');
     const sttProvider = CredentialsManager.getInstance().getSttProvider();
     const sttLanguage = CredentialsManager.getInstance().getSttLanguage();
 
-    let stt: STTProvider;
+    let stt: STTProvider | null = null;
 
     if (sttProvider === 'natively') {
       const nativelyKey = CredentialsManager.getInstance().getNativelyApiKey();
       if (!nativelyKey) {
-        // Natively is Coming Soon — no key means degrade gracefully like every other provider
-        console.warn(`[Main] No Natively API Key configured for ${speaker}, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
+        console.warn(`[Main] No Natively API Key configured for ${speaker} — transcription disabled`);
+        return null;
       } else {
         // 'system' for interviewer (system audio), 'mic' for user (microphone).
         // The server uses ${key}:${channel} as the session key so both streams
@@ -823,8 +824,8 @@ export class AppState {
         console.log(`[Main] Using DeepgramStreamingSTT for ${speaker}`);
         stt = new DeepgramStreamingSTT(apiKey);
       } else {
-        console.warn(`[Main] No API key for Deepgram STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
+        console.warn(`[Main] No API key for Deepgram STT — transcription disabled for ${speaker}`);
+        return null;
       }
     } else if (sttProvider === 'soniox') {
       const apiKey = CredentialsManager.getInstance().getSonioxApiKey();
@@ -832,8 +833,8 @@ export class AppState {
         console.log(`[Main] Using SonioxStreamingSTT for ${speaker}`);
         stt = new SonioxStreamingSTT(apiKey);
       } else {
-        console.warn(`[Main] No API key for Soniox STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
+        console.warn(`[Main] No API key for Soniox STT — transcription disabled for ${speaker}`);
+        return null;
       }
     } else if (sttProvider === 'elevenlabs') {
       const apiKey = CredentialsManager.getInstance().getElevenLabsApiKey();
@@ -841,8 +842,8 @@ export class AppState {
         console.log(`[Main] Using ElevenLabsStreamingSTT for ${speaker}`);
         stt = new ElevenLabsStreamingSTT(apiKey);
       } else {
-        console.warn(`[Main] No API key for ElevenLabs STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
+        console.warn(`[Main] No API key for ElevenLabs STT — transcription disabled for ${speaker}`);
+        return null;
       }
     } else if (sttProvider === 'openai') {
       // OpenAI: WebSocket Realtime (gpt-4o-transcribe → gpt-4o-mini-transcribe) with whisper-1 REST fallback
@@ -851,8 +852,8 @@ export class AppState {
         console.log(`[Main] Using OpenAIStreamingSTT (WebSocket+REST fallback) for ${speaker}`);
         stt = new OpenAIStreamingSTT(apiKey);
       } else {
-        console.warn(`[Main] No API key for OpenAI STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
+        console.warn(`[Main] No API key for OpenAI STT — transcription disabled for ${speaker}`);
+        return null;
       }
     } else if (sttProvider === 'groq' || sttProvider === 'azure' || sttProvider === 'ibmwatson') {
       let apiKey: string | undefined;
@@ -874,11 +875,12 @@ export class AppState {
         console.log(`[Main] Using RestSTT (${sttProvider}) for ${speaker}`);
         stt = new RestSTT(sttProvider, apiKey, modelOverride, region);
       } else {
-        console.warn(`[Main] No API key for ${sttProvider} STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
+        console.warn(`[Main] No API key for ${sttProvider} STT — transcription disabled for ${speaker}`);
+        return null;
       }
     } else {
-      stt = new GoogleSTT(speaker);
+      console.warn(`[Main] Unknown STT provider '${sttProvider}' — transcription disabled for ${speaker}`);
+      return null;
     }
 
     stt.setRecognitionLanguage(sttLanguage);
@@ -969,6 +971,30 @@ export class AppState {
         });
         this.systemAudioCapture.on('error', (err: Error) => {
           console.error('[Main] SystemAudioCapture Error:', err);
+          // Attempt recovery if meeting is active (debounced + capped)
+          if (this.isMeetingActive && !this._audioRecoveryInProgress && this._audioRecoveryAttempts < 3) {
+            this._audioRecoveryInProgress = true;
+            this._audioRecoveryAttempts++;
+            console.log(`[Main] Attempting SystemAudioCapture recovery (attempt ${this._audioRecoveryAttempts}/3)...`);
+            // 1s delay gives the audio subsystem time to settle
+            setTimeout(() => {
+              if (this.isMeetingActive && this.systemAudioCapture) {
+                try {
+                  this.systemAudioCapture.start();
+                  // Also restart STT providers in case they disconnected
+                  this.googleSTT?.start();
+                  this.googleSTT_User?.start();
+                  console.log('[Main] SystemAudioCapture recovery successful');
+                } catch (recoveryErr) {
+                  console.error('[Main] SystemAudioCapture recovery failed:', recoveryErr);
+                } finally {
+                  this._audioRecoveryInProgress = false;
+                }
+              } else {
+                this._audioRecoveryInProgress = false;
+              }
+            }, 1000);
+          }
         });
       }
 
@@ -1159,38 +1185,51 @@ export class AppState {
   public async reconfigureSttProvider(): Promise<void> {
     console.log('[Main] Reconfiguring STT Provider...');
 
-    // RC-01 fix: pause audio captures FIRST so their EventEmitter queues drain
-    // before we null-out the STT instances. Without this, buffered 'data' events
-    // still in-flight call this.googleSTT?.write() while googleSTT is already null.
-    if (this.isMeetingActive) {
-      this.systemAudioCapture?.stop();
-      this.microphoneCapture?.stop();
+    // Block recovery handler from racing with this reconfiguration
+    const wasMeetingActive = this.isMeetingActive;
+    if (wasMeetingActive) {
+      this._audioRecoveryInProgress = true;
     }
 
-    // Now safe to destroy STT instances — no more audio events incoming
-    if (this.googleSTT) {
-      this.googleSTT.stop();
-      this.googleSTT.removeAllListeners();
-      this.googleSTT = null;
-    }
-    if (this.googleSTT_User) {
-      this.googleSTT_User.stop();
-      this.googleSTT_User.removeAllListeners();
-      this.googleSTT_User = null;
-    }
+    try {
+      // RC-01 fix: pause audio captures FIRST so their EventEmitter queues drain
+      // before we null-out the STT instances. Without this, buffered 'data' events
+      // still in-flight call this.googleSTT?.write() while googleSTT is already null.
+      if (this.isMeetingActive) {
+        this.systemAudioCapture?.stop();
+        this.microphoneCapture?.stop();
+      }
 
-    // Reinitialize the pipeline (will pick up the new provider from CredentialsManager)
-    this.setupSystemAudioPipeline();
+      // Now safe to destroy STT instances — no more audio events incoming
+      if (this.googleSTT) {
+        this.googleSTT.stop();
+        this.googleSTT.removeAllListeners();
+        this.googleSTT = null;
+      }
+      if (this.googleSTT_User) {
+        this.googleSTT_User.stop();
+        this.googleSTT_User.removeAllListeners();
+        this.googleSTT_User = null;
+      }
 
-    // Restart audio captures and new STT instances if a meeting is active
-    if (this.isMeetingActive) {
-      this.systemAudioCapture?.start();
-      this.microphoneCapture?.start();
-      this.googleSTT?.start();
-      this.googleSTT_User?.start();
+      // Reinitialize the pipeline (will pick up the new provider from CredentialsManager)
+      this.setupSystemAudioPipeline();
+
+      // Restart audio captures and new STT instances if a meeting is active
+      if (this.isMeetingActive) {
+        this.systemAudioCapture?.start();
+        this.microphoneCapture?.start();
+        this.googleSTT?.start();
+        this.googleSTT_User?.start();
+      }
+
+      console.log('[Main] STT Provider reconfigured');
+    } finally {
+      // Allow recovery handler to fire again after reconfiguration completes (or fails)
+      if (wasMeetingActive) {
+        this._audioRecoveryInProgress = false;
+      }
     }
-
-    console.log('[Main] STT Provider reconfigured');
   }
 
 
@@ -1384,6 +1423,8 @@ export class AppState {
   public async endMeeting(): Promise<void> {
     console.log('[Main] Ending Meeting...');
     this.isMeetingActive = false; // Block new data immediately
+    this._audioRecoveryInProgress = false; // Cancel any pending recovery
+    this._audioRecoveryAttempts = 0; // Reset recovery counter for next meeting
     this.broadcastMeetingState();
 
     // Reset Mouse Passthrough so the next meeting overlay starts fresh and focusable

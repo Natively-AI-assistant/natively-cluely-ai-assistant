@@ -104,7 +104,6 @@ impl SilenceSuppressionConfig {
     }
 }
 
-
 /// Silence suppression state machine with adaptive threshold + WebRTC VAD
 pub struct SilenceSuppressor {
     config: SilenceSuppressionConfig,

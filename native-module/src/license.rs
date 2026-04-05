@@ -171,7 +171,8 @@ impl Task for VerifyDodoTask {
                             );
                             // Return the instance_id from the conflict body if available,
                             // so callers can re-use the existing activation slot.
-                            if let Some(existing_id) = json["id"].as_str()
+                            if let Some(existing_id) = json["id"]
+                                .as_str()
                                 .or_else(|| json["license_key_instance_id"].as_str())
                             {
                                 return Ok(format!("ERR:dodo:duplicate:{}", existing_id));
@@ -310,7 +311,10 @@ impl Task for ValidateDodoTask {
                             "[LicenseRust] Dodo validate: non-JSON response (status={})",
                             status
                         );
-                        Ok(format!("ERR:dodo:validate unexpected response (HTTP {})", status))
+                        Ok(format!(
+                            "ERR:dodo:validate unexpected response (HTTP {})",
+                            status
+                        ))
                     }
                 }
             }
@@ -438,7 +442,10 @@ impl Task for DeactivateDodoTask {
 /// Network errors return "ERR:dodo:network:..." — callers should still remove the local license
 /// file even on network failure (fail-safe: local removal always happens).
 #[napi]
-pub fn deactivate_dodo_key(license_key: String, instance_id: String) -> AsyncTask<DeactivateDodoTask> {
+pub fn deactivate_dodo_key(
+    license_key: String,
+    instance_id: String,
+) -> AsyncTask<DeactivateDodoTask> {
     AsyncTask::new(DeactivateDodoTask {
         license_key,
         instance_id,

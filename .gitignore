@@ -201,3 +201,6 @@ opencode.json
 # Temporary working files
 temp/
 planning/live-negotiation/temp/
+
+# IDE
+/.idea/
