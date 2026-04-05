@@ -1024,6 +1024,27 @@ export class AppState {
         });
         this.microphoneCapture.on('error', (err: Error) => {
           console.error('[Main] MicrophoneCapture Error:', err);
+          // Attempt recovery if meeting is active (shares debounce/cap with system audio)
+          if (this.isMeetingActive && !this._audioRecoveryInProgress && this._audioRecoveryAttempts < 3) {
+            this._audioRecoveryInProgress = true;
+            this._audioRecoveryAttempts++;
+            console.log(`[Main] Attempting MicrophoneCapture recovery (attempt ${this._audioRecoveryAttempts}/3)...`);
+            this._audioRecoveryTimer = setTimeout(() => {
+              this._audioRecoveryTimer = null;
+              if (this.isMeetingActive && this.microphoneCapture) {
+                try {
+                  this.microphoneCapture.start();
+                  console.log('[Main] MicrophoneCapture recovery successful');
+                } catch (recoveryErr) {
+                  console.error('[Main] MicrophoneCapture recovery failed:', recoveryErr);
+                } finally {
+                  this._audioRecoveryInProgress = false;
+                }
+              } else {
+                this._audioRecoveryInProgress = false;
+              }
+            }, 1000);
+          }
         });
       }
 
