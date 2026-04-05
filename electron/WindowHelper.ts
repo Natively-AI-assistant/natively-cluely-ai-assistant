@@ -45,6 +45,19 @@ export class WindowHelper {
     this.appState = appState
   }
 
+  private getDisplayWorkArea(bounds?: Electron.Rectangle): Electron.Rectangle {
+    if (bounds) {
+      return screen.getDisplayMatching(bounds).workArea
+    }
+    if (this.overlayBounds) {
+      return screen.getDisplayMatching(this.overlayBounds).workArea
+    }
+    if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+      return screen.getDisplayMatching(this.overlayWindow.getBounds()).workArea
+    }
+    return screen.getPrimaryDisplay().workArea
+  }
+
   public setContentProtection(enable: boolean): void {
     this.contentProtection = enable
     this.applyContentProtection(enable)
@@ -92,16 +105,16 @@ export class WindowHelper {
     console.log('[WindowHelper] setOverlayDimensions:', width, height);
 
     const [currentX, currentY] = this.overlayWindow.getPosition()
-    const primaryDisplay = screen.getPrimaryDisplay()
-    const workArea = primaryDisplay.workAreaSize
+    const currentBounds = this.overlayWindow.getBounds()
+    const workArea = this.getDisplayWorkArea(currentBounds)
     const maxAllowedWidth = Math.floor(workArea.width * 0.9)
     const maxAllowedHeight = Math.floor(workArea.height * 0.9)
     const newWidth = Math.min(Math.max(width, 300), maxAllowedWidth) // min 300, max 90%
     const newHeight = Math.min(Math.max(height, 1), maxAllowedHeight) // min 1, max 90%
-    const maxX = workArea.width - newWidth
-    const maxY = workArea.height - newHeight
-    const newX = Math.min(Math.max(currentX, 0), maxX)
-    const newY = Math.min(Math.max(currentY, 0), maxY)
+    const maxX = workArea.x + workArea.width - newWidth
+    const maxY = workArea.y + workArea.height - newHeight
+    const newX = Math.min(Math.max(currentX, workArea.x), maxX)
+    const newY = Math.min(Math.max(currentY, workArea.y), maxY)
 
     this.overlayWindow.setContentSize(newWidth, newHeight)
     this.overlayWindow.setPosition(newX, newY)
@@ -510,19 +523,28 @@ export class WindowHelper {
 
     // Show Overlay FIRST
     if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
-      const primaryDisplay = screen.getPrimaryDisplay()
-      const workArea = primaryDisplay.workArea;
       const currentBounds = this.overlayWindow.getBounds();
-      const targetBounds = this.overlayBounds
+      const savedBounds = this.overlayBounds
         ? {
             ...this.overlayBounds,
             height: Math.max(this.overlayBounds.height, 216)
+          }
+        : null;
+      const workArea = this.getDisplayWorkArea(savedBounds ?? currentBounds);
+      const maxAllowedWidth = Math.floor(workArea.width * 0.9);
+      const maxAllowedHeight = Math.floor(workArea.height * 0.9);
+      const targetBounds = savedBounds
+        ? {
+            x: Math.min(Math.max(savedBounds.x, workArea.x), workArea.x + workArea.width - Math.min(savedBounds.width, maxAllowedWidth)),
+            y: Math.min(Math.max(savedBounds.y, workArea.y), workArea.y + workArea.height - Math.min(savedBounds.height, maxAllowedHeight)),
+            width: Math.min(savedBounds.width, maxAllowedWidth),
+            height: Math.min(savedBounds.height, maxAllowedHeight)
           }
         : {
             x: Math.floor(workArea.x + (workArea.width - 600) / 2),
             y: Math.floor(workArea.y + (workArea.height - 600) / 2),
             width: 600,
-            height: Math.max(currentBounds.height, 216)
+            height: Math.max(Math.min(currentBounds.height, maxAllowedHeight), 216)
           };
 
       this.overlayWindow.setBounds(targetBounds);
