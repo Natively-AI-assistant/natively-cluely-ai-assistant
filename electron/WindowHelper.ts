@@ -24,6 +24,7 @@ export class WindowHelper {
   // Position/Size tracking for Launcher
   private launcherPosition: { x: number; y: number } | null = null
   private launcherSize: { width: number; height: number } | null = null
+  private overlayBounds: Electron.Rectangle | null = null
   // Track current window mode (persists even when overlay is hidden via Cmd+B)
   private currentWindowMode: 'launcher' | 'overlay' = 'launcher'
 
@@ -104,6 +105,7 @@ export class WindowHelper {
 
     this.overlayWindow.setContentSize(newWidth, newHeight)
     this.overlayWindow.setPosition(newX, newY)
+    this.overlayBounds = this.overlayWindow.getBounds()
   }
 
   public createWindow(): void {
@@ -318,6 +320,18 @@ export class WindowHelper {
     // Listen for overlay close (e.g. Cmd+W). Never truly destroy it — either
     // hide it (during a meeting) or switch back to launcher (between meetings).
     if (this.overlayWindow) {
+      this.overlayWindow.on("move", () => {
+        if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+          this.overlayBounds = this.overlayWindow.getBounds()
+        }
+      })
+
+      this.overlayWindow.on("resize", () => {
+        if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+          this.overlayBounds = this.overlayWindow.getBounds()
+        }
+      })
+
       this.overlayWindow.on('system-context-menu', (e, point) => {
         e.preventDefault();
         if (!this.appState.getUndetectable()) {
@@ -354,6 +368,7 @@ export class WindowHelper {
   public getCurrentWindowMode(): 'launcher' | 'overlay' { return this.currentWindowMode }
 
   public getLastOverlayBounds(): Electron.Rectangle | null {
+    if (this.overlayBounds) return { ...this.overlayBounds };
     if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return null;
     return this.overlayWindow.getBounds();
   }
@@ -495,16 +510,23 @@ export class WindowHelper {
 
     // Show Overlay FIRST
     if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
-      // Reset overlay position to center or last known? 
-      // For now, center it nicely
       const primaryDisplay = screen.getPrimaryDisplay()
       const workArea = primaryDisplay.workArea;
       const currentBounds = this.overlayWindow.getBounds();
-      const targetHeight = Math.max(currentBounds.height, 216);
-      const x = Math.floor(workArea.x + (workArea.width - 600) / 2)
-      const y = Math.floor(workArea.y + (workArea.height - 600) / 2)
+      const targetBounds = this.overlayBounds
+        ? {
+            ...this.overlayBounds,
+            height: Math.max(this.overlayBounds.height, 216)
+          }
+        : {
+            x: Math.floor(workArea.x + (workArea.width - 600) / 2),
+            y: Math.floor(workArea.y + (workArea.height - 600) / 2),
+            width: 600,
+            height: Math.max(currentBounds.height, 216)
+          };
 
-      this.overlayWindow.setBounds({ x, y, width: 600, height: targetHeight });
+      this.overlayWindow.setBounds(targetBounds);
+      this.overlayBounds = this.overlayWindow.getBounds();
 
       // Restore opacity before showing (it may have been zeroed by hideMainWindow).
       if (process.platform === 'win32' && this.contentProtection) {
