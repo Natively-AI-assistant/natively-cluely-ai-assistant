@@ -48,9 +48,6 @@ pub struct SystemAudioCapture {
     /// native device is initialized. Callers always get the real hardware rate.
     sample_rate: Arc<AtomicU32>,
     device_id: Option<String>,
-    /// Stores the SpeakerInput for recreation on restart.
-    /// Recreated on each start() if None (like MicrophoneCapture.input).
-    input: Option<speaker::SpeakerInput>,
 }
 
 #[napi]
@@ -66,7 +63,6 @@ impl SystemAudioCapture {
             // 48kHz is the standard macOS CoreAudio rate.
             sample_rate: Arc::new(AtomicU32::new(48000)),
             device_id,
-            input: None, // Lazy init — created in start()
         })
     }
 
@@ -92,44 +88,34 @@ impl SystemAudioCapture {
         self.stop_signal.store(false, Ordering::SeqCst);
         let stop_signal = self.stop_signal.clone();
         let sample_rate_shared = self.sample_rate.clone();
-
-        // Recreate SpeakerInput if it was consumed by a previous start() cycle.
-        // This is the fix for the one-shot take_consumer() bug and WASAPI device contention.
-        if self.input.is_none() {
-            println!("[SystemAudioCapture] Recreating SpeakerInput for restart...");
-            match speaker::SpeakerInput::new(self.device_id.clone()) {
-                Ok(i) => {
-                    self.input = Some(i);
-                }
-                Err(e) => {
-                    println!(
-                        "[SystemAudioCapture] Recreate failed: {}. Trying default...",
-                        e
-                    );
-                    match speaker::SpeakerInput::new(None) {
-                        Ok(i) => {
-                            self.input = Some(i);
-                        }
-                        Err(e2) => {
-                            return Err(napi::Error::from_reason(format!(
-                                "[SystemAudioCapture] Failed to create SpeakerInput: {}",
-                                e2
-                            )));
-                        }
-                    }
-                }
-            }
-        }
-
-        // Take ownership of the input for the background thread
-        let input = self.input.take().ok_or_else(|| {
-            napi::Error::from_reason("SpeakerInput missing after recreation check")
-        })?;
+        let device_id = self.device_id.clone();
 
         // ALL init + DSP runs in background thread — start() returns INSTANTLY
         self.capture_thread = Some(thread::spawn(move || {
-            // 1. SCK Init (takes 5-7 seconds — runs OFF main thread)
+            // 1. SpeakerInput Init (takes 5-7 seconds — runs OFF main thread)
             println!("[SystemAudioCapture] Background init starting...");
+            let input = match speaker::SpeakerInput::new(device_id.clone()) {
+                Ok(i) => i,
+                Err(e) => {
+                    println!("[SystemAudioCapture] Init failed: {}. Trying default...", e);
+                    match speaker::SpeakerInput::new(None) {
+                        Ok(i) => i,
+                        Err(e2) => {
+                            let msg = format!(
+                                "[SystemAudioCapture] FATAL: All init attempts failed: {}",
+                                e2
+                            );
+                            eprintln!("{}", msg);
+                            // Notify JS so it can emit 'error' and reset isRecording
+                            tsfn.call(
+                                Err(napi::Error::from_reason(msg)),
+                                ThreadsafeFunctionCallMode::NonBlocking,
+                            );
+                            return;
+                        }
+                    }
+                }
+            };
 
             let mut stream = input.stream();
             let mut consumer = match stream.take_consumer() {
