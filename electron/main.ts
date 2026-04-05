@@ -233,6 +233,7 @@ export class AppState {
   private _isQuitting: boolean = false;
   private _audioRecoveryInProgress: boolean = false; // Prevent overlapping recovery attempts
   private _audioRecoveryAttempts: number = 0; // Cap recovery retries per meeting
+  private _audioRecoveryTimer: NodeJS.Timeout | null = null; // Track pending recovery timeout for cleanup
   private _verboseLogging: boolean = false;
   private _disguiseTimers: NodeJS.Timeout[] = []; // Track forceUpdate timeouts
   private _dockDebounceTimer: NodeJS.Timeout | null = null; // Debounce dock state changes
@@ -878,6 +879,15 @@ export class AppState {
         console.warn(`[Main] No API key for ${sttProvider} STT — transcription disabled for ${speaker}`);
         return null;
       }
+    } else if (sttProvider === 'google') {
+      const serviceAccountPath = CredentialsManager.getInstance().getGoogleServiceAccountPath();
+      if (serviceAccountPath) {
+        console.log(`[Main] Using GoogleSTT for ${speaker}`);
+        stt = new GoogleSTT(speaker);
+      } else {
+        console.warn(`[Main] No Google Service Account configured — transcription disabled for ${speaker}`);
+        return null;
+      }
     } else {
       console.warn(`[Main] Unknown STT provider '${sttProvider}' — transcription disabled for ${speaker}`);
       return null;
@@ -977,7 +987,8 @@ export class AppState {
             this._audioRecoveryAttempts++;
             console.log(`[Main] Attempting SystemAudioCapture recovery (attempt ${this._audioRecoveryAttempts}/3)...`);
             // 1s delay gives the audio subsystem time to settle
-            setTimeout(() => {
+            this._audioRecoveryTimer = setTimeout(() => {
+              this._audioRecoveryTimer = null;
               if (this.isMeetingActive && this.systemAudioCapture) {
                 try {
                   this.systemAudioCapture.start();
@@ -1189,6 +1200,10 @@ export class AppState {
     const wasMeetingActive = this.isMeetingActive;
     if (wasMeetingActive) {
       this._audioRecoveryInProgress = true;
+      if (this._audioRecoveryTimer) {
+        clearTimeout(this._audioRecoveryTimer);
+        this._audioRecoveryTimer = null;
+      }
     }
 
     try {
@@ -1425,6 +1440,10 @@ export class AppState {
     this.isMeetingActive = false; // Block new data immediately
     this._audioRecoveryInProgress = false; // Cancel any pending recovery
     this._audioRecoveryAttempts = 0; // Reset recovery counter for next meeting
+    if (this._audioRecoveryTimer) {
+      clearTimeout(this._audioRecoveryTimer);
+      this._audioRecoveryTimer = null;
+    }
     this.broadcastMeetingState();
 
     // Reset Mouse Passthrough so the next meeting overlay starts fresh and focusable

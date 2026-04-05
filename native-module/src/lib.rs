@@ -141,6 +141,7 @@ impl SystemAudioCapture {
             };
 
             let native_rate = stream.sample_rate();
+            // Publish the real native rate so JS can read it via get_sample_rate()
             sample_rate_shared.store(native_rate, Ordering::Release);
             println!(
                 "[SystemAudioCapture] Background init complete. Initial Rate: {}Hz. DSP starting.",
@@ -153,6 +154,7 @@ impl SystemAudioCapture {
                 ..SilenceSuppressionConfig::for_system_audio()
             });
 
+            // 20ms chunks at native rate (e.g. 960 samples at 48kHz)
             let chunk_size = (native_rate as usize / 1000) * 20;
             let mut frame_buffer: Vec<i16> = Vec::with_capacity(chunk_size * 4);
             let mut raw_batch: Vec<f32> = Vec::with_capacity(4096);
@@ -162,10 +164,12 @@ impl SystemAudioCapture {
                     break;
                 }
 
+                // Drain ALL available samples from ring buffer (lock-free)
                 while let Some(sample) = consumer.try_pop() {
                     raw_batch.push(sample);
                 }
 
+                // Convert f32 -> i16 at native sample rate
                 if !raw_batch.is_empty() {
                     for &f in &raw_batch {
                         let scaled = (f * 32767.0).clamp(-32768.0, 32767.0);
@@ -174,6 +178,7 @@ impl SystemAudioCapture {
                     raw_batch.clear();
                 }
 
+                // Process in 20ms chunks through the two-stage gate
                 while frame_buffer.len() >= chunk_size {
                     let frame: Vec<i16> = frame_buffer.drain(0..chunk_size).collect();
 
@@ -188,6 +193,7 @@ impl SystemAudioCapture {
                             );
                         }
                         FrameAction::SendSilence => {
+                            // Send zero-filled buffer to keep streaming APIs alive
                             let silence = vec![0u8; chunk_size * 2];
                             tsfn.call(
                                 Ok(Buffer::from(silence)),
@@ -195,10 +201,11 @@ impl SystemAudioCapture {
                             );
                         }
                         FrameAction::Suppress => {
-                            // Do nothing
+                            // Do nothing — bandwidth saving
                         }
                     }
 
+                    // Fire speech_ended callback on the exact transition frame
                     if speech_ended {
                         if let Some(ref se_tsfn) = speech_ended_tsfn {
                             se_tsfn.call(Ok(true), ThreadsafeFunctionCallMode::NonBlocking);
@@ -206,6 +213,7 @@ impl SystemAudioCapture {
                     }
                 }
 
+                // Keep the sleep small so we quickly read the ring buffer
                 thread::sleep(Duration::from_millis(DSP_POLL_MS));
             }
 
