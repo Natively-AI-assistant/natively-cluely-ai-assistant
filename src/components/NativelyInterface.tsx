@@ -1209,10 +1209,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
 
             if (!question && currentAttachments.length === 0) {
                 // No voice input and no image
+                const msg = sttNotConfigured
+                    ? '⚠️ Speech-to-Text is not configured. Open Settings to set up your STT provider.'
+                    : '⚠️ No speech detected. Try speaking closer to your microphone.';
                 setMessages(prev => [...prev, {
                     id: Date.now().toString(),
                     role: 'system',
-                    text: '⚠️ No speech detected. Try speaking closer to your microphone.'
+                    text: msg
                 }]);
                 return;
             }
