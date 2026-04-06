@@ -139,7 +139,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     useEffect(() => {
         if (!window.electronAPI?.onSttConfigChanged) return;
         const unsubscribe = window.electronAPI.onSttConfigChanged((data) => {
-            setSttNotConfigured(!data.configured);
+            if (!data.configured) {
+                setSttNotConfigured(true);
+                setRollingTranscript('');
+            } else {
+                setSttNotConfigured(false);
+            }
         });
         return unsubscribe;
     }, []);

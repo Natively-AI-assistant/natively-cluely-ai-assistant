@@ -1268,6 +1268,14 @@ export class AppState {
       }
 
       console.log('[Main] STT Provider reconfigured');
+      // Notify renderer of the new STT state so it can update UI mid-meeting
+      if (this.isMeetingActive) {
+        if (!this.googleSTT || !this.googleSTT_User) {
+          this.broadcast('stt-config-changed', { configured: false, reason: 'No API key or service account configured' });
+        } else {
+          this.broadcast('stt-config-changed', { configured: true });
+        }
+      }
     } catch (error) {
       console.error('[Main] STT reconfiguration failed:', error);
       // Restore audio captures if meeting is still active
