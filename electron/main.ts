@@ -231,9 +231,12 @@ export class AppState {
   private hasDebugged: boolean = false
   private isMeetingActive: boolean = false; // Guard for session state leaks
   private _isQuitting: boolean = false;
-  private _audioRecoveryInProgress: boolean = false; // Prevent overlapping recovery attempts
-  private _audioRecoveryAttempts: number = 0; // Cap recovery retries per meeting
-  private _audioRecoveryTimer: NodeJS.Timeout | null = null; // Track pending recovery timeout for cleanup
+  private _systemAudioRecoveryInProgress: boolean = false;
+  private _systemAudioRecoveryAttempts: number = 0;
+  private _systemAudioRecoveryTimer: NodeJS.Timeout | null = null;
+  private _microphoneRecoveryInProgress: boolean = false;
+  private _microphoneRecoveryAttempts: number = 0;
+  private _microphoneRecoveryTimer: NodeJS.Timeout | null = null;
   private _verboseLogging: boolean = false;
   private _disguiseTimers: NodeJS.Timeout[] = []; // Track forceUpdate timeouts
   private _dockDebounceTimer: NodeJS.Timeout | null = null; // Debounce dock state changes
@@ -981,14 +984,14 @@ export class AppState {
         });
         this.systemAudioCapture.on('error', (err: Error) => {
           console.error('[Main] SystemAudioCapture Error:', err);
-          // Attempt recovery if meeting is active (debounced + capped)
-          if (this.isMeetingActive && !this._audioRecoveryInProgress && this._audioRecoveryAttempts < 3) {
-            this._audioRecoveryInProgress = true;
-            this._audioRecoveryAttempts++;
-            console.log(`[Main] Attempting SystemAudioCapture recovery (attempt ${this._audioRecoveryAttempts}/3)...`);
+          // Attempt recovery if meeting is active (debounced + capped per-device)
+          if (this.isMeetingActive && !this._systemAudioRecoveryInProgress && this._systemAudioRecoveryAttempts < 3) {
+            this._systemAudioRecoveryInProgress = true;
+            this._systemAudioRecoveryAttempts++;
+            console.log(`[Main] Attempting SystemAudioCapture recovery (attempt ${this._systemAudioRecoveryAttempts}/3)...`);
             // 1s delay gives the audio subsystem time to settle
-            this._audioRecoveryTimer = setTimeout(() => {
-              this._audioRecoveryTimer = null;
+            this._systemAudioRecoveryTimer = setTimeout(() => {
+              this._systemAudioRecoveryTimer = null;
               if (this.isMeetingActive && this.systemAudioCapture) {
                 try {
                   this.systemAudioCapture.start();
@@ -999,10 +1002,10 @@ export class AppState {
                 } catch (recoveryErr) {
                   console.error('[Main] SystemAudioCapture recovery failed:', recoveryErr);
                 } finally {
-                  this._audioRecoveryInProgress = false;
+                  this._systemAudioRecoveryInProgress = false;
                 }
               } else {
-                this._audioRecoveryInProgress = false;
+                this._systemAudioRecoveryInProgress = false;
               }
             }, 1000);
           }
@@ -1024,13 +1027,13 @@ export class AppState {
         });
         this.microphoneCapture.on('error', (err: Error) => {
           console.error('[Main] MicrophoneCapture Error:', err);
-          // Attempt recovery if meeting is active (shares debounce/cap with system audio)
-          if (this.isMeetingActive && !this._audioRecoveryInProgress && this._audioRecoveryAttempts < 3) {
-            this._audioRecoveryInProgress = true;
-            this._audioRecoveryAttempts++;
-            console.log(`[Main] Attempting MicrophoneCapture recovery (attempt ${this._audioRecoveryAttempts}/3)...`);
-            this._audioRecoveryTimer = setTimeout(() => {
-              this._audioRecoveryTimer = null;
+          // Attempt recovery if meeting is active (debounced + capped per-device)
+          if (this.isMeetingActive && !this._microphoneRecoveryInProgress && this._microphoneRecoveryAttempts < 3) {
+            this._microphoneRecoveryInProgress = true;
+            this._microphoneRecoveryAttempts++;
+            console.log(`[Main] Attempting MicrophoneCapture recovery (attempt ${this._microphoneRecoveryAttempts}/3)...`);
+            this._microphoneRecoveryTimer = setTimeout(() => {
+              this._microphoneRecoveryTimer = null;
               if (this.isMeetingActive && this.microphoneCapture) {
                 try {
                   this.microphoneCapture.start();
@@ -1038,10 +1041,10 @@ export class AppState {
                 } catch (recoveryErr) {
                   console.error('[Main] MicrophoneCapture recovery failed:', recoveryErr);
                 } finally {
-                  this._audioRecoveryInProgress = false;
+                  this._microphoneRecoveryInProgress = false;
                 }
               } else {
-                this._audioRecoveryInProgress = false;
+                this._microphoneRecoveryInProgress = false;
               }
             }, 1000);
           }
@@ -1225,13 +1228,18 @@ export class AppState {
   public async reconfigureSttProvider(): Promise<void> {
     console.log('[Main] Reconfiguring STT Provider...');
 
-    // Block recovery handler from racing with this reconfiguration
+    // Block recovery handlers from racing with this reconfiguration
     const wasMeetingActive = this.isMeetingActive;
     if (wasMeetingActive) {
-      this._audioRecoveryInProgress = true;
-      if (this._audioRecoveryTimer) {
-        clearTimeout(this._audioRecoveryTimer);
-        this._audioRecoveryTimer = null;
+      this._systemAudioRecoveryInProgress = true;
+      this._microphoneRecoveryInProgress = true;
+      if (this._systemAudioRecoveryTimer) {
+        clearTimeout(this._systemAudioRecoveryTimer);
+        this._systemAudioRecoveryTimer = null;
+      }
+      if (this._microphoneRecoveryTimer) {
+        clearTimeout(this._microphoneRecoveryTimer);
+        this._microphoneRecoveryTimer = null;
       }
     }
 
@@ -1291,9 +1299,10 @@ export class AppState {
         }
       }
     } finally {
-      // Allow recovery handler to fire again after reconfiguration completes (or fails)
+      // Allow recovery handlers to fire again after reconfiguration completes (or fails)
       if (wasMeetingActive) {
-        this._audioRecoveryInProgress = false;
+        this._systemAudioRecoveryInProgress = false;
+        this._microphoneRecoveryInProgress = false;
       }
     }
   }
@@ -1489,11 +1498,17 @@ export class AppState {
   public async endMeeting(): Promise<void> {
     console.log('[Main] Ending Meeting...');
     this.isMeetingActive = false; // Block new data immediately
-    this._audioRecoveryInProgress = false; // Cancel any pending recovery
-    this._audioRecoveryAttempts = 0; // Reset recovery counter for next meeting
-    if (this._audioRecoveryTimer) {
-      clearTimeout(this._audioRecoveryTimer);
-      this._audioRecoveryTimer = null;
+    this._systemAudioRecoveryInProgress = false;
+    this._systemAudioRecoveryAttempts = 0;
+    this._microphoneRecoveryInProgress = false;
+    this._microphoneRecoveryAttempts = 0;
+    if (this._systemAudioRecoveryTimer) {
+      clearTimeout(this._systemAudioRecoveryTimer);
+      this._systemAudioRecoveryTimer = null;
+    }
+    if (this._microphoneRecoveryTimer) {
+      clearTimeout(this._microphoneRecoveryTimer);
+      this._microphoneRecoveryTimer = null;
     }
     this.broadcastMeetingState();
 
