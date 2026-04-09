@@ -303,27 +303,12 @@ export class CredentialsManager {
         this.credentials.nativelyApiKey = trimmed || undefined;
 
         if (trimmed) {
-            // Auto-promote natively to default model unless user already chose a non-Gemini/Groq model
-            const current = this.credentials.defaultModel || '';
-            const isAutoDefault = !current
-                || current.startsWith('gemini-')
-                || current.startsWith('llama-')
-                || current.startsWith('mixtral-')
-                || current.startsWith('gemma-')
-                || current === 'gemini'
-                || current === 'llama';
-            if (isAutoDefault) {
-                this.credentials.defaultModel = 'natively';
-                console.log('[CredentialsManager] Auto-set default model to natively');
-            }
+            this.credentials.defaultModel = 'natively';
+            console.log('[CredentialsManager] Auto-set default model to natively');
 
-            // Auto-promote natively STT if still on the default Google STT
-            if (!this.credentials.sttProvider || this.credentials.sttProvider === 'none') {
-                this.credentials.sttProvider = 'natively';
-                console.log('[CredentialsManager] Auto-set STT provider to natively');
-            }
+            this.credentials.sttProvider = 'natively';
+            console.log('[CredentialsManager] Auto-set STT provider to natively');
         } else {
-            // Key cleared — revert natively-auto-set defaults back to safe fallbacks
             if (this.credentials.defaultModel === 'natively') {
                 this.credentials.defaultModel = 'gemini-3.1-flash-lite-preview';
                 console.log('[CredentialsManager] Natively key cleared — reset default model to Gemini Flash');
