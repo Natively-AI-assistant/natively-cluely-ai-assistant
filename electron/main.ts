@@ -1073,7 +1073,6 @@ export class AppState {
         this.googleSTT = this.createSTTProvider('interviewer');
         if (!this.googleSTT) {
           console.warn('[Main] Interviewer STT is null — transcription will be disabled');
-          this.broadcast('stt-config-changed', { configured: false, reason: 'No API key or service account configured' });
         }
       }
 
@@ -1084,7 +1083,6 @@ export class AppState {
         this.googleSTT_User = this.createSTTProvider('user');
         if (!this.googleSTT_User) {
           console.warn('[Main] User STT is null — transcription will be disabled');
-          this.broadcast('stt-config-changed', { configured: false, reason: 'No API key or service account configured' });
         }
       }
 
