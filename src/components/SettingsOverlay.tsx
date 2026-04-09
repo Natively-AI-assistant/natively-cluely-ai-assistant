@@ -837,6 +837,23 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     const [isSttDropdownOpen, setIsSttDropdownOpen] = useState(false);
     const sttDropdownRef = React.useRef<HTMLDivElement>(null);
 
+    // Check if STT is properly configured (provider selected AND API key exists)
+    const isSttConfigured = (() => {
+      switch (sttProvider) {
+        case 'none': return false;
+        case 'google': return !!googleServiceAccountPath;
+        case 'natively': return hasNativelyKey;
+        case 'groq': return hasStoredSttGroqKey;
+        case 'deepgram': return hasStoredDeepgramKey;
+        case 'elevenlabs': return hasStoredElevenLabsKey;
+        case 'azure': return hasStoredAzureKey;
+        case 'ibmwatson': return hasStoredIbmWatsonKey;
+        case 'soniox': return hasStoredSonioxKey;
+        case 'openai': return hasStoredSttOpenaiKey;
+        default: return false;
+      }
+    })();
+
     // Close STT dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -1300,7 +1317,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'audio' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
                                         <Mic size={16} /> Audio
-                                        {sttProvider === 'none' && (
+                                        {!isSttConfigured && (
                                             <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
                                         )}
                                     </button>
@@ -2805,11 +2822,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         ]}
                                                     />
                                                 </div>
-                                                {sttProvider === 'none' && (
+                                                {sttProvider === 'none' || !isSttConfigured ? (
                                                     <p className="text-xs text-text-tertiary mt-1.5">
                                                         Transcription requires an STT provider — select one and add your API key
                                                     </p>
-                                                )}
+                                                ) : null}
                                             </div>
 
                                             {/* Groq Model Selector */}
