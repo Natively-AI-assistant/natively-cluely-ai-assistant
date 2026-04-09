@@ -18,19 +18,27 @@ const cachedTheme = localStorage.getItem(THEME_CACHE_KEY) as 'light' | 'dark' | 
 document.documentElement.setAttribute('data-theme', cachedTheme ?? 'dark');
 
 // Step 2: Confirm/correct from main process (authoritative) and keep cache in sync.
+let themeCleanup: (() => void) | null = null;
 if (window.electronAPI?.getThemeMode) {
   window.electronAPI.getThemeMode().then(({ resolved }) => {
     document.documentElement.setAttribute('data-theme', resolved);
     localStorage.setItem(THEME_CACHE_KEY, resolved);
   });
 
-  const cleanup = window.electronAPI.onThemeChanged(({ resolved }) => {
-    document.documentElement.setAttribute('data-theme', resolved);
-    localStorage.setItem(THEME_CACHE_KEY, resolved);
-  });
+  if (!themeCleanup && window.electronAPI.onThemeChanged) {
+    themeCleanup = window.electronAPI.onThemeChanged(({ resolved }) => {
+      document.documentElement.setAttribute('data-theme', resolved);
+      localStorage.setItem(THEME_CACHE_KEY, resolved);
+    });
+  }
 
   if (import.meta.hot) {
-    import.meta.hot.dispose(() => cleanup());
+    import.meta.hot.dispose(() => {
+      if (themeCleanup) {
+        themeCleanup();
+        themeCleanup = null;
+      }
+    });
   }
 }
 

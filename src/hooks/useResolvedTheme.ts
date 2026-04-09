@@ -5,12 +5,22 @@ type ResolvedTheme = 'light' | 'dark';
 const getResolvedTheme = (): ResolvedTheme =>
     document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
 
+let globalUnsubscribe: (() => void) | null = null;
+let listenerCount = 0;
+
 export const useResolvedTheme = (): ResolvedTheme => {
     const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() => getResolvedTheme());
 
     useEffect(() => {
-        // Watch for data-theme attribute changes on <html> — catches both the
-        // async IPC correction in main.tsx and user-triggered theme changes.
+        listenerCount++;
+
+        if (!globalUnsubscribe && window.electronAPI?.onThemeChanged) {
+            globalUnsubscribe = window.electronAPI.onThemeChanged(({ resolved }) => {
+                document.documentElement.setAttribute('data-theme', resolved);
+                setResolvedTheme(resolved);
+            });
+        }
+
         const observer = new MutationObserver(() => {
             setResolvedTheme(getResolvedTheme());
         });
@@ -19,14 +29,13 @@ export const useResolvedTheme = (): ResolvedTheme => {
             attributeFilter: ['data-theme'],
         });
 
-        // Also subscribe to the IPC event for redundancy.
-        const unsubscribe = window.electronAPI?.onThemeChanged?.(({ resolved }) => {
-            setResolvedTheme(resolved);
-        });
-
         return () => {
             observer.disconnect();
-            unsubscribe?.();
+            listenerCount--;
+            if (listenerCount === 0 && globalUnsubscribe) {
+                globalUnsubscribe();
+                globalUnsubscribe = null;
+            }
         };
     }, []);
 
