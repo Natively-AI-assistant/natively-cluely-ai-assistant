@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import packageJson from '../../package.json';
 import {
     X, Mic, Speaker, Monitor, Keyboard, User, LifeBuoy, LogOut, Upload,
@@ -850,45 +850,56 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [isSttDropdownOpen]);
 
+    // Load STT settings function (used on mount and on credential changes)
+    const loadSttSettings = useCallback(async () => {
+        try {
+            // @ts-ignore
+            const creds = await window.electronAPI?.getStoredCredentials?.();
+            if (creds) {
+                setSttProvider(creds.sttProvider || 'none');
+                if (creds.groqSttModel) setGroqSttModel(creds.groqSttModel);
+                setGoogleServiceAccountPath(creds.googleServiceAccountPath);
+                setHasStoredSttGroqKey(creds.hasSttGroqKey);
+                setHasStoredSttOpenaiKey(creds.hasSttOpenaiKey);
+                setHasStoredDeepgramKey(creds.hasDeepgramKey);
+                setHasStoredElevenLabsKey(creds.hasElevenLabsKey);
+                setHasStoredAzureKey(creds.hasAzureKey);
+                if (creds.azureRegion) setSttAzureRegion(creds.azureRegion);
+                setHasStoredIbmWatsonKey(creds.hasIbmWatsonKey);
+                setHasStoredSonioxKey(creds.hasSonioxKey || false);
+                setHasStoredTavilyKey(creds.hasTavilyKey || false);
+                setHasNativelyKey(creds.hasNativelyKey || false);
+                setHasGeminiKey(creds.hasGeminiKey || false);
+                setHasGroqAiKey(creds.hasGroqKey || false);
+                setHasOpenaiAiKey(creds.hasOpenaiKey || false);
+                setHasClaudeAiKey(creds.hasClaudeKey || false);
+                // Populate key fields so switching providers doesn't make saved keys appear gone
+                if (creds.sttGroqKey) setSttGroqKey(creds.sttGroqKey);
+                if (creds.sttOpenaiKey) setSttOpenaiKey(creds.sttOpenaiKey);
+                if (creds.sttDeepgramKey) setSttDeepgramKey(creds.sttDeepgramKey);
+                if (creds.sttElevenLabsKey) setSttElevenLabsKey(creds.sttElevenLabsKey);
+                if (creds.sttAzureKey) setSttAzureKey(creds.sttAzureKey);
+                if (creds.sttIbmKey) setSttIbmKey(creds.sttIbmKey);
+                if (creds.sttSonioxKey) setSttSonioxKey(creds.sttSonioxKey);
+            }
+        } catch (e) {
+            console.error('Failed to load STT settings:', e);
+        }
+    }, [setSttProvider, setGroqSttModel, setGoogleServiceAccountPath, setHasStoredSttGroqKey, setHasStoredSttOpenaiKey, setHasStoredDeepgramKey, setHasStoredElevenLabsKey, setHasStoredAzureKey, setSttAzureRegion, setHasStoredIbmWatsonKey, setHasStoredSonioxKey, setHasStoredTavilyKey, setHasNativelyKey, setHasGeminiKey, setHasGroqAiKey, setHasOpenaiAiKey, setHasClaudeAiKey, setSttGroqKey, setSttOpenaiKey, setSttDeepgramKey, setSttElevenLabsKey, setSttAzureKey, setSttIbmKey, setSttSonioxKey]);
+
     // Load STT settings on mount
     useEffect(() => {
-        const loadSttSettings = async () => {
-            try {
-                // @ts-ignore
-                const creds = await window.electronAPI?.getStoredCredentials?.();
-                if (creds) {
-                    setSttProvider(creds.sttProvider || 'none');
-                    if (creds.groqSttModel) setGroqSttModel(creds.groqSttModel);
-                    setGoogleServiceAccountPath(creds.googleServiceAccountPath);
-                    setHasStoredSttGroqKey(creds.hasSttGroqKey);
-                    setHasStoredSttOpenaiKey(creds.hasSttOpenaiKey);
-                    setHasStoredDeepgramKey(creds.hasDeepgramKey);
-                    setHasStoredElevenLabsKey(creds.hasElevenLabsKey);
-                    setHasStoredAzureKey(creds.hasAzureKey);
-                    if (creds.azureRegion) setSttAzureRegion(creds.azureRegion);
-                    setHasStoredIbmWatsonKey(creds.hasIbmWatsonKey);
-                    setHasStoredSonioxKey(creds.hasSonioxKey || false);
-                    setHasStoredTavilyKey(creds.hasTavilyKey || false);
-                    setHasNativelyKey(creds.hasNativelyKey || false);
-                    setHasGeminiKey(creds.hasGeminiKey || false);
-                    setHasGroqAiKey(creds.hasGroqKey || false);
-                    setHasOpenaiAiKey(creds.hasOpenaiKey || false);
-                    setHasClaudeAiKey(creds.hasClaudeKey || false);
-                    // Populate key fields so switching providers doesn't make saved keys appear gone
-                    if (creds.sttGroqKey) setSttGroqKey(creds.sttGroqKey);
-                    if (creds.sttOpenaiKey) setSttOpenaiKey(creds.sttOpenaiKey);
-                    if (creds.sttDeepgramKey) setSttDeepgramKey(creds.sttDeepgramKey);
-                    if (creds.sttElevenLabsKey) setSttElevenLabsKey(creds.sttElevenLabsKey);
-                    if (creds.sttAzureKey) setSttAzureKey(creds.sttAzureKey);
-                    if (creds.sttIbmKey) setSttIbmKey(creds.sttIbmKey);
-                    if (creds.sttSonioxKey) setSttSonioxKey(creds.sttSonioxKey);
-                }
-            } catch (e) {
-                console.error('Failed to load STT settings:', e);
-            }
-        };
         if (isOpen) loadSttSettings();
-    }, [isOpen]);
+    }, [isOpen, loadSttSettings]);
+
+    // Listen for credential changes from other windows (AI provider key saved, etc.)
+    useEffect(() => {
+        if (!window.electronAPI?.onCredentialsChanged) return;
+        const unsubscribe = window.electronAPI.onCredentialsChanged(() => {
+            loadSttSettings();
+        });
+        return unsubscribe;
+    }, [loadSttSettings]);
 
     const handleSttProviderChange = async (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively') => {
         setSttProvider(provider);

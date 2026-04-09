@@ -109,6 +109,7 @@ export interface ElectronAPI {
   onSuggestionProcessingStart: (callback: () => void) => () => void
   onSuggestionError: (callback: (error: { error: string }) => void) => () => void
   onSttConfigChanged: (callback: (data: { configured: boolean; reason?: string }) => void) => () => void
+  onCredentialsChanged: (callback: () => void) => () => void
   generateSuggestion: (context: string, lastQuestion: string) => Promise<{ suggestion: string }>
   getInputDevices: () => Promise<Array<{ id: string; name: string }>>
   getOutputDevices: () => Promise<Array<{ id: string; name: string }>>

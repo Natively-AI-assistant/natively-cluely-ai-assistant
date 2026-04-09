@@ -583,6 +583,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.removeListener("stt-config-changed", subscription)
     }
   },
+  onCredentialsChanged: (callback: () => void) => {
+    const subscription = () => callback()
+    ipcRenderer.on("credentials-changed", subscription)
+    return () => {
+      ipcRenderer.removeListener("credentials-changed", subscription)
+    }
+  },
   generateSuggestion: (context: string, lastQuestion: string) =>
     ipcRenderer.invoke("generate-suggestion", context, lastQuestion),
 

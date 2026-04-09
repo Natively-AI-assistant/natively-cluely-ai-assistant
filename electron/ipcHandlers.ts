@@ -727,6 +727,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Re-init IntelligenceManager
       appState.getIntelligenceManager().initializeLLMs();
 
+      // Notify renderer that credentials changed
+      const mainWindow = appState.getMainWindow();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('credentials-changed');
+      }
+
       return { success: true };
     } catch (error: any) {
       console.error("Error saving Gemini API key:", error);
@@ -747,6 +753,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       appState.getIntelligenceManager().resetEngine();
       // Re-init IntelligenceManager
       appState.getIntelligenceManager().initializeLLMs();
+
+      // Notify renderer that credentials changed
+      const mainWindow = appState.getMainWindow();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('credentials-changed');
+      }
 
       return { success: true };
     } catch (error: any) {
@@ -769,6 +781,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Re-init IntelligenceManager
       appState.getIntelligenceManager().initializeLLMs();
 
+      // Notify renderer that credentials changed
+      const mainWindow = appState.getMainWindow();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('credentials-changed');
+      }
+
       return { success: true };
     } catch (error: any) {
       console.error("Error saving OpenAI API key:", error);
@@ -789,6 +807,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       appState.getIntelligenceManager().resetEngine();
       // Re-init IntelligenceManager
       appState.getIntelligenceManager().initializeLLMs();
+
+      // Notify renderer that credentials changed
+      const mainWindow = appState.getMainWindow();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('credentials-changed');
+      }
 
       return { success: true };
     } catch (error: any) {
@@ -823,6 +847,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (newSttProvider !== prevSttProvider) {
         console.log(`[IPC] set-natively-api-key: STT provider changed ${prevSttProvider} → ${newSttProvider}, reconfiguring pipeline`);
         await appState.reconfigureSttProvider();
+      }
+
+      // Notify renderer that credentials changed
+      const mainWindow = appState.getMainWindow();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('credentials-changed');
       }
 
       return { success: true };
