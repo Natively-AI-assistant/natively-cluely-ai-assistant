@@ -8,6 +8,16 @@ const getResolvedTheme = (): ResolvedTheme =>
 let globalUnsubscribe: (() => void) | null = null;
 let listenerCount = 0;
 
+if (import.meta.hot) {
+    import.meta.hot.dispose(() => {
+        if (globalUnsubscribe) {
+            globalUnsubscribe();
+            globalUnsubscribe = null;
+        }
+        listenerCount = 0;
+    });
+}
+
 export const useResolvedTheme = (): ResolvedTheme => {
     const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() => getResolvedTheme());
 
