@@ -896,6 +896,10 @@ export class AppState {
       return null;
     }
 
+    if (!stt) {
+      return null;
+    }
+
     stt.setRecognitionLanguage(sttLanguage);
 
     // Wire Transcript Events
