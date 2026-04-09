@@ -1000,9 +1000,7 @@ export class AppState {
                 if (this.isMeetingActive && this.systemAudioCapture) {
                   try {
                     this.systemAudioCapture.start();
-                    // Also restart STT providers in case they disconnected
                     this.googleSTT?.start();
-                    this.googleSTT_User?.start();
                     console.log('[Main] SystemAudioCapture recovery successful');
                   } catch (recoveryErr) {
                     console.error('[Main] SystemAudioCapture recovery failed:', recoveryErr);
