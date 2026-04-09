@@ -27,7 +27,6 @@ export const useResolvedTheme = (): ResolvedTheme => {
         if (!globalUnsubscribe && window.electronAPI?.onThemeChanged) {
             globalUnsubscribe = window.electronAPI.onThemeChanged(({ resolved }) => {
                 document.documentElement.setAttribute('data-theme', resolved);
-                setResolvedTheme(resolved);
             });
         }
 
