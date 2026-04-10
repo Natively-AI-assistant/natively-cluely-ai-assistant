@@ -238,6 +238,51 @@ export class AppState {
   private _microphoneRecoveryAttempts: number = 0;
   private _microphoneRecoveryTimer: NodeJS.Timeout | null = null;
   private _verboseLogging: boolean = false;
+
+  private setupAudioRecoveryHandler(
+    capture: SystemAudioCapture | MicrophoneCapture,
+    type: 'system' | 'microphone'
+  ): void {
+    const isSystem = type === 'system';
+    const inProgress = isSystem ? '_systemAudioRecoveryInProgress' : '_microphoneRecoveryInProgress';
+    const attempts = isSystem ? '_systemAudioRecoveryAttempts' : '_microphoneRecoveryAttempts';
+    const timer = isSystem ? '_systemAudioRecoveryTimer' : '_microphoneRecoveryTimer';
+    const stt = isSystem ? this.googleSTT : this.googleSTT_User;
+    const maxAttempts = 3;
+
+    capture.on('error', (err: Error) => {
+      console.error(`[Main] ${isSystem ? 'SystemAudioCapture' : 'MicrophoneCapture'} Error:`, err);
+      if (this.isMeetingActive && !(this as any)[inProgress] && (this as any)[attempts] < maxAttempts) {
+        try {
+          (this as any)[inProgress] = true;
+          (this as any)[attempts]++;
+          console.log(`[Main] Attempting ${isSystem ? 'SystemAudioCapture' : 'MicrophoneCapture'} recovery (attempt ${(this as any)[attempts]}/3)...`);
+          (this as any)[timer] = setTimeout(() => {
+            (this as any)[timer] = null;
+            if (this.isMeetingActive && capture) {
+              try {
+                capture.start();
+                if (isSystem) {
+                  stt?.start();
+                }
+                console.log(`[Main] ${isSystem ? 'SystemAudioCapture' : 'MicrophoneCapture'} recovery successful`);
+              } catch (recoveryErr) {
+                console.error(`[Main] ${isSystem ? 'SystemAudioCapture' : 'MicrophoneCapture'} recovery failed:`, recoveryErr);
+              } finally {
+                (this as any)[inProgress] = false;
+              }
+            } else {
+              (this as any)[inProgress] = false;
+            }
+          }, 1000);
+        } catch (err) {
+          (this as any)[inProgress] = false;
+          console.error(`[Main] ${isSystem ? 'SystemAudioCapture' : 'MicrophoneCapture'} recovery setup failed:`, err);
+        }
+      }
+    });
+  }
+
   private _disguiseTimers: NodeJS.Timeout[] = []; // Track forceUpdate timeouts
   private _dockDebounceTimer: NodeJS.Timeout | null = null; // Debounce dock state changes
   private _dockReassertTimers: NodeJS.Timeout[] = []; // Re-assert dock-hidden state after show+focus
@@ -986,37 +1031,7 @@ export class AppState {
         this.systemAudioCapture.on('speech_ended', () => {
           this.googleSTT?.notifySpeechEnded?.();
         });
-        this.systemAudioCapture.on('error', (err: Error) => {
-          console.error('[Main] SystemAudioCapture Error:', err);
-          // Attempt recovery if meeting is active (debounced + capped per-device)
-          if (this.isMeetingActive && !this._systemAudioRecoveryInProgress && this._systemAudioRecoveryAttempts < 3) {
-            try {
-              this._systemAudioRecoveryInProgress = true;
-              this._systemAudioRecoveryAttempts++;
-              console.log(`[Main] Attempting SystemAudioCapture recovery (attempt ${this._systemAudioRecoveryAttempts}/3)...`);
-              // 1s delay gives the audio subsystem time to settle
-              this._systemAudioRecoveryTimer = setTimeout(() => {
-                this._systemAudioRecoveryTimer = null;
-                if (this.isMeetingActive && this.systemAudioCapture) {
-                  try {
-                    this.systemAudioCapture.start();
-                    this.googleSTT?.start();
-                    console.log('[Main] SystemAudioCapture recovery successful');
-                  } catch (recoveryErr) {
-                    console.error('[Main] SystemAudioCapture recovery failed:', recoveryErr);
-                  } finally {
-                    this._systemAudioRecoveryInProgress = false;
-                  }
-                } else {
-                  this._systemAudioRecoveryInProgress = false;
-                }
-              }, 1000);
-            } catch (err) {
-              this._systemAudioRecoveryInProgress = false;
-              console.error('[Main] SystemAudioCapture recovery setup failed:', err);
-            }
-          }
-        });
+        this.setupAudioRecoveryHandler(this.systemAudioCapture, 'system');
       }
 
       if (!this.microphoneCapture) {
@@ -1032,35 +1047,7 @@ export class AppState {
         this.microphoneCapture.on('speech_ended', () => {
           this.googleSTT_User?.notifySpeechEnded?.();
         });
-        this.microphoneCapture.on('error', (err: Error) => {
-          console.error('[Main] MicrophoneCapture Error:', err);
-          // Attempt recovery if meeting is active (debounced + capped per-device)
-          if (this.isMeetingActive && !this._microphoneRecoveryInProgress && this._microphoneRecoveryAttempts < 3) {
-            try {
-              this._microphoneRecoveryInProgress = true;
-              this._microphoneRecoveryAttempts++;
-              console.log(`[Main] Attempting MicrophoneCapture recovery (attempt ${this._microphoneRecoveryAttempts}/3)...`);
-              this._microphoneRecoveryTimer = setTimeout(() => {
-                this._microphoneRecoveryTimer = null;
-                if (this.isMeetingActive && this.microphoneCapture) {
-                  try {
-                    this.microphoneCapture.start();
-                    console.log('[Main] MicrophoneCapture recovery successful');
-                  } catch (recoveryErr) {
-                    console.error('[Main] MicrophoneCapture recovery failed:', recoveryErr);
-                  } finally {
-                    this._microphoneRecoveryInProgress = false;
-                  }
-                } else {
-                  this._microphoneRecoveryInProgress = false;
-                }
-              }, 1000);
-            } catch (err) {
-              this._microphoneRecoveryInProgress = false;
-              console.error('[Main] MicrophoneCapture recovery setup failed:', err);
-            }
-          }
-        });
+        this.setupAudioRecoveryHandler(this.microphoneCapture, 'microphone');
       }
 
       // 2. Initialize STT Services if missing
@@ -1140,35 +1127,7 @@ export class AppState {
       this.systemAudioCapture.on('speech_ended', () => {
         this.googleSTT?.notifySpeechEnded?.();
       });
-      this.systemAudioCapture.on('error', (err: Error) => {
-        console.error('[Main] SystemAudioCapture Error:', err);
-        if (this.isMeetingActive && !this._systemAudioRecoveryInProgress && this._systemAudioRecoveryAttempts < 3) {
-          try {
-            this._systemAudioRecoveryInProgress = true;
-            this._systemAudioRecoveryAttempts++;
-            console.log(`[Main] Attempting SystemAudioCapture recovery (attempt ${this._systemAudioRecoveryAttempts}/3)...`);
-            this._systemAudioRecoveryTimer = setTimeout(() => {
-              this._systemAudioRecoveryTimer = null;
-              if (this.isMeetingActive && this.systemAudioCapture) {
-                try {
-                  this.systemAudioCapture.start();
-                  this.googleSTT?.start();
-                  console.log('[Main] SystemAudioCapture recovery successful');
-                } catch (recoveryErr) {
-                  console.error('[Main] SystemAudioCapture recovery failed:', recoveryErr);
-                } finally {
-                  this._systemAudioRecoveryInProgress = false;
-                }
-              } else {
-                this._systemAudioRecoveryInProgress = false;
-              }
-            }, 1000);
-          } catch (err) {
-            this._systemAudioRecoveryInProgress = false;
-            console.error('[Main] SystemAudioCapture recovery setup failed:', err);
-          }
-        }
-      });
+      this.setupAudioRecoveryHandler(this.systemAudioCapture, 'system');
       console.log('[Main] SystemAudioCapture initialized.');
     } catch (err) {
       console.warn('[Main] Failed to initialize SystemAudioCapture with preferred ID. Falling back to default.', err);
@@ -1193,35 +1152,7 @@ export class AppState {
         this.systemAudioCapture.on('speech_ended', () => {
           this.googleSTT?.notifySpeechEnded?.();
         });
-        this.systemAudioCapture.on('error', (err: Error) => {
-          console.error('[Main] SystemAudioCapture (Default) Error:', err);
-          if (this.isMeetingActive && !this._systemAudioRecoveryInProgress && this._systemAudioRecoveryAttempts < 3) {
-            try {
-              this._systemAudioRecoveryInProgress = true;
-              this._systemAudioRecoveryAttempts++;
-              console.log(`[Main] Attempting SystemAudioCapture recovery (attempt ${this._systemAudioRecoveryAttempts}/3)...`);
-              this._systemAudioRecoveryTimer = setTimeout(() => {
-                this._systemAudioRecoveryTimer = null;
-                if (this.isMeetingActive && this.systemAudioCapture) {
-                  try {
-                    this.systemAudioCapture.start();
-                    this.googleSTT?.start();
-                    console.log('[Main] SystemAudioCapture recovery successful');
-                  } catch (recoveryErr) {
-                    console.error('[Main] SystemAudioCapture recovery failed:', recoveryErr);
-                  } finally {
-                    this._systemAudioRecoveryInProgress = false;
-                  }
-                } else {
-                  this._systemAudioRecoveryInProgress = false;
-                }
-              }, 1000);
-            } catch (err) {
-              this._systemAudioRecoveryInProgress = false;
-              console.error('[Main] SystemAudioCapture recovery setup failed:', err);
-            }
-          }
-        });
+        this.setupAudioRecoveryHandler(this.systemAudioCapture, 'system');
       } catch (err2) {
         console.error('[Main] Failed to initialize SystemAudioCapture (Default):', err2);
       }
@@ -1252,34 +1183,7 @@ export class AppState {
       this.microphoneCapture.on('speech_ended', () => {
         this.googleSTT_User?.notifySpeechEnded?.();
       });
-      this.microphoneCapture.on('error', (err: Error) => {
-        console.error('[Main] MicrophoneCapture Error:', err);
-        if (this.isMeetingActive && !this._microphoneRecoveryInProgress && this._microphoneRecoveryAttempts < 3) {
-          try {
-            this._microphoneRecoveryInProgress = true;
-            this._microphoneRecoveryAttempts++;
-            console.log(`[Main] Attempting MicrophoneCapture recovery (attempt ${this._microphoneRecoveryAttempts}/3)...`);
-            this._microphoneRecoveryTimer = setTimeout(() => {
-              this._microphoneRecoveryTimer = null;
-              if (this.isMeetingActive && this.microphoneCapture) {
-                try {
-                  this.microphoneCapture.start();
-                  console.log('[Main] MicrophoneCapture recovery successful');
-                } catch (recoveryErr) {
-                  console.error('[Main] MicrophoneCapture recovery failed:', recoveryErr);
-                } finally {
-                  this._microphoneRecoveryInProgress = false;
-                }
-              } else {
-                this._microphoneRecoveryInProgress = false;
-              }
-            }, 1000);
-          } catch (err) {
-            this._microphoneRecoveryInProgress = false;
-            console.error('[Main] MicrophoneCapture recovery setup failed:', err);
-          }
-        }
-      });
+      this.setupAudioRecoveryHandler(this.microphoneCapture, 'microphone');
       console.log('[Main] MicrophoneCapture initialized.');
     } catch (err) {
       console.warn('[Main] Failed to initialize MicrophoneCapture with preferred ID. Falling back to default.', err);
@@ -1299,34 +1203,7 @@ export class AppState {
         this.microphoneCapture.on('speech_ended', () => {
           this.googleSTT_User?.notifySpeechEnded?.();
         });
-        this.microphoneCapture.on('error', (err: Error) => {
-          console.error('[Main] MicrophoneCapture (Default) Error:', err);
-          if (this.isMeetingActive && !this._microphoneRecoveryInProgress && this._microphoneRecoveryAttempts < 3) {
-            try {
-              this._microphoneRecoveryInProgress = true;
-              this._microphoneRecoveryAttempts++;
-              console.log(`[Main] Attempting MicrophoneCapture recovery (attempt ${this._microphoneRecoveryAttempts}/3)...`);
-              this._microphoneRecoveryTimer = setTimeout(() => {
-                this._microphoneRecoveryTimer = null;
-                if (this.isMeetingActive && this.microphoneCapture) {
-                  try {
-                    this.microphoneCapture.start();
-                    console.log('[Main] MicrophoneCapture recovery successful');
-                  } catch (recoveryErr) {
-                    console.error('[Main] MicrophoneCapture recovery failed:', recoveryErr);
-                  } finally {
-                    this._microphoneRecoveryInProgress = false;
-                  }
-                } else {
-                  this._microphoneRecoveryInProgress = false;
-                }
-              }, 1000);
-            } catch (err) {
-              this._microphoneRecoveryInProgress = false;
-              console.error('[Main] MicrophoneCapture recovery setup failed:', err);
-            }
-          }
-        });
+        this.setupAudioRecoveryHandler(this.microphoneCapture, 'microphone');
       } catch (err2) {
         console.error('[Main] Failed to initialize MicrophoneCapture (Default):', err2);
       }
