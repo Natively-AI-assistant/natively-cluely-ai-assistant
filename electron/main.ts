@@ -247,7 +247,6 @@ export class AppState {
     const inProgress = isSystem ? '_systemAudioRecoveryInProgress' : '_microphoneRecoveryInProgress';
     const attempts = isSystem ? '_systemAudioRecoveryAttempts' : '_microphoneRecoveryAttempts';
     const timer = isSystem ? '_systemAudioRecoveryTimer' : '_microphoneRecoveryTimer';
-    const stt = isSystem ? this.googleSTT : this.googleSTT_User;
     const maxAttempts = 3;
 
     capture.on('error', (err: Error) => {
@@ -263,7 +262,9 @@ export class AppState {
               try {
                 capture.start();
                 if (isSystem) {
-                  stt?.start();
+                  this.googleSTT?.start();
+                } else {
+                  this.googleSTT_User?.start();
                 }
                 console.log(`[Main] ${isSystem ? 'SystemAudioCapture' : 'MicrophoneCapture'} recovery successful`);
               } catch (recoveryErr) {
