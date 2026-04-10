@@ -1411,10 +1411,11 @@ export class AppState {
         }
       }
     } finally {
-      // Allow recovery handlers to fire again after reconfiguration completes (or fails)
       if (wasMeetingActive) {
         this._systemAudioRecoveryInProgress = false;
+        this._systemAudioRecoveryAttempts = 0;
         this._microphoneRecoveryInProgress = false;
+        this._microphoneRecoveryAttempts = 0;
       }
     }
   }
