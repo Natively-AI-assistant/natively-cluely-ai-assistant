@@ -91,4 +91,26 @@ impl SpeakerStream {
             BackendStream::Sck(s) => s.take_consumer(),
         }
     }
+
+    /// Pause the underlying audio stream without destroying it.
+    pub fn pause(&mut self) {
+        match &mut self.backend {
+            BackendStream::CoreAudio(s) => s.pause(),
+            BackendStream::Sck(_s) => {
+                println!("[SpeakerStream] SCK pause: no-op (managed by capture thread)");
+            }
+        }
+    }
+
+    /// Resume the underlying audio stream.
+    /// Returns Err for CoreAudio (needs full recreation); SCK is a no-op.
+    pub fn resume(&mut self) -> Result<()> {
+        match &mut self.backend {
+            BackendStream::CoreAudio(s) => s.resume(),
+            BackendStream::Sck(_s) => {
+                println!("[SpeakerStream] SCK resume: no-op (stream remains active)");
+                Ok(())
+            }
+        }
+    }
 }

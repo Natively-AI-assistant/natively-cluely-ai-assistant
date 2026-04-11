@@ -131,6 +131,7 @@ export class SystemAudioCapture extends EventEmitter {
         } catch (error) {
             console.error('[SystemAudioCapture] Failed to start:', error);
             this.isRecording = false;
+            this.monitor = null; // Force recreation on next start() — device may have changed
             this.emit('error', error);
         }
     }
@@ -153,8 +154,9 @@ export class SystemAudioCapture extends EventEmitter {
             console.error('[SystemAudioCapture] Error stopping:', e);
         }
 
-        // Destroy monitor so it's recreated fresh on next start()
-        this.monitor = null;
+        // DO NOT destroy monitor here. Keep it alive for seamless restart.
+        // this.monitor = null;  // ← REMOVED — was causing Windows WASAPI device contention
+
         this.isRecording = false;
         this.emit('stop');
     }

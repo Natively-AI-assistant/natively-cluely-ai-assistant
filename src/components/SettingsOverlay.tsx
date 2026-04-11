@@ -836,7 +836,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     const [useExperimentalSck, setUseExperimentalSck] = useState(false);
 
     // STT Provider settings
-    const [sttProvider, setSttProvider] = useState<'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively'>('google');
+    const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively'>('none');
     const [groqSttModel, setGroqSttModel] = useState('whisper-large-v3-turbo');
     const [sttGroqKey, setSttGroqKey] = useState('');
     const [sttOpenaiKey, setSttOpenaiKey] = useState('');
@@ -882,7 +882,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                 // @ts-ignore
                 const creds = await window.electronAPI?.getStoredCredentials?.();
                 if (creds) {
-                    setSttProvider(creds.sttProvider || 'google');
+                    setSttProvider(creds.sttProvider || 'none');
                     if (creds.groqSttModel) setGroqSttModel(creds.groqSttModel);
                     setGoogleServiceAccountPath(creds.googleServiceAccountPath);
                     setHasStoredSttGroqKey(creds.hasSttGroqKey);
@@ -911,7 +911,33 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         if (isOpen) loadSttSettings();
     }, [isOpen]);
 
-    const handleSttProviderChange = async (provider: 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively') => {
+    // PR #173: Live-reload settings whenever the backend broadcasts a credentials change
+    // (e.g., when the user saves an STT key in a different window, or main fires it after
+    // a provider auto-reconfigure like Natively key clear).
+    useEffect(() => {
+        if (!window.electronAPI?.onCredentialsChanged) return;
+        const unsubscribe = window.electronAPI.onCredentialsChanged(() => {
+            if (isOpen) {
+                // Re-fetch credentials silently — purely additive, no state reset
+                window.electronAPI?.getStoredCredentials?.().then((creds: any) => {
+                    if (!creds) return;
+                    setSttProvider(creds.sttProvider || 'none');
+                    if (creds.groqSttModel) setGroqSttModel(creds.groqSttModel);
+                    setHasNativelyKey(creds.hasNativelyKey || false);
+                    setHasStoredSttGroqKey(creds.hasSttGroqKey);
+                    setHasStoredSttOpenaiKey(creds.hasSttOpenaiKey);
+                    setHasStoredDeepgramKey(creds.hasDeepgramKey);
+                    setHasStoredElevenLabsKey(creds.hasElevenLabsKey);
+                    setHasStoredAzureKey(creds.hasAzureKey);
+                    setHasStoredIbmWatsonKey(creds.hasIbmWatsonKey);
+                    setHasStoredSonioxKey(creds.hasSonioxKey || false);
+                }).catch(() => { /* silently ignore */ });
+            }
+        });
+        return () => unsubscribe();
+    }, [isOpen]);
+
+    const handleSttProviderChange = async (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively') => {
         setSttProvider(provider);
         setIsSttDropdownOpen(false);
         setSttTestStatus('idle');
@@ -1050,7 +1076,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     };
 
     const handleTestSttConnection = async () => {
-        if (sttProvider === 'google' || sttProvider === 'natively') return;
+        if (sttProvider === 'none' || sttProvider === 'google' || sttProvider === 'natively') return;
         const keyMap: Record<string, string> = {
             groq: sttGroqKey, openai: sttOpenaiKey, deepgram: sttDeepgramKey,
             elevenlabs: sttElevenLabsKey, azure: sttAzureKey, ibmwatson: sttIbmKey,

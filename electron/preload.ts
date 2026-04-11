@@ -71,7 +71,7 @@ interface ElectronAPI {
   onTrialEnded:   (cb: (data: { choice: string }) => void) => () => void
 
   // STT Provider Management
-  setSttProvider: (provider: 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively') => Promise<{ success: boolean; error?: string }>
+  setSttProvider: (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively') => Promise<{ success: boolean; error?: string }>
   getSttProvider: () => Promise<string>
   setGroqSttApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setOpenAiSttApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
@@ -82,7 +82,12 @@ interface ElectronAPI {
   setIbmWatsonApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setGroqSttModel: (model: string) => Promise<{ success: boolean; error?: string }>
   setSonioxApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
+  setIbmWatsonRegion: (region: string) => Promise<{ success: boolean; error?: string }>
   testSttConnection: (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox', apiKey: string, region?: string) => Promise<{ success: boolean; error?: string }>
+
+  // STT Config Events
+  onSttConfigChanged: (callback: (data: { configured: boolean; provider: string }) => void) => () => void
+  onCredentialsChanged: (callback: () => void) => () => void
 
   // Native Audio Service Events
   onNativeAudioTranscript: (callback: (transcript: { speaker: string; text: string; final: boolean }) => void) => () => void
@@ -548,7 +553,20 @@ contextBridge.exposeInMainWorld("electronAPI", {
   setIbmWatsonApiKey: (apiKey: string) => ipcRenderer.invoke("set-ibmwatson-api-key", apiKey),
   setGroqSttModel: (model: string) => ipcRenderer.invoke("set-groq-stt-model", model),
   setSonioxApiKey: (apiKey: string) => ipcRenderer.invoke("set-soniox-api-key", apiKey),
+  setIbmWatsonRegion: (region: string) => ipcRenderer.invoke("set-ibmwatson-region", region),
   testSttConnection: (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox', apiKey: string, region?: string) => ipcRenderer.invoke("test-stt-connection", provider, apiKey, region),
+
+  // STT Config Events (Adapted from public PR #173 — verify premium interaction)
+  onSttConfigChanged: (callback: (data: { configured: boolean; provider: string }) => void) => {
+    const subscription = (_: any, data: any) => callback(data);
+    ipcRenderer.on('stt-config-changed', subscription);
+    return () => { ipcRenderer.removeListener('stt-config-changed', subscription); };
+  },
+  onCredentialsChanged: (callback: () => void) => {
+    const subscription = () => callback();
+    ipcRenderer.on('credentials-changed', subscription);
+    return () => { ipcRenderer.removeListener('credentials-changed', subscription); };
+  },
 
   // Native Audio Service Events
   onNativeAudioTranscript: (callback: (transcript: { speaker: string; text: string; final: boolean }) => void) => {

@@ -74,6 +74,7 @@ export const RECOGNITION_LANGUAGES: Record<string, LanguageOption> = {
     'korean': { label: 'Korean', code: 'korean', bcp47: 'ko-KR', iso639: 'ko', group: 'Korean' },
     'chinese': { label: 'Chinese (Simplified)', code: 'chinese', bcp47: 'zh-CN', iso639: 'zh', group: 'Chinese' },
     'turkish': { label: 'Turkish', code: 'turkish', bcp47: 'tr-TR', iso639: 'tr', group: 'Turkish' },
+    'ukrainian': { label: 'Ukrainian', code: 'ukrainian', bcp47: 'uk-UA', iso639: 'uk', group: 'Ukrainian' },
 };
 
 export const AI_RESPONSE_LANGUAGES = [
@@ -90,4 +91,5 @@ export const AI_RESPONSE_LANGUAGES = [
     { label: 'Korean', code: 'Korean' },
     { label: 'Chinese', code: 'Chinese' },
     { label: 'Turkish', code: 'Turkish' },
+    { label: 'Ukrainian', code: 'Ukrainian' },
 ];

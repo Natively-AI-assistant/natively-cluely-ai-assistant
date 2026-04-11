@@ -102,19 +102,14 @@ impl SpeakerInput {
 
         // Get available content - triggers permission check
         // Use blocking wait since we're in a sync context
-        use std::cell::UnsafeCell;
-        use std::sync::{
-            atomic::{AtomicBool, Ordering},
-            Arc,
-        };
+        use std::sync::{Arc, Mutex};
 
-        let content_cell: Arc<UnsafeCell<Option<arc::R<sc::ShareableContent>>>> =
-            Arc::new(UnsafeCell::new(None));
-        let content_ready = Arc::new(AtomicBool::new(false));
-        let content_error = Arc::new(AtomicBool::new(false));
+        let content_cell: Arc<Mutex<Option<arc::R<sc::ShareableContent>>>> =
+            Arc::new(Mutex::new(None));
+        let content_error: Arc<Mutex<Option<arc::R<ns::Error>>>> =
+            Arc::new(Mutex::new(None));
 
         let cell_clone = content_cell.clone();
-        let ready_clone = content_ready.clone();
         let error_clone = content_error.clone();
 
         sc::ShareableContent::current_with_ch(move |content_opt, error_opt| {
@@ -123,30 +118,43 @@ impl SpeakerInput {
                     "[SpeakerInput] ERROR: ScreenCaptureKit access denied: {:?}",
                     e
                 );
-                error_clone.store(true, Ordering::SeqCst);
+                if let Ok(mut guard) = error_clone.lock() {
+                    *guard = Some(e.retained());
+                }
             } else if let Some(c) = content_opt {
-                // Retain the content
-                unsafe {
-                    *cell_clone.get() = Some(c.retained());
+                if let Ok(mut guard) = cell_clone.lock() {
+                    *guard = Some(c.retained());
                 }
             }
-            ready_clone.store(true, Ordering::SeqCst);
         });
 
-        // Wait for shareable content (max 5 seconds)
-        for _ in 0..500 {
-            if content_ready.load(Ordering::SeqCst) {
+        // Wait for shareable content (max 10 seconds).
+        // Permission is pre-checked by the TS layer before calling startMeeting(),
+        // so this timeout is a safety net for SCK initialization, not permission waiting.
+        let start = std::time::Instant::now();
+        loop {
+            if start.elapsed() > std::time::Duration::from_secs(10) {
+                println!("[SpeakerInput] Timed out waiting for ScreenCaptureKit content (10s)");
                 break;
             }
-            std::thread::sleep(std::time::Duration::from_millis(10));
+            if content_error.lock().unwrap().is_some() {
+                break;
+            }
+            if content_cell.lock().unwrap().is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
         }
 
-        if content_error.load(Ordering::SeqCst) {
+        if let Some(e) = content_error.lock().unwrap().as_ref() {
             println!("[SpeakerInput] Please grant Screen Recording permission in System Settings > Privacy & Security");
-            return Err(anyhow::anyhow!("ScreenCaptureKit access denied"));
+            return Err(anyhow::anyhow!("ScreenCaptureKit access denied: {:?}", e));
         }
 
-        let content = unsafe { (*content_cell.get()).take() }
+        let content = content_cell
+            .lock()
+            .unwrap()
+            .take()
             .ok_or_else(|| anyhow::anyhow!("Failed to get shareable content (timeout)"))?;
 
         let displays = content.displays();
@@ -235,8 +243,10 @@ impl SpeakerInput {
             complete_clone.store(true, Ordering::SeqCst);
         });
 
-        // Wait for start completion (max 2 seconds)
-        for _ in 0..200 {
+        // Wait for start completion (max 3 seconds).
+        // Permission is already confirmed by the TS layer, so the callback
+        // should arrive almost instantly. This is a safety net for SCK bugs.
+        for _ in 0..300 {
             if start_complete.load(Ordering::SeqCst) {
                 break;
             }
@@ -280,10 +290,32 @@ impl SpeakerStream {
 
 impl Drop for SpeakerStream {
     fn drop(&mut self) {
+        use std::sync::{Arc, Condvar, Mutex};
+
         println!("[SpeakerStream] Stopping ScreenCaptureKit stream...");
-        self.stream.stop_with_ch(|_| {
+
+        let stop_pair = Arc::new((Mutex::new(false), Condvar::new()));
+        let pair_clone = stop_pair.clone();
+
+        self.stream.stop_with_ch(move |_| {
             println!("[SpeakerStream] Stream stopped");
+            let (lock, cvar) = &*pair_clone;
+            let mut stopped = lock.lock().unwrap();
+            *stopped = true;
+            cvar.notify_one();
         });
-        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        // Wait for stop completion (max 2 seconds)
+        let (lock, cvar) = &*stop_pair;
+        let mut stopped = lock.lock().unwrap();
+        if !*stopped {
+            let result = cvar
+                .wait_timeout(stopped, std::time::Duration::from_secs(2))
+                .unwrap();
+            stopped = result.0;
+            if !*stopped {
+                println!("[SpeakerStream] WARNING: Stop callback not received after 2s");
+            }
+        }
     }
 }

@@ -806,10 +806,17 @@ export class AppState {
   private googleSTT: STTProvider | null = null; // Interviewer
   private googleSTT_User: STTProvider | null = null; // User
 
-  private createSTTProvider(speaker: 'interviewer' | 'user'): STTProvider {
+  private createSTTProvider(speaker: 'interviewer' | 'user'): STTProvider | null {
     const { CredentialsManager } = require('./services/CredentialsManager');
     const sttProvider = CredentialsManager.getInstance().getSttProvider();
     const sttLanguage = CredentialsManager.getInstance().getSttLanguage();
+
+    // 'none' means the user has explicitly disabled STT (no provider selected).
+    // Return null so the pipeline skips STT without falling back to Google.
+    if (sttProvider === 'none') {
+      console.log(`[Main] STT provider is 'none' — audio capture will proceed but transcription is disabled.`);
+      return null;
+    }
 
     let stt: STTProvider;
 
@@ -978,6 +985,8 @@ export class AppState {
         this.systemAudioCapture.on('error', (err: Error) => {
           console.error('[Main] SystemAudioCapture Error:', err);
         });
+        // PR #173: Wire audio recovery handler so mid-session device failures auto-restart
+        this.setupAudioRecoveryHandler();
       }
 
       if (!this.microphoneCapture) {
@@ -1199,6 +1208,74 @@ export class AppState {
     }
 
     console.log('[Main] STT Provider reconfigured');
+
+    // Broadcast the new STT config state to all windows so they can update banners / warnings
+    const { CredentialsManager: CM } = require('./services/CredentialsManager');
+    const newProvider = CM.getInstance().getSttProvider();
+    this.broadcast('stt-config-changed', { configured: newProvider !== 'none', provider: newProvider });
+  }
+
+  /**
+   * PR #173: Audio Recovery Handler
+   *
+   * Listens for 'audio-capture-failed' emit from SystemAudioCapture and
+   * transparently restarts the full capture + STT pipeline without ending the
+   * meeting session. Prevents silent audio loss when macOS CoreAudio or SCK
+   * drops the capture stream mid-session (e.g. device re-plug, Display Sleep).
+   */
+  private _systemAudioRecoveryInProgress = false;
+  private _systemAudioRecoveryAttempts = 0;
+  private _systemAudioRecoveryTimer: NodeJS.Timeout | null = null;
+  private _systemAudioLastFailureAt: number | null = null;
+  private _systemAudioSuccessfulRestarts = 0;
+  private _systemAudioConsecutiveFailures = 0;
+
+  private setupAudioRecoveryHandler(): void {
+    if (!this.systemAudioCapture) return;
+
+    this.systemAudioCapture.on('error', async (err: Error) => {
+      if (!this.isMeetingActive) return; // Only attempt recovery during active meetings
+
+      const now = Date.now();
+      this._systemAudioLastFailureAt = now;
+      this._systemAudioConsecutiveFailures++;
+
+      // Cap at 3 consecutive recovery attempts to avoid infinite restart loops
+      if (this._systemAudioRecoveryInProgress || this._systemAudioRecoveryAttempts >= 3) {
+        console.warn(
+          `[AudioRecovery] Skipping recovery — already in progress or max attempts (${this._systemAudioRecoveryAttempts}/3) reached.`,
+        );
+        return;
+      }
+
+      this._systemAudioRecoveryInProgress = true;
+      this._systemAudioRecoveryAttempts++;
+      console.warn(
+        `[AudioRecovery] SystemAudioCapture error — attempting recovery #${this._systemAudioRecoveryAttempts}: ${err.message}`,
+      );
+
+      try {
+        // Brief delay so the OS can release the device before re-acquisition
+        await new Promise<void>(resolve => {
+          this._systemAudioRecoveryTimer = setTimeout(resolve, 1500);
+        });
+        this._systemAudioRecoveryTimer = null;
+
+        // Restart the audio captures without disturbing the STT provider or the session
+        this.systemAudioCapture?.stop();
+        this.systemAudioCapture?.start();
+
+        this._systemAudioSuccessfulRestarts++;
+        this._systemAudioConsecutiveFailures = 0;
+        console.log(
+          `[AudioRecovery] SystemAudioCapture restarted successfully (total restarts: ${this._systemAudioSuccessfulRestarts}).`,
+        );
+      } catch (recoveryErr: any) {
+        console.error(`[AudioRecovery] Recovery attempt #${this._systemAudioRecoveryAttempts} failed:`, recoveryErr);
+      } finally {
+        this._systemAudioRecoveryInProgress = false;
+      }
+    });
   }
 
 
@@ -1295,6 +1372,15 @@ export class AppState {
 
   public async startMeeting(metadata?: any): Promise<void> {
     console.log('[Main] Starting Meeting...', metadata);
+
+    // PR #173: Reset audio recovery state for fresh session
+    this._systemAudioRecoveryInProgress = false;
+    this._systemAudioRecoveryAttempts = 0;
+    this._systemAudioConsecutiveFailures = 0;
+    if (this._systemAudioRecoveryTimer) {
+      clearTimeout(this._systemAudioRecoveryTimer);
+      this._systemAudioRecoveryTimer = null;
+    }
 
     if (!(await ensureMacMicrophoneAccess('meeting start'))) {
       const message = 'Microphone access denied. Please allow microphone access in System Settings.';

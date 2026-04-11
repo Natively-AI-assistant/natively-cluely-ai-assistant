@@ -33,7 +33,7 @@ export interface StoredCredentials {
     defaultModel?: string;
     nativelyApiKey?: string;
     // STT Provider settings
-    sttProvider?: 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively';
+    sttProvider?: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively';
     groqSttApiKey?: string;
     groqSttModel?: string;
     openAiSttApiKey?: string;
@@ -111,8 +111,8 @@ export class CredentialsManager {
         return this.credentials.customProviders || [];
     }
 
-    public getSttProvider(): 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' {
-        return this.credentials.sttProvider || 'google';
+    public getSttProvider(): 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' {
+        return this.credentials.sttProvider || 'none';
     }
 
     public getDeepgramApiKey(): string | undefined {
@@ -212,7 +212,7 @@ export class CredentialsManager {
         console.log('[CredentialsManager] Google Service Account path updated');
     }
 
-    public setSttProvider(provider: 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively'): void {
+    public setSttProvider(provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively'): void {
         this.credentials.sttProvider = provider;
         this.saveCredentials();
         console.log(`[CredentialsManager] STT Provider set to: ${provider}`);
@@ -321,8 +321,8 @@ export class CredentialsManager {
                 console.log('[CredentialsManager] Auto-set default model to natively');
             }
 
-            // Auto-promote natively STT if still on the default Google STT
-            if (!this.credentials.sttProvider || this.credentials.sttProvider === 'google') {
+            // Auto-promote natively STT if still on 'none' or the default Google STT
+            if (!this.credentials.sttProvider || this.credentials.sttProvider === 'none' || this.credentials.sttProvider === 'google') {
                 this.credentials.sttProvider = 'natively';
                 console.log('[CredentialsManager] Auto-set STT provider to natively');
             }
@@ -333,8 +333,8 @@ export class CredentialsManager {
                 console.log('[CredentialsManager] Natively key cleared — reset default model to Gemini Flash');
             }
             if (this.credentials.sttProvider === 'natively') {
-                this.credentials.sttProvider = 'google';
-                console.log('[CredentialsManager] Natively key cleared — reset STT provider to Google');
+                this.credentials.sttProvider = 'none';
+                console.log('[CredentialsManager] Natively key cleared — reset STT provider to none');
             }
         }
 

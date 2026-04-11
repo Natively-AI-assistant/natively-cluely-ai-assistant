@@ -199,9 +199,10 @@ impl SpeakerInput {
                         }
                     }
 
+                    // Timeout is normal when no audio is playing — WASAPI loopback
+                    // doesn't fire events during silence. Just continue waiting.
                     if h_event.wait_for_event(3000).is_err() {
-                        error!("Timeout error, stopping capture");
-                        break;
+                        continue;
                     }
 
                     let mut temp_queue = VecDeque::new();

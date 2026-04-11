@@ -77,20 +77,24 @@ impl SystemAudioCapture {
         callback: ThreadsafeFunction<Buffer>,
         on_speech_ended: Option<ThreadsafeFunction<bool>>,
     ) -> napi::Result<()> {
+        // Guard against double-start — prevents spawning concurrent threads
+        if self.capture_thread.is_some() {
+            return Err(napi::Error::from_reason("Capture already running"));
+        }
+
         let tsfn = callback;
         let speech_ended_tsfn = on_speech_ended;
 
         self.stop_signal.store(false, Ordering::SeqCst);
         let stop_signal = self.stop_signal.clone();
-        let device_id = self.device_id.clone();
         let sample_rate_shared = self.sample_rate.clone();
+        let device_id = self.device_id.clone();
 
-        // ★ ALL init + DSP runs in background thread — start() returns INSTANTLY
-        // This prevents the 5-7 second main-thread block from SCK initialization.
+        // ALL init + DSP runs in background thread — start() returns INSTANTLY
         self.capture_thread = Some(thread::spawn(move || {
-            // 1. SCK Init (takes 5-7 seconds — runs OFF main thread)
+            // 1. SpeakerInput Init (takes 5-7 seconds — runs OFF main thread)
             println!("[SystemAudioCapture] Background init starting...");
-            let input = match speaker::SpeakerInput::new(device_id) {
+            let input = match speaker::SpeakerInput::new(device_id.clone()) {
                 Ok(i) => i,
                 Err(e) => {
                     println!("[SystemAudioCapture] Init failed: {}. Trying default...", e);
@@ -212,6 +216,12 @@ impl SystemAudioCapture {
         if let Some(handle) = self.capture_thread.take() {
             let _ = handle.join();
         }
+    }
+}
+
+impl Drop for SystemAudioCapture {
+    fn drop(&mut self) {
+        self.stop();
     }
 }
 
