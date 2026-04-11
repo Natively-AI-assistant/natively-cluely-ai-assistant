@@ -213,7 +213,7 @@ export class LLMHelper {
   }
 
   private isGroqModel(modelId: string): boolean {
-    return modelId.startsWith("llama-") || modelId.startsWith("mixtral-") || modelId.startsWith("gemma-") || modelId.startsWith("meta-llama/");
+    return modelId.startsWith("llama-") || modelId.startsWith("mixtral-") || modelId.startsWith("gemma-") || modelId.startsWith("meta-llama/") || modelId.startsWith("qwen/") || modelId.startsWith("qwen-");
   }
 
   private isGeminiModel(modelId: string): boolean {
@@ -950,7 +950,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         if (isMultimodal && imagePaths) {
           return await this.generateWithGroqMultimodal(userContent, imagePaths, openaiSystemPrompt);
         }
-        return await this.generateWithGroq(combinedMessages.groq);
+        return await this.generateWithGroq(combinedMessages.groq, this.currentModelId);
       }
 
       // Fallback (Gemini) - logic handled below by SMART DYNAMIC FALLBACK list
@@ -1006,7 +1006,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           providers.push({ name: 'Natively API', execute: () => this.generateWithNatively(userContent, openaiSystemPrompt) });
         }
         if (this.groqClient) {
-          providers.push({ name: `Groq (${textGroq})`, execute: () => this.generateWithGroq(combinedMessages.groq) });
+          providers.push({ name: `Groq (${textGroq})`, execute: () => this.generateWithGroq(combinedMessages.groq, textGroq) });
         }
         if (this.client) {
           providers.push({
@@ -1198,14 +1198,14 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     throw new Error('All reasoning models failed for structured generation after 3 attempts');
   }
 
-  private async generateWithGroq(fullMessage: string): Promise<string> {
+  private async generateWithGroq(fullMessage: string, modelId: string = GROQ_MODEL): Promise<string> {
     if (!this.groqClient) throw new Error("Groq client not initialized");
 
     await this.rateLimiters.groq.acquire();
 
     // Non-streaming Groq call
     const response = await this.groqClient.chat.completions.create({
-      model: GROQ_MODEL,
+      model: modelId,
       messages: [{ role: "user", content: fullMessage }],
       temperature: 0.4,
       max_tokens: 8192,
@@ -1754,7 +1754,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           }
           return {
             name: `Groq (${modelId})`,
-            execute: () => this.generateWithGroq(`${systemPrompt}\n\n${userPrompt}`)
+            execute: () => this.generateWithGroq(`${systemPrompt}\n\n${userPrompt}`, modelId)
           };
 
         default:
@@ -1985,7 +1985,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         providers.push({ name: 'Natively API', execute: () => this.streamWithNatively(userContent, openaiSystemPrompt) });
       }
       if (this.groqClient) {
-        providers.push({ name: `Groq (${textGroq})`, execute: () => this.streamWithGroq(combinedMessages.groq) });
+        providers.push({ name: `Groq (${textGroq})`, execute: () => this.streamWithGroq(combinedMessages.groq, textGroq) });
       }
       if (this.openaiClient) {
         providers.push({ name: `OpenAI (${textOpenAI})`, execute: () => this.streamWithOpenai(userContent, openaiSystemPrompt, textOpenAI) });
@@ -2137,7 +2137,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           const groqSystem = systemPromptOverride || GROQ_SYSTEM_PROMPT;
           const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
           const groqFullMessage = `${finalGroqSystem}\n\n${userContent}`;
-          yield* this.streamWithGroq(groqFullMessage);
+          yield* this.streamWithGroq(groqFullMessage, this.currentModelId);
           return;
         } catch (e: any) {
           console.warn("[LLMHelper] Groq Fast Text streaming failed, falling back:", e.message);
@@ -2221,7 +2221,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       const groqSystem = systemPromptOverride ? baseSystemPrompt : GROQ_SYSTEM_PROMPT;
       const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
       const groqFullMessage = `${finalGroqSystem}\n\n${userContent}`;
-      yield* this.streamWithGroq(groqFullMessage);
+      yield* this.streamWithGroq(groqFullMessage, this.currentModelId);
       return;
     }
 
@@ -2392,11 +2392,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
   /**
    * Stream response from Groq
    */
-  private async * streamWithGroq(fullMessage: string): AsyncGenerator<string, void, unknown> {
+  private async * streamWithGroq(fullMessage: string, modelId: string = GROQ_MODEL): AsyncGenerator<string, void, unknown> {
     if (!this.groqClient) throw new Error("Groq client not initialized");
 
     const stream = await this.groqClient.chat.completions.create({
-      model: GROQ_MODEL,
+      model: modelId,
       messages: [{ role: "user", content: fullMessage }],
       stream: true,
       temperature: 0.4,
