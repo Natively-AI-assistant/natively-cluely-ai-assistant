@@ -68,7 +68,7 @@ If you’re looking for a hosted desktop recording API, consider checking out [R
 
 <br/>
 
-**<span style="color: #f97316">🔥 49.4k views</span>** &nbsp;·&nbsp; **<span style="color: #22c55e">💸 $0 vs $149/mo rivals</span>** &nbsp;·&nbsp; **<span style="color: #3b82f6">⚡ <500ms latency</span>** &nbsp;·&nbsp; **<span style="color: #a855f7">🛡️ 0 data breaches</span>**
+**<span style="color: #ef4444">👥 9,000+ Users</span>** &nbsp;·&nbsp; **<span style="color: #f97316">🔥 700+ DAU</span>** &nbsp;·&nbsp; **<span style="color: #22c55e">💸 $0 vs $149/mo rivals</span>** &nbsp;·&nbsp; **<span style="color: #3b82f6">⚡ <500ms latency</span>** &nbsp;·&nbsp; **<span style="color: #a855f7">🛡️ 0 data breaches</span>**
 
 </div>
 
@@ -108,7 +108,7 @@ Natively works as a **free, undetectable AI coding interview assistant** for sta
 
 ## 3 things you should know before choosing an interview AI
 
-1. **Cluely** had a data breach in mid-2025 that exposed 83,000 users' personal info, transcripts, and screenshots — Natively stores everything locally with limited basic telemetry and has never had a breach.
+1. **Cluely** had a data breach in mid-2025 that exposed 83,000 users' personal info, transcripts, and screenshots — Natively stores everything locally by default with limited anonymous telemetry and has never had a breach.
 2. **Final Round AI** costs $149/month and its taskbar icon is visible to proctoring software — Natively is free, open-source, and has a battle-tested undetectable stealth mode.
 3. **LockedIn AI** charges $55–70/month and locks you into their cloud LLM with no local option — Natively lets you use any model (GPT, Claude, Gemini, Llama) or go fully offline with Ollama.
 
@@ -172,7 +172,7 @@ The UI is intentionally familiar — if you've used Cluely, there's zero learnin
 
 Cluely's mid-2025 data breach exposed personal information, full interview transcripts, and screenshots of 83,000 users. Every word spoken during an interview was stored on their servers — and then leaked. They charge $20/month for this privilege.
 
-Natively has no backend, no servers, and limited telemetry (basic GA4 install tracking, zero user data). Your transcripts, API keys, and screenshots never leave your machine. The entire codebase is open-source (AGPL-3.0) and auditable. Zero breaches, zero data collection — that is the only acceptable standard for a tool that listens to your interviews.
+By default, Natively stores everything on your local machine, with only limited anonymous telemetry (basic GA4 install tracking, zero personal data). Your transcripts, API keys, and screenshots never leave your machine when using your own keys. The entire codebase is open-source (AGPL-3.0) and auditable. Zero breaches — that is the only acceptable standard for a tool that listens to your interviews.
 
 ### vs LockedIn AI — $70/month for cloud lock-in
 
@@ -226,6 +226,22 @@ Parakeet AI offers basic live meeting assistance but has no persistent memory, n
 
 ---
 
+## What Users Are Saying
+
+> "This is a fantastic piece of software and you should definitely keep up the great work! This is exactly what I was looking for. I started out trying the open-source version, and because it worked so well, I decided to go ahead and buy the full premium license."  
+> — **Oskar Krzak** (⭐⭐⭐⭐⭐ via Gumroad)
+
+> "Natively is significantly faster than Cluely when it comes to response time and screen analysis. The latency is practically non-existent."  
+> — **Premium User**
+
+> "Just wanted to say thanks! Natively helped me completely crack the first two rounds of my Software Engineering interviews. The responses were incredibly fast and accurate."  
+> — **Private Email Feedback**
+
+> "Used the free version of Natively for my interviews and just landed a massive summer internship. It took all the stress out of the live coding and behavioral rounds!"  
+> — **Private Email Feedback**
+
+---
+
 ## Why Natively?
 
 While other tools act as simple API wrappers, Natively is a complete, native intelligence system designed specifically for high-stakes meetings and interviews.
@@ -236,7 +252,7 @@ While other tools act as simple API wrappers, Natively is a complete, native int
 - **Rolling Context:** We don't just transcribe; we maintain a "memory window" of the conversation for smarter answers.
 - **Local RAG Memory:** We embed your meetings locally using SQLite vector search so you can ask, "What did John say about the API last week?"
 - **Rich Dashboard:** A full UI to manage, search, and export your history—not just a floating window.
-- **Fully Offline Capable:** Don't trust the cloud? Run Natively 100% offline using local Ollama models with limited basic telemetry.
+- **Fully Offline Capable:** Don't trust the cloud? Run Natively 100% offline using local Ollama models with limited anonymous telemetry.
 
 ---
 
@@ -291,7 +307,16 @@ Under the hood, Natively API connects you to the absolute best models for the op
 
 <p align="center">
   <a href="https://checkout.dodopayments.com/buy/pdt_0NbFixGmD8CSeawb5qvVl">
-    <img src="https://img.shields.io/badge/Get_Natively_API-Subscribe_Now-F97316?style=for-the-badge&logo=fastapi&logoColor=white" />
+    <img src="https://img.shields.io/badge/Standard_Plan-Subscribe_Now-94a3b8?style=for-the-badge&logo=fastapi&logoColor=white" />
+  </a>
+  <a href="https://checkout.dodopayments.com/buy/pdt_0NcM6Aw0IWdspbsgUeCLA">
+    <img src="https://img.shields.io/badge/Pro_Plan-Subscribe_Now-8b5cf6?style=for-the-badge&logo=fastapi&logoColor=white" />
+  </a>
+  <a href="https://checkout.dodopayments.com/buy/pdt_0NcM7JElX4Af6LNVFS1Yf">
+    <img src="https://img.shields.io/badge/Max_Plan-Subscribe_Now-6366f1?style=for-the-badge&logo=fastapi&logoColor=white" />
+  </a>
+  <a href="https://checkout.dodopayments.com/buy/pdt_0NcM7rC2kAb69TFKsZnUU">
+    <img src="https://img.shields.io/badge/Ultra_Plan-Subscribe_Now-fbbf24?style=for-the-badge&logo=fastapi&logoColor=white" />
   </a>
 </p>
 
@@ -318,8 +343,11 @@ While Natively is **free and open-source forever**, we also offer a **Pro Editio
 | **Priority Feature Access & Support**               |      ❌       |      ✅      |
 
 <p align="center">
-  <a href="https://evynignatious.gumroad.com/l/natively">
-    <img src="https://img.shields.io/badge/Get_Natively_Pro-Unlock_Premium-FF3366?style=for-the-badge&logo=gumroad&logoColor=white" />
+  <a href="https://checkout.dodopayments.com/buy/pdt_0NbHo6EnXlNPqNcZ14OTi">
+    <img src="https://img.shields.io/badge/Lifetime_License-Unlock_Premium-facc15?style=for-the-badge&logo=fastapi&logoColor=black" />
+  </a>
+  <a href="https://checkout.dodopayments.com/buy/pdt_0NcM4QBwy0CDcPV9CXaNP">
+    <img src="https://img.shields.io/badge/Yearly_License-Unlock_Premium-black?style=for-the-badge&logo=fastapi&logoColor=white" />
   </a>
 </p>
 
@@ -348,6 +376,7 @@ Version 2.4.0 introduces major feature upgrades, architectural overhauls, and ro
 - [Demo](#demo)
 - [Full comparison](#full-comparison-natively-vs-cluely-vs-final-round-ai-vs-lockedin-ai-vs-interview-coder)
 - [Why Natively wins](#why-natively-wins)
+- [What Users Are Saying](#what-users-are-saying)
 - [Why Natively?](#why-natively)
 - [Natively Pro](#natively-pro)
 - [What's New in v2.4.0](#whats-new-in-v240)
@@ -397,7 +426,7 @@ All while remaining **invisible, fast, and privacy-first**.
 - Bring Your Own Keys (BYOK)
 - Local AI option (Ollama)
 - All data stored locally
-- Limited telemetry (basic GA4 counts)
+- Limited anonymous telemetry (basic GA4 counts)
 - No user data tracking
 - No hidden uploads
 
@@ -825,7 +854,7 @@ Yes. Natively uses a Rust-based system audio capture that works universally acro
 
 #### Is my data safe?
 
-Natively is built on **Privacy-by-Design**. All transcripts, vector embeddings (Local RAG), and keys are stored locally on your machine. We have no backend and collect only limited basic telemetry (no user data).
+Natively is built on **Privacy-by-Design**. By default, all transcripts, vector embeddings (Local RAG), and keys are stored locally on your machine. We collect only limited anonymous telemetry (no personal user data).
 
 #### Can I use it for technical interviews?
 
