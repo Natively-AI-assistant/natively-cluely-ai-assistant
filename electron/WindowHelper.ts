@@ -450,6 +450,11 @@ export class WindowHelper {
       this.overlayWindow.setIgnoreMouseEvents(false);
       // Restore full interactivity when passthrough is turned off.
       this.overlayWindow.setFocusable(true);
+      // Re-assert skipTaskbar after setFocusable() — on Windows, modifying
+      // WS_EX_NOACTIVATE via setFocusable resets the taskbar visibility state.
+      if (process.platform === 'win32') {
+        this.overlayWindow.setSkipTaskbar(true);
+      }
       console.log('[WindowHelper] Overlay mouse passthrough OFF');
     }
   }
