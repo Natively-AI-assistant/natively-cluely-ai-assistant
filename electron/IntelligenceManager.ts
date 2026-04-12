@@ -184,6 +184,10 @@ export class IntelligenceManager extends EventEmitter {
         return this.engine.runBrainstorm(imagePaths, problemStatement);
     }
 
+    async runBugFinder(imagePaths?: string[], problemStatement?: string): Promise<string | null> {
+        return this.engine.runBugFinder(imagePaths, problemStatement);
+    }
+
     // ============================================
     // State Management
     // ============================================

@@ -6,7 +6,7 @@ import { EventEmitter } from 'events';
 import { LLMHelper } from './LLMHelper';
 import { SessionTracker, TranscriptSegment, SuggestionTrigger, ContextItem } from './SessionTracker';
 import {
-    AnswerLLM, AssistLLM, BrainstormLLM, ClarifyLLM, CodeHintLLM, FollowUpLLM, RecapLLM,
+    AnswerLLM, AssistLLM, BrainstormLLM, BugFinderLLM, ClarifyLLM, CodeHintLLM, FollowUpLLM, RecapLLM,
     FollowUpQuestionsLLM, WhatToAnswerLLM,
     prepareTranscriptForWhatToAnswer, buildTemporalContext,
     AssistantResponse as LLMAssistantResponse, classifyIntent
@@ -70,6 +70,7 @@ export class IntelligenceEngine extends EventEmitter {
     private whatToAnswerLLM: WhatToAnswerLLM | null = null;
     private codeHintLLM: CodeHintLLM | null = null;
     private brainstormLLM: BrainstormLLM | null = null;
+    private bugFinderLLM: BugFinderLLM | null = null;
 
     // Concurrency tracking
     private assistCancellationToken: AbortController | null = null;
@@ -120,6 +121,7 @@ export class IntelligenceEngine extends EventEmitter {
         this.whatToAnswerLLM = new WhatToAnswerLLM(this.llmHelper);
         this.codeHintLLM = new CodeHintLLM(this.llmHelper);
         this.brainstormLLM = new BrainstormLLM(this.llmHelper);
+        this.bugFinderLLM = new BugFinderLLM(this.llmHelper);
 
         // Sync RecapLLM reference to SessionTracker for epoch compaction
         this.session.setRecapLLM(this.recapLLM);
@@ -797,6 +799,81 @@ export class IntelligenceEngine extends EventEmitter {
 
         } catch (error) {
             this.emit('error', error as Error, 'brainstorm');
+            this.setMode('idle');
+            return null;
+        }
+    }
+
+    /**
+     * MODE 9: Bug Finder (Minimal diff between user code and correct solution)
+     */
+    async runBugFinder(imagePaths?: string[], problemStatement?: string): Promise<string | null> {
+        if (this.assistCancellationToken) {
+            this.assistCancellationToken.abort();
+            this.assistCancellationToken = null;
+        }
+
+        this.setMode('bug_finder');
+
+        try {
+            if (!this.bugFinderLLM) {
+                this.setMode('idle');
+                return "Please configure your API Keys in Settings to use this feature.";
+            }
+
+            const sessionQuestion = this.session.getDetectedCodingQuestion();
+            const questionContext = problemStatement ?? sessionQuestion.question ?? null;
+            const questionSource = problemStatement ? 'screenshot' : sessionQuestion.source;
+            const transcriptContext = questionContext === null
+                ? this.session.getFormattedContext(180)
+                : null;
+
+            console.log(`[IntelligenceEngine] Bug finder — question source: ${questionContext ? (questionSource ?? 'passed') : 'none'}, images: ${imagePaths?.length ?? 0}`);
+
+            const generationId = ++this.currentGenerationId;
+            let fullResult = "";
+            const stream = this.bugFinderLLM.generateStream(
+                imagePaths,
+                questionContext ?? undefined,
+                questionSource,
+                transcriptContext ?? undefined
+            );
+            let streamAborted = false;
+
+            for await (const token of stream) {
+                if (this.currentGenerationId !== generationId) {
+                    console.log('[IntelligenceEngine] bug_finder stream aborted by new generation');
+                    await stream.return(undefined);
+                    streamAborted = true;
+                    break;
+                }
+                this.emit('suggested_answer_token', token, 'Bug Finder', 1.0);
+                fullResult += token;
+            }
+
+            if (streamAborted) {
+                this.setMode('idle');
+                return null;
+            }
+
+            if (!fullResult || fullResult.trim().length < 5) {
+                fullResult = "I couldn't detect any code in the screenshot. Try screenshotting your code editor directly.";
+            }
+
+            this.session.addAssistantMessage(fullResult);
+            this.session.pushUsage({
+                type: 'assist',
+                timestamp: Date.now(),
+                question: 'Bug Finder',
+                answer: fullResult
+            });
+
+            this.emit('suggested_answer', fullResult, 'Bug Finder', 1.0);
+            this.setMode('idle');
+            return fullResult;
+
+        } catch (error) {
+            this.emit('error', error as Error, 'bug_finder');
             this.setMode('idle');
             return null;
         }

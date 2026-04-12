@@ -4,6 +4,7 @@
 export { AnswerLLM } from "./AnswerLLM";
 export { AssistLLM } from "./AssistLLM";
 export { BrainstormLLM } from "./BrainstormLLM";
+export { BugFinderLLM } from "./BugFinderLLM";
 export { ClarifyLLM } from "./ClarifyLLM";
 export { CodeHintLLM } from "./CodeHintLLM";
 export { FollowUpLLM } from "./FollowUpLLM";
@@ -45,5 +46,7 @@ export {
     GROQ_FOLLOWUP_EMAIL_PROMPT,
     CODE_HINT_PROMPT,
     buildCodeHintMessage,
-    BRAINSTORM_MODE_PROMPT
+    BRAINSTORM_MODE_PROMPT,
+    BUG_FINDER_PROMPT,
+    buildBugFinderMessage
 } from "./prompts";

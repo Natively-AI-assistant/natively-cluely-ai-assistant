@@ -26,7 +26,8 @@ import {
     Code,
     Copy,
     Check,
-    PointerOff
+    PointerOff,
+    Bug
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -966,6 +967,40 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     };
 
 
+    const handleBugFinder = async () => {
+        setIsExpanded(true);
+        setIsProcessing(true);
+        analytics.trackCommandExecuted('bug_finder');
+
+        const currentAttachments = attachedContext;
+        if (currentAttachments.length > 0) {
+            setAttachedContext([]);
+            setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                role: 'user',
+                text: 'Find bugs in this code',
+                hasScreenshot: true,
+                screenshotPreview: currentAttachments[0].preview
+            }]);
+            setTimeout(() => {
+                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }, 50);
+        }
+
+        try {
+            await window.electronAPI.generateBugFinder(currentAttachments.length > 0 ? currentAttachments.map(s => s.path) : undefined);
+        } catch (err) {
+            setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                role: 'system',
+                text: `Error: ${err}`
+            }]);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+
     // Setup Streaming Listeners
     useEffect(() => {
         const cleanups: (() => void)[] = [];
@@ -1668,7 +1703,8 @@ Provide only the answer, nothing else.`;
         handleAnswerNow,
         handleClarify,
         handleCodeHint,
-        handleBrainstorm
+        handleBrainstorm,
+        handleBugFinder
     });
 
     // Update ref on every render so the event listener always access latest state/props
@@ -1680,7 +1716,8 @@ Provide only the answer, nothing else.`;
         handleAnswerNow,
         handleClarify,
         handleCodeHint,
-        handleBrainstorm
+        handleBrainstorm,
+        handleBugFinder
     };
 
     useEffect(() => {
@@ -2129,6 +2166,9 @@ Provide only the answer, nothing else.`;
                                 </button>
                                 <button onClick={handleFollowUpQuestions} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
                                     <HelpCircle className="w-3 h-3 opacity-70" /> Follow Up Question
+                                </button>
+                                <button onClick={handleBugFinder} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
+                                    <Bug className="w-3 h-3 opacity-70" /> Bug Finder
                                 </button>
                                 <button
                                     onClick={handleAnswerNow}

@@ -127,7 +127,7 @@ export class WindowHelper {
     const workArea = primaryDisplay.workArea
 
     // Fixed dimensions per user request
-    const width = 1200;
+    const width = 1400;
     const height = 800;
 
     // Calculate centered X, and top-centered Y (5% from top)

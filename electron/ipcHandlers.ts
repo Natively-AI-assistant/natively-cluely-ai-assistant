@@ -2178,6 +2178,26 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle("generate-bug-finder", async (_, imagePaths?: string[], problemStatement?: string) => {
+    try {
+      const resolvedImagePaths: string[] =
+        imagePaths && imagePaths.length > 0
+          ? imagePaths
+          : appState.getScreenshotQueue();
+
+      console.log(`[IPC] generate-bug-finder: using ${resolvedImagePaths.length} image(s) (${imagePaths?.length ? 'explicit' : 'queue fallback'})`);
+
+      const intelligenceManager = appState.getIntelligenceManager();
+      const result = await intelligenceManager.runBugFinder(
+        resolvedImagePaths.length > 0 ? resolvedImagePaths : undefined,
+        problemStatement
+      );
+      return { result };
+    } catch (error: any) {
+      throw error;
+    }
+  });
+
   // Dynamic Action Button Mode (Recap vs Brainstorm)
   safeHandle("get-action-button-mode", () => {
     const { SettingsManager } = require('./services/SettingsManager');
