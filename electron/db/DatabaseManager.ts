@@ -626,8 +626,10 @@ export class DatabaseManager {
         if (!this.db) return;
 
         const createdAt = new Date(startTimeMs).toISOString();
-        const title = metadata?.title || 'Live Meeting';
-        const source = metadata?.source || 'manual';
+        const insertTitle = metadata?.title || 'Live Meeting';
+        const insertSource = metadata?.source || 'manual';
+        const updateTitle = metadata?.title || null;
+        const updateSource = metadata?.source || null;
         const summaryJson = JSON.stringify({
             legacySummary: '',
             detailedSummary: { actionItems: [], keyPoints: [] }
@@ -640,19 +642,21 @@ export class DatabaseManager {
                 VALUES (?, ?, ?, 0, ?, ?, ?, ?, 0)
                 ON CONFLICT(id) DO UPDATE SET
                     start_time = excluded.start_time,
-                    title = COALESCE(excluded.title, title),
+                    title = COALESCE(?, title),
                     calendar_event_id = COALESCE(excluded.calendar_event_id, calendar_event_id),
-                    source = COALESCE(excluded.source, source),
+                    source = COALESCE(?, source),
                     is_processed = 0
             `);
             upsert.run(
                 meetingId,
-                title,
+                insertTitle,
                 startTimeMs,
                 summaryJson,
                 createdAt,
                 metadata?.calendarEventId || null,
-                source,
+                insertSource,
+                updateTitle,
+                updateSource,
             );
         } catch (error) {
             console.error(`[DatabaseManager] Failed to ensure live meeting ${meetingId}:`, error);
