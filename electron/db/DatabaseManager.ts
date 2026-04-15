@@ -631,12 +631,18 @@ export class DatabaseManager {
         });
 
         try {
-            const insert = this.db.prepare(`
-                INSERT OR IGNORE INTO meetings
+            const upsert = this.db.prepare(`
+                INSERT INTO meetings
                     (id, title, start_time, duration_ms, summary_json, created_at, calendar_event_id, source, is_processed)
                 VALUES (?, ?, ?, 0, ?, ?, ?, ?, 0)
+                ON CONFLICT(id) DO UPDATE SET
+                    start_time = excluded.start_time,
+                    title = COALESCE(excluded.title, title),
+                    calendar_event_id = COALESCE(excluded.calendar_event_id, calendar_event_id),
+                    source = COALESCE(excluded.source, source),
+                    is_processed = 0
             `);
-            insert.run(
+            upsert.run(
                 meetingId,
                 title,
                 startTimeMs,
@@ -644,24 +650,6 @@ export class DatabaseManager {
                 createdAt,
                 metadata?.calendarEventId || null,
                 source,
-            );
-
-            const update = this.db.prepare(`
-                UPDATE meetings
-                SET
-                    start_time = ?,
-                    title = COALESCE(?, title),
-                    calendar_event_id = COALESCE(?, calendar_event_id),
-                    source = COALESCE(?, source),
-                    is_processed = 0
-                WHERE id = ?
-            `);
-            update.run(
-                startTimeMs,
-                metadata?.title || null,
-                metadata?.calendarEventId || null,
-                metadata?.source || null,
-                meetingId,
             );
         } catch (error) {
             console.error(`[DatabaseManager] Failed to ensure live meeting ${meetingId}:`, error);
