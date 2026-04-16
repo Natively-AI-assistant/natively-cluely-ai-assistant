@@ -1562,10 +1562,10 @@ export class AppState {
           }
 
           // Reconcile chunks from canonical persisted transcript.
+          await this.processCompletedMeetingForRAG(meetingId);
           if (ragManager) {
             ragManager.deleteMeetingData(meetingId);
           }
-          await this.processCompletedMeetingForRAG(meetingId);
         } catch (err) {
           console.error('[Main] Background post-meeting RAG processing failed:', err);
         }
