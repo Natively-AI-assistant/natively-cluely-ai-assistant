@@ -30,7 +30,7 @@ export class MeetingPersistence {
         }
 
         // 0. Force-save any pending interim transcript
-        this.session.flushInterimTranscript();
+        const flushedInterim = this.session.flushInterimTranscript();
 
         // 1. Snapshot valid data BEFORE resetting
         const durationMs = Date.now() - this.session.getSessionStartTime();
@@ -38,6 +38,15 @@ export class MeetingPersistence {
             console.log("Meeting too short, ignoring.");
             this.session.reset();
             return null;
+        }
+
+        if (flushedInterim) {
+            DatabaseManager.getInstance().appendTranscriptSegment(meetingId, {
+                speaker: flushedInterim.speaker,
+                text: flushedInterim.text,
+                timestamp: flushedInterim.timestamp,
+            });
+            DatabaseManager.getInstance().flushPendingTranscriptSegments();
         }
 
         const snapshot = {
