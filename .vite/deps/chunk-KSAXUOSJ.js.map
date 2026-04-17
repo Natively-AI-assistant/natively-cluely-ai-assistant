@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/refractor/lang/hsts.js"],
+  "sourcesContent": ["'use strict'\n\nmodule.exports = hsts\nhsts.displayName = 'hsts'\nhsts.aliases = []\nfunction hsts(Prism) {\n  /**\n   * Original by Scott Helme.\n   *\n   * Reference: https://scotthelme.co.uk/hsts-cheat-sheet/\n   */\n  Prism.languages.hsts = {\n    directive: {\n      pattern: /\\b(?:includeSubDomains|max-age|preload)(?=[\\s;=]|$)/i,\n      alias: 'property'\n    },\n    operator: /=/,\n    punctuation: /;/\n  }\n}\n"],
+  "mappings": ";;;;;AAAA;AAAA;AAEA,WAAO,UAAU;AACjB,SAAK,cAAc;AACnB,SAAK,UAAU,CAAC;AAChB,aAAS,KAAK,OAAO;AAMnB,YAAM,UAAU,OAAO;AAAA,QACrB,WAAW;AAAA,UACT,SAAS;AAAA,UACT,OAAO;AAAA,QACT;AAAA,QACA,UAAU;AAAA,QACV,aAAa;AAAA,MACf;AAAA,IACF;AAAA;AAAA;",
+  "names": []
+}

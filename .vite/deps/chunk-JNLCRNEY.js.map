@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/refractor/lang/yang.js"],
+  "sourcesContent": ["'use strict'\n\nmodule.exports = yang\nyang.displayName = 'yang'\nyang.aliases = []\nfunction yang(Prism) {\n  Prism.languages.yang = {\n    // https://tools.ietf.org/html/rfc6020#page-34\n    // http://www.yang-central.org/twiki/bin/view/Main/YangExamples\n    comment: /\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*/,\n    string: {\n      pattern: /\"(?:[^\\\\\"]|\\\\.)*\"|'[^']*'/,\n      greedy: true\n    },\n    keyword: {\n      pattern: /(^|[{};\\r\\n][ \\t]*)[a-z_][\\w.-]*/i,\n      lookbehind: true\n    },\n    namespace: {\n      pattern: /(\\s)[a-z_][\\w.-]*(?=:)/i,\n      lookbehind: true\n    },\n    boolean: /\\b(?:false|true)\\b/,\n    operator: /\\+/,\n    punctuation: /[{};:]/\n  }\n}\n"],
+  "mappings": ";;;;;AAAA;AAAA;AAEA,WAAO,UAAU;AACjB,SAAK,cAAc;AACnB,SAAK,UAAU,CAAC;AAChB,aAAS,KAAK,OAAO;AACnB,YAAM,UAAU,OAAO;AAAA;AAAA;AAAA,QAGrB,SAAS;AAAA,QACT,QAAQ;AAAA,UACN,SAAS;AAAA,UACT,QAAQ;AAAA,QACV;AAAA,QACA,SAAS;AAAA,UACP,SAAS;AAAA,UACT,YAAY;AAAA,QACd;AAAA,QACA,WAAW;AAAA,UACT,SAAS;AAAA,UACT,YAAY;AAAA,QACd;AAAA,QACA,SAAS;AAAA,QACT,UAAU;AAAA,QACV,aAAa;AAAA,MACf;AAAA,IACF;AAAA;AAAA;",
+  "names": []
+}

@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/refractor/lang/roboconf.js"],
+  "sourcesContent": ["'use strict'\n\nmodule.exports = roboconf\nroboconf.displayName = 'roboconf'\nroboconf.aliases = []\nfunction roboconf(Prism) {\n  Prism.languages.roboconf = {\n    comment: /#.*/,\n    keyword: {\n      pattern:\n        /(^|\\s)(?:(?:external|import)\\b|(?:facet|instance of)(?=[ \\t]+[\\w-]+[ \\t]*\\{))/,\n      lookbehind: true\n    },\n    component: {\n      pattern: /[\\w-]+(?=[ \\t]*\\{)/,\n      alias: 'variable'\n    },\n    property: /[\\w.-]+(?=[ \\t]*:)/,\n    value: {\n      pattern: /(=[ \\t]*(?![ \\t]))[^,;]+/,\n      lookbehind: true,\n      alias: 'attr-value'\n    },\n    optional: {\n      pattern: /\\(optional\\)/,\n      alias: 'builtin'\n    },\n    wildcard: {\n      pattern: /(\\.)\\*/,\n      lookbehind: true,\n      alias: 'operator'\n    },\n    punctuation: /[{},.;:=]/\n  }\n}\n"],
+  "mappings": ";;;;;AAAA;AAAA;AAEA,WAAO,UAAU;AACjB,aAAS,cAAc;AACvB,aAAS,UAAU,CAAC;AACpB,aAAS,SAAS,OAAO;AACvB,YAAM,UAAU,WAAW;AAAA,QACzB,SAAS;AAAA,QACT,SAAS;AAAA,UACP,SACE;AAAA,UACF,YAAY;AAAA,QACd;AAAA,QACA,WAAW;AAAA,UACT,SAAS;AAAA,UACT,OAAO;AAAA,QACT;AAAA,QACA,UAAU;AAAA,QACV,OAAO;AAAA,UACL,SAAS;AAAA,UACT,YAAY;AAAA,UACZ,OAAO;AAAA,QACT;AAAA,QACA,UAAU;AAAA,UACR,SAAS;AAAA,UACT,OAAO;AAAA,QACT;AAAA,QACA,UAAU;AAAA,UACR,SAAS;AAAA,UACT,YAAY;AAAA,UACZ,OAAO;AAAA,QACT;AAAA,QACA,aAAa;AAAA,MACf;AAAA,IACF;AAAA;AAAA;",
+  "names": []
+}

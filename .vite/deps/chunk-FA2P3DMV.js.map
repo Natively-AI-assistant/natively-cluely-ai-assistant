@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/refractor/lang/tap.js"],
+  "sourcesContent": ["'use strict'\nvar refractorYaml = require('./yaml.js')\nmodule.exports = tap\ntap.displayName = 'tap'\ntap.aliases = []\nfunction tap(Prism) {\n  Prism.register(refractorYaml)\n  // https://en.wikipedia.org/wiki/Test_Anything_Protocol\n  Prism.languages.tap = {\n    fail: /not ok[^#{\\n\\r]*/,\n    pass: /ok[^#{\\n\\r]*/,\n    pragma: /pragma [+-][a-z]+/,\n    bailout: /bail out!.*/i,\n    version: /TAP version \\d+/i,\n    plan: /\\b\\d+\\.\\.\\d+(?: +#.*)?/,\n    subtest: {\n      pattern: /# Subtest(?:: .*)?/,\n      greedy: true\n    },\n    punctuation: /[{}]/,\n    directive: /#.*/,\n    yamlish: {\n      pattern: /(^[ \\t]*)---[\\s\\S]*?[\\r\\n][ \\t]*\\.\\.\\.$/m,\n      lookbehind: true,\n      inside: Prism.languages.yaml,\n      alias: 'language-yaml'\n    }\n  }\n}\n"],
+  "mappings": ";;;;;;;;AAAA;AAAA;AACA,QAAI,gBAAgB;AACpB,WAAO,UAAU;AACjB,QAAI,cAAc;AAClB,QAAI,UAAU,CAAC;AACf,aAAS,IAAI,OAAO;AAClB,YAAM,SAAS,aAAa;AAE5B,YAAM,UAAU,MAAM;AAAA,QACpB,MAAM;AAAA,QACN,MAAM;AAAA,QACN,QAAQ;AAAA,QACR,SAAS;AAAA,QACT,SAAS;AAAA,QACT,MAAM;AAAA,QACN,SAAS;AAAA,UACP,SAAS;AAAA,UACT,QAAQ;AAAA,QACV;AAAA,QACA,aAAa;AAAA,QACb,WAAW;AAAA,QACX,SAAS;AAAA,UACP,SAAS;AAAA,UACT,YAAY;AAAA,UACZ,QAAQ,MAAM,UAAU;AAAA,UACxB,OAAO;AAAA,QACT;AAAA,MACF;AAAA,IACF;AAAA;AAAA;",
+  "names": []
+}

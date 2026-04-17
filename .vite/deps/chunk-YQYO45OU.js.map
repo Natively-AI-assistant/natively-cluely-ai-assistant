@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/refractor/lang/racket.js"],
+  "sourcesContent": ["'use strict'\nvar refractorScheme = require('./scheme.js')\nmodule.exports = racket\nracket.displayName = 'racket'\nracket.aliases = ['rkt']\nfunction racket(Prism) {\n  Prism.register(refractorScheme)\n  Prism.languages.racket = Prism.languages.extend('scheme', {\n    'lambda-parameter': {\n      // the racket lambda syntax is a lot more complex, so we won't even attempt to capture it.\n      // this will just prevent false positives of the `function` pattern\n      pattern: /([(\\[]lambda\\s+[(\\[])[^()\\[\\]'\\s]+/,\n      lookbehind: true\n    }\n  })\n  Prism.languages.insertBefore('racket', 'string', {\n    lang: {\n      pattern: /^#lang.+/m,\n      greedy: true,\n      alias: 'keyword'\n    }\n  })\n  Prism.languages.rkt = Prism.languages.racket\n}\n"],
+  "mappings": ";;;;;;;;AAAA;AAAA;AACA,QAAI,kBAAkB;AACtB,WAAO,UAAU;AACjB,WAAO,cAAc;AACrB,WAAO,UAAU,CAAC,KAAK;AACvB,aAAS,OAAO,OAAO;AACrB,YAAM,SAAS,eAAe;AAC9B,YAAM,UAAU,SAAS,MAAM,UAAU,OAAO,UAAU;AAAA,QACxD,oBAAoB;AAAA;AAAA;AAAA,UAGlB,SAAS;AAAA,UACT,YAAY;AAAA,QACd;AAAA,MACF,CAAC;AACD,YAAM,UAAU,aAAa,UAAU,UAAU;AAAA,QAC/C,MAAM;AAAA,UACJ,SAAS;AAAA,UACT,QAAQ;AAAA,UACR,OAAO;AAAA,QACT;AAAA,MACF,CAAC;AACD,YAAM,UAAU,MAAM,MAAM,UAAU;AAAA,IACxC;AAAA;AAAA;",
+  "names": []
+}

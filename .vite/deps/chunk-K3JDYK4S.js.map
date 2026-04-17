@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/highlight.js/lib/languages/erb.js"],
+  "sourcesContent": ["/*\nLanguage: ERB (Embedded Ruby)\nRequires: xml.js, ruby.js\nAuthor: Lucas Mazza <lucastmazza@gmail.com>\nContributors: Kassio Borges <kassioborgesm@gmail.com>\nDescription: \"Bridge\" language defining fragments of Ruby in HTML within <% .. %>\nWebsite: https://ruby-doc.org/stdlib-2.6.5/libdoc/erb/rdoc/ERB.html\nCategory: template\n*/\n\n/** @type LanguageFn */\nfunction erb(hljs) {\n  return {\n    name: 'ERB',\n    subLanguage: 'xml',\n    contains: [\n      hljs.COMMENT('<%#', '%>'),\n      {\n        begin: '<%[%=-]?',\n        end: '[%-]?%>',\n        subLanguage: 'ruby',\n        excludeBegin: true,\n        excludeEnd: true\n      }\n    ]\n  };\n}\n\nmodule.exports = erb;\n"],
+  "mappings": ";;;;;AAAA;AAAA;AAWA,aAAS,IAAI,MAAM;AACjB,aAAO;AAAA,QACL,MAAM;AAAA,QACN,aAAa;AAAA,QACb,UAAU;AAAA,UACR,KAAK,QAAQ,OAAO,IAAI;AAAA,UACxB;AAAA,YACE,OAAO;AAAA,YACP,KAAK;AAAA,YACL,aAAa;AAAA,YACb,cAAc;AAAA,YACd,YAAY;AAAA,UACd;AAAA,QACF;AAAA,MACF;AAAA,IACF;AAEA,WAAO,UAAU;AAAA;AAAA;",
+  "names": []
+}

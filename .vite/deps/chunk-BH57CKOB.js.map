@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/refractor/lang/editorconfig.js"],
+  "sourcesContent": ["'use strict'\n\nmodule.exports = editorconfig\neditorconfig.displayName = 'editorconfig'\neditorconfig.aliases = []\nfunction editorconfig(Prism) {\n  Prism.languages.editorconfig = {\n    // https://editorconfig-specification.readthedocs.io\n    comment: /[;#].*/,\n    section: {\n      pattern: /(^[ \\t]*)\\[.+\\]/m,\n      lookbehind: true,\n      alias: 'selector',\n      inside: {\n        regex: /\\\\\\\\[\\[\\]{},!?.*]/,\n        // Escape special characters with '\\\\'\n        operator: /[!?]|\\.\\.|\\*{1,2}/,\n        punctuation: /[\\[\\]{},]/\n      }\n    },\n    key: {\n      pattern: /(^[ \\t]*)[^\\s=]+(?=[ \\t]*=)/m,\n      lookbehind: true,\n      alias: 'attr-name'\n    },\n    value: {\n      pattern: /=.*/,\n      alias: 'attr-value',\n      inside: {\n        punctuation: /^=/\n      }\n    }\n  }\n}\n"],
+  "mappings": ";;;;;AAAA;AAAA;AAEA,WAAO,UAAU;AACjB,iBAAa,cAAc;AAC3B,iBAAa,UAAU,CAAC;AACxB,aAAS,aAAa,OAAO;AAC3B,YAAM,UAAU,eAAe;AAAA;AAAA,QAE7B,SAAS;AAAA,QACT,SAAS;AAAA,UACP,SAAS;AAAA,UACT,YAAY;AAAA,UACZ,OAAO;AAAA,UACP,QAAQ;AAAA,YACN,OAAO;AAAA;AAAA,YAEP,UAAU;AAAA,YACV,aAAa;AAAA,UACf;AAAA,QACF;AAAA,QACA,KAAK;AAAA,UACH,SAAS;AAAA,UACT,YAAY;AAAA,UACZ,OAAO;AAAA,QACT;AAAA,QACA,OAAO;AAAA,UACL,SAAS;AAAA,UACT,OAAO;AAAA,UACP,QAAQ;AAAA,YACN,aAAa;AAAA,UACf;AAAA,QACF;AAAA,MACF;AAAA,IACF;AAAA;AAAA;",
+  "names": []
+}

@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/refractor/lang/properties.js"],
+  "sourcesContent": ["'use strict'\n\nmodule.exports = properties\nproperties.displayName = 'properties'\nproperties.aliases = []\nfunction properties(Prism) {\n  Prism.languages.properties = {\n    comment: /^[ \\t]*[#!].*$/m,\n    'attr-value': {\n      pattern:\n        /(^[ \\t]*(?:\\\\(?:\\r\\n|[\\s\\S])|[^\\\\\\s:=])+(?: *[=:] *(?! )| ))(?:\\\\(?:\\r\\n|[\\s\\S])|[^\\\\\\r\\n])+/m,\n      lookbehind: true\n    },\n    'attr-name': /^[ \\t]*(?:\\\\(?:\\r\\n|[\\s\\S])|[^\\\\\\s:=])+(?= *[=:]| )/m,\n    punctuation: /[=:]/\n  }\n}\n"],
+  "mappings": ";;;;;AAAA;AAAA;AAEA,WAAO,UAAU;AACjB,eAAW,cAAc;AACzB,eAAW,UAAU,CAAC;AACtB,aAAS,WAAW,OAAO;AACzB,YAAM,UAAU,aAAa;AAAA,QAC3B,SAAS;AAAA,QACT,cAAc;AAAA,UACZ,SACE;AAAA,UACF,YAAY;AAAA,QACd;AAAA,QACA,aAAa;AAAA,QACb,aAAa;AAAA,MACf;AAAA,IACF;AAAA;AAAA;",
+  "names": []
+}

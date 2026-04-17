@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/highlight.js/lib/languages/python-repl.js"],
+  "sourcesContent": ["/*\nLanguage: Python REPL\nRequires: python.js\nAuthor: Josh Goebel <hello@joshgoebel.com>\nCategory: common\n*/\n\nfunction pythonRepl(hljs) {\n  return {\n    aliases: [ 'pycon' ],\n    contains: [\n      {\n        className: 'meta',\n        starts: {\n          // a space separates the REPL prefix from the actual code\n          // this is purely for cleaner HTML output\n          end: / |$/,\n          starts: {\n            end: '$',\n            subLanguage: 'python'\n          }\n        },\n        variants: [\n          {\n            begin: /^>>>(?=[ ]|$)/\n          },\n          {\n            begin: /^\\.\\.\\.(?=[ ]|$)/\n          }\n        ]\n      }\n    ]\n  };\n}\n\nmodule.exports = pythonRepl;\n"],
+  "mappings": ";;;;;AAAA;AAAA;AAOA,aAAS,WAAW,MAAM;AACxB,aAAO;AAAA,QACL,SAAS,CAAE,OAAQ;AAAA,QACnB,UAAU;AAAA,UACR;AAAA,YACE,WAAW;AAAA,YACX,QAAQ;AAAA;AAAA;AAAA,cAGN,KAAK;AAAA,cACL,QAAQ;AAAA,gBACN,KAAK;AAAA,gBACL,aAAa;AAAA,cACf;AAAA,YACF;AAAA,YACA,UAAU;AAAA,cACR;AAAA,gBACE,OAAO;AAAA,cACT;AAAA,cACA;AAAA,gBACE,OAAO;AAAA,cACT;AAAA,YACF;AAAA,UACF;AAAA,QACF;AAAA,MACF;AAAA,IACF;AAEA,WAAO,UAAU;AAAA;AAAA;",
+  "names": []
+}

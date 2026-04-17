@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/refractor/lang/gcode.js"],
+  "sourcesContent": ["'use strict'\n\nmodule.exports = gcode\ngcode.displayName = 'gcode'\ngcode.aliases = []\nfunction gcode(Prism) {\n  Prism.languages.gcode = {\n    comment: /;.*|\\B\\(.*?\\)\\B/,\n    string: {\n      pattern: /\"(?:\"\"|[^\"])*\"/,\n      greedy: true\n    },\n    keyword: /\\b[GM]\\d+(?:\\.\\d+)?\\b/,\n    property: /\\b[A-Z]/,\n    checksum: {\n      pattern: /(\\*)\\d+/,\n      lookbehind: true,\n      alias: 'number'\n    },\n    // T0:0:0\n    punctuation: /[:*]/\n  }\n}\n"],
+  "mappings": ";;;;;AAAA;AAAA;AAEA,WAAO,UAAU;AACjB,UAAM,cAAc;AACpB,UAAM,UAAU,CAAC;AACjB,aAAS,MAAM,OAAO;AACpB,YAAM,UAAU,QAAQ;AAAA,QACtB,SAAS;AAAA,QACT,QAAQ;AAAA,UACN,SAAS;AAAA,UACT,QAAQ;AAAA,QACV;AAAA,QACA,SAAS;AAAA,QACT,UAAU;AAAA,QACV,UAAU;AAAA,UACR,SAAS;AAAA,UACT,YAAY;AAAA,UACZ,OAAO;AAAA,QACT;AAAA;AAAA,QAEA,aAAa;AAAA,MACf;AAAA,IACF;AAAA;AAAA;",
+  "names": []
+}

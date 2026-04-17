@@ -264,7 +264,7 @@ async function getDisplaysIntersectingSelection(
     captures.push({
       display,
       intersection,
-      imageBuffer: cropped.toPNG()
+      imageBuffer: cropped.toJPEG(85)
     });
   }
   
@@ -357,7 +357,7 @@ async function stitchImages(captures: DisplayCapture[], selection: Electron.Rect
       // Resize the capture to target dimensions to normalize DPI scales
       const resizedBuffer = await sharp(capture.imageBuffer)
         .resize(targetWidth, targetHeight, { fit: 'fill' })
-        .png()
+        .jpeg({ quality: 85 })
         .toBuffer();
       
       composites.push({
@@ -380,12 +380,12 @@ async function stitchImages(captures: DisplayCapture[], selection: Electron.Rect
       create: {
         width: outputWidth,
         height: outputHeight,
-        channels: 4,
-        background: { r: 0, g: 0, b: 0, alpha: 0 }
+        channels: 3,
+        background: { r: 0, g: 0, b: 0 }
       }
     })
     .composite(composites)
-    .png()
+    .jpeg({ quality: 85 })
     .toBuffer();
   } catch (error) {
     console.error('[ScreenshotHelper] Error creating stitched image:', error);
@@ -560,7 +560,7 @@ export class ScreenshotHelper {
     }
 
     try {
-      await fs.promises.writeFile(outputPath, image.toPNG());
+      await fs.promises.writeFile(outputPath, image.toJPEG(85));
       console.log(`[ScreenshotHelper] Screenshot saved to: ${outputPath}`);
     } catch (writeError) {
       console.error('[ScreenshotHelper] Failed to write screenshot to disk:', writeError);
@@ -608,7 +608,7 @@ export class ScreenshotHelper {
       let screenshotPath = ""
 
       if (this.view === "queue") {
-        screenshotPath = path.join(this.screenshotDir, `${uuidv4()}.png`)
+        screenshotPath = path.join(this.screenshotDir, `${uuidv4()}.jpg`)
         console.log(`[ScreenshotHelper] Using queue directory: ${screenshotPath}`);
         if (process.platform === 'darwin') {
           await this.captureWithDesktopCapturer(screenshotPath, undefined, preferredDisplay);
@@ -631,7 +631,7 @@ export class ScreenshotHelper {
           }
         }
       } else {
-        screenshotPath = path.join(this.extraScreenshotDir, `${uuidv4()}.png`)
+        screenshotPath = path.join(this.extraScreenshotDir, `${uuidv4()}.jpg`)
         console.log(`[ScreenshotHelper] Using extra screenshots directory: ${screenshotPath}`);
         if (process.platform === 'darwin') {
           await this.captureWithDesktopCapturer(screenshotPath, undefined, preferredDisplay);
@@ -668,7 +668,7 @@ export class ScreenshotHelper {
       console.log('[ScreenshotHelper] Taking selective screenshot...');
       console.log(`[ScreenshotHelper] Capture area: ${captureArea ? JSON.stringify(captureArea) : 'user selection'}`);
 
-      const screenshotPath = path.join(this.screenshotDir, `selective-${uuidv4()}.png`)
+      const screenshotPath = path.join(this.screenshotDir, `selective-${uuidv4()}.jpg`)
 
       if ((process.platform === 'win32' || process.platform === 'darwin') && captureArea) {
         // Check if selection spans multiple displays
@@ -774,7 +774,8 @@ export class ScreenshotHelper {
           const stats = await fs.promises.stat(filepath)
           if (stats.size > 0) {
             const data = await fs.promises.readFile(filepath)
-            return `data:image/png;base64,${data.toString("base64")}`
+            const mimeType = filepath.endsWith('.jpg') || filepath.endsWith('.jpeg') ? 'image/jpeg' : 'image/png'
+            return `data:${mimeType};base64,${data.toString("base64")}`
           }
         }
       } catch (error) {

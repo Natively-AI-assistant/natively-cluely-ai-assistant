@@ -282,8 +282,8 @@ export class LLMHelper {
       let images: string[] | undefined;
       if (imagePath) {
         try {
-          const imageData = await fs.promises.readFile(imagePath);
-          images = [imageData.toString("base64")];
+          const { data } = await this.processImage(imagePath);
+          images = [data];
         } catch (e) {
           console.warn("[LLMHelper] callOllama: failed to read image, sending text only:", e);
         }
@@ -642,12 +642,26 @@ CRITICAL RULES:
 
 
   /**
-   * NEW: Helper to process image: resize to max 1536px and compress to JPEG 80%
-   * drastically reduces token usage and upload time.
+   * Helper to process image: resize to max 1536px and compress to JPEG 80%.
+   * Drastically reduces token usage and upload time.
+   *
+   * Smart fast-path: if the source file is already JPEG and ≤500 KB (typical
+   * for screenshots captured by the optimised ScreenshotHelper JPEG pipeline),
+   * skip the expensive sharp decode→resize→re-encode cycle entirely.
+   * This avoids double-compression quality loss and saves ~50–100 ms per image.
    */
-  private async processImage(path: string): Promise<{ mimeType: string, data: string }> {
+  private async processImage(imgPath: string): Promise<{ mimeType: string, data: string }> {
     try {
-      const imageBuffer = await fs.promises.readFile(path);
+      const imageBuffer = await fs.promises.readFile(imgPath);
+
+      // Fast-path: already-small JPEG — skip re-compression
+      const isJpeg = imgPath.endsWith('.jpg') || imgPath.endsWith('.jpeg');
+      if (isJpeg && imageBuffer.length <= 500 * 1024) {
+        return {
+          mimeType: "image/jpeg",
+          data: imageBuffer.toString("base64")
+        };
+      }
 
       // Resize and compress
       const processedBuffer = await sharp(imageBuffer)
@@ -667,9 +681,10 @@ CRITICAL RULES:
     } catch (error) {
       console.error("[LLMHelper] Failed to process image with sharp:", error);
       // Fallback to raw read if sharp fails
-      const data = await fs.promises.readFile(path);
+      const data = await fs.promises.readFile(imgPath);
+      const fallbackMime = imgPath.endsWith('.jpg') || imgPath.endsWith('.jpeg') ? 'image/jpeg' : 'image/png';
       return {
-        mimeType: "image/png",
+        mimeType: fallbackMime,
         data: data.toString("base64")
       };
     }
@@ -1320,11 +1335,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     if (imagePaths?.length) {
       const contentParts: any[] = [{ type: "text", text: userMessage }];
-      for (const p of imagePaths) {
-        if (fs.existsSync(p)) {
-          const imageData = await fs.promises.readFile(p);
-          contentParts.push({ type: "image_url", image_url: { url: `data:image/png;base64,${imageData.toString("base64")}` } });
-        }
+      const processed = await Promise.all(
+        imagePaths.filter(p => fs.existsSync(p)).map(p => this.processImage(p))
+      );
+      for (const { mimeType, data } of processed) {
+        contentParts.push({ type: "image_url", image_url: { url: `data:${mimeType};base64,${data}` } });
       }
       messages.push({ role: "user", content: contentParts });
     } else {
@@ -1358,8 +1373,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     let base64Image = "";
     if (imagePath) {
       try {
-        const imageData = await fs.promises.readFile(imagePath);
-        base64Image = imageData.toString("base64");
+        const { data } = await this.processImage(imagePath);
+        base64Image = data;
       } catch (e) {
         console.warn("[LLMHelper] chatWithCurl: failed to read image:", e);
       }
@@ -1421,18 +1436,18 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     const content: any[] = [];
     if (imagePaths?.length) {
-      for (const p of imagePaths) {
-        if (fs.existsSync(p)) {
-          const imageData = await fs.promises.readFile(p);
-          content.push({
-            type: "image",
-            source: {
-              type: "base64",
-              media_type: "image/png",
-              data: imageData.toString("base64")
-            }
-          });
-        }
+      const processed = await Promise.all(
+        imagePaths.filter(p => fs.existsSync(p)).map(p => this.processImage(p))
+      );
+      for (const { mimeType, data } of processed) {
+        content.push({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: mimeType,
+            data
+          }
+        });
       }
     }
     content.push({ type: "text", text: userMessage });
@@ -1471,8 +1486,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     let base64Image = "";
     if (imagePath) {
       try {
-        const imageData = await fs.promises.readFile(imagePath);
-        base64Image = imageData.toString("base64");
+        const { data } = await this.processImage(imagePath);
+        base64Image = data;
       } catch (e) {
         console.warn("Failed to read image for Custom Provider:", e);
       }
@@ -1602,16 +1617,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     if (imagePaths?.length) {
       const contents: any[] = [{ text: fullMessage }];
-      for (const p of imagePaths) {
-        if (fs.existsSync(p)) {
-          const imageData = await fs.promises.readFile(p);
-          contents.push({
-            inlineData: {
-              mimeType: "image/png",
-              data: imageData.toString("base64")
-            }
-          });
-        }
+      const processed = await Promise.all(
+        imagePaths.filter(p => fs.existsSync(p)).map(p => this.processImage(p))
+      );
+      for (const { mimeType, data } of processed) {
+        contents.push({ inlineData: { mimeType, data } });
       }
 
       // Use current model for multimodal (allows Pro fallback)
@@ -1647,11 +1657,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     }
 
     const contentParts: any[] = [{ type: "text", text: userMessage }];
-    for (const p of imagePaths) {
-      if (fs.existsSync(p)) {
-        const imageData = await fs.promises.readFile(p);
-        contentParts.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${imageData.toString("base64")}` } });
-      }
+    const processed = await Promise.all(
+      imagePaths.filter(p => fs.existsSync(p)).map(p => this.processImage(p))
+    );
+    for (const { mimeType, data } of processed) {
+      contentParts.push({ type: "image_url", image_url: { url: `data:${mimeType};base64,${data}` } });
     }
     messages.push({ role: "user", content: contentParts });
 
@@ -2318,11 +2328,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     // Attach images — the server routes image requests to the appropriate provider
     if (imagePaths?.length) {
       const images: { mime_type: string; data: string }[] = [];
-      for (const p of imagePaths) {
-        if (fs.existsSync(p)) {
-          const imageData = await fs.promises.readFile(p);
-          images.push({ mime_type: 'image/png', data: imageData.toString('base64') });
-        }
+      const processed = await Promise.all(
+        imagePaths.filter(p => fs.existsSync(p)).map(p => this.processImage(p))
+      );
+      for (const { mimeType, data } of processed) {
+        images.push({ mime_type: mimeType, data });
       }
       if (images.length) body.images = images;
     }
@@ -2518,11 +2528,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     }
 
     const contentParts: any[] = [{ type: "text", text: userMessage }];
-    for (const p of imagePaths) {
-      if (fs.existsSync(p)) {
-        const imageData = await fs.promises.readFile(p);
-        contentParts.push({ type: "image_url", image_url: { url: `data:image/png;base64,${imageData.toString("base64")}` } });
-      }
+    const processed = await Promise.all(
+      imagePaths.filter(p => fs.existsSync(p)).map(p => this.processImage(p))
+    );
+    for (const { mimeType, data } of processed) {
+      contentParts.push({ type: "image_url", image_url: { url: `data:${mimeType};base64,${data}` } });
     }
     messages.push({ role: "user", content: contentParts });
 
@@ -2551,18 +2561,18 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     const model = modelId || (this.isClaudeModel(this.currentModelId) ? this.currentModelId : CLAUDE_MODEL);
 
     const imageContentParts: any[] = [];
-    for (const p of imagePaths) {
-      if (fs.existsSync(p)) {
-        const imageData = await fs.promises.readFile(p);
-        imageContentParts.push({
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: "image/png",
-            data: imageData.toString("base64")
-          }
-        });
-      }
+    const processed = await Promise.all(
+      imagePaths.filter(p => fs.existsSync(p)).map(p => this.processImage(p))
+    );
+    for (const { mimeType, data } of processed) {
+      imageContentParts.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: mimeType,
+          data
+        }
+      });
     }
 
     const stream = await this.claudeClient.messages.stream({
@@ -2593,16 +2603,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     const contents: any[] = [{ text: fullMessage }];
     if (imagePaths?.length) {
-      for (const p of imagePaths) {
-        if (fs.existsSync(p)) {
-          const imageData = await fs.promises.readFile(p);
-          contents.push({
-            inlineData: {
-              mimeType: "image/png",
-              data: imageData.toString("base64")
-            }
-          });
-        }
+      const processed = await Promise.all(
+        imagePaths.filter(p => fs.existsSync(p)).map(p => this.processImage(p))
+      );
+      for (const { mimeType, data } of processed) {
+        contents.push({ inlineData: { mimeType, data } });
       }
     }
 
@@ -2662,16 +2667,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     const contents: any[] = [{ text: fullMessage }];
     if (imagePaths?.length) {
-      for (const p of imagePaths) {
-        if (fs.existsSync(p)) {
-          const imageData = await fs.promises.readFile(p);
-          contents.push({
-            inlineData: {
-              mimeType: "image/png",
-              data: imageData.toString("base64")
-            }
-          });
-        }
+      const processed = await Promise.all(
+        imagePaths.filter(p => fs.existsSync(p)).map(p => this.processImage(p))
+      );
+      for (const { mimeType, data } of processed) {
+        contents.push({ inlineData: { mimeType, data } });
       }
     }
 
@@ -2696,15 +2696,13 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     // Build optional images array — Ollama multimodal API accepts raw base64 strings (no data-URL prefix)
     let images: string[] | undefined;
     if (imagePaths?.length) {
-      const encoded: string[] = [];
-      for (const p of imagePaths) {
-        try {
-          const data = await fs.promises.readFile(p);
-          encoded.push(data.toString("base64"));
-        } catch (e) {
+      const processed = await Promise.all(
+        imagePaths.filter(p => fs.existsSync(p)).map(p => this.processImage(p).catch(e => {
           console.warn("[LLMHelper] streamWithOllama: failed to read image, skipping:", p, e);
-        }
-      }
+          return null;
+        }))
+      );
+      const encoded = processed.filter(p => p !== null).map(p => p!.data);
       if (encoded.length) images = encoded;
     }
 
@@ -2764,8 +2762,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (imagePaths?.length) {
       try {
         // Use the first image for custom providers (they typically only support one)
-        const data = await fs.promises.readFile(imagePaths[0]);
-        base64Image = data.toString("base64");
+        const { data } = await this.processImage(imagePaths[0]);
+        base64Image = data;
       } catch (e) { }
     }
 

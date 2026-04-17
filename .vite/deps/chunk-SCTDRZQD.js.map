@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/refractor/lang/brainfuck.js"],
+  "sourcesContent": ["'use strict'\n\nmodule.exports = brainfuck\nbrainfuck.displayName = 'brainfuck'\nbrainfuck.aliases = []\nfunction brainfuck(Prism) {\n  Prism.languages.brainfuck = {\n    pointer: {\n      pattern: /<|>/,\n      alias: 'keyword'\n    },\n    increment: {\n      pattern: /\\+/,\n      alias: 'inserted'\n    },\n    decrement: {\n      pattern: /-/,\n      alias: 'deleted'\n    },\n    branching: {\n      pattern: /\\[|\\]/,\n      alias: 'important'\n    },\n    operator: /[.,]/,\n    comment: /\\S+/\n  }\n}\n"],
+  "mappings": ";;;;;AAAA;AAAA;AAEA,WAAO,UAAU;AACjB,cAAU,cAAc;AACxB,cAAU,UAAU,CAAC;AACrB,aAAS,UAAU,OAAO;AACxB,YAAM,UAAU,YAAY;AAAA,QAC1B,SAAS;AAAA,UACP,SAAS;AAAA,UACT,OAAO;AAAA,QACT;AAAA,QACA,WAAW;AAAA,UACT,SAAS;AAAA,UACT,OAAO;AAAA,QACT;AAAA,QACA,WAAW;AAAA,UACT,SAAS;AAAA,UACT,OAAO;AAAA,QACT;AAAA,QACA,WAAW;AAAA,UACT,SAAS;AAAA,UACT,OAAO;AAAA,QACT;AAAA,QACA,UAAU;AAAA,QACV,SAAS;AAAA,MACX;AAAA,IACF;AAAA;AAAA;",
+  "names": []
+}

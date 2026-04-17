@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/refractor/lang/bnf.js"],
+  "sourcesContent": ["'use strict'\n\nmodule.exports = bnf\nbnf.displayName = 'bnf'\nbnf.aliases = ['rbnf']\nfunction bnf(Prism) {\n  Prism.languages.bnf = {\n    string: {\n      pattern: /\"[^\\r\\n\"]*\"|'[^\\r\\n']*'/\n    },\n    definition: {\n      pattern: /<[^<>\\r\\n\\t]+>(?=\\s*::=)/,\n      alias: ['rule', 'keyword'],\n      inside: {\n        punctuation: /^<|>$/\n      }\n    },\n    rule: {\n      pattern: /<[^<>\\r\\n\\t]+>/,\n      inside: {\n        punctuation: /^<|>$/\n      }\n    },\n    operator: /::=|[|()[\\]{}*+?]|\\.{3}/\n  }\n  Prism.languages.rbnf = Prism.languages.bnf\n}\n"],
+  "mappings": ";;;;;AAAA;AAAA;AAEA,WAAO,UAAU;AACjB,QAAI,cAAc;AAClB,QAAI,UAAU,CAAC,MAAM;AACrB,aAAS,IAAI,OAAO;AAClB,YAAM,UAAU,MAAM;AAAA,QACpB,QAAQ;AAAA,UACN,SAAS;AAAA,QACX;AAAA,QACA,YAAY;AAAA,UACV,SAAS;AAAA,UACT,OAAO,CAAC,QAAQ,SAAS;AAAA,UACzB,QAAQ;AAAA,YACN,aAAa;AAAA,UACf;AAAA,QACF;AAAA,QACA,MAAM;AAAA,UACJ,SAAS;AAAA,UACT,QAAQ;AAAA,YACN,aAAa;AAAA,UACf;AAAA,QACF;AAAA,QACA,UAAU;AAAA,MACZ;AACA,YAAM,UAAU,OAAO,MAAM,UAAU;AAAA,IACzC;AAAA;AAAA;",
+  "names": []
+}

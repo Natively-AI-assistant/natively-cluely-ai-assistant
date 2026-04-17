@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/refractor/lang/jsonp.js"],
+  "sourcesContent": ["'use strict'\nvar refractorJson = require('./json.js')\nmodule.exports = jsonp\njsonp.displayName = 'jsonp'\njsonp.aliases = []\nfunction jsonp(Prism) {\n  Prism.register(refractorJson)\n  Prism.languages.jsonp = Prism.languages.extend('json', {\n    punctuation: /[{}[\\]();,.]/\n  })\n  Prism.languages.insertBefore('jsonp', 'punctuation', {\n    function: /(?!\\s)[_$a-zA-Z\\xA0-\\uFFFF](?:(?!\\s)[$\\w\\xA0-\\uFFFF])*(?=\\s*\\()/\n  })\n}\n"],
+  "mappings": ";;;;;;;;AAAA;AAAA;AACA,QAAI,gBAAgB;AACpB,WAAO,UAAU;AACjB,UAAM,cAAc;AACpB,UAAM,UAAU,CAAC;AACjB,aAAS,MAAM,OAAO;AACpB,YAAM,SAAS,aAAa;AAC5B,YAAM,UAAU,QAAQ,MAAM,UAAU,OAAO,QAAQ;AAAA,QACrD,aAAa;AAAA,MACf,CAAC;AACD,YAAM,UAAU,aAAa,SAAS,eAAe;AAAA,QACnD,UAAU;AAAA,MACZ,CAAC;AAAA,IACH;AAAA;AAAA;",
+  "names": []
+}

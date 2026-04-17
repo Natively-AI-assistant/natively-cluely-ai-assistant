@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/highlight.js/lib/languages/clean.js"],
+  "sourcesContent": ["/*\nLanguage: Clean\nAuthor: Camil Staps <info@camilstaps.nl>\nCategory: functional\nWebsite: http://clean.cs.ru.nl\n*/\n\n/** @type LanguageFn */\nfunction clean(hljs) {\n  return {\n    name: 'Clean',\n    aliases: [\n      'icl',\n      'dcl'\n    ],\n    keywords: {\n      keyword:\n        'if let in with where case of class instance otherwise ' +\n        'implementation definition system module from import qualified as ' +\n        'special code inline foreign export ccall stdcall generic derive ' +\n        'infix infixl infixr',\n      built_in:\n        'Int Real Char Bool',\n      literal:\n        'True False'\n    },\n    contains: [\n      hljs.C_LINE_COMMENT_MODE,\n      hljs.C_BLOCK_COMMENT_MODE,\n      hljs.APOS_STRING_MODE,\n      hljs.QUOTE_STRING_MODE,\n      hljs.C_NUMBER_MODE,\n      { // relevance booster\n        begin: '->|<-[|:]?|#!?|>>=|\\\\{\\\\||\\\\|\\\\}|:==|=:|<>'\n      }\n    ]\n  };\n}\n\nmodule.exports = clean;\n"],
+  "mappings": ";;;;;AAAA;AAAA;AAQA,aAAS,MAAM,MAAM;AACnB,aAAO;AAAA,QACL,MAAM;AAAA,QACN,SAAS;AAAA,UACP;AAAA,UACA;AAAA,QACF;AAAA,QACA,UAAU;AAAA,UACR,SACE;AAAA,UAIF,UACE;AAAA,UACF,SACE;AAAA,QACJ;AAAA,QACA,UAAU;AAAA,UACR,KAAK;AAAA,UACL,KAAK;AAAA,UACL,KAAK;AAAA,UACL,KAAK;AAAA,UACL,KAAK;AAAA,UACL;AAAA;AAAA,YACE,OAAO;AAAA,UACT;AAAA,QACF;AAAA,MACF;AAAA,IACF;AAEA,WAAO,UAAU;AAAA;AAAA;",
+  "names": []
+}

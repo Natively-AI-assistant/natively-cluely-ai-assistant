@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/refractor/lang/csv.js"],
+  "sourcesContent": ["'use strict'\n\nmodule.exports = csv\ncsv.displayName = 'csv'\ncsv.aliases = []\nfunction csv(Prism) {\n  // https://tools.ietf.org/html/rfc4180\n  Prism.languages.csv = {\n    value: /[^\\r\\n,\"]+|\"(?:[^\"]|\"\")*\"(?!\")/,\n    punctuation: /,/\n  }\n}\n"],
+  "mappings": ";;;;;AAAA;AAAA;AAEA,WAAO,UAAU;AACjB,QAAI,cAAc;AAClB,QAAI,UAAU,CAAC;AACf,aAAS,IAAI,OAAO;AAElB,YAAM,UAAU,MAAM;AAAA,QACpB,OAAO;AAAA,QACP,aAAa;AAAA,MACf;AAAA,IACF;AAAA;AAAA;",
+  "names": []
+}

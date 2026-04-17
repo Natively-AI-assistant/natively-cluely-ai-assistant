@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/highlight.js/lib/languages/fix.js"],
+  "sourcesContent": ["/*\nLanguage: FIX\nAuthor: Brent Bradbury <brent@brentium.com>\n*/\n\n/** @type LanguageFn */\nfunction fix(hljs) {\n  return {\n    name: 'FIX',\n    contains: [{\n      begin: /[^\\u2401\\u0001]+/,\n      end: /[\\u2401\\u0001]/,\n      excludeEnd: true,\n      returnBegin: true,\n      returnEnd: false,\n      contains: [\n        {\n          begin: /([^\\u2401\\u0001=]+)/,\n          end: /=([^\\u2401\\u0001=]+)/,\n          returnEnd: true,\n          returnBegin: false,\n          className: 'attr'\n        },\n        {\n          begin: /=/,\n          end: /([\\u2401\\u0001])/,\n          excludeEnd: true,\n          excludeBegin: true,\n          className: 'string'\n        }\n      ]\n    }],\n    case_insensitive: true\n  };\n}\n\nmodule.exports = fix;\n"],
+  "mappings": ";;;;;AAAA;AAAA;AAMA,aAAS,IAAI,MAAM;AACjB,aAAO;AAAA,QACL,MAAM;AAAA,QACN,UAAU,CAAC;AAAA,UACT,OAAO;AAAA,UACP,KAAK;AAAA,UACL,YAAY;AAAA,UACZ,aAAa;AAAA,UACb,WAAW;AAAA,UACX,UAAU;AAAA,YACR;AAAA,cACE,OAAO;AAAA,cACP,KAAK;AAAA,cACL,WAAW;AAAA,cACX,aAAa;AAAA,cACb,WAAW;AAAA,YACb;AAAA,YACA;AAAA,cACE,OAAO;AAAA,cACP,KAAK;AAAA,cACL,YAAY;AAAA,cACZ,cAAc;AAAA,cACd,WAAW;AAAA,YACb;AAAA,UACF;AAAA,QACF,CAAC;AAAA,QACD,kBAAkB;AAAA,MACpB;AAAA,IACF;AAEA,WAAO,UAAU;AAAA;AAAA;",
+  "names": []
+}

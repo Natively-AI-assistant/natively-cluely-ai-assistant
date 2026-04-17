@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/longest-streak/index.js"],
+  "sourcesContent": ["/**\n * Get the count of the longest repeating streak of `substring` in `value`.\n *\n * @param {string} value\n *   Content to search in.\n * @param {string} substring\n *   Substring to look for, typically one character.\n * @returns {number}\n *   Count of most frequent adjacent `substring`s in `value`.\n */\nexport function longestStreak(value, substring) {\n  const source = String(value)\n  let index = source.indexOf(substring)\n  let expected = index\n  let count = 0\n  let max = 0\n\n  if (typeof substring !== 'string') {\n    throw new TypeError('Expected substring')\n  }\n\n  while (index !== -1) {\n    if (index === expected) {\n      if (++count > max) {\n        max = count\n      }\n    } else {\n      count = 1\n    }\n\n    expected = index + substring.length\n    index = source.indexOf(substring, expected)\n  }\n\n  return max\n}\n"],
+  "mappings": ";AAUO,SAAS,cAAc,OAAO,WAAW;AAC9C,QAAM,SAAS,OAAO,KAAK;AAC3B,MAAI,QAAQ,OAAO,QAAQ,SAAS;AACpC,MAAI,WAAW;AACf,MAAI,QAAQ;AACZ,MAAI,MAAM;AAEV,MAAI,OAAO,cAAc,UAAU;AACjC,UAAM,IAAI,UAAU,oBAAoB;AAAA,EAC1C;AAEA,SAAO,UAAU,IAAI;AACnB,QAAI,UAAU,UAAU;AACtB,UAAI,EAAE,QAAQ,KAAK;AACjB,cAAM;AAAA,MACR;AAAA,IACF,OAAO;AACL,cAAQ;AAAA,IACV;AAEA,eAAW,QAAQ,UAAU;AAC7B,YAAQ,OAAO,QAAQ,WAAW,QAAQ;AAAA,EAC5C;AAEA,SAAO;AACT;",
+  "names": []
+}

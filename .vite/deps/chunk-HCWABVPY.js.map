@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/refractor/lang/nand2tetris-hdl.js"],
+  "sourcesContent": ["'use strict'\n\nmodule.exports = nand2tetrisHdl\nnand2tetrisHdl.displayName = 'nand2tetrisHdl'\nnand2tetrisHdl.aliases = []\nfunction nand2tetrisHdl(Prism) {\n  Prism.languages['nand2tetris-hdl'] = {\n    comment: /\\/\\/.*|\\/\\*[\\s\\S]*?(?:\\*\\/|$)/,\n    keyword: /\\b(?:BUILTIN|CHIP|CLOCKED|IN|OUT|PARTS)\\b/,\n    boolean: /\\b(?:false|true)\\b/,\n    function: /\\b[A-Za-z][A-Za-z0-9]*(?=\\()/,\n    number: /\\b\\d+\\b/,\n    operator: /=|\\.\\./,\n    punctuation: /[{}[\\];(),:]/\n  }\n}\n"],
+  "mappings": ";;;;;AAAA;AAAA;AAEA,WAAO,UAAU;AACjB,mBAAe,cAAc;AAC7B,mBAAe,UAAU,CAAC;AAC1B,aAAS,eAAe,OAAO;AAC7B,YAAM,UAAU,iBAAiB,IAAI;AAAA,QACnC,SAAS;AAAA,QACT,SAAS;AAAA,QACT,SAAS;AAAA,QACT,UAAU;AAAA,QACV,QAAQ;AAAA,QACR,UAAU;AAAA,QACV,aAAa;AAAA,MACf;AAAA,IACF;AAAA;AAAA;",
+  "names": []
+}

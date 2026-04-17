@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/refractor/lang/birb.js"],
+  "sourcesContent": ["'use strict'\n\nmodule.exports = birb\nbirb.displayName = 'birb'\nbirb.aliases = []\nfunction birb(Prism) {\n  Prism.languages.birb = Prism.languages.extend('clike', {\n    string: {\n      pattern: /r?(\"|')(?:\\\\.|(?!\\1)[^\\\\])*\\1/,\n      greedy: true\n    },\n    'class-name': [\n      /\\b[A-Z](?:[\\d_]*[a-zA-Z]\\w*)?\\b/, // matches variable and function return types (parameters as well).\n      /\\b(?:[A-Z]\\w*|(?!(?:var|void)\\b)[a-z]\\w*)(?=\\s+\\w+\\s*[;,=()])/\n    ],\n    keyword:\n      /\\b(?:assert|break|case|class|const|default|else|enum|final|follows|for|grab|if|nest|new|next|noSeeb|return|static|switch|throw|var|void|while)\\b/,\n    operator: /\\+\\+|--|&&|\\|\\||<<=?|>>=?|~(?:\\/=?)?|[+\\-*\\/%&^|=!<>]=?|\\?|:/,\n    variable: /\\b[a-z_]\\w*\\b/\n  })\n  Prism.languages.insertBefore('birb', 'function', {\n    metadata: {\n      pattern: /<\\w+>/,\n      greedy: true,\n      alias: 'symbol'\n    }\n  })\n}\n"],
+  "mappings": ";;;;;AAAA;AAAA;AAEA,WAAO,UAAU;AACjB,SAAK,cAAc;AACnB,SAAK,UAAU,CAAC;AAChB,aAAS,KAAK,OAAO;AACnB,YAAM,UAAU,OAAO,MAAM,UAAU,OAAO,SAAS;AAAA,QACrD,QAAQ;AAAA,UACN,SAAS;AAAA,UACT,QAAQ;AAAA,QACV;AAAA,QACA,cAAc;AAAA,UACZ;AAAA;AAAA,UACA;AAAA,QACF;AAAA,QACA,SACE;AAAA,QACF,UAAU;AAAA,QACV,UAAU;AAAA,MACZ,CAAC;AACD,YAAM,UAAU,aAAa,QAAQ,YAAY;AAAA,QAC/C,UAAU;AAAA,UACR,SAAS;AAAA,UACT,QAAQ;AAAA,UACR,OAAO;AAAA,QACT;AAAA,MACF,CAAC;AAAA,IACH;AAAA;AAAA;",
+  "names": []
+}

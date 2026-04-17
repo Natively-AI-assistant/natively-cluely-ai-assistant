@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/refractor/lang/llvm.js"],
+  "sourcesContent": ["'use strict'\n\nmodule.exports = llvm\nllvm.displayName = 'llvm'\nllvm.aliases = []\nfunction llvm(Prism) {\n  ;(function (Prism) {\n    Prism.languages.llvm = {\n      comment: /;.*/,\n      string: {\n        pattern: /\"[^\"]*\"/,\n        greedy: true\n      },\n      boolean: /\\b(?:false|true)\\b/,\n      variable: /[%@!#](?:(?!\\d)(?:[-$.\\w]|\\\\[a-f\\d]{2})+|\\d+)/i,\n      label: /(?!\\d)(?:[-$.\\w]|\\\\[a-f\\d]{2})+:/i,\n      type: {\n        pattern:\n          /\\b(?:double|float|fp128|half|i[1-9]\\d*|label|metadata|ppc_fp128|token|void|x86_fp80|x86_mmx)\\b/,\n        alias: 'class-name'\n      },\n      keyword: /\\b[a-z_][a-z_0-9]*\\b/,\n      number:\n        /[+-]?\\b\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b|\\b0x[\\dA-Fa-f]+\\b|\\b0xK[\\dA-Fa-f]{20}\\b|\\b0x[ML][\\dA-Fa-f]{32}\\b|\\b0xH[\\dA-Fa-f]{4}\\b/,\n      punctuation: /[{}[\\];(),.!*=<>]/\n    }\n  })(Prism)\n}\n"],
+  "mappings": ";;;;;AAAA;AAAA;AAEA,WAAO,UAAU;AACjB,SAAK,cAAc;AACnB,SAAK,UAAU,CAAC;AAChB,aAAS,KAAK,OAAO;AACnB;AAAC,OAAC,SAAUA,QAAO;AACjB,QAAAA,OAAM,UAAU,OAAO;AAAA,UACrB,SAAS;AAAA,UACT,QAAQ;AAAA,YACN,SAAS;AAAA,YACT,QAAQ;AAAA,UACV;AAAA,UACA,SAAS;AAAA,UACT,UAAU;AAAA,UACV,OAAO;AAAA,UACP,MAAM;AAAA,YACJ,SACE;AAAA,YACF,OAAO;AAAA,UACT;AAAA,UACA,SAAS;AAAA,UACT,QACE;AAAA,UACF,aAAa;AAAA,QACf;AAAA,MACF,GAAG,KAAK;AAAA,IACV;AAAA;AAAA;",
+  "names": ["Prism"]
+}

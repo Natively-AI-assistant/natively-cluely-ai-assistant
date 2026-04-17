@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/refractor/lang/t4-cs.js"],
+  "sourcesContent": ["'use strict'\nvar refractorT4Templating = require('./t4-templating.js')\nvar refractorCsharp = require('./csharp.js')\nmodule.exports = t4Cs\nt4Cs.displayName = 't4Cs'\nt4Cs.aliases = []\nfunction t4Cs(Prism) {\n  Prism.register(refractorT4Templating)\n  Prism.register(refractorCsharp)\n  Prism.languages.t4 = Prism.languages['t4-cs'] =\n    Prism.languages['t4-templating'].createT4('csharp')\n}\n"],
+  "mappings": ";;;;;;;;;;;AAAA;AAAA;AACA,QAAI,wBAAwB;AAC5B,QAAI,kBAAkB;AACtB,WAAO,UAAU;AACjB,SAAK,cAAc;AACnB,SAAK,UAAU,CAAC;AAChB,aAAS,KAAK,OAAO;AACnB,YAAM,SAAS,qBAAqB;AACpC,YAAM,SAAS,eAAe;AAC9B,YAAM,UAAU,KAAK,MAAM,UAAU,OAAO,IAC1C,MAAM,UAAU,eAAe,EAAE,SAAS,QAAQ;AAAA,IACtD;AAAA;AAAA;",
+  "names": []
+}

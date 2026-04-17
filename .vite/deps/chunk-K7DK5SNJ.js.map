@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/refractor/lang/go-module.js"],
+  "sourcesContent": ["'use strict'\n\nmodule.exports = goModule\ngoModule.displayName = 'goModule'\ngoModule.aliases = []\nfunction goModule(Prism) {\n  // https://go.dev/ref/mod#go-mod-file-module\n  Prism.languages['go-mod'] = Prism.languages['go-module'] = {\n    comment: {\n      pattern: /\\/\\/.*/,\n      greedy: true\n    },\n    version: {\n      pattern: /(^|[\\s()[\\],])v\\d+\\.\\d+\\.\\d+(?:[+-][-+.\\w]*)?(?![^\\s()[\\],])/,\n      lookbehind: true,\n      alias: 'number'\n    },\n    'go-version': {\n      pattern: /((?:^|\\s)go\\s+)\\d+(?:\\.\\d+){1,2}/,\n      lookbehind: true,\n      alias: 'number'\n    },\n    keyword: {\n      pattern: /^([ \\t]*)(?:exclude|go|module|replace|require|retract)\\b/m,\n      lookbehind: true\n    },\n    operator: /=>/,\n    punctuation: /[()[\\],]/\n  }\n}\n"],
+  "mappings": ";;;;;AAAA;AAAA;AAEA,WAAO,UAAU;AACjB,aAAS,cAAc;AACvB,aAAS,UAAU,CAAC;AACpB,aAAS,SAAS,OAAO;AAEvB,YAAM,UAAU,QAAQ,IAAI,MAAM,UAAU,WAAW,IAAI;AAAA,QACzD,SAAS;AAAA,UACP,SAAS;AAAA,UACT,QAAQ;AAAA,QACV;AAAA,QACA,SAAS;AAAA,UACP,SAAS;AAAA,UACT,YAAY;AAAA,UACZ,OAAO;AAAA,QACT;AAAA,QACA,cAAc;AAAA,UACZ,SAAS;AAAA,UACT,YAAY;AAAA,UACZ,OAAO;AAAA,QACT;AAAA,QACA,SAAS;AAAA,UACP,SAAS;AAAA,UACT,YAAY;AAAA,QACd;AAAA,QACA,UAAU;AAAA,QACV,aAAa;AAAA,MACf;AAAA,IACF;AAAA;AAAA;",
+  "names": []
+}

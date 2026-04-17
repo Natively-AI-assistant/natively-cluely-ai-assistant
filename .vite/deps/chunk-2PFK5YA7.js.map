@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/highlight.js/lib/languages/ldif.js"],
+  "sourcesContent": ["/*\nLanguage: LDIF\nContributors: Jacob Childress <jacobc@gmail.com>\nCategory: enterprise, config\nWebsite: https://en.wikipedia.org/wiki/LDAP_Data_Interchange_Format\n*/\nfunction ldif(hljs) {\n  return {\n    name: 'LDIF',\n    contains: [\n      {\n        className: 'attribute',\n        begin: '^dn',\n        end: ': ',\n        excludeEnd: true,\n        starts: {\n          end: '$',\n          relevance: 0\n        },\n        relevance: 10\n      },\n      {\n        className: 'attribute',\n        begin: '^\\\\w',\n        end: ': ',\n        excludeEnd: true,\n        starts: {\n          end: '$',\n          relevance: 0\n        }\n      },\n      {\n        className: 'literal',\n        begin: '^-',\n        end: '$'\n      },\n      hljs.HASH_COMMENT_MODE\n    ]\n  };\n}\n\nmodule.exports = ldif;\n"],
+  "mappings": ";;;;;AAAA;AAAA;AAMA,aAAS,KAAK,MAAM;AAClB,aAAO;AAAA,QACL,MAAM;AAAA,QACN,UAAU;AAAA,UACR;AAAA,YACE,WAAW;AAAA,YACX,OAAO;AAAA,YACP,KAAK;AAAA,YACL,YAAY;AAAA,YACZ,QAAQ;AAAA,cACN,KAAK;AAAA,cACL,WAAW;AAAA,YACb;AAAA,YACA,WAAW;AAAA,UACb;AAAA,UACA;AAAA,YACE,WAAW;AAAA,YACX,OAAO;AAAA,YACP,KAAK;AAAA,YACL,YAAY;AAAA,YACZ,QAAQ;AAAA,cACN,KAAK;AAAA,cACL,WAAW;AAAA,YACb;AAAA,UACF;AAAA,UACA;AAAA,YACE,WAAW;AAAA,YACX,OAAO;AAAA,YACP,KAAK;AAAA,UACP;AAAA,UACA,KAAK;AAAA,QACP;AAAA,MACF;AAAA,IACF;AAEA,WAAO,UAAU;AAAA;AAAA;",
+  "names": []
+}

@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/refractor/lang/json5.js"],
+  "sourcesContent": ["'use strict'\nvar refractorJson = require('./json.js')\nmodule.exports = json5\njson5.displayName = 'json5'\njson5.aliases = []\nfunction json5(Prism) {\n  Prism.register(refractorJson)\n  ;(function (Prism) {\n    var string = /(\"|')(?:\\\\(?:\\r\\n?|\\n|.)|(?!\\1)[^\\\\\\r\\n])*\\1/\n    Prism.languages.json5 = Prism.languages.extend('json', {\n      property: [\n        {\n          pattern: RegExp(string.source + '(?=\\\\s*:)'),\n          greedy: true\n        },\n        {\n          pattern:\n            /(?!\\s)[_$a-zA-Z\\xA0-\\uFFFF](?:(?!\\s)[$\\w\\xA0-\\uFFFF])*(?=\\s*:)/,\n          alias: 'unquoted'\n        }\n      ],\n      string: {\n        pattern: string,\n        greedy: true\n      },\n      number:\n        /[+-]?\\b(?:NaN|Infinity|0x[a-fA-F\\d]+)\\b|[+-]?(?:\\b\\d+(?:\\.\\d*)?|\\B\\.\\d+)(?:[eE][+-]?\\d+\\b)?/\n    })\n  })(Prism)\n}\n"],
+  "mappings": ";;;;;;;;AAAA;AAAA;AACA,QAAI,gBAAgB;AACpB,WAAO,UAAU;AACjB,UAAM,cAAc;AACpB,UAAM,UAAU,CAAC;AACjB,aAAS,MAAM,OAAO;AACpB,YAAM,SAAS,aAAa;AAC3B,OAAC,SAAUA,QAAO;AACjB,YAAI,SAAS;AACb,QAAAA,OAAM,UAAU,QAAQA,OAAM,UAAU,OAAO,QAAQ;AAAA,UACrD,UAAU;AAAA,YACR;AAAA,cACE,SAAS,OAAO,OAAO,SAAS,WAAW;AAAA,cAC3C,QAAQ;AAAA,YACV;AAAA,YACA;AAAA,cACE,SACE;AAAA,cACF,OAAO;AAAA,YACT;AAAA,UACF;AAAA,UACA,QAAQ;AAAA,YACN,SAAS;AAAA,YACT,QAAQ;AAAA,UACV;AAAA,UACA,QACE;AAAA,QACJ,CAAC;AAAA,MACH,GAAG,KAAK;AAAA,IACV;AAAA;AAAA;",
+  "names": ["Prism"]
+}
