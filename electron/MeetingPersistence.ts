@@ -200,7 +200,7 @@ export class MeetingPersistence {
                     : null;
                 const durationMs = Number.isFinite(lastTimestamp)
                     ? Math.max(0, (lastTimestamp as number) - safeStartTime)
-                    : Math.max(0, Date.now() - safeStartTime);
+                    : 0;
 
                 const snapshot = {
                     usage: details.usage,
