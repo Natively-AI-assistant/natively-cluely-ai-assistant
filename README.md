@@ -158,6 +158,7 @@ This demo shows **a complete live meeting scenario**:
 | **Stealth mode**         | ✅ Undetectable            | ❌                   | ❌         | ❌               | ❌ Visible to proctors |
 | **Process Disguise**     | ✅ Terminal, Settings, etc | ❌                   | ❌         | ❌               | ❌                     |
 | **Resume & context**     | ✅ Pro                     | ❌                   | ❌         | ✅ Yes           | ✅ Yes                 |
+| **Custom Personas/Modes**| ✅ Pro                     | ✅ Yes               | ❌         | ❌               | ⚠️ Limited             |
 | **Data breach history**  | ✅ None                    | ❌ 83k users exposed | ✅ None    | ✅ None          | ✅ None                |
 
 > **Legend:** ✅ Full support · ⚠️ Partial or limited · ❌ Not available
@@ -340,6 +341,8 @@ While Natively is **free and open-source forever**, we also offer a **Pro Editio
 | **Job Description (JD) & Resume Context Awareness** |      ❌       |      ✅      |
 | **Automated Company Research & Dossiers**           |      ❌       |      ✅      |
 | **Live Salary & Offer Negotiation Copilot**         |      ❌       |      ✅      |
+| **Custom Persona Modes (Sales, Tech, etc.)**        |      ❌       |      ✅      |
+| **Custom Real-Time Context & Reference Files**      |      ❌       |      ✅      |
 | **Priority Feature Access & Support**               |      ❌       |      ✅      |
 
 <p align="center">
@@ -353,19 +356,19 @@ While Natively is **free and open-source forever**, we also offer a **Pro Editio
 
 ---
 
-### What's New in v2.4.0
+### What's New in v2.5.0
 
-Version 2.4.0 introduces major feature upgrades, architectural overhauls, and robust stability fixes:
+Version 2.5.0 introduces major feature upgrades, architectural overhauls, and robust stability fixes:
 
+- **Custom Persona Modes**: Completed Cluely-style Custom Modes (Technical Interview, Sales, Recruiting, Team Meet, Lecture, etc.) allowing tailored AI personas and behaviors.
+- **Dynamic Note Templates**: AI now dynamically generates highly structured meeting notes based on the active persona mode (e.g., Problem Statement, Follow-ups, Space & Time Complexity for tech interviews).
+- **Reference Files & Custom Context**: Deeply integrate PDFs, DOCX files, and custom text instructions into the AI's real-time prompt logic. 
 - **10-Minute Free Trial**: A new free trial system lets you experience Natively API with built-in HWID+IP anti-abuse protections and seamless upgrade paths.
-- **Tavily Search Integration**: Replaced standard search with Tavily Search API for deep company research and robust context gathering.
-- **Guided Permissions Setup**: A polished, proactive macOS/Windows permissions flow ensures screen recording and microphone access is easily granted.
 - **Reliable Screenshot Capture**: Hardened and completely stable multi-screenshot capture with single-trigger `Cmd+Shift+Enter` analysis.
-- **Custom Provider Notes & Summaries**: Custom cURL endpoints and custom API integrations now natively support automatic meeting summaries and custom AI behaviors without breaking the prompt injection strategy.
-- **Two-Stage Silence Processing**: Combined adaptive RMS threshold with WebRTC ML VAD for unparalleled microphone background noise rejection.
-- **Dynamic AI Model Selection**: Smoothly select real-time models dynamically from OpenAI, Anthropic, Gemini, Groq, and Ollama.
-- **Zero-Copy ABI Transfers**: Rust pipeline refactored to stream audio buffers with true zero-allocation natively, eliminating garbage collection freezes and ensuring constant <500ms latency.
-- **Robust Webhook Billing**: Hardened API subsciptions webhook verifications and payment processing to properly coordinate Standard, Pro, Max, and Ultra API plans.
+- **Custom Provider Enhancements**: Custom cURL endpoints now completely support automatic meeting summaries and custom AI behaviors without breaking the prompt injection strategy.
+- **STT Connection Pools & Resilience**: Added round-robin connection pools for Deepgram and ElevenLabs with exponential backoff and shadow-probe failover, absolutely eliminating 1006 reconnect storms.
+- **Redesigned Premium UI**: Apple-tier designs applied across the Modes Pro Gate, Permissions Toaster, Free Trial Modals, and settings overlays using hardware-accelerated animations.
+- **Robust Webhook Billing**: Hardened API subscriptions webhook verifications and payment processing to properly coordinate Standard, Pro, Max, and Ultra API plans.
 
 ---
 
