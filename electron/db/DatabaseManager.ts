@@ -759,6 +759,14 @@ export class DatabaseManager {
         }
     }
 
+    public clearPendingSegmentsForMeeting(meetingId: string): void {
+        this.pendingTranscriptSegments.delete(meetingId);
+        if (this.pendingTranscriptSegments.size === 0 && this.pendingTranscriptFlushTimer) {
+            clearTimeout(this.pendingTranscriptFlushTimer);
+            this.pendingTranscriptFlushTimer = null;
+        }
+    }
+
     private scheduleTranscriptFlush(): void {
         if (this.pendingTranscriptFlushTimer) return;
 

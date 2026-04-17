@@ -1578,6 +1578,7 @@ export class AppState {
       }
       if (endingMeetingId) {
         DatabaseManager.getInstance().deleteMeeting(endingMeetingId);
+        DatabaseManager.getInstance().clearPendingSegmentsForMeeting(endingMeetingId);
       }
     }
     // ─────────────────────────────────────────────────────────────────────────
