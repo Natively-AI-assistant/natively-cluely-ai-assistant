@@ -539,6 +539,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         return stored !== 'false';
     });
 
+    const [autoAnswerCapture, setAutoAnswerCapture] = useState(() => {
+        const stored = localStorage.getItem('natively_autoAnswerCapture');
+        return stored ? stored === 'true' : false;
+    });
+
     // Recognition Language
     const [recognitionLanguage, setRecognitionLanguage] = useState('');
     const [selectedSttGroup, setSelectedSttGroup] = useState('');
@@ -1562,6 +1567,30 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         className={`w-11 h-6 rounded-full relative transition-colors ${showTranscript ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                     >
                                                         <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${showTranscript ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                    </div>
+                                                </div>
+
+                                                {/* Auto Answer on Capture */}
+                                                <div className="flex items-center justify-between px-4 py-3">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle flex items-center justify-center text-text-tertiary">
+                                                            <Zap size={20} />
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="text-sm font-bold text-text-primary">Auto Answer Screenshots</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">Automatically answer when a screenshot is taken</p>
+                                                        </div>
+                                                    </div>
+                                                    <div
+                                                        onClick={() => {
+                                                            const newState = !autoAnswerCapture;
+                                                            setAutoAnswerCapture(newState);
+                                                            localStorage.setItem('natively_autoAnswerCapture', String(newState));
+                                                            window.dispatchEvent(new Event('storage'));
+                                                        }}
+                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer ${autoAnswerCapture ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                    >
+                                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${autoAnswerCapture ? 'translate-x-5' : 'translate-x-0'}`} />
                                                     </div>
                                                 </div>
 

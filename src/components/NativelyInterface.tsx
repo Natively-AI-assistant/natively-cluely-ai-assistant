@@ -93,11 +93,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     // Analytics State
     const requestStartTimeRef = useRef<number | null>(null);
 
-    // Sync transcript setting
+    // Sync transcript & autoAnswer settings
     useEffect(() => {
         const handleStorage = () => {
-            const stored = localStorage.getItem('natively_interviewer_transcript');
-            setShowTranscript(stored !== 'false');
+            const storedTranscript = localStorage.getItem('natively_interviewer_transcript');
+            setShowTranscript(storedTranscript !== 'false');
+
+            const storedAutoAnswer = localStorage.getItem('natively_autoAnswerCapture');
+            setAutoAnswerCapture(storedAutoAnswer === 'true');
         };
         window.addEventListener('storage', handleStorage);
         return () => window.removeEventListener('storage', handleStorage);
@@ -126,6 +129,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         const stored = localStorage.getItem('natively_hideChatHidesWidget');
         return stored ? stored === 'true' : true;
     });
+    
+    // Auto Answer on Capture (Screenshot)
+    const [autoAnswerCapture, setAutoAnswerCapture] = useState(() => {
+        const stored = localStorage.getItem('natively_autoAnswerCapture');
+        return stored ? stored === 'true' : false;
+    });
+
+    const autoAnswerCaptureRef = useRef(autoAnswerCapture);
+    useEffect(() => {
+        autoAnswerCaptureRef.current = autoAnswerCapture;
+    }, [autoAnswerCapture]);
 
     // Model Selection State
     const [currentModel, setCurrentModel] = useState<string>('gemini-3-flash-preview');
@@ -212,7 +226,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     useEffect(() => {
         localStorage.setItem('natively_undetectable', String(isUndetectable));
         localStorage.setItem('natively_hideChatHidesWidget', String(hideChatHidesWidget));
-    }, [isUndetectable, hideChatHidesWidget]);
+        localStorage.setItem('natively_autoAnswerCapture', String(autoAnswerCapture));
+    }, [isUndetectable, hideChatHidesWidget, autoAnswerCapture]);
 
     // Mouse Passthrough State
     const [isMousePassthrough, setIsMousePassthrough] = useState(false);
@@ -386,6 +401,18 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
             const updated = [...prev, data];
             return updated.slice(-5); // Keep last 5
         });
+
+        // Trigger 'Answer' automatically if the toggle is enabled
+        if (autoAnswerCaptureRef.current) {
+            pendingCaptureRef.current = data;
+            requestAnimationFrame(() => {
+                try {
+                    handlersRef.current.handleWhatToSay();
+                } finally {
+                    pendingCaptureRef.current = null;
+                }
+            });
+        }
     };
 
     // Connect to Native Audio Backend
