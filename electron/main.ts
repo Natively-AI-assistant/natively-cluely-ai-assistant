@@ -1383,6 +1383,11 @@ export class AppState {
   public async startMeeting(metadata?: any): Promise<void> {
     console.log('[Main] Starting Meeting...', metadata);
 
+    if (this.isMeetingActive) {
+      console.warn('[Main] startMeeting called while meeting already active — ignoring.');
+      return;
+    }
+
     // PR #173: Reset audio recovery state for fresh session
     this._systemAudioRecoveryInProgress = false;
     this._systemAudioRecoveryAttempts = 0;
