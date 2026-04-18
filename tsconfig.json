@@ -13,7 +13,12 @@
     "noUnusedLocals": false,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "paths": {
+      "@/*": ["./src/*"],
+      "@hooks/*": ["./src/hooks/*"],
+      "@config/*": ["./src/config/*"]
+    }
   },
   "include": ["src", "premium/src"], // React source files and optional premium components
   "references": [{ "path": "./tsconfig.node.json" }]

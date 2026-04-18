@@ -39,6 +39,7 @@ interface Meeting {
         keyPoints: string[];
         actionItemsTitle?: string;
         keyPointsTitle?: string;
+        sections?: Array<{ title: string; bullets: string[] }>;
     };
     transcript?: Array<{
         speaker: string;
@@ -254,6 +255,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                         {activeTab === 'summary' && (
                             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                                 {/* Overview - Rendered as Markdown */}
+                                {meeting.detailedSummary?.overview && (
                                 <div className="mb-6 pb-6 border-b border-border-subtle prose prose-sm max-w-none">
                                     <ReactMarkdown
                                         remarkPlugins={[remarkGfm]}
@@ -272,7 +274,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                         {meeting.detailedSummary?.overview || ''}
                                     </ReactMarkdown>
                                 </div>
-
+                                )}
 
                                 {/* Action Items - Only show if there are items */}
                                 {meeting.detailedSummary?.actionItems && meeting.detailedSummary.actionItems.length > 0 && (
@@ -362,6 +364,29 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                             ))}
                                         </ul>
                                     </section>
+                                )}
+
+                                {/* Mode-specific sections (when active mode has a notes template) */}
+                                {meeting.detailedSummary?.sections && meeting.detailedSummary.sections.length > 0 && (
+                                    <div className="space-y-8">
+                                        {meeting.detailedSummary.sections.map((section, si) => (
+                                            section.bullets.length > 0 && (
+                                                <section key={si}>
+                                                    <div className="flex items-center justify-between mb-4">
+                                                        <h2 className="text-lg font-semibold text-text-primary">{section.title}</h2>
+                                                    </div>
+                                                    <ul className="space-y-3">
+                                                        {section.bullets.map((bullet, bi) => (
+                                                            <li key={bi} className="flex items-start gap-3 group">
+                                                                <div className="mt-2 w-1.5 h-1.5 rounded-full bg-text-secondary shrink-0" />
+                                                                <p className="text-sm text-text-secondary leading-relaxed">{bullet}</p>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </section>
+                                            )
+                                        ))}
+                                    </div>
                                 )}
                             </motion.div>
                         )}

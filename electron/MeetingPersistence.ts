@@ -80,7 +80,7 @@ export class MeetingPersistence {
         metadata?: { title?: string; calendarEventId?: string; source?: 'manual' | 'calendar' } | null
     ): Promise<void> {
         let title = "Untitled Session";
-        let summaryData: { actionItems: string[], keyPoints: string[] } = { actionItems: [], keyPoints: [] };
+        let summaryData: { overview?: string; actionItems: string[], keyPoints: string[], sections?: Array<{ title: string; bullets: string[] }> } = { actionItems: [], keyPoints: [] };
 
         // Use passed-in metadata snapshot (NOT this.session.getMeetingMetadata() which is already cleared)
         let calendarEventId: string | undefined;
@@ -102,38 +102,126 @@ export class MeetingPersistence {
                 if (generatedTitle) title = generatedTitle.replace(/["*]/g, '').trim();
             }
 
+            // Load template note sections for the active mode's templateType
+            let modeNoteSections: Array<{ title: string; description: string }> = [];
+            try {
+                const { ModesManager, TEMPLATE_NOTE_SECTIONS } = require('./services/ModesManager');
+                const modesMgr = ModesManager.getInstance();
+                const activeMode = modesMgr.getActiveMode();
+                if (activeMode) {
+                    // Prefer user's customized DB sections; fall back to canonical template
+                    const dbSections: Array<{ title: string; description: string }> = modesMgr.getNoteSections(activeMode.id);
+                    modeNoteSections = dbSections.length > 0
+                        ? dbSections
+                        : (TEMPLATE_NOTE_SECTIONS[activeMode.templateType] ?? []);
+                    console.log(`[MeetingPersistence] Active mode: "${activeMode.name}" (${activeMode.templateType}), sections: ${modeNoteSections.length} (${dbSections.length > 0 ? 'custom DB' : 'canonical template'})`);
+                } else {
+                    console.log('[MeetingPersistence] No active mode — using generic summary.');
+                }
+            } catch (modeErr: any) {
+                console.warn('[MeetingPersistence] Failed to load active mode sections:', modeErr?.message);
+            }
+
             // Generate Structured Summary
             if (data.context && data.context.trim().length > 80) {
-                const summaryPrompt = `You are a silent meeting summarizer. Convert this conversation into concise internal meeting notes.
-    
-    RULES:
-    - Do NOT invent information not present in the context
-    - You MAY infer implied action items or next steps if they are logical consequences of the discussion
-    - Do NOT explain or define concepts mentioned
-    - Do NOT use filler phrases like "The meeting covered..." or "Discussed various..."
-    - Do NOT mention transcripts, AI, or summaries
-    - Do NOT sound like an AI assistant
-    - Sound like a senior PM's internal notes
-    
-    STYLE: Calm, neutral, professional, skim-friendly. Short bullets, no sub-bullets.
-    
-    Return ONLY valid JSON (no markdown code blocks):
-    {
-      "overview": "1-2 sentence description of what was discussed",
-      "keyPoints": ["3-6 specific bullets - each = one concrete topic or point discussed"],
-      "actionItems": ["specific next steps, assigned tasks, or implied follow-ups. If absolutely none found, return empty array"]
-    }`;
+                const baseRules = `RULES:
+- Do NOT invent information not present in the context
+- You MAY infer implied action items or next steps if they are logical consequences of the discussion
+- Do NOT explain or define concepts mentioned
+- Do NOT use filler phrases like "The meeting covered..." or "Discussed various..."
+- Do NOT mention transcripts, AI, or summaries
+- Do NOT sound like an AI assistant
+- Sound like a senior PM's internal notes
 
-                const groqSummaryPrompt = GROQ_SUMMARY_JSON_PROMPT;
+STYLE: Calm, neutral, professional, skim-friendly. Short bullets, no sub-bullets.`;
+
+                let summaryPrompt: string;
+                let groqSummaryPrompt: string;
+
+                if (modeNoteSections.length > 0) {
+                    // Mode-specific structured notes — sections as object with title keys
+                    const sectionList = modeNoteSections
+                        .map(s => s.description?.trim()
+                            ? `- "${s.title}": ${s.description}`
+                            : `- "${s.title}"`)
+                        .join('\n');
+                    const sectionKeys = modeNoteSections
+                        .map(s => `    "${s.title}": []`)
+                        .join(',\n');
+
+                    // Include the full mode context block (reference files + custom context)
+                    const modeContext = (() => {
+                        try {
+                            const { ModesManager } = require('./services/ModesManager');
+                            const block = ModesManager.getInstance().buildActiveModeContextBlock();
+                            return block ? `\n${block}\n` : '';
+                        } catch { return ''; }
+                    })();
+
+                    summaryPrompt = `You are a silent meeting note-taker. Extract structured notes from the conversation transcript below.
+${modeContext}
+${baseRules}
+
+SECTIONS TO FILL (extract only what is present in the transcript):
+${sectionList}
+
+Return ONLY valid JSON — no markdown fences, no comments, no extra keys. Each section value is an array of concise factual bullet strings taken directly from the conversation. Use [] if a section has no relevant content.
+
+{
+  "overview": "1-2 sentence summary of what was discussed",
+  "sections": {
+${sectionKeys}
+  }
+}`;
+                    console.log('[MeetingPersistence] Using mode-specific prompt with sections:', modeNoteSections.map(s => s.title));
+                    groqSummaryPrompt = summaryPrompt;
+                } else {
+                    // Default generic notes
+                    summaryPrompt = `You are a silent meeting summarizer. Convert this conversation into concise internal meeting notes.
+
+${baseRules}
+
+Return ONLY valid JSON (no markdown code blocks):
+{
+  "overview": "1-2 sentence description of what was discussed",
+  "keyPoints": ["3-6 specific bullets - each = one concrete topic or point discussed"],
+  "actionItems": ["specific next steps, assigned tasks, or implied follow-ups. If absolutely none found, return empty array"]
+}`;
+                    groqSummaryPrompt = GROQ_SUMMARY_JSON_PROMPT;
+                }
 
                 const generatedSummary = await this.llmHelper.generateMeetingSummary(summaryPrompt, data.context.substring(0, 10000), groqSummaryPrompt);
 
                 if (generatedSummary) {
-                    const jsonMatch = generatedSummary.match(/```json\n([\s\S]*?)\n```/) || [null, generatedSummary];
+                    // Strip markdown fences if present
+                    const jsonMatch = generatedSummary.match(/```(?:json)?\n?([\s\S]*?)\n?```/) || [null, generatedSummary];
                     const jsonStr = (jsonMatch[1] || generatedSummary).trim();
+                    console.log('[MeetingPersistence] Raw LLM summary response (first 500 chars):', jsonStr.substring(0, 500));
                     try {
-                        summaryData = JSON.parse(jsonStr);
-                    } catch (e) { console.error("Failed to parse summary JSON", e); }
+                        const parsed = JSON.parse(jsonStr);
+                        if (modeNoteSections.length > 0 && parsed.sections && typeof parsed.sections === 'object') {
+                            // Convert sections object into typed array preserving template order
+                            const sectionsArr: Array<{ title: string; bullets: string[] }> = modeNoteSections
+                                .map(s => ({
+                                    title: s.title,
+                                    bullets: Array.isArray(parsed.sections[s.title]) ? parsed.sections[s.title] as string[] : [],
+                                }));
+                            console.log('[MeetingPersistence] Parsed mode sections:', sectionsArr.map(s => `${s.title}(${s.bullets.length})`));
+                            summaryData = {
+                                overview: parsed.overview,
+                                actionItems: [],
+                                keyPoints: [],
+                                sections: sectionsArr,
+                            };
+                        } else {
+                            if (modeNoteSections.length > 0) {
+                                console.warn('[MeetingPersistence] Mode sections expected but LLM did not return "sections" key. Falling back to generic.');
+                            }
+                            summaryData = parsed;
+                        }
+                    } catch (e) {
+                        console.error('[MeetingPersistence] Failed to parse summary JSON. Raw response:', jsonStr.substring(0, 800), e);
+                    }
                 }
             } else {
                 console.log('Context too short for summary generation.');

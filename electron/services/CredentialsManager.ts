@@ -57,6 +57,7 @@ export interface StoredCredentials {
     trialToken?:     string;   // server-issued signed token (natively_trial_…)
     trialExpiresAt?: string;   // ISO timestamp — local copy for startup check
     trialStartedAt?: string;   // ISO timestamp
+    trialClaimed?:   boolean;  // set true on first claim, never cleared — hides start card permanently
 }
 
 export class CredentialsManager {
@@ -112,7 +113,17 @@ export class CredentialsManager {
     }
 
     public getSttProvider(): 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' {
-        return this.credentials.sttProvider || 'none';
+        const provider = this.credentials.sttProvider || 'none';
+        // Self-heal: if provider is 'none' but a Natively key exists, the user is in a
+        // broken state (key cleared then re-entered via a path that skipped auto-promote,
+        // or credentials restored from backup). Silently restore to 'natively' so STT works.
+        if (provider === 'none' && this.credentials.nativelyApiKey) {
+            this.credentials.sttProvider = 'natively';
+            this.saveCredentials();
+            console.log('[CredentialsManager] Self-healed sttProvider: none→natively (Natively key present)');
+            return 'natively';
+        }
+        return provider;
     }
 
     public getDeepgramApiKey(): string | undefined {
@@ -414,10 +425,15 @@ export class CredentialsManager {
         return this.credentials.trialStartedAt;
     }
 
+    public getTrialClaimed(): boolean {
+        return this.credentials.trialClaimed === true;
+    }
+
     public setTrialToken(token: string, expiresAt: string, startedAt: string): void {
         this.credentials.trialToken     = token;
         this.credentials.trialExpiresAt = expiresAt;
         this.credentials.trialStartedAt = startedAt;
+        this.credentials.trialClaimed   = true;
         this.saveCredentials();
         console.log('[CredentialsManager] Trial token stored, expires:', expiresAt);
     }
@@ -426,6 +442,7 @@ export class CredentialsManager {
         delete this.credentials.trialToken;
         delete this.credentials.trialExpiresAt;
         delete this.credentials.trialStartedAt;
+        // trialClaimed intentionally NOT cleared — keeps start card hidden after token wipe
         this.saveCredentials();
         console.log('[CredentialsManager] Trial token cleared');
     }

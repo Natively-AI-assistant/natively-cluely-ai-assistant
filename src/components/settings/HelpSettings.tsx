@@ -4,7 +4,7 @@ import {
     Command, Monitor, Mic, Settings, Zap, Key, User, Play, Image, ArrowUp, FileText, Sparkles, Search, ChevronUp, Copy,
     FileJson, MessageSquare, Briefcase, Eye, EyeOff, Ghost, ChevronDown, ChevronRight, HelpCircle, Upload, CheckCircle2,
     RefreshCw, Trash2, Check, ExternalLink, Volume2, Globe, Brain, Cpu, Calendar, Star, CreditCard, X, Pencil, Lightbulb,
-    SlidersHorizontal, PointerOff, ArrowRight
+    SlidersHorizontal, PointerOff, ArrowRight, LayoutGrid
 } from 'lucide-react';
 import { SiOpenai, SiGoogle } from 'react-icons/si';
 import { useShortcuts } from '../../hooks/useShortcuts';
@@ -1490,10 +1490,117 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                 </div>
                             </div>
                         </div>
+
+                        <div className="border-t border-border-subtle pt-5 mt-2">
+                            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl mb-4">
+                                <h4 className="text-[13px] font-semibold text-emerald-500 flex items-center gap-2 mb-1">
+                                    <FileText size={14} /> Custom Context Notes
+                                </h4>
+                                <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
+                                    In addition to your Resume and JD, type any free-form context into the <strong>Custom Context</strong> textarea — sales stats, product details, LeetCode solutions, personal preferences. Injected as a <code className="bg-bg-elevated px-1 rounded text-[10px]">&lt;user_context&gt;</code> block into every AI call, across all modes and providers.
+                                </p>
+                            </div>
+                            <div className="grid md:grid-cols-2 gap-3">
+                                <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                        <Upload className="w-4 h-4 text-emerald-500" /> How to Use
+                                    </h4>
+                                    <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
+                                        <li>Open <strong>Settings → Profile Intelligence</strong></li>
+                                        <li>Scroll to the <strong>Custom Context</strong> textarea</li>
+                                        <li>Type anything — auto-saved after 800 ms</li>
+                                        <li>Up to 4,000 characters with a live counter</li>
+                                    </ul>
+                                </div>
+                                <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                        <Sparkles className="w-4 h-4 text-amber-500" /> What to Put Here
+                                    </h4>
+                                    <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
+                                        <li>Your company's product details or pricing</li>
+                                        <li>Candidate pipeline notes for recruiting</li>
+                                        <li>LeetCode / DSA patterns you prefer</li>
+                                        <li>Personal formatting or style preferences</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
                      </div>
                 </AccordionSection>
 
-                <AccordionSection title="8. Miscellaneous" icon={<Settings className="w-4 h-4" />}>
+                <AccordionSection title="8. Modes Manager" icon={<LayoutGrid className="w-4 h-4" />}>
+                    <div className="space-y-6">
+                        <p className="text-[13px]">Modes let you assign a specialized AI persona to your session. Each mode has a tailored system prompt, a personal context area, reference files, and smart note template sections — so Natively behaves differently depending on whether you're in a sales call, a coding interview, or a team standup.</p>
+
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                            {([
+                                { name: 'Interview', desc: 'STAR-format answers, behavioral stories, step-by-step coding hints.' },
+                                { name: 'Sales', desc: 'Objection handling, discovery questions, product pitch frameworks.' },
+                                { name: 'Recruiting', desc: 'Candidate assessment, JD cross-referencing, structured evaluation.' },
+                                { name: 'Team Meet', desc: 'Action items, announcements, blockers, decisions — auto-extracted.' },
+                                { name: 'Lecture', desc: 'Concept breakdowns, intuition-first explanations, formula notes.' },
+                                { name: 'Technical', desc: 'DSA / system design reasoning, edge cases, complexity analysis.' },
+                            ] as Array<{ name: string; desc: string }>).map(({ name, desc }) => (
+                                <div key={name} className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                    <h5 className="font-semibold text-sm text-text-primary mb-1">{name}</h5>
+                                    <p className="text-[11px] text-text-secondary leading-relaxed">{desc}</p>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="space-y-3 pt-2 border-t border-border-subtle">
+                            <h4 className="font-bold text-sm text-text-primary pt-4">How to Use Modes</h4>
+                            <div className="grid md:grid-cols-2 gap-3">
+                                <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">Opening the Manager</h4>
+                                    <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
+                                        <li>Click the <strong>grid icon</strong> in the Launcher header</li>
+                                        <li>Or click the grid icon in the main interface toolbar</li>
+                                        <li>Requires a Natively Pro license</li>
+                                    </ul>
+                                </div>
+                                <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">Activating a Mode</h4>
+                                    <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
+                                        <li>Select any mode in the left sidebar</li>
+                                        <li>Click <strong>Set active</strong> to apply it</li>
+                                        <li>The toolbar icon shows the active mode name live</li>
+                                        <li>Click <strong>Deactivate</strong> to return to General</li>
+                                    </ul>
+                                </div>
+                                <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">Reference Files</h4>
+                                    <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
+                                        <li>Upload PDF, DOCX, or TXT files per mode</li>
+                                        <li>File contents are injected as real-time context</li>
+                                        <li>Great for: resumes, product sheets, job descriptions</li>
+                                        <li>Per-file cap: 12 k chars · total cap: 40 k chars</li>
+                                    </ul>
+                                </div>
+                                <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">Custom Modes</h4>
+                                    <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
+                                        <li>Click <strong>+ New Mode</strong> to create from scratch</li>
+                                        <li>Or use <strong>Natively Templates</strong> for a preset start</li>
+                                        <li>Write a custom real-time prompt for the AI</li>
+                                        <li>Add your own note section templates</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+                            <h4 className="text-[13px] font-semibold text-indigo-400 flex items-center gap-2 mb-1">
+                                <Star size={14} /> Pro Feature
+                            </h4>
+                            <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
+                                Modes are locked behind Natively Pro. Free and trial users see only the General mode. Activate a license via <strong>Settings → Natively API</strong> to unlock all seven modes.
+                            </p>
+                        </div>
+                    </div>
+                </AccordionSection>
+
+                <AccordionSection title="9. Miscellaneous" icon={<Settings className="w-4 h-4" />}>
                     <div className="space-y-6">
                         {/* Calendar */}
                         <div>
@@ -1544,7 +1651,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="9. Stealth & Window Control" icon={<Ghost className="w-4 h-4" />}>
+                <AccordionSection title="10. Stealth & Window Control" icon={<Ghost className="w-4 h-4" />}>
                      <div className="space-y-4">
                         <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl mb-4">
                             <h4 className="text-[13px] font-semibold text-indigo-400 flex items-center gap-2 mb-1">

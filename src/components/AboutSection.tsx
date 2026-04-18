@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import {
     Github, Twitter, Shield, Cpu, Database,
-    Heart, Linkedin, Instagram, Mail, MicOff, Star, Bug, Globe, Sparkles, Zap, Camera
+    Heart, Linkedin, Instagram, Mail, MicOff, Star, Bug, Globe, Sparkles, Zap, Camera, LayoutGrid, User
 } from 'lucide-react';
 import evinProfile from '../assets/evin.png';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
@@ -64,17 +64,17 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
 
             {/* What's New Section */}
             <div>
-                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">What's New in v2.4</h4>
+                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">What's New in v2.5</h4>
                 <div className="bg-bg-item-surface rounded-xl border border-border-subtle overflow-hidden">
                     <div className="p-3 border-b border-border-subtle bg-bg-card/50">
                         <div className="flex items-start gap-4">
-                            <div className="w-10 h-10 rounded-lg bg-violet-500/10 flex items-center justify-center text-violet-400 shrink-0">
-                                <Sparkles size={20} />
+                            <div className="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400 shrink-0">
+                                <LayoutGrid size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">10-Minute Free Trial</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">Modes Manager</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Try Natively before committing. New users get a full-featured 10-minute trial including AI queries, live transcription, and web search — no credit card required.
+                                    Seven specialized AI personas — Interview, Sales, Recruiting, Team Meet, Lecture, Technical, and General. Each mode injects a tailored system prompt, reference files, and smart note sections into every response.
                                 </p>
                             </div>
                         </div>
@@ -83,12 +83,12 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                     <div className="p-3 border-b border-border-subtle bg-bg-card/50">
                         <div className="flex items-start gap-4">
                             <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-400 shrink-0">
-                                <Shield size={20} />
+                                <User size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Guided Permissions Setup</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">Custom Context in Profile Intelligence</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    A smart first-launch card walks you through granting screen recording and microphone access, with live status re-checks after you visit System Settings.
+                                    A free-form textarea in Profile Intelligence lets you inject any personal context — sales stats, product notes, LeetCode patterns, preferences — into every AI call as a structured block. Auto-saves as you type.
                                 </p>
                             </div>
                         </div>
@@ -97,12 +97,12 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                     <div className="p-3 border-b border-border-subtle bg-bg-card/50">
                         <div className="flex items-start gap-4">
                             <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400 shrink-0">
-                                <Camera size={20} />
+                                <Shield size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Reliable Screenshot Capture</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">Real-Time Pro License Sync</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Screenshots now consistently appear in the message bar during active meetings. Cmd+H and Shift+H global shortcuts work correctly in all scenarios.
+                                    Pro feature gates (Modes, Profile Intelligence) now update instantly when you activate or deactivate a license — no restart needed. Active mode is automatically cleared on license loss.
                                 </p>
                             </div>
                         </div>
@@ -114,9 +114,9 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                                 <Zap size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Custom Provider Notes & Summaries</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">STT Stability & Resilience</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Custom and cURL LLM providers now power meeting note generation, session summaries, and AI suggestions — not just live chat responses.
+                                    Deepgram reconnect storms are now prevented via exponential backoff and connection staggering. Server-side key pooling supports up to 6 Deepgram and ElevenLabs keys with automatic rotation on failure.
                                 </p>
                             </div>
                         </div>
@@ -232,8 +232,8 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                             </div>
                             <div className="flex items-center gap-4 pl-[60px]">
                                 <a
-                                    href="https://github.com/evinjohnn/natively-cluely-ai-assistant"
-                                    onClick={(e) => handleOpenLink(e, "https://github.com/evinjohnn/natively-cluely-ai-assistant")}
+                                    href="https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant"
+                                    onClick={(e) => handleOpenLink(e, "https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant")}
                                     className="text-text-tertiary hover:text-text-primary transition-colors"
                                     title="GitHub"
                                 >
@@ -270,8 +270,8 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                     {/* 2. Star & Report */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <a
-                            href="https://github.com/evinjohnn/natively-cluely-ai-assistant"
-                            onClick={(e) => handleOpenLink(e, "https://github.com/evinjohnn/natively-cluely-ai-assistant")}
+                            href="https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant"
+                            onClick={(e) => handleOpenLink(e, "https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant")}
                             className="bg-bg-item-surface border border-border-subtle rounded-xl p-5 transition-all group flex items-center gap-4 h-full hover:bg-white/10"
                         >
                             <div className="w-10 h-10 rounded-lg bg-yellow-500/10 flex items-center justify-center text-yellow-500 shrink-0 group-hover:scale-110 transition-transform">
@@ -284,8 +284,8 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                         </a>
 
                         <a
-                            href="https://github.com/evinjohnn/natively-cluely-ai-assistant/issues"
-                            onClick={(e) => handleOpenLink(e, "https://github.com/evinjohnn/natively-cluely-ai-assistant/issues")}
+                            href="https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/issues"
+                            onClick={(e) => handleOpenLink(e, "https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/issues")}
                             className="bg-bg-item-surface border border-border-subtle rounded-xl p-5 transition-all group flex items-center gap-4 h-full hover:bg-white/10"
                         >
                             <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center text-red-500 shrink-0 group-hover:scale-110 transition-transform">

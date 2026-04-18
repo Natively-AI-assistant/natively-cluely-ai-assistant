@@ -20,6 +20,20 @@ module.exports = {
           'item-surface': 'var(--bg-item-surface)',
           'item-active': 'var(--bg-item-active)',
         },
+        accent: {
+          primary: 'var(--accent-primary)',
+          secondary: 'var(--accent-muted)',
+        },
+        button: {
+          primary: {
+            bg: 'var(--btn-primary-bg)',
+            hover: 'var(--btn-primary-hover)',
+            'disabled-bg': 'var(--btn-primary-disabled-bg)',
+            'disabled-border': 'var(--btn-primary-disabled-border)',
+            'disabled-text': 'var(--btn-primary-disabled-text)',
+            'shadow-color': 'var(--btn-primary-shadow-color)',
+          }
+        },
         text: {
           primary: 'var(--text-primary)',
           secondary: 'var(--text-secondary)',
@@ -29,10 +43,6 @@ module.exports = {
           subtle: 'var(--border-subtle)',
           muted: 'var(--border-muted)',
         },
-        accent: {
-          primary: 'var(--accent-primary)',
-          secondary: 'var(--accent-muted)', // Mapping "secondary" to muted for compatibility if needed, or stick to refined naming
-        }
       },
       fontFamily: {
         sans: ["Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", "Helvetica", "Arial", "sans-serif"],

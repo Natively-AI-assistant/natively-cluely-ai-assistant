@@ -56,6 +56,7 @@ export class LLMHelper {
   private activeCurlProvider: CurlProvider | null = null;
   private groqFastTextMode: boolean = false;
   private knowledgeOrchestrator: any = null;
+  private customNotes: string = '';
   private aiResponseLanguage: string = 'auto';
   private sttLanguage: string = 'english-us';
   private nativelyKey: string | null = null;
@@ -213,7 +214,7 @@ export class LLMHelper {
   }
 
   private isGroqModel(modelId: string): boolean {
-    return modelId.startsWith("llama-") || modelId.startsWith("mixtral-") || modelId.startsWith("gemma-") || modelId.startsWith("meta-llama/");
+    return modelId.startsWith("llama-") || modelId.startsWith("mixtral-") || modelId.startsWith("gemma-") || modelId.startsWith("meta-llama/") || modelId.startsWith("qwen/") || modelId.startsWith("qwen-");
   }
 
   private isGeminiModel(modelId: string): boolean {
@@ -699,27 +700,50 @@ CRITICAL RULES:
    * @returns Suggested response for the user
    */
   public async generateSuggestion(context: string, lastQuestion: string): Promise<string> {
-    const basePrompt = `You are an expert interview coach. Based on the conversation transcript, provide a concise, natural response the user could say.
+    // Load active mode system prompt and context block (reference files + custom context)
+    let activeModePrompt = '';
+    let modeContextBlock = '';
+    try {
+      const { ModesManager } = require('./services/ModesManager');
+      const modesMgr = ModesManager.getInstance();
+      activeModePrompt = modesMgr.getActiveModeSystemPromptSuffix() ?? '';
+      modeContextBlock = modesMgr.buildActiveModeContextBlock() ?? '';
+    } catch (_modeErr: any) {
+      console.warn('[LLMHelper] ModesManager load failed in generateSuggestion (non-fatal):', _modeErr?.message);
+    }
+
+    // Prepend mode context block (reference files, custom context) to the transcript context
+    const enrichedContext = modeContextBlock
+      ? `${modeContextBlock}\n\n${context}`
+      : context;
+
+    // Inject custom user notes into every suggestion when present
+    const customNotesBlock = this.customNotes?.trim()
+      ? `\n\n<user_context>\n${this.customNotes.trim()}\n</user_context>\nUse this context naturally if relevant. Never quote it verbatim.`
+      : '';
+
+    const basePrompt = activeModePrompt
+      ? `${HARD_SYSTEM_PROMPT}\n\n## ACTIVE MODE\n${activeModePrompt}${customNotesBlock}`
+      : `You are an expert conversation coach. Based on the transcript, provide a concise, natural response the user could say.
 
 RULES:
 - Be direct and conversational
-- Keep responses under 3 sentences unless complexity requires more  
+- Keep responses under 3 sentences unless complexity requires more
 - Focus on answering the specific question asked
 - If it's a technical question, provide a clear, structured answer
 - Do NOT preface with "You could say" or similar - just give the answer directly
 - If unsure, answer briefly and confidently anyway.
-- Never hedge.
-- Never say "it depends".
+- Never hedge. Never say "it depends".${customNotesBlock}
 
 CONVERSATION SO FAR:
-${context}
+${enrichedContext}
 
-LATEST QUESTION FROM INTERVIEWER:
+LATEST QUESTION:
 ${lastQuestion}
 
 ANSWER DIRECTLY:`;
 
-    // Apply language instruction so this path honurs the user's language setting
+    // Apply language instruction so this path honours the user's language setting
     const systemPrompt = this.injectLanguageInstruction(basePrompt);
 
     try {
@@ -728,9 +752,10 @@ ANSWER DIRECTLY:`;
       } else if (this.customProvider || this.activeCurlProvider) {
         // Pass basePrompt (pre-language-injection) as systemPromptOverride so streamChat
         // calls injectLanguageInstruction exactly once. lastQuestion is the clean user message.
+        // enrichedContext carries the mode reference files + custom context.
         // ignoreKnowledgeMode=true: this is a live suggestion, not a knowledge/profile query.
         let fullResponse = '';
-        for await (const chunk of this.streamChat(lastQuestion, undefined, undefined, basePrompt, true)) {
+        for await (const chunk of this.streamChat(lastQuestion, undefined, enrichedContext, basePrompt, true)) {
           fullResponse += chunk;
         }
         return this.processResponse(fullResponse);
@@ -748,6 +773,10 @@ ANSWER DIRECTLY:`;
   public setKnowledgeOrchestrator(orchestrator: any): void {
     this.knowledgeOrchestrator = orchestrator;
     console.log('[LLMHelper] KnowledgeOrchestrator attached');
+  }
+
+  public setCustomNotes(notes: string): void {
+    this.customNotes = notes;
   }
 
   public getKnowledgeOrchestrator(): any {
@@ -892,7 +921,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       if (this.groqFastTextMode && !isMultimodal && this.groqClient) {
         console.log(`[LLMHelper] ⚡️ Groq Fast Text Mode Active. Routing to Groq...`);
         try {
-          return await this.generateWithGroq(combinedMessages.groq);
+          return await this.generateWithGroq(combinedMessages.groq); // intentional: Fast Text Mode always uses baseline GROQ_MODEL for speed — do not thread currentModelId
         } catch (e: any) {
           console.warn("[LLMHelper] Groq Fast Text failed, falling back to standard routing:", e.message);
           // Fall through to standard routing
@@ -950,7 +979,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         if (isMultimodal && imagePaths) {
           return await this.generateWithGroqMultimodal(userContent, imagePaths, openaiSystemPrompt);
         }
-        return await this.generateWithGroq(combinedMessages.groq);
+        return await this.generateWithGroq(combinedMessages.groq, this.currentModelId);
       }
 
       // Fallback (Gemini) - logic handled below by SMART DYNAMIC FALLBACK list
@@ -1006,7 +1035,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           providers.push({ name: 'Natively API', execute: () => this.generateWithNatively(userContent, openaiSystemPrompt) });
         }
         if (this.groqClient) {
-          providers.push({ name: `Groq (${textGroq})`, execute: () => this.generateWithGroq(combinedMessages.groq) });
+          providers.push({ name: `Groq (${textGroq})`, execute: () => this.generateWithGroq(combinedMessages.groq, textGroq) });
         }
         if (this.client) {
           providers.push({
@@ -1146,7 +1175,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     // Priority 5: Groq (Fallback despite JSON hallucination risks)
     if (this.groqClient) {
-      providers.push({ name: `Groq (${GROQ_MODEL}) fallback`, execute: () => this.generateWithGroq(message) });
+      providers.push({ name: `Groq (${GROQ_MODEL}) fallback`, execute: () => this.generateWithGroq(message) }); // intentional: structured-gen last-resort uses stable baseline model, not user selection
     }
 
     // Priority 6: Ollama (on-device fallback — last resort, no cloud dependency)
@@ -1157,7 +1186,26 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       });
     }
 
-    // Priority 7: Natively API — used when no other provider is available, or as final fallback
+    // Priority 7: Custom / cURL providers (OpenRouter etc.)
+    if (this.customProvider) {
+      providers.push({
+        name: `Custom Provider (${this.customProvider.name})`,
+        execute: () => this.executeCustomProvider(
+          this.customProvider!.curlCommand,
+          message,
+          '',
+          message,
+          ''
+        )
+      });
+    } else if (this.activeCurlProvider) {
+      providers.push({
+        name: `cURL Provider (${this.activeCurlProvider.name})`,
+        execute: () => this.chatWithCurl(message)
+      });
+    }
+
+    // Priority 8: Natively API — used when no other provider is available, or as final fallback
     const nativelyKeyForStructured = this.nativelyKey || (() => {
       try { return require('./services/CredentialsManager').CredentialsManager.getInstance().getNativelyApiKey() || null; } catch { return null; }
     })();
@@ -1169,7 +1217,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     }
 
     if (providers.length === 0) {
-      throw new Error('No reasoning model available. Please configure an OpenAI, Claude, Gemini, Groq, or Natively API key.');
+      throw new Error('No reasoning model available. Please configure an API key (OpenAI, Claude, Gemini, Groq, Natively) or a custom provider.');
     }
 
     const MAX_ROTATIONS = 3;
@@ -1198,14 +1246,14 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     throw new Error('All reasoning models failed for structured generation after 3 attempts');
   }
 
-  private async generateWithGroq(fullMessage: string): Promise<string> {
+  private async generateWithGroq(fullMessage: string, modelId: string = GROQ_MODEL): Promise<string> {
     if (!this.groqClient) throw new Error("Groq client not initialized");
 
     await this.rateLimiters.groq.acquire();
 
     // Non-streaming Groq call
     const response = await this.groqClient.chat.completions.create({
-      model: GROQ_MODEL,
+      model: modelId,
       messages: [{ role: "user", content: fullMessage }],
       temperature: 0.4,
       max_tokens: 8192,
@@ -1754,7 +1802,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           }
           return {
             name: `Groq (${modelId})`,
-            execute: () => this.generateWithGroq(`${systemPrompt}\n\n${userPrompt}`)
+            execute: () => this.generateWithGroq(`${systemPrompt}\n\n${userPrompt}`, modelId)
           };
 
         default:
@@ -1985,7 +2033,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         providers.push({ name: 'Natively API', execute: () => this.streamWithNatively(userContent, openaiSystemPrompt) });
       }
       if (this.groqClient) {
-        providers.push({ name: `Groq (${textGroq})`, execute: () => this.streamWithGroq(combinedMessages.groq) });
+        providers.push({ name: `Groq (${textGroq})`, execute: () => this.streamWithGroq(combinedMessages.groq, textGroq) });
       }
       if (this.openaiClient) {
         providers.push({ name: `OpenAI (${textOpenAI})`, execute: () => this.streamWithOpenai(userContent, openaiSystemPrompt, textOpenAI) });
@@ -2114,6 +2162,39 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       }
     }
 
+    // ============================================================
+    // ACTIVE MODE INJECTION (Context + System Prompt Suffix)
+    // ============================================================
+    try {
+      const { ModesManager } = require('./services/ModesManager');
+      const modesMgr = ModesManager.getInstance();
+      const modePromptSuffix = modesMgr.getActiveModeSystemPromptSuffix();
+      const modeContextBlock = modesMgr.buildActiveModeContextBlock();
+
+      if (modePromptSuffix) {
+        // Mode prompt supplements the base prompt — preserves KO profile intelligence if already set
+        const baseForMode = systemPromptOverride || HARD_SYSTEM_PROMPT;
+        systemPromptOverride = `${baseForMode}\n\n## ACTIVE MODE\n${modePromptSuffix}`;
+      }
+
+      if (modeContextBlock) {
+        // Guard combined context size: KO block + mode block must not exceed 60KB to protect
+        // the token budget for the actual user question.
+        const existingLen = context?.length ?? 0;
+        const COMBINED_CTX_CAP = 60_000;
+        if (existingLen + modeContextBlock.length > COMBINED_CTX_CAP) {
+          const available = Math.max(0, COMBINED_CTX_CAP - existingLen);
+          const trimmed = available > 0 ? modeContextBlock.slice(0, available) + '\n[...mode context truncated]' : '';
+          console.warn(`[LLMHelper] Combined context exceeded ${COMBINED_CTX_CAP} chars — mode context trimmed`);
+          if (trimmed) context = context ? `${trimmed}\n\n${context}` : trimmed;
+        } else {
+          context = context ? `${modeContextBlock}\n\n${context}` : modeContextBlock;
+        }
+      }
+    } catch (_modeErr: any) {
+      console.warn('[LLMHelper] ModesManager injection failed (non-fatal):', _modeErr?.message);
+    }
+
     // Preparation
     const isMultimodal = !!(imagePaths?.length);
 
@@ -2137,7 +2218,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           const groqSystem = systemPromptOverride || GROQ_SYSTEM_PROMPT;
           const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
           const groqFullMessage = `${finalGroqSystem}\n\n${userContent}`;
-          yield* this.streamWithGroq(groqFullMessage);
+          yield* this.streamWithGroq(groqFullMessage, this.currentModelId);
           return;
         } catch (e: any) {
           console.warn("[LLMHelper] Groq Fast Text streaming failed, falling back:", e.message);
@@ -2221,7 +2302,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       const groqSystem = systemPromptOverride ? baseSystemPrompt : GROQ_SYSTEM_PROMPT;
       const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
       const groqFullMessage = `${finalGroqSystem}\n\n${userContent}`;
-      yield* this.streamWithGroq(groqFullMessage);
+      yield* this.streamWithGroq(groqFullMessage, this.currentModelId);
       return;
     }
 
@@ -2246,7 +2327,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
               } else {
                 const groqSystem = systemPromptOverride ? baseSystemPrompt : GROQ_SYSTEM_PROMPT;
                 const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
-                yield* this.streamWithGroq(`${finalGroqSystem}\n\n${userContent}`);
+                yield* this.streamWithGroq(`${finalGroqSystem}\n\n${userContent}`); // intentional: emergency fallback waterfall — use stable GROQ_MODEL baseline, not currentModelId
               }
               return;
             } catch (groqErr: any) {
@@ -2392,11 +2473,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
   /**
    * Stream response from Groq
    */
-  private async * streamWithGroq(fullMessage: string): AsyncGenerator<string, void, unknown> {
+  private async * streamWithGroq(fullMessage: string, modelId: string = GROQ_MODEL): AsyncGenerator<string, void, unknown> {
     if (!this.groqClient) throw new Error("Groq client not initialized");
 
     const stream = await this.groqClient.chat.completions.create({
-      model: GROQ_MODEL,
+      model: modelId,
       messages: [{ role: "user", content: fullMessage }],
       stream: true,
       temperature: 0.4,

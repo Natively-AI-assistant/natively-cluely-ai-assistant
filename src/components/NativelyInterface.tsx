@@ -21,6 +21,7 @@ import {
     Zap,
     Edit3,
     SlidersHorizontal,
+    LayoutGrid,
     Ghost,
     Link,
     Code,
@@ -126,6 +127,21 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         const stored = localStorage.getItem('natively_hideChatHidesWidget');
         return stored ? stored === 'true' : true;
     });
+
+    // Active mode name (shown as a badge near the Modes button)
+    const [activeModeLabel, setActiveModeLabel] = useState<string | null>(null);
+
+    useEffect(() => {
+        // Load initial active mode name
+        window.electronAPI?.modesGetActive?.()
+            .then((mode: { name: string } | null) => setActiveModeLabel(mode?.name ?? null))
+            .catch(() => {});
+        // Live-update whenever mode is activated/deactivated
+        const unsub = window.electronAPI?.onModeChanged?.((data: { id: string | null; name: string | null }) => {
+            setActiveModeLabel(data.name);
+        });
+        return () => unsub?.();
+    }, []);
 
     // Model Selection State
     const [currentModel, setCurrentModel] = useState<string>('gemini-3-flash-preview');
@@ -2305,7 +2321,7 @@ Provide only the answer, nothing else.`;
                                             </button>
                                         </div>
 
-                                        <div className="w-px h-3 mx-1" style={appearance.dividerStyle} />
+
 
                                         {/* Mouse Passthrough Toggle */}
                                         <div className="relative">

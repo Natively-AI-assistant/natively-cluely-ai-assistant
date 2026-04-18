@@ -38,8 +38,15 @@ export class NativelyProSTT extends EventEmitter {
     private readonly MAX_RECONNECT   = 5;
     private readonly RECONNECT_BASE_MS = 1500;
     private reconnectTimer: NodeJS.Timeout | null = null;
+    // Cleared only after 5 s of stable connection so backoff actually increases on rapid 1006 loops
+    private stabilityTimer: NodeJS.Timeout | null = null;
 
     private readonly BACKEND_URL = 'wss://api.natively.software/v1/transcribe';
+
+    // Static: stagger concurrent connections with the same key so both instances
+    // don't hit the server (and its upstream Deepgram key rotation) simultaneously.
+    private static readonly nextSlotByKey = new Map<string, number>();
+    private static readonly SLOT_INTERVAL_MS = 3000;
 
     constructor(apiKey: string, channel: 'system' | 'mic' = 'system') {
         super();
@@ -130,6 +137,10 @@ export class NativelyProSTT extends EventEmitter {
             clearTimeout(this.reconnectTimer);
             this.reconnectTimer = null;
         }
+        if (this.stabilityTimer) {
+            clearTimeout(this.stabilityTimer);
+            this.stabilityTimer = null;
+        }
         this.closeUpstream();
         this.buffer = [];
     }
@@ -160,8 +171,29 @@ export class NativelyProSTT extends EventEmitter {
 
     // ── Internal ──────────────────────────────────────────────
 
-    private connect(): void {
+    private connect(skipStagger = false): void {
         if (this.isConnecting || !this.isActive) return;
+
+        if (!skipStagger) {
+            // Stagger connections for the same key to avoid concurrent server collisions.
+            // If the server received two connections within SLOT_INTERVAL_MS, it (or its
+            // upstream Deepgram key pool) can fail both with 1006.
+            const now = Date.now();
+            const reserved = NativelyProSTT.nextSlotByKey.get(this.apiKey) ?? 0;
+            const staggerMs = Math.max(0, reserved - now);
+            NativelyProSTT.nextSlotByKey.set(this.apiKey, Math.max(now, reserved) + NativelyProSTT.SLOT_INTERVAL_MS);
+
+            if (staggerMs > 0) {
+                this.isConnecting = true; // Hold the slot while waiting
+                console.log(`[NativelyProSTT:${this.channel}] Staggering connection ${staggerMs}ms (concurrent key collision prevention)`);
+                setTimeout(() => {
+                    this.isConnecting = false;
+                    if (this.isActive) this.connect(true);
+                }, staggerMs);
+                return;
+            }
+        }
+
         this.isConnecting = true;
         this.isConnected  = false;
 
@@ -226,10 +258,17 @@ export class NativelyProSTT extends EventEmitter {
                 }
 
                 if (msg.status === 'connected') {
-                    this.isConnecting     = false;
-                    this.isConnected      = true;
-                    this.reconnectAttempts = 0;
+                    this.isConnecting = false;
+                    this.isConnected  = true;
                     console.log(`[NativelyProSTT] Connected via ${msg.provider}`);
+                    // Delay resetting reconnectAttempts: only reset after 5 s of stability.
+                    // An immediate reset means every rapid 1006 loop re-uses the minimum
+                    // 1500 ms delay, causing an infinite tight reconnect storm.
+                    if (this.stabilityTimer) clearTimeout(this.stabilityTimer);
+                    this.stabilityTimer = setTimeout(() => {
+                        this.stabilityTimer = null;
+                        this.reconnectAttempts = 0;
+                    }, 5000);
                     this.flushBuffer();
                     return;
                 }
@@ -291,6 +330,8 @@ export class NativelyProSTT extends EventEmitter {
     private scheduleReconnect(): void {
         if (!this.isActive) return;
         this._chunksSent = 0;  // Reset per-session counter so chunk #N logs reflect the new session
+        // Connection dropped before stability window — cancel the backoff reset
+        if (this.stabilityTimer) { clearTimeout(this.stabilityTimer); this.stabilityTimer = null; }
         if (this.reconnectAttempts >= this.MAX_RECONNECT) {
             console.error('[NativelyProSTT] Max reconnect attempts reached — giving up');
             this.emit('error', new Error('NativelyProSTT: max reconnect attempts exceeded'));

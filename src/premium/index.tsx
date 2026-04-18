@@ -66,6 +66,10 @@ const _maxUltraUpgradeToaster = import.meta.glob<any>(
   '../../premium/src/MaxUltraUpgradeToaster.tsx',
   { eager: true }
 );
+const _modesSettings = import.meta.glob<any>(
+  '../../premium/src/ModesSettings.tsx',
+  { eager: true }
+);
 
 // ─── Helper ──────────────────────────────────────────────────────────
 function get<T>(mods: Record<string, any>, name: string, fallback: T): T {
@@ -103,3 +107,6 @@ export const NativelyApiPromoToaster: React.FC<any> =
 
 export const MaxUltraUpgradeToaster: React.FC<any> =
   get(_maxUltraUpgradeToaster, 'MaxUltraUpgradeToaster', NullComponent);
+
+export const ModesSettings: React.FC<any> =
+  get(_modesSettings, 'default', NullComponent);

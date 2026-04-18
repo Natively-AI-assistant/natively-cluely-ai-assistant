@@ -440,6 +440,13 @@ export class AppState {
         llmHelper.setGroqFastTextMode(true);
         console.log('[AppState] Fast mode restored from settings');
       }
+      // Restore custom notes for non-premium path
+      try {
+        const savedNotes = DatabaseManager.getInstance().getCustomNotes();
+        if (savedNotes) {
+          llmHelper.setCustomNotes(savedNotes);
+        }
+      } catch (_) {}
     }
 
     // Initialize RAGManager (requires database to be ready)
@@ -596,6 +603,14 @@ export class AppState {
         if (sm.get('knowledgeMode')) {
           this.knowledgeOrchestrator.setKnowledgeMode(true);
           console.log('[AppState] Knowledge mode restored from settings');
+        }
+
+        // Restore custom notes so orchestrator has them from first request
+        const savedNotes = DatabaseManager.getInstance().getCustomNotes();
+        if (savedNotes) {
+          this.knowledgeOrchestrator.setCustomNotes(savedNotes);
+          llmHelper.setCustomNotes(savedNotes);
+          console.log('[AppState] Custom notes restored');
         }
 
         console.log('[AppState] KnowledgeOrchestrator initialized');

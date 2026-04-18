@@ -1,6 +1,6 @@
 {
   "name": "natively",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "main": "dist-electron/electron/main.js",
   "description": "Natively is a meeting notes app that uses AI to generate notes from your meetings.",
   "scripts": {
@@ -132,7 +132,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "evinjohnn",
+        "owner": "Natively-AI-assistant",
         "repo": "natively-cluely-ai-assistant",
         "releaseType": "release"
       }
@@ -145,6 +145,7 @@
     "@electron/notarize": "^3.1.1",
     "@electron/rebuild": "^4.0.3",
     "@napi-rs/cli": "^3.5.1",
+    "@playwright/test": "^1.59.1",
     "@types/better-sqlite3": "^7.6.13",
     "@types/color": "^4.2.0",
     "@types/diff": "^6.0.0",
@@ -179,6 +180,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
     "@bany/curl-to-json": "^1.2.10",
+    "@deepgram/sdk": "^3.13.0",
     "@elevenlabs/client": "^0.15.1",
     "@elevenlabs/elevenlabs-js": "^2.39.0",
     "@google-cloud/speech": "^7.2.1",

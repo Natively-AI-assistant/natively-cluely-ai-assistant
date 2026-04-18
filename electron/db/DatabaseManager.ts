@@ -16,6 +16,9 @@ export interface Meeting {
         overview?: string;
         actionItems: string[];
         keyPoints: string[];
+        actionItemsTitle?: string;
+        keyPointsTitle?: string;
+        sections?: Array<{ title: string; bullets: string[] }>;
     };
     transcript?: Array<{
         speaker: string;
@@ -436,7 +439,356 @@ export class DatabaseManager {
             this.db.pragma('user_version = 10');
         }
 
+        // Version 10 → 11: Add modes, mode_reference_files, and mode_note_sections tables
+        if (version < 11) {
+            console.log('[DatabaseManager] Applying migration v10 → v11: Add modes tables');
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS modes (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    template_type TEXT NOT NULL DEFAULT 'general',
+                    custom_context TEXT NOT NULL DEFAULT '',
+                    is_active INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS mode_reference_files (
+                    id TEXT PRIMARY KEY,
+                    mode_id TEXT NOT NULL,
+                    file_name TEXT NOT NULL,
+                    content TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(mode_id) REFERENCES modes(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS mode_note_sections (
+                    id TEXT PRIMARY KEY,
+                    mode_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
+                    sort_order INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(mode_id) REFERENCES modes(id) ON DELETE CASCADE
+                );
+            `);
+            // Seed a default "General" mode as active
+            const defaultModeId = 'mode_general_default';
+            this.db.prepare(`
+                INSERT OR IGNORE INTO modes (id, name, template_type, custom_context, is_active)
+                VALUES (?, ?, ?, ?, 1)
+            `).run(defaultModeId, 'General', 'general', '');
+            this.db.pragma('user_version = 11');
+        }
+
+        // Version 11 → 12: Seed note sections for the default General mode if missing
+        if (version < 12) {
+            console.log('[DatabaseManager] Applying migration v11 → v12: Seed default General mode note sections');
+            const defaultModeId = 'mode_general_default';
+            const modeExists = this.db.prepare('SELECT id FROM modes WHERE id = ?').get(defaultModeId);
+            const existing = modeExists
+                ? this.db.prepare('SELECT id FROM mode_note_sections WHERE mode_id = ?').get(defaultModeId)
+                : null;
+            if (modeExists && !existing) {
+                const defaultSections = [
+                    { title: 'Summary',      description: 'High-level summary of the conversation.' },
+                    { title: 'Action items', description: 'Tasks and follow-ups identified.' },
+                    { title: 'Key points',   description: 'Important points discussed.' },
+                ];
+                const insertSection = this.db.prepare(
+                    'INSERT OR IGNORE INTO mode_note_sections (id, mode_id, title, description, sort_order) VALUES (?, ?, ?, ?, ?)'
+                );
+                defaultSections.forEach((s, i) => {
+                    insertSection.run(`ns_general_${i}`, defaultModeId, s.title, s.description, i);
+                });
+            }
+            this.db.pragma('user_version = 12');
+        }
+
+        // Version 12 → 13: Backfill note sections for any mode instance that has none
+        if (version < 13) {
+            console.log('[DatabaseManager] Applying migration v12 → v13: Backfill missing mode note sections');
+            const BACKFILL_SECTIONS: Record<string, Array<{ title: string; description: string }>> = {
+                general: [
+                    { title: 'Summary',      description: 'High-level summary of the conversation.' },
+                    { title: 'Action items', description: 'Tasks and follow-ups identified.' },
+                    { title: 'Key points',   description: 'Important points discussed.' },
+                ],
+                'looking-for-work': [
+                    { title: 'Follow-up actions',       description: 'Next interview steps or additional materials I said I would send if applicable.' },
+                    { title: 'Overview',                description: 'Overview of the interview, the company, and general structure.' },
+                    { title: 'Questions and responses', description: 'All questions asked to me during the interview and answers that gave.' },
+                    { title: 'Areas to improve',        description: 'What I could have done better during the interview.' },
+                    { title: 'Role details',            description: 'Anything discussed about the position, salary expectations, etc.' },
+                ],
+                sales: [
+                    { title: 'Action Items',        description: 'All action items that were said I would do after the meeting.' },
+                    { title: 'Outcome',             description: 'Did I close the sale and what was the outcome of the conversation.' },
+                    { title: 'Prospect background', description: 'Background and context on who I was selling to.' },
+                    { title: 'Discovery',           description: 'What the prospect said during discovery.' },
+                    { title: 'Product',             description: "How I pitched the product and the prospect's reaction." },
+                    { title: 'Objections',          description: 'Objections from the prospect if there were any.' },
+                ],
+                recruiting: [
+                    { title: 'Action Items',          description: 'All action items that I have to do after the meeting.' },
+                    { title: 'Experience and skills', description: "Candidate's previous work experience and skills discussed." },
+                    { title: 'Quality of responses',  description: 'If there were questions asked, how well and how accurately the candidate answered each question.' },
+                    { title: 'Interest in company',   description: 'What the candidate said about their interest in the company.' },
+                    { title: 'Role expectations',     description: 'Anything discussed about the position, salary expectations, etc.' },
+                ],
+                'team-meet': [
+                    { title: 'Action Items',           description: 'All action items that were said I would do after the meeting.' },
+                    { title: 'Announcements',          description: 'Any team-wide announcements from the meeting.' },
+                    { title: 'Team updates',           description: "Each team member's progress, accomplishments, and current focus." },
+                    { title: 'Challenges or blockers', description: 'Any issues or obstacles raised that may affect progress.' },
+                    { title: 'Decisions made',         description: 'Key decisions or agreements reached during the meeting.' },
+                ],
+                lecture: [
+                    { title: 'Follow-up work', description: 'Follow-up reading, assignments, or tasks to complete.' },
+                    { title: 'Topic',          description: 'Main subject or theme of the lecture.' },
+                    { title: 'Key concepts',   description: 'Core ideas or frameworks covered.' },
+                    { title: 'Content',        description: 'All content from the lecture with incredibly detailed bullet notes.' },
+                ],
+                'technical-interview': [
+                    { title: 'Problems covered', description: 'Each problem asked, the approach used, and the outcome.' },
+                    { title: 'Concepts tested',  description: 'Key algorithms, data structures, or system design concepts that came up.' },
+                    { title: 'What went well',   description: 'Approaches or explanations that landed well.' },
+                    { title: 'Areas to study',   description: 'Topics or gaps identified that need more preparation.' },
+                    { title: 'Action items',     description: 'Follow-up steps — e.g. send code, study specific topics, await next round.' },
+                ],
+            };
+
+            const allModes = this.db.prepare('SELECT id, template_type FROM modes').all() as Array<{ id: string; template_type: string }>;
+            const insertSection = this.db.prepare(
+                'INSERT OR IGNORE INTO mode_note_sections (id, mode_id, title, description, sort_order) VALUES (?, ?, ?, ?, ?)'
+            );
+            for (const mode of allModes) {
+                const hasSection = this.db.prepare('SELECT id FROM mode_note_sections WHERE mode_id = ? LIMIT 1').get(mode.id);
+                if (!hasSection) {
+                    const sections = BACKFILL_SECTIONS[mode.template_type] ?? [];
+                    sections.forEach((s, i) => {
+                        insertSection.run(`ns_bf_${mode.id}_${i}`, mode.id, s.title, s.description, i);
+                    });
+                    if (sections.length > 0) {
+                        console.log(`[DatabaseManager] Backfilled ${sections.length} sections for mode "${mode.id}" (${mode.template_type})`);
+                    }
+                }
+            }
+            this.db.pragma('user_version = 13');
+        }
+
+        // Version 13 → 14: Add profile_custom_notes table
+        if (version < 14) {
+            console.log('[DatabaseManager] Applying migration v13 → v14: Add profile_custom_notes table');
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS profile_custom_notes (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    content TEXT NOT NULL DEFAULT '',
+                    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                );
+                INSERT OR IGNORE INTO profile_custom_notes (id, content) VALUES (1, '');
+            `);
+            this.db.pragma('user_version = 14');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
+    }
+
+    // ============================================
+    // Profile Custom Notes
+    // ============================================
+
+    public getCustomNotes(): string {
+        if (!this.db) return '';
+        try {
+            const row = this.db.prepare('SELECT content FROM profile_custom_notes WHERE id = 1').get() as { content: string } | undefined;
+            return row?.content ?? '';
+        } catch (e) {
+            console.error('[DatabaseManager] getCustomNotes failed:', e);
+            return '';
+        }
+    }
+
+    public saveCustomNotes(content: string): void {
+        if (!this.db) return;
+        try {
+            this.db.prepare(
+                'INSERT INTO profile_custom_notes (id, content, updated_at) VALUES (1, ?, datetime(\'now\')) ON CONFLICT(id) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at'
+            ).run(content);
+        } catch (e) {
+            console.error('[DatabaseManager] saveCustomNotes failed:', e);
+        }
+    }
+
+    // ============================================
+    // Modes CRUD
+    // ============================================
+
+    public getModes(): any[] {
+        if (!this.db) return [];
+        try {
+            return this.db.prepare('SELECT * FROM modes ORDER BY created_at ASC').all();
+        } catch (e) {
+            console.error('[DatabaseManager] getModes failed:', e);
+            return [];
+        }
+    }
+
+    public getActiveMode(): any | null {
+        if (!this.db) return null;
+        try {
+            return this.db.prepare('SELECT * FROM modes WHERE is_active = 1 LIMIT 1').get() ?? null;
+        } catch (e) {
+            console.error('[DatabaseManager] getActiveMode failed:', e);
+            return null;
+        }
+    }
+
+    public createMode(mode: { id: string; name: string; templateType: string; customContext: string }): void {
+        if (!this.db) return;
+        try {
+            this.db.prepare(`
+                INSERT INTO modes (id, name, template_type, custom_context, is_active)
+                VALUES (?, ?, ?, ?, 0)
+            `).run(mode.id, mode.name, mode.templateType, mode.customContext);
+        } catch (e) {
+            console.error('[DatabaseManager] createMode failed:', e);
+        }
+    }
+
+    public updateMode(id: string, updates: { name?: string; templateType?: string; customContext?: string }): void {
+        if (!this.db) return;
+        try {
+            if (updates.name !== undefined) {
+                this.db.prepare('UPDATE modes SET name = ? WHERE id = ?').run(updates.name, id);
+            }
+            if (updates.templateType !== undefined) {
+                this.db.prepare('UPDATE modes SET template_type = ? WHERE id = ?').run(updates.templateType, id);
+            }
+            if (updates.customContext !== undefined) {
+                this.db.prepare('UPDATE modes SET custom_context = ? WHERE id = ?').run(updates.customContext, id);
+            }
+        } catch (e) {
+            console.error('[DatabaseManager] updateMode failed:', e);
+        }
+    }
+
+    public deleteMode(id: string): void {
+        if (!this.db) return;
+        try {
+            this.db.prepare('DELETE FROM modes WHERE id = ?').run(id);
+        } catch (e) {
+            console.error('[DatabaseManager] deleteMode failed:', e);
+        }
+    }
+
+    public setActiveMode(id: string | null): void {
+        if (!this.db) return;
+        try {
+            const txn = this.db.transaction(() => {
+                this.db!.prepare('UPDATE modes SET is_active = 0').run();
+                if (id) {
+                    const result = this.db!.prepare('UPDATE modes SET is_active = 1 WHERE id = ?').run(id);
+                    if (result.changes === 0) {
+                        console.warn(`[DatabaseManager] setActiveMode: no mode found with id "${id}" — active mode cleared`);
+                    }
+                }
+            });
+            txn();
+        } catch (e) {
+            console.error('[DatabaseManager] setActiveMode failed:', e);
+        }
+    }
+
+    public getReferenceFiles(modeId: string): any[] {
+        if (!this.db) return [];
+        try {
+            return this.db.prepare('SELECT * FROM mode_reference_files WHERE mode_id = ? ORDER BY created_at ASC').all(modeId);
+        } catch (e) {
+            console.error('[DatabaseManager] getReferenceFiles failed:', e);
+            return [];
+        }
+    }
+
+    public addReferenceFile(file: { id: string; modeId: string; fileName: string; content: string }): void {
+        if (!this.db) return;
+        try {
+            this.db.prepare(`
+                INSERT INTO mode_reference_files (id, mode_id, file_name, content)
+                VALUES (?, ?, ?, ?)
+            `).run(file.id, file.modeId, file.fileName, file.content);
+        } catch (e) {
+            console.error('[DatabaseManager] addReferenceFile failed:', e);
+        }
+    }
+
+    public deleteReferenceFile(id: string): void {
+        if (!this.db) return;
+        try {
+            this.db.prepare('DELETE FROM mode_reference_files WHERE id = ?').run(id);
+        } catch (e) {
+            console.error('[DatabaseManager] deleteReferenceFile failed:', e);
+        }
+    }
+
+    // ── Note Sections ─────────────────────────────────────────────
+
+    public getNoteSections(modeId: string): any[] {
+        if (!this.db) return [];
+        try {
+            return this.db.prepare(
+                'SELECT * FROM mode_note_sections WHERE mode_id = ? ORDER BY sort_order ASC, created_at ASC'
+            ).all(modeId);
+        } catch (e) {
+            console.error('[DatabaseManager] getNoteSections failed:', e);
+            return [];
+        }
+    }
+
+    public addNoteSection(section: { id: string; modeId: string; title: string; description: string; sortOrder: number }): void {
+        if (!this.db) return;
+        try {
+            this.db.prepare(`
+                INSERT INTO mode_note_sections (id, mode_id, title, description, sort_order)
+                VALUES (?, ?, ?, ?, ?)
+            `).run(section.id, section.modeId, section.title, section.description, section.sortOrder);
+        } catch (e) {
+            console.error('[DatabaseManager] addNoteSection failed:', e);
+        }
+    }
+
+    public updateNoteSection(id: string, updates: { title?: string; description?: string; sortOrder?: number }): void {
+        if (!this.db) return;
+        try {
+            if (updates.title !== undefined) {
+                this.db.prepare('UPDATE mode_note_sections SET title = ? WHERE id = ?').run(updates.title, id);
+            }
+            if (updates.description !== undefined) {
+                this.db.prepare('UPDATE mode_note_sections SET description = ? WHERE id = ?').run(updates.description, id);
+            }
+            if (updates.sortOrder !== undefined) {
+                this.db.prepare('UPDATE mode_note_sections SET sort_order = ? WHERE id = ?').run(updates.sortOrder, id);
+            }
+        } catch (e) {
+            console.error('[DatabaseManager] updateNoteSection failed:', e);
+        }
+    }
+
+    public deleteNoteSection(id: string): void {
+        if (!this.db) return;
+        try {
+            this.db.prepare('DELETE FROM mode_note_sections WHERE id = ?').run(id);
+        } catch (e) {
+            console.error('[DatabaseManager] deleteNoteSection failed:', e);
+        }
+    }
+
+    public deleteAllNoteSections(modeId: string): void {
+        if (!this.db) return;
+        try {
+            this.db.prepare('DELETE FROM mode_note_sections WHERE mode_id = ?').run(modeId);
+        } catch (e) {
+            console.error('[DatabaseManager] deleteAllNoteSections failed:', e);
+        }
     }
 
     // ============================================
