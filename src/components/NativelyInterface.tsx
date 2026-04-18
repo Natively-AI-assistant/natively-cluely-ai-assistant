@@ -410,6 +410,24 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         });
     };
 
+    // STT Status listener — must survive isExpanded changes.
+    // If registered inside the [isExpanded] effect, events are dropped during cleanup.
+    useEffect(() => {
+        return window.electronAPI.onSttStatusChanged((data) => {
+            if (data.channel === 'user') {
+                setSttUserStatus(data.state);
+                setSttUserProvider(data.provider);
+                if (data.error) setSttUserError(data.error);
+                if (data.state === 'connected') setSttUserError('');
+            } else if (data.channel === 'interviewer') {
+                setSttInterviewerStatus(data.state);
+                setSttInterviewerProvider(data.provider);
+                if (data.error) setSttInterviewerError(data.error);
+                if (data.state === 'connected') setSttInterviewerError('');
+            }
+        });
+    }, []);
+
     // Connect to Native Audio Backend
     useEffect(() => {
         const cleanups: (() => void)[] = [];
@@ -424,21 +442,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         }));
         cleanups.push(window.electronAPI.onNativeAudioDisconnected(() => {
             setIsConnected(false);
-        }));
-
-        // STT Status — dispatch to correct channel
-        cleanups.push(window.electronAPI.onSttStatusChanged((data) => {
-            if (data.channel === 'user') {
-                setSttUserStatus(data.state);
-                setSttUserProvider(data.provider);
-                if (data.error) setSttUserError(data.error);
-                if (data.state === 'connected') setSttUserError('');
-            } else if (data.channel === 'interviewer') {
-                setSttInterviewerStatus(data.state);
-                setSttInterviewerProvider(data.provider);
-                if (data.error) setSttInterviewerError(data.error);
-                if (data.state === 'connected') setSttInterviewerError('');
-            }
         }));
 
         // Real-time Transcripts
