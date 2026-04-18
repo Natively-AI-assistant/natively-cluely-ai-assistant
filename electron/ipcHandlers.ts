@@ -704,7 +704,10 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle("get-os-version", async () => {
     const platform = process.platform;
     if (platform === 'darwin') {
-      return `macOS ${os.release()}`;
+      const darwinMajor = parseInt(os.release().split('.')[0] || '0', 10);
+      // Darwin 20 = macOS 11 (Big Sur), each Darwin major = +1 macOS major
+      const macosMajor = darwinMajor >= 20 ? darwinMajor - 9 : null;
+      return macosMajor ? `macOS ${macosMajor}` : `macOS ${os.release()}`;
     }
     if (platform === 'win32') {
       const release = os.release();
