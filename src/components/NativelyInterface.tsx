@@ -79,6 +79,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     const { shortcuts, isShortcutPressed } = useShortcuts();
     const [messages, setMessages] = useState<Message[]>([]);
     const [isConnected, setIsConnected] = useState(false);
+    const [sttUserStatus, setSttUserStatus] = useState<'connected' | 'reconnecting' | 'failed'>('connected');
+    const [sttUserError, setSttUserError] = useState<string>('');
+    const [sttUserProvider, setSttUserProvider] = useState<string>('');
+    const [sttInterviewerStatus, setSttInterviewerStatus] = useState<'connected' | 'reconnecting' | 'failed'>('connected');
+    const [sttInterviewerError, setSttInterviewerError] = useState<string>('');
+    const [sttInterviewerProvider, setSttInterviewerProvider] = useState<string>('');
     const [isProcessing, setIsProcessing] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [conversationContext, setConversationContext] = useState<string>('');
@@ -418,6 +424,21 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         }));
         cleanups.push(window.electronAPI.onNativeAudioDisconnected(() => {
             setIsConnected(false);
+        }));
+
+        // STT Status — dispatch to correct channel
+        cleanups.push(window.electronAPI.onSttStatusChanged((data) => {
+            if (data.channel === 'user') {
+                setSttUserStatus(data.state);
+                setSttUserProvider(data.provider);
+                if (data.error) setSttUserError(data.error);
+                if (data.state === 'connected') setSttUserError('');
+            } else if (data.channel === 'interviewer') {
+                setSttInterviewerStatus(data.state);
+                setSttInterviewerProvider(data.provider);
+                if (data.error) setSttInterviewerError(data.error);
+                if (data.state === 'connected') setSttInterviewerError('');
+            }
         }));
 
         // Real-time Transcripts
@@ -1215,12 +1236,26 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
             manualTranscriptRef.current = '';
 
             if (!question && currentAttachments.length === 0) {
-                // No voice input and no image
-                setMessages(prev => [...prev, {
-                    id: Date.now().toString(),
-                    role: 'system',
-                    text: '⚠️ No speech detected. Try speaking closer to your microphone.'
-                }]);
+                // No voice input and no image — show real STT error if available
+                if (sttUserStatus === 'failed' && sttUserError) {
+                    setMessages(prev => [...prev, {
+                        id: Date.now().toString(),
+                        role: 'system',
+                        text: `❌ STT Error: ${sttUserError}`
+                    }]);
+                } else if (sttUserStatus === 'reconnecting') {
+                    setMessages(prev => [...prev, {
+                        id: Date.now().toString(),
+                        role: 'system',
+                        text: '⏳ STT is reconnecting, try again in a moment.'
+                    }]);
+                } else {
+                    setMessages(prev => [...prev, {
+                        id: Date.now().toString(),
+                        role: 'system',
+                        text: '⚠️ No speech detected. Try speaking closer to your microphone.'
+                    }]);
+                }
                 return;
             }
 
@@ -1944,6 +1979,48 @@ Provide only the answer, nothing else.`;
         return unsubscribe;
     }, []);
 
+    // ── Derived STT status for the rolling transcript indicator (interviewer channel) ──
+    const interviewerSttIndicatorStatus = sttInterviewerStatus;
+    // Strip consecutive error count from display — show only in expanded diagnostics
+    const interviewerSttIndicatorError = sttInterviewerError?.replace(/\s*\(\d+ consecutive errors\):?/gi, '');
+
+    const copyDiagnostics = async () => {
+        const version = import.meta.env.VITE_APP_VERSION || 'unknown';
+        const [arch, osVersion] = await Promise.all([
+            window.electronAPI?.getArch?.().catch(() => 'unknown'),
+            window.electronAPI?.getOsVersion?.().catch(() => 'unknown'),
+        ]);
+        const { categorizeSttError } = await import('../lib/sttErrorMapper');
+        const userCat = sttUserError ? categorizeSttError(sttUserError) : null;
+        const interviewerCat = sttInterviewerError ? categorizeSttError(sttInterviewerError) : null;
+        const report = [
+            '## STT Diagnostic Report',
+            `App Version: ${version}`,
+            `Platform: ${osVersion} (${arch})`,
+            `---`,
+            `Microphone Provider: ${sttUserProvider}`,
+            `Microphone Status: ${sttUserStatus}`,
+            userCat ? `Microphone Category: ${userCat.title} [${userCat.category}]` : '',
+            `Microphone Error: ${sttUserError || 'N/A'}`,
+            `---`,
+            `System Audio Provider: ${sttInterviewerProvider}`,
+            `System Audio Status: ${sttInterviewerStatus}`,
+            interviewerCat ? `System Audio Category: ${interviewerCat.title} [${interviewerCat.category}]` : '',
+            `System Audio Error: ${sttInterviewerError || 'N/A'}`,
+            `Timestamp: ${new Date().toISOString()}`,
+        ].filter(Boolean).join('\n');
+        try {
+            await navigator.clipboard.writeText(report);
+        } catch {
+            const ta = document.createElement('textarea');
+            ta.value = report;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+        }
+    };
+
     return (
         <div ref={contentRef} className="flex flex-col items-center w-fit mx-auto h-fit min-h-0 bg-transparent p-0 rounded-[24px] font-sans gap-2 overlay-text-primary">
 
@@ -2038,14 +2115,25 @@ Provide only the answer, nothing else.`;
                                 </div>
                             )}
 
-                            {/* Rolling Transcript Bar - Single-line interviewer speech */}
-                            {(rollingTranscript || isInterviewerSpeaking) && showTranscript && (
+                            {/* Rolling Transcript Bar — includes STT status indicator inline */}
+                            {(showTranscript && rollingTranscript) || interviewerSttIndicatorStatus !== 'connected' || sttUserStatus !== 'connected' ? (
                                 <RollingTranscript
-                                    text={rollingTranscript}
+                                    text={showTranscript ? rollingTranscript : ''}
                                     isActive={isInterviewerSpeaking}
-                                    surfaceStyle={appearance.transcriptStyle}
+                                    surfaceStyle={showTranscript ? appearance.transcriptStyle : undefined}
+                                    interviewerChannel={{
+                                        status: interviewerSttIndicatorStatus,
+                                        error: interviewerSttIndicatorError,
+                                        provider: sttInterviewerProvider,
+                                    }}
+                                    microphoneChannel={{
+                                        status: sttUserStatus,
+                                        error: sttUserError,
+                                        provider: sttUserProvider,
+                                    }}
+                                    onCopyDiagnostics={copyDiagnostics}
                                 />
-                            )}
+                            ) : null}
 
                             {/* Chat History - Only show if there are messages OR active states */}
                             {(messages.length > 0 || isManualRecording || isProcessing) && (

@@ -109,6 +109,9 @@ interface ElectronAPI {
   onSttLanguageAutoDetected: (callback: (bcp47: string) => void) => () => void
   onSystemAudioPermissionDenied: (callback: (message: string) => void) => () => void
 
+  // STT Status Events
+  onSttStatusChanged: (callback: (data: { state: 'connected' | 'reconnecting' | 'failed'; provider: string; error?: string; channel: 'user' | 'interviewer'; reconnectAttempts?: number }) => void) => () => void
+
   // Intelligence Mode IPC
   generateAssist: () => Promise<{ insight: string | null }>
   generateWhatToSay: (question?: string, imagePaths?: string[]) => Promise<{ answer: string | null; question?: string; error?: string }>
@@ -285,9 +288,10 @@ interface ElectronAPI {
   setVerboseLogging: (enabled: boolean) => Promise<{ success: boolean }>;
   getLogFilePath: () => Promise<string | null>;
   openLogFile: () => Promise<{ success: boolean; error?: string }>;
-  
+
   // Arch
   getArch: () => Promise<string>;
+  getOsVersion: () => Promise<string>;
 
   // Cropper API
   cropperConfirmed: (bounds: Electron.Rectangle) => void;
@@ -665,6 +669,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
     const subscription = (_: any, message: string) => callback(message);
     ipcRenderer.on('system-audio-permission-denied', subscription);
     return () => { ipcRenderer.removeListener('system-audio-permission-denied', subscription); };
+  },
+
+  // STT Status Events
+  onSttStatusChanged: (callback: (data: { state: 'connected' | 'reconnecting' | 'failed'; provider: string; error?: string; channel: 'user' | 'interviewer'; reconnectAttempts?: number }) => void) => {
+    const subscription = (_: any, data: any) => callback(data);
+    ipcRenderer.on('stt-status', subscription);
+    return () => { ipcRenderer.removeListener('stt-status', subscription); };
   },
 
   // Intelligence Mode IPC
@@ -1155,6 +1166,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   
   // Arch
   getArch: () => ipcRenderer.invoke('get-arch'),
+  getOsVersion: () => ipcRenderer.invoke('get-os-version'),
 
   // Cropper API
   cropperConfirmed: (bounds: Electron.Rectangle) => ipcRenderer.send('cropper-confirmed', bounds),

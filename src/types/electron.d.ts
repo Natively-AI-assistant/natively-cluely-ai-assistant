@@ -138,6 +138,9 @@ export interface ElectronAPI {
   onSttLanguageAutoDetected: (callback: (bcp47: string) => void) => () => void
   onSystemAudioPermissionDenied: (callback: (message: string) => void) => () => void
 
+  // STT Status Events
+  onSttStatusChanged: (callback: (data: { state: 'connected' | 'reconnecting' | 'failed'; provider: string; error?: string; channel: 'user' | 'interviewer' }) => void) => () => void
+
   getNativeAudioStatus: () => Promise<{ connected: boolean }>
 
   // Intelligence Mode IPC
@@ -356,6 +359,7 @@ export interface ElectronAPI {
 
   // Arch
   getArch: () => Promise<string>;
+  getOsVersion: () => Promise<string>;
 
   // Cropper API
   cropperConfirmed: (bounds: { x: number; y: number; width: number; height: number }) => void;

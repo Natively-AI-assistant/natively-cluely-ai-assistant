@@ -321,6 +321,100 @@ body {
   border-bottom-color: transparent;
 }
 
+/* ─── STT Status States in Transcript ────────────────────────────────────
+   Instrument-panel aesthetic: subtle, purposeful, no noise.
+   Each state has its own surface treatment and content layout.
+   ─────────────────────────────────────────────────────────────────────── */
+
+@keyframes stt-state-enter {
+  0% { opacity: 0; transform: translateY(2px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes stt-pulse-red {
+  0%, 100% { opacity: 0.06; }
+  50% { opacity: 0.30; }
+}
+
+@keyframes stt-pulse-amber {
+  0%, 100% { opacity: 0.06; }
+  50% { opacity: 0.28; }
+}
+
+@keyframes stt-wave-dot {
+  0% { transform: scaleY(1); opacity: 0.3; }
+  40% { transform: scaleY(2.4); opacity: 1; }
+  100% { transform: scaleY(1); opacity: 0.3; }
+}
+
+.stt-state-enter {
+  animation: stt-state-enter 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.stt-pulse-red {
+  animation: stt-pulse-red 2s ease-in-out infinite;
+  will-change: opacity;
+  contain: layout paint;
+  transform: translate3d(0,0,0);
+}
+
+.stt-pulse-amber {
+  animation: stt-pulse-amber 2s ease-in-out infinite;
+  will-change: opacity;
+  contain: layout paint;
+  transform: translate3d(0,0,0);
+}
+
+.stt-wave-dot {
+  animation: stt-wave-dot 1.2s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.stt-wave-dot:nth-child(2) { animation-delay: 0.15s; }
+.stt-wave-dot:nth-child(3) { animation-delay: 0.3s; }
+.stt-wave-dot:nth-child(4) { animation-delay: 0.45s; }
+
+/* ─── STT Error Panel — matches overlay surface pattern with red accent ── */
+.stt-error-surface {
+    background: var(--overlay-panel-bg);
+    border-color: rgba(220, 38, 38, 0.20);
+}
+
+.stt-error-card-fail {
+    background: var(--overlay-chip-bg);
+    border-color: rgba(220, 38, 38, 0.25);
+}
+
+.stt-error-card-ok {
+    background: var(--overlay-chip-bg);
+    border-color: var(--overlay-border-soft);
+}
+
+.stt-error-card-reconnecting {
+    background: var(--overlay-chip-bg);
+    border-color: rgba(202, 138, 4, 0.25);
+}
+
+.stt-error-code-bg {
+    background: var(--overlay-code-bg);
+    border-color: rgba(220, 38, 38, 0.12);
+}
+
+[data-theme='light'] .stt-error-surface {
+    background: var(--overlay-panel-bg);
+    border-color: rgba(220, 38, 38, 0.18);
+}
+
+[data-theme='light'] .stt-error-card-fail {
+    background: var(--overlay-chip-bg);
+    border-color: rgba(220, 38, 38, 0.22);
+}
+
+[data-theme='light'] .stt-error-card-reconnecting {
+    background: var(--overlay-chip-bg);
+    border-color: rgba(202, 138, 4, 0.22);
+}
+
 .overlay-subtle-surface {
   background: var(--overlay-chip-bg);
   border-color: var(--overlay-border-soft);

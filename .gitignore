@@ -192,6 +192,9 @@ native-module/*.node
 .opencode/
 .planning/
 opencode.json
+.superpowers/
+.superbrains/
+docs/superpowers/
 
 # Agent documentation patterns
 **/AGENTS.md

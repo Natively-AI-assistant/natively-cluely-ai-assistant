@@ -4,6 +4,7 @@ import { app, ipcMain, shell, dialog, desktopCapturer, systemPreferences, Browse
 import { AppState } from "./main"
 import { GEMINI_FLASH_MODEL } from "./IntelligenceManager"
 import { DatabaseManager } from "./db/DatabaseManager"; // Import Database Manager
+import * as os from "os";
 import * as path from "path";
 import * as fs from "fs";
 import { AudioDevices } from "./audio/AudioDevices";
@@ -698,6 +699,20 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle("get-arch", async () => {
     return process.arch;
+  });
+
+  safeHandle("get-os-version", async () => {
+    const platform = process.platform;
+    if (platform === 'darwin') {
+      return `macOS ${os.release()}`;
+    }
+    if (platform === 'win32') {
+      const release = os.release();
+      // Windows 11 build starts at 22000
+      const majorBuild = parseInt(release.split('.')[2] || '0', 10);
+      return majorBuild >= 22000 ? `Windows 11` : `Windows 10`;
+    }
+    return os.type();
   });
 
   // LLM Model Management Handlers

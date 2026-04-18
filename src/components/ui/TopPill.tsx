@@ -1,4 +1,4 @@
-import { ChevronUp, ChevronDown, PointerOff } from "lucide-react";
+import { ChevronUp, ChevronDown } from "lucide-react";
 import icon from "../icon.png";
 import type { OverlayAppearance } from "../../lib/overlayAppearance";
 
