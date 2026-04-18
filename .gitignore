@@ -213,3 +213,5 @@ test_*.py
 qa-report.json
 templog*.txt
 dodollm.txt
+temp_code_expansion/
+cluelyprompts/
