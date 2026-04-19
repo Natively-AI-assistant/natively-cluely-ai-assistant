@@ -37,7 +37,7 @@ export function categorizeSttError(rawError: string): SttErrorCategory {
 
     // 1. Authentication errors — immediately fatal
     if (
-        rawError.includes('401')
+        rawError.startsWith('401 ')
         || lower.includes('auth_timeout')
         || lower.includes('invalid_key')
         || lower.includes('invalid api')
@@ -54,7 +54,7 @@ export function categorizeSttError(rawError: string): SttErrorCategory {
     }
 
     // 2. Access denied / geo-blocking
-    if (rawError.includes('403') || lower.includes('forbidden')) {
+    if (rawError.startsWith('403 ') || lower.includes('forbidden')) {
         return {
             title: 'Access Denied',
             body: 'This service is not available in your region or your API key lacks the required permissions.',
@@ -75,7 +75,7 @@ export function categorizeSttError(rawError: string): SttErrorCategory {
     }
 
     // 4. Rate limited
-    if (rawError.includes('429') || lower.includes('too many requests') || lower.includes('rate limit')) {
+    if (rawError.startsWith('429 ') || lower.includes('too many requests') || lower.includes('rate limit')) {
         return {
             title: 'Rate Limited',
             body: 'Too many requests. The service is throttling your connection.',
@@ -116,9 +116,9 @@ export function categorizeSttError(rawError: string): SttErrorCategory {
 
     // 7. Service unavailable (5xx)
     if (
-        rawError.includes('500')
-        || rawError.includes('502')
-        || rawError.includes('503')
+        rawError.startsWith('500 ')
+        || rawError.startsWith('502 ')
+        || rawError.startsWith('503 ')
         || lower.includes('internal server error')
         || lower.includes('bad gateway')
         || lower.includes('service unavailable')
@@ -132,7 +132,7 @@ export function categorizeSttError(rawError: string): SttErrorCategory {
     }
 
     // 8. Invalid configuration / bad request
-    if (rawError.includes('400') || lower.includes('bad request') || lower.includes('invalid argument')) {
+    if (rawError.startsWith('400 ') || lower.includes('bad request') || lower.includes('invalid argument')) {
         return {
             title: 'Invalid Configuration',
             body: 'The STT service rejected the request. Verify your settings.',
