@@ -1619,9 +1619,8 @@ export class AppState {
 
     while (Date.now() < deadline) {
       const details = db.getMeetingDetails(meetingId);
-      const recent = db.getRecentMeetings(20).find(m => m.id === meetingId);
 
-      if (details && recent?.isProcessed) {
+      if (details?.isProcessed) {
         return true;
       }
 
