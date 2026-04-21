@@ -1042,7 +1042,9 @@ export class DatabaseManager {
             ]);
         }
 
-        this.scheduleTranscriptFlush();
+        // Durability-first behavior: write queued final transcript segments
+        // immediately so a crash cannot lose up to one flush interval.
+        this.flushPendingTranscriptSegments();
     }
 
     public flushPendingTranscriptSegments(): void {
