@@ -1609,10 +1609,38 @@ export class AppState {
     // ─────────────────────────────────────────────────────────────────────────
   }
 
+  private async waitForMeetingFinalization(
+    meetingId: string,
+    timeoutMs: number = 15000,
+    pollIntervalMs: number = 250
+  ): Promise<boolean> {
+    const db = DatabaseManager.getInstance();
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+      const details = db.getMeetingDetails(meetingId);
+      const recent = db.getRecentMeetings(20).find(m => m.id === meetingId);
+
+      if (details && recent?.isProcessed) {
+        return true;
+      }
+
+      await new Promise<void>((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
+
+    console.warn(`[AppState] Timed out waiting for meeting ${meetingId} finalization before RAG re-index.`);
+    return false;
+  }
+
   private async processCompletedMeetingForRAG(meetingId: string): Promise<boolean> {
     if (!this.ragManager) return false;
 
     try {
+      const finalized = await this.waitForMeetingFinalization(meetingId);
+      if (!finalized) {
+        return false;
+      }
+
       // Use the explicit meetingId passed from endMeeting() — deterministic, never
       // picks up a concurrently started meeting the way getRecentMeetings(1) could.
       const meeting = DatabaseManager.getInstance().getMeetingDetails(meetingId);
