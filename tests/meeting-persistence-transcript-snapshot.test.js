@@ -49,6 +49,7 @@ test('MeetingPersistence finalizes an existing live meeting ID without full tran
     const { DatabaseManager } = require(compiledDatabaseManagerPath);
 
     const finalizedMeetings = [];
+    const finalizedCallbacks = [];
     const originalGetInstance = DatabaseManager.getInstance;
 
     DatabaseManager.getInstance = function fakeGetInstance() {
@@ -76,7 +77,9 @@ test('MeetingPersistence finalizes an existing live meeting ID without full tran
             },
         };
 
-        const persistence = new MeetingPersistence(session, llmHelper);
+        const persistence = new MeetingPersistence(session, llmHelper, async (meetingId) => {
+            finalizedCallbacks.push(meetingId);
+        });
         const meetingId = await persistence.stopMeeting('meeting-123');
 
         assert.equal(meetingId, 'meeting-123');
@@ -87,6 +90,7 @@ test('MeetingPersistence finalizes an existing live meeting ID without full tran
         assert.equal(finalizedMeetings[0].meetingId, 'meeting-123');
         assert.equal(finalizedMeetings[0].data.durationMs > 0, true);
         assert.ok(Array.isArray(finalizedMeetings[0].data.usage));
+        assert.deepEqual(finalizedCallbacks, ['meeting-123']);
     } finally {
         DatabaseManager.getInstance = originalGetInstance;
         Module._load = originalLoad;

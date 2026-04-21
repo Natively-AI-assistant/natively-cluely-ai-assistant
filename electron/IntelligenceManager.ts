@@ -36,7 +36,9 @@ export class IntelligenceManager extends EventEmitter {
         super();
         this.session = new SessionTracker();
         this.engine = new IntelligenceEngine(llmHelper, this.session);
-        this.persistence = new MeetingPersistence(this.session, llmHelper);
+        this.persistence = new MeetingPersistence(this.session, llmHelper, async (meetingId: string) => {
+            this.emit('meeting-finalized', meetingId);
+        });
 
         // Forward all engine events through the facade
         this.forwardEngineEvents();

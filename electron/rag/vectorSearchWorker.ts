@@ -22,6 +22,7 @@ interface NativeVecSearchChunksMessage {
     dim: number;        // embedding dimension — selects vec_chunks_{dim} table
     meetingId?: string;
     providerName?: string;
+    chunkSource?: 'live' | 'final';
     limit: number;
     minSimilarity: number;
     fetchMultiplier: number;
@@ -198,7 +199,7 @@ parentPort.on('message', (message: WorkerMessage) => {
             }
 
             case 'nativeVecSearch': {
-                const { requestId, dbPath, extPath, queryBlob, dim, meetingId, providerName, limit, minSimilarity, fetchMultiplier } = message;
+                const { requestId, dbPath, extPath, queryBlob, dim, meetingId, providerName, chunkSource, limit, minSimilarity, fetchMultiplier } = message;
                 // P1-4: validate dim is a positive integer before interpolating into the table name.
                 // This worker runs in a separate thread and receives messages from the main process,
                 // so it operates at a trust boundary — the value must be validated here independently.
@@ -223,6 +224,7 @@ parentPort.on('message', (message: WorkerMessage) => {
                 const params: any[] = [...chunkIds];
                 if (meetingId) { q += ' AND c.meeting_id = ?'; params.push(meetingId); }
                 if (providerName) { q += ' AND m.embedding_provider = ?'; params.push(providerName); }
+                if (chunkSource) { q += ' AND c.chunk_source = ?'; params.push(chunkSource); }
 
                 const chunkRows = db.prepare(q).all(...params) as any[];
                 const chunkMap = new Map<number, any>();

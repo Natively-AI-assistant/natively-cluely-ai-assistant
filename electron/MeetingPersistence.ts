@@ -10,10 +10,16 @@ import { GROQ_TITLE_PROMPT, GROQ_SUMMARY_JSON_PROMPT } from './llm';
 export class MeetingPersistence {
     private session: SessionTracker;
     private llmHelper: LLMHelper;
+    private onMeetingFinalized?: (meetingId: string) => void | Promise<void>;
 
-    constructor(session: SessionTracker, llmHelper: LLMHelper) {
+    constructor(
+        session: SessionTracker,
+        llmHelper: LLMHelper,
+        onMeetingFinalized?: (meetingId: string) => void | Promise<void>
+    ) {
         this.session = session;
         this.llmHelper = llmHelper;
+        this.onMeetingFinalized = onMeetingFinalized;
     }
 
     /**
@@ -247,6 +253,10 @@ Return ONLY valid JSON (no markdown code blocks):
             // Notify Frontend to refresh list
             const wins = require('electron').BrowserWindow.getAllWindows();
             wins.forEach((w: any) => w.webContents.send('meetings-updated'));
+
+            if (this.onMeetingFinalized) {
+                await this.onMeetingFinalized(meetingId);
+            }
 
         } catch (error) {
             console.error('[MeetingPersistence] Failed to save meeting:', error);

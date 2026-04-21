@@ -1569,7 +1569,6 @@ export class AppState {
     // delay. They are pure background tasks with no UI dependency:
     //   • stopLiveIndexing flushes the JIT RAG live stream
     //   • processCompletedMeetingForRAG embeds the full meeting into the vector store
-    //   • deleteMeetingData cleans up provisional JIT chunks
     // Chain them sequentially in the background so ordering is preserved,
     // but the IPC call returns immediately and the UI transitions without delay.
     const ragManager = this.ragManager;
@@ -1579,17 +1578,6 @@ export class AppState {
           if (ragManager) {
             await ragManager.stopLiveIndexing();
             console.log('[Main] Live RAG indexing stopped.');
-          }
-
-          // Reconcile chunks from canonical persisted transcript.
-          // Only remove provisional live chunks after a successful re-index.
-          const reindexSucceeded = await this.processCompletedMeetingForRAG(meetingId);
-          if (reindexSucceeded && ragManager) {
-            ragManager.deleteMeetingData(meetingId);
-          } else if (ragManager) {
-            console.warn(
-              `[Main] Skipping live RAG chunk cleanup for meeting ${meetingId} because canonical re-index did not complete.`
-            );
           }
         } catch (err) {
           console.error('[Main] Background post-meeting RAG processing failed:', err);
@@ -1609,37 +1597,10 @@ export class AppState {
     // ─────────────────────────────────────────────────────────────────────────
   }
 
-  private async waitForMeetingFinalization(
-    meetingId: string,
-    timeoutMs: number = 15000,
-    pollIntervalMs: number = 250
-  ): Promise<boolean> {
-    const db = DatabaseManager.getInstance();
-    const deadline = Date.now() + timeoutMs;
-
-    while (Date.now() < deadline) {
-      const details = db.getMeetingDetails(meetingId);
-
-      if (details?.isProcessed) {
-        return true;
-      }
-
-      await new Promise<void>((resolve) => setTimeout(resolve, pollIntervalMs));
-    }
-
-    console.warn(`[AppState] Timed out waiting for meeting ${meetingId} finalization before RAG re-index.`);
-    return false;
-  }
-
   private async processCompletedMeetingForRAG(meetingId: string): Promise<boolean> {
     if (!this.ragManager) return false;
 
     try {
-      const finalized = await this.waitForMeetingFinalization(meetingId);
-      if (!finalized) {
-        return false;
-      }
-
       // Use the explicit meetingId passed from endMeeting() — deterministic, never
       // picks up a concurrently started meeting the way getRecentMeetings(1) could.
       const meeting = DatabaseManager.getInstance().getMeetingDetails(meetingId);
@@ -1658,10 +1619,15 @@ export class AppState {
       // Generate summary from detailedSummary if available
       let summary: string | undefined;
       if (meeting.detailedSummary) {
-        summary = [
+        const summaryParts = [
+          meeting.detailedSummary.overview,
           ...(meeting.detailedSummary.keyPoints || []),
           ...(meeting.detailedSummary.actionItems || []).map(a => `Action: ${a}`)
-        ].join('. ');
+        ].filter((part): part is string => !!part && part.trim().length > 0);
+
+        if (summaryParts.length > 0) {
+          summary = summaryParts.join('. ');
+        }
       }
 
       const result = await this.ragManager.processMeeting(meeting.id, segments, summary);
@@ -1678,6 +1644,21 @@ export class AppState {
     const mainWindow = this.getMainWindow.bind(this)
 
     // Forward intelligence events to renderer
+    this.intelligenceManager.on('meeting-finalized', async (meetingId: string) => {
+      try {
+        if (this.ragManager) {
+          await this.ragManager.stopLiveIndexing();
+        }
+
+        const reindexSucceeded = await this.processCompletedMeetingForRAG(meetingId);
+        if (reindexSucceeded && this.ragManager) {
+          this.ragManager.deleteLiveChunkData(meetingId);
+        }
+      } catch (err) {
+        console.error('[Main] Post-finalization RAG processing failed:', err);
+      }
+    });
+
     this.intelligenceManager.on('assist_update', (insight: string) => {
       // Send to both if both exist, though mostly overlay needs it
       const helper = this.getWindowHelper();

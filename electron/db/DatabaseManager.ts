@@ -172,6 +172,7 @@ export class DatabaseManager {
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     meeting_id TEXT NOT NULL,
                     chunk_index INTEGER NOT NULL,
+                    chunk_source TEXT NOT NULL DEFAULT 'final',
                     speaker TEXT,
                     start_timestamp_ms INTEGER,
                     end_timestamp_ms INTEGER,
@@ -591,6 +592,24 @@ export class DatabaseManager {
                 INSERT OR IGNORE INTO profile_custom_notes (id, content) VALUES (1, '');
             `);
             this.db.pragma('user_version = 14');
+        }
+
+        // Version 14 → 15: Distinguish provisional live chunks from canonical final chunks.
+        if (version < 15) {
+            console.log('[DatabaseManager] Applying migration v14 → v15: Add chunks.chunk_source');
+            try {
+                this.db.exec("ALTER TABLE chunks ADD COLUMN chunk_source TEXT NOT NULL DEFAULT 'final'");
+            } catch (_) {
+                // Column may already exist on some installs.
+            }
+
+            try {
+                this.db.exec('CREATE INDEX IF NOT EXISTS idx_chunks_meeting_source ON chunks(meeting_id, chunk_source)');
+            } catch (e) {
+                console.warn('[DatabaseManager] Failed to create idx_chunks_meeting_source (non-fatal):', e);
+            }
+
+            this.db.pragma('user_version = 15');
         }
 
         console.log('[DatabaseManager] Migrations completed.');
@@ -1539,6 +1558,7 @@ export class DatabaseManager {
             detailedSummary: summaryData.detailedSummary,
             calendarEventId: meetingRow.calendar_event_id,
             source: meetingRow.source,
+            isProcessed: meetingRow.is_processed === 1,
             transcript: transcript,
             usage: usage
         };

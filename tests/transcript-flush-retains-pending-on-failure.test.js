@@ -10,6 +10,10 @@ function makeDbManager(DatabaseManager) {
     const dbManager = Object.create(DatabaseManager.prototype);
     dbManager.pendingTranscriptSegments = new Map();
     dbManager.pendingTranscriptFlushTimer = null;
+    dbManager.transcriptFlushIntervalMs = 250;
+    dbManager.transcriptFlushMaxBackoffMs = 30000;
+    dbManager.transcriptFlushFailureCount = 0;
+    dbManager.transcriptFlushBackoffUntilMs = 0;
     dbManager.getLastTranscriptByMeetingStmt = () => ({
         get: () => undefined,
     });
