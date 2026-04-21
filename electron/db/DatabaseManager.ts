@@ -47,6 +47,9 @@ export class DatabaseManager {
     private pendingTranscriptSegments: Map<string, Array<{ speaker: string; text: string; timestamp: number }>> = new Map();
     private pendingTranscriptFlushTimer: ReturnType<typeof setTimeout> | null = null;
     private readonly transcriptFlushIntervalMs: number = 250;
+    private readonly transcriptFlushMaxBackoffMs: number = 30000;
+    private transcriptFlushFailureCount: number = 0;
+    private transcriptFlushBackoffUntilMs: number = 0;
 
     private constructor() {
         const userDataPath = app.getPath('userData');
@@ -1042,6 +1045,14 @@ export class DatabaseManager {
             ]);
         }
 
+        // If DB flush is currently in failure backoff mode, avoid tight retry loops
+        // from immediate append-triggered writes. Let the scheduled retry run.
+        const now = Date.now();
+        if (now < this.transcriptFlushBackoffUntilMs) {
+            this.scheduleTranscriptFlush(this.transcriptFlushBackoffUntilMs - now);
+            return;
+        }
+
         // Durability-first behavior: write queued final transcript segments
         // immediately so a crash cannot lose up to one flush interval.
         this.flushPendingTranscriptSegments();
@@ -1098,6 +1109,11 @@ export class DatabaseManager {
 
         try {
             runTransaction();
+            if (this.transcriptFlushFailureCount > 0) {
+                console.log('[DatabaseManager] Transcript flush recovered; clearing backoff state.');
+            }
+            this.transcriptFlushFailureCount = 0;
+            this.transcriptFlushBackoffUntilMs = 0;
             for (const [meetingId, { count }] of batches) {
                 const current = this.pendingTranscriptSegments.get(meetingId);
                 if (!current) continue;
@@ -1108,8 +1124,18 @@ export class DatabaseManager {
                 }
             }
         } catch (error) {
-            console.error('[DatabaseManager] Failed to flush transcript segments:', error);
-            this.scheduleTranscriptFlush();
+            this.transcriptFlushFailureCount += 1;
+            const nextDelay = Math.min(
+                this.transcriptFlushIntervalMs * Math.pow(2, this.transcriptFlushFailureCount),
+                this.transcriptFlushMaxBackoffMs
+            );
+            this.transcriptFlushBackoffUntilMs = Date.now() + nextDelay;
+
+            console.error(
+                `[DatabaseManager] Failed to flush transcript segments (attempt ${this.transcriptFlushFailureCount}). Retrying in ${nextDelay}ms:`,
+                error
+            );
+            this.scheduleTranscriptFlush(nextDelay);
         }
     }
 
@@ -1119,15 +1145,19 @@ export class DatabaseManager {
             clearTimeout(this.pendingTranscriptFlushTimer);
             this.pendingTranscriptFlushTimer = null;
         }
+        if (this.pendingTranscriptSegments.size === 0) {
+            this.transcriptFlushFailureCount = 0;
+            this.transcriptFlushBackoffUntilMs = 0;
+        }
     }
 
-    private scheduleTranscriptFlush(): void {
+    private scheduleTranscriptFlush(delayMs: number = this.transcriptFlushIntervalMs): void {
         if (this.pendingTranscriptFlushTimer) return;
 
         this.pendingTranscriptFlushTimer = setTimeout(() => {
             this.pendingTranscriptFlushTimer = null;
             this.flushPendingTranscriptSegments();
-        }, this.transcriptFlushIntervalMs);
+        }, Math.max(0, delayMs));
     }
 
     private getLastTranscriptByMeetingStmt(): Database.Statement {
