@@ -1,4 +1,7 @@
 // ipcHandlers.ts
+//
+// This file is now a thin re-export wrapper for backward compatibility.
+// All IPC handlers have been split into domain-specific modules in electron/ipc/.
 
 import { app, ipcMain, shell, dialog, desktopCapturer, systemPreferences, BrowserWindow, screen } from "electron"
 import { AppState } from "./main"
@@ -12,6 +15,10 @@ import { AudioDevices } from "./audio/AudioDevices";
 
 import { RECOGNITION_LANGUAGES, AI_RESPONSE_LANGUAGES } from "./config/languages"
 
+/**
+ * Initializes all IPC handlers by delegating to the modular handler groups.
+ * This function maintains backward compatibility with existing code.
+ */
 export function initializeIpcHandlers(appState: AppState): void {
   const safeHandle = (channel: string, listener: (event: any, ...args: any[]) => Promise<any> | any) => {
     ipcMain.removeHandler(channel);

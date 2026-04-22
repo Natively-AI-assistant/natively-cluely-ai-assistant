@@ -1095,6 +1095,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
     }
   },
 
+  // Global shortcut listener — fired stealthily from main process without focusing the window
+  onGlobalShortcut: (callback: (data: { action: string }) => void) => {
+    const subscription = (_: any, data: { action: string }) => callback(data)
+    ipcRenderer.on('global-shortcut', subscription)
+    return () => {
+      ipcRenderer.removeListener('global-shortcut', subscription)
+    }
+  },
+
   // Donation API
   getDonationStatus: () => ipcRenderer.invoke("get-donation-status"),
   markDonationToastShown: () => ipcRenderer.invoke("mark-donation-toast-shown"),

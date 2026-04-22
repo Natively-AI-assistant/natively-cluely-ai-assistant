@@ -13,8 +13,9 @@ console.log(`[WindowHelper] isEnvDev: ${isEnvDev}, isPackaged: ${isPackaged}, in
 // Force production mode if running as packaged app or inside app bundle
 const isDev = isEnvDev && !isPackaged;
 
+const devHost = process.env.DEV_HOST || 'localhost'
 const startUrl = isDev
-  ? "http://localhost:5180"
+  ? `http://${devHost}:5180`
   : `file://${path.join(__dirname, "../../dist/index.html")}`
 
 export class WindowHelper {

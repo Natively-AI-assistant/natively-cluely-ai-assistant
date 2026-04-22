@@ -2,6 +2,10 @@ import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPref
 import path from "path"
 import fs from "fs"
 import { autoUpdater } from "electron-updater"
+import { isVersionNewer } from './appState/versionUtils'
+import { selectSttProvider } from './appState/audioConfig'
+import { canStartMeeting, canEndMeeting } from './appState/meetingStateMachine'
+import { getDisplayById as getDisplayByIdPure, getTargetDisplay as getTargetDisplayPure } from './appState/displayUtils'
 if (!app.isPackaged) {
   require('dotenv').config();
 }
@@ -828,8 +832,22 @@ export class AppState {
 
   private createSTTProvider(speaker: 'interviewer' | 'user'): STTProvider | null {
     const { CredentialsManager } = require('./services/CredentialsManager');
-    const sttProvider = CredentialsManager.getInstance().getSttProvider();
-    const sttLanguage = CredentialsManager.getInstance().getSttLanguage();
+    const cm = CredentialsManager.getInstance();
+    const sttProvider = cm.getSttProvider();
+    const sttLanguage = cm.getSttLanguage();
+
+    // Use extracted pure function to determine provider configuration
+    const config = selectSttProvider(sttProvider, {
+      natively: cm.getNativelyApiKey(),
+      deepgram: cm.getDeepgramApiKey(),
+      soniox: cm.getSonioxApiKey(),
+      elevenlabs: cm.getElevenLabsApiKey(),
+      openai: cm.getOpenAiSttApiKey(),
+      groq: cm.getGroqSttApiKey(),
+      groqSttModel: cm.getGroqSttModel(),
+      azure: cm.getAzureApiKey() ? { key: cm.getAzureApiKey(), region: cm.getAzureRegion() } : undefined,
+      ibm: cm.getIbmWatsonApiKey() ? { key: cm.getIbmWatsonApiKey(), region: cm.getIbmWatsonRegion() } : undefined,
+    });
 
     // 'none' means the user has explicitly disabled STT (no provider selected).
     // Return null so the pipeline skips STT without falling back to Google.
@@ -856,16 +874,15 @@ export class AppState {
       const apiKey = CredentialsManager.getInstance().getDeepgramApiKey();
       if (apiKey) {
         console.log(`[Main] Using DeepgramStreamingSTT for ${speaker}`);
-        stt = new DeepgramStreamingSTT(apiKey);
+        stt = new DeepgramStreamingSTT(config.apiKey);
       } else {
         console.warn(`[Main] No API key for Deepgram STT, falling back to GoogleSTT`);
         stt = new GoogleSTT(speaker);
       }
-    } else if (sttProvider === 'soniox') {
-      const apiKey = CredentialsManager.getInstance().getSonioxApiKey();
-      if (apiKey) {
+    } else if (config.providerName === 'soniox') {
+      if (config.apiKey) {
         console.log(`[Main] Using SonioxStreamingSTT for ${speaker}`);
-        stt = new SonioxStreamingSTT(apiKey);
+        stt = new SonioxStreamingSTT(config.apiKey);
       } else {
         console.warn(`[Main] No API key for Soniox STT, falling back to GoogleSTT`);
         stt = new GoogleSTT(speaker);

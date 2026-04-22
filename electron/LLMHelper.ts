@@ -19,6 +19,11 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import axios from 'axios';
 import { createProviderRateLimiters, RateLimiter } from './services/RateLimiter';
+import {
+  isGeminiModel, isOpenAiModel, isClaudeModel, isGroqModel,
+  cleanJsonResponse, selectProviderForModel, resolveModelId,
+  GEMINI_FLASH_MODEL, GEMINI_PRO_MODEL, GROQ_MODEL, OPENAI_MODEL, CLAUDE_MODEL
+} from './llm/modelUtils';
 const execAsync = promisify(exec);
 
 interface OllamaResponse {
@@ -169,6 +174,22 @@ export class LLMHelper {
   }
 
   /**
+   * Initialize the self-improving model version manager.
+   * Should be called after all API keys are configured.
+   * Triggers initial model discovery and starts background scheduler.
+   */
+  public async initModelVersionManager(): Promise<void> {
+    this.modelVersionManager.setApiKeys({
+      openai: this.openaiApiKey,
+      gemini: this.apiKey,
+      claude: this.claudeApiKey,
+      groq: this.groqApiKey,
+    });
+    await this.modelVersionManager.initialize();
+    console.log(this.modelVersionManager.getSummary());
+  }
+
+  /**
    * Scrub all API keys from memory to minimize exposure window.
    * Called on app quit.
    */
@@ -204,13 +225,13 @@ export class LLMHelper {
     return this.aiResponseLanguage;
   }
 
-  // --- Model Type Checkers ---
+  // --- Model Type Checkers (delegated to llm/modelUtils.ts) ---
   private isOpenAiModel(modelId: string): boolean {
-    return modelId.startsWith("gpt-") || modelId.startsWith("o1-") || modelId.startsWith("o3-") || modelId.includes("openai");
+    return isOpenAiModel(modelId);
   }
 
   private isClaudeModel(modelId: string): boolean {
-    return modelId.startsWith("claude-");
+    return isClaudeModel(modelId);
   }
 
   private isGroqModel(modelId: string): boolean {
@@ -218,7 +239,7 @@ export class LLMHelper {
   }
 
   private isGeminiModel(modelId: string): boolean {
-    return modelId.startsWith("gemini-") || modelId.startsWith("models/");
+    return isGeminiModel(modelId);
   }
   // ---------------------------
 
@@ -241,7 +262,8 @@ export class LLMHelper {
       return;
     }
 
-    const custom = customProviders.find(p => p.id === targetModelId);
+    // Use extracted function to find custom/curl provider
+    const custom = selectProviderForModel(targetModelId, customProviders);
     if (custom) {
       this.useOllama = false;
       this.customProvider = custom;
@@ -270,11 +292,7 @@ export class LLMHelper {
   }
 
   private cleanJsonResponse(text: string): string {
-    // Remove markdown code block syntax if present
-    text = text.replace(/^```(?:json)?\n/, '').replace(/\n```$/, '');
-    // Remove any leading/trailing whitespace
-    text = text.trim();
-    return text;
+    return cleanJsonResponse(text);
   }
 
   private async callOllama(prompt: string, imagePath?: string): Promise<string> {
@@ -1213,6 +1231,14 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       providers.push({
         name: 'Natively API',
         execute: () => this.generateWithNatively(message)
+      });
+    }
+
+    // Priority 6: Ollama (on-device fallback — last resort, no cloud dependency)
+    if (this.useOllama && await this.checkOllamaAvailable()) {
+      providers.push({
+        name: `Ollama (${this.ollamaModel})`,
+        execute: () => this.callOllama(message)
       });
     }
 
@@ -2260,6 +2286,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         imagePaths?.[0]
       );
       yield response;
+      return;
+    }
+
+    // 2b. CustomProvider (switchToCustom path) — full SSE-capable streaming
+    if (this.customProvider) {
+      yield* this.streamWithCustom(message, context, imagePaths, finalSystemPrompt);
       return;
     }
 

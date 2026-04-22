@@ -3,6 +3,7 @@
 import { AppState } from "./main"
 import { LLMHelper } from "./LLMHelper"
 import { CredentialsManager } from "./services/CredentialsManager"
+import { loadStoredCredentials } from "./helpers/credentialLoader"
 import { app } from "electron"
 // import dotenv from "dotenv" // Removed static import
 
