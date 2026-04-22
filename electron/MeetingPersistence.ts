@@ -305,13 +305,17 @@ Return ONLY valid JSON (no markdown code blocks):
                     : 0;
 
                 const snapshot = {
-                    usage: details.usage,
+                    usage: details.usage ?? [],
                     startTime: safeStartTime,
                     durationMs,
                     context,
                 };
 
-                await this.processAndFinalizeMeeting(snapshot, m.id);
+                await this.processAndFinalizeMeeting(snapshot, m.id, {
+                    title: details.title !== 'Live Meeting' ? details.title : undefined,
+                    calendarEventId: details.calendarEventId ?? undefined,
+                    source: details.source as 'manual' | 'calendar' | undefined,
+                });
                 console.log(`[MeetingPersistence] Recovered meeting ${m.id}`);
 
             } catch (e) {
