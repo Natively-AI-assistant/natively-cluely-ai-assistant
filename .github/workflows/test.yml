@@ -2,39 +2,41 @@ name: Unit & Integration Tests
 
 on:
   push:
-    branches: [main, master]
   pull_request:
-    branches: [main, master]
 
 jobs:
-  native-module-tests:
-    runs-on: ubuntu-latest
+  unit-tests:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
+          submodules: true
+          token: ${{ secrets.GH_APP_TOKEN }}
 
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          workspaces: native-module
+          node-version: 22
+          cache: 'npm'
 
-      - name: Run native module tests
-        working-directory: native-module
-        run: cargo test --no-default-features
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Run native module checks
-        working-directory: native-module
-        run: cargo clippy --no-default-features -- -D warnings
+      - name: Run unit tests
+        run: npx vitest run
 
-  test-coverage:
-    runs-on: ubuntu-latest
-    needs: native-module-tests
+  coverage:
+    runs-on: windows-latest
+    needs: unit-tests
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: ${{ secrets.GH_APP_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -46,31 +48,29 @@ jobs:
         run: npm ci
 
       - name: Run tests with coverage
-        run: npx vitest run --coverage
+        run: npm run test:coverage
 
       - name: Check coverage thresholds
         run: |
           node -e "
             const fs = require('fs');
             const coverage = JSON.parse(fs.readFileSync('./coverage/coverage.json', 'utf8'));
-            
-            // Define our per-directory thresholds from vitest.config.ts
+
             const thresholds = {
-              'src/utils/**': { lines: 90, functions: 90, branches: 90, statements: 90 },
-              'src/hooks/**': { lines: 80, functions: 80, branches: 80, statements: 80 },
-              'src/components/**': { lines: 70, functions: 70, branches: 70, statements: 70 },
-              'src/services/**': { lines: 80, functions: 80, branches: 80, statements: 80 },
-              'electron/**': { lines: 60, functions: 60, branches: 60, statements: 60 }
+              'src/utils/**': { lines: 95, functions: 95, branches: 95, statements: 95 },
+              'src/hooks/**': { lines: 90, functions: 90, branches: 90, statements: 90 },
+              'src/components/**': { lines: 80, functions: 80, branches: 80, statements: 80 },
+              'src/services/**': { lines: 85, functions: 85, branches: 85, statements: 85 },
+              'electron/**': { lines: 80, functions: 80, branches: 80, statements: 80 }
             };
-            
-            // Check each threshold
+
             let failed = false;
             for (const [pattern, threshold] of Object.entries(thresholds)) {
               const prefix = pattern.replace('/**', '');
-              const files = Object.keys(coverage).filter(file => 
+              const files = Object.keys(coverage).filter(file =>
                 file.startsWith(prefix)
               );
-              
+
               for (const file of files) {
                 const fileCoverage = coverage[file];
                 if (fileCoverage.lines < threshold.lines ||
@@ -86,10 +86,9 @@ jobs:
                 }
               }
             }
-            
+
             if (failed) {
-              console.warn('⚠ Coverage thresholds not met — see warnings above');
-              console.warn('⚠ PR will NOT be blocked, but coverage could be improved');
+              console.warn('Coverage thresholds not met');
             } else {
               console.log('All coverage thresholds passed');
             }
@@ -101,3 +100,27 @@ jobs:
           files: ./coverage/*.json
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
+
+  native-module-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: ${{ secrets.GH_APP_TOKEN }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native-module
+
+      - name: Run native module tests
+        run: npm run test:rust
+
+      - name: Run native module checks
+        run: cargo clippy -- -D warnings

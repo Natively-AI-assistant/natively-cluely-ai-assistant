@@ -357,7 +357,7 @@ fn calculate_rms(samples: &[i16]) -> f32 {
         .map(|&s| (s as f64) * (s as f64))
         .sum();
 
-    let count = (samples.len() + 3) / 4;
+    let count = samples.len().div_ceil(4);
     (sum_of_squares / count as f64).sqrt() as f32
 }
 
@@ -369,6 +369,7 @@ pub fn generate_silence_frame(size: usize) -> Vec<i16> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use test_case::test_case;
 
     #[test]
     fn test_speech_immediate() {
