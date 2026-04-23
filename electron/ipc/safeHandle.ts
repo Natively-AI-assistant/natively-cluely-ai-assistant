@@ -3,12 +3,21 @@
  * Ensures no duplicate handlers are registered.
  */
 
-import { ipcMain } from 'electron';
+import { ipcMain } from 'electron'
+
+const registeredHandlers = new Set<string>()
 
 export const safeHandle = (
   channel: string,
-  listener: (event: any, ...args: any[]) => Promise<any> | any
+  listener: (event: any, ...args: any[]) => Promise<any> | any,
 ): void => {
-  ipcMain.removeHandler(channel);
-  ipcMain.handle(channel, listener);
-};
+  if (registeredHandlers.has(channel)) {
+    console.warn(
+      `[IPC] Handler for channel "${channel}" is being replaced. This may indicate duplicate registration.`,
+    )
+  } else {
+    registeredHandlers.add(channel)
+  }
+  ipcMain.removeHandler(channel)
+  ipcMain.handle(channel, listener)
+}
