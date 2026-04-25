@@ -221,3 +221,26 @@ cluelyprompts/
 /test-results/
 /playwright-report/
 reports/
+
+# ── GSD baseline (auto-generated) ──
+.gsd
+.gsd-id
+.mcp.json
+.bg-shell/
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.code-workspace
+.env.*
+!.env.example
+.next/
+__pycache__/
+*.pyc
+.venv/
+venv/
+vendor/
+coverage/
+tmp/

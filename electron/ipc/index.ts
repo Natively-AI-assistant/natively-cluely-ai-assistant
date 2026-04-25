@@ -13,6 +13,8 @@ import { registerRAGHandlers } from './ipcHandlers.rag';
 import { registerUpdateHandlers } from './ipcHandlers.updates';
 import { registerThemeHandlers } from './ipcHandlers.theme';
 import { registerProfileHandlers } from './ipcHandlers.profile';
+import { registerModesHandlers } from './ipcHandlers.modes';
+import { registerSystemHandlers } from './ipcHandlers.system';
 
 /**
  * Registers all IPC handlers with the given AppState instance.
@@ -28,4 +30,6 @@ export function registerAllHandlers(appState: AppState): void {
   registerUpdateHandlers(appState);
   registerThemeHandlers(appState);
   registerProfileHandlers(appState);
+  registerModesHandlers(appState);
+  registerSystemHandlers(appState);
 }

@@ -5,6 +5,7 @@
 
 import { safeHandle } from './safeHandle';
 import { AppState } from '../main';
+import type { ThemeMode } from '../ThemeManager';
 
 export function registerThemeHandlers(appState: AppState): void {
   safeHandle("theme:get-mode", () => {
@@ -17,7 +18,7 @@ export function registerThemeHandlers(appState: AppState): void {
 
   const VALID_MODES = ['system', 'light', 'dark'] as const;
 
-  safeHandle("theme:set-mode", (_, mode: string) => {
+  safeHandle("theme:set-mode", (_, mode: ThemeMode) => {
     if (!VALID_MODES.includes(mode as typeof VALID_MODES[number])) {
       throw new Error(`Invalid theme mode: ${mode}. Must be one of: ${VALID_MODES.join(', ')}`);
     }

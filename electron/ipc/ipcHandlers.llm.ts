@@ -8,6 +8,9 @@ import { app } from 'electron'
 import type { AppState } from '../main'
 import { safeHandle } from './safeHandle'
 
+const _usageCache = new Map<string, { data: unknown; ts: number }>();
+const USAGE_CACHE_TTL_MS = 60_000;
+
 export function registerLLMHandlers(appState: AppState): void {
   safeHandle('get-current-llm-config', async () => {
     const llmHelper = appState.processingHelper.getLLMHelper()
@@ -309,6 +312,40 @@ export function registerLLMHandlers(appState: AppState): void {
       console.error('Error saving Natively API key:', error)
       return { success: false, error: error.message }
     }
+  })
+
+  safeHandle('get-natively-usage', async () => {
+    try {
+      const { CredentialsManager } = require('../services/CredentialsManager')
+      const key = CredentialsManager.getInstance().getNativelyApiKey()
+      if (!key) return { ok: false, error: 'no_key' }
+
+      const cached = _usageCache.get(key)
+      if (cached && Date.now() - cached.ts < USAGE_CACHE_TTL_MS) {
+        return cached.data
+      }
+
+      const res = await fetch('https://api.natively.software/v1/usage', {
+        headers: { 'x-natively-key': key },
+        signal: AbortSignal.timeout(8000),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as any
+        return { ok: false, error: body.error || 'request_failed', status: res.status }
+      }
+      const data = await res.json() as any
+      const result = { ok: true, ...data }
+
+      _usageCache.set(key, { data: result, ts: Date.now() })
+      return result
+    } catch (error: any) {
+      return { ok: false, error: error.message || 'network_error' }
+    }
+  })
+
+  safeHandle('invalidate-natively-usage-cache', () => {
+    _usageCache.clear()
+    return { ok: true }
   })
 
   safeHandle('get-custom-providers', async () => {

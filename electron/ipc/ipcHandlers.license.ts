@@ -47,4 +47,20 @@ export function registerLicenseHandlers(appState: AppState): void {
       return 'unavailable';
     }
   });
+
+  safeHandle("license:get-details", async () => {
+    try {
+      return LicenseManager.getInstance().getLicenseDetails();
+    } catch {
+      return { isPremium: false };
+    }
+  });
+
+  safeHandle("license:check-premium-async", async () => {
+    try {
+      return await LicenseManager.getInstance().isPremiumAsync();
+    } catch {
+      return false;
+    }
+  });
 }

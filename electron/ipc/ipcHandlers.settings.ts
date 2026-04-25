@@ -82,6 +82,22 @@ export function registerSettingsHandlers(appState: AppState): void {
     appState.settingsWindowHelper.closeWindow()
   })
 
+  safeHandle('settings:open-tab', (_, tab: string) => {
+    const launcherWin = appState.getWindowHelper().getLauncherWindow()
+    if (launcherWin && !launcherWin.isDestroyed()) {
+      launcherWin.webContents.send('settings:open-tab', tab)
+      launcherWin.show()
+      launcherWin.focus()
+    }
+  })
+
+  safeHandle('toggle-advanced-settings', async () => {
+    const launcherWin = appState.getWindowHelper().getLauncherWindow()
+    if (launcherWin && !launcherWin.isDestroyed()) {
+      launcherWin.webContents.send('toggle-advanced-settings')
+    }
+  })
+
   safeHandle('get-stored-credentials', async () => {
     try {
       const { CredentialsManager } = require('../services/CredentialsManager')
@@ -204,6 +220,18 @@ export function registerSettingsHandlers(appState: AppState): void {
     const { CredentialsManager } = require('../services/CredentialsManager')
     CredentialsManager.getInstance().setIbmWatsonApiKey(key)
     return { success: true }
+  })
+
+  safeHandle('set-ibmwatson-region', async (_, region: string) => {
+    try {
+      const { CredentialsManager } = require('../services/CredentialsManager')
+      CredentialsManager.getInstance().setIbmWatsonRegion(region)
+      await appState.reconfigureSttProvider()
+      return { success: true }
+    } catch (error: any) {
+      console.error('Error setting IBM Watson region:', error)
+      return { success: false, error: error.message }
+    }
   })
 
   safeHandle('set-soniox-api-key', async (_, key: string) => {
