@@ -91,13 +91,6 @@ export function registerSettingsHandlers(appState: AppState): void {
     }
   })
 
-  safeHandle('toggle-advanced-settings', async () => {
-    const launcherWin = appState.getWindowHelper().getLauncherWindow()
-    if (launcherWin && !launcherWin.isDestroyed()) {
-      launcherWin.webContents.send('toggle-advanced-settings')
-    }
-  })
-
   safeHandle('get-stored-credentials', async () => {
     try {
       const { CredentialsManager } = require('../services/CredentialsManager')
