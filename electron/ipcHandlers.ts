@@ -2206,21 +2206,33 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  // Dynamic Action Button Mode (Recap vs Brainstorm)
+  // Legacy: Interview Mode used to flip Ctrl+M between recap and brainstorm. Ctrl+M is always
+  // system design now; coding brainstorm uses Ctrl+Shift+M. Always return `recap` and migrate
+  // persisted `brainstorm` so old installs don't stay on the wrong default.
   safeHandle("get-action-button-mode", () => {
     const { SettingsManager } = require('./services/SettingsManager');
     const sm = SettingsManager.getInstance();
-    return sm.get('actionButtonMode') ?? 'recap';
+    const stored = sm.get('actionButtonMode') ?? 'recap';
+    if (stored === 'brainstorm') {
+      sm.set('actionButtonMode', 'recap');
+      BrowserWindow.getAllWindows().forEach(win => {
+        if (!win.isDestroyed()) {
+          win.webContents.send('action-button-mode-changed', 'recap');
+        }
+      });
+    }
+    return 'recap';
   });
 
   safeHandle("set-action-button-mode", (_, mode: 'recap' | 'brainstorm') => {
     const { SettingsManager } = require('./services/SettingsManager');
     const sm = SettingsManager.getInstance();
-    sm.set('actionButtonMode', mode);
+    const normalized = mode === 'brainstorm' ? 'recap' : mode;
+    sm.set('actionButtonMode', normalized);
 
     BrowserWindow.getAllWindows().forEach(win => {
       if (!win.isDestroyed()) {
-        win.webContents.send('action-button-mode-changed', mode);
+        win.webContents.send('action-button-mode-changed', normalized);
       }
     });
 
@@ -2239,10 +2251,21 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // MODE 4: Recap (Summary)
-  safeHandle("generate-recap", async () => {
+  safeHandle("generate-recap", async (_, imagePaths?: string[]) => {
     try {
+      const resolvedImagePaths: string[] =
+        imagePaths && imagePaths.length > 0
+          ? imagePaths
+          : appState.getScreenshotQueue();
+
+      console.log(
+        `[IPC] generate-recap: using ${resolvedImagePaths.length} image(s) (${imagePaths?.length ? "explicit" : "queue fallback"})`
+      );
+
       const intelligenceManager = appState.getIntelligenceManager();
-      const summary = await intelligenceManager.runRecap();
+      const summary = await intelligenceManager.runRecap(
+        resolvedImagePaths.length > 0 ? resolvedImagePaths : undefined
+      );
       return { summary };
     } catch (error: any) {
       throw error;
@@ -2250,10 +2273,21 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // MODE 6: Follow-Up Questions
-  safeHandle("generate-follow-up-questions", async () => {
+  safeHandle("generate-follow-up-questions", async (_, imagePaths?: string[]) => {
     try {
+      const resolvedImagePaths: string[] =
+        imagePaths && imagePaths.length > 0
+          ? imagePaths
+          : appState.getScreenshotQueue();
+
+      console.log(
+        `[IPC] generate-follow-up-questions: using ${resolvedImagePaths.length} image(s) (${imagePaths?.length ? "explicit" : "queue fallback"})`
+      );
+
       const intelligenceManager = appState.getIntelligenceManager();
-      const questions = await intelligenceManager.runFollowUpQuestions();
+      const questions = await intelligenceManager.runFollowUpQuestions(
+        resolvedImagePaths.length > 0 ? resolvedImagePaths : undefined
+      );
       return { questions };
     } catch (error: any) {
       throw error;

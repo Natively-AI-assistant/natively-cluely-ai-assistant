@@ -22,14 +22,16 @@ export const DEFAULT_KEYBINDS: KeybindConfig[] = [
 
     // Chat - Global shortcuts (work even when app is not focused - stealth mode)
     { id: 'chat:whatToAnswer', label: 'What to Answer', accelerator: 'CommandOrControl+1', isGlobal: true, defaultAccelerator: 'CommandOrControl+1' },
-    { id: 'chat:clarify', label: 'Clarify', accelerator: 'CommandOrControl+2', isGlobal: true, defaultAccelerator: 'CommandOrControl+2' },
-    { id: 'chat:dynamicAction4', label: 'Recap / Brainstorm', accelerator: 'CommandOrControl+3', isGlobal: true, defaultAccelerator: 'CommandOrControl+3' },
-    { id: 'chat:followUp', label: 'Follow Up', accelerator: 'CommandOrControl+4', isGlobal: true, defaultAccelerator: 'CommandOrControl+4' },
+    { id: 'chat:bugFinder', label: 'Bug Finder', accelerator: 'CommandOrControl+N', isGlobal: true, defaultAccelerator: 'CommandOrControl+N' },
+    { id: 'chat:dynamicAction4', label: 'System Design', accelerator: 'CommandOrControl+M', isGlobal: true, defaultAccelerator: 'CommandOrControl+M' },
+    { id: 'chat:codingBrainstorm', label: 'Coding Brainstorm (multi-approach)', accelerator: 'CommandOrControl+Shift+M', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+M' },
+    { id: 'chat:followUp', label: 'AI Design', accelerator: 'CommandOrControl+K', isGlobal: true, defaultAccelerator: 'CommandOrControl+K' },
     { id: 'chat:answer', label: 'Answer / Record', accelerator: 'CommandOrControl+5', isGlobal: true, defaultAccelerator: 'CommandOrControl+5' },
     { id: 'chat:codeHint', label: 'Get Code Hint', accelerator: 'CommandOrControl+6', isGlobal: true, defaultAccelerator: 'CommandOrControl+6' },
-    { id: 'chat:brainstorm', label: 'Brainstorm Approaches', accelerator: 'CommandOrControl+7', isGlobal: true, defaultAccelerator: 'CommandOrControl+7' },
     { id: 'chat:scrollUp', label: 'Scroll Up', accelerator: 'CommandOrControl+Up', isGlobal: true, defaultAccelerator: 'CommandOrControl+Up' },
     { id: 'chat:scrollDown', label: 'Scroll Down', accelerator: 'CommandOrControl+Down', isGlobal: true, defaultAccelerator: 'CommandOrControl+Down' },
+    { id: 'chat:scrollCodeLeft', label: 'Scroll code left', accelerator: 'CommandOrControl+Left', isGlobal: true, defaultAccelerator: 'CommandOrControl+Left' },
+    { id: 'chat:scrollCodeRight', label: 'Scroll code right', accelerator: 'CommandOrControl+Right', isGlobal: true, defaultAccelerator: 'CommandOrControl+Right' },
 
     // Window Movement - Global shortcuts (stealth window positioning)
     { id: 'window:move-up', label: 'Move Window Up', accelerator: 'CommandOrControl+Shift+Up', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Up' },
@@ -75,6 +77,12 @@ export class KeybindManager {
         if (actionId === 'general:take-screenshot') return true;
         if (actionId === 'general:selective-screenshot') return true;
         if (actionId === 'general:capture-and-process') return true;
+        // Bug finder must work globally (user relies on keybinds, not clicking the overlay).
+        if (actionId === 'chat:bugFinder') return true;
+        // System Design (⌘M), coding brainstorm (⌘⇧M), AI Design (⌘K): work from launcher / unfocused window.
+        if (actionId === 'chat:dynamicAction4') return true;
+        if (actionId === 'chat:codingBrainstorm') return true;
+        if (actionId === 'chat:followUp') return true;
 
         return false;
     }
@@ -170,6 +178,42 @@ export class KeybindManager {
             }
         } catch (error) {
             console.error('[KeybindManager] Failed to load keybinds:', error);
+        }
+
+        // One-time migrations for default key changes
+        let migratedKeybinds = false;
+        const normK = this.normalizeAccelerator('CommandOrControl+K');
+        const normL = this.normalizeAccelerator('CommandOrControl+L');
+        const norm3 = this.normalizeAccelerator('CommandOrControl+3');
+        const scrollLeftKb = this.keybinds.get('chat:scrollCodeLeft');
+        if (scrollLeftKb?.accelerator && this.normalizeAccelerator(scrollLeftKb.accelerator) === normK) {
+            scrollLeftKb.accelerator = 'CommandOrControl+Left';
+            this.keybinds.set('chat:scrollCodeLeft', scrollLeftKb);
+            migratedKeybinds = true;
+        }
+        const scrollRightKb = this.keybinds.get('chat:scrollCodeRight');
+        if (scrollRightKb?.accelerator && this.normalizeAccelerator(scrollRightKb.accelerator) === normL) {
+            scrollRightKb.accelerator = 'CommandOrControl+Right';
+            this.keybinds.set('chat:scrollCodeRight', scrollRightKb);
+            migratedKeybinds = true;
+        }
+        const dynamicKb = this.keybinds.get('chat:dynamicAction4');
+        if (dynamicKb?.accelerator && this.normalizeAccelerator(dynamicKb.accelerator) === norm3) {
+            dynamicKb.accelerator = 'CommandOrControl+M';
+            this.keybinds.set('chat:dynamicAction4', dynamicKb);
+            migratedKeybinds = true;
+        }
+        const norm4 = this.normalizeAccelerator('CommandOrControl+4');
+        const followKb = this.keybinds.get('chat:followUp');
+        if (followKb?.accelerator && this.normalizeAccelerator(followKb.accelerator) === norm4) {
+            followKb.accelerator = 'CommandOrControl+K';
+            this.keybinds.set('chat:followUp', followKb);
+            migratedKeybinds = true;
+        }
+        if (migratedKeybinds) {
+            this.save();
+            this.registerGlobalShortcuts();
+            this.broadcastUpdate();
         }
     }
 

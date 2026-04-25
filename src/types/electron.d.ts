@@ -146,8 +146,8 @@ export interface ElectronAPI {
   generateBrainstorm: (imagePaths?: string[], problemStatement?: string) => Promise<{ script: string | null }>
   generateBugFinder: (imagePaths?: string[], problemStatement?: string) => Promise<{ result: string | null }>
   generateFollowUp: (intent: string, userRequest?: string) => Promise<{ refined: string | null; intent: string }>
-  generateFollowUpQuestions: () => Promise<{ questions: string | null }>
-  generateRecap: () => Promise<{ summary: string | null }>
+  generateFollowUpQuestions: (imagePaths?: string[]) => Promise<{ questions: string | null }>
+  generateRecap: (imagePaths?: string[]) => Promise<{ summary: string | null }>
   submitManualQuestion: (question: string) => Promise<{ answer: string | null; question: string }>
   getIntelligenceContext: () => Promise<{ context: string; lastAssistantMessage: string | null; activeMode: string }>
   resetIntelligence: () => Promise<{ success: boolean; error?: string }>

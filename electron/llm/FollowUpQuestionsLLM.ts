@@ -20,9 +20,10 @@ export class FollowUpQuestionsLLM {
         }
     }
 
-    async *generateStream(context: string): AsyncGenerator<string> {
+    async *generateStream(context: string, imagePaths?: string[]): AsyncGenerator<string> {
+        if (!context.trim() && !imagePaths?.length) return;
         try {
-            yield* this.llmHelper.streamChat(context, undefined, undefined, UNIVERSAL_FOLLOW_UP_QUESTIONS_PROMPT);
+            yield* this.llmHelper.streamChat(context, imagePaths, undefined, UNIVERSAL_FOLLOW_UP_QUESTIONS_PROMPT);
         } catch (e) {
             console.error("[FollowUpQuestionsLLM] Stream Failed:", e);
         }

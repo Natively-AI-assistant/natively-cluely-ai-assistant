@@ -112,7 +112,8 @@ interface ElectronAPI {
   generateAssist: () => Promise<{ insight: string | null }>
   generateWhatToSay: (question?: string, imagePaths?: string[]) => Promise<{ answer: string | null; question?: string; error?: string }>
   generateFollowUp: (intent: string, userRequest?: string) => Promise<{ refined: string | null; intent: string }>
-  generateRecap: () => Promise<{ summary: string | null }>
+  generateFollowUpQuestions: (imagePaths?: string[]) => Promise<{ questions: string | null }>
+  generateRecap: (imagePaths?: string[]) => Promise<{ summary: string | null }>
   submitManualQuestion: (question: string) => Promise<{ answer: string | null; question: string }>
   getIntelligenceContext: () => Promise<{ context: string; lastAssistantMessage: string | null; activeMode: string }>
   resetIntelligence: () => Promise<{ success: boolean; error?: string }>
@@ -650,8 +651,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   generateBrainstorm: (imagePaths?: string[], problemStatement?: string) => ipcRenderer.invoke("generate-brainstorm", imagePaths, problemStatement),
   generateBugFinder: (imagePaths?: string[], problemStatement?: string) => ipcRenderer.invoke("generate-bug-finder", imagePaths, problemStatement),
   generateFollowUp: (intent: string, userRequest?: string) => ipcRenderer.invoke("generate-follow-up", intent, userRequest),
-  generateFollowUpQuestions: () => ipcRenderer.invoke("generate-follow-up-questions"),
-  generateRecap: () => ipcRenderer.invoke("generate-recap"),
+  generateFollowUpQuestions: (imagePaths?: string[]) =>
+    ipcRenderer.invoke("generate-follow-up-questions", imagePaths),
+  generateRecap: (imagePaths?: string[]) => ipcRenderer.invoke("generate-recap", imagePaths),
   submitManualQuestion: (question: string) => ipcRenderer.invoke("submit-manual-question", question),
   getIntelligenceContext: () => ipcRenderer.invoke("get-intelligence-context"),
   resetIntelligence: () => ipcRenderer.invoke("reset-intelligence"),

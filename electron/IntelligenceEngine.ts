@@ -13,7 +13,7 @@ import {
 } from './llm';
 
 // Mode types
-export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'follow_up' | 'recap' | 'clarify' | 'manual' | 'follow_up_questions' | 'code_hint' | 'brainstorm';
+export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'follow_up' | 'recap' | 'clarify' | 'manual' | 'follow_up_questions' | 'code_hint' | 'brainstorm' | 'bug_finder';
 
 // Refinement intent detection (refined to avoid false positives)
 function detectRefinementIntent(userText: string): { isRefinement: boolean; intent: string } {
@@ -433,7 +433,7 @@ export class IntelligenceEngine extends EventEmitter {
      * MODE 4: Recap (Summary)
      * Neutral conversation summary
      */
-    async runRecap(): Promise<string | null> {
+    async runRecap(imagePaths?: string[]): Promise<string | null> {
         console.log('[IntelligenceEngine] runRecap called');
         this.setMode('recap');
 
@@ -444,16 +444,24 @@ export class IntelligenceEngine extends EventEmitter {
                 return null;
             }
 
-            const context = this.session.getFormattedContext(120);
+            let context = this.session.getFormattedContext(120)?.trim();
             if (!context) {
-                console.warn('[IntelligenceEngine] No context available for recap');
-                this.setMode('idle');
-                return null;
+                const full = this.session.getFullSessionContext()?.trim();
+                if (full) context = full.length > 14000 ? full.slice(-14000) : full;
+            }
+            const imagePathsArg = imagePaths?.length ? imagePaths : undefined;
+            if (!context && imagePathsArg?.length) {
+                context =
+                    '[Prioritize attached screenshot(s). System design: start with FUNCTIONAL REQUIREMENTS, then NON-FUNCTIONAL + napkin-math QUANT (2–4 numeric estimates), then one committed ```text``` diagram + verbal hints.]';
+            }
+            if (!context) {
+                context =
+                    '[No transcript synced yet. System design: FUNCTIONAL REQUIREMENTS, NON-FUNCTIONAL + QUANT (assumed ≈ numbers), then one small ```text``` diagram with named defaults + verbal hints.]';
             }
 
             const generationId = ++this.currentGenerationId;
             let fullSummary = "";
-            const stream = this.recapLLM.generateStream(context);
+            const stream = this.recapLLM.generateStream(context, imagePathsArg);
             let streamAborted = false;
 
             for await (const token of stream) {
@@ -474,7 +482,7 @@ export class IntelligenceEngine extends EventEmitter {
                 this.session.pushUsage({
                     type: 'chat',
                     timestamp: Date.now(),
-                    question: 'Recap Meeting',
+                    question: 'System Design',
                     answer: fullSummary
                 });
             }
@@ -558,7 +566,7 @@ export class IntelligenceEngine extends EventEmitter {
      * MODE 6: Follow-Up Questions
      * Suggest strategic questions for the user to ask
      */
-    async runFollowUpQuestions(): Promise<string | null> {
+    async runFollowUpQuestions(imagePaths?: string[]): Promise<string | null> {
         console.log('[IntelligenceEngine] runFollowUpQuestions called');
         this.setMode('follow_up_questions');
 
@@ -569,16 +577,28 @@ export class IntelligenceEngine extends EventEmitter {
                 return null;
             }
 
-            const context = this.session.getFormattedContext(120);
+            let context = this.session.getFormattedContext(120)?.trim();
+            // Rolling 120s window can be empty while older transcript still exists — reuse it.
             if (!context) {
-                console.warn('[IntelligenceEngine] No context available for follow-up questions');
-                this.setMode('idle');
-                return null;
+                const full = this.session.getFullSessionContext()?.trim();
+                if (full) {
+                    context = full.length > 14000 ? full.slice(-14000) : full;
+                }
+            }
+            const imagePathsArg = imagePaths?.length ? imagePaths : undefined;
+            if (!context && imagePathsArg?.length) {
+                context =
+                    '[Prioritize attached screenshot(s). Produce follow-up questions: compact orientation, rubric, clarifiers — keywords and short lines only.]';
+            }
+            // No transcript at all: still run so Ctrl+K does something useful (matches prompt "empty context" branch).
+            if (!context) {
+                context =
+                    '[No transcript synced yet. Follow system instructions for empty context: compact orientation, rubric, opening clarifiers, tool discipline — keywords and short lines only.]';
             }
 
             const generationId = ++this.currentGenerationId;
             let fullQuestions = "";
-            const stream = this.followUpQuestionsLLM.generateStream(context);
+            const stream = this.followUpQuestionsLLM.generateStream(context, imagePathsArg);
 
             for await (const token of stream) {
                 if (this.currentGenerationId !== generationId) {
@@ -594,7 +614,7 @@ export class IntelligenceEngine extends EventEmitter {
                 this.session.pushUsage({
                     type: 'followup_questions',
                     timestamp: Date.now(),
-                    question: 'Generate Follow-up Questions',
+                    question: 'AI Design',
                     answer: fullQuestions
                 });
             }
@@ -744,7 +764,11 @@ export class IntelligenceEngine extends EventEmitter {
                 return "Please configure your API Keys in Settings to use this feature.";
             }
 
-            let context = this.session.getFormattedContext(180);
+            let context = this.session.getFormattedContext(180)?.trim();
+            if (!context) {
+                const full = this.session.getFullSessionContext()?.trim();
+                if (full) context = full.length > 14000 ? full.slice(-14000) : full;
+            }
             // Prepend the problem statement so the LLM knows exactly what to brainstorm
             const resolvedProblem = problemStatement?.trim() ||
                 this.session.getDetectedCodingQuestion().question?.trim();
@@ -759,6 +783,9 @@ export class IntelligenceEngine extends EventEmitter {
 
             if (resolvedProblem) {
                 context = `<problem_statement>\n${resolvedProblem}\n</problem_statement>\n\n${context}`;
+            } else if (!context.trim() && imagePaths?.length) {
+                context =
+                    '[Use attached screenshot(s) as the problem. Brainstorm 2–3 approaches with trade-offs and what to verify first.]';
             }
             const generationId = ++this.currentGenerationId;
             let fullResult = "";
@@ -782,7 +809,8 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             if (!fullResult || fullResult.trim().length < 5) {
-                fullResult = "I couldn't generate brainstorm approaches. Make sure your question is visible and try again.";
+                fullResult =
+                    "Could not generate approaches from this context. Try a screenshot (attach or capture), more transcript, or use System Design (Ctrl+M / ⌘M) if you meant architecture.";
             }
 
             this.session.addAssistantMessage(fullResult);

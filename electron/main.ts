@@ -359,25 +359,29 @@ export class AppState {
         // Chat actions — fire into the renderer without focusing the window
         } else if (
           actionId === 'chat:whatToAnswer' ||
-          actionId === 'chat:clarify' ||
+          actionId === 'chat:bugFinder' ||
           actionId === 'chat:followUp' ||
           actionId === 'chat:answer' ||
           actionId === 'chat:codeHint' ||
-          actionId === 'chat:brainstorm' ||
           actionId === 'chat:dynamicAction4' ||
+          actionId === 'chat:codingBrainstorm' ||
           actionId === 'chat:scrollUp' ||
-          actionId === 'chat:scrollDown'
+          actionId === 'chat:scrollDown' ||
+          actionId === 'chat:scrollCodeLeft' ||
+          actionId === 'chat:scrollCodeRight'
         ) {
           const actionMap: Record<string, string> = {
             'chat:whatToAnswer': 'whatToAnswer',
-            'chat:clarify': 'clarify',
+            'chat:bugFinder': 'bugFinder',
             'chat:followUp': 'followUp',
             'chat:answer': 'answer',
             'chat:codeHint': 'codeHint',
-            'chat:brainstorm': 'brainstorm',
             'chat:dynamicAction4': 'dynamicAction4',
+            'chat:codingBrainstorm': 'codingBrainstorm',
             'chat:scrollUp': 'scrollUp',
             'chat:scrollDown': 'scrollDown',
+            'chat:scrollCodeLeft': 'scrollCodeLeft',
+            'chat:scrollCodeRight': 'scrollCodeRight',
           };
           const action = actionMap[actionId];
           // Send to all windows without focusing — stealth operation

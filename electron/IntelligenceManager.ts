@@ -148,16 +148,16 @@ export class IntelligenceManager extends EventEmitter {
         return this.engine.runFollowUp(intent, userRequest);
     }
 
-    async runRecap(): Promise<string | null> {
-        return this.engine.runRecap();
+    async runRecap(imagePaths?: string[]): Promise<string | null> {
+        return this.engine.runRecap(imagePaths);
     }
 
     async runClarify(): Promise<string | null> {
         return this.engine.runClarify();
     }
 
-    async runFollowUpQuestions(): Promise<string | null> {
-        return this.engine.runFollowUpQuestions();
+    async runFollowUpQuestions(imagePaths?: string[]): Promise<string | null> {
+        return this.engine.runFollowUpQuestions(imagePaths);
     }
 
     async runManualAnswer(question: string): Promise<string | null> {

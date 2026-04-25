@@ -6,16 +6,18 @@ import { getPlatformShortcut, isMac } from '../utils/platformUtils';
 export interface ShortcutConfig {
     whatToAnswer: string[];
     autoAnswerMode: string[];
-    clarify: string[];
+    bugFinder: string[];
     followUp: string[];
     dynamicAction4: string[];
+    codingBrainstorm: string[];
     answer: string[];
     codeHint: string[];
-    brainstorm: string[];
     shorten: string[];
     recap: string[];
     scrollUp: string[];
     scrollDown: string[];
+    scrollCodeLeft: string[];
+    scrollCodeRight: string[];
     // Window Movement
     moveWindowUp: string[];
     moveWindowDown: string[];
@@ -37,16 +39,18 @@ function buildDefaultShortcuts(): ShortcutConfig {
     return {
         whatToAnswer: [mod, '1'],
         autoAnswerMode: [mod, 'f'],
-        clarify: [mod, '2'],
-        dynamicAction4: [mod, '3'],
-        followUp: [mod, '4'],
+        bugFinder: [mod, 'N'],
+        dynamicAction4: [mod, 'M'],
+        codingBrainstorm: [mod, shift, 'M'],
+        followUp: [mod, 'K'],
         answer: [mod, '5'],
         codeHint: [mod, '6'],
-        brainstorm: [mod, '7'],
         shorten: [],
         recap: [],
         scrollUp: ['↑'],
         scrollDown: ['↓'],
+        scrollCodeLeft: [mod, '←'],
+        scrollCodeRight: [mod, '→'],
         moveWindowUp: [mod, shift, '↑'],
         moveWindowDown: [mod, shift, '↓'],
         moveWindowLeft: [mod, shift, '←'],
@@ -64,16 +68,18 @@ function buildDefaultShortcuts(): ShortcutConfig {
 export const DEFAULT_SHORTCUTS: ShortcutConfig = {
     whatToAnswer: ['⌘', '1'],
     autoAnswerMode: ['⌘', 'F'],
-    clarify: ['⌘', '2'],
-    dynamicAction4: ['⌘', '3'],   // slot 3 — matches KeybindManager
-    followUp: ['⌘', '4'],          // slot 4 — matches KeybindManager
+    bugFinder: ['⌘', 'N'],
+    dynamicAction4: ['⌘', 'M'],
+    codingBrainstorm: ['⌘', '⇧', 'M'],
+    followUp: ['⌘', 'K'],
     answer: ['⌘', '5'],
     codeHint: ['⌘', '6'],
-    brainstorm: ['⌘', '7'],
     shorten: [],
     recap: [],
     scrollUp: ['↑'],
     scrollDown: ['↓'],
+    scrollCodeLeft: ['⌘', '←'],
+    scrollCodeRight: ['⌘', '→'],
     moveWindowUp: ['⌘', '⇧', '↑'],
     moveWindowDown: ['⌘', '⇧', '↓'],
     moveWindowLeft: ['⌘', '⇧', '←'],
@@ -104,15 +110,17 @@ export const useShortcuts = () => {
                 else if (kb.id === 'app:toggle-global-overlay') newShortcuts.toggleGlobalOverlay = keys;
                 else if (kb.id === 'chat:followUp') newShortcuts.followUp = keys;
                 else if (kb.id === 'chat:followup') newShortcuts.followUp = keys; // backwards compat
-                else if (kb.id === 'chat:clarify') newShortcuts.clarify = keys;
+                else if (kb.id === 'chat:bugFinder') newShortcuts.bugFinder = keys;
                 else if (kb.id === 'chat:dynamicAction4') newShortcuts.dynamicAction4 = keys;
+                else if (kb.id === 'chat:codingBrainstorm') newShortcuts.codingBrainstorm = keys;
                 else if (kb.id === 'chat:answer') newShortcuts.answer = keys;
                 else if (kb.id === 'chat:codeHint') newShortcuts.codeHint = keys;
-                else if (kb.id === 'chat:brainstorm') newShortcuts.brainstorm = keys;
                 else if (kb.id === 'chat:shorten') newShortcuts.shorten = keys;
                 else if (kb.id === 'chat:recap') newShortcuts.recap = keys;
                 else if (kb.id === 'chat:scrollUp') newShortcuts.scrollUp = keys;
                 else if (kb.id === 'chat:scrollDown') newShortcuts.scrollDown = keys;
+                else if (kb.id === 'chat:scrollCodeLeft') newShortcuts.scrollCodeLeft = keys;
+                else if (kb.id === 'chat:scrollCodeRight') newShortcuts.scrollCodeRight = keys;
                 else if (kb.id === 'chat:auto-answer-mode') newShortcuts.autoAnswerMode = keys;
                 // Window
                 else if (kb.id === 'window:move-up') newShortcuts.moveWindowUp = keys;
@@ -166,16 +174,18 @@ export const useShortcuts = () => {
         switch (actionId) {
             case 'whatToAnswer': backendId = 'chat:whatToAnswer'; break;
             case 'autoAnswerMode': backendId = 'chat:auto-answer-mode'; break;
-            case 'clarify': backendId = 'chat:clarify'; break;
+            case 'bugFinder': backendId = 'chat:bugFinder'; break;
             case 'followUp': backendId = 'chat:followUp'; break;
             case 'dynamicAction4': backendId = 'chat:dynamicAction4'; break;
+            case 'codingBrainstorm': backendId = 'chat:codingBrainstorm'; break;
             case 'answer': backendId = 'chat:answer'; break;
             case 'codeHint': backendId = 'chat:codeHint'; break;
-            case 'brainstorm': backendId = 'chat:brainstorm'; break;
             case 'shorten': backendId = 'chat:shorten'; break;
             case 'recap': backendId = 'chat:recap'; break;
             case 'scrollUp': backendId = 'chat:scrollUp'; break;
             case 'scrollDown': backendId = 'chat:scrollDown'; break;
+            case 'scrollCodeLeft': backendId = 'chat:scrollCodeLeft'; break;
+            case 'scrollCodeRight': backendId = 'chat:scrollCodeRight'; break;
             // Window
             case 'moveWindowUp': backendId = 'window:move-up'; break;
             case 'moveWindowDown': backendId = 'window:move-down'; break;
@@ -263,9 +273,19 @@ export const useShortcuts = () => {
             return event.code === 'Space';
         }
 
-        // Handle Arrow keys
-        // Electron accelerator uses 'ArrowUp' (mapped from 'Up'), event.key is 'ArrowUp'
-        // So direct comparison usually works
+        // Arrow keys: match event.key; also event.code (some hosts / focus paths differ)
+        if (configKey === 'arrowup') {
+            return eventKey === 'arrowup' || event.code === 'ArrowUp';
+        }
+        if (configKey === 'arrowdown') {
+            return eventKey === 'arrowdown' || event.code === 'ArrowDown';
+        }
+        if (configKey === 'arrowleft') {
+            return eventKey === 'arrowleft' || event.code === 'ArrowLeft';
+        }
+        if (configKey === 'arrowright') {
+            return eventKey === 'arrowright' || event.code === 'ArrowRight';
+        }
 
         return eventKey === configKey;
     }, [shortcuts]);

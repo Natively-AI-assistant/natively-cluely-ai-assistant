@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Command, Monitor, Mic, Settings, Zap, Key, User, Play, Image, ArrowUp, FileText, Sparkles, Search, ChevronUp, Copy,
     FileJson, MessageSquare, Briefcase, Eye, EyeOff, Ghost, ChevronDown, ChevronRight, HelpCircle, Upload, CheckCircle2,
-    RefreshCw, Trash2, Check, ExternalLink, Volume2, Globe, Brain, Cpu, Calendar, Star, CreditCard, X, Pencil, Lightbulb,
+    RefreshCw, LayoutGrid, Trash2, Check, ExternalLink, Volume2, Globe, Brain, Cpu, Calendar, Star, CreditCard, X, Pencil, Lightbulb, Bug,
     SlidersHorizontal, PointerOff, ArrowRight
 } from 'lucide-react';
 import { SiOpenai, SiGoogle } from 'react-icons/si';
@@ -17,9 +17,9 @@ import nativelyIcon from '../icon.png';
 
 const MOCK_BUTTONS = [
     { icon: Pencil,        label: 'What to answer?',   kbd: '⌘1', color: 'blue'    },
-    { icon: MessageSquare, label: 'Clarify',            kbd: '⌘2', color: 'indigo'  },
-    { icon: RefreshCw,     label: 'Recap',              kbd: '⌘7', color: 'amber'   },
-    { icon: HelpCircle,    label: 'Follow Up Question', kbd: '⌘4', color: 'teal'    },
+    { icon: Bug,           label: 'Bug Finder',        kbd: '⌘N', color: 'rose'    },
+    { icon: LayoutGrid,    label: 'System Design',     kbd: '⌘M', color: 'amber'   },
+    { icon: Sparkles,      label: 'AI Design',         kbd: '⌘K', color: 'teal'    },
     { icon: Zap,           label: 'Answer',             kbd: '⌘5', color: 'emerald' },
 ] as const;
 
@@ -29,6 +29,7 @@ const colorMap: Record<string, string> = {
     amber:   'bg-amber-500/10 text-amber-500 border-amber-500/25',
     teal:    'bg-teal-500/10 text-teal-500 border-teal-500/25',
     emerald: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/25',
+    rose:    'bg-rose-500/10 text-rose-500 border-rose-500/25',
 };
 
 const MockAppInterface = () => {
@@ -1224,13 +1225,13 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                             {([
                                 { Icon: Pencil,        color: 'blue',   title: 'What to Answer?',  badge: null,           bc: '',                                                          kbd: ['⌘','1'],        desc: 'Reads the active transcript and screen, then streams a precise response to read aloud.' },
-                                { Icon: Lightbulb,     color: 'violet', title: 'Brainstorm',        badge: 'Interview ON',  bc: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',  kbd: ['⌘','3'],        desc: 'Recap becomes Brainstorm when Interview Mode is ON — deep multi-step strategies.' },
-                                { Icon: HelpCircle,    color: 'teal',   title: 'Follow Up',         badge: null,           bc: '',                                                          kbd: ['⌘','4'],        desc: 'Suggests the next logical question to keep conversation flowing gracefully.' },
+                                { Icon: Lightbulb,     color: 'violet', title: 'Coding brainstorm', badge: null,           bc: '',                                                          kbd: ['⌘','⇧','M'],    desc: 'Multi-approach spoken script (DSA / trade-offs). Separate from system design.' },
+                                { Icon: Sparkles,      color: 'teal',   title: 'AI Design',         badge: null,           bc: '',                                                          kbd: ['⌘','K'],        desc: 'Meta-style AI-enabled design interview crib sheet — agents, RAG, eval, safety, iteration; keywords and short lines only.' },
                                 { Icon: Zap,           color: 'emerald',title: 'Answer Now',        badge: null,           bc: '',                                                          kbd: ['⌘','5'],        desc: 'Records your mic + screen context and fires an immediate AI query.' },
-                                { Icon: MessageSquare, color: 'indigo', title: 'Clarify',           badge: null,           bc: '',                                                          kbd: ['⌘','2'],        desc: 'Generates sharp probing questions from latent audio when a topic is unclear.' },
-                                { Icon: RefreshCw,     color: 'amber',  title: 'Recap',             badge: 'Interview OFF', bc: 'bg-red-500/10 text-red-400 border-red-500/30',              kbd: ['⌘','3'],        desc: 'Condenses the last 5 minutes into bullet points when you lose the thread.' },
+                                { Icon: Bug,           color: 'rose',   title: 'Bug Finder',        badge: null,           bc: '',                                                          kbd: ['⌘','N'],        desc: 'Analyzes your screen (and attached screenshots) for likely bugs and fixes — best used with Ctrl+N from anywhere.' },
+                                { Icon: LayoutGrid,    color: 'amber',  title: 'System Design',     badge: null,           bc: '',                                                          kbd: ['⌘','M'],        desc: 'FAANG-style system design from transcript — single committed architecture, FR/NFR + napkin math first.' },
                                 { Icon: Sparkles,      color: 'sky',    title: 'Code Hint',         badge: null,           bc: '',                                                          kbd: ['⌘','6'],        desc: 'Reads your screen and nudges you toward the correct code implementation.' },
-                                { Icon: Monitor,       color: 'rose',   title: 'Screenshot & Ask',  badge: null,           bc: '',                                                          kbd: ['⌘','⇧','H'],    desc: 'Forces a full-screen capture and immediately processes it through the LLM.' },
+                                { Icon: Monitor,       color: 'indigo', title: 'Screenshot & Ask',  badge: null,           bc: '',                                                          kbd: ['⌘','⇧','H'],    desc: 'Forces a full-screen capture and immediately processes it through the LLM.' },
                                 { Icon: EyeOff,        color: 'slate',  title: 'Stealth Execute',   badge: null,           bc: '',                                                          kbd: ['⌘','↵'],        desc: 'Processes context in the background without ever revealing the interface.' },
                             ] as Array<{ Icon: React.ElementType; color: 'blue'|'violet'|'teal'|'emerald'|'indigo'|'amber'|'sky'|'rose'|'slate'; title: string; badge: string|null; bc: string; kbd: string[]; desc: string }>).map(({ Icon, color, title, badge, bc, kbd, desc }) => {
                                 const isWindows = typeof navigator !== 'undefined' && /Win/i.test(navigator.platform);

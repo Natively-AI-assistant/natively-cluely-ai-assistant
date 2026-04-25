@@ -1,16 +1,13 @@
-import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from 'react';
 import {
     Sparkles,
     Pencil,
     MessageSquare,
-    RefreshCw,
     Settings,
     ArrowUp,
     ArrowRight,
-    HelpCircle,
     ChevronUp,
     ChevronDown,
-    Lightbulb,
     CornerDownLeft,
     Mic,
     MicOff,
@@ -24,10 +21,12 @@ import {
     Ghost,
     Link,
     Code,
+    LayoutGrid,
     Copy,
     Check,
     PointerOff,
-    Bug
+    Bug,
+    Lightbulb
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -131,22 +130,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     // Model Selection State
     const [currentModel, setCurrentModel] = useState<string>('gemini-3-flash-preview');
 
-    // Dynamic Action Button Mode (Recap vs Brainstorm)
-    const [actionButtonMode, setActionButtonMode] = useState<'recap' | 'brainstorm'>('recap');
-
-    useEffect(() => {
-        // Load persisted mode
-        window.electronAPI?.getActionButtonMode?.()?.then((mode: 'recap' | 'brainstorm') => {
-            if (mode) setActionButtonMode(mode);
-        }).catch(() => {});
-
-        // Listen for live changes from SettingsPopup / IPC
-        const unsubscribe = window.electronAPI?.onActionButtonModeChanged?.((mode: 'recap' | 'brainstorm') => {
-            setActionButtonMode(mode);
-        });
-        return () => { unsubscribe?.(); };
-    }, []);
-
     const codeTheme = isLightTheme ? oneLight : vscDarkPlus;
     const codeLineNumberColor = isLightTheme ? 'rgba(15,23,42,0.35)' : 'rgba(255,255,255,0.2)';
     const appearance = useMemo(
@@ -161,6 +144,45 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     const quickActionClass = 'overlay-chip-surface overlay-text-interactive';
     const inputClass = `${isLightTheme ? 'focus:ring-black/10' : 'focus:ring-white/10'} overlay-input-surface overlay-input-text`;
     const controlSurfaceClass = 'overlay-control-surface overlay-text-interactive';
+
+    /** Fenced markdown `pre` blocks — targets Ctrl/Cmd+← / → horizontal scroll. */
+    const MarkdownScrollPre = useMemo(
+        () =>
+            function MarkdownScrollPreInner({ children, ...props }: any) {
+                return (
+                    <pre
+                        data-natively-code-scroll
+                        className={`my-2 max-w-full overflow-x-auto rounded-lg border px-3 py-2.5 text-[12px] font-mono leading-relaxed whitespace-pre ${
+                            isLightTheme ? 'border-black/10 bg-slate-100 text-slate-900' : 'border-white/10 bg-black/35 text-slate-100'
+                        }`}
+                        {...props}
+                    >
+                        {children}
+                    </pre>
+                );
+            },
+        [isLightTheme],
+    );
+
+    const scrollCodeBlocksHorizontally = useCallback((deltaX: number) => {
+        // Use the full overlay root so code targets are found even when the chat
+        // list ref is absent, and to match global shortcuts (same DOM scope).
+        const root = contentRef.current;
+        if (!root) return false;
+        const step = deltaX === 0 ? 0 : deltaX > 0 ? Math.abs(deltaX) : -Math.abs(deltaX);
+        if (step === 0) return false;
+        let consumed = false;
+        root.querySelectorAll<HTMLElement>('[data-natively-code-scroll]').forEach((el) => {
+            if (el.scrollWidth <= el.clientWidth + 1) return;
+            const maxScroll = el.scrollWidth - el.clientWidth;
+            const left = el.scrollLeft;
+            if (step < 0 && left <= 0.5) return;
+            if (step > 0 && left >= maxScroll - 0.5) return;
+            el.scrollBy({ left: step, behavior: 'smooth' });
+            consumed = true;
+        });
+        return consumed;
+    }, []);
 
     useEffect(() => {
         // Load the persisted default model (not the runtime model)
@@ -585,7 +607,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
             });
         }));
 
-        // STREAMING: Recap
+        // STREAMING: System Design (intent recap / IPC names unchanged)
         cleanups.push(window.electronAPI.onIntelligenceRecapToken((data) => {
             setMessages(prev => {
                 const lastMsg = prev[prev.length - 1];
@@ -710,7 +732,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     // taken, `switchToOverlay` fires `ensure-expanded` which can flip isExpanded
     // from false→true, triggering the [isExpanded] effect cleanup. If `screenshot-taken`
     // arrives during that teardown gap the event is silently dropped (same issue
-    // as clarify streaming listeners below). handleScreenshotAttach only uses stable
+    // as other streaming listeners). handleScreenshotAttach only uses stable
     // useState setters so a mount-only closure is safe here.
     useEffect(() => {
         const cleanupTaken = window.electronAPI.onScreenshotTaken(handleScreenshotAttach);
@@ -720,55 +742,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
             cleanupAttached?.();
         };
     }, []);
-
-    // Stable mount-only effect for clarify streaming listeners.
-    // These MUST NOT be inside the [isExpanded] effect — if the user
-    // expands/collapses the panel while a clarify stream is in-flight,
-    // the [isExpanded] effect would tear down and re-register listeners,
-    // orphaning the final 'clarify' event and leaving isProcessing=true forever.
-    useEffect(() => {
-        const cleanupToken = window.electronAPI.onIntelligenceClarifyToken((data) => {
-            setMessages(prev => {
-                const lastMsg = prev[prev.length - 1];
-                if (lastMsg && lastMsg.isStreaming && lastMsg.intent === 'clarify') {
-                    const updated = [...prev];
-                    updated[prev.length - 1] = { ...lastMsg, text: lastMsg.text + data.token };
-                    return updated;
-                }
-                return [...prev, {
-                    id: Date.now().toString(),
-                    role: 'system' as const,
-                    text: data.token,
-                    intent: 'clarify',
-                    isStreaming: true
-                }];
-            });
-        });
-
-        const cleanupFinal = window.electronAPI.onIntelligenceClarify((data) => {
-            setIsProcessing(false);
-            setMessages(prev => {
-                const lastMsg = prev[prev.length - 1];
-                if (lastMsg && lastMsg.isStreaming && lastMsg.intent === 'clarify') {
-                    const updated = [...prev];
-                    updated[prev.length - 1] = { ...lastMsg, text: data.clarification, isStreaming: false };
-                    return updated;
-                }
-                return [...prev, {
-                    id: Date.now().toString(),
-                    role: 'system' as const,
-                    text: data.clarification,
-                    intent: 'clarify'
-                }];
-            });
-        });
-
-        return () => {
-            cleanupToken();
-            cleanupFinal();
-        };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []); // intentionally empty — these listeners must survive isExpanded changes
 
     // Quick Actions - Updated to use new Intelligence APIs
 
@@ -843,10 +816,66 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     const handleRecap = async () => {
         setIsExpanded(true);
         setIsProcessing(true);
-        analytics.trackCommandExecuted('recap');
+        analytics.trackCommandExecuted('system_design');
+
+        const pending = pendingCaptureRef.current;
+        let currentAttachments = attachedContext;
+        if (pending && !currentAttachments.some(s => s.path === pending.path)) {
+            currentAttachments = [...currentAttachments, pending].slice(-5);
+        }
+
+        if (currentAttachments.length > 0) {
+            setAttachedContext([]);
+            setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                role: 'user',
+                text: 'System design (Ctrl+M / ⌘M) — system-design prompt, attached screenshot(s)',
+                hasScreenshot: true,
+                screenshotPreview: currentAttachments[0].preview
+            }]);
+            setTimeout(() => {
+                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }, 50);
+        }
 
         try {
-            await window.electronAPI.generateRecap();
+            await window.electronAPI.generateRecap(
+                currentAttachments.length > 0 ? currentAttachments.map(s => s.path) : undefined
+            );
+        } catch (err) {
+            setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                role: 'system',
+                text: `Error: ${err}`
+            }]);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    /** Coding / DSA brainstorm — multi-approach script (Ctrl+Shift+M); not system design. */
+    const handleBrainstorm = async () => {
+        setIsExpanded(true);
+        setIsProcessing(true);
+        analytics.trackCommandExecuted('brainstorm');
+
+        const currentAttachments = attachedContext;
+        if (currentAttachments.length > 0) {
+            setAttachedContext([]);
+            setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                role: 'user',
+                text: 'Coding brainstorm (Ctrl+Shift+M / ⌘⇧M) — brainstorm prompt, attached screenshot(s)',
+                hasScreenshot: true,
+                screenshotPreview: currentAttachments[0].preview
+            }]);
+            setTimeout(() => {
+                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }, 50);
+        }
+
+        try {
+            await window.electronAPI.generateBrainstorm(currentAttachments.length > 0 ? currentAttachments.map(s => s.path) : undefined);
         } catch (err) {
             setMessages(prev => [...prev, {
                 id: Date.now().toString(),
@@ -861,28 +890,32 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     const handleFollowUpQuestions = async () => {
         setIsExpanded(true);
         setIsProcessing(true);
-        analytics.trackCommandExecuted('suggest_questions');
+        analytics.trackCommandExecuted('ai_design');
 
-        try {
-            await window.electronAPI.generateFollowUpQuestions();
-        } catch (err) {
+        const pending = pendingCaptureRef.current;
+        let currentAttachments = attachedContext;
+        if (pending && !currentAttachments.some(s => s.path === pending.path)) {
+            currentAttachments = [...currentAttachments, pending].slice(-5);
+        }
+
+        if (currentAttachments.length > 0) {
+            setAttachedContext([]);
             setMessages(prev => [...prev, {
                 id: Date.now().toString(),
-                role: 'system',
-                text: `Error: ${err}`
+                role: 'user',
+                text: 'AI design with this context',
+                hasScreenshot: true,
+                screenshotPreview: currentAttachments[0].preview
             }]);
-        } finally {
-            setIsProcessing(false);
+            setTimeout(() => {
+                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }, 50);
         }
-    };
-
-    const handleClarify = async () => {
-        setIsExpanded(true);
-        setIsProcessing(true);
-        analytics.trackCommandExecuted('clarify');
 
         try {
-            await window.electronAPI.generateClarify();
+            await window.electronAPI.generateFollowUpQuestions(
+                currentAttachments.length > 0 ? currentAttachments.map(s => s.path) : undefined
+            );
         } catch (err) {
             setMessages(prev => [...prev, {
                 id: Date.now().toString(),
@@ -928,42 +961,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
             setIsProcessing(false);
         }
     };
-
-    const handleBrainstorm = async () => {
-        setIsExpanded(true);
-        setIsProcessing(true);
-        analytics.trackCommandExecuted('brainstorm');
-
-        const currentAttachments = attachedContext;
-        if (currentAttachments.length > 0) {
-            setAttachedContext([]);
-            // Show the attached image in chat
-            setMessages(prev => [...prev, {
-                id: Date.now().toString(),
-                role: 'user',
-                text: 'Brainstorm with this context',
-                hasScreenshot: true,
-                screenshotPreview: currentAttachments[0].preview
-            }]);
-        	// Scroll to bottom when user sends message
-        	setTimeout(() => {
-        		messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        	}, 50);
-        }
-
-        try {
-            await window.electronAPI.generateBrainstorm(currentAttachments.length > 0 ? currentAttachments.map(s => s.path) : undefined);
-        } catch (err) {
-            setMessages(prev => [...prev, {
-                id: Date.now().toString(),
-                role: 'system',
-                text: `Error: ${err}`
-            }]);
-        } finally {
-            setIsProcessing(false);
-        }
-    };
-
 
     const handleBugFinder = async () => {
         setIsExpanded(true);
@@ -1463,7 +1460,7 @@ Provide only the answer, nothing else.`;
                                                     {lang || 'CODE'}
                                                 </span>
                                             </div>
-                                            <div className="bg-transparent">
+                                            <div className="bg-transparent max-w-full overflow-x-auto" data-natively-code-scroll>
                                                 <SyntaxHighlighter
                                                     language={lang}
                                                     style={codeTheme}
@@ -1476,7 +1473,7 @@ Provide only the answer, nothing else.`;
                                                         padding: '16px',
                                                         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
                                                     }}
-                                                    wrapLongLines={true}
+                                                    wrapLongLines={false}
                                                     showLineNumbers={true}
                                                     lineNumberStyle={{ minWidth: '2.5em', paddingRight: '1.2em', color: codeLineNumberColor, textAlign: 'right', fontSize: '11px' }}
                                                 >
@@ -1503,6 +1500,7 @@ Provide only the answer, nothing else.`;
                                             h1: ({ node, ...props }: any) => <h1 className="text-lg font-bold mb-2 mt-3 overlay-text-strong" {...props} />,
                                             h2: ({ node, ...props }: any) => <h2 className="text-base font-bold mb-2 mt-3 overlay-text-strong" {...props} />,
                                             h3: ({ node, ...props }: any) => <h3 className="text-sm font-bold mb-1 mt-2 overlay-text-primary" {...props} />,
+                                            pre: MarkdownScrollPre,
                                             code: ({ node, ...props }: any) => <code className={`overlay-inline-code-surface rounded px-1 py-0.5 text-xs font-mono whitespace-pre-wrap ${isLightTheme ? 'text-violet-700' : 'text-purple-200'}`} {...props} />,
                                             blockquote: ({ node, ...props }: any) => <blockquote className={`border-l-2 pl-3 italic my-2 ${isLightTheme ? 'border-violet-500/30 text-slate-600' : 'border-purple-500/50 text-slate-400'}`} {...props} />,
                                             a: ({ node, ...props }: any) => <a className={`hover:underline ${isLightTheme ? 'text-blue-600 hover:text-blue-700' : 'text-blue-400 hover:text-blue-300'}`} target="_blank" rel="noopener noreferrer" {...props} />,
@@ -1518,7 +1516,7 @@ Provide only the answer, nothing else.`;
             );
         }
 
-        // Custom Styled Labels (Shorten, Recap, Follow-up) - also use Markdown for content
+        // Custom Styled Labels (Shorten, System Design, AI Design) — intent ids unchanged
         if (msg.intent === 'shorten') {
             return (
                 <div className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`} style={appearance.subtleStyle}>
@@ -1532,6 +1530,7 @@ Provide only the answer, nothing else.`;
                             strong: ({ node, ...props }: any) => <strong className={`font-bold ${isLightTheme ? 'text-cyan-800' : 'text-cyan-100'}`} {...props} />,
                             ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mb-2" {...props} />,
                             li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
+                            pre: MarkdownScrollPre,
                         }}>
                             {msg.text}
                         </ReactMarkdown>
@@ -1544,8 +1543,8 @@ Provide only the answer, nothing else.`;
             return (
                 <div className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`} style={appearance.subtleStyle}>
                     <div className={`flex items-center gap-2 mb-2 font-semibold text-xs uppercase tracking-wide ${isLightTheme ? 'text-indigo-700' : 'text-indigo-300'}`}>
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        <span>Recap</span>
+                        <LayoutGrid className="w-3.5 h-3.5" />
+                        <span>System Design</span>
                     </div>
                     <div className={`text-[13px] leading-relaxed markdown-content ${isLightTheme ? 'text-slate-800' : 'text-slate-200'}`}>
                         <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={{
@@ -1553,6 +1552,7 @@ Provide only the answer, nothing else.`;
                             strong: ({ node, ...props }: any) => <strong className={`font-bold ${isLightTheme ? 'text-indigo-800' : 'text-indigo-100'}`} {...props} />,
                             ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mb-2" {...props} />,
                             li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
+                            pre: MarkdownScrollPre,
                         }}>
                             {msg.text}
                         </ReactMarkdown>
@@ -1565,8 +1565,8 @@ Provide only the answer, nothing else.`;
             return (
                 <div className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`} style={appearance.subtleStyle}>
                     <div className={`flex items-center gap-2 mb-2 font-semibold text-xs uppercase tracking-wide ${isLightTheme ? 'text-amber-700' : 'text-[#FFD60A]'}`}>
-                        <HelpCircle className="w-3.5 h-3.5" />
-                        <span>Follow-Up Questions</span>
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>AI Design</span>
                     </div>
                     <div className={`text-[13px] leading-relaxed markdown-content ${isLightTheme ? 'text-slate-800' : 'text-slate-200'}`}>
                         <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={{
@@ -1574,6 +1574,7 @@ Provide only the answer, nothing else.`;
                             strong: ({ node, ...props }: any) => <strong className={`font-bold ${isLightTheme ? 'text-amber-800' : 'text-[#FFF9C4]'}`} {...props} />,
                             ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mb-2" {...props} />,
                             li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
+                            pre: MarkdownScrollPre,
                         }}>
                             {msg.text}
                         </ReactMarkdown>
@@ -1618,7 +1619,7 @@ Provide only the answer, nothing else.`;
                                                 </span>
                                             </div>
 
-                                            <div className="bg-transparent">
+                                            <div className="bg-transparent max-w-full overflow-x-auto" data-natively-code-scroll>
                                                 <SyntaxHighlighter
                                                     language={lang}
                                                     style={codeTheme}
@@ -1631,7 +1632,7 @@ Provide only the answer, nothing else.`;
                                                         padding: '16px',
                                                         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
                                                     }}
-                                                    wrapLongLines={true}
+                                                    wrapLongLines={false}
                                                     showLineNumbers={true}
                                                     lineNumberStyle={{ minWidth: '2.5em', paddingRight: '1.2em', color: codeLineNumberColor, textAlign: 'right', fontSize: '11px' }}
                                                 >
@@ -1655,6 +1656,7 @@ Provide only the answer, nothing else.`;
                                             ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mb-2 space-y-1" {...props} />,
                                             ol: ({ node, ...props }: any) => <ol className="list-decimal ml-4 mb-2 space-y-1" {...props} />,
                                             li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
+                                            pre: MarkdownScrollPre,
                                         }}
                                     >
                                         {part}
@@ -1681,6 +1683,7 @@ Provide only the answer, nothing else.`;
                         ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mb-2 space-y-1" {...props} />,
                         ol: ({ node, ...props }: any) => <ol className="list-decimal ml-4 mb-2 space-y-1" {...props} />,
                         li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
+                        pre: MarkdownScrollPre,
                         code: ({ node, ...props }: any) => <code className={`overlay-inline-code-surface rounded px-1 py-0.5 text-xs font-mono ${isLightTheme ? 'text-slate-800' : ''}`} {...props} />,
                         a: ({ node, ...props }: any) => <a className="underline hover:opacity-80" target="_blank" rel="noopener noreferrer" {...props} />,
                     }}
@@ -1698,10 +1701,9 @@ Provide only the answer, nothing else.`;
         handleFollowUp,
         handleFollowUpQuestions,
         handleRecap,
-        handleAnswerNow,
-        handleClarify,
-        handleCodeHint,
         handleBrainstorm,
+        handleAnswerNow,
+        handleCodeHint,
         handleBugFinder
     });
 
@@ -1711,52 +1713,48 @@ Provide only the answer, nothing else.`;
         handleFollowUp,
         handleFollowUpQuestions,
         handleRecap,
-        handleAnswerNow,
-        handleClarify,
-        handleCodeHint,
         handleBrainstorm,
+        handleAnswerNow,
+        handleCodeHint,
         handleBugFinder
     };
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            const { handleWhatToSay, handleFollowUp, handleFollowUpQuestions, handleRecap, handleAnswerNow, handleClarify, handleCodeHint, handleBrainstorm } = handlersRef.current;
+            const { handleWhatToSay, handleFollowUp, handleFollowUpQuestions, handleRecap, handleBrainstorm, handleAnswerNow, handleCodeHint, handleBugFinder } = handlersRef.current;
 
             // Chat Shortcuts (Scope: Local to Chat/Overlay usually, but we allow them here if focused)
             if (isShortcutPressed(e, 'whatToAnswer')) {
                 e.preventDefault();
                 handleWhatToSay();
-            } else if (isShortcutPressed(e, 'clarify')) {
-                e.preventDefault();
-                handleClarify();
             } else if (isShortcutPressed(e, 'followUp')) {
                 e.preventDefault();
                 handleFollowUpQuestions();
+            } else if (isShortcutPressed(e, 'codingBrainstorm')) {
+                e.preventDefault();
+                handleBrainstorm();
             } else if (isShortcutPressed(e, 'dynamicAction4')) {
                 e.preventDefault();
-                if (actionButtonMode === 'brainstorm') {
-                    handleBrainstorm();
-                } else {
-                    handleRecap();
-                }
+                handleRecap();
             } else if (isShortcutPressed(e, 'answer')) {
                 e.preventDefault();
                 handleAnswerNow();
-            } else if (isShortcutPressed(e, 'clarify')) {
-                e.preventDefault();
-                handleClarify();
             } else if (isShortcutPressed(e, 'codeHint')) {
                 e.preventDefault();
                 handleCodeHint();
-            } else if (isShortcutPressed(e, 'brainstorm')) {
+            } else if (isShortcutPressed(e, 'bugFinder')) {
                 e.preventDefault();
-                handleBrainstorm();
+                handleBugFinder();
             } else if (isShortcutPressed(e, 'scrollUp')) {
                 e.preventDefault();
                 scrollContainerRef.current?.scrollBy({ top: -100, behavior: 'smooth' });
             } else if (isShortcutPressed(e, 'scrollDown')) {
                 e.preventDefault();
                 scrollContainerRef.current?.scrollBy({ top: 100, behavior: 'smooth' });
+            } else if (isShortcutPressed(e, 'scrollCodeLeft')) {
+                if (scrollCodeBlocksHorizontally(-140)) e.preventDefault();
+            } else if (isShortcutPressed(e, 'scrollCodeRight')) {
+                if (scrollCodeBlocksHorizontally(140)) e.preventDefault();
             } else if (isShortcutPressed(e, 'moveWindowUp') || isShortcutPressed(e, 'moveWindowDown')) {
                 // Prevent default scrolling when moving window
                 e.preventDefault();
@@ -1765,7 +1763,7 @@ Provide only the answer, nothing else.`;
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isShortcutPressed]);
+    }, [isShortcutPressed, scrollCodeBlocksHorizontally]);
 
     // General Global Shortcuts (Rebindable)
     // We listen here to handle them when the window is focused (renderer side)
@@ -1942,16 +1940,15 @@ Provide only the answer, nothing else.`;
             else if (action === 'shorten') handlers.handleFollowUp('shorten');
             else if (action === 'followUp') handlers.handleFollowUpQuestions();
             else if (action === 'recap') handlers.handleRecap();
-            else if (action === 'dynamicAction4') {
-                if (actionButtonMode === 'brainstorm') handlers.handleBrainstorm();
-                else handlers.handleRecap();
-            }
+            else if (action === 'dynamicAction4') handlers.handleRecap();
+            else if (action === 'codingBrainstorm') handlers.handleBrainstorm();
             else if (action === 'answer') handlers.handleAnswerNow();
-            else if (action === 'clarify') handlers.handleClarify();
+            else if (action === 'bugFinder') handlers.handleBugFinder();
             else if (action === 'codeHint') handlers.handleCodeHint();
-            else if (action === 'brainstorm') handlers.handleBrainstorm();
             else if (action === 'scrollUp') scrollContainerRef.current?.scrollBy({ top: -100, behavior: 'smooth' });
             else if (action === 'scrollDown') scrollContainerRef.current?.scrollBy({ top: 100, behavior: 'smooth' });
+            else if (action === 'scrollCodeLeft') scrollCodeBlocksHorizontally(-140);
+            else if (action === 'scrollCodeRight') scrollCodeBlocksHorizontally(140);
             else if (action === 'processScreenshots') generalHandlers.processScreenshots();
             else if (action === 'resetCancel') generalHandlers.resetCancel();
             else if (action === 'takeScreenshot') generalHandlers.takeScreenshot();
@@ -1961,7 +1958,7 @@ Provide only the answer, nothing else.`;
             setTimeout(() => { isStealthRef.current = false; }, 500);
         });
         return unsubscribe;
-    }, []);
+    }, [scrollCodeBlocksHorizontally]);
 
     return (
         <div ref={contentRef} className="flex flex-col items-center w-fit mx-auto h-fit min-h-0 bg-transparent p-0 rounded-[24px] font-sans gap-2 overlay-text-primary">
@@ -1983,7 +1980,7 @@ Provide only the answer, nothing else.`;
                             onLogoClick={() => window.electronAPI?.setWindowMode?.('launcher', true)}
                         />
                         <div
-                            className={`relative w-[600px] max-w-full backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col draggable-area overlay-shell-surface ${overlayPanelClass}`}
+                            className={`relative w-[600px] max-w-full min-w-0 backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col draggable-area overlay-shell-surface ${overlayPanelClass}`}
                             style={appearance.shellStyle}
                         >
 
@@ -2068,11 +2065,11 @@ Provide only the answer, nothing else.`;
 
                             {/* Chat History - Only show if there are messages OR active states */}
                             {(messages.length > 0 || isManualRecording || isProcessing) && (
-                                <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3 max-h-[clamp(300px,35vh,450px)] no-drag" style={{ scrollbarWidth: 'none' }}>
+                                <div ref={scrollContainerRef} className="flex-1 min-w-0 overflow-y-auto p-4 space-y-3 max-h-[clamp(300px,35vh,450px)] no-drag" style={{ scrollbarWidth: 'none' }}>
                                     {messages.map((msg) => (
-                                        <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in-up`}>
+                                        <div key={msg.id} className={`flex min-w-0 ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in-up`}>
                                             <div className={`
-                      ${msg.role === 'user' ? 'max-w-[72.25%] px-[13.6px] py-[10.2px]' : 'max-w-[85%] px-4 py-3'} text-[14px] leading-relaxed relative group whitespace-pre-wrap
+                      ${msg.role === 'user' ? 'max-w-[72.25%] min-w-0 px-[13.6px] py-[10.2px]' : 'max-w-[85%] min-w-0 px-4 py-3'} text-[14px] leading-relaxed relative group whitespace-pre-wrap
                       ${msg.role === 'user'
                                                     ? (isLightTheme
                                                         ? 'bg-blue-500/10 backdrop-blur-md border border-blue-500/20 text-blue-900 rounded-[20px] rounded-tr-[4px] shadow-sm font-medium'
@@ -2153,17 +2150,14 @@ Provide only the answer, nothing else.`;
                                 <button onClick={handleWhatToSay} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
                                     <Pencil className="w-3 h-3 opacity-70" /> What to answer?
                                 </button>
-                                <button onClick={handleClarify} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
-                                    <MessageSquare className="w-3 h-3 opacity-70" /> Clarify
+                                <button onClick={handleRecap} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
+                                    <LayoutGrid className="w-3 h-3 opacity-70" /> System Design
                                 </button>
-                                <button onClick={actionButtonMode === 'brainstorm' ? handleBrainstorm : handleRecap} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
-                                    {actionButtonMode === 'brainstorm'
-                                        ? <><Lightbulb className="w-3 h-3 opacity-70" /> Brainstorm</>
-                                        : <><RefreshCw className="w-3 h-3 opacity-70" /> Recap</>
-                                    }
+                                <button onClick={handleBrainstorm} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
+                                    <Lightbulb className="w-3 h-3 opacity-70" /> Brainstorm
                                 </button>
                                 <button onClick={handleFollowUpQuestions} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
-                                    <HelpCircle className="w-3 h-3 opacity-70" /> Follow Up Question
+                                    <Sparkles className="w-3 h-3 opacity-70" /> AI Design
                                 </button>
                                 <button onClick={handleBugFinder} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
                                     <Bug className="w-3 h-3 opacity-70" /> Bug Finder

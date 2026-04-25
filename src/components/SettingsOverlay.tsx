@@ -4,8 +4,8 @@ import {
     X, Mic, Speaker, Monitor, Keyboard, User, LifeBuoy, LogOut, Upload,
     ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
-    ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Settings, Activity, ExternalLink, Trash2,
-    Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff,
+    ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, LayoutGrid, Info, Globe, FlaskConical, Terminal, Settings, Activity, ExternalLink, Trash2,
+    Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff, Bug, Lightbulb,
     Star, AlertCircle, Gift
 } from 'lucide-react';
 import { analytics } from '../lib/analytics/analytics.service';
@@ -115,13 +115,13 @@ const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
                                 <Pencil className="w-3 h-3 opacity-70" /> What to answer?
                             </div>
                             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
-                                <MessageSquare className="w-3 h-3 opacity-70" /> Clarify
+                                <Bug className="w-3 h-3 opacity-70" /> Bug Finder
                             </div>
                             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
-                                <RefreshCw className="w-3 h-3 opacity-70" /> Recap
+                                <LayoutGrid className="w-3 h-3 opacity-70" /> System Design
                             </div>
                             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
-                                <HelpCircle className="w-3 h-3 opacity-70" /> Follow Up Question
+                                <Sparkles className="w-3 h-3 opacity-70" /> AI Design
                             </div>
                             <div className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium min-w-[74px] shrink-0 border overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
                                 <Zap className="w-3 h-3 opacity-70" /> Answer
@@ -2817,14 +2817,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                             <div className="space-y-1">
                                                 {[
                                                     { id: 'whatToAnswer', label: 'What to Answer', icon: <Sparkles size={14} /> },
-                                                    { id: 'clarify', label: 'Clarify', icon: <MessageSquare size={14} /> },
-                                                    { id: 'followUp', label: 'Follow Up', icon: <MessageSquare size={14} /> },
-                                                    { id: 'dynamicAction4', label: 'Recap / Brainstorm', icon: <RefreshCw size={14} /> },
+                                                    { id: 'bugFinder', label: 'Bug Finder', icon: <Bug size={14} /> },
+                                                    { id: 'followUp', label: 'AI Design (⌘K)', icon: <Sparkles size={14} /> },
+                                                    { id: 'dynamicAction4', label: 'System Design (⌘M)', icon: <LayoutGrid size={14} /> },
+                                                    { id: 'codingBrainstorm', label: 'Coding brainstorm (⌘⇧M)', icon: <Lightbulb size={14} /> },
                                                     { id: 'answer', label: 'Answer / Record', icon: <Mic size={14} /> },
                                                     { id: 'codeHint', label: 'Get Code Hint', icon: <Zap size={14} /> },
-                                                    { id: 'brainstorm', label: 'Brainstorm Approaches', icon: <Zap size={14} /> },
                                                     { id: 'scrollUp', label: 'Scroll Up', icon: <ArrowUp size={14} /> },
                                                     { id: 'scrollDown', label: 'Scroll Down', icon: <ArrowDown size={14} /> },
+                                                    { id: 'scrollCodeLeft', label: 'Scroll code left', icon: <ArrowLeft size={14} /> },
+                                                    { id: 'scrollCodeRight', label: 'Scroll code right', icon: <ArrowRight size={14} /> },
                                                 ].map((item, i) => (
                                                     <div key={i} className="flex items-center justify-between py-1.5 group">
                                                         <div className="flex items-center gap-3">

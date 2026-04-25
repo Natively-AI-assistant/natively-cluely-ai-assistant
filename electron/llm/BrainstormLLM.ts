@@ -18,7 +18,7 @@ export class BrainstormLLM {
             yield* this.llmHelper.streamChat(context, imagePaths, undefined, BRAINSTORM_MODE_PROMPT);
         } catch (error) {
             console.error("[BrainstormLLM] Stream failed:", error);
-            yield "I couldn't generate brainstorm approaches. Make sure your question is visible and try again.";
+            yield "Could not generate approaches from this context. Try a screenshot (attach or capture), more transcript, or use System Design (Ctrl+M / ⌘M) if you meant architecture.";
         }
     }
 }

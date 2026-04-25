@@ -185,7 +185,7 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
             className="bg-white/10 hover:bg-white/20 transition-colors rounded-md px-2 py-1 text-[11px] leading-none text-white/70 flex items-center gap-1"
             onClick={onBrainstorm}
             type="button"
-            title="Brainstorm 2-3 problem-solving approaches (⌘7)"
+            title="Coding brainstorm: Ctrl+Shift+M / ⌘⇧M or Brainstorm chip in overlay"
           >
             🧠 Brainstorm
           </button>
