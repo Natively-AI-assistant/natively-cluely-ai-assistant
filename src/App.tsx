@@ -349,7 +349,7 @@ const App: React.FC = () => {
         // Actually, main process startMeeting triggers nothing UI-wise unless we tell it to switch window
         // But we configured main.ts to not auto-switch?
         // Let's explicitly request mode change.
-        await window.electronAPI.setWindowMode('overlay');
+        await window.electronAPI.setWindowMode('overlay', true);
       } else {
         console.error("Failed to start meeting:", result.error);
       }
@@ -378,10 +378,10 @@ const App: React.FC = () => {
 
       // Switch back to Native Launcher Mode
       // (Ad delay tracking moved to onMeetingsUpdated listener so ads wait for note generation to finish)
-      await window.electronAPI.setWindowMode('launcher');
+      await window.electronAPI.setWindowMode('launcher', true);
     } catch (err) {
       console.error("Failed to end meeting:", err);
-      window.electronAPI.setWindowMode('launcher');
+      window.electronAPI.setWindowMode('launcher', true);
     }
   };
 

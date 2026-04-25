@@ -221,12 +221,15 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle("take-screenshot", async () => {
     try {
-      const screenshotPath = await appState.takeScreenshot()
-      const preview = await appState.getImagePreview(screenshotPath)
-      return { path: screenshotPath, preview }
+      appState.logFocusDebug("take-screenshot IPC:before capture");
+      const screenshotPath = await appState.takeScreenshot();
+      const preview = await appState.getImagePreview(screenshotPath);
+      appState.logFocusDebug("take-screenshot IPC:after capture + restore");
+      setTimeout(() => appState.logFocusDebug("take-screenshot IPC:after 350ms"), 350);
+      return { path: screenshotPath, preview };
     } catch (error) {
       // console.error("Error taking screenshot:", error)
-      throw error
+      throw error;
     }
   })
 
@@ -276,8 +279,13 @@ export function initializeIpcHandlers(appState: AppState): void {
   })
 
   safeHandle("show-window", async (event, inactive?: boolean) => {
-    // Default show main window (Launcher usually)
-    appState.showMainWindow(inactive)
+    const willStealOsFocus = inactive !== true;
+    console.log(
+      `[FocusDebug] show-window IPC | inactive=${inactive} | willRequestShowWithOsFocusSteal=${willStealOsFocus} (true => overlay expand likely pulls focus from IDE)`,
+    );
+    appState.logFocusDebug("show-window:before showMainWindow");
+    appState.showMainWindow(inactive);
+    setImmediate(() => appState.logFocusDebug("show-window:after setImmediate"));
   })
 
   safeHandle("hide-window", async () => {

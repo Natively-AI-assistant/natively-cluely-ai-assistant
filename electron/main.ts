@@ -305,11 +305,16 @@ export class AppState {
       console.log(`[Main] Global shortcut triggered: ${actionId}`);
       try {
         if (actionId === 'general:toggle-visibility') {
+          this.logFocusDebug('global shortcut Ctrl/Cmd+B (toggle-visibility):before');
           this.toggleMainWindow();
+          setImmediate(() =>
+            this.logFocusDebug('global shortcut Ctrl/Cmd+B (toggle-visibility):after setImmediate'),
+          );
         } else if (actionId === 'general:toggle-mouse-passthrough') {
           // Adapted from public PR #113 — verify premium interaction
           this.toggleOverlayMousePassthrough();
         } else if (actionId === 'general:take-screenshot') {
+          this.logFocusDebug('global shortcut Ctrl/Cmd+H (take-screenshot):before');
           // Route to renderer via global-shortcut so the renderer handles the
           // screenshot through the IPC invoke path (request/response guarantee).
           // The old pattern — main takes screenshot → fires screenshot-taken event →
@@ -321,6 +326,10 @@ export class AppState {
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('global-shortcut', { action: 'takeScreenshot' });
           }
+          setImmediate(() =>
+            this.logFocusDebug('global shortcut Ctrl/Cmd+H (take-screenshot):after setImmediate (renderer may still be capturing)'),
+          );
+          setTimeout(() => this.logFocusDebug('global shortcut Ctrl/Cmd+H (take-screenshot):after 400ms'), 400);
         } else if (actionId === 'general:selective-screenshot') {
           const mainWindow = this.getMainWindow();
           if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1834,6 +1843,45 @@ export class AppState {
     }
   }
 
+  /**
+   * Dev aid: logs which of our BrowserWindows has OS keyboard focus (if any).
+   * When `nativelyHasOsFocus` is true, another app (e.g. Coderpad in the browser) likely lost focus.
+   */
+  public logFocusDebug(context: string): void {
+    const focused = BrowserWindow.getFocusedWindow();
+    const launcher = this.windowHelper?.getLauncherWindow() ?? null;
+    const overlay = this.windowHelper?.getOverlayWindow() ?? null;
+    const settingsW = this.settingsWindowHelper?.getSettingsWindow() ?? null;
+    const modelW = this.modelSelectorWindowHelper?.getWindow() ?? null;
+
+    let label: string;
+    if (!focused) {
+      label = 'none (likely another app e.g. browser/IDE has focus)';
+    } else if (launcher && focused === launcher) {
+      label = 'natively-launcher';
+    } else if (overlay && focused === overlay) {
+      label = 'natively-overlay';
+    } else if (settingsW && focused === settingsW) {
+      label = 'natively-settings';
+    } else if (modelW && focused === modelW) {
+      label = 'natively-model-selector';
+    } else {
+      label = `unknown-window id=${focused.id}`;
+    }
+
+    const nativelyHasOsFocus = !!(
+      focused &&
+      ((launcher && focused === launcher) ||
+        (overlay && focused === overlay) ||
+        (settingsW && focused === settingsW) ||
+        (modelW && focused === modelW))
+    );
+
+    console.log(
+      `[FocusDebug] ${context} | electronFocused=${label} | nativelyHasOsFocus=${nativelyHasOsFocus} | likelyLostIdeFocus=${nativelyHasOsFocus}`,
+    );
+  }
+
   public toggleMainWindow(): void {
     console.log(
       "Screenshots: ",
@@ -1843,16 +1891,26 @@ export class AppState {
     )
     
     const mode = this.windowHelper.getCurrentWindowMode();
+    this.logFocusDebug(`toggleMainWindow:enter (mode=${mode})`);
     
     if (mode === 'launcher') {
       // In launcher mode, just physically hide/show the window
       this.windowHelper.toggleMainWindow();
+      setImmediate(() =>
+        this.logFocusDebug('toggleMainWindow:after (launcher hide/show uses inactive=true when showing)'),
+      );
     } else {
       // In overlay mode, send toggle-expand IPC to expand/collapse the UI
       const targetWindow = this.windowHelper.getOverlayWindow();
       if (targetWindow && !targetWindow.isDestroyed()) {
         targetWindow.webContents.send('toggle-expand');
       }
+      setImmediate(() =>
+        this.logFocusDebug(
+          'toggleMainWindow:after setImmediate (overlay — if expand ran, check next show-window IPC log for steal)',
+        ),
+      );
+      setTimeout(() => this.logFocusDebug('toggleMainWindow:after 250ms (overlay expand/collapse + show-window)'), 250);
     }
   }
 
@@ -1926,10 +1984,11 @@ export class AppState {
     const shouldRestoreMainWindow = session.wasMainWindowVisible;
 
     if (shouldRestoreMainWindow) {
+      // Always restore main window without OS focus steal (IDE/browser stays active).
       if (session.windowMode === 'overlay') {
-        this.windowHelper.switchToOverlay(!activate);
+        this.windowHelper.switchToOverlay(true);
       } else {
-        this.windowHelper.switchToLauncher(!activate);
+        this.windowHelper.switchToLauncher(true);
       }
     }
 

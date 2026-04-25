@@ -323,10 +323,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     }, []);
 
     // Sync Window Visibility with Expanded State
+    // Always show inactive (never call focus() in main) so OS focus stays in the
+    // underlying app (browser/IDE). User clicks the overlay to type when needed.
     useEffect(() => {
         if (isExpanded) {
-            window.electronAPI.showWindow(isStealthRef.current);
-            isStealthRef.current = false; // Reset back to default
+            window.electronAPI.showWindow(true);
+            isStealthRef.current = false;
         } else {
             // Slight delay to allow animation to clean up if needed, though immediate is safer for click-through
             // Using setTimeout to ensure the render cycle completes first
@@ -345,13 +347,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     }, []);
 
     // Ensure overlay is expanded when requested by main process (e.g. after switching to overlay mode).
-    // IMPORTANT: set isStealthRef before setIsExpanded so that if isExpanded was false, the
-    // isExpanded effect fires showWindow(true) instead of showWindow(false). Without this,
-    // ensure-expanded on a collapsed overlay would trigger show()+focus(), breaking stealth.
     useEffect(() => {
         if (!window.electronAPI?.onEnsureExpanded) return;
         const unsubscribe = window.electronAPI.onEnsureExpanded(() => {
-            isStealthRef.current = true;
             setIsExpanded(true);
         });
         return () => unsubscribe();
@@ -1982,7 +1980,7 @@ Provide only the answer, nothing else.`;
                             onToggle={() => setIsExpanded(!isExpanded)}
                             onQuit={() => onEndMeeting ? onEndMeeting() : window.electronAPI.quitApp()}
                             appearance={appearance}
-                            onLogoClick={() => window.electronAPI?.setWindowMode?.('launcher')}
+                            onLogoClick={() => window.electronAPI?.setWindowMode?.('launcher', true)}
                         />
                         <div
                             className={`relative w-[600px] max-w-full backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col draggable-area overlay-shell-surface ${overlayPanelClass}`}

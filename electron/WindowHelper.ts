@@ -368,7 +368,7 @@ export class WindowHelper {
             // launcher's "Meeting ongoing" button which calls setWindowMode('overlay').
             this.hideOverlay();
           } else {
-            this.switchToLauncher();
+            this.switchToLauncher(true);
           }
         }
       })
@@ -479,11 +479,8 @@ export class WindowHelper {
       // The underlying app (Zoom, browser, etc.) must keep focus.
       this.overlayWindow.showInactive();
     } else {
-      // Normal interactive mode: show and focus so the user can click/type.
+      // Show on top without focus() — keeps browser/IDE foreground (e.g. Coderpad).
       this.overlayWindow.showInactive();
-      // Bring to front without a full app-activate (avoids dock bounce on macOS).
-      // setAlwaysOnTop is already set at creation; a focus() call alone is safe.
-      this.overlayWindow.focus();
     }
   }
 
@@ -524,9 +521,9 @@ export class WindowHelper {
     // launcher — switching to the launcher during a meeting would expose it in the
     // taskbar/dock and break stealth.
     if (this.currentWindowMode === 'overlay') {
-      this.switchToOverlay(); // explicit user action, so we want to grant focus
+      this.switchToOverlay(true);
     } else {
-      this.switchToLauncher();
+      this.switchToLauncher(true);
       this.launcherWindow?.center();
     }
   }
