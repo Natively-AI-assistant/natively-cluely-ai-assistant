@@ -36,7 +36,9 @@ export class IntelligenceManager extends EventEmitter {
         super();
         this.session = new SessionTracker();
         this.engine = new IntelligenceEngine(llmHelper, this.session);
-        this.persistence = new MeetingPersistence(this.session, llmHelper);
+        this.persistence = new MeetingPersistence(this.session, llmHelper, async (meetingId: string) => {
+            this.emit('meeting-finalized', meetingId);
+        });
 
         // Forward all engine events through the facade
         this.forwardEngineEvents();
@@ -124,8 +126,8 @@ export class IntelligenceManager extends EventEmitter {
     // Transcript Handling (delegates to engine)
     // ============================================
 
-    handleTranscript(segment: import('./SessionTracker').TranscriptSegment): void {
-        this.engine.handleTranscript(segment);
+    handleTranscript(segment: import('./SessionTracker').TranscriptSegment): { role: 'interviewer' | 'user' | 'assistant' } | null {
+        return this.engine.handleTranscript(segment);
     }
 
     async handleSuggestionTrigger(trigger: import('./SessionTracker').SuggestionTrigger): Promise<void> {
@@ -201,8 +203,8 @@ export class IntelligenceManager extends EventEmitter {
     // Meeting Lifecycle (delegates to persistence)
     // ============================================
 
-    async stopMeeting(): Promise<string | null> {
-        return this.persistence.stopMeeting();
+    async stopMeeting(meetingId: string | null): Promise<string | null> {
+        return this.persistence.stopMeeting(meetingId);
     }
 
     async recoverUnprocessedMeetings(): Promise<void> {
@@ -223,8 +225,8 @@ export class IntelligenceManager extends EventEmitter {
         this.engine.reset();
     }
 
-    reset(): void {
-        this.session.reset();
+    reset(startTimeMs?: number): void {
+        this.session.reset(startTimeMs);
         this.engine.reset();
     }
 }

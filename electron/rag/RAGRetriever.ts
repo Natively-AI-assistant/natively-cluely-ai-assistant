@@ -82,13 +82,18 @@ export class RAGRetriever {
             };
         }
 
+        const preferredChunkSource = meetingId
+            ? (this.vectorStore.hasEmbeddings(meetingId, 'final') ? 'final' : 'live')
+            : undefined;
+
         // 2. Retrieve candidates (over-fetch for reranking)
         const providerName = this.embeddingPipeline.getActiveProviderName();
         let candidates = await this.vectorStore.searchSimilar(queryEmbedding, {
             meetingId,
             limit: topK * 2,
             minSimilarity: 0.25,
-            providerName
+            providerName,
+            chunkSource: preferredChunkSource
         });
 
         if (candidates.length === 0) {

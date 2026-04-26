@@ -454,25 +454,28 @@ export class SessionTracker {
     /**
      * Force-save any pending interim transcript (called on meeting stop)
      */
-    flushInterimTranscript(): void {
+    flushInterimTranscript(): TranscriptSegment | null {
         if (this.lastInterimInterviewer) {
             console.log('[SessionTracker] Force-saving pending interim transcript:', this.lastInterimInterviewer.text);
             const finalSegment = { ...this.lastInterimInterviewer, final: true };
             this.addTranscript(finalSegment);
             this.lastInterimInterviewer = null;
+            return finalSegment;
         }
+
+        return null;
     }
 
     // ============================================
     // Reset
     // ============================================
 
-    reset(): void {
+    reset(startTimeMs?: number): void {
         this.contextItems = [];
         this.fullTranscript = [];
         this.fullUsage = [];
         this.transcriptEpochSummaries = [];
-        this.sessionStartTime = Date.now();
+        this.sessionStartTime = startTimeMs ?? Date.now();
         this.lastAssistantMessage = null;
         this.assistantResponseHistory = [];
         this.lastInterimInterviewer = null;

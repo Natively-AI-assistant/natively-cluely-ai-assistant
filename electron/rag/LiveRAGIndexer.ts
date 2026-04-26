@@ -114,7 +114,7 @@ export class LiveRAGIndexer {
             }));
 
             // 4. Save chunks to DB (without embeddings initially)
-            const chunkIds = this.vectorStore.saveChunks(indexedChunks);
+            const chunkIds = this.vectorStore.saveChunks(indexedChunks, 'live');
             this.chunkCounter += indexedChunks.length;
 
             console.log(`[LiveRAGIndexer] Saved ${indexedChunks.length} chunks (${this.chunkCounter} total) for meeting ${meetingId}`);

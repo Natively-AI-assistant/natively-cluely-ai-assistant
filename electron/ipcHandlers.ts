@@ -3149,7 +3149,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle("modes:upload-reference-file", async (_, modeId: string) => {
     try {
       if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
-      const result = await dialog.showOpenDialog({
+      const result: any = await dialog.showOpenDialog({
         properties: ['openFile'],
         filters: [
           { name: 'Text & Documents', extensions: ['txt', 'md', 'pdf', 'docx', 'doc'] },

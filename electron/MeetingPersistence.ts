@@ -2,30 +2,41 @@
 // Handles meeting lifecycle: stop, save, and recovery.
 // Extracted from IntelligenceManager to decouple DB operations from LLM orchestration.
 
-import { SessionTracker, TranscriptSegment } from './SessionTracker';
+import { SessionTracker } from './SessionTracker';
 import { LLMHelper } from './LLMHelper';
-import { DatabaseManager, Meeting } from './db/DatabaseManager';
+import { DatabaseManager } from './db/DatabaseManager';
 import { GROQ_TITLE_PROMPT, GROQ_SUMMARY_JSON_PROMPT } from './llm';
-const crypto = require('crypto');
 
 export class MeetingPersistence {
     private session: SessionTracker;
     private llmHelper: LLMHelper;
+    private onMeetingFinalized?: (meetingId: string) => void | Promise<void>;
 
-    constructor(session: SessionTracker, llmHelper: LLMHelper) {
+    constructor(
+        session: SessionTracker,
+        llmHelper: LLMHelper,
+        onMeetingFinalized?: (meetingId: string) => void | Promise<void>
+    ) {
         this.session = session;
         this.llmHelper = llmHelper;
+        this.onMeetingFinalized = onMeetingFinalized;
     }
 
     /**
      * Stops the meeting immediately, snapshots data, and triggers background processing.
      * Returns immediately so UI can switch.
      */
-    public async stopMeeting(): Promise<string | null> {
+    public async stopMeeting(meetingId: string | null): Promise<string | null> {
         console.log('[MeetingPersistence] Stopping meeting and queueing save...');
 
+        if (!meetingId) {
+            console.warn('[MeetingPersistence] stopMeeting called with no active meetingId');
+            this.session.reset();
+            return null;
+        }
+
         // 0. Force-save any pending interim transcript
-        this.session.flushInterimTranscript();
+        const flushedInterim = this.session.flushInterimTranscript();
 
         // 1. Snapshot valid data BEFORE resetting
         const durationMs = Date.now() - this.session.getSessionStartTime();
@@ -35,11 +46,19 @@ export class MeetingPersistence {
             return null;
         }
 
+        if (flushedInterim) {
+            DatabaseManager.getInstance().appendTranscriptSegment(meetingId, {
+                speaker: flushedInterim.speaker,
+                text: flushedInterim.text,
+                timestamp: flushedInterim.timestamp,
+            });
+            DatabaseManager.getInstance().flushPendingTranscriptSegments();
+        }
+
         const snapshot = {
-            transcript: [...this.session.getFullTranscript()],
             usage: [...this.session.getFullUsage()],
             startTime: this.session.getSessionStartTime(),
-            durationMs: durationMs,
+            durationMs,
             context: this.session.getFullSessionContext()
         };
 
@@ -50,36 +69,9 @@ export class MeetingPersistence {
         // 2. Reset state immediately so new meeting can start or UI is clean
         this.session.reset();
 
-        const meetingId = crypto.randomUUID();
-        this.processAndSaveMeeting(snapshot, meetingId, metadataSnapshot).catch(err => {
+        this.processAndFinalizeMeeting(snapshot, meetingId, metadataSnapshot).catch(err => {
             console.error('[MeetingPersistence] Background processing failed:', err);
         });
-
-        // 4. Initial Save (Placeholder)
-        const minutes = Math.floor(durationMs / 60000);
-        const seconds = ((durationMs % 60000) / 1000).toFixed(0);
-        const durationStr = `${minutes}:${Number(seconds) < 10 ? '0' : ''}${seconds}`;
-
-        const placeholder: Meeting = {
-            id: meetingId,
-            title: "Processing...",
-            date: new Date().toISOString(),
-            duration: durationStr,
-            summary: "Generating summary...",
-            detailedSummary: { actionItems: [], keyPoints: [] },
-            transcript: snapshot.transcript,
-            usage: snapshot.usage,
-            isProcessed: false
-        };
-
-        try {
-            DatabaseManager.getInstance().saveMeeting(placeholder, snapshot.startTime, durationMs);
-            // Notify Frontend
-            const wins = require('electron').BrowserWindow.getAllWindows();
-            wins.forEach((w: any) => w.webContents.send('meetings-updated'));
-        } catch (e) {
-            console.error("Failed to save placeholder", e);
-        }
 
         return meetingId;
     }
@@ -87,8 +79,8 @@ export class MeetingPersistence {
     /**
      * Heavy lifting: LLM Title, Summary, and DB Write
      */
-    private async processAndSaveMeeting(
-        data: { transcript: TranscriptSegment[], usage: any[], startTime: number, durationMs: number, context: string },
+    private async processAndFinalizeMeeting(
+        data: { usage: any[], startTime: number, durationMs: number, context: string },
         meetingId: string,
         // BUG-04 fix: accept metadata snapshot so calendar info is not lost after session.reset()
         metadata?: { title?: string; calendarEventId?: string; source?: 'manual' | 'calendar' } | null
@@ -137,7 +129,7 @@ export class MeetingPersistence {
             }
 
             // Generate Structured Summary
-            if (data.transcript.length > 2) {
+            if (data.context && data.context.trim().length > 80) {
                 const baseRules = `RULES:
 - Do NOT invent information not present in the context
 - You MAY infer implied action items or next steps if they are logical consequences of the discussion
@@ -238,41 +230,40 @@ Return ONLY valid JSON (no markdown code blocks):
                     }
                 }
             } else {
-                console.log("Transcript too short for summary generation.");
+                console.log('Context too short for summary generation.');
             }
         } catch (e) {
             console.error("Error generating meeting metadata", e);
         }
 
         try {
-            const minutes = Math.floor(data.durationMs / 60000);
-            const seconds = ((data.durationMs % 60000) / 1000).toFixed(0);
-            const durationStr = `${minutes}:${Number(seconds) < 10 ? '0' : ''}${seconds}`;
-
-            const meetingData: Meeting = {
-                id: meetingId,
-                title: title,
-                date: new Date().toISOString(),
-                duration: durationStr,
-                summary: "See detailed summary",
+            DatabaseManager.getInstance().finalizeMeeting(meetingId, {
+                title,
+                startTimeMs: data.startTime,
+                durationMs: data.durationMs,
+                summary: 'See detailed summary',
                 detailedSummary: summaryData,
-                transcript: data.transcript,
                 usage: data.usage,
-                calendarEventId: calendarEventId,
-                source: source,
-                isProcessed: true
-            };
-
-            DatabaseManager.getInstance().saveMeeting(meetingData, data.startTime, data.durationMs);
+                calendarEventId,
+                source,
+            });
 
             // Metadata was already snapshotted before session.reset() — nothing to clear here.
 
             // Notify Frontend to refresh list
             const wins = require('electron').BrowserWindow.getAllWindows();
             wins.forEach((w: any) => w.webContents.send('meetings-updated'));
-
         } catch (error) {
             console.error('[MeetingPersistence] Failed to save meeting:', error);
+            return;
+        }
+
+        if (this.onMeetingFinalized) {
+            try {
+                await this.onMeetingFinalized(meetingId);
+            } catch (error) {
+                console.error('[MeetingPersistence] onMeetingFinalized hook failed:', error);
+            }
         }
     }
 
@@ -304,22 +295,27 @@ Return ONLY valid JSON (no markdown code blocks):
                     return `[${label}]: ${t.text}`;
                 }).join('\n') || "";
 
-                const parts = (details.duration || '0:00').split(':');
-                // EC-07 fix: guard against malformed duration strings (e.g. corrupted DB row)
-                const mins = parseInt(parts[0]) || 0;
-                const secs = parseInt(parts[1]) || 0;
-                const durationMs = ((mins * 60) + secs) * 1000;
                 const startTime = new Date(details.date).getTime();
+                const safeStartTime = Number.isFinite(startTime) ? startTime : Date.now();
+                const lastTimestamp = details.transcript && details.transcript.length > 0
+                    ? details.transcript[details.transcript.length - 1].timestamp
+                    : null;
+                const durationMs = Number.isFinite(lastTimestamp)
+                    ? Math.max(0, (lastTimestamp as number) - safeStartTime)
+                    : 0;
 
                 const snapshot = {
-                    transcript: details.transcript as TranscriptSegment[],
-                    usage: details.usage,
-                    startTime: startTime,
-                    durationMs: durationMs,
-                    context: context
+                    usage: details.usage ?? [],
+                    startTime: safeStartTime,
+                    durationMs,
+                    context,
                 };
 
-                await this.processAndSaveMeeting(snapshot, m.id);
+                await this.processAndFinalizeMeeting(snapshot, m.id, {
+                    title: details.title !== 'Live Meeting' ? details.title : undefined,
+                    calendarEventId: details.calendarEventId ?? undefined,
+                    source: details.source as 'manual' | 'calendar' | undefined,
+                });
                 console.log(`[MeetingPersistence] Recovered meeting ${m.id}`);
 
             } catch (e) {

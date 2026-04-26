@@ -42,6 +42,15 @@ export class DatabaseManager {
     private db: Database.Database | null = null;
     private dbPath: string;
     private resolvedExtPath: string = '';
+    private lastTranscriptByMeetingStmt: Database.Statement | null = null;
+    private insertTranscriptStmt: Database.Statement | null = null;
+    private pendingTranscriptSegments: Map<string, Array<{ speaker: string; text: string; timestamp: number }>> = new Map();
+    private pendingTranscriptFlushTimer: ReturnType<typeof setTimeout> | null = null;
+    private pendingTranscriptFlushScheduledForMs: number | null = null;
+    private readonly transcriptFlushIntervalMs: number = 250;
+    private readonly transcriptFlushMaxBackoffMs: number = 30000;
+    private transcriptFlushFailureCount: number = 0;
+    private transcriptFlushBackoffUntilMs: number = 0;
 
     private constructor() {
         const userDataPath = app.getPath('userData');
@@ -83,6 +92,7 @@ export class DatabaseManager {
 
             this.db = new Database(this.dbPath);
             this.db.pragma('journal_mode = WAL');
+            this.db.pragma('foreign_keys = ON');
 
             // Load sqlite-vec extension for native vector search
             try {
@@ -163,6 +173,7 @@ export class DatabaseManager {
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     meeting_id TEXT NOT NULL,
                     chunk_index INTEGER NOT NULL,
+                    chunk_source TEXT NOT NULL DEFAULT 'final',
                     speaker TEXT,
                     start_timestamp_ms INTEGER,
                     end_timestamp_ms INTEGER,
@@ -584,6 +595,24 @@ export class DatabaseManager {
             this.db.pragma('user_version = 14');
         }
 
+        // Version 14 → 15: Distinguish provisional live chunks from canonical final chunks.
+        if (version < 15) {
+            console.log('[DatabaseManager] Applying migration v14 → v15: Add chunks.chunk_source');
+            try {
+                this.db.exec("ALTER TABLE chunks ADD COLUMN chunk_source TEXT NOT NULL DEFAULT 'final'");
+            } catch (_) {
+                // Column may already exist on some installs.
+            }
+
+            try {
+                this.db.exec('CREATE INDEX IF NOT EXISTS idx_chunks_meeting_source ON chunks(meeting_id, chunk_source)');
+            } catch (e) {
+                console.warn('[DatabaseManager] Failed to create idx_chunks_meeting_source (non-fatal):', e);
+            }
+
+            this.db.pragma('user_version = 15');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 
@@ -962,6 +991,365 @@ export class DatabaseManager {
         return this.resolvedExtPath;
     }
 
+    /**
+     * Ensure an in-progress meeting row exists for live transcript appends.
+     */
+    public ensureLiveMeeting(
+        meetingId: string,
+        startTimeMs: number,
+        metadata?: { title?: string; calendarEventId?: string; source?: 'manual' | 'calendar' }
+    ): void {
+        if (!this.db) {
+            const error = new Error(`[DatabaseManager] Cannot ensure live meeting ${meetingId}: database is not initialized`);
+             console.error(error.message);
+             throw error;
+       }
+
+        const createdAt = new Date(startTimeMs).toISOString();
+        const insertTitle = metadata?.title || 'Live Meeting';
+        const insertSource = metadata?.source || 'manual';
+        const updateTitle = metadata?.title || null;
+        const updateSource = metadata?.source || null;
+        const summaryJson = JSON.stringify({
+            legacySummary: '',
+            detailedSummary: { actionItems: [], keyPoints: [] }
+        });
+
+        try {
+            const upsert = this.db.prepare(`
+                INSERT INTO meetings
+                    (id, title, start_time, duration_ms, summary_json, created_at, calendar_event_id, source, is_processed)
+                VALUES (?, ?, ?, 0, ?, ?, ?, ?, 0)
+                ON CONFLICT(id) DO UPDATE SET
+                    start_time = excluded.start_time,
+                    title = COALESCE(?, title),
+                    calendar_event_id = COALESCE(excluded.calendar_event_id, calendar_event_id),
+                    source = COALESCE(?, source),
+                    is_processed = 0
+            `);
+            upsert.run(
+                meetingId,
+                insertTitle,
+                startTimeMs,
+                summaryJson,
+                createdAt,
+                metadata?.calendarEventId || null,
+                insertSource,
+                updateTitle,
+                updateSource,
+            );
+        } catch (error) {
+            console.error(`[DatabaseManager] Failed to ensure live meeting ${meetingId}:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Persist one final transcript segment during an active meeting.
+     */
+    public appendTranscriptSegment(
+        meetingId: string,
+        segment: { speaker: string; text: string; timestamp: number }
+    ): void {
+        if (!this.db) {
+            const error = new Error(`[DatabaseManager] Cannot append transcript segment for meeting ${meetingId}: database is not initialized`);
+            console.error(error.message);
+            throw error;
+        }
+
+        const text = (segment.text || '').trim();
+        if (!text) return;
+
+        const queue = this.pendingTranscriptSegments.get(meetingId);
+        if (queue) {
+            queue.push({ speaker: segment.speaker, text, timestamp: segment.timestamp });
+        } else {
+            this.pendingTranscriptSegments.set(meetingId, [
+                { speaker: segment.speaker, text, timestamp: segment.timestamp }
+            ]);
+        }
+
+        // If DB flush is currently in failure backoff mode, avoid tight retry loops
+        // from immediate append-triggered writes. Let the scheduled retry run.
+        const now = Date.now();
+        if (now < this.transcriptFlushBackoffUntilMs) {
+            this.scheduleTranscriptFlush(this.transcriptFlushBackoffUntilMs - now);
+            return;
+        }
+
+        // Durability-first behavior: write queued final transcript segments
+        // immediately so a crash cannot lose up to one flush interval.
+        this.flushPendingTranscriptSegments();
+    }
+
+    public flushPendingTranscriptSegments(): void {
+        if (!this.db || this.pendingTranscriptSegments.size === 0) return;
+
+        if (this.pendingTranscriptFlushTimer) {
+            clearTimeout(this.pendingTranscriptFlushTimer);
+            this.pendingTranscriptFlushTimer = null;
+            this.pendingTranscriptFlushScheduledForMs = null;
+        }
+
+        const batches = new Map<string, { segments: Array<{ speaker: string; text: string; timestamp: number }>; count: number }>();
+        for (const [meetingId, segments] of this.pendingTranscriptSegments) {
+            if (segments.length === 0) continue;
+            batches.set(meetingId, { segments: segments.slice(), count: segments.length });
+        }
+
+        if (batches.size === 0) return;
+
+        const lastStmt = this.getLastTranscriptByMeetingStmt();
+        const insertStmt = this.getInsertTranscriptStmt();
+
+        const runTransaction = this.db.transaction(() => {
+            for (const [meetingId, { segments }] of batches) {
+                const last = lastStmt.get(meetingId) as
+                    { speaker: string; content: string; timestamp_ms: number } | undefined;
+                let lastSpeaker = last?.speaker;
+                let lastText = last?.content;
+                let lastTimestamp = last?.timestamp_ms;
+
+                for (const segment of segments) {
+                    const text = (segment.text || '').trim();
+                    if (!text) continue;
+
+                    if (
+                        lastSpeaker &&
+                        lastText !== undefined &&
+                        Math.abs((lastTimestamp ?? 0) - segment.timestamp) < 500 &&
+                        lastSpeaker === segment.speaker &&
+                        lastText === text
+                    ) {
+                        continue;
+                    }
+
+                    insertStmt.run(meetingId, segment.speaker, text, segment.timestamp);
+                    lastSpeaker = segment.speaker;
+                    lastText = text;
+                    lastTimestamp = segment.timestamp;
+                }
+            }
+        });
+
+        try {
+            runTransaction();
+            if (this.transcriptFlushFailureCount > 0) {
+                console.log('[DatabaseManager] Transcript flush recovered; clearing backoff state.');
+            }
+            this.transcriptFlushFailureCount = 0;
+            this.transcriptFlushBackoffUntilMs = 0;
+            for (const [meetingId, { count }] of batches) {
+                const current = this.pendingTranscriptSegments.get(meetingId);
+                if (!current) continue;
+                if (current.length <= count) {
+                    this.pendingTranscriptSegments.delete(meetingId);
+                } else {
+                    this.pendingTranscriptSegments.set(meetingId, current.slice(count));
+                }
+            }
+        } catch (error) {
+            this.transcriptFlushFailureCount += 1;
+            const nextDelay = Math.min(
+                this.transcriptFlushIntervalMs * Math.pow(2, this.transcriptFlushFailureCount),
+                this.transcriptFlushMaxBackoffMs
+            );
+            this.transcriptFlushBackoffUntilMs = Date.now() + nextDelay;
+
+            console.error(
+                `[DatabaseManager] Failed to flush transcript segments (attempt ${this.transcriptFlushFailureCount}). Retrying in ${nextDelay}ms:`,
+                error
+            );
+            this.scheduleTranscriptFlush(nextDelay);
+        }
+    }
+
+    public clearPendingSegmentsForMeeting(meetingId: string): void {
+        this.pendingTranscriptSegments.delete(meetingId);
+        if (this.pendingTranscriptSegments.size === 0 && this.pendingTranscriptFlushTimer) {
+            clearTimeout(this.pendingTranscriptFlushTimer);
+            this.pendingTranscriptFlushTimer = null;
+            this.pendingTranscriptFlushScheduledForMs = null;
+        }
+        if (this.pendingTranscriptSegments.size === 0) {
+            this.transcriptFlushFailureCount = 0;
+            this.transcriptFlushBackoffUntilMs = 0;
+        }
+    }
+
+    public hasPendingTranscriptSegmentsForMeeting(meetingId: string): boolean {
+        const pending = this.pendingTranscriptSegments.get(meetingId);
+        return !!pending && pending.length > 0;
+    }
+
+    public async waitForPendingTranscriptFlush(meetingId: string): Promise<boolean> {
+        if (!this.db) return false;
+
+        while (this.hasPendingTranscriptSegmentsForMeeting(meetingId)) {
+            const now = Date.now();
+            const scheduledDelayMs = this.pendingTranscriptFlushScheduledForMs
+                ? Math.max(0, this.pendingTranscriptFlushScheduledForMs - now)
+                : 0;
+            const backoffDelayMs = Math.max(0, this.transcriptFlushBackoffUntilMs - now);
+            const delayMs = Math.max(scheduledDelayMs, backoffDelayMs);
+
+            if (delayMs > 0) {
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+                continue;
+            }
+
+            this.flushPendingTranscriptSegments();
+        }
+
+        return true;
+    }
+
+    private scheduleTranscriptFlush(delayMs: number = this.transcriptFlushIntervalMs): void {
+        if (this.pendingTranscriptFlushTimer) return;
+
+        this.pendingTranscriptFlushScheduledForMs = Date.now() + Math.max(0, delayMs);
+        this.pendingTranscriptFlushTimer = setTimeout(() => {
+            this.pendingTranscriptFlushTimer = null;
+            this.pendingTranscriptFlushScheduledForMs = null;
+            this.flushPendingTranscriptSegments();
+        }, Math.max(0, delayMs));
+    }
+
+    private getLastTranscriptByMeetingStmt(): Database.Statement {
+        if (!this.db) {
+            throw new Error('DB not initialized');
+        }
+
+        if (!this.lastTranscriptByMeetingStmt) {
+            this.lastTranscriptByMeetingStmt = this.db.prepare(
+                `SELECT speaker, content, timestamp_ms FROM transcripts WHERE meeting_id = ? ORDER BY id DESC LIMIT 1`
+            );
+        }
+
+        return this.lastTranscriptByMeetingStmt;
+    }
+
+    private getInsertTranscriptStmt(): Database.Statement {
+        if (!this.db) {
+            throw new Error('DB not initialized');
+        }
+
+        if (!this.insertTranscriptStmt) {
+            this.insertTranscriptStmt = this.db.prepare(`
+                INSERT INTO transcripts (meeting_id, speaker, content, timestamp_ms)
+                VALUES (?, ?, ?, ?)
+            `);
+        }
+
+        return this.insertTranscriptStmt;
+    }
+
+    /**
+     * Finalize an existing meeting row and persist usage interactions.
+     * Transcript rows are expected to be already appended incrementally.
+     */
+    public finalizeMeeting(
+        meetingId: string,
+        data: {
+            title: string;
+            startTimeMs: number;
+            durationMs: number;
+            summary: string;
+            detailedSummary?: { overview?: string; actionItems: string[]; keyPoints: string[] };
+            usage?: Array<any>;
+            calendarEventId?: string;
+            source?: 'manual' | 'calendar';
+        }
+    ): void {
+        if (!this.db) return;
+
+        const summaryJson = JSON.stringify({
+            legacySummary: data.summary,
+            detailedSummary: data.detailedSummary,
+        });
+        const createdAt = new Date(data.startTimeMs).toISOString();
+
+        const insertMeeting = this.db.prepare(`
+            INSERT OR IGNORE INTO meetings (id, title, start_time, duration_ms, summary_json, created_at, calendar_event_id, source, is_processed)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+        `);
+
+        const updateMeeting = this.db.prepare(`
+            UPDATE meetings
+            SET
+                title = ?,
+                start_time = ?,
+                duration_ms = ?,
+                summary_json = ?,
+                created_at = ?,
+                calendar_event_id = ?,
+                source = ?,
+                is_processed = 1
+            WHERE id = ?
+        `);
+
+        const clearInteractions = this.db.prepare(`DELETE FROM ai_interactions WHERE meeting_id = ?`);
+        const insertInteraction = this.db.prepare(`
+            INSERT INTO ai_interactions (meeting_id, type, timestamp, user_query, ai_response, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `);
+
+        const runTransaction = this.db.transaction(() => {
+            insertMeeting.run(
+                meetingId,
+                data.title,
+                data.startTimeMs,
+                data.durationMs,
+                summaryJson,
+                createdAt,
+                data.calendarEventId || null,
+                data.source || 'manual'
+            );
+
+            updateMeeting.run(
+                data.title,
+                data.startTimeMs,
+                data.durationMs,
+                summaryJson,
+                createdAt,
+                data.calendarEventId || null,
+                data.source || 'manual',
+                meetingId
+            );
+
+            clearInteractions.run(meetingId);
+
+            for (const usage of data.usage || []) {
+                let metadata = null;
+                if (usage.items) {
+                    metadata = JSON.stringify(usage.items);
+                } else if (usage.type === 'followup_questions' && Array.isArray(usage.answer)) {
+                    metadata = JSON.stringify(usage.answer);
+                }
+
+                const answerText = Array.isArray(usage.answer) ? null : usage.answer || null;
+                const queryText = usage.question || null;
+
+                insertInteraction.run(
+                    meetingId,
+                    usage.type,
+                    usage.timestamp,
+                    queryText,
+                    answerText,
+                    metadata
+                );
+            }
+        });
+
+        try {
+            runTransaction();
+            console.log(`[DatabaseManager] Finalized meeting ${meetingId}`);
+        } catch (error) {
+            console.error(`[DatabaseManager] Failed to finalize meeting ${meetingId}:`, error);
+            throw error;
+        }
+    }
+
     public saveMeeting(meeting: Meeting, startTimeMs: number, durationMs: number) {
         if (!this.db) {
             console.error('[DatabaseManager] DB not initialized');
@@ -1137,6 +1525,7 @@ export class DatabaseManager {
                 detailedSummary: summaryData.detailedSummary,
                 calendarEventId: row.calendar_event_id,
                 source: row.source as any,
+                isProcessed: row.is_processed === 1,
                 // We don't load full transcript/usage for list view to keep it light
                 transcript: [] as any[],
                 usage: [] as any[]
@@ -1205,6 +1594,7 @@ export class DatabaseManager {
             detailedSummary: summaryData.detailedSummary,
             calendarEventId: meetingRow.calendar_event_id,
             source: meetingRow.source,
+            isProcessed: meetingRow.is_processed === 1,
             transcript: transcript,
             usage: usage
         };

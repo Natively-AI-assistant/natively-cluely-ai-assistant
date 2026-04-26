@@ -124,7 +124,7 @@ export class RAGManager {
         }
 
         // 3. Save chunks to database
-        this.vectorStore.saveChunks(chunks);
+        this.vectorStore.saveChunks(chunks, 'final');
 
         // 4. Save summary if provided
         if (summary) {
@@ -335,6 +335,29 @@ export class RAGManager {
             }
         } catch (e) {
             console.warn('[RAGManager] Failed to delete transient meeting row', e);
+        }
+    }
+
+    /**
+     * Delete only provisional live chunks after canonical final indexing succeeds.
+     * This keeps finalized chunks and summary data intact.
+     */
+    deleteLiveChunkData(meetingId: string): void {
+        this.vectorStore.deleteChunksForMeeting(meetingId, 'live');
+
+        try {
+            const info = this.db.prepare(`
+                DELETE FROM embedding_queue
+                WHERE meeting_id = ?
+                  AND chunk_id IS NOT NULL
+                  AND chunk_id NOT IN (SELECT id FROM chunks WHERE meeting_id = ?)
+            `).run(meetingId, meetingId);
+
+            if (info.changes > 0) {
+                console.log(`[RAGManager] Cleared ${info.changes} stale embedding_queue items after live chunk cleanup for meeting ${meetingId}`);
+            }
+        } catch (e) {
+            console.warn(`[RAGManager] Failed to clear stale embedding_queue items for meeting ${meetingId}`, e);
         }
     }
 

@@ -40,6 +40,7 @@ interface Meeting {
     }>;
     active?: boolean; // UI state
     time?: string; // Optional for compatibility
+    isProcessed?: boolean;
 }
 
 interface LauncherProps {
@@ -88,6 +89,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     const [isCalendarConnected, setIsCalendarConnected] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [showNotification, setShowNotification] = useState(false);
+    const [queueStatus, setQueueStatus] = useState<{ pending: number; processing: number; completed: number; failed: number } | null>(null);
 
     // Global search state (for AI chat overlay)
     const [isGlobalChatOpen, setIsGlobalChatOpen] = useState(false);
@@ -179,6 +181,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         if (window.electronAPI?.onMeetingStateChanged) {
             removeMeetingStateListener = window.electronAPI.onMeetingStateChanged(({ isActive }) => {
                 setIsMeetingActive(isActive);
+                fetchMeetings();
             });
         }
 
@@ -288,6 +291,20 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         return new Date(b).getTime() - new Date(a).getTime();
     });
 
+    const hasUnprocessedMeetings = meetings.some(meeting => meeting.isProcessed === false);
+    const totalQueueItems = queueStatus
+        ? (queueStatus.pending + queueStatus.processing + queueStatus.completed + queueStatus.failed)
+        : 0;
+    const processedQueueItems = queueStatus
+        ? (queueStatus.completed + queueStatus.failed)
+        : 0;
+    const processingPercent = totalQueueItems > 0
+        ? Math.round((processedQueueItems / totalQueueItems) * 100)
+        : 0;
+    const processingLabel = totalQueueItems > 0
+        ? `Processing ${processingPercent}%`
+        : 'Finalizing...';
+
 
     const [forwardMeeting, setForwardMeeting] = useState<Meeting | null>(null);
     const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
@@ -296,6 +313,31 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     useEffect(() => {
         setMenuEntered(false);
     }, [activeMenuId]);
+
+    useEffect(() => {
+        if (!window.electronAPI?.ragGetQueueStatus) return;
+        if (!hasUnprocessedMeetings || isMeetingActive) {
+            setQueueStatus(null);
+            return;
+        }
+
+        let mounted = true;
+        const pollStatus = async () => {
+            try {
+                const status = await window.electronAPI.ragGetQueueStatus();
+                if (mounted) setQueueStatus(status);
+            } catch (e) {
+                console.error('Failed to fetch RAG queue status:', e);
+            }
+        };
+
+        pollStatus();
+        const interval = setInterval(pollStatus, 2500);
+        return () => {
+            mounted = false;
+            clearInterval(interval);
+        };
+    }, [hasUnprocessedMeetings, isMeetingActive]);
 
     // Global click listener to close menu
     useEffect(() => {
@@ -899,37 +941,39 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                             <section key={label}>
                                                 <h3 className="text-[13px] font-medium text-text-secondary mb-3 pl-1">{label}</h3>
                                                 <div className="space-y-1">
-                                                    {groupedMeetings[label].map((m) => (
-                                                        <motion.div
-                                                            key={m.id}
-                                                            layoutId={`meeting-${m.id}`}
-                                                            className="group relative flex items-center justify-between px-3 py-2 rounded-lg bg-transparent hover:bg-bg-elevated transition-colors"
-                                                            onClick={() => handleOpenMeeting(m)}
-                                                        >
-                                                            <div className={`font-medium text-[14px] max-w-[60%] truncate ${m.title === 'Processing...' ? 'text-blue-400 italic animate-pulse' : 'text-text-primary'}`}>
-                                                                {m.title}
-                                                            </div>
+                                                    {groupedMeetings[label].map((m) => {
+                                                        const showProcessing = m.isProcessed === false && !isMeetingActive;
+                                                        return (
+                                                            <motion.div
+                                                                key={m.id}
+                                                                layoutId={`meeting-${m.id}`}
+                                                                className="group relative flex items-center justify-between px-3 py-2 rounded-lg bg-transparent hover:bg-bg-elevated transition-colors"
+                                                                onClick={() => handleOpenMeeting(m)}
+                                                            >
+                                                                <div className={`font-medium text-[14px] max-w-[60%] truncate ${showProcessing ? 'text-blue-400 italic animate-pulse' : 'text-text-primary'}`}>
+                                                                    {m.title}
+                                                                </div>
 
-                                                            {/* Time & Duration Section */}
-                                                            <div className="flex items-center gap-4">
-                                                                {m.title === 'Processing...' ? (
-                                                                    <div className="flex items-center gap-2 transition-all duration-200 ease-out group-hover:opacity-0 group-hover:translate-x-2 delayed-hover-exit">
-                                                                        <RefreshCw size={12} className="animate-spin text-blue-500" />
-                                                                        <span className="text-xs text-blue-500 font-medium">Finalizing...</span>
-                                                                    </div>
-                                                                ) : (
-                                                                    <>
-                                                                        <span className="relative z-10 bg-bg-elevated text-text-secondary text-[9px] px-1.5 py-0.5 rounded-full font-medium min-w-[35px] text-center tracking-wide">
-                                                                            {formatDurationPill(m.duration)}
-                                                                        </span>
+                                                                {/* Time & Duration Section */}
+                                                                <div className="flex items-center gap-4">
+                                                                    {showProcessing ? (
+                                                                        <div className="flex items-center gap-2 transition-all duration-200 ease-out group-hover:opacity-0 group-hover:translate-x-2 delayed-hover-exit">
+                                                                            <RefreshCw size={12} className="animate-spin text-blue-500" />
+                                                                            <span className="text-xs text-blue-500 font-medium">{processingLabel}</span>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <>
+                                                                            <span className="relative z-10 bg-bg-elevated text-text-secondary text-[9px] px-1.5 py-0.5 rounded-full font-medium min-w-[35px] text-center tracking-wide">
+                                                                                {formatDurationPill(m.duration)}
+                                                                            </span>
 
-                                                                        {/* Time Text (Should fade out on hover) */}
-                                                                        <span className="text-[13px] text-text-secondary font-medium min-w-[60px] text-right transition-all duration-200 ease-out group-hover:opacity-0 group-hover:translate-x-2 delayed-hover-exit">
-                                                                            {formatTime(m.date)}
-                                                                        </span>
-                                                                    </>
-                                                                )}
-                                                            </div>
+                                                                            {/* Time Text (Should fade out on hover) */}
+                                                                            <span className="text-[13px] text-text-secondary font-medium min-w-[60px] text-right transition-all duration-200 ease-out group-hover:opacity-0 group-hover:translate-x-2 delayed-hover-exit">
+                                                                                {formatTime(m.date)}
+                                                                            </span>
+                                                                        </>
+                                                                    )}
+                                                                </div>
 
                                                             {/* Context Menu Trigger (Slides in on hover) */}
                                                             <div className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 translate-x-4 transition-all duration-300 ease-out group-hover:opacity-100 group-hover:translate-x-0">
@@ -1006,8 +1050,9 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                                     </motion.div>
                                                                 )}
                                                             </AnimatePresence>
-                                                        </motion.div>
-                                                    ))}
+                                                            </motion.div>
+                                                        );
+                                                    })}
                                                 </div>
                                             </section>
                                         ))}

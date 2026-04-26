@@ -1,7 +1,9 @@
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPreferences, screen, desktopCapturer } from "electron"
 import path from "path"
 import fs from "fs"
+import { randomUUID } from 'crypto'
 import { autoUpdater } from "electron-updater"
+import { persistAndIndexFinalTranscriptSegment } from './TranscriptPipeline';
 if (!app.isPackaged) {
   require('dotenv').config();
 }
@@ -247,6 +249,7 @@ export class AppState {
 
   private hasDebugged: boolean = false
   private isMeetingActive: boolean = false; // Guard for session state leaks
+  private activeMeetingId: string | null = null;
   private _isQuitting: boolean = false;
   private _verboseLogging: boolean = false;
   private _disguiseTimers: NodeJS.Timeout[] = []; // Track forceUpdate timeouts
@@ -924,28 +927,40 @@ export class AppState {
         return;
       }
 
-      this.intelligenceManager.handleTranscript({
-        speaker: speaker,
+      const timestamp = Date.now();
+      const normalized = {
+        speaker,
         text: segment.text,
-        timestamp: Date.now(),
+        timestamp,
         final: segment.isFinal,
-        confidence: segment.confidence
-      });
+        confidence: segment.confidence,
+      };
 
-      // Feed final transcript to JIT RAG indexer
-      if (segment.isFinal && this.ragManager) {
-        this.ragManager.feedLiveTranscript([{
-          speaker: speaker,
-          text: segment.text,
-          timestamp: Date.now()
-        }]);
-      }
+      const transcriptResult = this.intelligenceManager.handleTranscript(normalized);
+
+      // Persist final transcript segments incrementally to avoid in-memory growth and crash loss.
+      persistAndIndexFinalTranscriptSegment({
+        isFinal: segment.isFinal,
+        activeMeetingId: this.activeMeetingId,
+        speaker,
+        text: segment.text,
+        timestamp,
+        transcriptResult,
+        appendTranscriptSegment: (meetingId, dbSegment) => {
+          DatabaseManager.getInstance().appendTranscriptSegment(meetingId, dbSegment);
+        },
+        feedLiveTranscript: this.ragManager
+          ? (segments) => {
+              this.ragManager?.feedLiveTranscript(segments);
+            }
+          : undefined,
+      });
 
       const helper = this.getWindowHelper();
       const payload = {
-        speaker: speaker,
+        speaker,
         text: segment.text,
-        timestamp: Date.now(),
+        timestamp,
         final: segment.isFinal,
         confidence: segment.confidence
       };
@@ -1474,6 +1489,11 @@ export class AppState {
   public async startMeeting(metadata?: any): Promise<void> {
     console.log('[Main] Starting Meeting...', metadata);
 
+    if (this.isMeetingActive) {
+      console.warn('[Main] startMeeting called while meeting already active — ignoring.');
+      return;
+    }
+
     // PR #173: Reset audio recovery state for fresh session
     this._systemAudioRecoveryInProgress = false;
     this._systemAudioRecoveryAttempts = 0;
@@ -1512,6 +1532,20 @@ export class AppState {
       // 'not-determined': Handled at startup. SCK/CoreAudio will trigger the TCC
       // dialog itself when it first attempts to access screen content.
     }
+
+    const meetingId = randomUUID();
+    this.activeMeetingId = meetingId;
+    const startTimeMs = Date.now();
+
+    // Reset session state to ensure timing and context are scoped to this meeting.
+    this.intelligenceManager.reset(startTimeMs);
+
+    // Ensure a durable meeting row exists before transcript segments arrive.
+    DatabaseManager.getInstance().ensureLiveMeeting(meetingId, startTimeMs, {
+      title: metadata?.title,
+      calendarEventId: metadata?.calendarEventId,
+      source: metadata?.source,
+    });
 
     this.isMeetingActive = true;
     this.broadcastMeetingState()
@@ -1558,8 +1592,8 @@ export class AppState {
         this.googleSTT_User?.start();
 
         // Start JIT RAG live indexing
-        if (this.ragManager) {
-          this.ragManager.startLiveIndexing('live-meeting-current');
+        if (this.ragManager && this.activeMeetingId) {
+          this.ragManager.startLiveIndexing(this.activeMeetingId);
         }
 
         if (this._verboseLogging) {
@@ -1581,6 +1615,8 @@ export class AppState {
 
   public async endMeeting(): Promise<void> {
     console.log('[Main] Ending Meeting...');
+    const endingMeetingId = this.activeMeetingId;
+    this.activeMeetingId = null;
     this.isMeetingActive = false; // Block new data immediately
     this.broadcastMeetingState();
 
@@ -1595,12 +1631,14 @@ export class AppState {
     this.microphoneCapture?.stop();
     this.googleSTT_User?.stop();
 
+    DatabaseManager.getInstance().flushPendingTranscriptSegments();
+
     // Save session state and reset context — MeetingPersistence.stopMeeting() is
     // already fire-and-forget internally (processAndSaveMeeting runs in background).
     // Capture the meetingId NOW so the background IIFE uses a deterministic ID
     // rather than getRecentMeetings(1) which could return a different meeting if the
     // user starts a new session before background processing finishes.
-    const meetingId = await this.intelligenceManager.stopMeeting();
+    const meetingId = await this.intelligenceManager.stopMeeting(endingMeetingId);
 
     // Revert to Default Model — synchronous, no blocking I/O
     try {
@@ -1622,7 +1660,6 @@ export class AppState {
     // delay. They are pure background tasks with no UI dependency:
     //   • stopLiveIndexing flushes the JIT RAG live stream
     //   • processCompletedMeetingForRAG embeds the full meeting into the vector store
-    //   • deleteMeetingData cleans up provisional JIT chunks
     // Chain them sequentially in the background so ordering is preserved,
     // but the IPC call returns immediately and the UI transitions without delay.
     const ragManager = this.ragManager;
@@ -1633,38 +1670,43 @@ export class AppState {
             await ragManager.stopLiveIndexing();
             console.log('[Main] Live RAG indexing stopped.');
           }
-          await this.processCompletedMeetingForRAG(meetingId);
-          // Guard: only delete live-meeting-current provisional chunks if no new
-          // meeting has started while we were processing. If a new meeting IS active,
-          // 'live-meeting-current' now belongs to that session — leave it alone.
-          if (ragManager && !this.isMeetingActive) {
-            ragManager.deleteMeetingData('live-meeting-current');
-            console.log('[Main] JIT RAG provisional chunks cleaned up.');
-          } else if (this.isMeetingActive) {
-            console.log('[Main] New meeting started during cleanup — skipping live-meeting-current deletion.');
-          }
         } catch (err) {
           console.error('[Main] Background post-meeting RAG processing failed:', err);
         }
       })();
     } else {
-      // Meeting was too short — still flush the live indexer and clean up
+      // Meeting was too short — still flush the live indexer and clean up partial data.
       if (ragManager) {
         ragManager.stopLiveIndexing().catch(() => {});
-        if (!this.isMeetingActive) ragManager.deleteMeetingData('live-meeting-current');
+        if (endingMeetingId) ragManager.deleteMeetingData(endingMeetingId);
+      }
+      if (endingMeetingId) {
+        DatabaseManager.getInstance().deleteMeeting(endingMeetingId);
+        DatabaseManager.getInstance().clearPendingSegmentsForMeeting(endingMeetingId);
       }
     }
     // ─────────────────────────────────────────────────────────────────────────
   }
 
-  private async processCompletedMeetingForRAG(meetingId: string): Promise<void> {
-    if (!this.ragManager) return;
+  private async processCompletedMeetingForRAG(meetingId: string): Promise<boolean> {
+    if (!this.ragManager) return false;
 
     try {
+      const dbManager = DatabaseManager.getInstance();
+
       // Use the explicit meetingId passed from endMeeting() — deterministic, never
       // picks up a concurrently started meeting the way getRecentMeetings(1) could.
-      const meeting = DatabaseManager.getInstance().getMeetingDetails(meetingId);
-      if (!meeting || !meeting.transcript || meeting.transcript.length === 0) return;
+      let meeting = dbManager.getMeetingDetails(meetingId);
+      if ((!meeting || !meeting.transcript || meeting.transcript.length === 0) && dbManager.hasPendingTranscriptSegmentsForMeeting(meetingId)) {
+        console.log(`[AppState] Waiting for pending transcript flush before RAG processing for meeting ${meetingId}.`);
+        await dbManager.waitForPendingTranscriptFlush(meetingId);
+        meeting = dbManager.getMeetingDetails(meetingId);
+      }
+
+      if (!meeting || !meeting.transcript || meeting.transcript.length === 0) {
+        console.warn(`[AppState] Skipping RAG processing for meeting ${meetingId}: transcript not available yet.`);
+        return false;
+      }
 
       // Convert transcript to RAG format
       const segments = meeting.transcript.map(t => ({
@@ -1676,17 +1718,24 @@ export class AppState {
       // Generate summary from detailedSummary if available
       let summary: string | undefined;
       if (meeting.detailedSummary) {
-        summary = [
+        const summaryParts = [
+          meeting.detailedSummary.overview,
           ...(meeting.detailedSummary.keyPoints || []),
           ...(meeting.detailedSummary.actionItems || []).map(a => `Action: ${a}`)
-        ].join('. ');
+        ].filter((part): part is string => !!part && part.trim().length > 0);
+
+        if (summaryParts.length > 0) {
+          summary = summaryParts.join('. ');
+        }
       }
 
       const result = await this.ragManager.processMeeting(meeting.id, segments, summary);
       console.log(`[AppState] RAG processed meeting ${meeting.id}: ${result.chunkCount} chunks`);
+      return true;
 
     } catch (error) {
       console.error('[AppState] Failed to process meeting for RAG:', error);
+      return false;
     }
   }
 
@@ -1694,6 +1743,21 @@ export class AppState {
     const mainWindow = this.getMainWindow.bind(this)
 
     // Forward intelligence events to renderer
+    this.intelligenceManager.on('meeting-finalized', async (meetingId: string) => {
+      try {
+        if (this.ragManager?.isLiveIndexingActive(meetingId)) {
+          await this.ragManager.stopLiveIndexing();
+        }
+
+        const reindexSucceeded = await this.processCompletedMeetingForRAG(meetingId);
+        if (reindexSucceeded && this.ragManager) {
+          this.ragManager.deleteLiveChunkData(meetingId);
+        }
+      } catch (err) {
+        console.error('[Main] Post-finalization RAG processing failed:', err);
+      }
+    });
+
     this.intelligenceManager.on('assist_update', (insight: string) => {
       // Send to both if both exist, though mostly overlay needs it
       const helper = this.getWindowHelper();

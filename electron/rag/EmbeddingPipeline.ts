@@ -183,7 +183,7 @@ export class EmbeddingPipeline {
      */
     async queueMeeting(meetingId: string): Promise<void> {
         // Get chunks without embeddings
-        const chunks = this.vectorStore.getChunksWithoutEmbeddings(meetingId);
+        const chunks = this.vectorStore.getChunksWithoutEmbeddings(meetingId, 'final');
 
         if (chunks.length === 0) {
             console.log(`[EmbeddingPipeline] No chunks to embed for meeting ${meetingId}`);

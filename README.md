@@ -236,6 +236,7 @@ Parakeet AI offers basic live meeting assistance but has no persistent memory, n
 
 ---
 
+
 ## Free AI Coding Interview Assistant — Undetectable on LeetCode, HackerRank & CoderPad
 
 Natively works as a **free, undetectable AI coding interview assistant** for standard online assessments. It captures your screen, analyzes the problem, and gives you real-time hints, solutions, and explanations — all through an invisible overlay that doesn't interfere with your coding environment.
@@ -279,7 +280,6 @@ Natively works as a **free, undetectable AI coding interview assistant** for sta
 Are you managing separate accounts for your AI reasoning, live transcription, fast inference, and web search? Juggling multiple API keys, rate limits, and invoices across completely different categories of tools is unnecessary overhead. Natively API replaces all of those categories with **one flat subscription**.
 
 Under the hood, Natively API connects you to the absolute best models for the optimal user experience:
-
 - **Backend AI Models**: Claude, OpenAI, Gemini, and Groq.
 - **Premium STT Models**: Google Chirp 2/3, ElevenLabs Scribe v2, and Deepgram Nova-3.
 
@@ -391,6 +391,7 @@ Version 2.5.0 introduces major feature upgrades, architectural overhauls, and ro
 - [Demo](#demo)
 - [Full comparison](#full-comparison-natively-vs-cluely-vs-final-round-ai-vs-lockedin-ai-vs-interview-coder)
 - [Why Natively wins](#why-natively-wins)
+- [Why Natively?](#why-natively)
 - [AI Coding Assistant](#free-ai-coding-interview-assistant-undetectable-on-leetcode-hackerrank--coderpad)
 - [Natively Pro](#natively-pro)
 - [What's New in v2.4.0](#whats-new-in-v240)
