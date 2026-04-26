@@ -244,3 +244,5 @@ function stripPrefixes(text: string): string {
 
     return result.trim();
 }
+  /* Added by bounty-bot */
+}
