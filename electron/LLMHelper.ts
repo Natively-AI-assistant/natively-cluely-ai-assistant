@@ -174,22 +174,6 @@ export class LLMHelper {
   }
 
   /**
-   * Initialize the self-improving model version manager.
-   * Should be called after all API keys are configured.
-   * Triggers initial model discovery and starts background scheduler.
-   */
-  public async initModelVersionManager(): Promise<void> {
-    this.modelVersionManager.setApiKeys({
-      openai: this.openaiApiKey,
-      gemini: this.apiKey,
-      claude: this.claudeApiKey,
-      groq: this.groqApiKey,
-    });
-    await this.modelVersionManager.initialize();
-    console.log(this.modelVersionManager.getSummary());
-  }
-
-  /**
    * Scrub all API keys from memory to minimize exposure window.
    * Called on app quit.
    */
