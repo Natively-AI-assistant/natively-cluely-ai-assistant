@@ -11,9 +11,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          submodules: true
-          token: ${{ secrets.GH_APP_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

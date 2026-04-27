@@ -1,0 +1,34 @@
+name: Premium Module Tests
+
+on:
+  workflow_run:
+    workflows: ["Unit & Integration Tests", "E2E Tests", "Build Smoke"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  premium-tests:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR code from fork
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.workflow_run.head_repository }}
+          ref: ${{ github.event.workflow_run.head_sha }}
+          submodules: true
+          token: ${{ secrets.GH_APP_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run premium module tests
+        run: npm run test:premium
