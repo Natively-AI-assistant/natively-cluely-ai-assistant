@@ -450,3 +450,41 @@ pub fn get_output_devices() -> Vec<AudioDeviceInfo> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+
+    #[test_case(&[], &[]; "empty_slice")]
+    #[test_case(&[0i16], &[0, 0]; "zero")]
+    #[test_case(&[1i16], &[1, 0]; "one_little_endian")]
+    #[test_case(&[256i16], &[0, 1]; "256_little_endian")]
+    #[test_case(&[-1i16], &[255, 255]; "negative_one_little_endian")]
+    #[test_case(&[32767i16], &[255, 127]; "max_i16")]
+    #[test_case(&[-32768i16], &[0, 128]; "min_i16")]
+    fn i16_to_le_bytes_correct(input: &[i16], expected: &[u8]) {
+        let result = i16_slice_to_le_bytes(input);
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn i16_to_le_bytes_length_is_doubled() {
+        let input = vec![0i16; 100];
+        let result = i16_slice_to_le_bytes(&input);
+        assert_eq!(result.len(), input.len() * 2);
+    }
+
+    #[test]
+    fn i16_to_le_bytes_roundtrip() {
+        let original: Vec<i16> = (0..1000)
+            .map(|i| ((i % 65536) as i32 - 32768) as i16)
+            .collect();
+        let bytes = i16_slice_to_le_bytes(&original);
+        let reconstructed: Vec<i16> = bytes
+            .chunks_exact(2)
+            .map(|chunk| i16::from_le_bytes([chunk[0], chunk[1]]))
+            .collect();
+        assert_eq!(original, reconstructed);
+    }
+}

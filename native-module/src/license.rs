@@ -464,3 +464,58 @@ fn hostname_fallback() -> String {
                 .unwrap_or_else(|_| "unknown-device".to_string())
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hardware_id_is_hex_string() {
+        let hw_id = get_hardware_id();
+        assert!(!hw_id.is_empty(), "Hardware ID should not be empty");
+        assert!(
+            hw_id.chars().all(|c| c.is_ascii_hexdigit()),
+            "Hardware ID should be hex: {}",
+            hw_id
+        );
+    }
+
+    #[test]
+    fn hardware_id_is_sha256_length() {
+        let hw_id = get_hardware_id();
+        assert_eq!(
+            hw_id.len(),
+            64,
+            "SHA-256 hex string should be 64 characters, got {}",
+            hw_id.len()
+        );
+    }
+
+    #[test]
+    fn hardware_id_is_deterministic() {
+        let id1 = get_hardware_id();
+        let id2 = get_hardware_id();
+        assert_eq!(id1, id2, "Hardware ID should be deterministic");
+    }
+
+    #[test]
+    fn hostname_fallback_returns_nonempty() {
+        let hostname = hostname_fallback();
+        assert!(
+            !hostname.is_empty(),
+            "Hostname fallback should return non-empty string"
+        );
+    }
+
+    #[test]
+    fn hostname_fallback_is_not_unknown_on_real_system() {
+        let hostname = hostname_fallback();
+        assert!(
+            hostname != "unknown-device"
+                || std::env::var("COMPUTERNAME").is_err()
+                    && std::env::var("HOSTNAME").is_err()
+                    && !std::path::Path::new("/etc/hostname").exists(),
+            "Should only return 'unknown-device' if no hostname source exists"
+        );
+    }
+}

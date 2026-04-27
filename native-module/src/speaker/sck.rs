@@ -106,8 +106,7 @@ impl SpeakerInput {
 
         let content_cell: Arc<Mutex<Option<arc::R<sc::ShareableContent>>>> =
             Arc::new(Mutex::new(None));
-        let content_error: Arc<Mutex<Option<arc::R<ns::Error>>>> =
-            Arc::new(Mutex::new(None));
+        let content_error: Arc<Mutex<Option<arc::R<ns::Error>>>> = Arc::new(Mutex::new(None));
 
         let cell_clone = content_cell.clone();
         let error_clone = content_error.clone();

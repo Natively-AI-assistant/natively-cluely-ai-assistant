@@ -1,0 +1,122 @@
+name: Unit & Integration Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  unit-tests:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npx vitest run
+
+  coverage:
+    runs-on: windows-latest
+    needs: unit-tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+
+      - name: Check coverage thresholds
+        run: |
+          node -e "
+            const fs = require('fs');
+            const coverage = JSON.parse(fs.readFileSync('./coverage/coverage.json', 'utf8'));
+
+            const thresholds = {
+              'src/utils/**': { lines: 95, functions: 95, branches: 95, statements: 95 },
+              'src/hooks/**': { lines: 90, functions: 90, branches: 90, statements: 90 },
+              'src/components/**': { lines: 80, functions: 80, branches: 80, statements: 80 },
+              'src/services/**': { lines: 85, functions: 85, branches: 85, statements: 85 },
+              'electron/**': { lines: 80, functions: 80, branches: 80, statements: 80 }
+            };
+
+            let failed = false;
+            for (const [pattern, threshold] of Object.entries(thresholds)) {
+              const prefix = pattern.replace('/**', '');
+              const files = Object.keys(coverage).filter(file =>
+                file.startsWith(prefix)
+              );
+
+              for (const file of files) {
+                const fileCoverage = coverage[file];
+                if (fileCoverage.lines < threshold.lines ||
+                    fileCoverage.functions < threshold.functions ||
+                    fileCoverage.branches < threshold.branches ||
+                    fileCoverage.statements < threshold.statements) {
+                  console.error('Coverage threshold failed for ' + file);
+                  console.error('   Lines: ' + fileCoverage.lines + '/' + threshold.lines);
+                  console.error('   Functions: ' + fileCoverage.functions + '/' + threshold.functions);
+                  console.error('   Branches: ' + fileCoverage.branches + '/' + threshold.branches);
+                  console.error('   Statements: ' + fileCoverage.statements + '/' + threshold.statements);
+                  failed = true;
+                }
+              }
+            }
+
+            if (failed) {
+              console.warn('Coverage thresholds not met');
+            } else {
+              console.log('All coverage thresholds passed');
+            }
+          "
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage/*.json
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
+  native-module-tests:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native-module
+
+      - name: Run native module tests
+        run: npm run test:rust
+
+      - name: Run native module checks
+        run: cargo clippy -- -D warnings
+        working-directory: native-module

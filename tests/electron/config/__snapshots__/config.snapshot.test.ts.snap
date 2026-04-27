@@ -1,0 +1,448 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Config Snapshots > AI response languages config matches snapshot > ai-response-languages 1`] = `
+[
+  {
+    "code": "auto",
+    "label": "Auto (Detect)",
+  },
+  {
+    "code": "English",
+    "label": "English",
+  },
+  {
+    "code": "Indonesian",
+    "label": "Indonesian",
+  },
+  {
+    "code": "Russian",
+    "label": "Russian",
+  },
+  {
+    "code": "Spanish",
+    "label": "Spanish",
+  },
+  {
+    "code": "French",
+    "label": "French",
+  },
+  {
+    "code": "German",
+    "label": "German",
+  },
+  {
+    "code": "Italian",
+    "label": "Italian",
+  },
+  {
+    "code": "Portuguese",
+    "label": "Portuguese",
+  },
+  {
+    "code": "Japanese",
+    "label": "Japanese",
+  },
+  {
+    "code": "Korean",
+    "label": "Korean",
+  },
+  {
+    "code": "Chinese",
+    "label": "Chinese",
+  },
+  {
+    "code": "Turkish",
+    "label": "Turkish",
+  },
+  {
+    "code": "Ukrainian",
+    "label": "Ukrainian",
+  },
+]
+`;
+
+exports[`Config Snapshots > default keybinds config matches snapshot > default-keybinds 1`] = `
+[
+  {
+    "accelerator": "CommandOrControl+B",
+    "defaultAccelerator": "CommandOrControl+B",
+    "id": "general:toggle-visibility",
+    "isGlobal": true,
+    "label": "Toggle Visibility",
+  },
+  {
+    "accelerator": "CommandOrControl+Shift+B",
+    "defaultAccelerator": "CommandOrControl+Shift+B",
+    "id": "general:toggle-mouse-passthrough",
+    "isGlobal": true,
+    "label": "Toggle Mouse Passthrough",
+  },
+  {
+    "accelerator": "CommandOrControl+Enter",
+    "defaultAccelerator": "CommandOrControl+Enter",
+    "id": "general:process-screenshots",
+    "isGlobal": true,
+    "label": "Process Screenshots",
+  },
+  {
+    "accelerator": "CommandOrControl+Shift+Enter",
+    "defaultAccelerator": "CommandOrControl+Shift+Enter",
+    "id": "general:capture-and-process",
+    "isGlobal": true,
+    "label": "Capture Screen & Ask AI (Global)",
+  },
+  {
+    "accelerator": "CommandOrControl+R",
+    "defaultAccelerator": "CommandOrControl+R",
+    "id": "general:reset-cancel",
+    "isGlobal": true,
+    "label": "Reset / Cancel",
+  },
+  {
+    "accelerator": "CommandOrControl+H",
+    "defaultAccelerator": "CommandOrControl+H",
+    "id": "general:take-screenshot",
+    "isGlobal": true,
+    "label": "Take Screenshot",
+  },
+  {
+    "accelerator": "CommandOrControl+Shift+H",
+    "defaultAccelerator": "CommandOrControl+Shift+H",
+    "id": "general:selective-screenshot",
+    "isGlobal": true,
+    "label": "Selective Screenshot",
+  },
+  {
+    "accelerator": "CommandOrControl+1",
+    "defaultAccelerator": "CommandOrControl+1",
+    "id": "chat:whatToAnswer",
+    "isGlobal": true,
+    "label": "What to Answer",
+  },
+  {
+    "accelerator": "CommandOrControl+2",
+    "defaultAccelerator": "CommandOrControl+2",
+    "id": "chat:clarify",
+    "isGlobal": true,
+    "label": "Clarify",
+  },
+  {
+    "accelerator": "CommandOrControl+3",
+    "defaultAccelerator": "CommandOrControl+3",
+    "id": "chat:dynamicAction4",
+    "isGlobal": true,
+    "label": "Recap / Brainstorm",
+  },
+  {
+    "accelerator": "CommandOrControl+4",
+    "defaultAccelerator": "CommandOrControl+4",
+    "id": "chat:followUp",
+    "isGlobal": true,
+    "label": "Follow Up",
+  },
+  {
+    "accelerator": "CommandOrControl+5",
+    "defaultAccelerator": "CommandOrControl+5",
+    "id": "chat:answer",
+    "isGlobal": true,
+    "label": "Answer / Record",
+  },
+  {
+    "accelerator": "CommandOrControl+6",
+    "defaultAccelerator": "CommandOrControl+6",
+    "id": "chat:codeHint",
+    "isGlobal": true,
+    "label": "Get Code Hint",
+  },
+  {
+    "accelerator": "CommandOrControl+7",
+    "defaultAccelerator": "CommandOrControl+7",
+    "id": "chat:brainstorm",
+    "isGlobal": true,
+    "label": "Brainstorm Approaches",
+  },
+  {
+    "accelerator": "CommandOrControl+Up",
+    "defaultAccelerator": "CommandOrControl+Up",
+    "id": "chat:scrollUp",
+    "isGlobal": true,
+    "label": "Scroll Up",
+  },
+  {
+    "accelerator": "CommandOrControl+Down",
+    "defaultAccelerator": "CommandOrControl+Down",
+    "id": "chat:scrollDown",
+    "isGlobal": true,
+    "label": "Scroll Down",
+  },
+  {
+    "accelerator": "CommandOrControl+Shift+Up",
+    "defaultAccelerator": "CommandOrControl+Shift+Up",
+    "id": "window:move-up",
+    "isGlobal": true,
+    "label": "Move Window Up",
+  },
+  {
+    "accelerator": "CommandOrControl+Shift+Down",
+    "defaultAccelerator": "CommandOrControl+Shift+Down",
+    "id": "window:move-down",
+    "isGlobal": true,
+    "label": "Move Window Down",
+  },
+  {
+    "accelerator": "CommandOrControl+Shift+Left",
+    "defaultAccelerator": "CommandOrControl+Shift+Left",
+    "id": "window:move-left",
+    "isGlobal": true,
+    "label": "Move Window Left",
+  },
+  {
+    "accelerator": "CommandOrControl+Shift+Right",
+    "defaultAccelerator": "CommandOrControl+Shift+Right",
+    "id": "window:move-right",
+    "isGlobal": true,
+    "label": "Move Window Right",
+  },
+]
+`;
+
+exports[`Config Snapshots > english variants config matches snapshot > english-variants 1`] = `
+{
+  "english-au": {
+    "alternates": [
+      "en-US",
+      "en-GB",
+      "en-IN",
+      "en-CA",
+    ],
+    "bcp47": "en-AU",
+    "code": "english-au",
+    "group": "English",
+    "iso639": "en",
+    "label": "Australia",
+    "primary": "en-AU",
+  },
+  "english-ca": {
+    "alternates": [
+      "en-US",
+      "en-GB",
+      "en-IN",
+      "en-AU",
+    ],
+    "bcp47": "en-CA",
+    "code": "english-ca",
+    "group": "English",
+    "iso639": "en",
+    "label": "Canada",
+    "primary": "en-CA",
+  },
+  "english-in": {
+    "alternates": [
+      "en-US",
+      "en-GB",
+      "en-AU",
+      "en-CA",
+    ],
+    "bcp47": "en-IN",
+    "code": "english-in",
+    "group": "English",
+    "iso639": "en",
+    "label": "India",
+    "primary": "en-IN",
+  },
+  "english-uk": {
+    "alternates": [
+      "en-US",
+      "en-IN",
+      "en-AU",
+      "en-CA",
+    ],
+    "bcp47": "en-GB",
+    "code": "english-uk",
+    "group": "English",
+    "iso639": "en",
+    "label": "United Kingdom",
+    "primary": "en-GB",
+  },
+  "english-us": {
+    "alternates": [
+      "en-GB",
+      "en-IN",
+      "en-AU",
+      "en-CA",
+    ],
+    "bcp47": "en-US",
+    "code": "english-us",
+    "group": "English",
+    "iso639": "en",
+    "label": "United States",
+    "primary": "en-US",
+  },
+}
+`;
+
+exports[`Config Snapshots > recognition languages config matches snapshot > recognition-languages 1`] = `
+{
+  "auto": {
+    "bcp47": "auto",
+    "code": "auto",
+    "group": "Auto",
+    "iso639": "auto",
+    "label": "Auto Detect",
+  },
+  "chinese": {
+    "bcp47": "zh-CN",
+    "code": "chinese",
+    "group": "Chinese",
+    "iso639": "zh",
+    "label": "Chinese (Simplified)",
+  },
+  "english-au": {
+    "alternates": [
+      "en-US",
+      "en-GB",
+      "en-IN",
+      "en-CA",
+    ],
+    "bcp47": "en-AU",
+    "code": "english-au",
+    "group": "English",
+    "iso639": "en",
+    "label": "Australia",
+    "primary": "en-AU",
+  },
+  "english-ca": {
+    "alternates": [
+      "en-US",
+      "en-GB",
+      "en-IN",
+      "en-AU",
+    ],
+    "bcp47": "en-CA",
+    "code": "english-ca",
+    "group": "English",
+    "iso639": "en",
+    "label": "Canada",
+    "primary": "en-CA",
+  },
+  "english-in": {
+    "alternates": [
+      "en-US",
+      "en-GB",
+      "en-AU",
+      "en-CA",
+    ],
+    "bcp47": "en-IN",
+    "code": "english-in",
+    "group": "English",
+    "iso639": "en",
+    "label": "India",
+    "primary": "en-IN",
+  },
+  "english-uk": {
+    "alternates": [
+      "en-US",
+      "en-IN",
+      "en-AU",
+      "en-CA",
+    ],
+    "bcp47": "en-GB",
+    "code": "english-uk",
+    "group": "English",
+    "iso639": "en",
+    "label": "United Kingdom",
+    "primary": "en-GB",
+  },
+  "english-us": {
+    "alternates": [
+      "en-GB",
+      "en-IN",
+      "en-AU",
+      "en-CA",
+    ],
+    "bcp47": "en-US",
+    "code": "english-us",
+    "group": "English",
+    "iso639": "en",
+    "label": "United States",
+    "primary": "en-US",
+  },
+  "french": {
+    "bcp47": "fr-FR",
+    "code": "french",
+    "group": "French",
+    "iso639": "fr",
+    "label": "French",
+  },
+  "german": {
+    "bcp47": "de-DE",
+    "code": "german",
+    "group": "German",
+    "iso639": "de",
+    "label": "German",
+  },
+  "indonesian": {
+    "bcp47": "id-ID",
+    "code": "indonesian",
+    "group": "Indonesian",
+    "iso639": "id",
+    "label": "Indonesian",
+  },
+  "italian": {
+    "bcp47": "it-IT",
+    "code": "italian",
+    "group": "Italian",
+    "iso639": "it",
+    "label": "Italian",
+  },
+  "japanese": {
+    "bcp47": "ja-JP",
+    "code": "japanese",
+    "group": "Japanese",
+    "iso639": "ja",
+    "label": "Japanese",
+  },
+  "korean": {
+    "bcp47": "ko-KR",
+    "code": "korean",
+    "group": "Korean",
+    "iso639": "ko",
+    "label": "Korean",
+  },
+  "portuguese": {
+    "bcp47": "pt-PT",
+    "code": "portuguese",
+    "group": "Portuguese",
+    "iso639": "pt",
+    "label": "Portuguese",
+  },
+  "russian": {
+    "bcp47": "ru-RU",
+    "code": "russian",
+    "group": "Russian",
+    "iso639": "ru",
+    "label": "Russian",
+  },
+  "spanish": {
+    "bcp47": "es-ES",
+    "code": "spanish",
+    "group": "Spanish",
+    "iso639": "es",
+    "label": "Spanish",
+  },
+  "turkish": {
+    "bcp47": "tr-TR",
+    "code": "turkish",
+    "group": "Turkish",
+    "iso639": "tr",
+    "label": "Turkish",
+  },
+  "ukrainian": {
+    "bcp47": "uk-UA",
+    "code": "ukrainian",
+    "group": "Ukrainian",
+    "iso639": "uk",
+    "label": "Ukrainian",
+  },
+}
+`;

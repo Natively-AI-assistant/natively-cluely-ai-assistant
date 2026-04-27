@@ -162,6 +162,7 @@ const ModelSelectorWindow = () => {
                                 return (
                                     <button
                                         key={model.id}
+                                        data-testid="model-selector-button"
                                         onClick={() => handleSelectFn(model.id)}
                                         className={`
                                             w-full text-left px-3 py-2 flex items-center justify-between group transition-colors duration-200 rounded-lg

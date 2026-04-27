@@ -303,3 +303,74 @@ impl Drop for MicrophoneStream {
         // Stream will be dropped and stopped automatically
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn list_input_devices_returns_default() {
+        let devices = list_input_devices().unwrap();
+        assert!(
+            !devices.is_empty(),
+            "Should always have at least 'default' device"
+        );
+        assert_eq!(devices[0].0, "default");
+        assert_eq!(devices[0].1, "Default Microphone");
+    }
+
+    /// Initialize COM on the current thread (Windows only).
+    /// cpal 0.15.x has a bug where COM is only initialized on the first thread
+    /// that accesses the audio enumerator, causing crashes on parallel test threads.
+    #[cfg(windows)]
+    fn ensure_com_initialized() {
+        use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
+        let _ = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
+    }
+
+    #[test]
+    fn resolve_default_returns_default_device() {
+        #[cfg(windows)]
+        ensure_com_initialized();
+
+        let host = cpal::default_host();
+        let _result = resolve_input_device(&host, Some("default"));
+    }
+
+    #[test]
+    fn resolve_empty_string_returns_default() {
+        #[cfg(windows)]
+        ensure_com_initialized();
+
+        let host = cpal::default_host();
+        let _result = resolve_input_device(&host, Some(""));
+    }
+
+    #[test]
+    fn resolve_whitespace_returns_default() {
+        #[cfg(windows)]
+        ensure_com_initialized();
+
+        let host = cpal::default_host();
+        let _result = resolve_input_device(&host, Some("   "));
+    }
+
+    #[test]
+    fn resolve_nonexistent_device_returns_error() {
+        #[cfg(windows)]
+        ensure_com_initialized();
+
+        let host = cpal::default_host();
+        let result = resolve_input_device(&host, Some("__nonexistent_device_xyz__"));
+        assert!(result.is_err(), "Should error for nonexistent device");
+    }
+
+    #[test]
+    fn resolve_none_uses_default() {
+        #[cfg(windows)]
+        ensure_com_initialized();
+
+        let host = cpal::default_host();
+        let _result = resolve_input_device(&host, None);
+    }
+}

@@ -2,7 +2,7 @@
 //
 // IMPORTANT: This VAD is for UI state display only.
 // It does NOT gate or delay audio sent to Google STT.
-// 
+//
 // The silence_suppression module handles audio gating.
 // This module is for:
 // - Showing "speaking" indicator in UI
@@ -11,7 +11,7 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::audio_config::{VAD_START_RMS, VAD_END_RMS, VAD_HANGOVER_MS};
+use crate::audio_config::{VAD_END_RMS, VAD_HANGOVER_MS, VAD_START_RMS};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum VadState {
@@ -97,7 +97,7 @@ impl VadIndicator {
         let step = 10;
         let mut sum: f32 = 0.0;
         let mut count = 0;
-        
+
         let mut i = 0;
         while i < data.len() {
             let sample = data[i] as f32;
@@ -136,5 +136,133 @@ impl VadGate {
             VadState::Speech | VadState::Hangover => vec![chunk],
             VadState::Idle => Vec::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+
+    #[test]
+    fn new_starts_in_idle() {
+        let vad = VadIndicator::new();
+        assert!(!vad.is_speech());
+    }
+
+    #[test]
+    fn loud_chunk_triggers_speech() {
+        let mut vad = VadIndicator::new();
+        let loud_frame: Vec<i16> = (0..320)
+            .map(|i| ((i as f32 * 0.1).sin() * 10000.0) as i16)
+            .collect();
+        let state = vad.update(&loud_frame);
+        assert_eq!(state, VadState::Speech);
+        assert!(vad.is_speech());
+    }
+
+    #[test]
+    fn silent_chunk_stays_idle() {
+        let mut vad = VadIndicator::new();
+        let silent_frame: Vec<i16> = vec![0; 320];
+        let state = vad.update(&silent_frame);
+        assert_eq!(state, VadState::Idle);
+        assert!(!vad.is_speech());
+    }
+
+    #[test]
+    fn reset_returns_to_idle() {
+        let mut vad = VadIndicator::new();
+        let loud_frame: Vec<i16> = (0..320)
+            .map(|i| ((i as f32 * 0.1).sin() * 10000.0) as i16)
+            .collect();
+        vad.update(&loud_frame);
+        assert!(vad.is_speech());
+
+        vad.reset();
+        assert!(!vad.is_speech());
+    }
+
+    #[test]
+    fn empty_chunk_does_not_panic() {
+        let mut vad = VadIndicator::new();
+        let state = vad.update(&[]);
+        assert_eq!(state, VadState::Idle);
+    }
+
+    #[test]
+    fn last_rms_is_updated() {
+        let mut vad = VadIndicator::new();
+        let loud_frame: Vec<i16> = (0..320)
+            .map(|i| ((i as f32 * 0.1).sin() * 10000.0) as i16)
+            .collect();
+        vad.update(&loud_frame);
+        assert!(vad.last_rms > 0.0);
+    }
+
+    #[test]
+    fn process_legacy_returns_chunk_when_speech() {
+        let mut vad = VadIndicator::new();
+        let loud_frame: Vec<i16> = (0..320)
+            .map(|i| ((i as f32 * 0.1).sin() * 10000.0) as i16)
+            .collect();
+        vad.update(&loud_frame);
+        let result = vad.process(loud_frame.clone());
+        assert_eq!(
+            result.len(),
+            1,
+            "Should return the chunk when in speech state"
+        );
+        assert_eq!(result[0], loud_frame);
+    }
+
+    #[test]
+    fn process_legacy_returns_empty_when_idle() {
+        let mut vad = VadIndicator::new();
+        let silent_frame: Vec<i16> = vec![0; 320];
+        let result = vad.process(silent_frame);
+        assert!(result.is_empty(), "Should return empty when idle");
+    }
+
+    #[test]
+    fn is_speech_idle_is_false() {
+        let vad = VadIndicator::new();
+        assert!(!vad.is_speech(), "Idle should not be speech");
+    }
+
+    #[test]
+    fn is_speech_after_loud_audio_is_true() {
+        let mut vad = VadIndicator::new();
+        let loud_frame: Vec<i16> = (0..320)
+            .map(|i| ((i as f32 * 0.5).sin() * 20000.0) as i16)
+            .collect();
+        vad.update(&loud_frame);
+        assert!(
+            vad.is_speech(),
+            "After loud audio, is_speech should be true"
+        );
+    }
+
+    #[test]
+    fn is_speech_returns_false_for_silence() {
+        let mut vad = VadIndicator::new();
+        let silent_frame: Vec<i16> = vec![0; 320];
+        vad.update(&silent_frame);
+        assert!(!vad.is_speech(), "Silence should not be speech");
+    }
+
+    #[test]
+    fn rms_calculation_step_by_10() {
+        let vad = VadIndicator::new();
+        let samples: Vec<i16> = (0..100).map(|i| (i * 100) as i16).collect();
+        let rms = vad.calculate_rms(&samples);
+        assert!(rms > 0.0);
+    }
+
+    #[test]
+    fn rms_of_empty_is_zero() {
+        let vad = VadIndicator::new();
+        let rms = vad.calculate_rms(&[]);
+        assert_eq!(rms, 0.0);
     }
 }

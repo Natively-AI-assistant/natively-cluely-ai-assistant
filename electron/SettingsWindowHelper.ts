@@ -4,8 +4,9 @@ import path from "node:path"
 
 const isDev = process.env.NODE_ENV === "development"
 
+const devHost = process.env.DEV_HOST || 'localhost'
 const startUrl = isDev
-    ? "http://localhost:5180"
+    ? `http://${devHost}:5180`
     : `file://${path.join(app.getAppPath(), "dist/index.html")}`
 
 type WindowActivationOptions = {

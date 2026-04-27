@@ -1,0 +1,35 @@
+# Lefthook — Git hooks manager
+# https://lefthook.dev/
+#
+# After cloning: npm install (runs "prepare" script → lefthook install)
+# Skip all hooks: LEFTHOOK=0 git commit -m "msg"
+
+pre-commit:
+  parallel: true
+  skip:
+    - merge
+    - rebase
+  commands:
+    biome-check:
+      glob: "*.{ts,tsx,js,jsx,json}"
+      run: npx biome check --fix {staged_files}
+      stage_fixed: true
+    rust-fmt:
+      glob: "*.rs"
+      root: "native-module/"
+      run: cargo fmt --check
+    rust-clippy:
+      glob: "*.rs"
+      root: "native-module/"
+      run: cargo clippy -- -D warnings
+
+pre-push:
+  parallel: true
+  commands:
+    typecheck:
+      run: npx tsc --noEmit
+    tests:
+      run: npx vitest run
+    rust-tests:
+      root: "native-module/"
+      run: cargo test

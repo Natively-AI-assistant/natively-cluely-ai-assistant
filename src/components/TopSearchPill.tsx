@@ -292,6 +292,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                         value={query}
                                         onChange={handleInputChange}
                                         onFocus={() => state === 'idle' && setState('focused')}
+                                        data-testid="search-input"
                                         className={`
                                         w-full bg-transparent
                                         pl-9 pr-4 py-1

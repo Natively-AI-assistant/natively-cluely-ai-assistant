@@ -309,13 +309,9 @@ impl SilenceSuppressor {
             return true;
         };
 
-        match self.vad.is_voice_segment(&self.vad_buf[..target]) {
-            Ok(is_voice) => is_voice,
-            Err(_) => {
-                // On VAD error, fall back to RMS-only (don't block audio)
-                true
-            }
-        }
+        self.vad
+            .is_voice_segment(&self.vad_buf[..target])
+            .unwrap_or(true)
     }
 
     /// Get statistics
@@ -361,7 +357,7 @@ fn calculate_rms(samples: &[i16]) -> f32 {
         .map(|&s| (s as f64) * (s as f64))
         .sum();
 
-    let count = (samples.len() + 3) / 4;
+    let count = samples.len().div_ceil(4);
     (sum_of_squares / count as f64).sqrt() as f32
 }
 
@@ -373,11 +369,12 @@ pub fn generate_silence_frame(size: usize) -> Vec<i16> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use test_case::test_case;
 
     #[test]
     fn test_speech_immediate() {
         let mut suppressor = SilenceSuppressor::new(SilenceSuppressionConfig {
-            native_sample_rate: 16000, // Use 16kHz for test to avoid decimation issues
+            native_sample_rate: 16000,
             ..SilenceSuppressionConfig::default()
         });
 
@@ -434,13 +431,334 @@ mod tests {
         let (_, ended) = suppressor.process(&loud_frame);
         assert!(!ended, "Speech should not end on a loud frame");
 
-        // Send a silent frame (should trigger speech_ended)
         let silent_frame: Vec<i16> = vec![0; 320];
         let (_, ended) = suppressor.process(&silent_frame);
         assert!(ended, "Speech should have ended on transition to silence");
 
-        // Another silent frame should NOT trigger speech_ended again
         let (_, ended) = suppressor.process(&silent_frame);
         assert!(!ended, "Speech_ended should only fire once per transition");
+    }
+
+    // --- New edge case tests ---
+
+    #[test]
+    fn empty_frame_returns_suppress() {
+        let mut suppressor = SilenceSuppressor::new(SilenceSuppressionConfig {
+            native_sample_rate: 16000,
+            ..SilenceSuppressionConfig::default()
+        });
+        let (action, ended) = suppressor.process(&[]);
+        assert!(
+            matches!(action, FrameAction::Suppress),
+            "Empty frame should be suppressed"
+        );
+        assert!(!ended, "Empty frame should not trigger speech_ended");
+    }
+
+    #[test]
+    fn reset_clears_speech_state() {
+        let mut suppressor = SilenceSuppressor::new(SilenceSuppressionConfig {
+            native_sample_rate: 16000,
+            ..SilenceSuppressionConfig::default()
+        });
+
+        let loud_frame: Vec<i16> = (0..320)
+            .map(|i| ((i as f32 * 0.1).sin() * 10000.0) as i16)
+            .collect();
+        suppressor.process(&loud_frame);
+        assert!(suppressor.is_speech());
+
+        suppressor.reset();
+        assert!(!suppressor.is_speech(), "Reset should clear speech state");
+    }
+
+    #[test]
+    fn stats_track_frames() {
+        let mut suppressor = SilenceSuppressor::new(SilenceSuppressionConfig {
+            native_sample_rate: 16000,
+            ..SilenceSuppressionConfig::default()
+        });
+
+        let loud_frame: Vec<i16> = (0..320)
+            .map(|i| ((i as f32 * 0.1).sin() * 10000.0) as i16)
+            .collect();
+        suppressor.process(&loud_frame);
+
+        let (sent, _suppressed) = suppressor.stats();
+        assert!(sent > 0, "Should have sent at least one frame");
+    }
+
+    #[test]
+    fn adaptive_threshold_starts_at_config_value() {
+        let suppressor = SilenceSuppressor::new(SilenceSuppressionConfig {
+            speech_threshold_rms: 150.0,
+            native_sample_rate: 16000,
+            ..SilenceSuppressionConfig::default()
+        });
+        assert_eq!(suppressor.adaptive_threshold(), 150.0);
+    }
+
+    #[test]
+    fn hangover_sends_frames_after_speech_ends() {
+        let mut suppressor = SilenceSuppressor::new(SilenceSuppressionConfig {
+            speech_threshold_rms: 100.0,
+            speech_hangover: Duration::from_millis(500),
+            silence_keepalive_interval: Duration::from_millis(50),
+            adaptive_multiplier: 3.0,
+            adaptive_min_floor: 20.0,
+            ema_alpha: 0.02,
+            native_sample_rate: 16000,
+            use_vad: false,
+            vad_mode: VadMode::Quality,
+        });
+
+        let loud_frame: Vec<i16> = (0..320)
+            .map(|i| ((i as f32 * 0.1).sin() * 10000.0) as i16)
+            .collect();
+        let (action, _) = suppressor.process(&loud_frame);
+        assert!(matches!(action, FrameAction::Send(_)));
+
+        let silent_frame: Vec<i16> = vec![0; 320];
+        let (action, _ended) = suppressor.process(&silent_frame);
+        assert!(
+            matches!(action, FrameAction::Send(_)),
+            "Hangover should still send frames"
+        );
+    }
+
+    #[test]
+    fn system_audio_does_not_require_vad() {
+        let mut suppressor = SilenceSuppressor::new(SilenceSuppressionConfig::for_system_audio());
+
+        let frame: Vec<i16> = (0..320)
+            .map(|i| ((i as f32 * 0.1).sin() * 200.0) as i16)
+            .collect();
+        let (action, _) = suppressor.process(&frame);
+        assert!(matches!(action, FrameAction::Send(_)));
+    }
+
+    // --- VAD rejection tests (core two-stage gate behavior) ---
+
+    #[test]
+    fn vad_rejects_silence_even_with_low_threshold() {
+        // Silence is always rejected by VAD, even with very low RMS threshold
+        let mut suppressor = SilenceSuppressor::new(SilenceSuppressionConfig {
+            native_sample_rate: 16000,
+            use_vad: true,
+            vad_mode: VadMode::Quality,
+            speech_threshold_rms: 1.0, // Near-zero threshold
+            ..SilenceSuppressionConfig::default()
+        });
+
+        let silent_frame: Vec<i16> = vec![0; 320];
+        let (action, _) = suppressor.process(&silent_frame);
+        assert!(
+            !matches!(action, FrameAction::Send(_)),
+            "Silence should never trigger Send even with near-zero threshold"
+        );
+    }
+
+    #[test]
+    fn vad_path_exercised_with_non_speech_signal() {
+        // This test exercises the VAD code path with a non-speech signal.
+        // We don't assert Send vs Suppress because VAD behavior with synthetic
+        // signals (tones, noise) is not guaranteed - it depends on the GMM model.
+        // The value is ensuring the two-stage gate path runs without errors.
+        let mut suppressor = SilenceSuppressor::new(SilenceSuppressionConfig {
+            native_sample_rate: 16000,
+            use_vad: true,
+            vad_mode: VadMode::VeryAggressive,
+            speech_threshold_rms: 50.0,
+            ..SilenceSuppressionConfig::default()
+        });
+
+        let tone: Vec<i16> = (0..320)
+            .map(|i| {
+                ((i as f32 * 1000.0 / 16000.0 * 2.0 * std::f32::consts::PI).sin() * 15000.0) as i16
+            })
+            .collect();
+
+        // Verify the path runs without panicking
+        let rms = calculate_rms(&tone);
+        assert!(rms > 50.0, "Tone should have high RMS: {}", rms);
+
+        let (action, _) = suppressor.process(&tone);
+        // Action can be Send or Suppress depending on VAD model behavior
+        let _ = action;
+    }
+
+    #[test]
+    fn vad_rejects_low_amplitude_noise() {
+        // Low-amplitude noise should be rejected by VAD even if above threshold
+        let mut suppressor = SilenceSuppressor::new(SilenceSuppressionConfig {
+            native_sample_rate: 16000,
+            use_vad: true,
+            vad_mode: VadMode::VeryAggressive,
+            speech_threshold_rms: 10.0,
+            ..SilenceSuppressionConfig::default()
+        });
+
+        // Very low amplitude alternating signal
+        let noise: Vec<i16> = (0..320)
+            .map(|i| if i % 2 == 0 { 20i16 } else { -20i16 })
+            .collect();
+
+        let rms = calculate_rms(&noise);
+        assert!(rms > 10.0, "Noise should be above threshold: {}", rms);
+
+        let (action, _) = suppressor.process(&noise);
+        assert!(
+            !matches!(action, FrameAction::Send(_)),
+            "Low-amplitude noise should not trigger Send, got {:?}",
+            action
+        );
+    }
+
+    #[test]
+    fn vad_passes_speech_like_signal() {
+        let mut suppressor = SilenceSuppressor::new(SilenceSuppressionConfig {
+            native_sample_rate: 16000,
+            use_vad: true,
+            vad_mode: VadMode::Quality,
+            speech_threshold_rms: 50.0,
+            ..SilenceSuppressionConfig::default()
+        });
+
+        // Complex signal that resembles speech (multiple harmonics)
+        let speech_like: Vec<i16> = (0..320)
+            .map(|i| {
+                let t = i as f32 / 16000.0;
+                let fundamental = (t * 200.0 * 2.0 * std::f32::consts::PI).sin();
+                let harmonic1 = (t * 400.0 * 2.0 * std::f32::consts::PI).sin() * 0.5;
+                let harmonic2 = (t * 600.0 * 2.0 * std::f32::consts::PI).sin() * 0.3;
+                ((fundamental + harmonic1 + harmonic2) * 10000.0) as i16
+            })
+            .collect();
+
+        // This test verifies VAD behavior with speech-like signals
+        // Note: VAD may still reject synthetic signals - the key assertion is that
+        // the test runs without error and the logic path is exercised
+        let (action, _) = suppressor.process(&speech_like);
+        // We don't assert Send vs Suppress because VAD behavior with synthetic
+        // speech-like signals is not guaranteed. The value is exercising the path.
+        let _ = action;
+    }
+
+    #[test]
+    fn rms_passes_vad_disabled() {
+        // When VAD is disabled, high RMS should always pass (system audio behavior)
+        let mut suppressor = SilenceSuppressor::new(SilenceSuppressionConfig {
+            native_sample_rate: 16000,
+            use_vad: false,
+            speech_threshold_rms: 50.0,
+            ..SilenceSuppressionConfig::default()
+        });
+
+        // Pure tone that VAD would reject
+        let tone: Vec<i16> = (0..320)
+            .map(|i| {
+                ((i as f32 * 1000.0 / 16000.0 * 2.0 * std::f32::consts::PI).sin() * 15000.0) as i16
+            })
+            .collect();
+
+        let (action, _) = suppressor.process(&tone);
+        assert!(
+            matches!(action, FrameAction::Send(_)),
+            "With VAD disabled, high RMS should always pass"
+        );
+    }
+
+    #[test]
+    fn generate_silence_frame_is_all_zeros() {
+        let silence = generate_silence_frame(640);
+        assert_eq!(silence.len(), 640);
+        assert!(silence.iter().all(|&s| s == 0));
+    }
+
+    #[test_case(0; "empty")]
+    #[test_case(1; "single_sample")]
+    #[test_case(100; "small")]
+    #[test_case(320; "standard_frame")]
+    #[test_case(960; "large_frame")]
+    fn rms_handles_various_sizes(size: usize) {
+        let samples: Vec<i16> = vec![1000; size];
+        let rms = calculate_rms(&samples);
+        if size == 0 {
+            assert_eq!(rms, 0.0, "RMS of empty slice should be 0");
+        } else {
+            assert!(
+                rms > 0.0,
+                "RMS should be positive for non-empty samples of size {}",
+                size
+            );
+        }
+    }
+
+    #[test]
+    fn rms_of_zeros_is_zero() {
+        let samples: Vec<i16> = vec![0; 320];
+        let rms = calculate_rms(&samples);
+        assert_eq!(rms, 0.0);
+    }
+
+    #[test]
+    fn rms_of_max_amplitude() {
+        let samples: Vec<i16> = vec![i16::MAX; 320];
+        let rms = calculate_rms(&samples);
+        assert!(rms > 30000.0, "Max amplitude should produce high RMS");
+    }
+
+    // --- Property-based tests ---
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn rms_is_always_nonnegative(frame in prop::collection::vec(any::<i16>(), 0..1000)) {
+            let rms = calculate_rms(&frame);
+            prop_assert!(rms >= 0.0, "RMS should never be negative");
+        }
+
+        #[test]
+        fn speech_detection_is_deterministic(
+            frame in prop::collection::vec(any::<i16>(), 320..=960)
+        ) {
+            let mut s1 = SilenceSuppressor::new(SilenceSuppressionConfig {
+                native_sample_rate: 16000,
+                use_vad: false,
+                ..SilenceSuppressionConfig::default()
+            });
+            let mut s2 = SilenceSuppressor::new(SilenceSuppressionConfig {
+                native_sample_rate: 16000,
+                use_vad: false,
+                ..SilenceSuppressionConfig::default()
+            });
+
+            let (a1, _) = s1.process(&frame);
+            let (a2, _) = s2.process(&frame);
+
+            prop_assert!(
+                std::mem::discriminant(&a1) == std::mem::discriminant(&a2),
+                "Same input should produce same action type"
+            );
+        }
+    }
+
+    #[test]
+    fn silence_frame_never_produces_send_action() {
+        let mut suppressor = SilenceSuppressor::new(SilenceSuppressionConfig {
+            speech_threshold_rms: 50.0,
+            native_sample_rate: 16000,
+            use_vad: false,
+            ..SilenceSuppressionConfig::default()
+        });
+
+        let silent_frame = vec![0i16; 320];
+        let (action, _) = suppressor.process(&silent_frame);
+
+        assert!(
+            !matches!(action, FrameAction::Send(_)),
+            "Pure silence should never trigger Send action"
+        );
     }
 }

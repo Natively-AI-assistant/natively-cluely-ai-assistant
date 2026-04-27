@@ -1,8 +1,8 @@
 name: Build Smoke
 
 on:
+  push:
   pull_request:
-  workflow_dispatch:
 
 jobs:
   electron-entry-smoke:
