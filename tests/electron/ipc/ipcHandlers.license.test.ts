@@ -20,7 +20,10 @@ vi.mock('../../../premium/electron/services/LicenseManager', () => ({
   },
 }))
 
-import { registerLicenseHandlers } from '../../../electron/ipc/ipcHandlers.license'
+import {
+  registerLicenseHandlers,
+  resetLicenseHandlersCache,
+} from '../../../electron/ipc/ipcHandlers.license'
 
 describe('ipcHandlers.license - handler behavior tests', () => {
   let mockAppState: any
@@ -28,6 +31,7 @@ describe('ipcHandlers.license - handler behavior tests', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    resetLicenseHandlersCache()
 
     mockAppState = {
       getKnowledgeOrchestrator: vi.fn(() => ({
