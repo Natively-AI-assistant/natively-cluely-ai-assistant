@@ -119,3 +119,4 @@ jobs:
 
       - name: Run native module checks
         run: cargo clippy -- -D warnings
+        working-directory: native-module
