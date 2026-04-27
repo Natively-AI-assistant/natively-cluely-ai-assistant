@@ -3,9 +3,8 @@
  * Tests rendering and electronAPI calls on mount
  */
 
-import React from 'react'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import '../../../tests/mocks/electronAPI.mock'
 import '../../../tests/mocks/framer-motion.mock'
@@ -14,8 +13,12 @@ import { createMockCredentials } from '../../../tests/fixtures'
 
 vi.mock('../../../src/premium', () => ({
   __esModule: true,
-  PremiumUpgradeModal: () => <div data-testid="premium-modal">PremiumUpgradeModal</div>,
-  ProfileVisualizer: () => <div data-testid="profile-visualizer">ProfileVisualizer</div>,
+  PremiumUpgradeModal: () => (
+    <div data-testid="premium-modal">PremiumUpgradeModal</div>
+  ),
+  ProfileVisualizer: () => (
+    <div data-testid="profile-visualizer">ProfileVisualizer</div>
+  ),
   PremiumPromoToaster: () => null,
   ProfileFeatureToaster: () => null,
   JDAwarenessToaster: () => null,
@@ -47,9 +50,16 @@ vi.mock('../../../src/hooks/useResolvedTheme', () => ({
 describe('SettingsPopup Component', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    ;(window.electronAPI.getStoredCredentials as any).mockResolvedValue(createMockCredentials())
-    ;(window.electronAPI.profileGetStatus as any).mockResolvedValue({ hasProfile: false, profileMode: false })
-    ;(window.electronAPI.licenseCheckPremium as any).mockResolvedValue({ isPremium: false })
+    ;(window.electronAPI.getStoredCredentials as any).mockResolvedValue(
+      createMockCredentials(),
+    )
+    ;(window.electronAPI.profileGetStatus as any).mockResolvedValue({
+      hasProfile: false,
+      profileMode: false,
+    })
+    ;(window.electronAPI.licenseCheckPremium as any).mockResolvedValue({
+      isPremium: false,
+    })
     ;(window.electronAPI.getUndetectable as any).mockResolvedValue(false)
     ;(window.electronAPI.getActionButtonMode as any).mockResolvedValue('recap')
   })

@@ -1,8 +1,11 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import fs from 'fs'
-import path from 'path'
-import { createTestEnv, destroyTestEnv, type TestEnv } from './__helpers__/test-env'
-import { createTestSettings } from './__fixtures__/settings'
+import fs from 'node:fs'
+import path from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import {
+  createTestEnv,
+  destroyTestEnv,
+  type TestEnv,
+} from './__helpers__/test-env'
 import './__helpers__/shared-mocks'
 
 import { SettingsManager } from '../../electron/services/SettingsManager'
@@ -88,7 +91,10 @@ describe('Settings Flow Integration', () => {
     })
 
     it('handles missing settings directory gracefully', () => {
-      ;(global as any).__NATIVELY_TEST_USER_DATA__ = path.join(env.userDataPath, 'nonexistent')
+      ;(global as any).__NATIVELY_TEST_USER_DATA__ = path.join(
+        env.userDataPath,
+        'nonexistent',
+      )
       resetSettingsManager(SettingsManager)
 
       expect(() => SettingsManager.getInstance()).not.toThrow()

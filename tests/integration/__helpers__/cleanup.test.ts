@@ -1,7 +1,7 @@
-import { describe, it, expect, afterEach } from 'vitest'
-import fs from 'fs'
-import { createTestEnv, destroyTestEnv } from './test-env'
+import fs from 'node:fs'
+import { describe, expect, it } from 'vitest'
 import { createInMemoryDb } from './db-helpers'
+import { createTestEnv, destroyTestEnv } from './test-env'
 
 describe('Test Helpers', () => {
   describe('createTestEnv', () => {
@@ -25,9 +25,11 @@ describe('Test Helpers', () => {
     it('creates database with all required tables', () => {
       const db = createInMemoryDb()
 
-      const tables = db.prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-      ).all()
+      const tables = db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
+        )
+        .all()
 
       const tableNames = tables.map((t: any) => t.name)
       expect(tableNames).toContain('meetings')

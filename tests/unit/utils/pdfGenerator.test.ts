@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { generateMeetingPDF } from '../../../src/utils/pdfGenerator'
 
 const { mockDoc, MockJsPDF } = vi.hoisted(() => {
@@ -18,7 +18,7 @@ const { mockDoc, MockJsPDF } = vi.hoisted(() => {
     },
   }
 
-  const MockJsPDF = function () { return mockDoc } as any
+  const MockJsPDF = (() => mockDoc) as any
   MockJsPDF.prototype = mockDoc
 
   return { mockDoc, MockJsPDF }
@@ -47,24 +47,36 @@ describe('pdfGenerator', () => {
       generateMeetingPDF(meeting)
 
       // Title at 18pt bold — splitTextToSize returns arrays
-      expect(mockDoc.text).toHaveBeenCalledWith(['Weekly Standup'], 20, expect.any(Number))
+      expect(mockDoc.text).toHaveBeenCalledWith(
+        ['Weekly Standup'],
+        20,
+        expect.any(Number),
+      )
       expect(mockDoc.setFontSize).toHaveBeenCalledWith(18)
 
       // Date + duration
       expect(mockDoc.text).toHaveBeenCalledWith(
         [expect.stringContaining('2024-01-15')],
         20,
-        expect.any(Number)
+        expect.any(Number),
       )
       expect(mockDoc.text).toHaveBeenCalledWith(
         [expect.stringContaining('30 minutes')],
         20,
-        expect.any(Number)
+        expect.any(Number),
       )
 
       // Summary section header + text
-      expect(mockDoc.text).toHaveBeenCalledWith(['Summary'], 20, expect.any(Number))
-      expect(mockDoc.text).toHaveBeenCalledWith(['Team discussed sprint progress.'], 20, expect.any(Number))
+      expect(mockDoc.text).toHaveBeenCalledWith(
+        ['Summary'],
+        20,
+        expect.any(Number),
+      )
+      expect(mockDoc.text).toHaveBeenCalledWith(
+        ['Team discussed sprint progress.'],
+        20,
+        expect.any(Number),
+      )
     })
 
     it('should include action items and key points when provided', () => {
@@ -83,14 +95,38 @@ describe('pdfGenerator', () => {
       generateMeetingPDF(meeting)
 
       // Action items section
-      expect(mockDoc.text).toHaveBeenCalledWith(['Action Items'], 20, expect.any(Number))
-      expect(mockDoc.text).toHaveBeenCalledWith(['• Deploy v2'], 20, expect.any(Number))
-      expect(mockDoc.text).toHaveBeenCalledWith(['• Write tests'], 20, expect.any(Number))
+      expect(mockDoc.text).toHaveBeenCalledWith(
+        ['Action Items'],
+        20,
+        expect.any(Number),
+      )
+      expect(mockDoc.text).toHaveBeenCalledWith(
+        ['• Deploy v2'],
+        20,
+        expect.any(Number),
+      )
+      expect(mockDoc.text).toHaveBeenCalledWith(
+        ['• Write tests'],
+        20,
+        expect.any(Number),
+      )
 
       // Key points section
-      expect(mockDoc.text).toHaveBeenCalledWith(['Key Points'], 20, expect.any(Number))
-      expect(mockDoc.text).toHaveBeenCalledWith(['• Velocity is up'], 20, expect.any(Number))
-      expect(mockDoc.text).toHaveBeenCalledWith(['• No blockers'], 20, expect.any(Number))
+      expect(mockDoc.text).toHaveBeenCalledWith(
+        ['Key Points'],
+        20,
+        expect.any(Number),
+      )
+      expect(mockDoc.text).toHaveBeenCalledWith(
+        ['• Velocity is up'],
+        20,
+        expect.any(Number),
+      )
+      expect(mockDoc.text).toHaveBeenCalledWith(
+        ['• No blockers'],
+        20,
+        expect.any(Number),
+      )
     })
 
     it('should render transcript entries with speaker and text', () => {
@@ -109,23 +145,35 @@ describe('pdfGenerator', () => {
       generateMeetingPDF(meeting)
 
       // Transcript section header
-      expect(mockDoc.text).toHaveBeenCalledWith(['Transcript'], 20, expect.any(Number))
+      expect(mockDoc.text).toHaveBeenCalledWith(
+        ['Transcript'],
+        20,
+        expect.any(Number),
+      )
 
       // Speaker lines contain speaker name
       expect(mockDoc.text).toHaveBeenCalledWith(
         [expect.stringContaining('Alice')],
         20,
-        expect.any(Number)
+        expect.any(Number),
       )
       expect(mockDoc.text).toHaveBeenCalledWith(
         [expect.stringContaining('Bob')],
         20,
-        expect.any(Number)
+        expect.any(Number),
       )
 
       // Speaker text lines
-      expect(mockDoc.text).toHaveBeenCalledWith(['Hello team'], 20, expect.any(Number))
-      expect(mockDoc.text).toHaveBeenCalledWith(['Hi everyone'], 20, expect.any(Number))
+      expect(mockDoc.text).toHaveBeenCalledWith(
+        ['Hello team'],
+        20,
+        expect.any(Number),
+      )
+      expect(mockDoc.text).toHaveBeenCalledWith(
+        ['Hi everyone'],
+        20,
+        expect.any(Number),
+      )
     })
 
     it('should render chat Q&A and assist interactions in usage section', () => {
@@ -136,23 +184,52 @@ describe('pdfGenerator', () => {
         duration: '30 min',
         summary: 'Summary',
         usage: [
-          { type: 'chat' as const, timestamp: 1704067200000, question: 'What changed?', answer: 'Everything.' },
-          { type: 'assist' as const, timestamp: 1704067201000, answer: 'Consider adding tests.' },
+          {
+            type: 'chat' as const,
+            timestamp: 1704067200000,
+            question: 'What changed?',
+            answer: 'Everything.',
+          },
+          {
+            type: 'assist' as const,
+            timestamp: 1704067201000,
+            answer: 'Consider adding tests.',
+          },
         ],
       }
 
       generateMeetingPDF(meeting)
 
       // Section header
-      expect(mockDoc.text).toHaveBeenCalledWith(['AI Usage & Interactions'], 20, expect.any(Number))
+      expect(mockDoc.text).toHaveBeenCalledWith(
+        ['AI Usage & Interactions'],
+        20,
+        expect.any(Number),
+      )
 
       // Chat Q&A
-      expect(mockDoc.text).toHaveBeenCalledWith(['Q: What changed?'], 20, expect.any(Number))
-      expect(mockDoc.text).toHaveBeenCalledWith(['A: Everything.'], 20, expect.any(Number))
+      expect(mockDoc.text).toHaveBeenCalledWith(
+        ['Q: What changed?'],
+        20,
+        expect.any(Number),
+      )
+      expect(mockDoc.text).toHaveBeenCalledWith(
+        ['A: Everything.'],
+        20,
+        expect.any(Number),
+      )
 
       // Assist
-      expect(mockDoc.text).toHaveBeenCalledWith(['Assist:'], 20, expect.any(Number))
-      expect(mockDoc.text).toHaveBeenCalledWith(['Consider adding tests.'], 20, expect.any(Number))
+      expect(mockDoc.text).toHaveBeenCalledWith(
+        ['Assist:'],
+        20,
+        expect.any(Number),
+      )
+      expect(mockDoc.text).toHaveBeenCalledWith(
+        ['Consider adding tests.'],
+        20,
+        expect.any(Number),
+      )
     })
 
     it('should save PDF with sanitized filename from title', () => {
@@ -182,10 +259,14 @@ describe('pdfGenerator', () => {
       generateMeetingPDF(meeting)
 
       // Should still render title
-      expect(mockDoc.text).toHaveBeenCalledWith(['Empty Summary'], 20, expect.any(Number))
+      expect(mockDoc.text).toHaveBeenCalledWith(
+        ['Empty Summary'],
+        20,
+        expect.any(Number),
+      )
       // Summary header should NOT appear
       const summaryHeaderCalls = mockDoc.text.mock.calls.filter(
-        (args: any[]) => args[0][0] === 'Summary'
+        (args: any[]) => args[0][0] === 'Summary',
       )
       expect(summaryHeaderCalls.length).toBe(0)
     })
@@ -206,16 +287,22 @@ describe('pdfGenerator', () => {
       generateMeetingPDF(meeting)
 
       const actionHeaderCalls = mockDoc.text.mock.calls.filter(
-        (args: any[]) => args[0][0] === 'Action Items'
+        (args: any[]) => args[0][0] === 'Action Items',
       )
       expect(actionHeaderCalls.length).toBe(0)
       // Key points should still be present
-      expect(mockDoc.text).toHaveBeenCalledWith(['Key Points'], 20, expect.any(Number))
+      expect(mockDoc.text).toHaveBeenCalledWith(
+        ['Key Points'],
+        20,
+        expect.any(Number),
+      )
     })
 
     it('should add a new page when content exceeds page height', () => {
       // Make page height very small to force page break
-      Object.defineProperty(mockDoc.internal.pageSize, 'getHeight', { value: () => 50 })
+      Object.defineProperty(mockDoc.internal.pageSize, 'getHeight', {
+        value: () => 50,
+      })
 
       const meeting = {
         id: '1',

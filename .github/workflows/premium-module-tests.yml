@@ -32,3 +32,11 @@ jobs:
 
       - name: Run premium module tests
         run: npm run test:premium
+
+      # E2E tests for premium components require the premium submodule contents
+      # (templates, mock data, and component fixtures checked out via submodules: true)
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Premium E2E Tests
+        run: npm run test:e2e:premium

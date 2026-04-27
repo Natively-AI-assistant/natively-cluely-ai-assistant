@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useStreamBuffer } from '../../../src/hooks/useStreamBuffer'
 
 describe('useStreamBuffer', () => {
@@ -12,17 +12,21 @@ describe('useStreamBuffer', () => {
     rafCallback = null
     rafId = 0
 
-    rafSpy = vi.spyOn(global, 'requestAnimationFrame').mockImplementation((callback: FrameRequestCallback) => {
-      rafCallback = callback
-      rafId++
-      return rafId
-    })
+    rafSpy = vi
+      .spyOn(global, 'requestAnimationFrame')
+      .mockImplementation((callback: FrameRequestCallback) => {
+        rafCallback = callback
+        rafId++
+        return rafId
+      })
 
-    cancelRafSpy = vi.spyOn(global, 'cancelAnimationFrame').mockImplementation((id: number) => {
-      if (id === rafId) {
-        rafCallback = null
-      }
-    })
+    cancelRafSpy = vi
+      .spyOn(global, 'cancelAnimationFrame')
+      .mockImplementation((id: number) => {
+        if (id === rafId) {
+          rafCallback = null
+        }
+      })
   })
 
   afterEach(() => {

@@ -1,12 +1,12 @@
 import { test as base, expect } from '@playwright/test'
-import { LauncherPage } from '../pages/LauncherPage'
-import { SettingsPage } from '../pages/SettingsPage'
-import { OverlayPage } from '../pages/OverlayPage'
-import { MeetingPage } from '../pages/MeetingPage'
 import { CropperPage } from '../pages/CropperPage'
+import { LauncherPage } from '../pages/LauncherPage'
+import { MeetingPage } from '../pages/MeetingPage'
 import { ModelSelectorPage } from '../pages/ModelSelectorPage'
+import { OverlayPage } from '../pages/OverlayPage'
+import { SettingsPage } from '../pages/SettingsPage'
 import { setupElectronMock } from './electronMocks'
-import { scenarios, ScenarioName } from './mockScenarios'
+import { type ScenarioName, scenarios } from './mockScenarios'
 
 interface TestFixtures {
   scenario: ScenarioName

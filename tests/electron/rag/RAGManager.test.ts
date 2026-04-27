@@ -1,49 +1,117 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createElectronMock } from '../../mocks/electron.mock'
 
-const { mockPreprocess, mockChunk, mockSaveChunks, mockSaveSummary, mockIsReady,
-  mockQueueMeeting, mockRetrieve, mockRetrieveGlobal, mockDetectScope, mockHasEmbeddings,
-  mockGetQueueStatus, mockDeleteChunksForMeeting, mockFeedSegments, mockLiveStart,
-  mockLiveStop, mockLiveIsRunning, mockLiveGetActive, mockLiveHasIndexed, mockLiveCount,
-  mockDbPrepare } = vi.hoisted(() => ({
+const {
+  mockPreprocess,
+  mockChunk,
+  mockSaveChunks,
+  mockSaveSummary,
+  mockIsReady,
+  mockQueueMeeting,
+  mockRetrieve,
+  mockRetrieveGlobal,
+  mockDetectScope,
+  mockHasEmbeddings,
+  mockGetQueueStatus,
+  mockDeleteChunksForMeeting,
+  mockFeedSegments,
+  mockLiveStart,
+  mockLiveStop,
+  mockLiveIsRunning,
+  mockLiveGetActive,
+  mockLiveHasIndexed,
+  mockLiveCount,
+  mockDbPrepare,
+} = vi.hoisted(() => ({
   mockPreprocess: vi.fn((t: any[]) => t),
   mockChunk: vi.fn(() => [{ id: 'chunk-1' }, { id: 'chunk-2' }]),
-  mockSaveChunks: vi.fn(), mockSaveSummary: vi.fn(), mockIsReady: vi.fn(() => false),
+  mockSaveChunks: vi.fn(),
+  mockSaveSummary: vi.fn(),
+  mockIsReady: vi.fn(() => false),
   mockQueueMeeting: vi.fn().mockResolvedValue(undefined),
-  mockRetrieve: vi.fn().mockResolvedValue({ chunks: [{ text: 'ctx' }], formattedContext: 'ctx', intent: 'answer' }),
-  mockRetrieveGlobal: vi.fn().mockResolvedValue({ chunks: [{ text: 'ctx' }], formattedContext: 'ctx', intent: 'answer' }),
+  mockRetrieve: vi.fn().mockResolvedValue({
+    chunks: [{ text: 'ctx' }],
+    formattedContext: 'ctx',
+    intent: 'answer',
+  }),
+  mockRetrieveGlobal: vi.fn().mockResolvedValue({
+    chunks: [{ text: 'ctx' }],
+    formattedContext: 'ctx',
+    intent: 'answer',
+  }),
   mockDetectScope: vi.fn(() => 'global'),
-  mockHasEmbeddings: vi.fn(() => true), mockGetQueueStatus: vi.fn(),
-  mockDeleteChunksForMeeting: vi.fn(), mockFeedSegments: vi.fn(),
-  mockLiveStart: vi.fn(), mockLiveStop: vi.fn().mockResolvedValue(undefined),
-  mockLiveIsRunning: vi.fn(() => false), mockLiveGetActive: vi.fn(),
-  mockLiveHasIndexed: vi.fn(), mockLiveCount: vi.fn(),
+  mockHasEmbeddings: vi.fn(() => true),
+  mockGetQueueStatus: vi.fn(),
+  mockDeleteChunksForMeeting: vi.fn(),
+  mockFeedSegments: vi.fn(),
+  mockLiveStart: vi.fn(),
+  mockLiveStop: vi.fn().mockResolvedValue(undefined),
+  mockLiveIsRunning: vi.fn(() => false),
+  mockLiveGetActive: vi.fn(),
+  mockLiveHasIndexed: vi.fn(),
+  mockLiveCount: vi.fn(),
   mockDbPrepare: vi.fn().mockReturnValue({ run: vi.fn() }),
 }))
 
-vi.mock('electron', () => createElectronMock({ app: { getPath: vi.fn(() => '/tmp'), getVersion: vi.fn(() => '1.0.0') } }))
+vi.mock('electron', () =>
+  createElectronMock({
+    app: { getPath: vi.fn(() => '/tmp'), getVersion: vi.fn(() => '1.0.0') },
+  }),
+)
 vi.mock('better-sqlite3', () => ({ Database: vi.fn() }))
 
 // Each mock class must be a proper constructor (function/class) so `new X()` works
 vi.mock('../../../electron/rag/VectorStore', () => ({
-  VectorStore: class { saveChunks = mockSaveChunks; saveSummary = mockSaveSummary; hasEmbeddings = mockHasEmbeddings; deleteChunksForMeeting = mockDeleteChunksForMeeting },
+  VectorStore: class {
+    saveChunks = mockSaveChunks
+    saveSummary = mockSaveSummary
+    hasEmbeddings = mockHasEmbeddings
+    deleteChunksForMeeting = mockDeleteChunksForMeeting
+  },
 }))
 vi.mock('../../../electron/rag/EmbeddingPipeline', () => ({
-  EmbeddingPipeline: class { initialize = vi.fn().mockResolvedValue(undefined); isReady = mockIsReady; queueMeeting = mockQueueMeeting; getQueueStatus = mockGetQueueStatus; processQueue = vi.fn(); getActiveProviderName = vi.fn() },
+  EmbeddingPipeline: class {
+    initialize = vi.fn().mockResolvedValue(undefined)
+    isReady = mockIsReady
+    queueMeeting = mockQueueMeeting
+    getQueueStatus = mockGetQueueStatus
+    processQueue = vi.fn()
+    getActiveProviderName = vi.fn()
+  },
 }))
 vi.mock('../../../electron/rag/RAGRetriever', () => ({
-  RAGRetriever: class { retrieve = mockRetrieve; retrieveGlobal = mockRetrieveGlobal; detectScope = mockDetectScope },
+  RAGRetriever: class {
+    retrieve = mockRetrieve
+    retrieveGlobal = mockRetrieveGlobal
+    detectScope = mockDetectScope
+  },
 }))
 vi.mock('../../../electron/rag/LiveRAGIndexer', () => ({
-  LiveRAGIndexer: class { start = mockLiveStart; stop = mockLiveStop; feedSegments = mockFeedSegments; isRunning = mockLiveIsRunning; getActiveMeetingId = mockLiveGetActive; hasIndexedChunks = mockLiveHasIndexed; getIndexedChunkCount = mockLiveCount },
+  LiveRAGIndexer: class {
+    start = mockLiveStart
+    stop = mockLiveStop
+    feedSegments = mockFeedSegments
+    isRunning = mockLiveIsRunning
+    getActiveMeetingId = mockLiveGetActive
+    hasIndexedChunks = mockLiveHasIndexed
+    getIndexedChunkCount = mockLiveCount
+  },
 }))
-vi.mock('../../../electron/rag/TranscriptPreprocessor', () => ({ preprocessTranscript: mockPreprocess }))
-vi.mock('../../../electron/rag/SemanticChunker', () => ({ chunkTranscript: mockChunk }))
-vi.mock('../../../electron/rag/prompts', () => ({ buildRAGPrompt: vi.fn().mockReturnValue('prompt'), NO_CONTEXT_FALLBACK: 'No context', NO_GLOBAL_CONTEXT_FALLBACK: 'No global context' }))
+vi.mock('../../../electron/rag/TranscriptPreprocessor', () => ({
+  preprocessTranscript: mockPreprocess,
+}))
+vi.mock('../../../electron/rag/SemanticChunker', () => ({
+  chunkTranscript: mockChunk,
+}))
+vi.mock('../../../electron/rag/prompts', () => ({
+  buildRAGPrompt: vi.fn().mockReturnValue('prompt'),
+  NO_CONTEXT_FALLBACK: 'No context',
+  NO_GLOBAL_CONTEXT_FALLBACK: 'No global context',
+}))
 vi.mock('../../../electron/LLMHelper', () => ({ LLMHelper: vi.fn() }))
 
-import { RAGManager } from '../../../electron/rag/RAGManager'
 import { NO_GLOBAL_CONTEXT_FALLBACK } from '../../../electron/rag/prompts'
+import { RAGManager } from '../../../electron/rag/RAGManager'
 
 function makeRAGManager(overrides: Record<string, any> = {}) {
   return new RAGManager({
@@ -60,7 +128,11 @@ describe('RAGManager', () => {
 
   describe('constructor', () => {
     it('calls initialize on embedding pipeline with keys', () => {
-      const mgr = makeRAGManager({ openaiKey: 'k1', geminiKey: 'k2', ollamaUrl: 'http://localhost' })
+      const mgr = makeRAGManager({
+        openaiKey: 'k1',
+        geminiKey: 'k2',
+        ollamaUrl: 'http://localhost',
+      })
       expect(mgr).toBeDefined()
     })
   })
@@ -88,11 +160,18 @@ describe('RAGManager', () => {
     it('preprocesses, chunks, saves, and queues embeddings when ready', async () => {
       mockIsReady.mockReturnValue(true)
       const segments = [{ speaker: 'A', text: 'hello', timestamp: 0 }]
-      const result = await makeRAGManager().processMeeting('m1', segments, 'summary')
+      const result = await makeRAGManager().processMeeting(
+        'm1',
+        segments,
+        'summary',
+      )
 
       expect(mockPreprocess).toHaveBeenCalledWith(segments)
       expect(mockChunk).toHaveBeenCalledWith('m1', segments)
-      expect(mockSaveChunks).toHaveBeenCalledWith([{ id: 'chunk-1' }, { id: 'chunk-2' }])
+      expect(mockSaveChunks).toHaveBeenCalledWith([
+        { id: 'chunk-1' },
+        { id: 'chunk-2' },
+      ])
       expect(mockSaveSummary).toHaveBeenCalledWith('m1', 'summary')
       expect(mockQueueMeeting).toHaveBeenCalledWith('m1')
       expect(result).toEqual({ chunkCount: 2 })
@@ -108,13 +187,17 @@ describe('RAGManager', () => {
 
     it('skips queueing when pipeline not ready', async () => {
       mockIsReady.mockReturnValue(false)
-      await makeRAGManager().processMeeting('m1', [{ speaker: 'A', text: 'hi', timestamp: 0 }])
+      await makeRAGManager().processMeeting('m1', [
+        { speaker: 'A', text: 'hi', timestamp: 0 },
+      ])
       expect(mockSaveChunks).toHaveBeenCalled()
       expect(mockQueueMeeting).not.toHaveBeenCalled()
     })
 
     it('does not call saveSummary when summary not provided', async () => {
-      await makeRAGManager().processMeeting('m1', [{ speaker: 'A', text: 'hi', timestamp: 0 }])
+      await makeRAGManager().processMeeting('m1', [
+        { speaker: 'A', text: 'hi', timestamp: 0 },
+      ])
       expect(mockSaveSummary).not.toHaveBeenCalled()
     })
   })
@@ -123,7 +206,11 @@ describe('RAGManager', () => {
     function makeQueryMgr() {
       mockIsReady.mockReturnValue(true)
       const mgr = makeRAGManager()
-      mgr.setLLMHelper({ streamChatWithGemini: vi.fn(async function*() { yield 'token' }) } as any)
+      mgr.setLLMHelper({
+        streamChatWithGemini: vi.fn(async function* () {
+          yield 'token'
+        }),
+      } as any)
       return mgr
     }
 
@@ -149,7 +236,11 @@ describe('RAGManager', () => {
     })
 
     it('throws NO_RELEVANT_CONTEXT_FOUND when retriever returns empty', async () => {
-      mockRetrieve.mockResolvedValueOnce({ chunks: [], formattedContext: '', intent: '' })
+      mockRetrieve.mockResolvedValueOnce({
+        chunks: [],
+        formattedContext: '',
+        intent: '',
+      })
       const gen = makeQueryMgr().queryMeeting('m1', 'q')
       await expect(gen.next()).rejects.toThrow('NO_RELEVANT_CONTEXT_FOUND')
     })
@@ -179,10 +270,18 @@ describe('RAGManager', () => {
     })
 
     it('yields fallback when no global context', async () => {
-      mockRetrieveGlobal.mockResolvedValueOnce({ chunks: [], formattedContext: '', intent: '' })
+      mockRetrieveGlobal.mockResolvedValueOnce({
+        chunks: [],
+        formattedContext: '',
+        intent: '',
+      })
       mockIsReady.mockReturnValue(true)
       const mgr = makeRAGManager()
-      mgr.setLLMHelper({ streamChatWithGemini: vi.fn(async function*() { yield 'x' }) } as any)
+      mgr.setLLMHelper({
+        streamChatWithGemini: vi.fn(async function* () {
+          yield 'x'
+        }),
+      } as any)
       const gen = mgr.queryGlobal('q')
       const { value } = await gen.next()
       expect(value).toBe(NO_GLOBAL_CONTEXT_FALLBACK)
@@ -194,7 +293,11 @@ describe('RAGManager', () => {
       mockDetectScope.mockReturnValue('meeting')
       mockIsReady.mockReturnValue(true)
       const mgr = makeRAGManager()
-      mgr.setLLMHelper({ streamChatWithGemini: vi.fn(async function*() { yield 'a' }) } as any)
+      mgr.setLLMHelper({
+        streamChatWithGemini: vi.fn(async function* () {
+          yield 'a'
+        }),
+      } as any)
       const gen = mgr.query('q', 'm1')
       const { value } = await gen.next()
       expect(value).toBe('a')
@@ -205,7 +308,11 @@ describe('RAGManager', () => {
       mockDetectScope.mockReturnValue('global')
       mockIsReady.mockReturnValue(true)
       const mgr = makeRAGManager()
-      mgr.setLLMHelper({ streamChatWithGemini: vi.fn(async function*() { yield 'b' }) } as any)
+      mgr.setLLMHelper({
+        streamChatWithGemini: vi.fn(async function* () {
+          yield 'b'
+        }),
+      } as any)
       const gen = mgr.query('q', 'm1')
       const { value } = await gen.next()
       expect(value).toBe('b')
@@ -216,12 +323,16 @@ describe('RAGManager', () => {
     it('calls vectorStore.deleteChunksForMeeting and clears queue', () => {
       makeRAGManager().deleteMeetingData('m1')
       expect(mockDeleteChunksForMeeting).toHaveBeenCalledWith('m1')
-      expect((mockDbPrepare as any)).toHaveBeenCalledWith('DELETE FROM embedding_queue WHERE meeting_id = ?')
+      expect(mockDbPrepare as any).toHaveBeenCalledWith(
+        'DELETE FROM embedding_queue WHERE meeting_id = ?',
+      )
     })
 
     it('deletes transient meeting row for live-meeting-current', () => {
       makeRAGManager().deleteMeetingData('live-meeting-current')
-      expect((mockDbPrepare as any)).toHaveBeenCalledWith('DELETE FROM meetings WHERE id = ?')
+      expect(mockDbPrepare as any).toHaveBeenCalledWith(
+        'DELETE FROM meetings WHERE id = ?',
+      )
     })
 
     it('does not delete meeting row for non-live IDs', () => {
@@ -231,7 +342,9 @@ describe('RAGManager', () => {
     })
 
     it('handles queue delete errors gracefully', () => {
-      mockDbPrepare.mockImplementationOnce(() => { throw new Error('db error') })
+      mockDbPrepare.mockImplementationOnce(() => {
+        throw new Error('db error')
+      })
       expect(() => makeRAGManager().deleteMeetingData('m1')).not.toThrow()
     })
   })
@@ -283,7 +396,9 @@ describe('RAGManager', () => {
     it('startLiveIndexing inserts meeting row and starts indexer when ready', () => {
       mockIsReady.mockReturnValue(true)
       makeRAGManager().startLiveIndexing('m1')
-      expect((mockDbPrepare as any)).toHaveBeenCalledWith(expect.stringContaining('INSERT OR IGNORE INTO meetings'))
+      expect(mockDbPrepare as any).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT OR IGNORE INTO meetings'),
+      )
       expect(mockLiveStart).toHaveBeenCalledWith('m1')
     })
   })
@@ -297,9 +412,19 @@ describe('RAGManager', () => {
 
   describe('getQueueStatus', () => {
     it('delegates to embedding pipeline', () => {
-      mockGetQueueStatus.mockReturnValue({ pending: 5, processing: 1, completed: 10, failed: 0 })
+      mockGetQueueStatus.mockReturnValue({
+        pending: 5,
+        processing: 1,
+        completed: 10,
+        failed: 0,
+      })
       const result = makeRAGManager().getQueueStatus()
-      expect(result).toEqual({ pending: 5, processing: 1, completed: 10, failed: 0 })
+      expect(result).toEqual({
+        pending: 5,
+        processing: 1,
+        completed: 10,
+        failed: 0,
+      })
     })
   })
 })

@@ -1,5 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { RateLimiter, createProviderRateLimiters } from '../../../electron/services/RateLimiter'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  createProviderRateLimiters,
+  RateLimiter,
+} from '../../../electron/services/RateLimiter'
 
 describe('RateLimiter', () => {
   let rateLimiter: RateLimiter
@@ -164,7 +167,7 @@ describe('createProviderRateLimiters', () => {
   })
 
   it('should create RateLimiter instances', () => {
-    Object.values(limiters).forEach(limiter => {
+    Object.values(limiters).forEach((limiter) => {
       expect(limiter).toBeInstanceOf(RateLimiter)
     })
   })

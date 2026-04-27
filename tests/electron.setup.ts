@@ -1,4 +1,4 @@
-import { beforeAll, afterAll, afterEach, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, vi } from 'vitest'
 import { createElectronMock, resetElectronMock } from './mocks/electron.mock'
 import { server } from './msw/server'
 

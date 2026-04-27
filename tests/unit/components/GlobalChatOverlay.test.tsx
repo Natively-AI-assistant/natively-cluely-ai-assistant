@@ -1,9 +1,11 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import GlobalChatOverlay from '../../../src/components/GlobalChatOverlay'
-import React from 'react'
 
-import { installElectronAPIMock, fireIPCEvent } from '../../mocks/electronAPI.mock'
+import {
+  fireIPCEvent,
+  installElectronAPIMock,
+} from '../../mocks/electronAPI.mock'
 
 // Mock scrollIntoView for refs
 Element.prototype.scrollIntoView = vi.fn()
@@ -92,7 +94,9 @@ describe('GlobalChatOverlay', () => {
 
   it('should render nothing when isOpen is false', () => {
     const onClose = vi.fn()
-    const { container } = render(<GlobalChatOverlay isOpen={false} onClose={onClose} />)
+    const { container } = render(
+      <GlobalChatOverlay isOpen={false} onClose={onClose} />,
+    )
 
     expect(container.querySelector('input')).not.toBeInTheDocument()
     expect(container.querySelector('button')).not.toBeInTheDocument()
@@ -100,7 +104,13 @@ describe('GlobalChatOverlay', () => {
 
   it('should auto-submit initialQuery on open', async () => {
     const onClose = vi.fn()
-    render(<GlobalChatOverlay isOpen={true} onClose={onClose} initialQuery="initial search" />)
+    render(
+      <GlobalChatOverlay
+        isOpen={true}
+        onClose={onClose}
+        initialQuery="initial search"
+      />,
+    )
 
     // Wait for the 100ms setTimeout + 200ms typing indicator delay
     await act(async () => {
@@ -113,7 +123,9 @@ describe('GlobalChatOverlay', () => {
 
   it('should clean up on unmount', () => {
     const onClose = vi.fn()
-    const { unmount } = render(<GlobalChatOverlay isOpen={true} onClose={onClose} />)
+    const { unmount } = render(
+      <GlobalChatOverlay isOpen={true} onClose={onClose} />,
+    )
 
     expect(() => unmount()).not.toThrow()
   })
@@ -171,7 +183,9 @@ describe('GlobalChatOverlay', () => {
       vi.advanceTimersByTime(300)
     })
 
-    expect(window.electronAPI.ragQueryGlobal).toHaveBeenCalledWith('search for meetings')
+    expect(window.electronAPI.ragQueryGlobal).toHaveBeenCalledWith(
+      'search for meetings',
+    )
   })
 
   it('should not submit empty queries', () => {
@@ -208,7 +222,9 @@ describe('GlobalChatOverlay', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByText("Couldn't get a response. Please try again.")).toBeInTheDocument()
+      expect(
+        screen.getByText("Couldn't get a response. Please try again."),
+      ).toBeInTheDocument()
     })
   })
 
@@ -275,7 +291,9 @@ describe('GlobalChatOverlay', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByText('Something went wrong. Please try again.')).toBeInTheDocument()
+      expect(
+        screen.getByText('Something went wrong. Please try again.'),
+      ).toBeInTheDocument()
     })
   })
 

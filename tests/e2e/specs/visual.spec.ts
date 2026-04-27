@@ -3,7 +3,7 @@
  * Run with: npm run test:e2e:visual
  * Tagged with @visual for selective execution.
  */
-import { test, expect } from '../fixtures/test'
+import { expect, test } from '../fixtures/test'
 
 test.describe('Visual Regression @visual', () => {
   test('launcher renders correctly @visual', async ({ page, launcher }) => {
@@ -21,19 +21,28 @@ test.describe('Visual Regression @visual', () => {
     })
   })
 
-  test('settings panel renders correctly @visual', async ({ page, launcher }) => {
+  test('settings panel renders correctly @visual', async ({
+    page,
+    launcher,
+  }) => {
     await launcher.goto()
     await launcher.clickSettingsGear()
-    await expect(page.locator('#settings-panel')).toHaveScreenshot('settings-panel.png', {
-      maxDiffPixelRatio: 0.02,
-    })
+    await expect(page.locator('#settings-panel')).toHaveScreenshot(
+      'settings-panel.png',
+      {
+        maxDiffPixelRatio: 0.02,
+      },
+    )
   })
 
   test('overlay renders correctly @visual', async ({ page, overlay }) => {
     await overlay.goto()
-    await expect(page.locator('.overlay-shell-surface')).toHaveScreenshot('overlay-shell.png', {
-      maxDiffPixelRatio: 0.02,
-    })
+    await expect(page.locator('.overlay-shell-surface')).toHaveScreenshot(
+      'overlay-shell.png',
+      {
+        maxDiffPixelRatio: 0.02,
+      },
+    )
   })
 
   test('cropper renders correctly @visual', async ({ page, cropper }) => {
@@ -44,7 +53,10 @@ test.describe('Visual Regression @visual', () => {
     })
   })
 
-  test('model selector renders correctly @visual', async ({ page, modelSelector }) => {
+  test('model selector renders correctly @visual', async ({
+    page,
+    modelSelector,
+  }) => {
     // Clear any cached state from previous runs
     await page.addInitScript(() => {
       localStorage.removeItem('cached-models')
@@ -52,9 +64,12 @@ test.describe('Visual Regression @visual', () => {
     })
     await modelSelector.goto()
     // Wait for the loading spinner to disappear and models to render
-    await page.waitForFunction(() => {
-      return !document.querySelector('.animate-spin')
-    }, { timeout: 10000 })
+    await page.waitForFunction(
+      () => {
+        return !document.querySelector('.animate-spin')
+      },
+      { timeout: 10000 },
+    )
     // Wait a bit more for the UI to settle
     await page.waitForTimeout(500)
     await expect(page).toHaveScreenshot('model-selector.png', {

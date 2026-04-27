@@ -38,6 +38,7 @@
     "test:e2e": "npm run pretest && playwright test",
     "test:e2e:ci": "npm run pretest && playwright install --with-deps && playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "test:e2e:premium": "playwright test --config playwright.premium.config.ts",
     "test:visual": "playwright test --grep @visual",
     "test:rust": "cd native-module && cargo test",
     "test:mutate": "stryker run",

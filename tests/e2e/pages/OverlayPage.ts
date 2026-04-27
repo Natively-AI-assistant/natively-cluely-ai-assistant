@@ -1,15 +1,13 @@
-import { Page, expect } from '@playwright/test'
+import { expect } from '@playwright/test'
 import { BasePage } from './BasePage'
 
 export class OverlayPage extends BasePage {
-  constructor(page: Page) {
-    super(page)
-  }
-
   async goto() {
     await this.dismissOverlays()
     await this.page.goto('/?window=overlay')
-    await expect(this.page.locator('.overlay-shell-surface')).toBeVisible({ timeout: 10000 })
+    await expect(this.page.locator('.overlay-shell-surface')).toBeVisible({
+      timeout: 10000,
+    })
   }
 
   async getTopPill() {

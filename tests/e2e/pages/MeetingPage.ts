@@ -1,13 +1,10 @@
-import { Page } from '@playwright/test'
 import { BasePage } from './BasePage'
 
 export class MeetingPage extends BasePage {
-  constructor(page: Page) {
-    super(page)
-  }
-
   getMeetingItems() {
-    return this.page.locator('[data-testid="meeting-item"], main .group.relative.flex.items-center')
+    return this.page.locator(
+      '[data-testid="meeting-item"], main .group.relative.flex.items-center',
+    )
   }
 
   async clickMeeting(index: number = 0) {
@@ -17,7 +14,9 @@ export class MeetingPage extends BasePage {
   }
 
   getDetailTabs() {
-    return this.page.locator('[role="tablist"] button, header button:has-text("Transcript"), header button:has-text("Summary"), header button:has-text("Usage")')
+    return this.page.locator(
+      '[role="tablist"] button, header button:has-text("Transcript"), header button:has-text("Summary"), header button:has-text("Usage")',
+    )
   }
 
   async switchToTab(tabName: string) {
@@ -26,9 +25,9 @@ export class MeetingPage extends BasePage {
   }
 
   getBackButton() {
-    return this.page.getByRole('button', { name: /back/i }).or(
-      this.page.locator('header button').first()
-    )
+    return this.page
+      .getByRole('button', { name: /back/i })
+      .or(this.page.locator('header button').first())
   }
 
   async goBack() {
@@ -37,14 +36,20 @@ export class MeetingPage extends BasePage {
   }
 
   getTranscriptContent() {
-    return this.page.locator('[data-testid="transcript-content"], .transcript-content').first()
+    return this.page
+      .locator('[data-testid="transcript-content"], .transcript-content')
+      .first()
   }
 
   getSummaryContent() {
-    return this.page.locator('[data-testid="summary-content"], .summary-content').first()
+    return this.page
+      .locator('[data-testid="summary-content"], .summary-content')
+      .first()
   }
 
   getActionItemsContent() {
-    return this.page.locator('[data-testid="action-items-content"], .action-items-content').first()
+    return this.page
+      .locator('[data-testid="action-items-content"], .action-items-content')
+      .first()
   }
 }

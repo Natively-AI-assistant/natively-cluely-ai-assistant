@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { cn } from '../../../src/lib/utils'
 
 describe('utils', () => {
@@ -24,7 +24,9 @@ describe('utils', () => {
     })
 
     it('handles Tailwind class merging with mixed valid and invalid inputs', () => {
-      expect(cn('bg-blue-500', undefined, 'text-white', '', 'p-4')).toBe('bg-blue-500 text-white p-4')
+      expect(cn('bg-blue-500', undefined, 'text-white', '', 'p-4')).toBe(
+        'bg-blue-500 text-white p-4',
+      )
     })
 
     it('preserves whitespace-containing class strings', () => {

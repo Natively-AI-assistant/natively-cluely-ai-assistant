@@ -23,7 +23,9 @@ export const mockDefaultSettings: E2EMockSettings = {
   disguise: 'none',
 }
 
-export function mockSettingsWithOverrides(overrides: Partial<E2EMockSettings>): E2EMockSettings {
+export function mockSettingsWithOverrides(
+  overrides: Partial<E2EMockSettings>,
+): E2EMockSettings {
   return {
     ...mockDefaultSettings,
     ...overrides,

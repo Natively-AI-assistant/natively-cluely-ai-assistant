@@ -1,13 +1,14 @@
-import React from 'react'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type React from 'react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Mock react-query
 vi.mock('react-query', () => ({
   QueryClient: class MockQueryClient {
     clear = vi.fn()
   },
-  QueryClientProvider: ({ children }: { children: React.ReactNode }) => children,
+  QueryClientProvider: ({ children }: { children: React.ReactNode }) =>
+    children,
 }))
 
 // Mock components used by App
@@ -15,7 +16,9 @@ vi.mock('../../src/components/NativelyInterface', () => ({
   default: ({ onEndMeeting }: any) => (
     <div data-testid="natively-interface">
       NativelyInterface
-      <button data-testid="end-meeting-btn" onClick={onEndMeeting}>End Meeting</button>
+      <button data-testid="end-meeting-btn" onClick={onEndMeeting}>
+        End Meeting
+      </button>
     </div>
   ),
 }))
@@ -28,8 +31,15 @@ vi.mock('../../src/components/Launcher', () => ({
   default: ({ onStartMeeting, onOpenSettings }: any) => (
     <div data-testid="launcher">
       Launcher
-      <button data-testid="start-meeting-btn" onClick={onStartMeeting}>Start Meeting</button>
-      <button data-testid="open-settings-btn" onClick={() => onOpenSettings('general')}>Settings</button>
+      <button data-testid="start-meeting-btn" onClick={onStartMeeting}>
+        Start Meeting
+      </button>
+      <button
+        data-testid="open-settings-btn"
+        onClick={() => onOpenSettings('general')}
+      >
+        Settings
+      </button>
     </div>
   ),
 }))
@@ -43,7 +53,9 @@ vi.mock('../../src/components/SettingsOverlay', () => ({
     isOpen ? (
       <div data-testid="settings-overlay">
         SettingsOverlay
-        <button data-testid="close-settings-btn" onClick={onClose}>Close</button>
+        <button data-testid="close-settings-btn" onClick={onClose}>
+          Close
+        </button>
       </div>
     ) : null,
 }))
@@ -52,7 +64,9 @@ vi.mock('../../src/components/StartupSequence', () => ({
   default: ({ onComplete }: any) => (
     <div data-testid="startup-sequence">
       StartupSequence
-      <button data-testid="startup-complete-btn" onClick={onComplete}>Complete</button>
+      <button data-testid="startup-complete-btn" onClick={onComplete}>
+        Complete
+      </button>
     </div>
   ),
 }))

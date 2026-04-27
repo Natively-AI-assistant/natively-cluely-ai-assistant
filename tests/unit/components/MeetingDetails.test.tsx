@@ -1,13 +1,13 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import MeetingDetails from '../../../src/components/MeetingDetails'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import React from 'react'
-
-import { installElectronAPIMock } from '../../mocks/electronAPI.mock'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import MeetingDetails from '../../../src/components/MeetingDetails'
 import { createMockMeeting, createMockTranscript } from '../../fixtures'
+import { installElectronAPIMock } from '../../mocks/electronAPI.mock'
 
 vi.mock('react-markdown', () => ({
-  default: ({ children }: { children: string }) => React.createElement('div', null, children),
+  default: ({ children }: { children: string }) =>
+    React.createElement('div', null, children),
 }))
 
 vi.mock('remark-gfm', () => ({
@@ -16,7 +16,8 @@ vi.mock('remark-gfm', () => ({
 }))
 
 vi.mock('react-syntax-highlighter', () => ({
-  Prism: ({ children }: { children: string }) => React.createElement('pre', null, children),
+  Prism: ({ children }: { children: string }) =>
+    React.createElement('pre', null, children),
 }))
 
 vi.mock('../../../src/components/icon.png', () => ({
@@ -41,7 +42,11 @@ const mockMeeting: any = {
     keyPointsTitle: 'Key Points',
   },
   transcript: [
-    createMockTranscript({ speaker: 'John', text: 'Hello everyone', timestamp: 1000 }),
+    createMockTranscript({
+      speaker: 'John',
+      text: 'Hello everyone',
+      timestamp: 1000,
+    }),
     createMockTranscript({ speaker: 'Jane', text: 'Hi John', timestamp: 5000 }),
   ],
   usage: [],
@@ -61,7 +66,11 @@ describe('MeetingDetails', () => {
 
   it('renders title and overview on the default summary tab', () => {
     render(
-      <MeetingDetails meeting={mockMeeting} onBack={vi.fn()} onOpenSettings={vi.fn()} />
+      <MeetingDetails
+        meeting={mockMeeting}
+        onBack={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
     )
 
     expect(screen.getByText('Test Meeting')).toBeInTheDocument()
@@ -71,7 +80,11 @@ describe('MeetingDetails', () => {
 
   it('renders action items and key points on summary tab', () => {
     render(
-      <MeetingDetails meeting={mockMeeting} onBack={vi.fn()} onOpenSettings={vi.fn()} />
+      <MeetingDetails
+        meeting={mockMeeting}
+        onBack={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
     )
 
     expect(screen.getByText('Action item 1')).toBeInTheDocument()
@@ -82,11 +95,15 @@ describe('MeetingDetails', () => {
 
   it('renders Summary, Transcript, and Usage tabs', () => {
     render(
-      <MeetingDetails meeting={mockMeeting} onBack={vi.fn()} onOpenSettings={vi.fn()} />
+      <MeetingDetails
+        meeting={mockMeeting}
+        onBack={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
     )
 
     const tabButtons = screen.getAllByRole('button')
-    const tabLabels = tabButtons.map(btn => btn.textContent)
+    const tabLabels = tabButtons.map((btn) => btn.textContent)
 
     expect(tabLabels).toContain('Summary')
     expect(tabLabels).toContain('Transcript')
@@ -95,7 +112,11 @@ describe('MeetingDetails', () => {
 
   it('shows transcript content when Transcript tab is clicked', () => {
     render(
-      <MeetingDetails meeting={mockMeeting} onBack={vi.fn()} onOpenSettings={vi.fn()} />
+      <MeetingDetails
+        meeting={mockMeeting}
+        onBack={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
     )
 
     fireEvent.click(screen.getByText('Transcript'))
@@ -108,7 +129,11 @@ describe('MeetingDetails', () => {
 
   it('does not show transcript content on the default summary tab', () => {
     render(
-      <MeetingDetails meeting={mockMeeting} onBack={vi.fn()} onOpenSettings={vi.fn()} />
+      <MeetingDetails
+        meeting={mockMeeting}
+        onBack={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
     )
 
     // Summary tab is active by default — transcript text should not be visible
@@ -117,7 +142,11 @@ describe('MeetingDetails', () => {
 
   it('switches from summary to usage tab and back', () => {
     render(
-      <MeetingDetails meeting={mockMeeting} onBack={vi.fn()} onOpenSettings={vi.fn()} />
+      <MeetingDetails
+        meeting={mockMeeting}
+        onBack={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
     )
 
     // Overview visible on summary tab
@@ -134,7 +163,11 @@ describe('MeetingDetails', () => {
 
   it('renders the tab navigation with Summary as default active tab', () => {
     render(
-      <MeetingDetails meeting={mockMeeting} onBack={vi.fn()} onOpenSettings={vi.fn()} />
+      <MeetingDetails
+        meeting={mockMeeting}
+        onBack={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
     )
 
     // Summary tab should be active — overview content visible
@@ -153,7 +186,11 @@ describe('MeetingDetails', () => {
     }
 
     render(
-      <MeetingDetails meeting={minimal as any} onBack={vi.fn()} onOpenSettings={vi.fn()} />
+      <MeetingDetails
+        meeting={minimal as any}
+        onBack={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
     )
 
     expect(screen.getByText('Quick Sync')).toBeInTheDocument()
@@ -165,13 +202,25 @@ describe('MeetingDetails', () => {
     const meetingWithUser = {
       ...mockMeeting,
       transcript: [
-        createMockTranscript({ speaker: 'user', text: 'My message', timestamp: 1000 }),
-        createMockTranscript({ speaker: 'Alice', text: 'Her message', timestamp: 2000 }),
+        createMockTranscript({
+          speaker: 'user',
+          text: 'My message',
+          timestamp: 1000,
+        }),
+        createMockTranscript({
+          speaker: 'Alice',
+          text: 'Her message',
+          timestamp: 2000,
+        }),
       ],
     }
 
     render(
-      <MeetingDetails meeting={meetingWithUser} onBack={vi.fn()} onOpenSettings={vi.fn()} />
+      <MeetingDetails
+        meeting={meetingWithUser}
+        onBack={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
     )
 
     fireEvent.click(screen.getByText('Transcript'))
@@ -184,14 +233,30 @@ describe('MeetingDetails', () => {
     const meetingWithAI = {
       ...mockMeeting,
       transcript: [
-        createMockTranscript({ speaker: 'user', text: 'Hello', timestamp: 1000 }),
-        createMockTranscript({ speaker: 'assistant', text: 'AI response', timestamp: 2000 }),
-        createMockTranscript({ speaker: 'John', text: 'Human reply', timestamp: 3000 }),
+        createMockTranscript({
+          speaker: 'user',
+          text: 'Hello',
+          timestamp: 1000,
+        }),
+        createMockTranscript({
+          speaker: 'assistant',
+          text: 'AI response',
+          timestamp: 2000,
+        }),
+        createMockTranscript({
+          speaker: 'John',
+          text: 'Human reply',
+          timestamp: 3000,
+        }),
       ],
     }
 
     render(
-      <MeetingDetails meeting={meetingWithAI} onBack={vi.fn()} onOpenSettings={vi.fn()} />
+      <MeetingDetails
+        meeting={meetingWithAI}
+        onBack={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
     )
 
     fireEvent.click(screen.getByText('Transcript'))
@@ -209,7 +274,11 @@ describe('MeetingDetails', () => {
     })
 
     render(
-      <MeetingDetails meeting={mockMeeting} onBack={vi.fn()} onOpenSettings={vi.fn()} />
+      <MeetingDetails
+        meeting={mockMeeting}
+        onBack={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
     )
 
     const titleEl = screen.getByText('Test Meeting')
@@ -228,7 +297,11 @@ describe('MeetingDetails', () => {
     })
 
     render(
-      <MeetingDetails meeting={mockMeeting} onBack={vi.fn()} onOpenSettings={vi.fn()} />
+      <MeetingDetails
+        meeting={mockMeeting}
+        onBack={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
     )
 
     const actionItem = screen.getByText('Action item 1')
@@ -237,7 +310,9 @@ describe('MeetingDetails', () => {
     fireEvent.input(actionItem)
     fireEvent.blur(actionItem)
 
-    expect(updateSummaryMock).toHaveBeenCalledWith('meeting-1', { actionItems: expect.arrayContaining(['Updated action']) })
+    expect(updateSummaryMock).toHaveBeenCalledWith('meeting-1', {
+      actionItems: expect.arrayContaining(['Updated action']),
+    })
   })
 
   it('calls updateMeetingSummary IPC when key point is edited', () => {
@@ -247,7 +322,11 @@ describe('MeetingDetails', () => {
     })
 
     render(
-      <MeetingDetails meeting={mockMeeting} onBack={vi.fn()} onOpenSettings={vi.fn()} />
+      <MeetingDetails
+        meeting={mockMeeting}
+        onBack={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
     )
 
     const keyPoint = screen.getByText('Key point 1')
@@ -256,7 +335,9 @@ describe('MeetingDetails', () => {
     fireEvent.input(keyPoint)
     fireEvent.blur(keyPoint)
 
-    expect(updateSummaryMock).toHaveBeenCalledWith('meeting-1', { keyPoints: expect.arrayContaining(['Updated key point']) })
+    expect(updateSummaryMock).toHaveBeenCalledWith('meeting-1', {
+      keyPoints: expect.arrayContaining(['Updated key point']),
+    })
   })
 
   it('copies summary content to clipboard when Copy button is clicked', async () => {
@@ -266,7 +347,11 @@ describe('MeetingDetails', () => {
     })
 
     render(
-      <MeetingDetails meeting={mockMeeting} onBack={vi.fn()} onOpenSettings={vi.fn()} />
+      <MeetingDetails
+        meeting={mockMeeting}
+        onBack={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
     )
 
     const copyBtn = screen.getByText(/Copy full summary/)
@@ -286,7 +371,11 @@ describe('MeetingDetails', () => {
     })
 
     render(
-      <MeetingDetails meeting={mockMeeting} onBack={vi.fn()} onOpenSettings={vi.fn()} />
+      <MeetingDetails
+        meeting={mockMeeting}
+        onBack={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
     )
 
     fireEvent.click(screen.getByText(/Copy full summary/))
@@ -298,7 +387,11 @@ describe('MeetingDetails', () => {
 
   it('opens chat overlay when floating search bar submits', () => {
     render(
-      <MeetingDetails meeting={mockMeeting} onBack={vi.fn()} onOpenSettings={vi.fn()} />
+      <MeetingDetails
+        meeting={mockMeeting}
+        onBack={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
     )
 
     const input = screen.getByPlaceholderText('Ask about this meeting...')
@@ -316,7 +409,11 @@ describe('MeetingDetails', () => {
     }
 
     render(
-      <MeetingDetails meeting={meetingNoTranscript} onBack={vi.fn()} onOpenSettings={vi.fn()} />
+      <MeetingDetails
+        meeting={meetingNoTranscript}
+        onBack={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
     )
 
     fireEvent.click(screen.getByText('Transcript'))
@@ -326,7 +423,11 @@ describe('MeetingDetails', () => {
 
   it('shows empty usage message when usage is empty', () => {
     render(
-      <MeetingDetails meeting={mockMeeting} onBack={vi.fn()} onOpenSettings={vi.fn()} />
+      <MeetingDetails
+        meeting={mockMeeting}
+        onBack={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
     )
 
     fireEvent.click(screen.getByText('Usage'))
@@ -344,7 +445,11 @@ describe('MeetingDetails', () => {
     }
 
     render(
-      <MeetingDetails meeting={meetingNoActions} onBack={vi.fn()} onOpenSettings={vi.fn()} />
+      <MeetingDetails
+        meeting={meetingNoActions}
+        onBack={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
     )
 
     expect(screen.queryByText('Action item 1')).not.toBeInTheDocument()
@@ -364,12 +469,18 @@ describe('MeetingDetails', () => {
     }
 
     render(
-      <MeetingDetails meeting={meetingWithUsage} onBack={vi.fn()} onOpenSettings={vi.fn()} />
+      <MeetingDetails
+        meeting={meetingWithUsage}
+        onBack={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
     )
 
     fireEvent.click(screen.getByText('Usage'))
 
     expect(screen.getByText('How to improve performance?')).toBeInTheDocument()
-    expect(screen.getByText('Use memoization and code splitting.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Use memoization and code splitting.'),
+    ).toBeInTheDocument()
   })
 })

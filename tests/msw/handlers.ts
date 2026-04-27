@@ -1,4 +1,4 @@
-import { http, HttpResponse } from 'msw'
+import { HttpResponse, http } from 'msw'
 
 export const handlers = [
   // Ollama
@@ -6,7 +6,11 @@ export const handlers = [
     return HttpResponse.json({
       models: [
         { name: 'llama3:latest', model: 'llama3:latest', size: 4661224496 },
-        { name: 'nomic-embed-text:latest', model: 'nomic-embed-text:latest', size: 274302441 },
+        {
+          name: 'nomic-embed-text:latest',
+          model: 'nomic-embed-text:latest',
+          size: 274302441,
+        },
       ],
     })
   }),
@@ -29,7 +33,13 @@ export const handlers = [
   http.post('https://api.openai.com/v1/chat/completions', () => {
     return HttpResponse.json({
       id: 'mock-openai-chat',
-      choices: [{ message: { role: 'assistant', content: 'Mock OpenAI response' }, index: 0, finish_reason: 'stop' }],
+      choices: [
+        {
+          message: { role: 'assistant', content: 'Mock OpenAI response' },
+          index: 0,
+          finish_reason: 'stop',
+        },
+      ],
       usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
     })
   }),
@@ -45,7 +55,13 @@ export const handlers = [
   http.post('https://api.groq.com/openai/v1/chat/completions', () => {
     return HttpResponse.json({
       id: 'mock-groq-chat',
-      choices: [{ message: { role: 'assistant', content: 'Mock Groq response' }, index: 0, finish_reason: 'stop' }],
+      choices: [
+        {
+          message: { role: 'assistant', content: 'Mock Groq response' },
+          index: 0,
+          finish_reason: 'stop',
+        },
+      ],
       usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
     })
   }),
@@ -66,14 +82,26 @@ export const handlers = [
   // Google Gemini
   http.post('https://generativelanguage.googleapis.com/*', () => {
     return HttpResponse.json({
-      candidates: [{ content: { parts: [{ text: 'Mock Gemini response' }], role: 'model' } }],
+      candidates: [
+        {
+          content: { parts: [{ text: 'Mock Gemini response' }], role: 'model' },
+        },
+      ],
     })
   }),
 
   // Deepgram
   http.post('https://api.deepgram.com/v1/listen', () => {
     return HttpResponse.json({
-      results: { channels: [{ alternatives: [{ transcript: 'Mock Deepgram transcript', confidence: 0.95 }] }] },
+      results: {
+        channels: [
+          {
+            alternatives: [
+              { transcript: 'Mock Deepgram transcript', confidence: 0.95 },
+            ],
+          },
+        ],
+      },
     })
   }),
 
@@ -81,7 +109,11 @@ export const handlers = [
   http.post('https://api.elevenlabs.io/v1/speech-to-text/*', () => {
     return HttpResponse.json({
       text: 'Mock ElevenLabs transcript',
-      words: [{ text: 'Mock', start: 0, end: 0.5 }, { text: 'ElevenLabs', start: 0.5, end: 1.0 }, { text: 'transcript', start: 1.0, end: 1.5 }],
+      words: [
+        { text: 'Mock', start: 0, end: 0.5 },
+        { text: 'ElevenLabs', start: 0.5, end: 1.0 },
+        { text: 'transcript', start: 1.0, end: 1.5 },
+      ],
     })
   }),
 ]

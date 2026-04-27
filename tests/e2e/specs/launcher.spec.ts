@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures/test'
+import { expect, test } from '../fixtures/test'
 
 test.describe('Launcher', () => {
   test('shows launcher after startup sequence @smoke', async ({ launcher }) => {
@@ -8,12 +8,16 @@ test.describe('Launcher', () => {
 
   test('displays Start Natively button @smoke', async ({ launcher }) => {
     await launcher.goto()
-    const startButton = launcher.page.getByRole('button', { name: 'Start Natively' })
+    const startButton = launcher.page.getByRole('button', {
+      name: 'Start Natively',
+    })
     await expect(startButton).toBeVisible()
     await expect(startButton).toBeEnabled()
   })
 
-  test('search input accepts and displays text @smoke', async ({ launcher }) => {
+  test('search input accepts and displays text @smoke', async ({
+    launcher,
+  }) => {
     await launcher.goto()
     await launcher.searchFor('test query')
     const searchInput = await launcher.getSearchInput()
@@ -28,7 +32,10 @@ test.describe('Launcher', () => {
     await expect(searchInput).toBeFocused()
   })
 
-  test('navigation: launcher -> settings -> close returns to launcher @navigation', async ({ launcher, settings }) => {
+  test('navigation: launcher -> settings -> close returns to launcher @navigation', async ({
+    launcher,
+    settings,
+  }) => {
     await launcher.goto()
     await settings.openFromLauncher()
     await expect(settings.page.locator('#settings-panel')).toBeVisible()

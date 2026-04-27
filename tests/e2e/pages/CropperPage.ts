@@ -1,15 +1,13 @@
-import { Page, expect } from '@playwright/test'
+import { expect } from '@playwright/test'
 import { BasePage } from './BasePage'
 
 interface CropperWindow extends Window {
-  __cropperResetCallback?: (data: { hudPosition: { x: number; y: number } }) => void
+  __cropperResetCallback?: (data: {
+    hudPosition: { x: number; y: number }
+  }) => void
 }
 
 export class CropperPage extends BasePage {
-  constructor(page: Page) {
-    super(page)
-  }
-
   async goto() {
     await this.dismissOverlays()
     await this.page.goto('/?window=cropper')
@@ -34,7 +32,7 @@ export class CropperPage extends BasePage {
     await this.dismissOverlays()
     await this.page.evaluate(() => {
       ;(window as CropperWindow).__cropperResetCallback?.({
-        hudPosition: { x: 640, y: 360 }
+        hudPosition: { x: 640, y: 360 },
       })
     })
   }

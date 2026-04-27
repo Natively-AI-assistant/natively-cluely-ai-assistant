@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures/test'
+import { expect, test } from '../fixtures/test'
 
 test.describe('Model Selector', () => {
   test('renders model selector window', async ({ modelSelector }) => {
@@ -27,7 +27,9 @@ test.describe('Model Selector', () => {
 test.describe('Model Selector - With Models', () => {
   test.use({ scenario: 'withMeetings' })
 
-  test('shows available model buttons when present', async ({ modelSelector }) => {
+  test('shows available model buttons when present', async ({
+    modelSelector,
+  }) => {
     await modelSelector.goto()
     const modelButtons = await modelSelector.getModelButtons()
     // Verify at least one model button is visible
@@ -40,6 +42,8 @@ test.describe('Model Selector - With Models', () => {
     const firstButtonText = await modelButtons.first().textContent()
     expect(firstButtonText).toBeTruthy()
     await modelButtons.first().click()
-    await expect(modelSelector.page.getByText(firstButtonText as string)).toBeVisible()
+    await expect(
+      modelSelector.page.getByText(firstButtonText as string),
+    ).toBeVisible()
   })
 })

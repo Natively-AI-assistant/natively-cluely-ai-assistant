@@ -1,6 +1,10 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { createTestEnv, destroyTestEnv, type TestEnv } from './__helpers__/test-env'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { server } from '../msw/server'
+import {
+  createTestEnv,
+  destroyTestEnv,
+  type TestEnv,
+} from './__helpers__/test-env'
 import './__helpers__/shared-mocks'
 
 import { LLMHelper } from '../../electron/LLMHelper'
@@ -23,7 +27,14 @@ describe('LLM Pipeline Integration', () => {
 
   describe('Provider routing', () => {
     it('routes to OpenAI when model is gpt-*', async () => {
-      const helper = new LLMHelper(undefined, false, undefined, undefined, undefined, 'fake-openai-key')
+      const helper = new LLMHelper(
+        undefined,
+        false,
+        undefined,
+        undefined,
+        undefined,
+        'fake-openai-key',
+      )
       helper.setModel('gpt-5.4')
 
       const result = await helper.chatWithGemini('Hello')
@@ -31,7 +42,15 @@ describe('LLM Pipeline Integration', () => {
     })
 
     it('routes to Claude when model is claude-*', async () => {
-      const helper = new LLMHelper(undefined, false, undefined, undefined, undefined, undefined, 'fake-claude-key')
+      const helper = new LLMHelper(
+        undefined,
+        false,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'fake-claude-key',
+      )
       helper.setModel('claude-sonnet-4-6')
 
       const result = await helper.chatWithGemini('Hello')

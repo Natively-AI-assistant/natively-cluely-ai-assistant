@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useResolvedTheme } from '../../../src/hooks/useResolvedTheme'
 
 // Import mock factory for consistent electronAPI mocking
@@ -12,11 +12,11 @@ describe('useResolvedTheme', () => {
   beforeEach(() => {
     // Set up initial theme attribute
     document.documentElement.setAttribute('data-theme', 'light')
-    
+
     // Create mocks
     observeMock = vi.fn()
     disconnectMock = vi.fn()
-    
+
     // Mock MutationObserver class
     class MockMutationObserver {
       observe = observeMock
@@ -46,7 +46,7 @@ describe('useResolvedTheme', () => {
 
   it('should observe document element for theme changes', () => {
     renderHook(() => useResolvedTheme())
-    
+
     // Verify observer was created and observe was called
     expect(observeMock).toHaveBeenCalled()
     expect(observeMock).toHaveBeenCalledWith(document.documentElement, {
@@ -58,20 +58,20 @@ describe('useResolvedTheme', () => {
   it('should respond to IPC theme change event', async () => {
     // Use fireIPCEvent from electronAPI mock to trigger the event
     const { fireIPCEvent } = await import('../../mocks/electronAPI.mock')
-    
+
     document.documentElement.setAttribute('data-theme', 'light')
-    
+
     // Render hook - it will subscribe to onThemeChanged
     const { result } = renderHook(() => useResolvedTheme())
-    
+
     // Initial state should be light
     expect(result.current).toBe('light')
-    
+
     // Fire IPC event with dark theme
     act(() => {
       fireIPCEvent('onThemeChanged', { resolved: 'dark' })
     })
-    
+
     // State should update to dark
     expect(result.current).toBe('dark')
   })
@@ -82,11 +82,11 @@ describe('useResolvedTheme', () => {
     delete (window as any).electronAPI
 
     const { result } = renderHook(() => useResolvedTheme())
-    
+
     // Should still return a valid theme from the DOM
     expect(result.current).toBeDefined()
     expect(['light', 'dark']).toContain(result.current)
-    
+
     // Restore electronAPI
     ;(window as any).electronAPI = originalElectronAPI
   })
@@ -98,16 +98,16 @@ describe('useResolvedTheme', () => {
     })
 
     const { result } = renderHook(() => useResolvedTheme())
-    
+
     // Should still return a valid theme
     expect(result.current).toBeDefined()
   })
 
   it('should clean up observer on unmount', () => {
     const { unmount } = renderHook(() => useResolvedTheme())
-    
+
     unmount()
-    
+
     expect(disconnectMock).toHaveBeenCalled()
   })
 
@@ -121,14 +121,14 @@ describe('useResolvedTheme', () => {
     })
 
     const { unmount } = renderHook(() => useResolvedTheme())
-    
+
     // Wait for useEffect to run
     await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 0))
+      await new Promise((resolve) => setTimeout(resolve, 0))
     })
-    
+
     unmount()
-    
+
     expect(unsubscribeMock).toHaveBeenCalled()
   })
 })

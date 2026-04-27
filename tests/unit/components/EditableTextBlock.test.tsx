@@ -1,8 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, act } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import EditableTextBlock from '../../../src/components/EditableTextBlock'
-import React from 'react'
 
 describe('EditableTextBlock', () => {
   beforeEach(() => {
@@ -21,7 +19,9 @@ describe('EditableTextBlock', () => {
   })
 
   it('renders with a custom tag name', () => {
-    render(<EditableTextBlock initialValue="Title" onSave={vi.fn()} tagName="h1" />)
+    render(
+      <EditableTextBlock initialValue="Title" onSave={vi.fn()} tagName="h1" />,
+    )
     expect(screen.getByText('Title').tagName).toBe('H1')
   })
 
@@ -77,7 +77,13 @@ describe('EditableTextBlock', () => {
 
   it('blurs (saves) on Enter key when multiline=false', () => {
     const onSave = vi.fn()
-    render(<EditableTextBlock initialValue="Single line" onSave={onSave} multiline={false} />)
+    render(
+      <EditableTextBlock
+        initialValue="Single line"
+        onSave={onSave}
+        multiline={false}
+      />,
+    )
     const el = screen.getByText('Single line')
 
     fireEvent.click(el)
@@ -89,11 +95,17 @@ describe('EditableTextBlock', () => {
 
   it('does not prevent default Enter key when multiline=true (allows newline)', () => {
     const onSave = vi.fn()
-    render(<EditableTextBlock initialValue="Multi" onSave={onSave} multiline={true} />)
+    render(
+      <EditableTextBlock
+        initialValue="Multi"
+        onSave={onSave}
+        multiline={true}
+      />,
+    )
     const el = screen.getByText('Multi')
 
     fireEvent.click(el)
-    const event = fireEvent.keyDown(el, { key: 'Enter' })
+    const _event = fireEvent.keyDown(el, { key: 'Enter' })
 
     // Default behavior not prevented for multiline
     expect(onSave).not.toHaveBeenCalled()
@@ -103,7 +115,12 @@ describe('EditableTextBlock', () => {
     const onEnter = vi.fn()
     const onSave = vi.fn()
     render(
-      <EditableTextBlock initialValue="Item" onSave={onSave} multiline={true} onEnter={onEnter} />
+      <EditableTextBlock
+        initialValue="Item"
+        onSave={onSave}
+        multiline={true}
+        onEnter={onEnter}
+      />,
     )
     const el = screen.getByText('Item')
 
@@ -125,7 +142,12 @@ describe('EditableTextBlock', () => {
   it('does not trigger onEnter if second Enter is after 500ms threshold', () => {
     const onEnter = vi.fn()
     render(
-      <EditableTextBlock initialValue="Item" onSave={vi.fn()} multiline={true} onEnter={onEnter} />
+      <EditableTextBlock
+        initialValue="Item"
+        onSave={vi.fn()}
+        multiline={true}
+        onEnter={onEnter}
+      />,
     )
     const el = screen.getByText('Item')
 
@@ -144,7 +166,13 @@ describe('EditableTextBlock', () => {
   })
 
   it('autoFocus starts component in edit mode', () => {
-    render(<EditableTextBlock initialValue="Auto focused" onSave={vi.fn()} autoFocus />)
+    render(
+      <EditableTextBlock
+        initialValue="Auto focused"
+        onSave={vi.fn()}
+        autoFocus
+      />,
+    )
     const el = screen.getByText('Auto focused')
 
     expect(el).toHaveAttribute('contenteditable', 'true')
@@ -152,26 +180,30 @@ describe('EditableTextBlock', () => {
 
   it('syncs external initialValue changes when not editing', () => {
     const { rerender } = render(
-      <EditableTextBlock initialValue="Initial" onSave={vi.fn()} />
+      <EditableTextBlock initialValue="Initial" onSave={vi.fn()} />,
     )
 
     expect(screen.getByText('Initial')).toBeInTheDocument()
 
-    rerender(<EditableTextBlock initialValue="Updated external" onSave={vi.fn()} />)
+    rerender(
+      <EditableTextBlock initialValue="Updated external" onSave={vi.fn()} />,
+    )
 
     expect(screen.getByText('Updated external')).toBeInTheDocument()
   })
 
   it('preserves edit mode when external initialValue changes', () => {
     const { rerender } = render(
-      <EditableTextBlock initialValue="Initial" onSave={vi.fn()} />
+      <EditableTextBlock initialValue="Initial" onSave={vi.fn()} />,
     )
     const el = screen.getByText('Initial')
 
     fireEvent.click(el) // Enter edit mode
     expect(el).toHaveAttribute('contenteditable', 'true')
 
-    rerender(<EditableTextBlock initialValue="External change" onSave={vi.fn()} />)
+    rerender(
+      <EditableTextBlock initialValue="External change" onSave={vi.fn()} />,
+    )
 
     // contentEditable state preserved — still in edit mode
     expect(el).toHaveAttribute('contenteditable', 'true')
@@ -197,7 +229,13 @@ describe('EditableTextBlock', () => {
   })
 
   it('applies custom className', () => {
-    render(<EditableTextBlock initialValue="Styled" onSave={vi.fn()} className="my-custom-class" />)
+    render(
+      <EditableTextBlock
+        initialValue="Styled"
+        onSave={vi.fn()}
+        className="my-custom-class"
+      />,
+    )
     const el = screen.getByText('Styled')
 
     expect(el.className).toContain('my-custom-class')

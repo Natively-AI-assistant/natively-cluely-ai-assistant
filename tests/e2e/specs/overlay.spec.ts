@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures/test'
+import { expect, test } from '../fixtures/test'
 
 test.describe('Overlay', () => {
   test('renders top pill with logo and controls', async ({ overlay }) => {
@@ -20,7 +20,9 @@ test.describe('Overlay', () => {
   test('shows What to answer chip', async ({ overlay }) => {
     await overlay.goto()
 
-    await expect(await overlay.getQuickActionChip('What to answer')).toBeVisible()
+    await expect(
+      await overlay.getQuickActionChip('What to answer'),
+    ).toBeVisible()
   })
 
   test('shows Clarify chip', async ({ overlay }) => {
@@ -34,7 +36,9 @@ test.describe('Overlay', () => {
 
     await overlay.typeInInput('Hello, this is a test message')
 
-    await expect(await overlay.getInputField()).toHaveValue('Hello, this is a test message')
+    await expect(await overlay.getInputField()).toHaveValue(
+      'Hello, this is a test message',
+    )
   })
 
   test('Enter key does not crash overlay', async ({ overlay }) => {

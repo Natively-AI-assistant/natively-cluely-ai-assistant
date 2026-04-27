@@ -7,7 +7,10 @@
 import { type IpcMainInvokeEvent, ipcMain } from 'electron'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LicenseManagerGetter } from '../../../electron/ipc/ipcHandlers.license'
-import { registerLicenseHandlers, resetLicenseHandlersCache } from '../../../electron/ipc/ipcHandlers.license'
+import {
+  registerLicenseHandlers,
+  resetLicenseHandlersCache,
+} from '../../../electron/ipc/ipcHandlers.license'
 
 const mockLicenseManagerInstance: any = vi.hoisted(() => ({
   activateLicense: vi.fn(),
@@ -20,7 +23,7 @@ const mockLicenseManagerInstance: any = vi.hoisted(() => ({
 
 const createMockGetLicenseManager = (): LicenseManagerGetter => {
   return async () => ({
-    getInstance: () => mockLicenseManagerInstance
+    getInstance: () => mockLicenseManagerInstance,
   })
 }
 

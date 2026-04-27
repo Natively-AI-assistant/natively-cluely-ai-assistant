@@ -8,7 +8,9 @@ export interface E2EMockMeeting {
   hasTranscript?: boolean
 }
 
-export function createMockMeeting(overrides: Partial<E2EMockMeeting> = {}): E2EMockMeeting {
+export function createMockMeeting(
+  overrides: Partial<E2EMockMeeting> = {},
+): E2EMockMeeting {
   return {
     id: 'meeting-default',
     title: 'Untitled Meeting',

@@ -1,6 +1,10 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { createTestEnv, destroyTestEnv, type TestEnv } from './__helpers__/test-env'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { server } from '../msw/server'
+import {
+  createTestEnv,
+  destroyTestEnv,
+  type TestEnv,
+} from './__helpers__/test-env'
 import './__helpers__/shared-mocks'
 
 describe('Intelligence Engine Integration', () => {
@@ -31,7 +35,14 @@ describe('Intelligence Engine Integration', () => {
 
     it('routes to OpenAI when model is gpt-*', async () => {
       const { LLMHelper } = await import('../../electron/LLMHelper')
-      const llm = new LLMHelper(undefined, false, undefined, undefined, 'fake-groq-key', 'fake-openai-key')
+      const llm = new LLMHelper(
+        undefined,
+        false,
+        undefined,
+        undefined,
+        'fake-groq-key',
+        'fake-openai-key',
+      )
       llm.setModel('gpt-4o-mini')
 
       const response = await llm.chatWithGemini('Test')
@@ -40,7 +51,15 @@ describe('Intelligence Engine Integration', () => {
 
     it('routes to Claude when model is claude-*', async () => {
       const { LLMHelper } = await import('../../electron/LLMHelper')
-      const llm = new LLMHelper(undefined, false, undefined, undefined, 'fake-groq-key', 'fake-openai-key', 'fake-claude-key')
+      const llm = new LLMHelper(
+        undefined,
+        false,
+        undefined,
+        undefined,
+        'fake-groq-key',
+        'fake-openai-key',
+        'fake-claude-key',
+      )
       llm.setModel('claude-sonnet-4-6')
 
       const response = await llm.chatWithGemini('Test')
@@ -77,7 +96,14 @@ describe('Intelligence Engine Integration', () => {
 
     it('changes model and routes to correct provider', async () => {
       const { LLMHelper } = await import('../../electron/LLMHelper')
-      const llm = new LLMHelper('fake-gemini-key', false, undefined, undefined, undefined, 'fake-openai-key')
+      const llm = new LLMHelper(
+        'fake-gemini-key',
+        false,
+        undefined,
+        undefined,
+        undefined,
+        'fake-openai-key',
+      )
 
       llm.setModel('gpt-4o-mini')
       const openaiResponse = await llm.chatWithGemini('Test')

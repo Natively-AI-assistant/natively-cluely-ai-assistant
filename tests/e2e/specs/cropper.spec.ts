@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures/test'
+import { expect, test } from '../fixtures/test'
 
 test.describe('Cropper', () => {
   test('renders cropper with canvas', async ({ cropper }) => {

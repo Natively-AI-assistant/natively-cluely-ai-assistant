@@ -3,9 +3,9 @@
  * Tests debug view rendering with diff view
  */
 
-import React from 'react'
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import React from 'react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Import mocks from test mocks directory
 import '../../mocks/framer-motion.mock'
@@ -22,14 +22,20 @@ vi.mock('react-query', () => ({
   QueryClient: class MockQueryClient {
     clear = vi.fn()
   },
-  QueryClientProvider: ({ children }: { children: React.ReactNode }) => children,
+  QueryClientProvider: ({ children }: { children: React.ReactNode }) =>
+    children,
   useQueryClient: vi.fn(() => mockQueryClient),
   useQuery: vi.fn(() => ({ data: undefined, isLoading: false, error: null })),
 }))
 
 // Mock react-syntax-highlighter
 vi.mock('react-syntax-highlighter', () => ({
-  Prism: ({ children }: any) => React.createElement('pre', { 'data-testid': 'syntax-highlighter' }, children),
+  Prism: ({ children }: any) =>
+    React.createElement(
+      'pre',
+      { 'data-testid': 'syntax-highlighter' },
+      children,
+    ),
 }))
 
 // Mock diff library
@@ -39,20 +45,36 @@ vi.mock('diff', () => ({
 
 // Mock ScreenshotQueue component
 vi.mock('../../../src/components/Queue/ScreenshotQueue', () => ({
-  default: ({ screenshots }: any) => React.createElement('div', { 'data-testid': 'screenshot-queue', 'data-count': screenshots?.length ?? 0 }),
+  default: ({ screenshots }: any) =>
+    React.createElement('div', {
+      'data-testid': 'screenshot-queue',
+      'data-count': screenshots?.length ?? 0,
+    }),
 }))
 
 // Mock SolutionCommands component
 vi.mock('../../../src/components/Solutions/SolutionCommands', () => ({
-  default: ({ extraScreenshots }: any) => React.createElement('div', { 'data-testid': 'solution-commands', 'data-has-screenshots': String((extraScreenshots?.length ?? 0) > 0) }),
+  default: ({ extraScreenshots }: any) =>
+    React.createElement('div', {
+      'data-testid': 'solution-commands',
+      'data-has-screenshots': String((extraScreenshots?.length ?? 0) > 0),
+    }),
 }))
 
 // Mock toast components
 vi.mock('../../../src/components/ui/toast', () => ({
-  Toast: ({ children }: { children: React.ReactNode }) => React.createElement('div', { 'data-testid': 'toast' }, children),
-  ToastDescription: ({ children }: { children: React.ReactNode }) => React.createElement('div', { 'data-testid': 'toast-description' }, children),
-  ToastMessage: ({ children }: { children: React.ReactNode }) => React.createElement('div', { 'data-testid': 'toast-message' }, children),
-  ToastTitle: ({ children }: { children: React.ReactNode }) => React.createElement('div', { 'data-testid': 'toast-title' }, children),
+  Toast: ({ children }: { children: React.ReactNode }) =>
+    React.createElement('div', { 'data-testid': 'toast' }, children),
+  ToastDescription: ({ children }: { children: React.ReactNode }) =>
+    React.createElement(
+      'div',
+      { 'data-testid': 'toast-description' },
+      children,
+    ),
+  ToastMessage: ({ children }: { children: React.ReactNode }) =>
+    React.createElement('div', { 'data-testid': 'toast-message' }, children),
+  ToastTitle: ({ children }: { children: React.ReactNode }) =>
+    React.createElement('div', { 'data-testid': 'toast-title' }, children),
   ToastVariant: {},
 }))
 
@@ -81,7 +103,10 @@ describe('Debug Component', () => {
   it('renders with empty screenshots by default', () => {
     render(<Debug isProcessing={false} setIsProcessing={mockSetIsProcessing} />)
 
-    expect(screen.getByTestId('screenshot-queue')).toHaveAttribute('data-count', '0')
+    expect(screen.getByTestId('screenshot-queue')).toHaveAttribute(
+      'data-count',
+      '0',
+    )
   })
 
   it('registers electronAPI event listeners on mount', () => {
@@ -103,7 +128,9 @@ describe('Debug Component', () => {
   })
 
   it('cleans up listeners on unmount', () => {
-    const { unmount } = render(<Debug isProcessing={false} setIsProcessing={mockSetIsProcessing} />)
+    const { unmount } = render(
+      <Debug isProcessing={false} setIsProcessing={mockSetIsProcessing} />,
+    )
     unmount()
     // If cleanup functions were returned and called, no error should have occurred
   })

@@ -1,8 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ErrorBoundary } from '../../../src/components/ErrorBoundary'
-import React from 'react'
 
 const ThrowError = ({ shouldThrow = true }: { shouldThrow?: boolean }) => {
   if (shouldThrow) {
@@ -26,7 +25,7 @@ describe('ErrorBoundary', () => {
     render(
       <ErrorBoundary>
         <div>Test content</div>
-      </ErrorBoundary>
+      </ErrorBoundary>,
     )
     expect(screen.getByText('Test content')).toBeInTheDocument()
   })
@@ -35,19 +34,23 @@ describe('ErrorBoundary', () => {
     render(
       <ErrorBoundary>
         <ThrowError />
-      </ErrorBoundary>
+      </ErrorBoundary>,
     )
     expect(screen.getByText('Application crashed')).toBeInTheDocument()
     expect(screen.getByText('Test error')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Try to recover' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Reload UI' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Try to recover' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Reload UI' }),
+    ).toBeInTheDocument()
   })
 
   it('shows context-specific title when context prop is provided', () => {
     render(
       <ErrorBoundary context="Launcher">
         <ThrowError />
-      </ErrorBoundary>
+      </ErrorBoundary>,
     )
     expect(screen.getByText('Launcher crashed')).toBeInTheDocument()
   })
@@ -56,7 +59,7 @@ describe('ErrorBoundary', () => {
     render(
       <ErrorBoundary>
         <ThrowError />
-      </ErrorBoundary>
+      </ErrorBoundary>,
     )
     expect(screen.getByText('Application crashed')).toBeInTheDocument()
   })
@@ -65,11 +68,14 @@ describe('ErrorBoundary', () => {
     render(
       <ErrorBoundary context="TestContext">
         <ThrowError />
-      </ErrorBoundary>
+      </ErrorBoundary>,
     )
     expect(consoleErrorSpy).toHaveBeenCalled()
     const hasContextPrefix = consoleErrorSpy.mock.calls.some(
-      call => call[0] && typeof call[0] === 'string' && call[0].includes('ErrorBoundary:TestContext')
+      (call) =>
+        call[0] &&
+        typeof call[0] === 'string' &&
+        call[0].includes('ErrorBoundary:TestContext'),
     )
     expect(hasContextPrefix).toBe(true)
   })
@@ -82,7 +88,7 @@ describe('ErrorBoundary', () => {
     render(
       <ErrorBoundary context="TestContext">
         <ThrowError />
-      </ErrorBoundary>
+      </ErrorBoundary>,
     )
 
     expect(logErrorToMain).toHaveBeenCalledWith(
@@ -90,7 +96,7 @@ describe('ErrorBoundary', () => {
         type: 'uncaught-render-error',
         context: 'TestContext',
         message: 'Test error',
-      })
+      }),
     )
 
     ;(window as any).electronAPI = original
@@ -109,7 +115,7 @@ describe('ErrorBoundary', () => {
     const { rerender } = render(
       <ErrorBoundary>
         <Recoverable shouldThrow={true} />
-      </ErrorBoundary>
+      </ErrorBoundary>,
     )
 
     expect(screen.getByText('Recoverable error')).toBeInTheDocument()
@@ -117,7 +123,7 @@ describe('ErrorBoundary', () => {
     rerender(
       <ErrorBoundary>
         <Recoverable shouldThrow={false} />
-      </ErrorBoundary>
+      </ErrorBoundary>,
     )
 
     await user.click(screen.getByRole('button', { name: 'Try to recover' }))
@@ -136,7 +142,7 @@ describe('ErrorBoundary', () => {
     render(
       <ErrorBoundary>
         <ThrowError />
-      </ErrorBoundary>
+      </ErrorBoundary>,
     )
 
     await user.click(screen.getByRole('button', { name: 'Reload UI' }))
@@ -151,7 +157,7 @@ describe('ErrorBoundary', () => {
     render(
       <ErrorBoundary>
         <ThrowStringError />
-      </ErrorBoundary>
+      </ErrorBoundary>,
     )
 
     expect(screen.getByText('Application crashed')).toBeInTheDocument()
@@ -162,7 +168,7 @@ describe('ErrorBoundary', () => {
       <ErrorBoundary>
         <ThrowError />
         <div>Should not be visible</div>
-      </ErrorBoundary>
+      </ErrorBoundary>,
     )
 
     expect(screen.queryByText('Should not be visible')).not.toBeInTheDocument()
@@ -177,7 +183,7 @@ describe('ErrorBoundary', () => {
           <ThrowError />
         </ErrorBoundary>
         <GoodChild />
-      </div>
+      </div>,
     )
 
     expect(screen.getByText('Application crashed')).toBeInTheDocument()

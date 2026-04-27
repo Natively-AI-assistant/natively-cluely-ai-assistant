@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest'
-import { prettifyModelId, STANDARD_CLOUD_MODELS } from '../../../src/utils/modelUtils'
+import { describe, expect, it } from 'vitest'
+import {
+  prettifyModelId,
+  STANDARD_CLOUD_MODELS,
+} from '../../../src/utils/modelUtils'
 import { createMockCredentials } from '../../fixtures'
 
 describe('modelUtils', () => {
@@ -17,7 +20,9 @@ describe('modelUtils', () => {
     })
 
     it('should capitalize first letter of each word', () => {
-      expect(prettifyModelId('llama-3.3-70b-versatile')).toBe('Llama 3.3 70b Versatile')
+      expect(prettifyModelId('llama-3.3-70b-versatile')).toBe(
+        'Llama 3.3 70b Versatile',
+      )
     })
 
     it('should handle mixed hyphens and underscores', () => {
@@ -44,27 +49,43 @@ describe('modelUtils', () => {
 
     it('should have correct hasKeyCheck for gemini', () => {
       const gemini = STANDARD_CLOUD_MODELS.gemini
-      expect(gemini.hasKeyCheck(createMockCredentials({ hasGeminiKey: true }))).toBe(true)
-      expect(gemini.hasKeyCheck(createMockCredentials({ hasGeminiKey: false }))).toBe(false)
+      expect(
+        gemini.hasKeyCheck(createMockCredentials({ hasGeminiKey: true })),
+      ).toBe(true)
+      expect(
+        gemini.hasKeyCheck(createMockCredentials({ hasGeminiKey: false })),
+      ).toBe(false)
       expect(gemini.hasKeyCheck(null)).toBe(false)
     })
 
     it('should have correct hasKeyCheck for openai', () => {
       const openai = STANDARD_CLOUD_MODELS.openai
-      expect(openai.hasKeyCheck(createMockCredentials({ hasOpenaiKey: true }))).toBe(true)
-      expect(openai.hasKeyCheck(createMockCredentials({ hasOpenaiKey: false }))).toBe(false)
+      expect(
+        openai.hasKeyCheck(createMockCredentials({ hasOpenaiKey: true })),
+      ).toBe(true)
+      expect(
+        openai.hasKeyCheck(createMockCredentials({ hasOpenaiKey: false })),
+      ).toBe(false)
     })
 
     it('should have correct hasKeyCheck for claude', () => {
       const claude = STANDARD_CLOUD_MODELS.claude
-      expect(claude.hasKeyCheck(createMockCredentials({ hasClaudeKey: true }))).toBe(true)
-      expect(claude.hasKeyCheck(createMockCredentials({ hasClaudeKey: false }))).toBe(false)
+      expect(
+        claude.hasKeyCheck(createMockCredentials({ hasClaudeKey: true })),
+      ).toBe(true)
+      expect(
+        claude.hasKeyCheck(createMockCredentials({ hasClaudeKey: false })),
+      ).toBe(false)
     })
 
     it('should have correct hasKeyCheck for groq', () => {
       const groq = STANDARD_CLOUD_MODELS.groq
-      expect(groq.hasKeyCheck(createMockCredentials({ hasGroqKey: true }))).toBe(true)
-      expect(groq.hasKeyCheck(createMockCredentials({ hasGroqKey: false }))).toBe(false)
+      expect(
+        groq.hasKeyCheck(createMockCredentials({ hasGroqKey: true })),
+      ).toBe(true)
+      expect(
+        groq.hasKeyCheck(createMockCredentials({ hasGroqKey: false })),
+      ).toBe(false)
     })
 
     it('should have correct pmKey for each provider', () => {
@@ -75,7 +96,7 @@ describe('modelUtils', () => {
     })
 
     it('should have arrays for ids, names, and descs', () => {
-      Object.values(STANDARD_CLOUD_MODELS).forEach(provider => {
+      Object.values(STANDARD_CLOUD_MODELS).forEach((provider) => {
         expect(Array.isArray(provider.ids)).toBe(true)
         expect(Array.isArray(provider.names)).toBe(true)
         expect(Array.isArray(provider.descs)).toBe(true)

@@ -1,5 +1,5 @@
-import { Page } from '@playwright/test'
-import { MockScenario } from './electronMocks'
+import type { Page } from '@playwright/test'
+import type { MockScenario } from './electronMocks'
 
 /**
  * Default mock scenario used when no specific scenario is provided.

@@ -1,13 +1,13 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
-  createMockMeeting,
-  mockMeetings,
-  createMockTranscript,
-  mockTranscripts,
-  createMockSettings,
-  mockSettings,
   createMockCredentials,
+  createMockMeeting,
+  createMockSettings,
+  createMockTranscript,
   mockCredentials,
+  mockMeetings,
+  mockSettings,
+  mockTranscripts,
 } from '../fixtures'
 
 describe('fixtures', () => {

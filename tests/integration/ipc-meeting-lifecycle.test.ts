@@ -1,6 +1,10 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { createTestEnv, destroyTestEnv, type TestEnv } from './__helpers__/test-env'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createTestMeeting } from './__fixtures__/meetings'
+import {
+  createTestEnv,
+  destroyTestEnv,
+  type TestEnv,
+} from './__helpers__/test-env'
 import './__helpers__/shared-mocks'
 
 import { DatabaseManager } from '../../electron/db/DatabaseManager'
@@ -39,12 +43,12 @@ describe('Meeting Lifecycle Integration', () => {
 
       const retrieved = db.getMeetingDetails('lifecycle-meeting')
       expect(retrieved).not.toBeNull()
-      expect(retrieved!.title).toBe('Lifecycle Test Meeting')
-      expect(retrieved!.transcript).toHaveLength(3)
+      expect(retrieved?.title).toBe('Lifecycle Test Meeting')
+      expect(retrieved?.transcript).toHaveLength(3)
 
-      expect(retrieved!.transcript![0].text).toBe('Starting the meeting')
-      expect(retrieved!.transcript![1].text).toBe('Discussing agenda')
-      expect(retrieved!.transcript![2].text).toBe('Moving to next topic')
+      expect(retrieved?.transcript?.[0].text).toBe('Starting the meeting')
+      expect(retrieved?.transcript?.[1].text).toBe('Discussing agenda')
+      expect(retrieved?.transcript?.[2].text).toBe('Moving to next topic')
 
       const deleted = db.deleteMeeting('lifecycle-meeting')
       expect(deleted).toBe(true)
@@ -80,19 +84,34 @@ describe('Meeting Lifecycle Integration', () => {
       const meeting = createTestMeeting({
         id: 'usage-meeting',
         usage: [
-          { type: 'assist', timestamp: 1000, question: 'What is X?', answer: 'X is...' },
-          { type: 'assist', timestamp: 2000, question: 'How about Y?', answer: 'Y is...' },
-          { type: 'followup', timestamp: 3000, question: '', answer: 'Summary...' },
+          {
+            type: 'assist',
+            timestamp: 1000,
+            question: 'What is X?',
+            answer: 'X is...',
+          },
+          {
+            type: 'assist',
+            timestamp: 2000,
+            question: 'How about Y?',
+            answer: 'Y is...',
+          },
+          {
+            type: 'followup',
+            timestamp: 3000,
+            question: '',
+            answer: 'Summary...',
+          },
         ],
       })
 
       db.saveMeeting(meeting, Date.now(), 600000)
 
       const retrieved = db.getMeetingDetails('usage-meeting')
-      expect(retrieved!.usage).toHaveLength(3)
-      expect(retrieved!.usage![0].type).toBe('assist')
-      expect(retrieved!.usage![0].question).toBe('What is X?')
-      expect(retrieved!.usage![2].type).toBe('followup')
+      expect(retrieved?.usage).toHaveLength(3)
+      expect(retrieved?.usage?.[0].type).toBe('assist')
+      expect(retrieved?.usage?.[0].question).toBe('What is X?')
+      expect(retrieved?.usage?.[2].type).toBe('followup')
     })
   })
 
@@ -104,7 +123,10 @@ describe('Meeting Lifecycle Integration', () => {
         id: 'summary-meeting',
         detailedSummary: {
           overview: 'This was a productive meeting about Q3 planning',
-          actionItems: ['Prepare budget report', 'Schedule follow-up with engineering'],
+          actionItems: [
+            'Prepare budget report',
+            'Schedule follow-up with engineering',
+          ],
           keyPoints: ['Budget approved', 'New hire starting next week'],
         },
       })
@@ -112,10 +134,14 @@ describe('Meeting Lifecycle Integration', () => {
       db.saveMeeting(meeting, Date.now(), 600000)
 
       const retrieved = db.getMeetingDetails('summary-meeting')
-      expect(retrieved!.detailedSummary).toBeDefined()
-      expect(retrieved!.detailedSummary!.overview).toBe('This was a productive meeting about Q3 planning')
-      expect(retrieved!.detailedSummary!.actionItems).toContain('Prepare budget report')
-      expect(retrieved!.detailedSummary!.keyPoints).toContain('Budget approved')
+      expect(retrieved?.detailedSummary).toBeDefined()
+      expect(retrieved?.detailedSummary?.overview).toBe(
+        'This was a productive meeting about Q3 planning',
+      )
+      expect(retrieved?.detailedSummary?.actionItems).toContain(
+        'Prepare budget report',
+      )
+      expect(retrieved?.detailedSummary?.keyPoints).toContain('Budget approved')
     })
   })
 
@@ -145,20 +171,26 @@ describe('Meeting Lifecycle Integration', () => {
 
       const retrieved = db.getMeetingDetails('empty-meeting')
       expect(retrieved).not.toBeNull()
-      expect(retrieved!.transcript).toHaveLength(0)
+      expect(retrieved?.transcript).toHaveLength(0)
     })
 
     it('handles duplicate meeting id by overwriting', () => {
       const db = DatabaseManager.getInstance()
 
-      const m1 = createTestMeeting({ id: 'dup-meeting', title: 'First Version' })
+      const m1 = createTestMeeting({
+        id: 'dup-meeting',
+        title: 'First Version',
+      })
       db.saveMeeting(m1, Date.now(), 300000)
 
-      const m2 = createTestMeeting({ id: 'dup-meeting', title: 'Second Version' })
+      const m2 = createTestMeeting({
+        id: 'dup-meeting',
+        title: 'Second Version',
+      })
       db.saveMeeting(m2, Date.now(), 600000)
 
       const retrieved = db.getMeetingDetails('dup-meeting')
-      expect(retrieved!.title).toBe('Second Version')
+      expect(retrieved?.title).toBe('Second Version')
     })
 
     it('handles meeting with very long transcript', () => {
@@ -179,7 +211,7 @@ describe('Meeting Lifecycle Integration', () => {
       db.saveMeeting(meeting, Date.now(), 600000)
 
       const retrieved = db.getMeetingDetails('long-meeting')
-      expect(retrieved!.transcript).toHaveLength(100)
+      expect(retrieved?.transcript).toHaveLength(100)
     })
 
     it('handles meeting with special characters in title', () => {
@@ -194,7 +226,9 @@ describe('Meeting Lifecycle Integration', () => {
       db.saveMeeting(meeting, Date.now(), 300000)
 
       const retrieved = db.getMeetingDetails('special-chars')
-      expect(retrieved!.title).toBe('Meeting with "quotes" & <special> chars: émojis 🎉')
+      expect(retrieved?.title).toBe(
+        'Meeting with "quotes" & <special> chars: émojis 🎉',
+      )
     })
   })
 })

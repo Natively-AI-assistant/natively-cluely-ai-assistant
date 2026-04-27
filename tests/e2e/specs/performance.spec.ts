@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures/test'
+import { expect, test } from '../fixtures/test'
 
 test.describe('Performance @performance', () => {
   test('launcher container renders with search', async ({ launcher, page }) => {

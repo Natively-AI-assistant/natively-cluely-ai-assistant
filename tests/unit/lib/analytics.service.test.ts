@@ -3,8 +3,11 @@
  * Tests gtag injection and event tracking
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { analytics, detectProviderType } from '../../../src/lib/analytics/analytics.service'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  analytics,
+  detectProviderType,
+} from '../../../src/lib/analytics/analytics.service'
 
 describe('analytics.service', () => {
   describe('detectProviderType', () => {
@@ -80,7 +83,15 @@ describe('analytics.service', () => {
       ['trackAssistantStart', () => analytics.trackAssistantStart()],
       ['trackAssistantStop', () => analytics.trackAssistantStop()],
       ['trackModeSelected', () => analytics.trackModeSelected('overlay')],
-      ['trackModelUsed', () => analytics.trackModelUsed({ model_name: 'gpt-4', provider_type: 'cloud', latency_ms: 100 })],
+      [
+        'trackModelUsed',
+        () =>
+          analytics.trackModelUsed({
+            model_name: 'gpt-4',
+            provider_type: 'cloud',
+            latency_ms: 100,
+          }),
+      ],
       ['trackCopyAnswer', () => analytics.trackCopyAnswer()],
       ['trackCommandExecuted', () => analytics.trackCommandExecuted('ask')],
       ['trackConversationStarted', () => analytics.trackConversationStarted()],
@@ -120,7 +131,7 @@ describe('analytics.service', () => {
       analytics.trackAppOpen()
 
       const eventCalls = gtagSpy.mock.calls.filter(
-        (call: any[]) => call[0] === 'event' && call[1] === 'app_opened'
+        (call: any[]) => call[0] === 'event' && call[1] === 'app_opened',
       )
       expect(eventCalls.length).toBe(1)
     })
@@ -131,7 +142,7 @@ describe('analytics.service', () => {
       analytics.trackAppOpen()
 
       const firstLaunchCalls = gtagSpy.mock.calls.filter(
-        (call: any[]) => call[0] === 'event' && call[1] === 'first_launch'
+        (call: any[]) => call[0] === 'event' && call[1] === 'first_launch',
       )
       expect(firstLaunchCalls.length).toBe(1)
       expect(localStorage.getItem('natively_has_launched')).toBe('true')
@@ -141,7 +152,7 @@ describe('analytics.service', () => {
       analytics.trackMeetingStarted()
 
       const calls = gtagSpy.mock.calls.filter(
-        (call: any[]) => call[0] === 'event' && call[1] === 'meeting_started'
+        (call: any[]) => call[0] === 'event' && call[1] === 'meeting_started',
       )
       expect(calls.length).toBe(1)
     })
@@ -157,7 +168,7 @@ describe('analytics.service', () => {
       analytics.trackModelUsed(payload)
 
       const calls = gtagSpy.mock.calls.filter(
-        (call: any[]) => call[0] === 'event' && call[1] === 'model_used'
+        (call: any[]) => call[0] === 'event' && call[1] === 'model_used',
       )
       expect(calls.length).toBe(1)
       expect(calls[0][2]).toMatchObject({
@@ -172,7 +183,7 @@ describe('analytics.service', () => {
       analytics.trackModeSelected('overlay')
 
       const calls = gtagSpy.mock.calls.filter(
-        (call: any[]) => call[0] === 'event' && call[1] === 'mode_selected'
+        (call: any[]) => call[0] === 'event' && call[1] === 'mode_selected',
       )
       expect(calls.length).toBe(1)
       expect(calls[0][2]).toMatchObject({ mode: 'overlay' })
@@ -182,7 +193,7 @@ describe('analytics.service', () => {
       analytics.trackCommandExecuted('ask')
 
       const calls = gtagSpy.mock.calls.filter(
-        (call: any[]) => call[0] === 'event' && call[1] === 'command_executed'
+        (call: any[]) => call[0] === 'event' && call[1] === 'command_executed',
       )
       expect(calls.length).toBe(1)
       expect(calls[0][2]).toMatchObject({ command_type: 'ask' })
@@ -192,10 +203,10 @@ describe('analytics.service', () => {
       analytics.trackAppClose()
 
       const durationCalls = gtagSpy.mock.calls.filter(
-        (call: any[]) => call[0] === 'event' && call[1] === 'session_duration'
+        (call: any[]) => call[0] === 'event' && call[1] === 'session_duration',
       )
       const closedCalls = gtagSpy.mock.calls.filter(
-        (call: any[]) => call[0] === 'event' && call[1] === 'app_closed'
+        (call: any[]) => call[0] === 'event' && call[1] === 'app_closed',
       )
       expect(durationCalls.length).toBe(1)
       expect(closedCalls.length).toBe(1)
@@ -208,7 +219,7 @@ describe('analytics.service', () => {
       analytics.trackAssistantStop()
 
       const stoppedCalls = gtagSpy.mock.calls.filter(
-        (call: any[]) => call[0] === 'event' && call[1] === 'assistant_stopped'
+        (call: any[]) => call[0] === 'event' && call[1] === 'assistant_stopped',
       )
       expect(stoppedCalls.length).toBe(1)
     })

@@ -6,7 +6,9 @@ export interface MockMeeting {
   summary: string
 }
 
-export function createMockMeeting(overrides: Partial<MockMeeting> = {}): MockMeeting {
+export function createMockMeeting(
+  overrides: Partial<MockMeeting> = {},
+): MockMeeting {
   return {
     id: 'meeting-1',
     title: 'Test Meeting',

@@ -25,7 +25,8 @@ export const SettingsSelectors = {
   closeButton: '[data-testid="settings-close-button"]',
   closeButtonFallback: '#settings-panel text="Close"',
   sidebar: '[data-testid="settings-sidebar"]',
-  sidebarFallback: '#settings-panel nav, #settings-panel [role="tablist"], #settings-panel aside',
+  sidebarFallback:
+    '#settings-panel nav, #settings-panel [role="tablist"], #settings-panel aside',
   opacitySlider: '[data-testid="opacity-slider"]',
   opacitySliderFallback: 'input[type="range"]',
   quitButton: '[data-testid="quit-button"]',
@@ -85,7 +86,10 @@ export const ModelSelectorSelectors = {
 /**
  * Helper to get selector with fallback
  */
-export function getSelector(selectors: Record<string, string>, key: string): string {
+export function getSelector(
+  selectors: Record<string, string>,
+  key: string,
+): string {
   const primary = selectors[key]
   const fallback = selectors[`${key}Fallback`]
   return fallback ? `${primary}, ${fallback}` : primary

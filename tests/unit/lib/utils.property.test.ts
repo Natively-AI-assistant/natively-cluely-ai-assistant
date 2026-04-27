@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
 import fc from 'fast-check'
+import { describe, expect, it } from 'vitest'
 import { cn } from '../../../src/lib/utils'
 
 describe('cn — property-based tests', () => {
@@ -10,33 +10,27 @@ describe('cn — property-based tests', () => {
         (classes) => {
           const result = cn(...(classes as (string | undefined)[]))
           expect(typeof result).toBe('string')
-        }
-      )
+        },
+      ),
     )
   })
 
   it('returns empty string when all inputs are falsy', () => {
     fc.assert(
-      fc.property(
-        fc.array(fc.constant(undefined)),
-        (classes) => {
-          expect(cn(...(classes as (string | undefined)[]))).toBe('')
-        }
-      )
+      fc.property(fc.array(fc.constant(undefined)), (classes) => {
+        expect(cn(...(classes as (string | undefined)[]))).toBe('')
+      }),
     )
   })
 
   it('output contains all non-falsy input strings', () => {
     fc.assert(
-      fc.property(
-        fc.array(fc.string({ minLength: 1 })),
-        (classes) => {
-          const result = cn(...(classes as (string | undefined)[]))
-          for (const cls of classes as string[]) {
-            expect(result).toContain(cls)
-          }
+      fc.property(fc.array(fc.string({ minLength: 1 })), (classes) => {
+        const result = cn(...(classes as (string | undefined)[]))
+        for (const cls of classes as string[]) {
+          expect(result).toContain(cls)
         }
-      )
+      }),
     )
   })
 
@@ -48,8 +42,8 @@ describe('cn — property-based tests', () => {
           const result = cn(...(classes as (string | undefined)[]))
           const expectedLength = (classes as string[]).join(' ').length
           expect(result.length).toBe(expectedLength)
-        }
-      )
+        },
+      ),
     )
   })
 
@@ -62,8 +56,8 @@ describe('cn — property-based tests', () => {
           const result1 = cn(...args)
           const result2 = cn(...args)
           expect(result1).toBe(result2)
-        }
-      )
+        },
+      ),
     )
   })
 })

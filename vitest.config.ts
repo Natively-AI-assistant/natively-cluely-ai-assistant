@@ -1,4 +1,4 @@
-import path from 'path'
+import path from 'node:path'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
@@ -106,9 +106,14 @@ export default defineConfig({
           name: 'premium',
           globals: true,
           environment: 'node',
+          setupFiles: ['./tests/premium.setup.ts'],
           include: [
             'tests/premium/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}',
           ],
+          alias: {
+            '@hooks': path.resolve(__dirname, './src/hooks'),
+            '@config': path.resolve(__dirname, './src/config'),
+          },
         },
       },
     ],

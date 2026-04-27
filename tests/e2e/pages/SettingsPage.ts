@@ -1,4 +1,4 @@
-import { Page, expect } from '@playwright/test'
+import { expect } from '@playwright/test'
 import { BasePage } from './BasePage'
 
 export class SettingsPage extends BasePage {
@@ -13,8 +13,10 @@ export class SettingsPage extends BasePage {
     'About',
   ] as const
 
-  constructor(page: Page) {
-    super(page)
+  async goto() {
+    await this.dismissOverlays()
+    await this.page.goto('/')
+    await this.page.waitForTimeout(500)
   }
 
   async openFromLauncher() {
@@ -27,13 +29,22 @@ export class SettingsPage extends BasePage {
     await this.dismissOverlays()
     // Wait for settings panel to be visible and stable first
     const settingsPanel = this.page.locator('#settings-panel')
-    await settingsPanel.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {})
+    await settingsPanel
+      .waitFor({ state: 'visible', timeout: 5000 })
+      .catch(() => {})
     // Use page.evaluate to click the close button directly via JS to bypass overlays
-    await this.page.evaluate(() => {
-      const closeBtn = document.querySelector('#settings-panel button[title="Close"], #settings-panel button.Close, #settings-panel button[class*="close"]')
-        || Array.from(document.querySelectorAll('#settings-panel button')).find((b: HTMLButtonElement) => b.textContent?.trim() === 'Close')
-      if (closeBtn instanceof HTMLElement) closeBtn.click()
-    }).catch(() => {})
+    await this.page
+      .evaluate(() => {
+        const closeBtn =
+          document.querySelector(
+            '#settings-panel button[title="Close"], #settings-panel button.Close, #settings-panel button[class*="close"]',
+          ) ||
+          Array.from(document.querySelectorAll('#settings-panel button')).find(
+            (b: HTMLButtonElement) => b.textContent?.trim() === 'Close',
+          )
+        if (closeBtn instanceof HTMLElement) closeBtn.click()
+      })
+      .catch(() => {})
     // If JS click didn't work, try Playwright's locator
     const closeButton = settingsPanel.getByRole('button', { name: 'Close' })
     await closeButton.click({ force: true }).catch(() => {})
@@ -47,7 +58,10 @@ export class SettingsPage extends BasePage {
   }
 
   async getSidebarTabs() {
-    const sidebar = this.page.locator('#settings-panel').locator('nav, [role="tablist"], aside').first()
+    const sidebar = this.page
+      .locator('#settings-panel')
+      .locator('nav, [role="tablist"], aside')
+      .first()
     return sidebar.locator('button')
   }
 
@@ -57,7 +71,11 @@ export class SettingsPage extends BasePage {
 
   // General tab
   async getThemeDropdown() {
-    return this.page.getByText('Theme').locator('..').locator('select, button, [role="combobox"]').first()
+    return this.page
+      .getByText('Theme')
+      .locator('..')
+      .locator('select, button, [role="combobox"]')
+      .first()
   }
 
   async getOpacitySlider() {
@@ -65,15 +83,27 @@ export class SettingsPage extends BasePage {
   }
 
   async getUndetectableToggle() {
-    return this.page.getByRole('switch', { name: /undetectable/i }).or(
-      this.page.locator('text="Undetectable"').locator('..').locator('[role="switch"], input[type="checkbox"]').first()
-    )
+    return this.page
+      .getByRole('switch', { name: /undetectable/i })
+      .or(
+        this.page
+          .locator('text="Undetectable"')
+          .locator('..')
+          .locator('[role="switch"], input[type="checkbox"]')
+          .first(),
+      )
   }
 
   async getMousePassthroughToggle() {
-    return this.page.getByRole('switch', { name: /mouse passthrough/i }).or(
-      this.page.locator('text="Mouse Passthrough"').locator('..').locator('[role="switch"], input[type="checkbox"]').first()
-    )
+    return this.page
+      .getByRole('switch', { name: /mouse passthrough/i })
+      .or(
+        this.page
+          .locator('text="Mouse Passthrough"')
+          .locator('..')
+          .locator('[role="switch"], input[type="checkbox"]')
+          .first(),
+      )
   }
 
   async getQuitButton() {

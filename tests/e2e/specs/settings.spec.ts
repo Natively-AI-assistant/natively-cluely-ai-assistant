@@ -1,7 +1,10 @@
-import { test, expect } from '../fixtures/test'
+import { expect, test } from '../fixtures/test'
 
 test.describe('Settings @settings', () => {
-  test('opens settings overlay from launcher @smoke', async ({ launcher, settings }) => {
+  test('opens settings overlay from launcher @smoke', async ({
+    launcher,
+    settings,
+  }) => {
     await launcher.goto()
     await settings.openFromLauncher()
     await expect(settings.page.locator('#settings-panel')).toBeVisible()
@@ -59,7 +62,10 @@ test.describe('Settings @settings', () => {
     await expect(settings.page.locator('#settings-panel')).toBeVisible()
   })
 
-  test('shows General tab content by default', async ({ launcher, settings }) => {
+  test('shows General tab content by default', async ({
+    launcher,
+    settings,
+  }) => {
     await launcher.goto()
     await settings.openFromLauncher()
     await expect(settings.page.getByText('Theme')).toBeVisible()
@@ -85,7 +91,10 @@ test.describe('Settings @settings', () => {
     await expect(slider).toBeVisible()
   })
 
-  test('navigation: settings tab switch to AI Providers and back', async ({ launcher, settings }) => {
+  test('navigation: settings tab switch to AI Providers and back', async ({
+    launcher,
+    settings,
+  }) => {
     await launcher.goto()
     await settings.openFromLauncher()
     await settings.switchToTab('AI Providers')
@@ -94,7 +103,10 @@ test.describe('Settings @settings', () => {
     await expect(settings.page.getByText('Theme')).toBeVisible()
   })
 
-  test('settings panel has correct structure', async ({ launcher, settings }) => {
+  test('settings panel has correct structure', async ({
+    launcher,
+    settings,
+  }) => {
     await launcher.goto()
     await settings.openFromLauncher()
     const contentArea = await settings.getContentArea()

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // CRITICAL: Mock platformUtils BEFORE importing - module has side effect reading window.electronAPI.platform at import time
 vi.mock('../../../src/utils/platformUtils', () => ({
@@ -7,7 +7,14 @@ vi.mock('../../../src/utils/platformUtils', () => ({
   isLinux: false,
   getModifierSymbol: (modifier: string) => {
     const m = modifier.toLowerCase()
-    if (m === 'commandorcontrol' || m === 'cmd' || m === 'command' || m === 'meta' || m === 'ctrl' || m === 'control') {
+    if (
+      m === 'commandorcontrol' ||
+      m === 'cmd' ||
+      m === 'command' ||
+      m === 'meta' ||
+      m === 'ctrl' ||
+      m === 'control'
+    ) {
       return 'Ctrl'
     }
     if (m === 'alt' || m === 'option') {
@@ -18,22 +25,23 @@ vi.mock('../../../src/utils/platformUtils', () => ({
     }
     return modifier
   },
-  getPlatformShortcut: (keys: string[]) => keys.map(key => {
-    const k = key.toLowerCase()
-    if (k === '⌘' || k === 'command' || k === 'meta' || k === 'cmd') {
-      return 'Ctrl'
-    }
-    if (k === '⌃' || k === 'control' || k === 'ctrl') {
-      return 'Ctrl'
-    }
-    if (k === '⌥' || k === 'option' || k === 'alt') {
-      return 'Alt'
-    }
-    if (k === '⇧' || k === 'shift') {
-      return 'Shift'
-    }
-    return key
-  }),
+  getPlatformShortcut: (keys: string[]) =>
+    keys.map((key) => {
+      const k = key.toLowerCase()
+      if (k === '⌘' || k === 'command' || k === 'meta' || k === 'cmd') {
+        return 'Ctrl'
+      }
+      if (k === '⌃' || k === 'control' || k === 'ctrl') {
+        return 'Ctrl'
+      }
+      if (k === '⌥' || k === 'option' || k === 'alt') {
+        return 'Alt'
+      }
+      if (k === '⇧' || k === 'shift') {
+        return 'Shift'
+      }
+      return key
+    }),
 }))
 
 // Also need to mock electronAPI for the module-level side effect
@@ -42,7 +50,7 @@ const mockElectronAPI = {
 }
 
 beforeEach(() => {
-  // @ts-ignore
+  // @ts-expect-error
   global.window = {
     electronAPI: mockElectronAPI,
   }
@@ -69,69 +77,95 @@ describe('platformUtils', () => {
 
   describe('getModifierSymbol', () => {
     it('should return Ctrl for commandorcontrol on Windows', async () => {
-      const { getModifierSymbol } = await import('../../../src/utils/platformUtils')
+      const { getModifierSymbol } = await import(
+        '../../../src/utils/platformUtils'
+      )
       expect(getModifierSymbol('commandorcontrol')).toBe('Ctrl')
     })
 
     it('should return Ctrl for cmd on Windows', async () => {
-      const { getModifierSymbol } = await import('../../../src/utils/platformUtils')
+      const { getModifierSymbol } = await import(
+        '../../../src/utils/platformUtils'
+      )
       expect(getModifierSymbol('cmd')).toBe('Ctrl')
     })
 
     it('should return Ctrl for meta on Windows', async () => {
-      const { getModifierSymbol } = await import('../../../src/utils/platformUtils')
+      const { getModifierSymbol } = await import(
+        '../../../src/utils/platformUtils'
+      )
       expect(getModifierSymbol('meta')).toBe('Ctrl')
     })
 
     it('should return Alt for alt on Windows', async () => {
-      const { getModifierSymbol } = await import('../../../src/utils/platformUtils')
+      const { getModifierSymbol } = await import(
+        '../../../src/utils/platformUtils'
+      )
       expect(getModifierSymbol('alt')).toBe('Alt')
     })
 
     it('should return Alt for option on Windows', async () => {
-      const { getModifierSymbol } = await import('../../../src/utils/platformUtils')
+      const { getModifierSymbol } = await import(
+        '../../../src/utils/platformUtils'
+      )
       expect(getModifierSymbol('option')).toBe('Alt')
     })
 
     it('should return Shift for shift on Windows', async () => {
-      const { getModifierSymbol } = await import('../../../src/utils/platformUtils')
+      const { getModifierSymbol } = await import(
+        '../../../src/utils/platformUtils'
+      )
       expect(getModifierSymbol('shift')).toBe('Shift')
     })
 
     it('should return modifier unchanged for unknown modifiers', async () => {
-      const { getModifierSymbol } = await import('../../../src/utils/platformUtils')
+      const { getModifierSymbol } = await import(
+        '../../../src/utils/platformUtils'
+      )
       expect(getModifierSymbol('unknown' as any)).toBe('unknown')
     })
   })
 
   describe('getPlatformShortcut', () => {
     it('should convert ⌘ to Ctrl on Windows', async () => {
-      const { getPlatformShortcut } = await import('../../../src/utils/platformUtils')
+      const { getPlatformShortcut } = await import(
+        '../../../src/utils/platformUtils'
+      )
       expect(getPlatformShortcut(['⌘', 'S'])).toEqual(['Ctrl', 'S'])
     })
 
     it('should convert Command to Ctrl on Windows', async () => {
-      const { getPlatformShortcut } = await import('../../../src/utils/platformUtils')
+      const { getPlatformShortcut } = await import(
+        '../../../src/utils/platformUtils'
+      )
       expect(getPlatformShortcut(['Command', 'S'])).toEqual(['Ctrl', 'S'])
     })
 
     it('should convert ⌃ to Ctrl on Windows', async () => {
-      const { getPlatformShortcut } = await import('../../../src/utils/platformUtils')
+      const { getPlatformShortcut } = await import(
+        '../../../src/utils/platformUtils'
+      )
       expect(getPlatformShortcut(['⌃', 'S'])).toEqual(['Ctrl', 'S'])
     })
 
     it('should convert ⌥ to Alt on Windows', async () => {
-      const { getPlatformShortcut } = await import('../../../src/utils/platformUtils')
+      const { getPlatformShortcut } = await import(
+        '../../../src/utils/platformUtils'
+      )
       expect(getPlatformShortcut(['⌥', 'S'])).toEqual(['Alt', 'S'])
     })
 
     it('should convert ⇧ to Shift on Windows', async () => {
-      const { getPlatformShortcut } = await import('../../../src/utils/platformUtils')
+      const { getPlatformShortcut } = await import(
+        '../../../src/utils/platformUtils'
+      )
       expect(getPlatformShortcut(['⇧', 'S'])).toEqual(['Shift', 'S'])
     })
 
     it('should leave non-modifier keys unchanged', async () => {
-      const { getPlatformShortcut } = await import('../../../src/utils/platformUtils')
+      const { getPlatformShortcut } = await import(
+        '../../../src/utils/platformUtils'
+      )
       expect(getPlatformShortcut(['A', 'B', 'C'])).toEqual(['A', 'B', 'C'])
     })
   })

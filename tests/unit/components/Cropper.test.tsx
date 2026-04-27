@@ -1,7 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Cropper from '../../../src/components/Cropper'
-import React from 'react'
 
 // Import mock factory for consistent electronAPI mocking
 import { installElectronAPIMock } from '../../mocks/electronAPI.mock'
@@ -76,7 +75,10 @@ describe('Cropper', () => {
       fireEvent.mouseDown(container, { clientX: 100, clientY: 100 })
       const canvas = document.querySelector('canvas')
       expect(canvas).toBeInTheDocument()
-      expect((HTMLCanvasElement.prototype.getContext as any).mock.results[0].value.clearRect).toHaveBeenCalled()
+      expect(
+        (HTMLCanvasElement.prototype.getContext as any).mock.results[0].value
+          .clearRect,
+      ).toHaveBeenCalled()
     }
   })
 
@@ -87,7 +89,8 @@ describe('Cropper', () => {
     if (container) {
       fireEvent.mouseDown(container, { clientX: 100, clientY: 100 })
       fireEvent.mouseMove(container, { clientX: 200, clientY: 200 })
-      const ctx = (HTMLCanvasElement.prototype.getContext as any).mock.results[0].value
+      const ctx = (HTMLCanvasElement.prototype.getContext as any).mock
+        .results[0].value
       expect(ctx.clearRect).toHaveBeenCalled()
     }
   })
@@ -104,7 +107,12 @@ describe('Cropper', () => {
     }
 
     expect(cropperConfirmed).toHaveBeenCalledWith(
-      expect.objectContaining({ x: expect.any(Number), y: expect.any(Number), width: expect.any(Number), height: expect.any(Number) })
+      expect.objectContaining({
+        x: expect.any(Number),
+        y: expect.any(Number),
+        width: expect.any(Number),
+        height: expect.any(Number),
+      }),
     )
   })
 

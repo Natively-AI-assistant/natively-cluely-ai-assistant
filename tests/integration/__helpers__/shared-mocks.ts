@@ -13,7 +13,8 @@ import { vi } from 'vitest'
 vi.mock('electron', () => ({
   app: {
     getPath: vi.fn((name: string) => {
-      if (name === 'userData') return (global as any).__NATIVELY_TEST_USER_DATA__
+      if (name === 'userData')
+        return (global as any).__NATIVELY_TEST_USER_DATA__
       return '/tmp/test-userdata'
     }),
     isReady: vi.fn(() => true),
@@ -68,7 +69,6 @@ vi.mock('../../electron/services/RateLimiter', () => ({
 
 vi.mock('openai', () => ({
   default: class OpenAI {
-    constructor() {}
     chat = {
       completions: {
         create: async () => ({
@@ -81,13 +81,12 @@ vi.mock('openai', () => ({
 
 vi.mock('@anthropic-ai/sdk', () => ({
   default: class Anthropic {
-    constructor() {}
     messages = {
       create: async () => ({
         content: [{ type: 'text', text: 'Mock Claude response' }],
       }),
     }
-  }
+  },
 }))
 
 vi.mock('../../electron/services/CredentialsManager', () => ({

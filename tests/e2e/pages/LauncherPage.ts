@@ -1,4 +1,4 @@
-import { Page, expect } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
 import { BasePage } from './BasePage'
 
 export class LauncherPage extends BasePage {
@@ -9,7 +9,9 @@ export class LauncherPage extends BasePage {
   async goto() {
     await this.dismissOverlays()
     await this.page.goto('/')
-    await expect(this.page.locator('#launcher-container')).toBeVisible({ timeout: 15000 })
+    await expect(this.page.locator('#launcher-container')).toBeVisible({
+      timeout: 15000,
+    })
   }
 
   async isReady() {
@@ -50,7 +52,9 @@ export class LauncherPage extends BasePage {
   }
 
   async getMeetingItems() {
-    return this.page.locator('[data-testid="meeting-item"], main .group.relative')
+    return this.page.locator(
+      '[data-testid="meeting-item"], main .group.relative',
+    )
   }
 
   async getRefreshButton() {

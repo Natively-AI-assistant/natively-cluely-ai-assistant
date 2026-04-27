@@ -5,17 +5,15 @@
  * reset behaviour, and window.electronAPI installation.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { vi } from 'vitest'
-import {
-  createElectronAPIMock,
-  installElectronAPIMock,
-  resetElectronAPIMock,
-  getExpectedElectronAPIMethods,
-} from './electronAPI.mock'
-
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // Import shared fixtures as source of truth for credential defaults
 import { mockCredentials } from '../fixtures'
+import {
+  createElectronAPIMock,
+  getExpectedElectronAPIMethods,
+  installElectronAPIMock,
+  resetElectronAPIMock,
+} from './electronAPI.mock'
 
 // ---------------------------------------------------------------------------
 // 1. Completeness — every interface method is present
@@ -87,7 +85,9 @@ describe('createElectronAPIMock', () => {
     expect(await mock.setTavilyApiKey('key')).toEqual({ success: true })
 
     expect(await mock.testLlmConnection('gemini')).toEqual({ success: true })
-    expect(await mock.testSttConnection('groq', 'key')).toEqual({ success: true })
+    expect(await mock.testSttConnection('groq', 'key')).toEqual({
+      success: true,
+    })
     expect(await mock.testReleaseFetch()).toEqual({ success: true })
   })
 
@@ -109,7 +109,9 @@ describe('createElectronAPIMock', () => {
   it('void async methods resolve to undefined', async () => {
     const mock = createElectronAPIMock()
 
-    expect(await mock.updateContentDimensions({ width: 100, height: 100 })).toBeUndefined()
+    expect(
+      await mock.updateContentDimensions({ width: 100, height: 100 }),
+    ).toBeUndefined()
     expect(await mock.takeScreenshot()).toBeUndefined()
     expect(await mock.moveWindowLeft()).toBeUndefined()
     expect(await mock.quitApp()).toBeUndefined()
@@ -131,7 +133,9 @@ describe('createElectronAPIMock', () => {
     expect(vi.isMockFunction(mock.cropperConfirmed)).toBe(true)
     expect(vi.isMockFunction(mock.cropperCancelled)).toBe(true)
     // They should not throw when called
-    expect(() => mock.cropperConfirmed({ x: 0, y: 0, width: 100, height: 100 })).not.toThrow()
+    expect(() =>
+      mock.cropperConfirmed({ x: 0, y: 0, width: 100, height: 100 }),
+    ).not.toThrow()
     expect(() => mock.cropperCancelled()).not.toThrow()
   })
 
@@ -158,7 +162,9 @@ describe('createElectronAPIMock', () => {
     const calls: any[] = []
     const customListener = vi.fn((cb: any) => {
       calls.push(cb)
-      return () => { /* custom unsub */ }
+      return () => {
+        /* custom unsub */
+      }
     })
 
     const mock = createElectronAPIMock({ onScreenshotTaken: customListener })

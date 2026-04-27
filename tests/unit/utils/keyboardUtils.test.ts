@@ -1,12 +1,22 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { acceleratorToKeys, keysToAccelerator } from '../../../src/utils/keyboardUtils'
+import { describe, expect, it, vi } from 'vitest'
+import {
+  acceleratorToKeys,
+  keysToAccelerator,
+} from '../../../src/utils/keyboardUtils'
 
 // Mock platformUtils
 vi.mock('../../../src/utils/platformUtils', () => ({
   isMac: false,
   getModifierSymbol: (modifier: string) => {
     const m = modifier.toLowerCase()
-    if (m === 'commandorcontrol' || m === 'ctrl' || m === 'control' || m === 'cmd' || m === 'command' || m === 'meta') {
+    if (
+      m === 'commandorcontrol' ||
+      m === 'ctrl' ||
+      m === 'control' ||
+      m === 'cmd' ||
+      m === 'command' ||
+      m === 'meta'
+    ) {
       return 'Ctrl'
     }
     if (m === 'alt' || m === 'option') {
@@ -102,7 +112,11 @@ describe('keyboardUtils', () => {
     })
 
     it('should handle complex accelerator', () => {
-      expect(acceleratorToKeys('CommandOrControl+Shift+Space')).toEqual(['Ctrl', 'Shift', 'Space'])
+      expect(acceleratorToKeys('CommandOrControl+Shift+Space')).toEqual([
+        'Ctrl',
+        'Shift',
+        'Space',
+      ])
     })
 
     it('should be case insensitive', () => {
@@ -216,7 +230,9 @@ describe('keyboardUtils', () => {
     })
 
     it('should handle complex combination', () => {
-      expect(keysToAccelerator(['Meta', 'Shift', 'Space'])).toBe('CommandOrControl+Shift+SPACE')
+      expect(keysToAccelerator(['Meta', 'Shift', 'Space'])).toBe(
+        'CommandOrControl+Shift+SPACE',
+      )
     })
 
     it('should be case insensitive', () => {

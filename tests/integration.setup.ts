@@ -1,5 +1,5 @@
 // tests/integration.setup.ts
-import { beforeAll, afterAll, afterEach } from 'vitest'
+import { afterAll, afterEach, beforeAll } from 'vitest'
 import { server } from './msw/server'
 
 // MSW: intercept HTTP calls in node environment

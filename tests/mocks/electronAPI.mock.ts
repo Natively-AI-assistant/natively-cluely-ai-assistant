@@ -29,7 +29,7 @@ const listeners = new Map<string, Set<Function>>()
  * Enables simulating main→renderer events in tests.
  */
 export function fireIPCEvent(channel: string, data: any): void {
-  listeners.get(channel)?.forEach(cb => cb(data))
+  listeners.get(channel)?.forEach((cb) => cb(data))
 }
 
 // ---------------------------------------------------------------------------
@@ -38,7 +38,7 @@ export function fireIPCEvent(channel: string, data: any): void {
 function listenerMock(channel: string) {
   return vi.fn((callback: Function) => {
     if (!listeners.has(channel)) listeners.set(channel, new Set())
-    listeners.get(channel)!.add(callback)
+    listeners.get(channel)?.add(callback)
     return () => listeners.get(channel)?.delete(callback)
   })
 }
@@ -52,7 +52,7 @@ function listenerMock(channel: string) {
  * is present with a vi.fn() that resolves to a type-appropriate default.
  */
 export function createElectronAPIMock(
-  overrides: Partial<Record<string, any>> = {}
+  overrides: Partial<Record<string, any>> = {},
 ): Record<string, any> {
   const mock: Record<string, any> = {
     // ===================================================================
@@ -117,20 +117,24 @@ export function createElectronAPIMock(
     getRecognitionLanguages: vi.fn(() => Promise.resolve({})),
     getScreenshots: vi.fn(() => Promise.resolve([])),
     takeSelectiveScreenshot: vi.fn(() =>
-      Promise.resolve({ path: '', preview: '', cancelled: false })
+      Promise.resolve({ path: '', preview: '', cancelled: false }),
     ),
     deleteScreenshot: vi.fn(() => Promise.resolve({ success: true })),
 
     // LLM
     getCurrentLlmConfig: vi.fn(() =>
-      Promise.resolve({ provider: 'ollama' as const, model: '', isOllama: true })
+      Promise.resolve({
+        provider: 'ollama' as const,
+        model: '',
+        isOllama: true,
+      }),
     ),
     getAvailableOllamaModels: vi.fn(() => Promise.resolve<string[]>([])),
     switchToOllama: vi.fn(() => Promise.resolve({ success: true })),
     switchToGemini: vi.fn(() => Promise.resolve({ success: true })),
     testLlmConnection: vi.fn(() => Promise.resolve({ success: true })),
     selectServiceAccount: vi.fn(() =>
-      Promise.resolve({ success: true, path: undefined, cancelled: false })
+      Promise.resolve({ success: true, path: undefined, cancelled: false }),
     ),
 
     // API keys
@@ -157,7 +161,7 @@ export function createElectronAPIMock(
         hasIbmWatsonKey: false,
         ibmWatsonRegion: '',
         hasSonioxKey: false,
-      })
+      }),
     ),
 
     // STT
@@ -175,38 +179,66 @@ export function createElectronAPIMock(
 
     // Devices / languages
     generateSuggestion: vi.fn(() => Promise.resolve({ suggestion: '' })),
-    getInputDevices: vi.fn(() => Promise.resolve<Array<{ id: string; name: string }>>([])),
-    getOutputDevices: vi.fn(() => Promise.resolve<Array<{ id: string; name: string }>>([])),
+    getInputDevices: vi.fn(() =>
+      Promise.resolve<Array<{ id: string; name: string }>>([]),
+    ),
+    getOutputDevices: vi.fn(() =>
+      Promise.resolve<Array<{ id: string; name: string }>>([]),
+    ),
     setRecognitionLanguage: vi.fn(() => Promise.resolve({ success: true })),
     getAiResponseLanguages: vi.fn(() =>
-      Promise.resolve<Array<{ label: string; code: string }>>([])
+      Promise.resolve<Array<{ label: string; code: string }>>([]),
     ),
     setAiResponseLanguage: vi.fn(() => Promise.resolve({ success: true })),
 
     // Intelligence
-    generateAssist: vi.fn(() => Promise.resolve({ insight: null as string | null })),
+    generateAssist: vi.fn(() =>
+      Promise.resolve({ insight: null as string | null }),
+    ),
     generateWhatToSay: vi.fn(() =>
-      Promise.resolve({ answer: null as string | null, question: undefined })
+      Promise.resolve({ answer: null as string | null, question: undefined }),
     ),
     generateFollowUp: vi.fn(() =>
-      Promise.resolve({ refined: null as string | null, intent: '' })
+      Promise.resolve({ refined: null as string | null, intent: '' }),
     ),
-    generateRecap: vi.fn(() => Promise.resolve({ summary: null as string | null })),
-    submitManualQuestion: vi.fn(() => Promise.resolve({ answer: null as string | null, question: '' })),
+    generateRecap: vi.fn(() =>
+      Promise.resolve({ summary: null as string | null }),
+    ),
+    submitManualQuestion: vi.fn(() =>
+      Promise.resolve({ answer: null as string | null, question: '' }),
+    ),
     getIntelligenceContext: vi.fn(() =>
-      Promise.resolve({ context: '', lastAssistantMessage: null as string | null, activeMode: '' })
+      Promise.resolve({
+        context: '',
+        lastAssistantMessage: null as string | null,
+        activeMode: '',
+      }),
     ),
     resetIntelligence: vi.fn(() => Promise.resolve({ success: true })),
-    generateClarify: vi.fn(() => Promise.resolve({ clarification: null as string | null })),
-    generateCodeHint: vi.fn(() => Promise.resolve({ hint: null as string | null })),
-    generateBrainstorm: vi.fn(() => Promise.resolve({ ideas: null as string | null })),
+    generateClarify: vi.fn(() =>
+      Promise.resolve({ clarification: null as string | null }),
+    ),
+    generateCodeHint: vi.fn(() =>
+      Promise.resolve({ hint: null as string | null }),
+    ),
+    generateBrainstorm: vi.fn(() =>
+      Promise.resolve({ ideas: null as string | null }),
+    ),
     generateFollowUpQuestions: vi.fn(() => Promise.resolve({ questions: '' })),
 
     // Meetings
     startMeeting: vi.fn(() => Promise.resolve({ success: true })),
     endMeeting: vi.fn(() => Promise.resolve({ success: true })),
     getRecentMeetings: vi.fn(() =>
-      Promise.resolve<Array<{ id: string; title: string; date: string; duration: string; summary: string }>>([])
+      Promise.resolve<
+        Array<{
+          id: string
+          title: string
+          date: string
+          duration: string
+          summary: string
+        }>
+      >([]),
     ),
     getMeetingDetails: vi.fn(() => Promise.resolve({})),
     updateMeetingTitle: vi.fn(() => Promise.resolve(true)),
@@ -233,7 +265,7 @@ export function createElectronAPIMock(
     // Email
     extractEmailsFromTranscript: vi.fn(() => Promise.resolve<string[]>([])),
     getCalendarAttendees: vi.fn(() =>
-      Promise.resolve<Array<{ email: string; name: string }>>([])
+      Promise.resolve<Array<{ email: string; name: string }>>([]),
     ),
     openMailto: vi.fn(() => Promise.resolve({ success: true })),
 
@@ -255,7 +287,7 @@ export function createElectronAPIMock(
 
     // Theme
     getThemeMode: vi.fn(() =>
-      Promise.resolve({ mode: 'system' as const, resolved: 'light' as const })
+      Promise.resolve({ mode: 'system' as const, resolved: 'light' as const }),
     ),
     setThemeMode: vi.fn(() => Promise.resolve()),
 
@@ -264,7 +296,16 @@ export function createElectronAPIMock(
     calendarDisconnect: vi.fn(() => Promise.resolve({ success: true })),
     getCalendarStatus: vi.fn(() => Promise.resolve({ connected: false })),
     getUpcomingEvents: vi.fn(() =>
-      Promise.resolve<Array<{ id: string; title: string; startTime: string; endTime: string; link?: string; source: 'google' }>>([])
+      Promise.resolve<
+        Array<{
+          id: string
+          title: string
+          startTime: string
+          endTime: string
+          link?: string
+          source: 'google'
+        }>
+      >([]),
     ),
     calendarRefresh: vi.fn(() => Promise.resolve({ success: true })),
 
@@ -277,23 +318,43 @@ export function createElectronAPIMock(
     ragQueryGlobal: vi.fn(() => Promise.resolve({})),
     ragCancelQuery: vi.fn(() => Promise.resolve({ success: true })),
     ragGetQueueStatus: vi.fn(() =>
-      Promise.resolve({ pending: 0, processing: 0, completed: 0, failed: 0 })
+      Promise.resolve({ pending: 0, processing: 0, completed: 0, failed: 0 }),
     ),
     ragRetryEmbeddings: vi.fn(() => Promise.resolve({ success: true })),
     reindexIncompatibleMeetings: vi.fn(() => Promise.resolve()),
 
     // Keybinds
     getKeybinds: vi.fn(() =>
-      Promise.resolve<Array<{ id: string; label: string; accelerator: string; isGlobal: boolean; defaultAccelerator: string }>>([])
+      Promise.resolve<
+        Array<{
+          id: string
+          label: string
+          accelerator: string
+          isGlobal: boolean
+          defaultAccelerator: string
+        }>
+      >([]),
     ),
     setKeybind: vi.fn(() => Promise.resolve(true)),
     resetKeybinds: vi.fn(() =>
-      Promise.resolve<Array<{ id: string; label: string; accelerator: string; isGlobal: boolean; defaultAccelerator: string }>>([])
+      Promise.resolve<
+        Array<{
+          id: string
+          label: string
+          accelerator: string
+          isGlobal: boolean
+          defaultAccelerator: string
+        }>
+      >([]),
     ),
 
     // Donation
     getDonationStatus: vi.fn(() =>
-      Promise.resolve({ shouldShow: false, hasDonated: false, lifetimeShows: 0 })
+      Promise.resolve({
+        shouldShow: false,
+        hasDonated: false,
+        lifetimeShows: 0,
+      }),
     ),
     markDonationToastShown: vi.fn(() => Promise.resolve({ success: true })),
     setDonationComplete: vi.fn(() => Promise.resolve({ success: true })),
@@ -301,7 +362,7 @@ export function createElectronAPIMock(
     // Profile
     profileUploadResume: vi.fn(() => Promise.resolve({ success: true })),
     profileGetStatus: vi.fn(() =>
-      Promise.resolve({ hasProfile: false, profileMode: false })
+      Promise.resolve({ hasProfile: false, profileMode: false }),
     ),
     profileSetMode: vi.fn(() => Promise.resolve({ success: true })),
     profileDelete: vi.fn(() => Promise.resolve({ success: true })),
@@ -320,7 +381,7 @@ export function createElectronAPIMock(
     // Overlay
     setOverlayMousePassthrough: vi.fn(() => Promise.resolve({ success: true })),
     toggleOverlayMousePassthrough: vi.fn(() =>
-      Promise.resolve({ success: true, enabled: false })
+      Promise.resolve({ success: true, enabled: false }),
     ),
 
     // Verbose logging
@@ -380,10 +441,16 @@ export function createElectronAPIMock(
 
     // Intelligence events
     onIntelligenceAssistUpdate: listenerMock('onIntelligenceAssistUpdate'),
-    onIntelligenceSuggestedAnswer: listenerMock('onIntelligenceSuggestedAnswer'),
-    onIntelligenceSuggestedAnswerToken: listenerMock('onIntelligenceSuggestedAnswerToken'),
+    onIntelligenceSuggestedAnswer: listenerMock(
+      'onIntelligenceSuggestedAnswer',
+    ),
+    onIntelligenceSuggestedAnswerToken: listenerMock(
+      'onIntelligenceSuggestedAnswerToken',
+    ),
     onIntelligenceRefinedAnswer: listenerMock('onIntelligenceRefinedAnswer'),
-    onIntelligenceRefinedAnswerToken: listenerMock('onIntelligenceRefinedAnswerToken'),
+    onIntelligenceRefinedAnswerToken: listenerMock(
+      'onIntelligenceRefinedAnswerToken',
+    ),
     onIntelligenceRecap: listenerMock('onIntelligenceRecap'),
     onIntelligenceRecapToken: listenerMock('onIntelligenceRecapToken'),
     onIntelligenceClarify: listenerMock('onIntelligenceClarify'),
@@ -392,8 +459,12 @@ export function createElectronAPIMock(
     onIntelligenceManualResult: listenerMock('onIntelligenceManualResult'),
     onIntelligenceModeChanged: listenerMock('onIntelligenceModeChanged'),
     onIntelligenceError: listenerMock('onIntelligenceError'),
-    onIntelligenceFollowUpQuestionsToken: listenerMock('onIntelligenceFollowUpQuestionsToken'),
-    onIntelligenceFollowUpQuestionsUpdate: listenerMock('onIntelligenceFollowUpQuestionsUpdate'),
+    onIntelligenceFollowUpQuestionsToken: listenerMock(
+      'onIntelligenceFollowUpQuestionsToken',
+    ),
+    onIntelligenceFollowUpQuestionsUpdate: listenerMock(
+      'onIntelligenceFollowUpQuestionsUpdate',
+    ),
     onSessionReset: listenerMock('onSessionReset'),
 
     // Streaming
@@ -403,7 +474,9 @@ export function createElectronAPIMock(
 
     // State change listeners
     onUndetectableChanged: listenerMock('onUndetectableChanged'),
-    onOverlayMousePassthroughChanged: listenerMock('onOverlayMousePassthroughChanged'),
+    onOverlayMousePassthroughChanged: listenerMock(
+      'onOverlayMousePassthroughChanged',
+    ),
     onGroqFastTextChanged: listenerMock('onGroqFastTextChanged'),
     onModelChanged: listenerMock('onModelChanged'),
 
@@ -432,7 +505,9 @@ export function createElectronAPIMock(
     onGlobalShortcut: listenerMock('onGlobalShortcut'),
 
     // Misc
-    onIncompatibleProviderWarning: listenerMock('onIncompatibleProviderWarning'),
+    onIncompatibleProviderWarning: listenerMock(
+      'onIncompatibleProviderWarning',
+    ),
     onDisguiseChanged: listenerMock('onDisguiseChanged'),
     onSettingsVisibilityChange: listenerMock('onSettingsVisibilityChange'),
     onOverlayOpacityChanged: listenerMock('onOverlayOpacityChanged'),
@@ -459,7 +534,7 @@ let _installedMock: Record<string, any> | null = null
  * Can be called again after resetElectronAPIMock() to re-install.
  */
 export function installElectronAPIMock(
-  overrides: Partial<Record<string, any>> = {}
+  overrides: Partial<Record<string, any>> = {},
 ): Record<string, any> {
   _installedMock = createElectronAPIMock(overrides)
   Object.defineProperty(window, 'electronAPI', {

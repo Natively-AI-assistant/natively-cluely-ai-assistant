@@ -1,19 +1,29 @@
-import { test, expect } from '../fixtures/test'
+import { expect, test } from '../fixtures/test'
 
 test.describe('Error States', () => {
-  test('app loads when Electron API mock is configured', async ({ launcher }) => {
+  test('app loads when Electron API mock is configured', async ({
+    launcher,
+  }) => {
     await launcher.goto()
-    await expect(launcher.page.locator('#launcher-container')).toBeVisible({ timeout: 15000 })
+    await expect(launcher.page.locator('#launcher-container')).toBeVisible({
+      timeout: 15000,
+    })
   })
 
-  test('settings popup renders with default empty settings', async ({ page, settings }) => {
+  test('settings popup renders with default empty settings', async ({
+    page,
+    settings,
+  }) => {
     void settings
     await page.goto('/?window=settings')
     await expect(page.getByText('Transcript')).toBeVisible()
     await expect(page.getByText('Detectable')).toBeVisible()
   })
 
-  test('empty model list shows appropriate message', async ({ modelSelector, page }) => {
+  test('empty model list shows appropriate message', async ({
+    modelSelector,
+    page,
+  }) => {
     await modelSelector.goto()
     const noModels = page.getByText(/no models/i)
     const loading = page.getByText(/loading models/i)
@@ -31,7 +41,9 @@ test.describe('Error States', () => {
   test('cropper container renders', async ({ cropper, page }) => {
     await cropper.goto()
     // Check for the cropper wrapper (canvas parent)
-    await expect(page.locator('.w-screen.h-screen.cursor-default')).toBeVisible()
+    await expect(
+      page.locator('.w-screen.h-screen.cursor-default'),
+    ).toBeVisible()
     // Check for canvas element (the actual cropper canvas)
     await expect(page.locator('canvas')).toBeVisible()
   })

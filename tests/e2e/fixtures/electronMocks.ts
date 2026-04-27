@@ -1,7 +1,7 @@
-import { Page } from '@playwright/test'
-import { E2EMockMeeting } from '../data/meetings'
-import { E2EMockModel } from '../data/models'
-import { E2EMockSettings } from '../data/settings'
+import type { Page } from '@playwright/test'
+import type { E2EMockMeeting } from '../data/meetings'
+import type { E2EMockModel } from '../data/models'
+import type { E2EMockSettings } from '../data/settings'
 
 export interface MockScenario {
   name: string
@@ -284,6 +284,9 @@ function buildElectronMockScript(scenario: MockScenario): string {
   `
 }
 
-export async function setupElectronMock(page: Page, scenario: MockScenario): Promise<void> {
+export async function setupElectronMock(
+  page: Page,
+  scenario: MockScenario,
+): Promise<void> {
   await page.addInitScript(buildElectronMockScript(scenario))
 }

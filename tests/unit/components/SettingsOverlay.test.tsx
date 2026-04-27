@@ -3,9 +3,9 @@
  * Tests settings categories, persistence, validation
  */
 
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import React from 'react'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import '../../mocks/framer-motion.mock'
 import '../../mocks/electronAPI.mock'
@@ -14,8 +14,12 @@ import { createMockCredentials } from '../../fixtures'
 
 vi.mock('../../../src/premium', () => ({
   __esModule: true,
-  PremiumUpgradeModal: () => <div data-testid="premium-modal">PremiumUpgradeModal</div>,
-  ProfileVisualizer: () => <div data-testid="profile-visualizer">ProfileVisualizer</div>,
+  PremiumUpgradeModal: () => (
+    <div data-testid="premium-modal">PremiumUpgradeModal</div>
+  ),
+  ProfileVisualizer: () => (
+    <div data-testid="profile-visualizer">ProfileVisualizer</div>
+  ),
   PremiumPromoToaster: () => null,
   ProfileFeatureToaster: () => null,
   JDAwarenessToaster: () => null,
@@ -87,10 +91,16 @@ vi.mock('../../../src/lib/overlayAppearance', () => ({
 vi.mock('../../../src/components/ui/KeyRecorder', () => ({
   __esModule: true,
   KeyRecorder: ({ value, onChange }: any) =>
-    React.createElement('input', { 'data-testid': 'key-recorder', value, onChange }),
+    React.createElement('input', {
+      'data-testid': 'key-recorder',
+      value,
+      onChange,
+    }),
 }))
 
-vi.mock('../../../src/components/icon.png', () => ({ default: '/mock-icon.png' }))
+vi.mock('../../../src/components/icon.png', () => ({
+  default: '/mock-icon.png',
+}))
 
 vi.mock('../../../src/components/AboutSection', () => ({
   __esModule: true,
@@ -99,12 +109,16 @@ vi.mock('../../../src/components/AboutSection', () => ({
 
 vi.mock('../../../src/components/settings/AIProvidersSettings', () => ({
   __esModule: true,
-  AIProvidersSettings: () => <div data-testid="ai-providers-settings">AIProvidersSettings</div>,
+  AIProvidersSettings: () => (
+    <div data-testid="ai-providers-settings">AIProvidersSettings</div>
+  ),
 }))
 
 vi.mock('../../../src/components/settings/NativelyApiSettings', () => ({
   __esModule: true,
-  NativelyApiSettings: () => <div data-testid="natively-api-settings">NativelyApiSettings</div>,
+  NativelyApiSettings: () => (
+    <div data-testid="natively-api-settings">NativelyApiSettings</div>
+  ),
 }))
 
 describe('SettingsOverlay Component', () => {
@@ -113,8 +127,13 @@ describe('SettingsOverlay Component', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     ;(window.electronAPI.getSttProvider as any).mockResolvedValue('google')
-    ;(window.electronAPI.getStoredCredentials as any).mockResolvedValue(createMockCredentials())
-    ;(window.electronAPI.getThemeMode as any).mockResolvedValue({ mode: 'system', resolved: 'light' })
+    ;(window.electronAPI.getStoredCredentials as any).mockResolvedValue(
+      createMockCredentials(),
+    )
+    ;(window.electronAPI.getThemeMode as any).mockResolvedValue({
+      mode: 'system',
+      resolved: 'light',
+    })
     ;(window.electronAPI.getKeybinds as any).mockResolvedValue([])
     ;(window.electronAPI.getActionButtonMode as any).mockResolvedValue('recap')
   })
@@ -142,15 +161,17 @@ describe('SettingsOverlay Component', () => {
     expect(buttons.length).toBeGreaterThan(0)
 
     // Check that known sidebar items are present as button text
-    const buttonTexts = buttons.map(btn => btn.textContent).filter(Boolean)
+    const buttonTexts = buttons.map((btn) => btn.textContent).filter(Boolean)
     const knownSections = ['AI Providers', 'About']
     for (const section of knownSections) {
-      expect(buttonTexts.some(text => text!.includes(section))).toBe(true)
+      expect(buttonTexts.some((text) => text?.includes(section))).toBe(true)
     }
   })
 
   it('renders the settings panel with expected structure', () => {
-    const { container } = render(<SettingsOverlay isOpen={true} onClose={mockOnClose} />)
+    const { container } = render(
+      <SettingsOverlay isOpen={true} onClose={mockOnClose} />,
+    )
 
     // Should have a backdrop and a panel
     expect(container.querySelector('#settings-backdrop')).not.toBeNull()

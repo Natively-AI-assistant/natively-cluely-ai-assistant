@@ -1,13 +1,18 @@
-import { Page, expect } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
 
 /**
  * Wait for app to be fully initialized
  */
-export async function waitForAppReady(page: Page, timeout = 15000): Promise<void> {
-  await page.locator('#launcher-container, [data-testid="launcher-container"]').waitFor({
-    state: 'visible',
-    timeout,
-  })
+export async function waitForAppReady(
+  page: Page,
+  timeout = 15000,
+): Promise<void> {
+  await page
+    .locator('#launcher-container, [data-testid="launcher-container"]')
+    .waitFor({
+      state: 'visible',
+      timeout,
+    })
 }
 
 /**
@@ -59,7 +64,11 @@ export async function assertAttribute(
   expectedValue: string | RegExp,
   timeout = 5000,
 ): Promise<void> {
-  await expect(page.locator(selector)).toHaveAttribute(attribute, expectedValue, { timeout })
+  await expect(page.locator(selector)).toHaveAttribute(
+    attribute,
+    expectedValue,
+    { timeout },
+  )
 }
 
 /**

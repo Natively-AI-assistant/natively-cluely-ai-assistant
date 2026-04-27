@@ -3,9 +3,8 @@
  * Tests rendering and electronAPI calls on mount
  */
 
-import React from 'react'
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import '../../../tests/mocks/electronAPI.mock'
 
@@ -25,7 +24,9 @@ describe('ModelSelectorWindow Component', () => {
     })
     ;(window.electronAPI.getCustomProviders as any).mockResolvedValue([])
     ;(window.electronAPI.getAvailableOllamaModels as any).mockResolvedValue([])
-    ;(window.electronAPI.getCurrentLlmConfig as any).mockResolvedValue({ model: '' })
+    ;(window.electronAPI.getCurrentLlmConfig as any).mockResolvedValue({
+      model: '',
+    })
     ;(window.electronAPI.onModelChanged as any).mockReturnValue(undefined)
   })
 

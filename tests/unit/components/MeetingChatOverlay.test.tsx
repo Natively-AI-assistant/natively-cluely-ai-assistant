@@ -3,15 +3,18 @@
  * Tests meeting chat UI, RAG streaming, and IPC
  */
 
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import React from 'react'
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Import mocks from test mocks directory
 import '../../mocks/framer-motion.mock'
-import { installElectronAPIMock, fireIPCEvent } from '../../mocks/electronAPI.mock'
 
 import MeetingChatOverlay from '../../../src/components/MeetingChatOverlay'
+import {
+  fireIPCEvent,
+  installElectronAPIMock,
+} from '../../mocks/electronAPI.mock'
 
 // Mock useStreamBuffer hook
 vi.mock('../../../src/hooks/useStreamBuffer', () => ({
@@ -33,7 +36,8 @@ Object.defineProperty(HTMLDivElement.prototype, 'scrollIntoView', {
 // Mock react-markdown
 vi.mock('react-markdown', () => ({
   __esModule: true,
-  default: ({ children }: any) => React.createElement('div', { 'data-testid': 'markdown' }, children),
+  default: ({ children }: any) =>
+    React.createElement('div', { 'data-testid': 'markdown' }, children),
 }))
 
 vi.mock('remark-gfm', () => ({ default: () => null }))
@@ -46,7 +50,9 @@ vi.mock('react-syntax-highlighter', () => ({
 }))
 
 // Mock image import
-vi.mock('../../../src/components/icon.png', () => ({ default: '/mock-icon.png' }))
+vi.mock('../../../src/components/icon.png', () => ({
+  default: '/mock-icon.png',
+}))
 
 describe('MeetingChatOverlay Component', () => {
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>
@@ -87,7 +93,7 @@ describe('MeetingChatOverlay Component', () => {
         onClose={mockOnClose}
         meetingContext={defaultMeetingContext}
         onNewQuery={mockOnNewQuery}
-      />
+      />,
     )
     expect(screen.getByText('Search this meeting')).toBeInTheDocument()
     expect(screen.getByRole('button')).toBeInTheDocument()
@@ -100,7 +106,7 @@ describe('MeetingChatOverlay Component', () => {
         onClose={mockOnClose}
         meetingContext={defaultMeetingContext}
         onNewQuery={mockOnNewQuery}
-      />
+      />,
     )
     expect(screen.queryByText('Search this meeting')).not.toBeInTheDocument()
   })
@@ -112,7 +118,7 @@ describe('MeetingChatOverlay Component', () => {
         onClose={mockOnClose}
         meetingContext={{ id: 'empty', title: 'Empty Meeting' }}
         onNewQuery={mockOnNewQuery}
-      />
+      />,
     )
     expect(screen.getByText('Search this meeting')).toBeInTheDocument()
     expect(screen.getByRole('button')).toBeInTheDocument()
@@ -125,7 +131,7 @@ describe('MeetingChatOverlay Component', () => {
         onClose={mockOnClose}
         meetingContext={defaultMeetingContext}
         onNewQuery={mockOnNewQuery}
-      />
+      />,
     )
 
     fireEvent.click(screen.getByRole('button'))
@@ -139,7 +145,7 @@ describe('MeetingChatOverlay Component', () => {
         onClose={mockOnClose}
         meetingContext={defaultMeetingContext}
         onNewQuery={mockOnNewQuery}
-      />
+      />,
     )
 
     fireEvent.keyDown(document, { key: 'Escape' })
@@ -154,7 +160,7 @@ describe('MeetingChatOverlay Component', () => {
         meetingContext={defaultMeetingContext}
         initialQuery="What happened?"
         onNewQuery={mockOnNewQuery}
-      />
+      />,
     )
 
     // Wait for the 100ms auto-submit + 200ms typing delay
@@ -174,7 +180,7 @@ describe('MeetingChatOverlay Component', () => {
         meetingContext={defaultMeetingContext}
         initialQuery="What happened?"
         onNewQuery={mockOnNewQuery}
-      />
+      />,
     )
 
     await act(async () => {
@@ -192,7 +198,7 @@ describe('MeetingChatOverlay Component', () => {
         meetingContext={defaultMeetingContext}
         initialQuery="test"
         onNewQuery={mockOnNewQuery}
-      />
+      />,
     )
 
     await act(async () => {
@@ -212,14 +218,17 @@ describe('MeetingChatOverlay Component', () => {
         meetingContext={defaultMeetingContext}
         initialQuery="hello"
         onNewQuery={mockOnNewQuery}
-      />
+      />,
     )
 
     await act(async () => {
       vi.advanceTimersByTime(400)
     })
 
-    expect(window.electronAPI.ragQueryMeeting).toHaveBeenCalledWith('test-meeting-id', 'hello')
+    expect(window.electronAPI.ragQueryMeeting).toHaveBeenCalledWith(
+      'test-meeting-id',
+      'hello',
+    )
   })
 
   it('shows error message on RAG stream error', async () => {
@@ -230,7 +239,7 @@ describe('MeetingChatOverlay Component', () => {
         meetingContext={defaultMeetingContext}
         initialQuery="test"
         onNewQuery={mockOnNewQuery}
-      />
+      />,
     )
 
     await act(async () => {
@@ -244,7 +253,9 @@ describe('MeetingChatOverlay Component', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByText("Couldn't get a response. Please try again.")).toBeInTheDocument()
+      expect(
+        screen.getByText("Couldn't get a response. Please try again."),
+      ).toBeInTheDocument()
     })
   })
 
@@ -261,7 +272,7 @@ describe('MeetingChatOverlay Component', () => {
         meetingContext={defaultMeetingContext}
         initialQuery="fallback test"
         onNewQuery={mockOnNewQuery}
-      />
+      />,
     )
 
     await act(async () => {
@@ -288,7 +299,7 @@ describe('MeetingChatOverlay Component', () => {
         meetingContext={contextNoId}
         initialQuery="hello"
         onNewQuery={mockOnNewQuery}
-      />
+      />,
     )
 
     await act(async () => {
@@ -315,7 +326,7 @@ describe('MeetingChatOverlay Component', () => {
         meetingContext={defaultMeetingContext}
         initialQuery="will throw"
         onNewQuery={mockOnNewQuery}
-      />
+      />,
     )
 
     await act(async () => {
@@ -323,7 +334,9 @@ describe('MeetingChatOverlay Component', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByText('Something went wrong. Please try again.')).toBeInTheDocument()
+      expect(
+        screen.getByText('Something went wrong. Please try again.'),
+      ).toBeInTheDocument()
     })
   })
 
@@ -335,7 +348,7 @@ describe('MeetingChatOverlay Component', () => {
         meetingContext={defaultMeetingContext}
         initialQuery=""
         onNewQuery={mockOnNewQuery}
-      />
+      />,
     )
 
     // Empty initialQuery should not trigger ragQueryMeeting
@@ -353,7 +366,7 @@ describe('MeetingChatOverlay Component', () => {
         onClose={mockOnClose}
         meetingContext={defaultMeetingContext}
         onNewQuery={mockOnNewQuery}
-      />
+      />,
     )
 
     expect(screen.getByText('Search this meeting')).toBeInTheDocument()
@@ -365,7 +378,7 @@ describe('MeetingChatOverlay Component', () => {
         onClose={mockOnClose}
         meetingContext={defaultMeetingContext}
         onNewQuery={mockOnNewQuery}
-      />
+      />,
     )
 
     // Re-open without error
@@ -375,7 +388,7 @@ describe('MeetingChatOverlay Component', () => {
         onClose={mockOnClose}
         meetingContext={defaultMeetingContext}
         onNewQuery={mockOnNewQuery}
-      />
+      />,
     )
 
     expect(screen.getByText('Search this meeting')).toBeInTheDocument()
@@ -397,7 +410,7 @@ describe('MeetingChatOverlay Component', () => {
         meetingContext={defaultMeetingContext}
         initialQuery="waiting test"
         onNewQuery={mockOnNewQuery}
-      />
+      />,
     )
 
     // Advance past auto-submit delay
@@ -422,7 +435,7 @@ describe('MeetingChatOverlay Component', () => {
         onClose={mockOnClose}
         meetingContext={defaultMeetingContext}
         onNewQuery={mockOnNewQuery}
-      />
+      />,
     )
 
     // Click close button, should not throw

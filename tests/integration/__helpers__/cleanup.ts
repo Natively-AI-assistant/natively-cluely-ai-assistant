@@ -7,7 +7,7 @@ import { destroyTestEnv } from './test-env'
  */
 export function setupTestCleanup(
   env: TestEnv,
-  extraCleanup?: () => void
+  extraCleanup?: () => void,
 ): () => void {
   return () => {
     extraCleanup?.()
@@ -24,7 +24,7 @@ export function setupTestCleanup(
  */
 export function resetSingletons(
   DatabaseManager: any,
-  SettingsManager: any
+  SettingsManager: any,
 ): void {
   resetDatabaseManager(DatabaseManager)
   resetSettingsManager(SettingsManager)
@@ -41,10 +41,14 @@ export function resetDatabaseManager(DatabaseManager: any): void {
       try {
         const db = dbInstance.getDb()
         db?.close()
-      } catch { /* db may already be closed */ }
+      } catch {
+        /* db may already be closed */
+      }
       DatabaseManager.instance = undefined
     }
-  } catch { /* no-op */ }
+  } catch {
+    /* no-op */
+  }
 }
 
 /**
@@ -57,8 +61,12 @@ export function resetSettingsManager(SettingsManager: any): void {
     if (instance) {
       try {
         instance.getSettings?.()
-      } catch { /* no-op */ }
+      } catch {
+        /* no-op */
+      }
       SettingsManager.instance = undefined
     }
-  } catch { /* no-op */ }
+  } catch {
+    /* no-op */
+  }
 }

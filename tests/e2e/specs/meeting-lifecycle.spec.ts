@@ -1,9 +1,11 @@
-import { test, expect } from '../fixtures/test'
+import { expect, test } from '../fixtures/test'
 
 test.describe('Meeting Lifecycle', () => {
   test.use({ scenario: 'withMeetings' })
 
-  test('displays meeting list with date group headers @smoke', async ({ launcher }) => {
+  test('displays meeting list with date group headers @smoke', async ({
+    launcher,
+  }) => {
     await launcher.goto()
     await expect(launcher.page.locator('#launcher-container')).toBeVisible()
     const meetingItems = await launcher.getMeetingItems()
@@ -23,20 +25,34 @@ test.describe('Meeting Lifecycle', () => {
     await expect(calendarCard).toBeVisible()
   })
 
-  test('clicking meeting opens detail view', async ({ launcher, meeting, page }) => {
+  test('clicking meeting opens detail view', async ({
+    launcher,
+    meeting,
+    page,
+  }) => {
     await launcher.goto()
     await meeting.clickMeeting(0)
-    await expect(page.getByRole('button', { name: 'Summary', exact: true })).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: 'Summary', exact: true }),
+    ).toBeVisible()
   })
 
   test('meeting detail shows tabs', async ({ launcher, meeting, page }) => {
     await launcher.goto()
     await meeting.clickMeeting(0)
-    await expect(page.getByRole('button', { name: 'Transcript', exact: true })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Summary', exact: true })).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: 'Transcript', exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: 'Summary', exact: true }),
+    ).toBeVisible()
   })
 
-  test('tab switching in meeting detail works @navigation', async ({ launcher, meeting, page }) => {
+  test('tab switching in meeting detail works @navigation', async ({
+    launcher,
+    meeting,
+    page,
+  }) => {
     await launcher.goto()
     await meeting.clickMeeting(0)
     await page.getByRole('button', { name: 'Summary', exact: true }).click()
@@ -52,6 +68,8 @@ test.describe('Meeting Lifecycle', () => {
 
   test('scrollable meeting list area', async ({ launcher }) => {
     await launcher.goto()
-    await expect(launcher.page.locator('main.flex-1.overflow-y-auto')).toBeVisible()
+    await expect(
+      launcher.page.locator('main.flex-1.overflow-y-auto'),
+    ).toBeVisible()
   })
 })

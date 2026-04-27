@@ -1,9 +1,9 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { validateCurl } from '../../../src/lib/curl-validator'
 
 // Mock the @bany/curl-to-json module
 vi.mock('@bany/curl-to-json', () => ({
-  default: vi.fn((curl: string) => {
+  default: vi.fn((_curl: string) => {
     // Simple mock that returns an object for valid curl commands
     return { command: 'curl', args: [] }
   }),
@@ -39,7 +39,9 @@ describe('curl-validator', () => {
     it('should return invalid when {{TEXT}} placeholder is missing', () => {
       const result = validateCurl('curl http://example.com')
       expect(result.isValid).toBe(false)
-      expect(result.message).toBe("Your cURL must contain {{TEXT}} variable to inject the user message.")
+      expect(result.message).toBe(
+        'Your cURL must contain {{TEXT}} variable to inject the user message.',
+      )
     })
 
     it('should return valid for valid curl with {{TEXT}}', () => {
@@ -49,13 +51,17 @@ describe('curl-validator', () => {
     })
 
     it('should return valid for curl with -X flag and {{TEXT}}', () => {
-      const result = validateCurl('curl -X POST http://api.example.com -d "{{TEXT}}"')
+      const result = validateCurl(
+        'curl -X POST http://api.example.com -d "{{TEXT}}"',
+      )
       expect(result.isValid).toBe(true)
       expect(result.json).toBeDefined()
     })
 
     it('should return valid for curl with headers and {{TEXT}}', () => {
-      const result = validateCurl('curl -H "Content-Type: application/json" -d "{{TEXT}}" http://api.example.com')
+      const result = validateCurl(
+        'curl -H "Content-Type: application/json" -d "{{TEXT}}" http://api.example.com',
+      )
       expect(result.isValid).toBe(true)
       expect(result.json).toBeDefined()
     })

@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
+import { HttpResponse, http } from 'msw'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { server } from './server'
-import { http, HttpResponse } from 'msw'
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'warn' }))
 afterEach(() => server.resetHandlers())
@@ -25,7 +25,7 @@ describe('MSW Setup', () => {
     server.use(
       http.get('http://localhost:11434/api/tags', () => {
         return HttpResponse.json({ models: [{ name: 'custom-model' }] })
-      })
+      }),
     )
     const res = await fetch('http://localhost:11434/api/tags')
     const data = await res.json()

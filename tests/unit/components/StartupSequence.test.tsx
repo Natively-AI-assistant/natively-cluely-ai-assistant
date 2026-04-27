@@ -1,7 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import StartupSequence from '../../../src/components/StartupSequence'
-import React from 'react'
 
 // Mock the icon import
 vi.mock('../../../src/components/icon.png', () => ({
@@ -49,7 +48,9 @@ describe('StartupSequence', () => {
 
   it('should render without crashing', () => {
     const onComplete = vi.fn()
-    expect(() => render(<StartupSequence onComplete={onComplete} />)).not.toThrow()
+    expect(() =>
+      render(<StartupSequence onComplete={onComplete} />),
+    ).not.toThrow()
   })
 
   it('should clean up timer on unmount', () => {

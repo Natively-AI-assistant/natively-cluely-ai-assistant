@@ -3,12 +3,12 @@
  * Verifies mount-time listener registration, rendered UI elements, and user interactions.
  */
 
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import React from 'react'
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import '../../mocks/framer-motion.mock'
-import { installElectronAPIMock, fireIPCEvent } from '../../mocks/electronAPI.mock'
+import { fireIPCEvent } from '../../mocks/electronAPI.mock'
 
 // Mock scrollIntoView for jsdom
 Object.defineProperty(HTMLDivElement.prototype, 'scrollIntoView', {
@@ -23,7 +23,9 @@ Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
 
 vi.mock('../../../src/premium', () => ({
   __esModule: true,
-  NegotiationCoachingCard: () => <div data-testid="negotiation-coaching">NegotiationCoachingCard</div>,
+  NegotiationCoachingCard: () => (
+    <div data-testid="negotiation-coaching">NegotiationCoachingCard</div>
+  ),
   PremiumUpgradeModal: () => null,
   useAdCampaigns: () => ({ activeAd: null, dismissAd: vi.fn() }),
   JDAwarenessToaster: () => null,
@@ -45,11 +47,19 @@ vi.mock('remark-math', () => ({ default: () => {} }))
 vi.mock('rehype-katex', () => ({ default: () => {} }))
 
 vi.mock('react-syntax-highlighter', () => ({
-  Prism: ({ children }: any) => React.createElement('pre', { 'data-testid': 'syntax-highlighter' }, children),
+  Prism: ({ children }: any) =>
+    React.createElement(
+      'pre',
+      { 'data-testid': 'syntax-highlighter' },
+      children,
+    ),
 }))
 
 vi.mock('../../../src/hooks/useShortcuts', () => ({
-  useShortcuts: vi.fn(() => ({ shortcuts: {}, isShortcutPressed: () => false })),
+  useShortcuts: vi.fn(() => ({
+    shortcuts: {},
+    isShortcutPressed: () => false,
+  })),
 }))
 
 vi.mock('../../../src/hooks/useResolvedTheme', () => ({
@@ -217,17 +227,23 @@ describe('NativelyInterface Component', () => {
     })
 
     it('tracks analytics when action buttons are clicked', async () => {
-      const { analytics } = await import('../../../src/lib/analytics/analytics.service')
+      const { analytics } = await import(
+        '../../../src/lib/analytics/analytics.service'
+      )
       render(<NativelyInterface />)
 
       fireEvent.click(screen.getByText('What to answer?'))
       await waitFor(() => {
-        expect(analytics.trackCommandExecuted).toHaveBeenCalledWith('what_to_say')
+        expect(analytics.trackCommandExecuted).toHaveBeenCalledWith(
+          'what_to_say',
+        )
       })
     })
 
     it('shows error message when action handler throws', async () => {
-      ;(window.electronAPI.generateWhatToSay as any).mockRejectedValue(new Error('API error'))
+      ;(window.electronAPI.generateWhatToSay as any).mockRejectedValue(
+        new Error('API error'),
+      )
 
       render(<NativelyInterface />)
       fireEvent.click(screen.getByText('What to answer?'))
@@ -248,7 +264,7 @@ describe('NativelyInterface Component', () => {
 
       // Find and click submit button
       const buttons = screen.getAllByRole('button')
-      const submitBtn = buttons.find(btn => {
+      const submitBtn = buttons.find((btn) => {
         const svg = btn.querySelector('svg')
         return svg !== null && btn.closest('[class*="absolute"]')
       })
@@ -271,7 +287,10 @@ describe('NativelyInterface Component', () => {
 
       // Simulate screenshot taken event
       const { fireIPCEvent: fire } = { fireIPCEvent }
-      fire('onScreenshotTaken', { path: '/tmp/screenshot.png', preview: 'data:image/png;base64,abc' })
+      fire('onScreenshotTaken', {
+        path: '/tmp/screenshot.png',
+        preview: 'data:image/png;base64,abc',
+      })
 
       // Component should handle the event without crashing
       expect(window.electronAPI.onScreenshotTaken).toHaveBeenCalled()

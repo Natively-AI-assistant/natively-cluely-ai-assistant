@@ -138,14 +138,12 @@ export function createElectronMock(overrides: Record<string, any> = {}) {
 
   const dialog = {
     showOpenDialog: vi.fn(() =>
-      Promise.resolve({ canceled: false, filePaths: [] })
+      Promise.resolve({ canceled: false, filePaths: [] }),
     ),
     showSaveDialog: vi.fn(() =>
-      Promise.resolve({ canceled: false, filePath: '' })
+      Promise.resolve({ canceled: false, filePath: '' }),
     ),
-    showMessageBox: vi.fn(() =>
-      Promise.resolve({ response: 0 })
-    ),
+    showMessageBox: vi.fn(() => Promise.resolve({ response: 0 })),
     showErrorBox: vi.fn(),
     showCertificateTrustDialog: vi.fn(),
     ...overrides.dialog,
@@ -321,7 +319,10 @@ export function createElectronMock(overrides: Record<string, any> = {}) {
 /**
  * Recursively collects all vi.fn() instances from an object tree.
  */
-function collectMockFns(obj: unknown, visited = new Set()): Array<{ owner: any; key: string }> {
+function collectMockFns(
+  obj: unknown,
+  visited = new Set(),
+): Array<{ owner: any; key: string }> {
   if (!obj || typeof obj !== 'object' || visited.has(obj)) return []
   visited.add(obj)
 
