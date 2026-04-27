@@ -30,6 +30,7 @@
     "test:unit": "npm run pretest && vitest run --project unit",
     "test:electron": "npm run pretest && vitest run --project electron",
     "test:integration": "npm run pretest && vitest run --project integration",
+    "test:premium": "vitest run --project premium --passWithNoTests",
     "test:coverage": "npm run pretest && vitest run --coverage",
     "test:watch": "vitest --watch",
     "test:ui": "vitest --ui",
