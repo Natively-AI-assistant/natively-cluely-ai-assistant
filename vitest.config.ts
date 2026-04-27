@@ -101,6 +101,16 @@ export default defineConfig({
           ],
         },
       },
+      {
+        test: {
+          name: 'premium',
+          globals: true,
+          environment: 'node',
+          include: [
+            'tests/premium/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}',
+          ],
+        },
+      },
     ],
     coverage: {
       provider: 'v8',
