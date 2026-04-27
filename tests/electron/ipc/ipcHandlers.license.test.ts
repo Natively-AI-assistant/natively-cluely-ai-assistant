@@ -1,37 +1,39 @@
 /**
  * Tests for license IPC handlers - verifying actual handler behavior.
+ * Uses dependency injection to mock LicenseManager, allowing tests
+ * to run without premium submodule present.
  */
 
 import { type IpcMainInvokeEvent, ipcMain } from 'electron'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { LicenseManagerGetter } from '../../../electron/ipc/ipcHandlers.license'
+import { registerLicenseHandlers, resetLicenseHandlersCache } from '../../../electron/ipc/ipcHandlers.license'
 
-// Module-level mock instance - hoisted so vi.mock captures the reference
 const mockLicenseManagerInstance: any = vi.hoisted(() => ({
   activateLicense: vi.fn(),
   isPremium: vi.fn(),
   deactivate: vi.fn(),
   getHardwareId: vi.fn(),
+  getLicenseDetails: vi.fn(),
+  isPremiumAsync: vi.fn(),
 }))
 
-// Mock LicenseManager using correct relative path
-vi.mock('../../../premium/electron/services/LicenseManager', () => ({
-  LicenseManager: {
-    getInstance: () => mockLicenseManagerInstance,
-  },
-}))
-
-import {
-  registerLicenseHandlers,
-  resetLicenseHandlersCache,
-} from '../../../electron/ipc/ipcHandlers.license'
+const createMockGetLicenseManager = (): LicenseManagerGetter => {
+  return async () => ({
+    getInstance: () => mockLicenseManagerInstance
+  })
+}
 
 describe('ipcHandlers.license - handler behavior tests', () => {
   let mockAppState: any
-  let handlers: Map<string, Function>
+  let handlers: Map<string, (...args: any[]) => Promise<any>>
+  let mockGetLm: LicenseManagerGetter
 
   beforeEach(() => {
     vi.clearAllMocks()
     resetLicenseHandlersCache()
+
+    mockGetLm = createMockGetLicenseManager()
 
     mockAppState = {
       getKnowledgeOrchestrator: vi.fn(() => ({
@@ -39,15 +41,14 @@ describe('ipcHandlers.license - handler behavior tests', () => {
       })),
     }
 
-    // Capture registered handlers
     handlers = new Map()
     vi.mocked(ipcMain.handle).mockImplementation(
-      (channel: string, fn: Function) => {
+      (channel: string, fn: (...args: any[]) => Promise<any>) => {
         handlers.set(channel, fn)
       },
     )
 
-    registerLicenseHandlers(mockAppState)
+    registerLicenseHandlers(mockAppState, mockGetLm)
   })
 
   describe('license:check-premium', () => {

@@ -2,13 +2,14 @@
  * License handlers extracted from ipcHandlers.ts.
  */
 
-import { app } from 'electron'
 import type { AppState } from '../main'
 import { safeHandle } from './safeHandle'
 
+export type LicenseManagerGetter = () => Promise<any | null>
+
 let _LicenseManager: any
 
-async function getLicenseManager() {
+async function defaultGetLicenseManager(): Promise<any | null> {
   if (_LicenseManager === undefined) {
     try {
       const module = await import(
@@ -26,10 +27,13 @@ export function resetLicenseHandlersCache(): void {
   _LicenseManager = undefined
 }
 
-export function registerLicenseHandlers(appState: AppState): void {
+export function registerLicenseHandlers(
+  appState: AppState,
+  getLm: LicenseManagerGetter = defaultGetLicenseManager,
+): void {
   safeHandle('license:activate', async (event, key: string) => {
     try {
-      const LicenseManager = await getLicenseManager()
+      const LicenseManager = await getLm()
       if (!LicenseManager) {
         return {
           success: false,
@@ -48,7 +52,7 @@ export function registerLicenseHandlers(appState: AppState): void {
 
   safeHandle('license:check-premium', async () => {
     try {
-      const LicenseManager = await getLicenseManager()
+      const LicenseManager = await getLm()
       if (!LicenseManager) return false
       return LicenseManager.getInstance().isPremium()
     } catch {
@@ -58,7 +62,7 @@ export function registerLicenseHandlers(appState: AppState): void {
 
   safeHandle('license:deactivate', async () => {
     try {
-      const LicenseManager = await getLicenseManager()
+      const LicenseManager = await getLm()
       if (LicenseManager) {
         LicenseManager.getInstance().deactivate()
       }
@@ -81,7 +85,7 @@ export function registerLicenseHandlers(appState: AppState): void {
 
   safeHandle('license:get-hardware-id', async () => {
     try {
-      const LicenseManager = await getLicenseManager()
+      const LicenseManager = await getLm()
       if (!LicenseManager) return 'unavailable'
       return LicenseManager.getInstance().getHardwareId()
     } catch {
@@ -91,7 +95,7 @@ export function registerLicenseHandlers(appState: AppState): void {
 
   safeHandle('license:get-details', async () => {
     try {
-      const LicenseManager = await getLicenseManager()
+      const LicenseManager = await getLm()
       if (!LicenseManager) return { isPremium: false }
       return LicenseManager.getInstance().getLicenseDetails()
     } catch {
@@ -101,7 +105,7 @@ export function registerLicenseHandlers(appState: AppState): void {
 
   safeHandle('license:check-premium-async', async () => {
     try {
-      const LicenseManager = await getLicenseManager()
+      const LicenseManager = await getLm()
       if (!LicenseManager) return false
       return await LicenseManager.getInstance().isPremiumAsync()
     } catch {
