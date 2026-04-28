@@ -1,5 +1,6 @@
 import { LLMHelper } from "../LLMHelper";
-import { UNIVERSAL_EPOCH_SUMMARY_PROMPT, UNIVERSAL_SYSTEM_DESIGN_PROMPT } from "./prompts";
+import { UNIVERSAL_EPOCH_SUMMARY_PROMPT } from "./prompts";
+import { getResolvedPromptBody } from "./promptResolver";
 
 export class RecapLLM {
     private llmHelper: LLMHelper;
@@ -30,7 +31,7 @@ export class RecapLLM {
     async *generateStream(context: string, imagePaths?: string[]): AsyncGenerator<string> {
         if (!context.trim() && !imagePaths?.length) return;
         try {
-            yield* this.llmHelper.streamChat(context, imagePaths, undefined, UNIVERSAL_SYSTEM_DESIGN_PROMPT);
+            yield* this.llmHelper.streamChat(context, imagePaths, undefined, getResolvedPromptBody("systemDesign"));
         } catch (error) {
             console.error("[RecapLLM] Streaming generation failed:", error);
         }

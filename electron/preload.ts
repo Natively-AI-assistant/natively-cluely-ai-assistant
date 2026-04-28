@@ -113,6 +113,7 @@ interface ElectronAPI {
   generateWhatToSay: (question?: string, imagePaths?: string[]) => Promise<{ answer: string | null; question?: string; error?: string }>
   generateFollowUp: (intent: string, userRequest?: string) => Promise<{ refined: string | null; intent: string }>
   generateFollowUpQuestions: (imagePaths?: string[]) => Promise<{ questions: string | null }>
+  generateCustomPrompt: (customId: string, imagePaths?: string[]) => Promise<{ text: string | null }>
   generateRecap: (imagePaths?: string[]) => Promise<{ summary: string | null }>
   submitManualQuestion: (question: string) => Promise<{ answer: string | null; question: string }>
   getIntelligenceContext: () => Promise<{ context: string; lastAssistantMessage: string | null; activeMode: string }>
@@ -135,6 +136,10 @@ interface ElectronAPI {
   onIntelligenceRecap: (callback: (data: { summary: string }) => void) => () => void
   onIntelligenceClarify: (callback: (data: { clarification: string }) => void) => () => void
   onIntelligenceClarifyToken: (callback: (data: { token: string }) => void) => () => void
+  onIntelligenceFollowUpQuestionsToken: (callback: (data: { token: string }) => void) => () => void
+  onIntelligenceFollowUpQuestionsUpdate: (callback: (data: { questions: string }) => void) => () => void
+  onIntelligenceCustomPromptToken: (callback: (data: { token: string; label: string }) => void) => () => void
+  onIntelligenceCustomPromptUpdate: (callback: (data: { text: string; label: string }) => void) => () => void
   onIntelligenceManualStarted: (callback: () => void) => () => void
   onIntelligenceManualResult: (callback: (data: { answer: string; question: string }) => void) => () => void
   onIntelligenceModeChanged: (callback: (data: { mode: string }) => void) => () => void
@@ -247,8 +252,42 @@ interface ElectronAPI {
   resetKeybinds: () => Promise<Array<{ id: string; label: string; accelerator: string; isGlobal: boolean; defaultAccelerator: string }>>
   onKeybindsUpdate: (callback: (keybinds: Array<any>) => void) => () => void
 
+  // Prompt registry (Settings → Prompts)
+  promptRegistryGetState: () => Promise<{
+    builtIns: Array<{
+      id: string
+      label: string
+      shortcutKey: string | null
+      keybindBackendId: string | null
+      defaultTags: string[]
+      tags: string[]
+      enabled: boolean
+      defaultBody: string
+      effectiveBody: string
+      hasCustomBody: boolean
+      shortcutDisplay: string
+    }>
+    customs: Array<{
+      id: string
+      label: string
+      tags: string[]
+      enabled: boolean
+      body: string
+      accelerator: string
+      shortcutDisplay: string
+    }>
+  }>
+  promptRegistrySetBuiltinBody: (id: string, body: string) => Promise<{ success: boolean; error?: string }>
+  promptRegistrySetBuiltinMeta: (id: string, meta: { tags?: string[]; enabled?: boolean }) => Promise<{ success: boolean; error?: string }>
+  promptRegistryResetBuiltinBody: (id: string) => Promise<{ success: boolean; error?: string }>
+  promptRegistryResetAll: () => Promise<{ success: boolean; error?: string }>
+  promptRegistryAddCustom: (entry: { label: string; tags?: string[]; enabled?: boolean; body: string; accelerator?: string }) => Promise<{ success: boolean; id?: string; error?: string }>
+  promptRegistryUpdateCustom: (id: string, partial: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>
+  promptRegistryRemoveCustom: (id: string) => Promise<{ success: boolean; error?: string }>
+  onPromptsRegistryChanged: (callback: () => void) => () => void
+
   // Global shortcut events (stealth: fired even when window is not focused)
-  onGlobalShortcut: (callback: (data: { action: string }) => void) => () => void
+  onGlobalShortcut: (callback: (data: { action: string; customId?: string }) => void) => () => void
 
   // Donation API
   getDonationStatus: () => Promise<{ shouldShow: boolean; hasDonated: boolean; lifetimeShows: number }>;
@@ -653,6 +692,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   generateFollowUp: (intent: string, userRequest?: string) => ipcRenderer.invoke("generate-follow-up", intent, userRequest),
   generateFollowUpQuestions: (imagePaths?: string[]) =>
     ipcRenderer.invoke("generate-follow-up-questions", imagePaths),
+  generateCustomPrompt: (customId: string, imagePaths?: string[]) =>
+    ipcRenderer.invoke("generate-custom-prompt", customId, imagePaths),
   generateRecap: (imagePaths?: string[]) => ipcRenderer.invoke("generate-recap", imagePaths),
   submitManualQuestion: (question: string) => ipcRenderer.invoke("submit-manual-question", question),
   getIntelligenceContext: () => ipcRenderer.invoke("get-intelligence-context"),
@@ -764,6 +805,20 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("intelligence-follow-up-questions-update", subscription)
     return () => {
       ipcRenderer.removeListener("intelligence-follow-up-questions-update", subscription)
+    }
+  },
+  onIntelligenceCustomPromptToken: (callback: (data: { token: string; label: string }) => void) => {
+    const subscription = (_: any, data: any) => callback(data)
+    ipcRenderer.on("intelligence-custom-prompt-token", subscription)
+    return () => {
+      ipcRenderer.removeListener("intelligence-custom-prompt-token", subscription)
+    }
+  },
+  onIntelligenceCustomPromptUpdate: (callback: (data: { text: string; label: string }) => void) => {
+    const subscription = (_: any, data: any) => callback(data)
+    ipcRenderer.on("intelligence-custom-prompt-update", subscription)
+    return () => {
+      ipcRenderer.removeListener("intelligence-custom-prompt-update", subscription)
     }
   },
   onIntelligenceManualStarted: (callback: () => void) => {
@@ -1032,6 +1087,25 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getKeybinds: () => ipcRenderer.invoke('keybinds:get-all'),
   setKeybind: (id: string, accelerator: string) => ipcRenderer.invoke('keybinds:set', id, accelerator),
   resetKeybinds: () => ipcRenderer.invoke('keybinds:reset'),
+
+  promptRegistryGetState: () => ipcRenderer.invoke('prompt-registry:get-state'),
+  promptRegistrySetBuiltinBody: (id: string, body: string) => ipcRenderer.invoke('prompt-registry:set-builtin-body', id, body),
+  promptRegistrySetBuiltinMeta: (id: string, meta: { tags?: string[]; enabled?: boolean }) =>
+    ipcRenderer.invoke('prompt-registry:set-builtin-meta', id, meta),
+  promptRegistryResetBuiltinBody: (id: string) => ipcRenderer.invoke('prompt-registry:reset-builtin-body', id),
+  promptRegistryResetAll: () => ipcRenderer.invoke('prompt-registry:reset-all'),
+  promptRegistryAddCustom: (entry: { label: string; tags?: string[]; enabled?: boolean; body: string; accelerator?: string }) =>
+    ipcRenderer.invoke('prompt-registry:add-custom', entry),
+  promptRegistryUpdateCustom: (id: string, partial: Record<string, unknown>) =>
+    ipcRenderer.invoke('prompt-registry:update-custom', id, partial),
+  promptRegistryRemoveCustom: (id: string) => ipcRenderer.invoke('prompt-registry:remove-custom', id),
+  onPromptsRegistryChanged: (callback: () => void) => {
+    const subscription = () => callback()
+    ipcRenderer.on('prompts-registry:changed', subscription)
+    return () => {
+      ipcRenderer.removeListener('prompts-registry:changed', subscription)
+    }
+  },
   onKeybindsUpdate: (callback: (keybinds: Array<any>) => void) => {
     const subscription = (_: any, keybinds: any) => callback(keybinds)
     ipcRenderer.on('keybinds:update', subscription)
@@ -1048,8 +1122,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
 
   // Global shortcut listener — fired stealthily from main process without focusing the window
-  onGlobalShortcut: (callback: (data: { action: string }) => void) => {
-    const subscription = (_: any, data: { action: string }) => callback(data)
+  onGlobalShortcut: (callback: (data: { action: string; customId?: string }) => void) => {
+    const subscription = (_: any, data: { action: string; customId?: string }) => callback(data)
     ipcRenderer.on('global-shortcut', subscription)
     return () => {
       ipcRenderer.removeListener('global-shortcut', subscription)

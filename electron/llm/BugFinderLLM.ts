@@ -1,5 +1,6 @@
 import { LLMHelper } from "../LLMHelper";
-import { BUG_FINDER_PROMPT, buildBugFinderMessage } from "./prompts";
+import { buildBugFinderMessage } from "./prompts";
+import { getResolvedPromptBody } from "./promptResolver";
 
 export class BugFinderLLM {
     private llmHelper: LLMHelper;
@@ -25,7 +26,7 @@ export class BugFinderLLM {
                 message,
                 imagePaths,
                 undefined,
-                BUG_FINDER_PROMPT
+                getResolvedPromptBody("bugFinder")
             );
         } catch (error) {
             console.error("[BugFinderLLM] Stream failed:", error);

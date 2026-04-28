@@ -1,5 +1,5 @@
 import { LLMHelper } from "../LLMHelper";
-import { UNIVERSAL_FOLLOW_UP_QUESTIONS_PROMPT } from "./prompts";
+import { getResolvedPromptBody } from "./promptResolver";
 
 export class FollowUpQuestionsLLM {
     private llmHelper: LLMHelper;
@@ -10,7 +10,7 @@ export class FollowUpQuestionsLLM {
 
     async generate(context: string): Promise<string> {
         try {
-            const stream = this.llmHelper.streamChat(context, undefined, undefined, UNIVERSAL_FOLLOW_UP_QUESTIONS_PROMPT);
+            const stream = this.llmHelper.streamChat(context, undefined, undefined, getResolvedPromptBody("aiDesign"));
             let full = "";
             for await (const chunk of stream) full += chunk;
             return full;
@@ -23,7 +23,7 @@ export class FollowUpQuestionsLLM {
     async *generateStream(context: string, imagePaths?: string[]): AsyncGenerator<string> {
         if (!context.trim() && !imagePaths?.length) return;
         try {
-            yield* this.llmHelper.streamChat(context, imagePaths, undefined, UNIVERSAL_FOLLOW_UP_QUESTIONS_PROMPT);
+            yield* this.llmHelper.streamChat(context, imagePaths, undefined, getResolvedPromptBody("aiDesign"));
         } catch (e) {
             console.error("[FollowUpQuestionsLLM] Stream Failed:", e);
         }

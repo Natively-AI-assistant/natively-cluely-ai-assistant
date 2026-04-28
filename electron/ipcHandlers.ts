@@ -10,6 +10,10 @@ import { AudioDevices } from "./audio/AudioDevices";
 
 
 import { RECOGNITION_LANGUAGES, AI_RESPONSE_LANGUAGES } from "./config/languages"
+import { PromptRegistryStore } from "./services/PromptRegistryStore"
+import { KeybindManager } from "./services/KeybindManager"
+import type { BuiltinPromptId } from "./llm/promptCatalog"
+import { getDefaultPromptBody, isBuiltinPromptId } from "./llm/promptResolver"
 
 export function initializeIpcHandlers(appState: AppState): void {
   const safeHandle = (channel: string, listener: (event: any, ...args: any[]) => Promise<any> | any) => {
@@ -2294,6 +2298,23 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle("generate-custom-prompt", async (_, customId: string, imagePaths?: string[]) => {
+    try {
+      const resolvedImagePaths: string[] =
+        imagePaths && imagePaths.length > 0
+          ? imagePaths
+          : appState.getScreenshotQueue();
+      const intelligenceManager = appState.getIntelligenceManager();
+      const text = await intelligenceManager.runCustomPrompt(
+        customId,
+        resolvedImagePaths.length > 0 ? resolvedImagePaths : undefined
+      );
+      return { text };
+    } catch (error: any) {
+      throw error;
+    }
+  });
+
   // MODE 5: Manual Answer (Fallback)
   safeHandle("submit-manual-question", async (_, question: string) => {
     try {
@@ -2981,6 +3002,68 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch {
       return false
     }
+  })
+
+  // ==========================================
+  // Prompt registry (Settings → Prompts)
+  // ==========================================
+
+  safeHandle("prompt-registry:get-state", async () => {
+    const km = KeybindManager.getInstance()
+    return PromptRegistryStore.getInstance().getFullState((kid) => km.getKeybind(kid) ?? "")
+  })
+
+  safeHandle("prompt-registry:set-builtin-body", async (_, id: string, body: string) => {
+    if (!isBuiltinPromptId(id)) return { success: false, error: "Unknown prompt id" }
+    const def = getDefaultPromptBody(id as BuiltinPromptId).trim()
+    const trimmed = (body ?? "").trim()
+    const store = PromptRegistryStore.getInstance()
+    if (!trimmed || trimmed === def) {
+      store.resetBuiltinBody(id as BuiltinPromptId)
+    } else {
+      store.setBuiltinBody(id as BuiltinPromptId, body)
+    }
+    return { success: true }
+  })
+
+  safeHandle("prompt-registry:set-builtin-meta", async (_, id: string, meta: { tags?: string[]; enabled?: boolean }) => {
+    if (!isBuiltinPromptId(id)) return { success: false, error: "Unknown prompt id" }
+    PromptRegistryStore.getInstance().setBuiltinMeta(id as BuiltinPromptId, meta || {})
+    return { success: true }
+  })
+
+  safeHandle("prompt-registry:reset-builtin-body", async (_, id: string) => {
+    if (!isBuiltinPromptId(id)) return { success: false, error: "Unknown prompt id" }
+    PromptRegistryStore.getInstance().resetBuiltinBody(id as BuiltinPromptId)
+    return { success: true }
+  })
+
+  safeHandle("prompt-registry:reset-all", async () => {
+    PromptRegistryStore.getInstance().resetEverything()
+    return { success: true }
+  })
+
+  safeHandle("prompt-registry:add-custom", async (_, entry: { label: string; tags?: string[]; enabled?: boolean; body: string; accelerator?: string }) => {
+    const id = PromptRegistryStore.getInstance().addCustom({
+      label: entry?.label || "Custom prompt",
+      tags: Array.isArray(entry?.tags) ? entry.tags : [],
+      enabled: entry?.enabled !== false,
+      body: entry?.body || "",
+      accelerator: entry?.accelerator || "",
+    })
+    return { success: true, id }
+  })
+
+  safeHandle("prompt-registry:update-custom", async (_, id: string, partial: Record<string, unknown>) => {
+    if (!id || typeof id !== "string") return { success: false, error: "Invalid id" }
+    PromptRegistryStore.getInstance().updateCustom(id, partial as any)
+    return { success: true }
+  })
+
+  safeHandle("prompt-registry:remove-custom", async (_, id: string) => {
+    if (!id) return { success: false, error: "Invalid id" }
+    PromptRegistryStore.getInstance().removeCustom(id)
+    return { success: true }
   })
 }
 

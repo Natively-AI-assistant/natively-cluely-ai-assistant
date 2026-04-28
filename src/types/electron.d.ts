@@ -147,6 +147,7 @@ export interface ElectronAPI {
   generateBugFinder: (imagePaths?: string[], problemStatement?: string) => Promise<{ result: string | null }>
   generateFollowUp: (intent: string, userRequest?: string) => Promise<{ refined: string | null; intent: string }>
   generateFollowUpQuestions: (imagePaths?: string[]) => Promise<{ questions: string | null }>
+  generateCustomPrompt: (customId: string, imagePaths?: string[]) => Promise<{ text: string | null }>
   generateRecap: (imagePaths?: string[]) => Promise<{ summary: string | null }>
   submitManualQuestion: (question: string) => Promise<{ answer: string | null; question: string }>
   getIntelligenceContext: () => Promise<{ context: string; lastAssistantMessage: string | null; activeMode: string }>
@@ -176,6 +177,8 @@ export interface ElectronAPI {
   onIntelligenceRefinedAnswer: (callback: (data: { answer: string; intent: string }) => void) => () => void
   onIntelligenceFollowUpQuestionsUpdate: (callback: (data: { questions: string }) => void) => () => void
   onIntelligenceFollowUpQuestionsToken: (callback: (data: { token: string }) => void) => () => void
+  onIntelligenceCustomPromptToken: (callback: (data: { token: string; label: string }) => void) => () => void
+  onIntelligenceCustomPromptUpdate: (callback: (data: { text: string; label: string }) => void) => () => void
   onIntelligenceRecap: (callback: (data: { summary: string }) => void) => () => void
   onIntelligenceRecapToken: (callback: (data: { token: string }) => void) => () => void
   onIntelligenceClarify: (callback: (data: { clarification: string }) => void) => () => void
@@ -289,7 +292,40 @@ export interface ElectronAPI {
   resetKeybinds: () => Promise<Array<{ id: string; label: string; accelerator: string; isGlobal: boolean; defaultAccelerator: string }>>
   onKeybindsUpdate: (callback: (keybinds: Array<any>) => void) => () => void
   onKeybindRegistrationFailed: (callback: (data: { id: string; accelerator: string }) => void) => () => void
-  onGlobalShortcut: (callback: (data: { action: string }) => void) => () => void
+
+  promptRegistryGetState: () => Promise<{
+    builtIns: Array<{
+      id: string
+      label: string
+      shortcutKey: string | null
+      keybindBackendId: string | null
+      defaultTags: string[]
+      tags: string[]
+      enabled: boolean
+      defaultBody: string
+      effectiveBody: string
+      hasCustomBody: boolean
+      shortcutDisplay: string
+    }>
+    customs: Array<{
+      id: string
+      label: string
+      tags: string[]
+      enabled: boolean
+      body: string
+      accelerator: string
+      shortcutDisplay: string
+    }>
+  }>
+  promptRegistrySetBuiltinBody: (id: string, body: string) => Promise<{ success: boolean; error?: string }>
+  promptRegistrySetBuiltinMeta: (id: string, meta: { tags?: string[]; enabled?: boolean }) => Promise<{ success: boolean; error?: string }>
+  promptRegistryResetBuiltinBody: (id: string) => Promise<{ success: boolean; error?: string }>
+  promptRegistryResetAll: () => Promise<{ success: boolean; error?: string }>
+  promptRegistryAddCustom: (entry: { label: string; tags?: string[]; enabled?: boolean; body: string; accelerator?: string }) => Promise<{ success: boolean; id?: string; error?: string }>
+  promptRegistryUpdateCustom: (id: string, partial: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>
+  promptRegistryRemoveCustom: (id: string) => Promise<{ success: boolean; error?: string }>
+  onPromptsRegistryChanged: (callback: () => void) => () => void
+  onGlobalShortcut: (callback: (data: { action: string; customId?: string }) => void) => () => void
 
   // Profile Engine API
   profileUploadResume: (filePath: string) => Promise<{ success: boolean; error?: string }>

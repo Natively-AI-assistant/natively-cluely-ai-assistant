@@ -1,5 +1,6 @@
 import { LLMHelper } from "../LLMHelper";
-import { CODE_HINT_PROMPT, buildCodeHintMessage } from "./prompts";
+import { buildCodeHintMessage } from "./prompts";
+import { getResolvedPromptBody } from "./promptResolver";
 
 export class CodeHintLLM {
     private llmHelper: LLMHelper;
@@ -25,7 +26,7 @@ export class CodeHintLLM {
                 message,
                 imagePaths,
                 undefined,
-                CODE_HINT_PROMPT
+                getResolvedPromptBody("codeHint")
             );
         } catch (error) {
             console.error("[CodeHintLLM] Stream failed:", error);

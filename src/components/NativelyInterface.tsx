@@ -54,6 +54,8 @@ interface Message {
     screenshotPreview?: string;
     isCode?: boolean;
     intent?: string;
+    /** Heading for custom_prompt / streamed copilot cards */
+    promptTitle?: string;
     isNegotiationCoaching?: boolean;
     negotiationCoachingData?: {
         tacticalNote: string;
@@ -76,6 +78,58 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     const [isExpanded, setIsExpanded] = useState(true);
     const [inputValue, setInputValue] = useState('');
     const { shortcuts, isShortcutPressed } = useShortcuts();
+    type OverlayChip =
+        | { kind: 'builtin'; builtinId: string; label: string; tags: string[]; shortcutDisplay: string }
+        | { kind: 'custom'; id: string; label: string; tags: string[]; shortcutDisplay: string };
+    const [overlayChips, setOverlayChips] = useState<OverlayChip[]>([]);
+
+    const refreshOverlayChips = useCallback(async () => {
+        if (!window.electronAPI?.promptRegistryGetState) return;
+        try {
+            const st = await window.electronAPI.promptRegistryGetState();
+            const chips: OverlayChip[] = [];
+            for (const b of st.builtIns ?? []) {
+                if (!b.enabled) continue;
+                if (b.id === 'refineAnswer') continue;
+                if (b.id === 'answerRecord') continue;
+                chips.push({
+                    kind: 'builtin',
+                    builtinId: b.id,
+                    label: b.label,
+                    tags: b.tags ?? [],
+                    shortcutDisplay: b.shortcutDisplay || '',
+                });
+            }
+            for (const c of st.customs ?? []) {
+                if (!c.enabled || !String(c.body || '').trim()) continue;
+                chips.push({
+                    kind: 'custom',
+                    id: c.id,
+                    label: c.label,
+                    tags: c.tags ?? [],
+                    shortcutDisplay: c.shortcutDisplay || '',
+                });
+            }
+            setOverlayChips(chips);
+        } catch {
+            /* ignore */
+        }
+    }, []);
+
+    useEffect(() => {
+        void refreshOverlayChips();
+    }, [refreshOverlayChips]);
+
+    useEffect(() => {
+        if (!window.electronAPI?.onPromptsRegistryChanged) return;
+        return window.electronAPI.onPromptsRegistryChanged(() => void refreshOverlayChips());
+    }, [refreshOverlayChips]);
+
+    useEffect(() => {
+        if (!window.electronAPI?.onKeybindsUpdate) return;
+        return window.electronAPI.onKeybindsUpdate(() => void refreshOverlayChips());
+    }, [refreshOverlayChips]);
+
     const [messages, setMessages] = useState<Message[]>([]);
     const [isConnected, setIsConnected] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -707,6 +761,75 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
             });
         }));
 
+        if (window.electronAPI.onIntelligenceCustomPromptToken) {
+            cleanups.push(
+                window.electronAPI.onIntelligenceCustomPromptToken((data) => {
+                    setMessages((prev) => {
+                        const lastMsg = prev[prev.length - 1];
+                        if (
+                            lastMsg &&
+                            lastMsg.isStreaming &&
+                            lastMsg.intent === 'custom_prompt' &&
+                            lastMsg.promptTitle === data.label
+                        ) {
+                            const updated = [...prev];
+                            updated[prev.length - 1] = {
+                                ...lastMsg,
+                                text: lastMsg.text + data.token,
+                            };
+                            return updated;
+                        }
+                        return [
+                            ...prev,
+                            {
+                                id: Date.now().toString(),
+                                role: 'system',
+                                text: data.token,
+                                intent: 'custom_prompt',
+                                promptTitle: data.label,
+                                isStreaming: true,
+                            },
+                        ];
+                    });
+                })
+            );
+        }
+
+        if (window.electronAPI.onIntelligenceCustomPromptUpdate) {
+            cleanups.push(
+                window.electronAPI.onIntelligenceCustomPromptUpdate((data) => {
+                    setIsProcessing(false);
+                    setMessages((prev) => {
+                        const lastMsg = prev[prev.length - 1];
+                        if (
+                            lastMsg &&
+                            lastMsg.isStreaming &&
+                            lastMsg.intent === 'custom_prompt' &&
+                            lastMsg.promptTitle === data.label
+                        ) {
+                            const updated = [...prev];
+                            updated[prev.length - 1] = {
+                                ...lastMsg,
+                                text: data.text,
+                                isStreaming: false,
+                            };
+                            return updated;
+                        }
+                        return [
+                            ...prev,
+                            {
+                                id: Date.now().toString(),
+                                role: 'system',
+                                text: data.text,
+                                intent: 'custom_prompt',
+                                promptTitle: data.label,
+                            },
+                        ];
+                    });
+                })
+            );
+        }
+
         cleanups.push(window.electronAPI.onIntelligenceManualResult((data) => {
             setIsProcessing(false);
             setMessages(prev => [...prev, {
@@ -922,6 +1045,52 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                 role: 'system',
                 text: `Error: ${err}`
             }]);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleCustomPrompt = async (customId: string) => {
+        setIsExpanded(true);
+        setIsProcessing(true);
+
+        const pending = pendingCaptureRef.current;
+        let currentAttachments = attachedContext;
+        if (pending && !currentAttachments.some((s) => s.path === pending.path)) {
+            currentAttachments = [...currentAttachments, pending].slice(-5);
+        }
+
+        if (currentAttachments.length > 0) {
+            setAttachedContext([]);
+            setMessages((prev) => [
+                ...prev,
+                {
+                    id: Date.now().toString(),
+                    role: 'user',
+                    text: 'Custom prompt with this context',
+                    hasScreenshot: true,
+                    screenshotPreview: currentAttachments[0].preview,
+                },
+            ]);
+            setTimeout(() => {
+                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }, 50);
+        }
+
+        try {
+            await window.electronAPI.generateCustomPrompt(
+                customId,
+                currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined
+            );
+        } catch (err) {
+            setMessages((prev) => [
+                ...prev,
+                {
+                    id: Date.now().toString(),
+                    role: 'system',
+                    text: `Error: ${err}`,
+                },
+            ]);
         } finally {
             setIsProcessing(false);
         }
@@ -1583,6 +1752,29 @@ Provide only the answer, nothing else.`;
             );
         }
 
+        if (msg.intent === 'custom_prompt') {
+            const title = msg.promptTitle || 'Custom';
+            return (
+                <div className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`} style={appearance.subtleStyle}>
+                    <div className={`flex items-center gap-2 mb-2 font-semibold text-xs uppercase tracking-wide ${isLightTheme ? 'text-teal-700' : 'text-teal-300'}`}>
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>{title}</span>
+                    </div>
+                    <div className={`text-[13px] leading-relaxed markdown-content ${isLightTheme ? 'text-slate-800' : 'text-slate-200'}`}>
+                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={{
+                            p: ({ node, ...props }: any) => <p className="mb-2 last:mb-0" {...props} />,
+                            strong: ({ node, ...props }: any) => <strong className={`font-bold ${isLightTheme ? 'text-teal-900' : 'text-teal-100'}`} {...props} />,
+                            ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mb-2" {...props} />,
+                            li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
+                            pre: MarkdownScrollPre,
+                        }}>
+                            {msg.text}
+                        </ReactMarkdown>
+                    </div>
+                </div>
+            );
+        }
+
         if (msg.intent === 'what_to_answer') {
             // Split text by code blocks (Handle unclosed blocks at EOF)
             const parts = msg.text.split(/(```[\s\S]*?(?:```|$))/g);
@@ -1704,7 +1896,8 @@ Provide only the answer, nothing else.`;
         handleBrainstorm,
         handleAnswerNow,
         handleCodeHint,
-        handleBugFinder
+        handleBugFinder,
+        handleCustomPrompt,
     });
 
     // Update ref on every render so the event listener always access latest state/props
@@ -1716,7 +1909,8 @@ Provide only the answer, nothing else.`;
         handleBrainstorm,
         handleAnswerNow,
         handleCodeHint,
-        handleBugFinder
+        handleBugFinder,
+        handleCustomPrompt,
     };
 
     useEffect(() => {
@@ -1930,7 +2124,7 @@ Provide only the answer, nothing else.`;
     // Listens for shortcuts triggered when the app is in the background
     useEffect(() => {
         if (!window.electronAPI.onGlobalShortcut) return;
-        const unsubscribe = window.electronAPI.onGlobalShortcut(({ action }) => {
+        const unsubscribe = window.electronAPI.onGlobalShortcut(({ action, customId }) => {
             const handlers = handlersRef.current;
             const generalHandlers = generalHandlersRef.current;
 
@@ -1945,6 +2139,7 @@ Provide only the answer, nothing else.`;
             else if (action === 'answer') handlers.handleAnswerNow();
             else if (action === 'bugFinder') handlers.handleBugFinder();
             else if (action === 'codeHint') handlers.handleCodeHint();
+            else if (action === 'customPrompt' && customId) handlers.handleCustomPrompt(customId);
             else if (action === 'scrollUp') scrollContainerRef.current?.scrollBy({ top: -100, behavior: 'smooth' });
             else if (action === 'scrollDown') scrollContainerRef.current?.scrollBy({ top: 100, behavior: 'smooth' });
             else if (action === 'scrollCodeLeft') scrollCodeBlocksHorizontally(-140);
@@ -2145,23 +2340,83 @@ Provide only the answer, nothing else.`;
                                 </div>
                             )}
 
-                            {/* Quick Actions - Minimal & Clean */}
-                            <div className={`flex flex-nowrap justify-center items-center gap-1.5 px-4 pb-3 overflow-x-hidden ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3'}`}>
-                                <button onClick={handleWhatToSay} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
-                                    <Pencil className="w-3 h-3 opacity-70" /> What to answer?
-                                </button>
-                                <button onClick={handleRecap} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
-                                    <LayoutGrid className="w-3 h-3 opacity-70" /> System Design
-                                </button>
-                                <button onClick={handleBrainstorm} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
-                                    <Lightbulb className="w-3 h-3 opacity-70" /> Brainstorm
-                                </button>
-                                <button onClick={handleFollowUpQuestions} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
-                                    <Sparkles className="w-3 h-3 opacity-70" /> AI Design
-                                </button>
-                                <button onClick={handleBugFinder} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
-                                    <Bug className="w-3 h-3 opacity-70" /> Bug Finder
-                                </button>
+                            {/* Quick Actions — driven by Settings → Prompts registry */}
+                            <div className={`flex flex-nowrap justify-center items-center gap-1.5 px-4 pb-3 overflow-x-auto ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3'}`}>
+                                {overlayChips.map((chip) => {
+                                    const subline = [chip.tags.length ? chip.tags.join(', ') : '', chip.shortcutDisplay || '']
+                                        .filter(Boolean)
+                                        .join(' · ');
+                                    const run = () => {
+                                        if (chip.kind === 'custom') {
+                                            void handleCustomPrompt(chip.id);
+                                            return;
+                                        }
+                                        switch (chip.builtinId) {
+                                            case 'whatToAnswer':
+                                                void handleWhatToSay();
+                                                break;
+                                            case 'systemDesign':
+                                                void handleRecap();
+                                                break;
+                                            case 'codingBrainstorm':
+                                                void handleBrainstorm();
+                                                break;
+                                            case 'aiDesign':
+                                                void handleFollowUpQuestions();
+                                                break;
+                                            case 'bugFinder':
+                                                void handleBugFinder();
+                                                break;
+                                            case 'codeHint':
+                                                void handleCodeHint();
+                                                break;
+                                            case 'clarify':
+                                                void window.electronAPI?.generateClarify?.();
+                                                break;
+                                            default:
+                                                break;
+                                        }
+                                    };
+                                    const icon =
+                                        chip.kind === 'custom' ? (
+                                            <Sparkles className="w-3 h-3 opacity-70" />
+                                        ) : chip.builtinId === 'whatToAnswer' ? (
+                                            <Pencil className="w-3 h-3 opacity-70" />
+                                        ) : chip.builtinId === 'systemDesign' ? (
+                                            <LayoutGrid className="w-3 h-3 opacity-70" />
+                                        ) : chip.builtinId === 'codingBrainstorm' ? (
+                                            <Lightbulb className="w-3 h-3 opacity-70" />
+                                        ) : chip.builtinId === 'aiDesign' ? (
+                                            <Sparkles className="w-3 h-3 opacity-70" />
+                                        ) : chip.builtinId === 'bugFinder' ? (
+                                            <Bug className="w-3 h-3 opacity-70" />
+                                        ) : chip.builtinId === 'codeHint' ? (
+                                            <Code className="w-3 h-3 opacity-70" />
+                                        ) : chip.builtinId === 'answerRecord' ? (
+                                            <Zap className="w-3 h-3 opacity-70" />
+                                        ) : (
+                                            <MessageSquare className="w-3 h-3 opacity-70" />
+                                        );
+                                    return (
+                                        <button
+                                            key={chip.kind === 'builtin' ? `b-${chip.builtinId}` : `c-${chip.id}`}
+                                            type="button"
+                                            onClick={() => run()}
+                                            className={`flex flex-col items-center gap-0.5 px-2.5 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press shrink-0 max-w-[140px] ${quickActionClass}`}
+                                            style={appearance.chipStyle}
+                                        >
+                                            <span className="flex items-center gap-1 whitespace-nowrap">
+                                                {icon}
+                                                <span className="truncate">{chip.label}</span>
+                                            </span>
+                                            {subline ? (
+                                                <span className="text-[9px] font-normal opacity-65 leading-tight truncate max-w-[120px]">
+                                                    {subline}
+                                                </span>
+                                            ) : null}
+                                        </button>
+                                    );
+                                })}
                                 <button
                                     onClick={handleAnswerNow}
                                     className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium transition-all active:scale-95 duration-200 interaction-base interaction-press min-w-[74px] whitespace-nowrap shrink-0 ${isManualRecording

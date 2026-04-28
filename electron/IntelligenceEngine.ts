@@ -13,7 +13,7 @@ import {
 } from './llm';
 
 // Mode types
-export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'follow_up' | 'recap' | 'clarify' | 'manual' | 'follow_up_questions' | 'code_hint' | 'brainstorm' | 'bug_finder';
+export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'follow_up' | 'recap' | 'clarify' | 'manual' | 'follow_up_questions' | 'code_hint' | 'brainstorm' | 'bug_finder' | 'custom_prompt';
 
 // Refinement intent detection (refined to avoid false positives)
 function detectRefinementIntent(userText: string): { isRefinement: boolean; intent: string } {
@@ -50,6 +50,8 @@ export interface IntelligenceModeEvents {
     'clarify_token': (token: string) => void;
     'follow_up_questions_update': (questions: string) => void;
     'follow_up_questions_token': (token: string) => void;
+    'custom_prompt_token': (data: { token: string; label: string }) => void;
+    'custom_prompt_update': (data: { text: string; label: string }) => void;
     'manual_answer_started': () => void;
     'manual_answer_result': (answer: string, question: string) => void;
     'mode_changed': (mode: IntelligenceMode) => void;
@@ -625,6 +627,68 @@ export class IntelligenceEngine extends EventEmitter {
 
         } catch (error) {
             this.emit('error', error as Error, 'follow_up_questions');
+            this.setMode('idle');
+            return null;
+        }
+    }
+
+    /**
+     * User-defined prompt from Settings → Prompts (custom entries).
+     */
+    async runCustomPrompt(customId: string, imagePaths?: string[]): Promise<string | null> {
+        const { PromptRegistryStore } = require('../services/PromptRegistryStore');
+        const spec = PromptRegistryStore.getInstance().getCustomForRun(customId);
+        if (!spec) {
+            this.setMode('idle');
+            return null;
+        }
+
+        this.setMode('custom_prompt');
+
+        try {
+            let context = this.session.getFormattedContext(120)?.trim();
+            if (!context) {
+                const full = this.session.getFullSessionContext()?.trim();
+                if (full) {
+                    context = full.length > 14000 ? full.slice(-14000) : full;
+                }
+            }
+            const imagePathsArg = imagePaths?.length ? imagePaths : undefined;
+            if (!context && imagePathsArg?.length) {
+                context =
+                    '[Use attached screenshot(s). Follow the system instructions for responses.]';
+            }
+            if (!context) {
+                context =
+                    '[No transcript synced yet. Follow system instructions for empty or minimal context.]';
+            }
+
+            const generationId = ++this.currentGenerationId;
+            let full = '';
+            const stream = this.llmHelper.streamChat(context, imagePathsArg, undefined, spec.body);
+
+            for await (const token of stream) {
+                if (this.currentGenerationId !== generationId) {
+                    break;
+                }
+                this.emit('custom_prompt_token', { token, label: spec.label });
+                full += token;
+            }
+
+            if (full && this.currentGenerationId === generationId) {
+                this.emit('custom_prompt_update', { text: full, label: spec.label });
+                this.session.pushUsage({
+                    type: 'chat',
+                    timestamp: Date.now(),
+                    question: spec.label,
+                    answer: full,
+                });
+            }
+
+            this.setMode('idle');
+            return full;
+        } catch (error) {
+            this.emit('error', error as Error, 'custom_prompt');
             this.setMode('idle');
             return null;
         }

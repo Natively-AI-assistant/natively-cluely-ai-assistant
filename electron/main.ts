@@ -368,7 +368,8 @@ export class AppState {
           actionId === 'chat:scrollUp' ||
           actionId === 'chat:scrollDown' ||
           actionId === 'chat:scrollCodeLeft' ||
-          actionId === 'chat:scrollCodeRight'
+          actionId === 'chat:scrollCodeRight' ||
+          (typeof actionId === 'string' && actionId.startsWith('chat:custom:'))
         ) {
           const actionMap: Record<string, string> = {
             'chat:whatToAnswer': 'whatToAnswer',
@@ -383,12 +384,19 @@ export class AppState {
             'chat:scrollCodeLeft': 'scrollCodeLeft',
             'chat:scrollCodeRight': 'scrollCodeRight',
           };
-          const action = actionMap[actionId];
+          let action = actionMap[actionId];
+          if (!action && typeof actionId === 'string' && actionId.startsWith('chat:custom:')) {
+            action = 'customPrompt';
+          }
           // Send to all windows without focusing — stealth operation
           const allWindows = BrowserWindow.getAllWindows();
           allWindows.forEach(win => {
             if (!win.isDestroyed()) {
-              win.webContents.send('global-shortcut', { action });
+              if (action === 'customPrompt' && typeof actionId === 'string' && actionId.startsWith('chat:custom:')) {
+                win.webContents.send('global-shortcut', { action: 'customPrompt', customId: actionId.replace(/^chat:custom:/, '') });
+              } else if (action) {
+                win.webContents.send('global-shortcut', { action });
+              }
             }
           });
 
@@ -1680,6 +1688,20 @@ export class AppState {
       }
     })
 
+    this.intelligenceManager.on('custom_prompt_token', (data: { token: string; label: string }) => {
+      const win = mainWindow()
+      if (win) {
+        win.webContents.send('intelligence-custom-prompt-token', data)
+      }
+    })
+
+    this.intelligenceManager.on('custom_prompt_update', (data: { text: string; label: string }) => {
+      const win = mainWindow()
+      if (win) {
+        win.webContents.send('intelligence-custom-prompt-update', data)
+      }
+    })
+
     this.intelligenceManager.on('manual_answer_started', () => {
       const win = mainWindow()
       if (win) {
@@ -2659,6 +2681,13 @@ async function initializeApp() {
   // Stealth mode: dock is already hidden, tray stays hidden, no action needed here.
   // Register global shortcuts using KeybindManager
   KeybindManager.getInstance().registerGlobalShortcuts()
+
+  try {
+    const { PromptRegistryStore } = require('./services/PromptRegistryStore')
+    PromptRegistryStore.getInstance().syncKeybindsToManager()
+  } catch (e) {
+    console.warn('[Init] PromptRegistryStore sync skipped:', e)
+  }
 
   // Pre-create settings window in background for faster first open
   appState.settingsWindowHelper.preloadWindow()

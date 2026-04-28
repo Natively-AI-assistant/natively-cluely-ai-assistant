@@ -83,6 +83,7 @@ export class KeybindManager {
         if (actionId === 'chat:dynamicAction4') return true;
         if (actionId === 'chat:codingBrainstorm') return true;
         if (actionId === 'chat:followUp') return true;
+        if (actionId.startsWith('chat:custom:')) return true;
 
         return false;
     }
@@ -168,6 +169,14 @@ export class KeybindManager {
 
                         current.accelerator = fileKb.accelerator;
                         this.keybinds.set(fileKb.id, current);
+                    } else if (fileKb.id && String(fileKb.id).startsWith('chat:custom:')) {
+                        this.keybinds.set(fileKb.id, {
+                            id: fileKb.id,
+                            label: fileKb.label || 'Custom prompt',
+                            accelerator: fileKb.accelerator || '',
+                            isGlobal: true,
+                            defaultAccelerator: fileKb.accelerator || '',
+                        });
                     }
                 }
 
@@ -239,8 +248,47 @@ export class KeybindManager {
         return Array.from(this.keybinds.values());
     }
 
+    /**
+     * User-defined copilot prompts (Settings → Prompts → Custom).
+     * Rows are rebuilt from PromptRegistryStore on each sync.
+     */
+    public syncCustomPromptKeybinds(rows: { id: string; label: string; accelerator: string }[]): void {
+        const keep = new Set(rows.map((r) => r.id));
+        const toDelete: string[] = [];
+        this.keybinds.forEach((_, kid) => {
+            if (kid.startsWith('chat:custom:') && !keep.has(kid)) {
+                toDelete.push(kid);
+            }
+        });
+        toDelete.forEach((kid) => this.keybinds.delete(kid));
+
+        for (const row of rows) {
+            const acc = (row.accelerator || '').trim();
+            this.keybinds.set(row.id, {
+                id: row.id,
+                label: row.label,
+                accelerator: acc,
+                isGlobal: true,
+                defaultAccelerator: acc,
+            });
+        }
+
+        this.save();
+        this.registerGlobalShortcuts();
+        this.broadcastUpdate();
+    }
+
     public setKeybind(id: string, accelerator: string) {
-        if (!this.keybinds.has(id)) return;
+        if (!this.keybinds.has(id)) {
+            if (!id.startsWith('chat:custom:')) return;
+            this.keybinds.set(id, {
+                id,
+                label: 'Custom prompt',
+                accelerator,
+                isGlobal: true,
+                defaultAccelerator: accelerator,
+            });
+        }
 
         const currentKb = this.keybinds.get(id)!;
         const oldAccelerator = currentKb.accelerator || '';
@@ -277,6 +325,12 @@ export class KeybindManager {
         this.save();
         this.registerGlobalShortcuts();
         this.broadcastUpdate();
+        try {
+            const { PromptRegistryStore } = require('./PromptRegistryStore');
+            PromptRegistryStore.getInstance().syncKeybindsToManager();
+        } catch {
+            /* optional module timing */
+        }
     }
 
     public registerGlobalShortcuts() {

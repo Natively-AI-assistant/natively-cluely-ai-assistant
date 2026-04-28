@@ -1,5 +1,5 @@
 import { LLMHelper } from "../LLMHelper";
-import { BRAINSTORM_MODE_PROMPT } from "./prompts";
+import { getResolvedPromptBody } from "./promptResolver";
 
 export class BrainstormLLM {
     private llmHelper: LLMHelper;
@@ -15,7 +15,7 @@ export class BrainstormLLM {
     async *generateStream(context: string, imagePaths?: string[]): AsyncGenerator<string> {
         if (!context.trim() && !imagePaths?.length) return;
         try {
-            yield* this.llmHelper.streamChat(context, imagePaths, undefined, BRAINSTORM_MODE_PROMPT);
+            yield* this.llmHelper.streamChat(context, imagePaths, undefined, getResolvedPromptBody("codingBrainstorm"));
         } catch (error) {
             console.error("[BrainstormLLM] Stream failed:", error);
             yield "Could not generate approaches from this context. Try a screenshot (attach or capture), more transcript, or use System Design (Ctrl+M / ⌘M) if you meant architecture.";

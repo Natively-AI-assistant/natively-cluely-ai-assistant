@@ -1,5 +1,5 @@
 import { LLMHelper } from "../LLMHelper";
-import { UNIVERSAL_ANSWER_PROMPT } from "./prompts";
+import { getResolvedPromptBody } from "./promptResolver";
 
 export class AnswerLLM {
     private llmHelper: LLMHelper;
@@ -15,7 +15,7 @@ export class AnswerLLM {
         try {
             // Use LLMHelper's streamChat but collect all tokens since this method is non-streaming
             // We use UNIVERSAL_ANSWER_PROMPT as override
-            const stream = this.llmHelper.streamChat(question, undefined, context, UNIVERSAL_ANSWER_PROMPT);
+            const stream = this.llmHelper.streamChat(question, undefined, context, getResolvedPromptBody("answerRecord"));
 
             let fullResponse = "";
             for await (const chunk of stream) {

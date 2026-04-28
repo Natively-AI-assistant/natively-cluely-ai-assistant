@@ -52,6 +52,7 @@ export class IntelligenceManager extends EventEmitter {
             'refined_answer', 'refined_answer_token',
             'recap', 'recap_token', 'clarify', 'clarify_token',
             'follow_up_questions_update', 'follow_up_questions_token',
+            'custom_prompt_token', 'custom_prompt_update',
             'manual_answer_started', 'manual_answer_result',
             'mode_changed', 'error'
         ];
@@ -158,6 +159,10 @@ export class IntelligenceManager extends EventEmitter {
 
     async runFollowUpQuestions(imagePaths?: string[]): Promise<string | null> {
         return this.engine.runFollowUpQuestions(imagePaths);
+    }
+
+    async runCustomPrompt(customId: string, imagePaths?: string[]): Promise<string | null> {
+        return this.engine.runCustomPrompt(customId, imagePaths);
     }
 
     async runManualAnswer(question: string): Promise<string | null> {
