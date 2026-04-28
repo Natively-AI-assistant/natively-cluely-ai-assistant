@@ -13,10 +13,16 @@ export class SystemAudioCapture extends EventEmitter {
     private monitor: any = null;
     private chunkCount: number = 0;
     private sampleRatePollTimers: NodeJS.Timeout[] = [];
+    private targetPids: number[] = [];
+    private targetBundleIds: string[] = [];
 
-    constructor(deviceId?: string | null) {
+    constructor(deviceId?: string | null, targetPids?: number[], targetBundleIds?: string[]) {
         super();
         this.deviceId = deviceId || null;
+        this.targetPids = Array.isArray(targetPids) ? targetPids.filter((p) => Number.isFinite(p) && p > 0) : [];
+        this.targetBundleIds = Array.isArray(targetBundleIds)
+            ? targetBundleIds.filter((b) => typeof b === 'string' && b.length > 0)
+            : [];
         if (!RustAudioCapture) {
             console.error('[SystemAudioCapture] Rust class implementation not found.');
         } else {
@@ -65,6 +71,24 @@ export class SystemAudioCapture extends EventEmitter {
             console.log('[SystemAudioCapture] Creating native monitor (lazy init)...');
             try {
                 this.monitor = new RustAudioCapture(this.deviceId);
+                if (this.targetPids.length > 0) {
+                    const setter = this.monitor.setTargetPids || this.monitor.set_target_pids;
+                    if (typeof setter === 'function') {
+                        setter.call(this.monitor, this.targetPids);
+                        console.log(`[SystemAudioCapture] Per-process tap configured for PIDs: ${this.targetPids.join(', ')}`);
+                    } else {
+                        console.warn('[SystemAudioCapture] Native module missing setTargetPids; falling back to global tap');
+                    }
+                }
+                if (this.targetBundleIds.length > 0) {
+                    const setterB = this.monitor.setTargetBundleIds || this.monitor.set_target_bundle_ids;
+                    if (typeof setterB === 'function') {
+                        setterB.call(this.monitor, this.targetBundleIds);
+                        console.log(`[SystemAudioCapture] Per-process tap bundle filters: ${this.targetBundleIds.join(', ')}`);
+                    } else {
+                        console.warn('[SystemAudioCapture] Native module missing setTargetBundleIds; bundle filters ignored');
+                    }
+                }
             } catch (e) {
                 console.error('[SystemAudioCapture] Failed to create native monitor:', e);
                 this.emit('error', e);

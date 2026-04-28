@@ -35,6 +35,7 @@ import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/
 // import { ModelSelector } from './ui/ModelSelector'; // REMOVED
 import TopPill from './ui/TopPill';
 import RollingTranscript from './ui/RollingTranscript';
+import LiveConversationPanel, { ConversationTurn } from './ui/LiveConversationPanel';
 import { NegotiationCoachingCard } from '../premium';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -45,12 +46,20 @@ import { analytics, detectProviderType } from '../lib/analytics/analytics.servic
 import { useShortcuts } from '../hooks/useShortcuts';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { getOverlayAppearance, OVERLAY_OPACITY_DEFAULT } from '../lib/overlayAppearance';
+import { pickFiller, type FillerIntent } from '../lib/buyTimeFillers';
 
 interface Message {
     id: string;
     role: 'user' | 'system' | 'interviewer';
     text: string;
     isStreaming?: boolean;
+    /**
+     * True while this bubble holds a buy-time stall line — a natural-sounding
+     * placeholder shown the instant the user clicks an action, so they can
+     * read it aloud while the real LLM call composes. Cleared (and the text
+     * fully replaced) when the first real token arrives.
+     */
+    isFiller?: boolean;
     hasScreenshot?: boolean;
     screenshotPreview?: string;
     isCode?: boolean;
@@ -112,6 +121,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
 
     const [rollingTranscript, setRollingTranscript] = useState('');  // For interviewer rolling text bar
     const [isInterviewerSpeaking, setIsInterviewerSpeaking] = useState(false);  // Track if actively speaking
+    const [conversationTurns, setConversationTurns] = useState<ConversationTurn[]>([]);
+    const [livePartial, setLivePartial] = useState<{ speaker: 'interviewer' | 'user'; text: string } | null>(null);
     const [voiceInput, setVoiceInput] = useState('');  // Accumulated user voice input
     const voiceInputRef = useRef<string>('');  // Ref for capturing in async handlers
     const textInputRef = useRef<HTMLInputElement>(null); // Ref for input focus
@@ -466,35 +477,52 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                 return;  // Don't add to messages while recording
             }
 
-            // Ignore user mic transcripts when not recording
-            // Only interviewer (system audio) transcripts should appear in chat
-            if (transcript.speaker === 'user') {
-                return;  // Skip user mic input - only relevant when Answer button is active
-            }
-
-            // Only show interviewer (system audio) transcripts in rolling bar
-            if (transcript.speaker !== 'interviewer') {
+            // Accept both speakers into the live conversation log so the user can
+            // follow along with what they said vs. what the other party said.
+            if (transcript.speaker !== 'interviewer' && transcript.speaker !== 'user') {
                 return;  // Safety check for any other speaker types
             }
 
-            // Route to rolling transcript bar - accumulate text continuously
+            const speaker = transcript.speaker as 'interviewer' | 'user';
+            const trimmed = transcript.text.trim();
+
+            if (transcript.final) {
+                if (trimmed) {
+                    setConversationTurns(prev => [
+                        ...prev.slice(-49),
+                        {
+                            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                            speaker,
+                            text: transcript.text,
+                            timestamp: Date.now(),
+                            final: true,
+                        },
+                    ]);
+                }
+                setLivePartial(prev => (prev && prev.speaker === speaker ? null : prev));
+            } else if (trimmed) {
+                setLivePartial({ speaker, text: transcript.text });
+            }
+
+            // Maintain the existing single-line interviewer rolling bar for
+            // back-compat with other UI hooks that read it.
+            if (speaker !== 'interviewer') {
+                return;
+            }
+
             setIsInterviewerSpeaking(!transcript.final);
 
             if (transcript.final) {
-                // Append finalized text to accumulated transcript
                 setRollingTranscript(prev => {
                     const separator = prev ? '  ·  ' : '';
                     return prev + separator + transcript.text;
                 });
 
-                // Clear speaking indicator after pause
                 setTimeout(() => {
                     setIsInterviewerSpeaking(false);
                 }, 3000);
             } else {
-                // For partial transcripts, show current segment appended to accumulated
                 setRollingTranscript(prev => {
-                    // Find where previous finalized content ends (look for last separator)
                     const lastSeparator = prev.lastIndexOf('  ·  ');
                     const accumulated = lastSeparator >= 0 ? prev.substring(0, lastSeparator + 5) : '';
                     return accumulated + transcript.text;
@@ -519,11 +547,27 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
 
         cleanups.push(window.electronAPI.onSuggestionError((err) => {
             setIsProcessing(false);
-            setMessages(prev => [...prev, {
-                id: Date.now().toString(),
-                role: 'system',
-                text: `Error: ${err.error}`
-            }]);
+            setMessages(prev => {
+                const lastMsg = prev[prev.length - 1];
+                // If the buy-time filler is still on screen with no real content yet,
+                // replace it with the error so the chat doesn't end up showing a
+                // stale "Yeah, give me a sec..." next to a failure message.
+                if (lastMsg && lastMsg.isFiller) {
+                    const updated = [...prev];
+                    updated[prev.length - 1] = {
+                        ...lastMsg,
+                        text: `Error: ${err.error}`,
+                        isFiller: false,
+                        isStreaming: false,
+                    };
+                    return updated;
+                }
+                return [...prev, {
+                    id: Date.now().toString(),
+                    role: 'system' as const,
+                    text: `Error: ${err.error}`,
+                }];
+            });
         }));
 
 
@@ -533,12 +577,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
             setMessages(prev => {
                 const lastMsg = prev[prev.length - 1];
 
-                // If we already have a streaming message for this intent, append
+                // If we already have a streaming message for this intent, replace
+                // (if it's still the buy-time filler) or append (real text).
                 if (lastMsg && lastMsg.isStreaming && lastMsg.intent === 'what_to_answer') {
                     const updated = [...prev];
                     updated[prev.length - 1] = {
                         ...lastMsg,
-                        text: lastMsg.text + data.token
+                        text: lastMsg.isFiller ? data.token : lastMsg.text + data.token,
+                        isFiller: false,
                     };
                     return updated;
                 }
@@ -589,7 +635,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                     const updated = [...prev];
                     updated[prev.length - 1] = {
                         ...lastMsg,
-                        text: lastMsg.text + data.token
+                        text: lastMsg.isFiller ? data.token : lastMsg.text + data.token,
+                        isFiller: false,
                     };
                     return updated;
                 }
@@ -634,7 +681,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                     const updated = [...prev];
                     updated[prev.length - 1] = {
                         ...lastMsg,
-                        text: lastMsg.text + data.token
+                        text: lastMsg.isFiller ? data.token : lastMsg.text + data.token,
+                        isFiller: false,
                     };
                     return updated;
                 }
@@ -689,7 +737,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                     const updated = [...prev];
                     updated[prev.length - 1] = {
                         ...lastMsg,
-                        text: lastMsg.text + data.token
+                        text: lastMsg.isFiller ? data.token : lastMsg.text + data.token,
+                        isFiller: false,
                     };
                     return updated;
                 }
@@ -737,11 +786,24 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
 
         cleanups.push(window.electronAPI.onIntelligenceError((data) => {
             setIsProcessing(false);
-            setMessages(prev => [...prev, {
-                id: Date.now().toString(),
-                role: 'system',
-                text: `❌ Error (${data.mode}): ${data.error}`
-            }]);
+            setMessages(prev => {
+                const lastMsg = prev[prev.length - 1];
+                if (lastMsg && lastMsg.isFiller) {
+                    const updated = [...prev];
+                    updated[prev.length - 1] = {
+                        ...lastMsg,
+                        text: `❌ Error (${data.mode}): ${data.error}`,
+                        isFiller: false,
+                        isStreaming: false,
+                    };
+                    return updated;
+                }
+                return [...prev, {
+                    id: Date.now().toString(),
+                    role: 'system' as const,
+                    text: `❌ Error (${data.mode}): ${data.error}`,
+                }];
+            });
         }));
         return () => cleanups.forEach(fn => fn());
     }, [isExpanded]);
@@ -773,7 +835,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                 const lastMsg = prev[prev.length - 1];
                 if (lastMsg && lastMsg.isStreaming && lastMsg.intent === 'clarify') {
                     const updated = [...prev];
-                    updated[prev.length - 1] = { ...lastMsg, text: lastMsg.text + data.token };
+                    updated[prev.length - 1] = {
+                        ...lastMsg,
+                        text: lastMsg.isFiller ? data.token : lastMsg.text + data.token,
+                        isFiller: false,
+                    };
                     return updated;
                 }
                 return [...prev, {
@@ -811,6 +877,28 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // intentionally empty — these listeners must survive isExpanded changes
 
+    /**
+     * Buy-time filler — push an instant stall line into the message stream so
+     * the user can start reading it aloud the moment they hit the action key.
+     * The filler bubble is marked isFiller=true and isStreaming=true; the next
+     * real streamed token replaces it (see token handlers above).
+     */
+    const spawnFiller = React.useCallback((intent: FillerIntent, messageIntent: string) => {
+        const fillerText = pickFiller(intent);
+        setMessages(prev => [...prev, {
+            id: `filler-${Date.now()}`,
+            role: 'system' as const,
+            text: fillerText,
+            intent: messageIntent,
+            isStreaming: true,
+            isFiller: true,
+        }]);
+        // Scroll the filler into view immediately.
+        setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 0);
+    }, []);
+
     // Quick Actions - Updated to use new Intelligence APIs
 
     const handleCopy = (text: string) => {
@@ -822,6 +910,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     const handleWhatToSay = async () => {
         setIsExpanded(true);
         setIsProcessing(true);
+        spawnFiller('what_to_answer', 'what_to_answer');
         analytics.trackCommandExecuted('what_to_say');
 
         // Capture and clear attached image context.
@@ -884,6 +973,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     const handleRecap = async () => {
         setIsExpanded(true);
         setIsProcessing(true);
+        spawnFiller('recap', 'recap');
         analytics.trackCommandExecuted('recap');
 
         try {
@@ -902,6 +992,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     const handleFollowUpQuestions = async () => {
         setIsExpanded(true);
         setIsProcessing(true);
+        spawnFiller('follow_up_questions', 'follow_up_questions');
         analytics.trackCommandExecuted('suggest_questions');
 
         try {
@@ -920,6 +1011,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     const handleClarify = async () => {
         setIsExpanded(true);
         setIsProcessing(true);
+        spawnFiller('clarify', 'clarify');
         analytics.trackCommandExecuted('clarify');
 
         try {
@@ -938,6 +1030,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     const handleCodeHint = async () => {
         setIsExpanded(true);
         setIsProcessing(true);
+        spawnFiller('code_hint', 'code_hint');
         analytics.trackCommandExecuted('code_hint');
 
         const currentAttachments = attachedContext;
@@ -973,6 +1066,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     const handleBrainstorm = async () => {
         setIsExpanded(true);
         setIsProcessing(true);
+        spawnFiller('brainstorm', 'brainstorm');
         analytics.trackCommandExecuted('brainstorm');
 
         const currentAttachments = attachedContext;
@@ -1039,12 +1133,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
             setMessages(prev => {
                 const lastMsg = prev[prev.length - 1];
                 if (lastMsg && lastMsg.isStreaming && lastMsg.role === 'system') {
+                    // If this bubble is still showing a buy-time filler, replace
+                    // its text with the first real token instead of appending.
+                    const newText = lastMsg.isFiller ? token : lastMsg.text + token;
                     const updated = [...prev];
                     updated[prev.length - 1] = {
                         ...lastMsg,
-                        text: lastMsg.text + token,
+                        text: newText,
+                        isFiller: false,
                         // re-check code status on every token? Expensive but needed for progressive highlighting
-                        isCode: (lastMsg.text + token).includes('```') || (lastMsg.text + token).includes('def ') || (lastMsg.text + token).includes('function ')
+                        isCode: newText.includes('```') || newText.includes('def ') || newText.includes('function ')
                     };
                     return updated;
                 }
@@ -1099,17 +1197,21 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
             setIsProcessing(false);
             requestStartTimeRef.current = null; // Clear timer on error
             setMessages(prev => {
-                // Append error to the current message or add new one?
-                // Let's add a new error block if the previous one confusing,
-                // or just update status.
-                // Ideally we want to show the partial response AND the error.
                 const lastMsg = prev[prev.length - 1];
                 if (lastMsg && lastMsg.isStreaming) {
+                    // If the buy-time filler is still in place, swap it for the
+                    // error fully — we don't want to append an error to "Yeah,
+                    // give me a sec...". Otherwise preserve any partial response
+                    // and append the error inline as before.
+                    const newText = lastMsg.isFiller
+                        ? `❌ Error: ${error}`
+                        : lastMsg.text + `\n\n[Error: ${error}]`;
                     const updated = [...prev];
                     updated[prev.length - 1] = {
                         ...lastMsg,
                         isStreaming: false,
-                        text: lastMsg.text + `\n\n[Error: ${error}]`
+                        isFiller: false,
+                        text: newText,
                     };
                     return updated;
                 }
@@ -1148,11 +1250,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                 setMessages(prev => {
                     const lastMsg = prev[prev.length - 1];
                     if (lastMsg && lastMsg.isStreaming && lastMsg.role === 'system') {
+                        // Replace the buy-time filler on first real chunk; append once
+                        // we're already streaming real content.
+                        const newText = lastMsg.isFiller ? data.chunk : lastMsg.text + data.chunk;
                         const updated = [...prev];
                         updated[prev.length - 1] = {
                             ...lastMsg,
-                            text: lastMsg.text + data.chunk,
-                            isCode: (lastMsg.text + data.chunk).includes('```')
+                            text: newText,
+                            isFiller: false,
+                            isCode: newText.includes('```')
                         };
                         return updated;
                     }
@@ -1202,11 +1308,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                 setMessages(prev => {
                     const lastMsg = prev[prev.length - 1];
                     if (lastMsg && lastMsg.isStreaming) {
+                        const newText = lastMsg.isFiller
+                            ? `❌ RAG Error: ${data.error}`
+                            : lastMsg.text + `\n\n[RAG Error: ${data.error}]`;
                         const updated = [...prev];
                         updated[prev.length - 1] = {
                             ...lastMsg,
                             isStreaming: false,
-                            text: lastMsg.text + `\n\n[RAG Error: ${data.error}]`
+                            isFiller: false,
+                            text: newText,
                         };
                         return updated;
                     }
@@ -1276,15 +1386,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                 messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
             }, 50);
 
-            // Add placeholder for streaming response
-            setMessages(prev => [...prev, {
-                id: Date.now().toString(),
-                role: 'system',
-                text: '',
-                isStreaming: true
-            }]);
-
+            // Buy-time filler placeholder — instantly fills the streaming bubble
+            // with a natural stall line the user can read aloud while the LLM
+            // composes. Replaced by the first real token via onGeminiStreamToken.
             setIsProcessing(true);
+            spawnFiller('answer_now', 'answer_now');
 
             try {
                 let prompt = '';
@@ -2042,40 +2148,61 @@ Provide only the answer, nothing else.`;
                             onQuit={() => onEndMeeting ? onEndMeeting() : window.electronAPI.quitApp()}
                             appearance={appearance}
                             onLogoClick={() => window.electronAPI?.setWindowMode?.('launcher')}
+                            sysActive={isInterviewerSpeaking}
+                            micActive={Boolean(livePartial && livePartial.speaker === 'user' && livePartial.text.trim()) || isManualRecording}
+                            sttHealth={
+                                sttUserStatus === 'failed' || sttInterviewerStatus === 'failed'
+                                    ? 'failed'
+                                    : sttUserStatus === 'reconnecting' || sttInterviewerStatus === 'reconnecting'
+                                        ? 'reconnecting'
+                                        : 'connected'
+                            }
                         />
                         <div
-                            className={`relative w-[600px] max-w-full backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col draggable-area overlay-shell-surface ${overlayPanelClass}`}
+                            className={`relative w-[600px] max-w-full backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col draggable-area overlay-shell-surface console-enter console-enter-d1 ${overlayPanelClass}`}
                             style={appearance.shellStyle}
                         >
-
-
+                            {/* Audio tape — vertical channel indicator on the left edge.
+                                A bead glows phosphor where you're talking, ivory where the
+                                source is talking, fading out when both are quiet. Pure
+                                visual chrome — pointer-events: none. */}
+                            <div className="console-tape" aria-hidden>
+                                <span
+                                    className={`console-tape-bead is-them ${isInterviewerSpeaking ? 'is-active' : ''}`}
+                                    style={{ top: '38%' }}
+                                />
+                                <span
+                                    className={`console-tape-bead is-you ${
+                                        (livePartial && livePartial.speaker === 'user' && livePartial.text.trim()) || isManualRecording
+                                            ? 'is-active'
+                                            : ''
+                                    }`}
+                                    style={{ top: '62%' }}
+                                />
+                            </div>
 
                             {/* System Audio Permission Warning Banner */}
                             {systemAudioWarning && (
-                                <div className="flex items-center justify-between mx-4 mt-3 mb-1 px-3.5 py-2.5 bg-yellow-500/10 border border-yellow-500/20 rounded-[12px] shadow-sm relative no-drag group/warning">
-                                    <div className="flex flex-col gap-1 pr-3">
-                                        <div className="flex items-center gap-2 text-[12.5px] text-yellow-600 dark:text-yellow-400/90 font-medium leading-tight">
-                                            <div className="shrink-0 p-1 bg-yellow-500/20 rounded-full">
-                                                <svg className="w-3.5 h-3.5 text-yellow-600 dark:text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                                </svg>
-                                            </div>
-                                            <span>Screen Recording Permission Denied</span>
-                                        </div>
-                                        <p className="text-[11px] text-yellow-600/70 dark:text-yellow-400/60 leading-snug pl-[26px]">
+                                <div className="console-banner console-banner-warn mx-4 mt-3 mb-1 no-drag relative group/warning">
+                                    <div className="flex flex-col gap-1 flex-1 min-w-0">
+                                        <span className="console-label" style={{ color: '#E8B546' }}>
+                                            Screen Recording · Permission Denied
+                                        </span>
+                                        <p className="text-[11.5px] console-ink-soft leading-snug">
                                             {systemAudioWarning}
                                         </p>
                                     </div>
-                                    <div className="flex items-center gap-2 shrink-0">
-                                        <button 
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                        <button
                                             onClick={() => { window.electronAPI.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'); }}
-                                            className="px-3 py-1.5 rounded-lg bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-700 dark:text-yellow-500 text-[11px] font-semibold transition-all active:scale-95 border border-yellow-500/20 shadow-sm"
+                                            className="console-key"
                                         >
                                             Open Settings
+                                            <span className="console-key-glyph">↗</span>
                                         </button>
-                                        <button 
+                                        <button
                                             onClick={() => setSystemAudioWarning(null)}
-                                            className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-yellow-600/50 hover:text-yellow-700 dark:text-yellow-500/50 dark:hover:text-yellow-400 transition-colors absolute top-1 right-1 opacity-0 group-hover/warning:opacity-100"
+                                            className="p-1 rounded-full opacity-50 hover:opacity-100 console-ink-soft transition-opacity"
                                             title="Dismiss"
                                         >
                                             <X className="w-3 h-3" />
@@ -2086,36 +2213,41 @@ Provide only the answer, nothing else.`;
 
                             {/* PR #173: STT Not Configured Warning Banner */}
                             {sttNotConfigured && (
-                                <div className="flex items-center justify-between mx-4 mt-3 mb-1 px-3.5 py-2.5 bg-orange-500/10 border border-orange-500/20 rounded-[12px] shadow-sm relative no-drag group/stt-warning">
-                                    <div className="flex flex-col gap-1 pr-3">
-                                        <div className="flex items-center gap-2 text-[12.5px] text-orange-600 dark:text-orange-400/90 font-medium leading-tight">
-                                            <div className="shrink-0 p-1 bg-orange-500/20 rounded-full">
-                                                <svg className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                                                </svg>
-                                            </div>
-                                            <span>Transcription Not Configured</span>
-                                        </div>
-                                        <p className="text-[11px] text-orange-600/70 dark:text-orange-400/60 leading-snug pl-[26px]">
+                                <div className="console-banner console-banner-error mx-4 mt-3 mb-1 no-drag relative group/stt-warning">
+                                    <div className="flex flex-col gap-1 flex-1 min-w-0">
+                                        <span className="console-label" style={{ color: '#FF6B6B' }}>
+                                            Transcription · Not Configured
+                                        </span>
+                                        <p className="text-[11.5px] console-ink-soft leading-snug">
                                             No STT provider selected. Open Settings → Audio to pick one.
                                         </p>
                                     </div>
-                                    <div className="flex items-center gap-2 shrink-0">
+                                    <div className="flex items-center gap-1.5 shrink-0">
                                         <button
                                             onClick={() => { window.electronAPI?.toggleSettingsWindow?.(); }}
-                                            className="px-3 py-1.5 rounded-lg bg-orange-500/15 hover:bg-orange-500/25 text-orange-700 dark:text-orange-500 text-[11px] font-semibold transition-all active:scale-95 border border-orange-500/20 shadow-sm"
+                                            className="console-key"
                                         >
                                             Open Settings
+                                            <span className="console-key-glyph">↗</span>
                                         </button>
                                         <button
                                             onClick={() => setSttNotConfigured(false)}
-                                            className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-orange-600/50 hover:text-orange-700 dark:text-orange-500/50 dark:hover:text-orange-400 transition-colors absolute top-1 right-1 opacity-0 group-hover/stt-warning:opacity-100"
+                                            className="p-1 rounded-full opacity-50 hover:opacity-100 console-ink-soft transition-opacity"
                                             title="Dismiss"
                                         >
                                             <X className="w-3 h-3" />
                                         </button>
                                     </div>
                                 </div>
+                            )}
+
+                            {/* Live two-speaker conversation log — shows both your speech and theirs */}
+                            {showTranscript && (
+                                <LiveConversationPanel
+                                    turns={conversationTurns}
+                                    livePartial={livePartial}
+                                    isLightTheme={isLightTheme}
+                                />
                             )}
 
                             {/* Rolling Transcript Bar — includes STT status indicator inline */}
@@ -2138,46 +2270,46 @@ Provide only the answer, nothing else.`;
                                 />
                             ) : null}
 
-                            {/* Chat History - Only show if there are messages OR active states */}
+                            {/* Chat History — editorial column */}
                             {(messages.length > 0 || isManualRecording || isProcessing) && (
-                                <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3 max-h-[clamp(300px,35vh,450px)] no-drag" style={{ scrollbarWidth: 'none' }}>
+                                <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-4 max-h-[clamp(300px,35vh,450px)] no-drag console-log">
                                     {messages.map((msg) => (
                                         <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in-up`}>
                                             <div className={`
-                      ${msg.role === 'user' ? 'max-w-[72.25%] px-[13.6px] py-[10.2px]' : 'max-w-[85%] px-4 py-3'} text-[14px] leading-relaxed relative group whitespace-pre-wrap
-                      ${msg.role === 'user'
-                                                    ? (isLightTheme
-                                                        ? 'bg-blue-500/10 backdrop-blur-md border border-blue-500/20 text-blue-900 rounded-[20px] rounded-tr-[4px] shadow-sm font-medium'
-                                                        : 'bg-blue-600/20 backdrop-blur-md border border-blue-500/30 text-blue-100 rounded-[20px] rounded-tr-[4px] shadow-sm font-medium')
-                                                    : ''
+                                                relative group whitespace-pre-wrap text-[14px] leading-[1.55]
+                                                ${msg.role === 'user'
+                                                    ? 'max-w-[78%] console-you-rule pr-3 console-ink text-right'
+                                                    : msg.role === 'system'
+                                                        ? 'max-w-[92%] console-ink'
+                                                        : 'max-w-[88%] console-them-rule pl-3 console-them-color console-serif italic text-[14px]'
                                                 }
-                      ${msg.role === 'system'
-                                                    ? 'overlay-text-primary font-normal'
-                                                    : ''
-                                                }
-                      ${msg.role === 'interviewer'
-                                                    ? 'overlay-text-muted italic pl-0 text-[13px]'
-                                                    : ''
-                                                }
-                    `}>
-                                                {msg.role === 'interviewer' && (
-                                                    <div className="flex items-center gap-1.5 mb-1 text-[10px] font-medium uppercase tracking-wider overlay-text-muted">
-                                                        Interviewer
-                                                        {msg.isStreaming && <span className="w-1 h-1 bg-green-500 rounded-full animate-pulse" />}
+                                            `}>
+                                                {msg.role === 'user' && (
+                                                    <div className="console-label console-you-soft mb-1 text-right">
+                                                        You {msg.hasScreenshot && <span className="ml-2 inline-flex items-center gap-1"><Image className="w-2.5 h-2.5 inline" /> screenshot</span>}
                                                     </div>
                                                 )}
-                                                {msg.role === 'user' && msg.hasScreenshot && (
-                                                    <div className={`flex items-center gap-1 text-[10px] opacity-70 mb-1 border-b pb-1 ${isLightTheme ? 'border-black/10' : 'border-white/10'}`}>
-                                                        <Image className="w-2.5 h-2.5" />
-                                                        <span>Screenshot attached</span>
+                                                {msg.role === 'system' && (
+                                                    <div className="flex items-center gap-2 mb-1.5">
+                                                        <span className="console-label console-ink-soft">Natively</span>
+                                                        {msg.isStreaming && (
+                                                            <span className="console-pulse-dot is-pulsing" style={{ width: 4, height: 4 }} />
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {msg.role === 'interviewer' && (
+                                                    <div className="console-label console-them-soft mb-1">
+                                                        Them
+                                                        {msg.isStreaming && (
+                                                            <span className="console-caret console-caret-them ml-2" />
+                                                        )}
                                                     </div>
                                                 )}
                                                 {msg.role === 'system' && !msg.isStreaming && (
                                                     <button
                                                         onClick={() => handleCopy(msg.text)}
-                                                        className="absolute top-2 right-2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive"
+                                                        className="absolute top-0 right-0 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity console-ink-soft hover:console-ink hover:bg-[var(--console-key-bg-hover)]"
                                                         title="Copy to clipboard"
-                                                        style={appearance.iconStyle}
                                                     >
                                                         <Copy className="w-3.5 h-3.5" />
                                                     </button>
@@ -2187,32 +2319,37 @@ Provide only the answer, nothing else.`;
                                         </div>
                                     ))}
 
-                                    {/* Active Recording State with Live Transcription */}
+                                    {/* Active Recording — phosphor live transcription */}
                                     {isManualRecording && (
-                                        <div className="flex flex-col items-end gap-1 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                            {/* Live transcription preview */}
+                                        <div className="flex flex-col items-end gap-1.5 animate-in fade-in slide-in-from-bottom-2 duration-300">
                                             {(manualTranscript || voiceInput) && (
-                                                <div className="max-w-[85%] px-3.5 py-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-[18px] rounded-tr-[4px]">
-                                                    <span className="text-[13px] text-emerald-300">
-                                                        {voiceInput}{voiceInput && manualTranscript ? ' ' : ''}{manualTranscript}
-                                                    </span>
+                                                <div className="max-w-[82%] console-you-rule pr-3 console-ink text-[13.5px] leading-[1.55] text-right">
+                                                    <div className="console-label console-you-soft mb-1">You · Live</div>
+                                                    {voiceInput}{voiceInput && manualTranscript ? ' ' : ''}{manualTranscript}
+                                                    <span className="console-caret" aria-hidden />
                                                 </div>
                                             )}
-                                            <div className="px-3 py-2 flex gap-1.5 items-center">
-                                                <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                                                <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                                                <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                                                <span className="text-[10px] text-emerald-400/70 ml-1">Listening...</span>
-                                            </div>
+                                            {!manualTranscript && !voiceInput && (
+                                                <div className="flex gap-1 items-center">
+                                                    <span className="console-label console-you-soft">Listening</span>
+                                                    <span className="console-pulse-dot is-pulsing" style={{ width: 4, height: 4 }} />
+                                                </div>
+                                            )}
                                         </div>
                                     )}
 
-                                    {isProcessing && (
-                                        <div className="flex justify-start">
-                                            <div className="px-3 py-2 flex gap-1.5">
-                                                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                                                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                                                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                                    {/* Hide the "Composing" dots whenever a streaming system bubble
+                                        already exists — the bubble's own pulse-dot in the header is
+                                        the live signal, and stacking dots below adds noise. This
+                                        covers both the buy-time filler and the streaming answer that
+                                        replaces it. */}
+                                    {isProcessing && !messages.some(m => m.isStreaming) && (
+                                        <div className="flex justify-start items-center gap-2">
+                                            <span className="console-label console-ink-dim">Composing</span>
+                                            <div className="px-1 py-1 flex gap-1">
+                                                <div className="w-1 h-1 bg-[var(--console-ink-soft)] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                                <div className="w-1 h-1 bg-[var(--console-ink-soft)] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                                <div className="w-1 h-1 bg-[var(--console-ink-soft)] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                                             </div>
                                         </div>
                                     )}
@@ -2220,67 +2357,76 @@ Provide only the answer, nothing else.`;
                                 </div>
                             )}
 
-                            {/* Quick Actions - Minimal & Clean */}
-                            <div className={`flex flex-nowrap justify-center items-center gap-1.5 px-4 pb-3 overflow-x-hidden ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3'}`}>
-                                <button onClick={handleWhatToSay} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
-                                    <Pencil className="w-3 h-3 opacity-70" /> What to answer?
-                                </button>
-                                <button onClick={handleClarify} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
-                                    <MessageSquare className="w-3 h-3 opacity-70" /> Clarify
-                                </button>
-                                <button onClick={actionButtonMode === 'brainstorm' ? handleBrainstorm : handleRecap} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
-                                    {actionButtonMode === 'brainstorm'
-                                        ? <><Lightbulb className="w-3 h-3 opacity-70" /> Brainstorm</>
-                                        : <><RefreshCw className="w-3 h-3 opacity-70" /> Recap</>
-                                    }
-                                </button>
-                                <button onClick={handleFollowUpQuestions} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
-                                    <HelpCircle className="w-3 h-3 opacity-70" /> Follow Up Question
-                                </button>
-                                <button
-                                    onClick={handleAnswerNow}
-                                    className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium transition-all active:scale-95 duration-200 interaction-base interaction-press min-w-[74px] whitespace-nowrap shrink-0 ${isManualRecording
-                                        ? 'bg-red-500/10 text-red-400 ring-1 ring-red-500/20'
-                                        : 'overlay-chip-surface overlay-text-interactive hover:text-emerald-500 hover:bg-emerald-500/10'
-                                        }`}
-                                    style={isManualRecording ? undefined : appearance.chipStyle}
-                                >
-                                    {isManualRecording ? (
-                                        <>
-                                            <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-                                            Stop
-                                        </>
-                                    ) : (
-                                        <><Zap className="w-3 h-3 opacity-70" /> Answer</>
-                                    )}
-                                </button>
+                            {/* Action ledger — typographic shortcut keys */}
+                            <div className={`px-5 ${rollingTranscript && showTranscript ? 'pt-2' : 'pt-3'} pb-3`}>
+                                <div className="console-rule mb-2.5" />
+                                <div className="flex flex-wrap justify-center items-center gap-1.5">
+                                    <button onClick={handleWhatToSay} className="console-key no-drag">
+                                        What to answer
+                                        <span className="console-key-glyph">⌘1</span>
+                                    </button>
+                                    <button onClick={handleClarify} className="console-key no-drag">
+                                        Clarify
+                                        <span className="console-key-glyph">⌘2</span>
+                                    </button>
+                                    <button
+                                        onClick={actionButtonMode === 'brainstorm' ? handleBrainstorm : handleRecap}
+                                        className="console-key no-drag"
+                                    >
+                                        {actionButtonMode === 'brainstorm' ? 'Brainstorm' : 'Recap'}
+                                        <span className="console-key-glyph">⌘3</span>
+                                    </button>
+                                    <button onClick={handleFollowUpQuestions} className="console-key no-drag">
+                                        Follow up
+                                        <span className="console-key-glyph">⌘4</span>
+                                    </button>
+                                    <button
+                                        onClick={handleAnswerNow}
+                                        className={`console-key no-drag ${isManualRecording ? 'is-recording' : ''}`}
+                                        style={
+                                            isManualRecording
+                                                ? {
+                                                    color: '#FF6B6B',
+                                                    borderColor: 'rgba(255,107,107,0.35)',
+                                                    background: 'rgba(255,107,107,0.06)',
+                                                }
+                                                : undefined
+                                        }
+                                    >
+                                        {isManualRecording ? (
+                                            <>
+                                                <span
+                                                    className="inline-block w-1.5 h-1.5 rounded-full"
+                                                    style={{
+                                                        background: '#FF6B6B',
+                                                        boxShadow: '0 0 6px rgba(255,107,107,0.6)',
+                                                    }}
+                                                />
+                                                Stop
+                                            </>
+                                        ) : (
+                                            <>Answer</>
+                                        )}
+                                        <span className="console-key-glyph">⌘5</span>
+                                    </button>
+                                </div>
                             </div>
 
                             {/* Input Area */}
-                            <div className="p-3 pt-0">
+                            <div className="px-5 pt-0 pb-4">
                                 {/* Latent Context Preview (Attached Screenshot) */}
                                 {attachedContext.length > 0 && (
-                                    <div className={`mb-2 rounded-lg p-2 transition-all duration-200 border ${subtleSurfaceClass}`} style={appearance.subtleStyle}>
-                                        <div className="flex items-center justify-between mb-1.5">
-                                            <span className="text-[11px] font-medium overlay-text-primary">
-                                                {attachedContext.length} screenshot{attachedContext.length > 1 ? 's' : ''} attached
-                                            </span>
-                                            <button
-                                                onClick={() => setAttachedContext([])}
-                                                className="p-1 rounded-full transition-colors overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive"
-                                                title="Remove all"
-                                                style={appearance.iconStyle}
-                                            >
-                                                <X className="w-3.5 h-3.5" />
-                                            </button>
-                                        </div>
-                                        <div className="flex gap-1.5 overflow-x-auto max-w-full pb-1">
+                                    <div className="mb-3 no-drag flex items-center gap-3">
+                                        <span className="console-label console-ink-soft">
+                                            {attachedContext.length} screenshot{attachedContext.length > 1 ? 's' : ''} attached
+                                        </span>
+                                        <div className="flex gap-1 overflow-x-auto max-w-full">
                                             {attachedContext.map((ctx, idx) => (
                                                 <div key={ctx.path} className="relative group/thumb flex-shrink-0">
                                                     <img
                                                         src={ctx.preview}
                                                         alt={`Screenshot ${idx + 1}`}
-                                                        className={`h-10 w-auto rounded border ${isLightTheme ? 'border-black/15' : 'border-white/20'}`}
+                                                        className="h-9 w-auto border border-[var(--console-rule-strong)]"
                                                     />
                                                     <button
                                                         onClick={() => setAttachedContext(prev => prev.filter((_, i) => i !== idx))}
@@ -2292,71 +2438,76 @@ Provide only the answer, nothing else.`;
                                                 </div>
                                             ))}
                                         </div>
-                                        <span className="text-[10px] overlay-text-muted">Ask a question or click Answer</span>
+                                        <button
+                                            onClick={() => setAttachedContext([])}
+                                            className="ml-auto p-1 console-ink-dim hover:console-ink transition-colors"
+                                            title="Remove all"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
                                     </div>
                                 )}
 
-                                <div className="relative group">
+                                {/* Editorial input — bottom-rule field */}
+                                <div className="relative no-drag">
                                     <input
                                         ref={textInputRef}
                                         type="text"
                                         value={inputValue}
                                         onChange={(e) => setInputValue(e.target.value)}
                                         onKeyDown={(e) => e.key === 'Enter' && handleManualSubmit()}
-
-                                        className={`w-full border focus:ring-1 rounded-xl pl-3 pr-10 py-2.5 focus:outline-none transition-all duration-200 ease-sculpted text-[13px] leading-relaxed ${inputClass}`}
-                                        style={appearance.inputStyle}
+                                        className="console-input"
                                     />
 
-                                    {/* Custom Rich Placeholder */}
+                                    {/* Editorial placeholder — italic with mono shortcut chips */}
                                     {!inputValue && (
-                                        <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none text-[13px] overlay-text-muted">
-                                            <span>Ask anything on screen or conversation, or</span>
-                                            <div className="flex items-center gap-1 opacity-80">
+                                        <div className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none">
+                                            <span className="console-serif italic text-[13px] console-ink-dim">
+                                                Ask anything…
+                                            </span>
+                                            <span className="console-label console-ink-dim">or</span>
+                                            <span className="flex items-center gap-1">
                                                 {(shortcuts.selectiveScreenshot || ['⌘', 'Shift', 'H']).map((key, i) => (
                                                     <React.Fragment key={i}>
-                                                        {i > 0 && <span className="text-[10px]">+</span>}
-                                                        <kbd className="px-1.5 py-0.5 rounded border text-[10px] font-sans min-w-[20px] text-center overlay-control-surface overlay-text-secondary" style={appearance.controlStyle}>{key}</kbd>
+                                                        {i > 0 && <span className="console-mono text-[9px] console-ink-dim">+</span>}
+                                                        <kbd className="console-mono text-[9.5px] console-ink-soft px-1 py-px border border-[var(--console-rule)] rounded-sm">
+                                                            {key}
+                                                        </kbd>
                                                     </React.Fragment>
                                                 ))}
-                                            </div>
-                                            <span>for selective screenshot</span>
+                                            </span>
+                                            <span className="console-label console-ink-dim">selective shot</span>
                                         </div>
                                     )}
 
-                                    {!inputValue && (
-                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none opacity-20">
-                                            <span className="text-[10px]">↵</span>
-                                        </div>
-                                    )}
+                                    {/* Send arrow — phosphor halo when ready */}
+                                    <button
+                                        onClick={handleManualSubmit}
+                                        disabled={!inputValue.trim()}
+                                        className={`absolute right-0 top-1/2 -translate-y-1/2 console-send no-drag interaction-base interaction-press ${inputValue.trim() ? 'is-ready' : ''}`}
+                                        title="Send"
+                                    >
+                                        <ArrowRight className="w-3.5 h-3.5" />
+                                    </button>
                                 </div>
 
-                                {/* Bottom Row */}
-                                <div className="flex items-center justify-between mt-3 px-0.5">
-                                    <div className="flex items-center gap-1.5">
+                                {/* Bottom Row — model · settings · passthrough */}
+                                <div className="flex items-center justify-between mt-4">
+                                    <div className="flex items-center gap-2 no-drag">
                                         <button
                                             onClick={(e) => {
-                                                // Calculate position for detached window
                                                 if (!contentRef.current) return;
                                                 const contentRect = contentRef.current.getBoundingClientRect();
                                                 const buttonRect = e.currentTarget.getBoundingClientRect();
                                                 const GAP = 8;
-
                                                 const x = window.screenX + buttonRect.left;
                                                 const y = window.screenY + contentRect.bottom + GAP;
-
                                                 window.electronAPI.toggleModelSelector({ x, y });
                                             }}
-                                            className={`
-                                                flex items-center gap-2 px-3 py-1.5
-                                                border rounded-lg transition-colors
-                                                text-xs font-medium w-[140px]
-                                                interaction-base interaction-press
-                                                ${controlSurfaceClass}
-                                            `}
-                                            style={appearance.controlStyle}
+                                            className="console-chip"
+                                            title="Switch model"
                                         >
-                                            <span className="truncate min-w-0 flex-1">
+                                            <span className="truncate max-w-[150px]">
                                                 {(() => {
                                                     const m = currentModel;
                                                     if (m.startsWith('ollama-')) return m.replace('ollama-', '');
@@ -2368,91 +2519,54 @@ Provide only the answer, nothing else.`;
                                                     return m;
                                                 })()}
                                             </span>
-                                            <ChevronDown size={14} className="shrink-0 transition-transform" />
+                                            <ChevronDown size={11} className="shrink-0 opacity-60" />
                                         </button>
 
-                                        <div className="w-px h-3 mx-1" style={appearance.dividerStyle} />
+                                        <span className="w-px h-3 bg-[var(--console-rule)]" aria-hidden />
 
-                                        <div className="relative">
-                                            <button
-                                                onClick={(e) => {
-                                                    if (isSettingsOpen) {
-                                                        // If open, just close it (toggle will handle logic but we can be explicit or just toggle)
-                                                        // Actually toggle-settings-window handles hiding if visible, so logic is same.
-                                                        window.electronAPI.toggleSettingsWindow();
-                                                        return;
-                                                    }
+                                        <button
+                                            onClick={(e) => {
+                                                if (isSettingsOpen) {
+                                                    window.electronAPI.toggleSettingsWindow();
+                                                    return;
+                                                }
+                                                if (!contentRef.current) return;
+                                                const contentRect = contentRef.current.getBoundingClientRect();
+                                                const buttonRect = e.currentTarget.getBoundingClientRect();
+                                                const GAP = 8;
+                                                const x = window.screenX + buttonRect.left;
+                                                const y = window.screenY + contentRect.bottom + GAP;
+                                                window.electronAPI.toggleSettingsWindow({ x, y });
+                                            }}
+                                            className={`w-6 h-6 flex items-center justify-center rounded-md interaction-base interaction-press ${
+                                                isSettingsOpen ? 'console-ink' : 'console-ink-soft hover:console-ink'
+                                            } hover:bg-[var(--console-key-bg-hover)]`}
+                                            title="Settings"
+                                        >
+                                            <SlidersHorizontal className="w-3.5 h-3.5" />
+                                        </button>
 
-                                                    if (!contentRef.current) return;
-
-                                                    const contentRect = contentRef.current.getBoundingClientRect();
-                                                    const buttonRect = e.currentTarget.getBoundingClientRect();
-                                                    const POPUP_WIDTH = 270; // Matches SettingsWindowHelper actual width
-                                                    const GAP = 8; // Same gap as between TopPill and main body (gap-2 = 8px)
-
-                                                    // X: Left-aligned relative to the Settings Button
-                                                    const x = window.screenX + buttonRect.left;
-
-                                                    // Y: Below the main content + gap
-                                                    const y = window.screenY + contentRect.bottom + GAP;
-
-                                                    window.electronAPI.toggleSettingsWindow({ x, y });
-                                                }}
-                                                className={`
-                                            w-7 h-7 flex items-center justify-center rounded-lg
-                                            interaction-base interaction-press
-                                            ${isSettingsOpen
-                                                    ? 'overlay-icon-surface overlay-icon-surface-hover overlay-text-primary'
-                                                    : 'overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive'}
-                                        `}
-
-                                                style={appearance.iconStyle}
-                                            >
-                                                <SlidersHorizontal className="w-3.5 h-3.5" />
-                                            </button>
-                                        </div>
-
-
-
-                                        {/* Mouse Passthrough Toggle */}
-                                        <div className="relative">
-                                            <button
-                                                onClick={() => {
-                                                    const newState = !isMousePassthrough;
-                                                    setIsMousePassthrough(newState);
-                                                    window.electronAPI?.setOverlayMousePassthrough?.(newState);
-                                                }}
-                                                className={`
-                                                    w-7 h-7 flex items-center justify-center rounded-lg
-                                                    interaction-base interaction-press
-                                                    ${isMousePassthrough
-                                                        ? 'overlay-icon-surface overlay-icon-surface-hover text-sky-400 opacity-100'
-                                                        : 'overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive'}
-                                                `}
-
-                                                style={appearance.iconStyle}
-                                            >
-                                                <PointerOff className="w-3.5 h-3.5" />
-                                            </button>
-                                        </div>
-
+                                        <button
+                                            onClick={() => {
+                                                const newState = !isMousePassthrough;
+                                                setIsMousePassthrough(newState);
+                                                window.electronAPI?.setOverlayMousePassthrough?.(newState);
+                                            }}
+                                            className={`w-6 h-6 flex items-center justify-center rounded-md interaction-base interaction-press ${
+                                                isMousePassthrough
+                                                    ? 'text-sky-400'
+                                                    : 'console-ink-soft hover:console-ink'
+                                            } hover:bg-[var(--console-key-bg-hover)]`}
+                                            title="Click-through"
+                                        >
+                                            <PointerOff className="w-3.5 h-3.5" />
+                                        </button>
                                     </div>
 
-                                    <button
-                                        onClick={handleManualSubmit}
-                                        disabled={!inputValue.trim()}
-                                    className={`
-                                    w-7 h-7 rounded-full flex items-center justify-center
-                                    interaction-base interaction-press
-                                    ${inputValue.trim()
-                                                ? 'bg-[#007AFF] text-white shadow-lg shadow-blue-500/20 hover:bg-[#0071E3]'
-                                                : 'overlay-icon-surface overlay-text-muted cursor-not-allowed'
-                                            }
-                                `}
-                                    style={inputValue.trim() ? undefined : appearance.iconStyle}
-                                    >
-                                        <ArrowRight className="w-3.5 h-3.5" />
-                                    </button>
+                                    {/* Right side: meta line — small mono caption */}
+                                    <span className="console-label console-ink-dim no-drag select-none">
+                                        ⌘1 – ⌘5 · Shortcuts
+                                    </span>
                                 </div>
                             </div>
                         </div>

@@ -353,6 +353,12 @@ const App: React.FC = () => {
       const inputDeviceId = localStorage.getItem('preferredInputDeviceId');
       let outputDeviceId = localStorage.getItem('preferredOutputDeviceId');
       const useExperimentalSck = localStorage.getItem('useExperimentalSckBackend') === 'true';
+      // AEC / voice processing — when on, the main process will request the
+      // microphone capture to apply Apple's AUVoiceProcessingIO (or a software
+      // echo canceller fallback) so speaker bleed is removed before the mic
+      // signal reaches the STT. Defaults to ON since most users will be on
+      // built-in speakers during interviews.
+      const enableVoiceProcessing = localStorage.getItem('enableVoiceProcessing') !== 'false';
 
       // Override output device ID to force SCK if experimental mode is enabled
       // Default to CoreAudio unless experimental is enabled
@@ -364,7 +370,7 @@ const App: React.FC = () => {
       }
 
       const result = await window.electronAPI.startMeeting({
-        audio: { inputDeviceId, outputDeviceId }
+        audio: { inputDeviceId, outputDeviceId, enableVoiceProcessing }
       });
       if (result.success) {
         analytics.trackMeetingStarted();

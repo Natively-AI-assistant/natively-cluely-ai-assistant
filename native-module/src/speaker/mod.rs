@@ -30,6 +30,16 @@ pub mod fallback {
         pub fn new(_device_id: Option<String>) -> Result<Self> {
             Err(anyhow::anyhow!("Unsupported platform"))
         }
+        pub fn new_with_pids(_device_id: Option<String>, _target_pids: Vec<i32>) -> Result<Self> {
+            Err(anyhow::anyhow!("Unsupported platform"))
+        }
+        pub fn new_with_filter(
+            _device_id: Option<String>,
+            _target_pids: Vec<i32>,
+            _bundle_id_prefixes: Vec<String>,
+        ) -> Result<Self> {
+            Err(anyhow::anyhow!("Unsupported platform"))
+        }
     }
     pub fn list_output_devices() -> Result<Vec<(String, String)>> {
         Ok(Vec::new())

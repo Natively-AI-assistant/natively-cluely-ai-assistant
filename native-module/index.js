@@ -582,6 +582,7 @@ module.exports.deactivateDodoKey = nativeBinding.deactivateDodoKey
 module.exports.getHardwareId = nativeBinding.getHardwareId
 module.exports.getInputDevices = nativeBinding.getInputDevices
 module.exports.getOutputDevices = nativeBinding.getOutputDevices
+module.exports.listAudioProcesses = nativeBinding.listAudioProcesses
 module.exports.validateDodoKey = nativeBinding.validateDodoKey
 module.exports.verifyDodoKey = nativeBinding.verifyDodoKey
 module.exports.verifyGumroadKey = nativeBinding.verifyGumroadKey

@@ -3,12 +3,35 @@
 export declare class MicrophoneCapture {
   constructor(deviceId?: string | undefined | null)
   getSampleRate(): number
+  /**
+   * Toggle Apple voice processing (AEC + AGC + NS) for this capture.
+   *
+   * The flag takes effect on the next `start()` call. If the underlying
+   * stream is already running we tear it down and recreate it on the new
+   * backend so the change is observable immediately — interview overlays
+   * commonly toggle this from the Settings panel mid-session.
+   */
+  setVoiceProcessing(enabled: boolean): void
   start(callback: ((err: Error | null, arg: Buffer) => any), onSpeechEnded?: (((err: Error | null, arg: boolean) => any)) | undefined | null): void
   stop(): void
 }
 
 export declare class SystemAudioCapture {
   constructor(deviceId?: string | undefined | null)
+  /**
+   * Restrict capture to only the audio produced by the given OS PIDs.
+   * Pass an empty array to revert to whole-device capture. Must be called BEFORE `start()`;
+   * changing PIDs after the capture thread has spawned has no effect until the capture
+   * is destroyed and re-created.
+   */
+  setTargetPids(pids: Array<number>): void
+  /**
+   * Restrict capture to processes whose CoreAudio bundle_id starts with any of these
+   * prefixes (e.g. ["com.google.Chrome", "com.microsoft.teams2"]). Combines additively
+   * with `set_target_pids`. Use this to target Chromium-based browsers reliably —
+   * every Chrome audio helper has a `com.google.Chrome.*` bundle id.
+   */
+  setTargetBundleIds(bundleIds: Array<string>): void
   getSampleRate(): number
   start(callback: ((err: Error | null, arg: Buffer) => any), onSpeechEnded?: (((err: Error | null, arg: boolean) => any)) | undefined | null): void
   stop(): void
@@ -17,6 +40,17 @@ export declare class SystemAudioCapture {
 export interface AudioDeviceInfo {
   id: string
   name: string
+}
+
+export interface AudioProcessInfo {
+  /** CoreAudio AudioObjectID for this process (used internally by macOS taps). */
+  objectId: number
+  /** OS PID of the process. -1 if unavailable. */
+  pid: number
+  /** Bundle identifier (e.g. "com.google.Chrome.helper.audio") if available. */
+  bundleId?: string
+  /** True when the process is actively producing audio output right now. */
+  runningOutput: boolean
 }
 
 /**
@@ -40,6 +74,17 @@ export declare function getHardwareId(): string
 export declare function getInputDevices(): Array<AudioDeviceInfo>
 
 export declare function getOutputDevices(): Array<AudioDeviceInfo>
+
+/**
+ * Enumerate every CoreAudio process object on the system. Each entry corresponds
+ * to a process that has registered with CoreAudio (typically because it has at
+ * some point opened an audio session). Use this to power a UI picker for
+ * per-process audio capture — much more reliable than `ps` because Chromium's
+ * audio-producing helper subprocess only shows up here.
+ *
+ * Returns an empty list on non-macOS or if the CoreAudio API call fails.
+ */
+export declare function listAudioProcesses(): Array<AudioProcessInfo>
 
 /**
  * Validates an existing Dodo Payments license key against the live API.

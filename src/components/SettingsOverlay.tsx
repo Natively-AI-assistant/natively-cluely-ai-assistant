@@ -27,6 +27,47 @@ import { KeyRecorder } from './ui/KeyRecorder';
 import { ProfileVisualizer, PremiumUpgradeModal } from '../premium';
 import icon from './icon.png';
 
+type AudioProcessInfo = {
+    objectId: number;
+    pid: number;
+    bundleId: string | null;
+    runningOutput: boolean;
+};
+
+type AudioSourceOption = {
+    id: string;
+    label: string;
+    helperText: string;
+    runningOutput: boolean;
+    pids: number[];
+    bundleIds: string[];
+};
+
+const KNOWN_AUDIO_APP_BUNDLES = [
+    { prefix: 'com.google.Chrome', label: 'Google Chrome' },
+    { prefix: 'com.brave.Browser', label: 'Brave' },
+    { prefix: 'com.microsoft.edgemac', label: 'Microsoft Edge' },
+    { prefix: 'org.mozilla.firefox', label: 'Firefox' },
+    { prefix: 'com.apple.Safari', label: 'Safari' },
+    { prefix: 'company.thebrowser.Browser', label: 'Arc' },
+    { prefix: 'com.vivaldi.Vivaldi', label: 'Vivaldi' },
+    { prefix: 'com.operasoftware.Opera', label: 'Opera' },
+    { prefix: 'com.openai.atlas', label: 'Atlas' },
+    { prefix: 'com.microsoft.teams', label: 'Microsoft Teams' },
+    { prefix: 'com.microsoft.teams2', label: 'Microsoft Teams' },
+    { prefix: 'us.zoom.xos', label: 'Zoom' },
+    { prefix: 'com.tinyspeck.slackmacgap', label: 'Slack' },
+    { prefix: 'com.cisco.webexmeetingsapp', label: 'Webex' },
+    { prefix: 'com.hnc.Discord', label: 'Discord' },
+    { prefix: 'com.apple.FaceTime', label: 'FaceTime' },
+].sort((a, b) => b.prefix.length - a.prefix.length);
+
+const normalizeAudioBundle = (bundleId: string): { prefix: string; label: string } => {
+    const known = KNOWN_AUDIO_APP_BUNDLES.find((app) => bundleId.startsWith(app.prefix));
+    if (known) return known;
+    return { prefix: bundleId, label: bundleId };
+};
+
 // ---------------------------------------------------------------------------
 // StarRating — renders filled/empty stars for culture ratings
 // ---------------------------------------------------------------------------
@@ -849,7 +890,111 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     const [selectedInput, setSelectedInput] = useState('');
     const [selectedOutput, setSelectedOutput] = useState('');
     const [micLevel, setMicLevel] = useState(0);
+    const [sourceLevel, setSourceLevel] = useState(0);
     const [useExperimentalSck, setUseExperimentalSck] = useState(false);
+    // Voice processing / AEC — when on, the next meeting will request the
+    // microphone path to apply Apple's AUVoiceProcessingIO. The Rust side may
+    // not yet implement it; the wrapper logs the request and falls back
+    // gracefully to today's behavior. The setting still persists so the
+    // moment the native module ships, the toggle takes effect with no UI
+    // change.
+    const [enableVoiceProcessing, setEnableVoiceProcessing] = useState<boolean>(() => {
+        return localStorage.getItem('enableVoiceProcessing') !== 'false';
+    });
+
+    // Per-process audio capture (macOS): manually pick which app's audio the
+    // CoreAudio Tap should target. Avoids the Chromium auto-detection guesswork.
+    const [audioProcesses, setAudioProcesses] = useState<AudioProcessInfo[]>([]);
+    const [selectedAudioSourceId, setSelectedAudioSourceId] = useState<string>(() => {
+        const savedSource = localStorage.getItem('preferredAudioSourceId');
+        if (savedSource) return savedSource;
+        const legacyPid = localStorage.getItem('preferredAudioSourcePid');
+        return legacyPid ? `pid:${legacyPid}` : '';
+    });
+    const [audioProcessesLoading, setAudioProcessesLoading] = useState(false);
+    const lastAudioSourceFilterKeyRef = React.useRef('');
+
+    const refreshAudioProcesses = React.useCallback(async () => {
+        if (!window.electronAPI?.listAudioProcesses) return;
+        setAudioProcessesLoading(true);
+        try {
+            const list = await window.electronAPI.listAudioProcesses();
+            setAudioProcesses(Array.isArray(list) ? list : []);
+        } catch (err) {
+            console.warn('[Settings] listAudioProcesses failed:', err);
+            setAudioProcesses([]);
+        } finally {
+            setAudioProcessesLoading(false);
+        }
+    }, []);
+
+    useEffect(() => { refreshAudioProcesses(); }, [refreshAudioProcesses]);
+
+    const audioSourceOptions = useMemo<AudioSourceOption[]>(() => {
+        const grouped = new Map<string, AudioSourceOption>();
+
+        for (const processInfo of audioProcesses) {
+            if (!Number.isFinite(processInfo.pid) || processInfo.pid <= 0) continue;
+
+            if (processInfo.bundleId) {
+                const normalized = normalizeAudioBundle(processInfo.bundleId);
+                const id = `bundle:${normalized.prefix}`;
+                const existing = grouped.get(id);
+                if (existing) {
+                    existing.runningOutput = existing.runningOutput || processInfo.runningOutput;
+                    existing.pids.push(processInfo.pid);
+                    continue;
+                }
+                grouped.set(id, {
+                    id,
+                    label: normalized.label,
+                    helperText: normalized.prefix,
+                    runningOutput: processInfo.runningOutput,
+                    pids: [processInfo.pid],
+                    bundleIds: [normalized.prefix],
+                });
+            } else {
+                grouped.set(`pid:${processInfo.pid}`, {
+                    id: `pid:${processInfo.pid}`,
+                    label: `Process ${processInfo.pid}`,
+                    helperText: 'No bundle id available; PID fallback',
+                    runningOutput: processInfo.runningOutput,
+                    pids: [processInfo.pid],
+                    bundleIds: [],
+                });
+            }
+        }
+
+        return Array.from(grouped.values()).sort((a, b) => {
+            if (a.runningOutput !== b.runningOutput) return a.runningOutput ? -1 : 1;
+            return a.label.localeCompare(b.label);
+        });
+    }, [audioProcesses]);
+
+    // Push the chosen app/process filter to the main process whenever it changes so
+    // that the next meeting start picks it up. Empty string = automatic detection.
+    useEffect(() => {
+        const option = audioSourceOptions.find((item) => item.id === selectedAudioSourceId);
+        const legacyPid = selectedAudioSourceId.startsWith('pid:')
+            ? parseInt(selectedAudioSourceId.slice(4), 10)
+            : NaN;
+        const fallbackPids = Number.isFinite(legacyPid) && legacyPid > 0 ? [legacyPid] : [];
+        const fallbackBundleIds = selectedAudioSourceId.startsWith('bundle:')
+            ? [selectedAudioSourceId.slice(7)].filter(Boolean)
+            : [];
+        const filter = option
+            ? { pids: option.bundleIds.length > 0 ? [] : option.pids, bundleIds: option.bundleIds }
+            : { pids: fallbackPids, bundleIds: fallbackBundleIds };
+        const filterKey = `${filter.pids.join(',')}|${filter.bundleIds.join(',')}`;
+        if (lastAudioSourceFilterKeyRef.current === filterKey) return;
+        lastAudioSourceFilterKeyRef.current = filterKey;
+
+        if (window.electronAPI?.setAudioSourceFilter) {
+            window.electronAPI.setAudioSourceFilter(filter).catch(() => {});
+            return;
+        }
+        window.electronAPI?.setAudioSourcePids?.(filter.pids).catch(() => {});
+    }, [audioSourceOptions, selectedAudioSourceId]);
 
     // STT Provider settings
     const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively'>('none');
@@ -1269,6 +1414,51 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
             });
         }
     }, [isOpen, activeTab, selectedInput]);
+
+    // Source-audio meter: spins up a SystemAudioCapture against the chosen
+    // app/output so the user can verify the per-process tap before starting
+    // a meeting. Restarts whenever the filter changes.
+    useEffect(() => {
+        if (!(isOpen && activeTab === 'audio')) {
+            setSourceLevel(0);
+            window.electronAPI?.stopSourceAudioTest?.().catch(() => {});
+            return;
+        }
+
+        if (!window.electronAPI?.startSourceAudioTest) return;
+
+        const option = audioSourceOptions.find((item) => item.id === selectedAudioSourceId);
+        const legacyPid = selectedAudioSourceId.startsWith('pid:')
+            ? parseInt(selectedAudioSourceId.slice(4), 10)
+            : NaN;
+        const fallbackPids = Number.isFinite(legacyPid) && legacyPid > 0 ? [legacyPid] : [];
+        const fallbackBundleIds = selectedAudioSourceId.startsWith('bundle:')
+            ? [selectedAudioSourceId.slice(7)].filter(Boolean)
+            : [];
+        const filter = option
+            ? { pids: option.bundleIds.length > 0 ? [] : option.pids, bundleIds: option.bundleIds }
+            : { pids: fallbackPids, bundleIds: fallbackBundleIds };
+
+        const unsubscribe = window.electronAPI.onSourceAudioTestLevel?.((level) => {
+            setSourceLevel(Math.max(0, Math.min(100, level * 100)));
+        });
+
+        window.electronAPI.startSourceAudioTest({
+            ...filter,
+            outputDeviceId: selectedOutput || undefined,
+        }).catch((error) => {
+            console.error("Error starting source audio test:", error);
+            setSourceLevel(0);
+        });
+
+        return () => {
+            unsubscribe?.();
+            window.electronAPI?.stopSourceAudioTest?.().catch((error) => {
+                console.error("Error stopping source audio test:", error);
+            });
+            setSourceLevel(0);
+        };
+    }, [isOpen, activeTab, selectedAudioSourceId, audioSourceOptions, selectedOutput]);
 
     return (
         <AnimatePresence>
@@ -1928,11 +2118,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         )}
 
                                                         {/* High-fidelity Toggle */}
-                                                        <div className={`flex items-center gap-2 bg-bg-input px-3 py-1.5 rounded-full border border-border-subtle ${!hasProfileAccess ? 'opacity-40 cursor-not-allowed' : ''}`} title={!hasProfileAccess ? 'Requires Pro license' : ''}>
+                                                        <div
+                                                            className={`flex items-center gap-2 bg-bg-input px-3 py-1.5 rounded-full border border-border-subtle ${!profileStatus.hasProfile ? 'opacity-50' : ''}`}
+                                                            title={!profileStatus.hasProfile ? 'Upload a resume below to enable the Persona Engine' : profileStatus.profileMode ? 'Persona Engine is ON — your resume + JD context is injected into AI answers' : 'Click to inject your resume + JD into AI answers'}
+                                                        >
                                                             <span className="text-xs font-medium text-text-secondary">Persona Engine</span>
                                                             <div
                                                                 onClick={async () => {
-                                                                    if (!profileStatus.hasProfile || !hasProfileAccess) return;
+                                                                    if (!profileStatus.hasProfile) return;
                                                                     const newState = !profileStatus.profileMode;
                                                                     try {
                                                                         await window.electronAPI?.profileSetMode?.(newState);
@@ -1941,9 +2134,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                         console.error('Failed to toggle profile mode:', e);
                                                                     }
                                                                 }}
-                                                                className={`w-9 h-5 rounded-full relative transition-colors ${(!profileStatus.hasProfile || !hasProfileAccess) ? 'opacity-40 cursor-not-allowed bg-bg-toggle-switch' : profileStatus.profileMode ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                                className={`w-9 h-5 rounded-full relative transition-colors ${!profileStatus.hasProfile ? 'cursor-not-allowed bg-bg-toggle-switch' : profileStatus.profileMode ? 'bg-accent-primary cursor-pointer' : 'bg-bg-toggle-switch border border-border-muted cursor-pointer'}`}
                                                             >
-                                                                <div className={`absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform ${profileStatus.profileMode && hasProfileAccess ? 'translate-x-4' : 'translate-x-0'}`} />
+                                                                <div className={`absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform ${profileStatus.profileMode ? 'translate-x-4' : 'translate-x-0'}`} />
                                                             </div>
                                                         </div>
                                                     </div>
@@ -3283,6 +3476,97 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 }}
                                                 placeholder="Default Speakers"
                                             />
+
+                                            {/* Audio Source picker - per-app CoreAudio tap. macOS only. */}
+                                            <div>
+                                                <div className="flex items-center justify-between mb-2 px-1">
+                                                    <label className="text-xs font-medium text-text-secondary flex items-center gap-1.5">
+                                                        <Speaker size={14} /> Meeting Audio Source
+                                                    </label>
+                                                    <button
+                                                        onClick={refreshAudioProcesses}
+                                                        disabled={audioProcessesLoading}
+                                                        className="text-[10px] text-text-secondary hover:text-text-primary disabled:opacity-50"
+                                                    >
+                                                        {audioProcessesLoading ? 'Refreshing…' : 'Refresh'}
+                                                    </button>
+                                                </div>
+                                                <select
+                                                    value={selectedAudioSourceId}
+                                                    onChange={(e) => {
+                                                        const value = e.target.value;
+                                                        setSelectedAudioSourceId(value);
+                                                        if (value) localStorage.setItem('preferredAudioSourceId', value);
+                                                        else localStorage.removeItem('preferredAudioSourceId');
+                                                        localStorage.removeItem('preferredAudioSourcePid');
+                                                    }}
+                                                    className="w-full bg-bg-input text-text-primary text-sm rounded-md px-3 py-2 border border-border-subtle focus:border-text-primary focus:outline-none"
+                                                >
+                                                    <option value="">Auto-detect meeting apps</option>
+                                                    {audioSourceOptions.map((option) => (
+                                                        <option key={option.id} value={option.id}>
+                                                            {option.runningOutput ? '[audio] ' : ''}
+                                                            {option.label} - {option.helperText}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <div className="mt-3">
+                                                    <div className="flex justify-between text-xs text-text-secondary mb-2 px-1">
+                                                        <span>Source Level</span>
+                                                        <span className="text-[10px] text-text-tertiary">
+                                                            {sourceLevel < 1 ? 'Silent — play audio in the selected app' : 'Receiving audio'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="h-1.5 bg-bg-input rounded-full overflow-hidden">
+                                                        <div
+                                                            className="h-full bg-blue-500 transition-all duration-100 ease-out"
+                                                            style={{ width: `${sourceLevel}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <p className="text-[10px] text-text-secondary mt-2 px-1">
+                                                    Pick the app whose audio should be transcribed as the interviewer, such as Chrome, Edge, Teams, or Zoom.
+                                                    Start the meeting audio, then click Refresh so active sources appear first.
+                                                </p>
+                                                <p className="text-[10px] text-text-tertiary mt-1 px-1">
+                                                    Do not mute macOS output; muted output can make the digital tap silent. Use headphones, low volume, or a virtual output device to avoid microphone bleed.
+                                                </p>
+                                                <p className="text-[10px] text-text-tertiary mt-1 px-1">
+                                                    Browser tab-level capture is not exposed by macOS CoreAudio; this targets the browser app and its audio helper processes.
+                                                </p>
+                                            </div>
+
+                                            {/* Voice Processing / AEC */}
+                                            <div className="bg-emerald-500/5 rounded-xl border border-emerald-500/20 p-4">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="mt-0.5 p-1.5 rounded-lg bg-emerald-500/10 text-emerald-500">
+                                                            <Mic size={18} />
+                                                        </div>
+                                                        <div>
+                                                            <div className="flex items-center gap-2 mb-0.5">
+                                                                <h3 className="text-sm font-bold text-text-primary">Echo Cancellation</h3>
+                                                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 uppercase tracking-wide">macOS</span>
+                                                            </div>
+                                                            <p className="text-xs text-text-secondary leading-relaxed max-w-[300px]">
+                                                                Apply Apple's voice processing to your microphone so the interviewer's audio bleeding through your speakers doesn't get transcribed as you. Turn off if you're using headphones.
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <div
+                                                        onClick={() => {
+                                                            const newState = !enableVoiceProcessing;
+                                                            setEnableVoiceProcessing(newState);
+                                                            window.localStorage.setItem('enableVoiceProcessing', newState ? 'true' : 'false');
+                                                        }}
+                                                        className={`w-11 h-6 rounded-full relative transition-colors shrink-0 cursor-pointer ${enableVoiceProcessing ? 'bg-emerald-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                    >
+                                                        <div
+                                                            className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-transform ${enableVoiceProcessing ? 'translate-x-[22px]' : 'translate-x-0.5'}`}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
 
                                             <div className="flex justify-end">
                                                 <button

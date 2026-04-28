@@ -156,6 +156,7 @@ import { ProcessingHelper } from "./ProcessingHelper"
 
 import { IntelligenceManager } from "./IntelligenceManager"
 import { SystemAudioCapture } from "./audio/SystemAudioCapture"
+import { scanAudioSourcePids } from "./audio/audioSourcePidScanner"
 import { MicrophoneCapture } from "./audio/MicrophoneCapture"
 import { GoogleSTT } from "./audio/GoogleSTT"
 import { RestSTT } from "./audio/RestSTT"
@@ -199,15 +200,10 @@ interface ScreenshotCaptureSession {
   restoreWithoutFocus: boolean;
 }
 
-// Premium: Knowledge modules loaded conditionally
-let KnowledgeOrchestratorClass: any = null;
-let KnowledgeDatabaseManagerClass: any = null;
-try {
-    KnowledgeOrchestratorClass = require('../premium/electron/knowledge/KnowledgeOrchestrator').KnowledgeOrchestrator;
-    KnowledgeDatabaseManagerClass = require('../premium/electron/knowledge/KnowledgeDatabaseManager').KnowledgeDatabaseManager;
-} catch {
-    console.log('[Main] Knowledge modules not available — profile intelligence disabled.');
-}
+import { KnowledgeOrchestrator } from './knowledge/KnowledgeOrchestrator';
+import { KnowledgeDatabaseManager } from './knowledge/KnowledgeDatabaseManager';
+const KnowledgeOrchestratorClass: any = KnowledgeOrchestrator;
+const KnowledgeDatabaseManagerClass: any = KnowledgeDatabaseManager;
 
 import { CredentialsManager } from "./services/CredentialsManager"
 import { SettingsManager } from "./services/SettingsManager"
@@ -560,70 +556,7 @@ export class AppState {
       console.error('[AppState] Failed to initialize RAGManager:', error);
     }
 
-    // Initialize Knowledge Orchestrator
-    try {
-      const db = DatabaseManager.getInstance();
-      const sqliteDb = db.getDb();
-
-      if (sqliteDb && KnowledgeDatabaseManagerClass && KnowledgeOrchestratorClass) {
-        const knowledgeDb = new KnowledgeDatabaseManagerClass(sqliteDb);
-        this.knowledgeOrchestrator = new KnowledgeOrchestratorClass(knowledgeDb);
-
-        // Wire up LLM functions
-        const llmHelper = this.processingHelper.getLLMHelper();
-
-        // generateContent function for LLM calls
-        this.knowledgeOrchestrator.setGenerateContentFn(async (contents: any[]) => {
-          return await llmHelper.generateContentStructured(
-            contents[0]?.text || ''
-          );
-        });
-
-        // Embedding function — lazily delegate to the cascaded EmbeddingPipeline
-        // (OpenAI → Gemini → Ollama → Local bundled model).
-        // We await waitForReady() so uploads during boot wait for the pipeline
-        // instead of immediately throwing 'not ready'.
-        const self = this;
-        this.knowledgeOrchestrator.setEmbedFn(async (text: string) => {
-          const pipeline = self.ragManager?.getEmbeddingPipeline();
-          if (!pipeline) throw new Error('RAG pipeline not available');
-          await pipeline.waitForReady();
-          return await pipeline.getEmbedding(text);
-        });
-        if (typeof this.knowledgeOrchestrator.setEmbedQueryFn === 'function') {
-          this.knowledgeOrchestrator.setEmbedQueryFn(async (text: string) => {
-            const pipeline = self.ragManager?.getEmbeddingPipeline();
-            if (!pipeline) throw new Error('RAG pipeline not available');
-            await pipeline.waitForReady();
-            return await pipeline.getEmbeddingForQuery(text);
-          });
-        }
-
-        // Attach KnowledgeOrchestrator to LLMHelper
-        llmHelper.setKnowledgeOrchestrator(this.knowledgeOrchestrator);
-
-        // Restore persisted toggle states so UI reflects what the user left them as.
-        // NOTE: groqFastTextMode is now restored unconditionally in the AppState constructor
-        // so it is not repeated here.
-        const sm = SettingsManager.getInstance();
-        if (sm.get('knowledgeMode')) {
-          this.knowledgeOrchestrator.setKnowledgeMode(true);
-          console.log('[AppState] Knowledge mode restored from settings');
-        }
-
-        // Restore custom notes so orchestrator has them from first request
-        const savedNotes = DatabaseManager.getInstance().getCustomNotes();
-        if (savedNotes) {
-          this.knowledgeOrchestrator.setCustomNotes(savedNotes);
-          llmHelper.setCustomNotes(savedNotes);
-          console.log('[AppState] Custom notes restored');
-        }
-
-        console.log('[AppState] KnowledgeOrchestrator initialized');
-      }
-    } catch (error) {
-      console.error('[AppState] Failed to initialize KnowledgeOrchestrator:', error);
-    }
+    this.ensureKnowledgeOrchestrator();
   }
 
   private setupAutoUpdater(): void {
@@ -823,6 +756,20 @@ export class AppState {
   private microphoneCapture: MicrophoneCapture | null = null;
   private audioTestCapture: MicrophoneCapture | null = null; // For audio settings test
   private _audioTestStarting = false;               // P2-12: in-flight guard against concurrent calls
+  private sourceAudioTestCapture: SystemAudioCapture | null = null; // For audio settings source meter
+  private _sourceAudioTestStarting = false;
+  private systemAudioLevelSamples: number = 0;
+  private systemAudioRmsTotal: number = 0;
+  private systemAudioSilenceWarned: boolean = false;
+  private lastSystemAudioActiveAt: number = 0;
+
+  // Rolling RMS history for speaker attribution. Each entry is { ts, rms }.
+  // We keep ~2s of frames per channel and consult the peak of the recent
+  // window when deciding whether a mic transcript is the local user or
+  // bleed from the speakers picking up the interviewer.
+  private micRmsHistory: Array<{ ts: number; rms: number }> = [];
+  private sysRmsHistory: Array<{ ts: number; rms: number }> = [];
+  private static readonly RMS_HISTORY_WINDOW_MS = 2000;
   private googleSTT: STTProvider | null = null; // Interviewer
   private googleSTT_User: STTProvider | null = null; // User
 
@@ -830,17 +777,20 @@ export class AppState {
     const { CredentialsManager } = require('./services/CredentialsManager');
     const sttProvider = CredentialsManager.getInstance().getSttProvider();
     const sttLanguage = CredentialsManager.getInstance().getSttLanguage();
+    const envDeepgramKey = process.env.DEEPGRAM_API_KEY?.trim();
+    const effectiveSttProvider =
+      sttProvider === 'none' && envDeepgramKey ? 'deepgram' : sttProvider;
 
     // 'none' means the user has explicitly disabled STT (no provider selected).
     // Return null so the pipeline skips STT without falling back to Google.
-    if (sttProvider === 'none') {
+    if (effectiveSttProvider === 'none') {
       console.log(`[Main] STT provider is 'none' — audio capture will proceed but transcription is disabled.`);
       return null;
     }
 
     let stt: STTProvider;
 
-    if (sttProvider === 'natively') {
+    if (effectiveSttProvider === 'natively') {
       const nativelyKey = CredentialsManager.getInstance().getNativelyApiKey();
       if (!nativelyKey) {
         // Natively is Coming Soon — no key means degrade gracefully like every other provider
@@ -852,16 +802,18 @@ export class AppState {
         // can coexist without triggering concurrent_session_blocked.
         stt = new NativelyProSTT(nativelyKey, speaker === 'interviewer' ? 'system' : 'mic');
       }
-    } else if (sttProvider === 'deepgram') {
-      const apiKey = CredentialsManager.getInstance().getDeepgramApiKey();
+    } else if (effectiveSttProvider === 'deepgram') {
+      const apiKey = CredentialsManager.getInstance().getDeepgramApiKey() || envDeepgramKey;
       if (apiKey) {
+        if (sttProvider === 'none' && envDeepgramKey)
+          console.log(`[Main] STT provider unset — using DEEPGRAM_API_KEY from .env for ${speaker}`);
         console.log(`[Main] Using DeepgramStreamingSTT for ${speaker}`);
-        stt = new DeepgramStreamingSTT(apiKey);
+        stt = new DeepgramStreamingSTT(apiKey, speaker);
       } else {
         console.warn(`[Main] No API key for Deepgram STT, falling back to GoogleSTT`);
         stt = new GoogleSTT(speaker);
       }
-    } else if (sttProvider === 'soniox') {
+    } else if (effectiveSttProvider === 'soniox') {
       const apiKey = CredentialsManager.getInstance().getSonioxApiKey();
       if (apiKey) {
         console.log(`[Main] Using SonioxStreamingSTT for ${speaker}`);
@@ -870,7 +822,7 @@ export class AppState {
         console.warn(`[Main] No API key for Soniox STT, falling back to GoogleSTT`);
         stt = new GoogleSTT(speaker);
       }
-    } else if (sttProvider === 'elevenlabs') {
+    } else if (effectiveSttProvider === 'elevenlabs') {
       const apiKey = CredentialsManager.getInstance().getElevenLabsApiKey();
       if (apiKey) {
         console.log(`[Main] Using ElevenLabsStreamingSTT for ${speaker}`);
@@ -879,7 +831,7 @@ export class AppState {
         console.warn(`[Main] No API key for ElevenLabs STT, falling back to GoogleSTT`);
         stt = new GoogleSTT(speaker);
       }
-    } else if (sttProvider === 'openai') {
+    } else if (effectiveSttProvider === 'openai') {
       // OpenAI: WebSocket Realtime (gpt-4o-transcribe → gpt-4o-mini-transcribe) with whisper-1 REST fallback
       const apiKey = CredentialsManager.getInstance().getOpenAiSttApiKey();
       if (apiKey) {
@@ -889,27 +841,27 @@ export class AppState {
         console.warn(`[Main] No API key for OpenAI STT, falling back to GoogleSTT`);
         stt = new GoogleSTT(speaker);
       }
-    } else if (sttProvider === 'groq' || sttProvider === 'azure' || sttProvider === 'ibmwatson') {
+    } else if (effectiveSttProvider === 'groq' || effectiveSttProvider === 'azure' || effectiveSttProvider === 'ibmwatson') {
       let apiKey: string | undefined;
       let region: string | undefined;
       let modelOverride: string | undefined;
 
-      if (sttProvider === 'groq') {
+      if (effectiveSttProvider === 'groq') {
         apiKey = CredentialsManager.getInstance().getGroqSttApiKey();
         modelOverride = CredentialsManager.getInstance().getGroqSttModel();
-      } else if (sttProvider === 'azure') {
+      } else if (effectiveSttProvider === 'azure') {
         apiKey = CredentialsManager.getInstance().getAzureApiKey();
         region = CredentialsManager.getInstance().getAzureRegion();
-      } else if (sttProvider === 'ibmwatson') {
+      } else if (effectiveSttProvider === 'ibmwatson') {
         apiKey = CredentialsManager.getInstance().getIbmWatsonApiKey();
         region = CredentialsManager.getInstance().getIbmWatsonRegion();
       }
 
       if (apiKey) {
-        console.log(`[Main] Using RestSTT (${sttProvider}) for ${speaker}`);
-        stt = new RestSTT(sttProvider, apiKey, modelOverride, region);
+        console.log(`[Main] Using RestSTT (${effectiveSttProvider}) for ${speaker}`);
+        stt = new RestSTT(effectiveSttProvider, apiKey, modelOverride, region);
       } else {
-        console.warn(`[Main] No API key for ${sttProvider} STT, falling back to GoogleSTT`);
+        console.warn(`[Main] No API key for ${effectiveSttProvider} STT, falling back to GoogleSTT`);
         stt = new GoogleSTT(speaker);
       }
     } else {
@@ -924,8 +876,21 @@ export class AppState {
         return;
       }
 
+      const routedSpeaker =
+        speaker === 'user' && this.shouldRouteMicrophoneAsInterviewer(segment.text)
+          ? 'interviewer'
+          : speaker;
+      if (routedSpeaker !== speaker && segment.text.trim()) {
+        const micMean = this.meanRmsSince(this.micRmsHistory, 1500);
+        const sysMean = this.meanRmsSince(this.sysRmsHistory, 1500);
+        const dominance = this.sysDominanceFraction(1500, 1.5);
+        console.log(
+          `[Main] Relabeling mic transcript as interviewer (sysMean=${sysMean.toFixed(0)} vs micMean=${micMean.toFixed(0)}, dominance=${(dominance * 100).toFixed(0)}%): "${segment.text.substring(0, 60)}..."`
+        );
+      }
+
       this.intelligenceManager.handleTranscript({
-        speaker: speaker,
+        speaker: routedSpeaker,
         text: segment.text,
         timestamp: Date.now(),
         final: segment.isFinal,
@@ -935,7 +900,7 @@ export class AppState {
       // Feed final transcript to JIT RAG indexer
       if (segment.isFinal && this.ragManager) {
         this.ragManager.feedLiveTranscript([{
-          speaker: speaker,
+          speaker: routedSpeaker,
           text: segment.text,
           timestamp: Date.now()
         }]);
@@ -943,7 +908,7 @@ export class AppState {
 
       const helper = this.getWindowHelper();
       const payload = {
-        speaker: speaker,
+        speaker: routedSpeaker,
         text: segment.text,
         timestamp: Date.now(),
         final: segment.isFinal,
@@ -953,7 +918,7 @@ export class AppState {
       helper.getOverlayWindow()?.webContents.send('native-audio-transcript', payload);
 
       // Feed final recruiter (system audio) transcripts to negotiation tracker
-      if (segment.isFinal && speaker === 'interviewer') {
+      if (segment.isFinal && routedSpeaker === 'interviewer') {
         this.knowledgeOrchestrator?.feedInterviewerUtterance?.(segment.text);
       }
     });
@@ -1059,6 +1024,67 @@ export class AppState {
     return stt;
   }
 
+  /**
+   * Default bundle-id prefix allowlist passed to CoreAudio's per-process tap. CoreAudio
+   * enumerates *every* audio process and unions in any whose bundle_id starts with one
+   * of these — far more reliable than guessing the right Chromium subprocess from `ps`,
+   * because the audio-producing helper has a `com.google.Chrome.helper.*` bundle id but
+   * its executable name is just "Google Chrome Helper".
+   */
+  private resolveAudioSourceBundleIds(): string[] {
+    if (process.platform !== 'darwin') return [];
+    if (process.env.NATIVELY_DISABLE_PER_APP_TAP === '1') return [];
+    return [
+      'com.google.Chrome',
+      'com.brave.Browser',
+      'com.microsoft.edgemac',
+      'org.mozilla.firefox',
+      'com.apple.Safari',
+      'company.thebrowser.Browser', // Arc
+      'com.vivaldi.Vivaldi',
+      'com.operasoftware.Opera',
+      'com.microsoft.teams',
+      'com.microsoft.teams2',
+      'us.zoom.xos',
+      'com.tinyspeck.slackmacgap',
+      'com.cisco.webexmeetingsapp',
+      'com.hnc.Discord',
+      'com.apple.FaceTime',
+    ];
+  }
+
+  /**
+   * Scan for PIDs of likely meeting-audio producers (browsers, Zoom/Teams/etc.) so the
+   * macOS CoreAudio Tap can capture only their audio. Eliminates mic-bleed because the
+   * tap no longer receives audio that's also being played to physical speakers.
+   *
+   * Set env NATIVELY_DISABLE_PER_APP_TAP=1 (or pass empty extra hints) to fall back to
+   * the global tap behavior when this heuristic doesn't fit a particular workflow.
+   */
+  private resolveAudioSourcePids(): number[] {
+    if (process.platform !== 'darwin') return [];
+    if (process.env.NATIVELY_DISABLE_PER_APP_TAP === '1') {
+      console.log('[Main] Per-app system audio tap disabled via NATIVELY_DISABLE_PER_APP_TAP');
+      return [];
+    }
+    try {
+      const matches = scanAudioSourcePids();
+      if (matches.length === 0) {
+        console.log('[Main] No browser/meeting processes found — using global system audio tap');
+        return [];
+      }
+      const pids = matches.map((m) => m.pid);
+      console.log(
+        `[Main] Per-app system audio tap targeting ${matches.length} process(es): ` +
+          matches.map((m) => `${m.pid}=${m.command.split('/').pop() || m.command}`).join(', '),
+      );
+      return pids;
+    } catch (err) {
+      console.warn('[Main] resolveAudioSourcePids failed, falling back to global tap:', (err as Error).message);
+      return [];
+    }
+  }
+
   private setupSystemAudioPipeline(): void {
     // REMOVED EARLY RETURN: if (this.systemAudioCapture && this.microphoneCapture) return; // Already initialized
 
@@ -1066,14 +1092,12 @@ export class AppState {
       // 1. Initialize Captures if missing
       // If they already exist (e.g. from reconfigureAudio), they are already wired to write to this.googleSTT/User
       if (!this.systemAudioCapture) {
-        this.systemAudioCapture = new SystemAudioCapture();
+        this.systemAudioCapture = new SystemAudioCapture(undefined, this.effectiveAudioSourcePids(), this.effectiveAudioSourceBundleIds());
         // Wire Capture -> STT
         let _sysChunkCount = 0;
         this.systemAudioCapture.on('data', (chunk: Buffer) => {
           _sysChunkCount++;
-          if (_sysChunkCount <= 3 || _sysChunkCount % 500 === 0) {
-            console.log(`[Main] SystemAudio->STT: chunk #${_sysChunkCount}, ${chunk.length}B, googleSTT=${this.googleSTT ? 'active' : 'NULL'}`);
-          }
+          this.observeSystemAudioChunk('SystemAudio->STT', _sysChunkCount, chunk);
           this.googleSTT?.write(chunk);
         });
         this.systemAudioCapture.on('sample_rate_changed', (rate: number) => {
@@ -1093,6 +1117,7 @@ export class AppState {
       if (!this.microphoneCapture) {
         this.microphoneCapture = new MicrophoneCapture();
         this.microphoneCapture.on('data', (chunk: Buffer) => {
+          this.observeMicrophoneChunk(chunk);
           this.googleSTT_User?.write(chunk);
         });
         this.microphoneCapture.on('sample_rate_changed', (rate: number) => {
@@ -1145,8 +1170,210 @@ export class AppState {
     }
   }
 
-  private async reconfigureAudio(inputDeviceId?: string, outputDeviceId?: string): Promise<void> {
-    console.log(`[Main] Reconfiguring Audio: Input=${inputDeviceId}, Output=${outputDeviceId}`);
+  /** PIDs explicitly chosen by the user via the Audio Source picker in settings.
+   *  When set, takes precedence over `resolveAudioSourcePids()` auto-detection. */
+  private manualAudioSourcePids: number[] = [];
+  private manualAudioSourceBundleIds: string[] = [];
+
+  public setManualAudioSourcePids(pids: number[]): void {
+    this.setManualAudioSourceFilter({ pids, bundleIds: [] });
+  }
+
+  public setManualAudioSourceFilter(filter: { pids?: number[]; bundleIds?: string[] }): void {
+    this.manualAudioSourcePids = Array.isArray(filter?.pids)
+      ? filter.pids.filter((p) => Number.isFinite(p) && p > 0)
+      : [];
+    this.manualAudioSourceBundleIds = Array.isArray(filter?.bundleIds)
+      ? filter.bundleIds.filter((b) => typeof b === 'string' && b.trim().length > 0)
+      : [];
+    console.log(
+      `[Main] Manual audio source filter: pids=${this.manualAudioSourcePids.join(', ') || '(none)'} ` +
+      `bundleIds=${this.manualAudioSourceBundleIds.join(', ') || '(none)'} ` +
+      `${this.manualAudioSourcePids.length === 0 && this.manualAudioSourceBundleIds.length === 0 ? '(auto)' : ''}`,
+    );
+  }
+
+  private effectiveAudioSourcePids(): number[] {
+    if (this.manualAudioSourceBundleIds.length > 0) return [];
+    if (this.manualAudioSourcePids.length > 0) return this.manualAudioSourcePids;
+    return this.resolveAudioSourcePids();
+  }
+
+  /** Bundle filters are skipped when the user has made a manual selection — the manual
+   *  PIDs are authoritative and we don't want auto-discovery silently widening the tap. */
+  private effectiveAudioSourceBundleIds(): string[] {
+    if (this.manualAudioSourceBundleIds.length > 0) return this.manualAudioSourceBundleIds;
+    if (this.manualAudioSourcePids.length > 0) return [];
+    return this.resolveAudioSourceBundleIds();
+  }
+
+  private getPcm16Level(chunk: Buffer): { rms: number; peak: number } {
+    let sumSquares = 0;
+    let peak = 0;
+    let count = 0;
+
+    for (let i = 0; i + 1 < chunk.length; i += 2) {
+      const sample = chunk.readInt16LE(i);
+      const abs = Math.abs(sample);
+      if (abs > peak) peak = abs;
+      sumSquares += sample * sample;
+      count++;
+    }
+
+    return {
+      rms: count > 0 ? Math.sqrt(sumSquares / count) : 0,
+      peak,
+    };
+  }
+
+  private observeSystemAudioChunk(label: string, chunkCount: number, chunk: Buffer): void {
+    const level = this.getPcm16Level(chunk);
+    this.systemAudioLevelSamples++;
+    this.systemAudioRmsTotal += level.rms;
+    if (level.rms >= 80 || level.peak >= 500) {
+      this.lastSystemAudioActiveAt = Date.now();
+    }
+    this.recordRms(this.sysRmsHistory, level.rms);
+
+    if (chunkCount <= 3 || chunkCount % 200 === 0) {
+      console.log(
+        `[Main] ${label}: chunk #${chunkCount}, ${chunk.length}B, ` +
+        `rms=${level.rms.toFixed(1)}, peak=${level.peak}, googleSTT=${this.googleSTT ? 'active' : 'NULL'}`,
+      );
+    }
+
+    if (!this.systemAudioSilenceWarned && this.systemAudioLevelSamples >= 200) {
+      const avgRms = this.systemAudioRmsTotal / this.systemAudioLevelSamples;
+      if (avgRms < 20) {
+        this.systemAudioSilenceWarned = true;
+        console.warn(
+          `[Main] System audio is effectively silent (avgRms=${avgRms.toFixed(1)}). ` +
+          'If the source is playing, do not mute macOS output; use headphones, a low output volume, or a virtual output device instead.',
+        );
+      }
+    }
+  }
+
+  private recordRms(history: Array<{ ts: number; rms: number }>, rms: number): void {
+    const now = Date.now();
+    history.push({ ts: now, rms });
+    const cutoff = now - AppState.RMS_HISTORY_WINDOW_MS;
+    // Trim the head while it's older than the window. The arrays are appended
+    // chronologically, so a single forward sweep is enough.
+    let drop = 0;
+    while (drop < history.length && history[drop].ts < cutoff) drop++;
+    if (drop > 0) history.splice(0, drop);
+  }
+
+  private peakRmsSince(history: Array<{ ts: number; rms: number }>, sinceMs: number): number {
+    const cutoff = Date.now() - sinceMs;
+    let peak = 0;
+    for (let i = history.length - 1; i >= 0; i--) {
+      const entry = history[i];
+      if (entry.ts < cutoff) break;
+      if (entry.rms > peak) peak = entry.rms;
+    }
+    return peak;
+  }
+
+  private meanRmsSince(history: Array<{ ts: number; rms: number }>, sinceMs: number): number {
+    const cutoff = Date.now() - sinceMs;
+    let sum = 0;
+    let count = 0;
+    for (let i = history.length - 1; i >= 0; i--) {
+      const entry = history[i];
+      if (entry.ts < cutoff) break;
+      sum += entry.rms;
+      count++;
+    }
+    return count === 0 ? 0 : sum / count;
+  }
+
+  private sysDominanceFraction(sinceMs: number, marginRatio: number): number {
+    const cutoff = Date.now() - sinceMs;
+    const sysSlice = this.sysRmsHistory.filter(e => e.ts >= cutoff);
+    if (sysSlice.length === 0) return 0;
+    let dominantSamples = 0;
+    for (const sysEntry of sysSlice) {
+      let micRms = 0;
+      let bestDelta = Infinity;
+      for (const micEntry of this.micRmsHistory) {
+        const delta = Math.abs(micEntry.ts - sysEntry.ts);
+        if (delta < bestDelta) {
+          bestDelta = delta;
+          micRms = micEntry.rms;
+        }
+        if (micEntry.ts > sysEntry.ts + 100) break;
+      }
+      if (sysEntry.rms > micRms * marginRatio) dominantSamples++;
+    }
+    return dominantSamples / sysSlice.length;
+  }
+
+  private observeMicrophoneChunk(chunk: Buffer): void {
+    const level = this.getPcm16Level(chunk);
+    this.recordRms(this.micRmsHistory, level.rms);
+  }
+
+  private shouldRouteMicrophoneAsInterviewer(text: string): boolean {
+    // The mic almost always doubles as a speaker echo channel: when the user
+    // is on built-in speakers, anything Chrome/Zoom plays back leaks into the
+    // mic and Deepgram transcribes it as if the user spoke.
+    //
+    // Earlier versions used peak RMS over a single 1.5s window, which mislabeled
+    // legitimate user speech whenever a brief system-audio spike (a notification
+    // ding, a transient interviewer syllable) coincided with quieter user speech.
+    // The fix: require *sustained* system-audio dominance — both the mean energy
+    // over the window AND the fraction of samples where sys > mic must clear
+    // their thresholds. Mean RMS is robust to transient peaks; the dominance
+    // fraction confirms it's not just one loud half-second.
+    const normalized = text.trim();
+    if (!normalized) return false;
+
+    const WINDOW_MS = 1500;
+    const micMean = this.meanRmsSince(this.micRmsHistory, WINDOW_MS);
+    const sysMean = this.meanRmsSince(this.sysRmsHistory, WINDOW_MS);
+    const micPeak = this.peakRmsSince(this.micRmsHistory, WINDOW_MS);
+    const sysPeak = this.peakRmsSince(this.sysRmsHistory, WINDOW_MS);
+
+    // No meaningful sustained source audio → keep on user channel.
+    // Use mean (not peak) so a single transient spike doesn't trip relabeling.
+    if (sysMean < 60) return false;
+
+    // Barge-in carveout (strengthened): if the mic shows sustained speech-like
+    // energy — mean above the typical bleed floor (~250–350) AND a real peak
+    // (>=600) — the user is actually talking. Bleed is a roughly continuous
+    // noise floor; speech has both a higher floor and clear peaks. Both
+    // conditions must hold to avoid a single mic spike rescuing pure echo.
+    const MIC_SUSTAINED_SPEECH_MEAN = 350;
+    const MIC_SPEECH_PEAK_FLOOR = 600;
+    if (micMean >= MIC_SUSTAINED_SPEECH_MEAN && micPeak >= MIC_SPEECH_PEAK_FLOOR) {
+      // Even with sustained mic speech, allow relabeling only if the system
+      // audio is overwhelmingly louder (e.g. user is on speakers and the
+      // mic is fully drowned out by a loud playback) — otherwise treat as
+      // genuine user speech.
+      if (sysMean < micMean * 2.5) return false;
+    }
+
+    // Sustained dominance check: at least 60% of recent system-audio samples
+    // must outweigh the (time-aligned) mic by >=1.5x. This prevents a single
+    // ~300ms peak from triggering relabel.
+    const dominanceFraction = this.sysDominanceFraction(WINDOW_MS, 1.5);
+    if (dominanceFraction < 0.6) return false;
+
+    // Mean dominance — the average source energy over the window must beat
+    // the average mic energy by >=1.4x. Combined with the dominance fraction
+    // above, this ensures we only relabel when the source is loudly and
+    // consistently dominant, not when peaks happen to align.
+    if (sysMean > micMean * 1.4 && sysPeak > micPeak * 1.2) return true;
+
+    return false;
+  }
+
+  private async reconfigureAudio(inputDeviceId?: string, outputDeviceId?: string, enableVoiceProcessing?: boolean): Promise<void> {
+    console.log(
+      `[Main] Reconfiguring Audio: Input=${inputDeviceId}, Output=${outputDeviceId}, AEC=${enableVoiceProcessing ? 'on' : 'off'}`
+    );
 
     // 1. System Audio (Output Capture)
     if (this.systemAudioCapture) {
@@ -1159,7 +1386,7 @@ export class AppState {
 
     try {
       console.log('[Main] Initializing SystemAudioCapture...');
-      this.systemAudioCapture = new SystemAudioCapture(outputDeviceId || undefined);
+      this.systemAudioCapture = new SystemAudioCapture(outputDeviceId || undefined, this.effectiveAudioSourcePids(), this.effectiveAudioSourceBundleIds());
       const rate = this.systemAudioCapture.getSampleRate();
       console.log(`[Main] SystemAudioCapture rate: ${rate}Hz`);
       this.googleSTT?.setSampleRate(rate);
@@ -1167,9 +1394,7 @@ export class AppState {
       let _rcfgSysChunkCount = 0;
       this.systemAudioCapture.on('data', (chunk: Buffer) => {
         _rcfgSysChunkCount++;
-        if (_rcfgSysChunkCount <= 3 || _rcfgSysChunkCount % 500 === 0) {
-          console.log(`[Main] (Reconfigured) SystemAudio->STT: chunk #${_rcfgSysChunkCount}, ${chunk.length}B, googleSTT=${this.googleSTT ? 'active' : 'NULL'}`);
-        }
+        this.observeSystemAudioChunk('(Reconfigured) SystemAudio->STT', _rcfgSysChunkCount, chunk);
         this.googleSTT?.write(chunk);
       });
       this.systemAudioCapture.on('sample_rate_changed', (rate: number) => {
@@ -1186,7 +1411,7 @@ export class AppState {
     } catch (err) {
       console.warn('[Main] Failed to initialize SystemAudioCapture with preferred ID. Falling back to default.', err);
       try {
-        this.systemAudioCapture = new SystemAudioCapture(); // Default
+        this.systemAudioCapture = new SystemAudioCapture(undefined, this.effectiveAudioSourcePids(), this.effectiveAudioSourceBundleIds()); // Default
         const rate = this.systemAudioCapture.getSampleRate();
         console.log(`[Main] SystemAudioCapture (Default) rate: ${rate}Hz`);
         this.googleSTT?.setSampleRate(rate);
@@ -1194,9 +1419,7 @@ export class AppState {
         let _dfltSysChunkCount = 0;
         this.systemAudioCapture.on('data', (chunk: Buffer) => {
           _dfltSysChunkCount++;
-          if (_dfltSysChunkCount <= 3 || _dfltSysChunkCount % 500 === 0) {
-            console.log(`[Main] (Default) SystemAudio->STT: chunk #${_dfltSysChunkCount}, ${chunk.length}B, googleSTT=${this.googleSTT ? 'active' : 'NULL'}`);
-          }
+          this.observeSystemAudioChunk('(Default) SystemAudio->STT', _dfltSysChunkCount, chunk);
           this.googleSTT?.write(chunk);
         });
         this.systemAudioCapture.on('sample_rate_changed', (rate: number) => {
@@ -1223,12 +1446,17 @@ export class AppState {
     try {
       console.log('[Main] Initializing MicrophoneCapture...');
       this.microphoneCapture = new MicrophoneCapture(inputDeviceId || undefined);
+      // Forward the AEC preference to the wrapper. If the native module hasn't
+      // been rebuilt with voice-processing support yet, the wrapper logs the
+      // request and gracefully no-ops — preserving today's behavior while
+      // letting the toggle round-trip end-to-end.
+      this.microphoneCapture.setVoiceProcessing?.(enableVoiceProcessing === true);
       const rate = this.microphoneCapture.getSampleRate();
       console.log(`[Main] MicrophoneCapture rate: ${rate}Hz`);
       this.googleSTT_User?.setSampleRate(rate);
 
       this.microphoneCapture.on('data', (chunk: Buffer) => {
-        // console.log('[Main] Mic chunk', chunk.length);
+        this.observeMicrophoneChunk(chunk);
         this.googleSTT_User?.write(chunk);
       });
       this.microphoneCapture.on('sample_rate_changed', (rate: number) => {
@@ -1251,6 +1479,7 @@ export class AppState {
         this.googleSTT_User?.setSampleRate(rate);
 
         this.microphoneCapture.on('data', (chunk: Buffer) => {
+          this.observeMicrophoneChunk(chunk);
           this.googleSTT_User?.write(chunk);
         });
         this.microphoneCapture.on('sample_rate_changed', (rate: number) => {
@@ -1463,6 +1692,77 @@ export class AppState {
     }
   }
 
+  public async startSourceAudioTest(filter?: { pids?: number[]; bundleIds?: string[]; outputDeviceId?: string }): Promise<void> {
+    if (this._sourceAudioTestStarting) return;
+    this._sourceAudioTestStarting = true;
+    try {
+      this.stopSourceAudioTest();
+
+      // Don't spin up a second tap during a live meeting — the active capture
+      // already feeds the interviewer STT and a duplicate could fight for the
+      // CoreAudio aggregate device. The meter is a pre-meeting setup tool.
+      if (this.isMeetingActive) {
+        console.log('[Main] Skipping source audio test: meeting is active');
+        return;
+      }
+
+      const pids = Array.isArray(filter?.pids)
+        ? filter!.pids.filter((p) => Number.isFinite(p) && p > 0)
+        : [];
+      const bundleIds = Array.isArray(filter?.bundleIds)
+        ? filter!.bundleIds.filter((b) => typeof b === 'string' && b.length > 0)
+        : [];
+      const outputDeviceId = typeof filter?.outputDeviceId === 'string' && filter.outputDeviceId.length > 0
+        ? filter.outputDeviceId
+        : undefined;
+
+      console.log(`[Main] Starting Source Audio Test. pids=[${pids.join(',')}] bundleIds=[${bundleIds.join(',')}] output=${outputDeviceId || 'default'}`);
+
+      try {
+        this.sourceAudioTestCapture = new SystemAudioCapture(outputDeviceId, pids, bundleIds);
+      } catch (e) {
+        console.error('[Main] Failed to create SystemAudioCapture for source test:', e);
+        this.sourceAudioTestCapture = null;
+        return;
+      }
+
+      this.sourceAudioTestCapture.on('data', (chunk: Buffer) => {
+        const targets = [
+          this.settingsWindowHelper.getSettingsWindow(),
+          this.getWindowHelper().getLauncherWindow(),
+          this.getWindowHelper().getOverlayWindow(),
+        ].filter((win): win is BrowserWindow => !!win && !win.isDestroyed());
+
+        if (targets.length === 0) return;
+
+        const { rms } = this.getPcm16Level(chunk);
+        // Match the mic meter scaling so the two bars are visually comparable.
+        const level = Math.min(rms / 10000, 1.0);
+        for (const target of targets) {
+          target.webContents.send('source-audio-test-level', level);
+        }
+      });
+
+      this.sourceAudioTestCapture.on('error', (err: Error) => {
+        console.error('[Main] SourceAudioTest Error:', err);
+      });
+
+      this.sourceAudioTestCapture.start();
+    } finally {
+      this._sourceAudioTestStarting = false;
+    }
+  }
+
+  public stopSourceAudioTest(): void {
+    if (this.sourceAudioTestCapture) {
+      console.log('[Main] Stopping Source Audio Test');
+      // destroy() also removes listeners so any in-flight Rust callback won't
+      // fire on a disposed instance.
+      this.sourceAudioTestCapture.destroy();
+      this.sourceAudioTestCapture = null;
+    }
+  }
+
   public finalizeMicSTT(): void {
     // We only want to finalize the user microphone, because the context is Manual Answer
     if (this.googleSTT_User?.finalize) {
@@ -1478,10 +1778,21 @@ export class AppState {
     this._systemAudioRecoveryInProgress = false;
     this._systemAudioRecoveryAttempts = 0;
     this._systemAudioConsecutiveFailures = 0;
+    this.systemAudioLevelSamples = 0;
+    this.systemAudioRmsTotal = 0;
+    this.systemAudioSilenceWarned = false;
+    this.lastSystemAudioActiveAt = 0;
+    this.micRmsHistory = [];
+    this.sysRmsHistory = [];
     if (this._systemAudioRecoveryTimer) {
       clearTimeout(this._systemAudioRecoveryTimer);
       this._systemAudioRecoveryTimer = null;
     }
+
+    // Tear down the audio settings preview taps before bringing up the live
+    // ones; otherwise the meeting capture could collide with a leftover meter.
+    this.stopAudioTest();
+    this.stopSourceAudioTest();
 
     if (!(await ensureMacMicrophoneAccess('meeting start'))) {
       const message = 'Microphone access denied. Please allow microphone access in System Settings.';
@@ -1543,7 +1854,11 @@ export class AppState {
       try {
         // Check for audio configuration preference
         if (metadata?.audio) {
-          await this.reconfigureAudio(metadata.audio.inputDeviceId, metadata.audio.outputDeviceId);
+          await this.reconfigureAudio(
+            metadata.audio.inputDeviceId,
+            metadata.audio.outputDeviceId,
+            metadata.audio.enableVoiceProcessing,
+          );
         }
 
         // LAZY INIT: Ensure pipeline is ready (if not reconfigured above)
@@ -1865,7 +2180,72 @@ export class AppState {
   }
 
   public getKnowledgeOrchestrator(): any {
+    if (!this.knowledgeOrchestrator) {
+      this.ensureKnowledgeOrchestrator();
+    }
     return this.knowledgeOrchestrator;
+  }
+
+  private ensureKnowledgeOrchestrator(): void {
+    if (this.knowledgeOrchestrator) return;
+    try {
+      const db = DatabaseManager.getInstance();
+      const sqliteDb = db.getDb();
+
+      if (!sqliteDb || !KnowledgeDatabaseManagerClass || !KnowledgeOrchestratorClass) {
+        console.warn('[AppState] KnowledgeOrchestrator dependencies missing:', {
+          sqliteDb: !!sqliteDb,
+          KnowledgeDatabaseManagerClass: !!KnowledgeDatabaseManagerClass,
+          KnowledgeOrchestratorClass: !!KnowledgeOrchestratorClass,
+        });
+        return;
+      }
+
+      const knowledgeDb = new KnowledgeDatabaseManagerClass(sqliteDb);
+      this.knowledgeOrchestrator = new KnowledgeOrchestratorClass(knowledgeDb);
+
+      const llmHelper = this.processingHelper.getLLMHelper();
+
+      this.knowledgeOrchestrator.setGenerateContentFn(async (contents: any[]) => {
+        return await llmHelper.generateContentStructured(contents[0]?.text || '');
+      });
+
+      const self = this;
+      this.knowledgeOrchestrator.setEmbedFn(async (text: string) => {
+        const pipeline = self.ragManager?.getEmbeddingPipeline();
+        if (!pipeline) throw new Error('RAG pipeline not available');
+        await pipeline.waitForReady();
+        return await pipeline.getEmbedding(text);
+      });
+      if (typeof this.knowledgeOrchestrator.setEmbedQueryFn === 'function') {
+        this.knowledgeOrchestrator.setEmbedQueryFn(async (text: string) => {
+          const pipeline = self.ragManager?.getEmbeddingPipeline();
+          if (!pipeline) throw new Error('RAG pipeline not available');
+          await pipeline.waitForReady();
+          return await pipeline.getEmbeddingForQuery(text);
+        });
+      }
+
+      llmHelper.setKnowledgeOrchestrator(this.knowledgeOrchestrator);
+
+      const sm = SettingsManager.getInstance();
+      if (sm.get('knowledgeMode')) {
+        this.knowledgeOrchestrator.setKnowledgeMode(true);
+        console.log('[AppState] Knowledge mode restored from settings');
+      }
+
+      const savedNotes = DatabaseManager.getInstance().getCustomNotes();
+      if (savedNotes) {
+        this.knowledgeOrchestrator.setCustomNotes(savedNotes);
+        llmHelper.setCustomNotes(savedNotes);
+        console.log('[AppState] Custom notes restored');
+      }
+
+      console.log('[AppState] KnowledgeOrchestrator initialized');
+    } catch (error: any) {
+      console.error('[AppState] Failed to initialize KnowledgeOrchestrator:', error?.message ?? error);
+      console.error(error?.stack);
+    }
   }
 
   public getView(): "queue" | "solutions" {

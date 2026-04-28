@@ -1,6 +1,6 @@
 use anyhow::Result;
 use ca::aggregate_device_keys as agg_keys;
-use cidre::{arc, av, cat, cf, core_audio as ca, ns, os};
+use cidre::{arc, av, cat, cf, core_audio as ca, ns, os, sys};
 use ringbuf::{
     traits::{Producer, Split},
     HeapCons, HeapProd, HeapRb,
@@ -25,6 +25,30 @@ pub struct SpeakerInput {
 
 impl SpeakerInput {
     pub fn new(device_id: Option<String>) -> Result<Self> {
+        Self::new_with_pids(device_id, Vec::new())
+    }
+
+    /// Create a SpeakerInput that taps either:
+    /// - Only the audio produced by the given OS PIDs (per-process tap), if `target_pids` is non-empty.
+    /// - Or the entire system audio mix on the selected output device (global tap), if empty.
+    ///
+    /// Per-process tap requires macOS 14.2+ and is the ideal mode for browser-based meetings:
+    /// targeting Chrome/Brave/Safari isolates the meeting audio so it never collides with the
+    /// microphone (no bleed) and other apps' audio (Spotify, etc.) is excluded automatically.
+    pub fn new_with_pids(device_id: Option<String>, target_pids: Vec<i32>) -> Result<Self> {
+        Self::new_with_filter(device_id, target_pids, Vec::new())
+    }
+
+    /// Like `new_with_pids` but additionally accepts a list of bundle-ID prefixes. Any
+    /// CoreAudio Process whose bundle_id starts with one of these prefixes AND is currently
+    /// producing audio output is included automatically. Solves the Chromium problem where
+    /// the audio-producing helper subprocess isn't visible to `ps` under a guessable name —
+    /// CoreAudio knows exactly which processes have audio sessions, so we ask it directly.
+    pub fn new_with_filter(
+        device_id: Option<String>,
+        target_pids: Vec<i32>,
+        bundle_id_prefixes: Vec<String>,
+    ) -> Result<Self> {
         // 1. Find the target output device
         let output_device = match device_id {
             Some(ref uid) if !uid.is_empty() && uid != "default" => {
@@ -40,13 +64,103 @@ impl SpeakerInput {
         let output_uid = output_device.uid()?;
         println!("[CoreAudioTap] Target device UID: {}", output_uid);
 
-        // 2. Create global tap
+        // 2. Build the target process AudioObjectID list from two sources:
+        //    (a) Translate the explicit OS PIDs we were given via `Process::with_pid`.
+        //    (b) Enumerate every CoreAudio process and pick the ones with an active audio
+        //        session whose bundle_id matches the supplied prefixes. CoreAudio knows
+        //        which sandboxed Chrome/Teams helper actually owns the audio session — we
+        //        don't have to guess from `ps` output.
+        let mut process_obj_ids: Vec<u32> = Vec::new();
+
+        for pid in &target_pids {
+            match ca::hardware::Process::with_pid(*pid as sys::Pid) {
+                Ok(proc_obj) => {
+                    let raw = (*proc_obj).0;
+                    if raw != 0 {
+                        process_obj_ids.push(raw);
+                    } else {
+                        println!(
+                            "[CoreAudioTap] PID {} did not resolve to a CoreAudio process object",
+                            pid
+                        );
+                    }
+                }
+                Err(e) => {
+                    println!(
+                        "[CoreAudioTap] Failed to translate PID {} to process object: {:?}",
+                        pid, e
+                    );
+                }
+            }
+        }
+
+        if !bundle_id_prefixes.is_empty() {
+            let lower_prefixes: Vec<String> =
+                bundle_id_prefixes.iter().map(|s| s.to_lowercase()).collect();
+            match ca::hardware::Process::list() {
+                Ok(processes) => {
+                    let mut auto_added = 0usize;
+                    for proc_obj in processes {
+                        let raw = (*proc_obj).0;
+                        if raw == 0 {
+                            continue;
+                        }
+                        if process_obj_ids.contains(&raw) {
+                            continue;
+                        }
+                        let running_output = proc_obj.is_running_output().unwrap_or(false);
+                        let bundle = match proc_obj.bundle_id() {
+                            Ok(s) => s.to_string().to_lowercase(),
+                            Err(_) => continue,
+                        };
+                        let matches = lower_prefixes
+                            .iter()
+                            .any(|p| !p.is_empty() && bundle.starts_with(p));
+                        if matches && (running_output || auto_added == 0) {
+                            // Always include matching bundles, but log running_output for clarity.
+                            println!(
+                                "[CoreAudioTap] Auto-including process {} bundle_id={} running_output={}",
+                                raw, bundle, running_output
+                            );
+                            process_obj_ids.push(raw);
+                            auto_added += 1;
+                        }
+                    }
+                    if auto_added == 0 {
+                        println!(
+                            "[CoreAudioTap] No bundle_id matches found for prefixes: {:?}",
+                            bundle_id_prefixes
+                        );
+                    }
+                }
+                Err(e) => {
+                    println!("[CoreAudioTap] Failed to enumerate audio processes: {:?}", e);
+                }
+            }
+        }
+
         let sub_device = cf::DictionaryOf::with_keys_values(
             &[ca::sub_device_keys::uid()],
             &[output_uid.as_type_ref()],
         );
 
-        let tap_desc = ca::TapDesc::with_mono_global_tap_excluding_processes(&ns::Array::new());
+        let tap_desc = if !process_obj_ids.is_empty() {
+            println!(
+                "[CoreAudioTap] Per-process tap targeting {} process object(s): {:?}",
+                process_obj_ids.len(),
+                process_obj_ids
+            );
+            let numbers: Vec<arc::R<ns::Number>> = process_obj_ids
+                .iter()
+                .map(|id| ns::Number::with_u32(*id))
+                .collect();
+            let refs: Vec<&ns::Number> = numbers.iter().map(|n| n.as_ref()).collect();
+            let arr = ns::Array::from_slice(&refs);
+            ca::TapDesc::with_mono_mixdown_of_processes(&arr)
+        } else {
+            println!("[CoreAudioTap] Global tap (all system audio on selected output)");
+            ca::TapDesc::with_mono_global_tap_excluding_processes(&ns::Array::new())
+        };
         let tap = tap_desc.create_process_tap()?;
         println!("[CoreAudioTap] Tap created: {:?}", tap.uid());
 

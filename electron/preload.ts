@@ -101,6 +101,9 @@ interface ElectronAPI {
   generateSuggestion: (context: string, lastQuestion: string) => Promise<{ suggestion: string }>
   getInputDevices: () => Promise<Array<{ id: string; name: string }>>
   getOutputDevices: () => Promise<Array<{ id: string; name: string }>>
+  listAudioProcesses: () => Promise<Array<{ objectId: number; pid: number; bundleId: string | null; runningOutput: boolean }>>
+  setAudioSourcePids: (pids: number[]) => Promise<{ success: boolean }>
+  setAudioSourceFilter: (filter: { pids?: number[]; bundleIds?: string[] }) => Promise<{ success: boolean }>
   setRecognitionLanguage: (key: string) => Promise<{ success: boolean; error?: string }>
   getAiResponseLanguages: () => Promise<Array<{ label: string; code: string }>>
   setAiResponseLanguage: (language: string) => Promise<{ success: boolean; error?: string }>
@@ -175,6 +178,9 @@ interface ElectronAPI {
   startAudioTest: (deviceId?: string) => Promise<{ success: boolean }>
   stopAudioTest: () => Promise<{ success: boolean }>
   onAudioTestLevel: (callback: (level: number) => void) => () => void
+  startSourceAudioTest: (filter?: { pids?: number[]; bundleIds?: string[]; outputDeviceId?: string }) => Promise<{ success: boolean }>
+  stopSourceAudioTest: () => Promise<{ success: boolean }>
+  onSourceAudioTestLevel: (callback: (level: number) => void) => () => void
 
   // Database
   flushDatabase: () => Promise<{ success: boolean }>
@@ -655,6 +661,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getNativeAudioStatus: () => ipcRenderer.invoke("native-audio-status"),
   getInputDevices: () => ipcRenderer.invoke("get-input-devices"),
   getOutputDevices: () => ipcRenderer.invoke("get-output-devices"),
+  listAudioProcesses: () => ipcRenderer.invoke("list-audio-processes"),
+  setAudioSourcePids: (pids: number[]) => ipcRenderer.invoke("set-audio-source-pids", pids),
+  setAudioSourceFilter: (filter: { pids?: number[]; bundleIds?: string[] }) => ipcRenderer.invoke("set-audio-source-filter", filter),
   setRecognitionLanguage: (key: string) => ipcRenderer.invoke("set-recognition-language", key),
   getAiResponseLanguages: () => ipcRenderer.invoke("get-ai-response-languages"),
   setAiResponseLanguage: (language: string) => ipcRenderer.invoke("set-ai-response-language", language),
@@ -905,6 +914,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on('audio-test-level', subscription)
     return () => {
       ipcRenderer.removeListener('audio-test-level', subscription)
+    }
+  },
+  startSourceAudioTest: (filter?: { pids?: number[]; bundleIds?: string[]; outputDeviceId?: string }) =>
+    ipcRenderer.invoke('start-source-audio-test', filter),
+  stopSourceAudioTest: () => ipcRenderer.invoke('stop-source-audio-test'),
+  onSourceAudioTestLevel: (callback: (level: number) => void) => {
+    const subscription = (_: any, level: number) => callback(level)
+    ipcRenderer.on('source-audio-test-level', subscription)
+    return () => {
+      ipcRenderer.removeListener('source-audio-test-level', subscription)
     }
   },
 

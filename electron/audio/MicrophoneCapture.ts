@@ -33,6 +33,35 @@ export class MicrophoneCapture extends EventEmitter {
         }
     }
 
+    /**
+     * Toggle Apple's voice processing (acoustic echo cancellation, noise
+     * suppression, automatic gain control) on the underlying capture.
+     * When enabled on macOS, the mic stream is routed through AVAudioEngine
+     * with `setVoiceProcessingEnabled:` on the input node, so speaker bleed
+     * is removed before the signal ever reaches STT. The flag takes effect
+     * on the next `start()` call; if the capture is already running, the
+     * native side tears it down so the next start rebuilds on the new
+     * backend.
+     *
+     * Falls back to a soft no-op + log line if the loaded native binary is
+     * older and doesn't expose `setVoiceProcessing` yet (e.g. mid-deploy).
+     */
+    public setVoiceProcessing(enabled: boolean): void {
+        const native = this.monitor;
+        if (native && typeof native.setVoiceProcessing === 'function') {
+            try {
+                native.setVoiceProcessing(enabled);
+                console.log(`[MicrophoneCapture] Voice processing (AEC) ${enabled ? 'enabled' : 'disabled'} via native AU.`);
+                return;
+            } catch (e) {
+                console.warn('[MicrophoneCapture] Native setVoiceProcessing failed:', e);
+            }
+        }
+        console.log(
+            `[MicrophoneCapture] AEC requested=${enabled} but native binary lacks setVoiceProcessing — rebuild native-module to pick up the new API.`,
+        );
+    }
+
     public getSampleRate(): number {
         if (this.monitor) {
             // NAPI-RS V3 auto-converts Rust snake_case to camelCase

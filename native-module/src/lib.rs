@@ -48,6 +48,15 @@ pub struct SystemAudioCapture {
     /// native device is initialized. Callers always get the real hardware rate.
     sample_rate: Arc<AtomicU32>,
     device_id: Option<String>,
+    /// Optional list of OS PIDs to capture audio from. When non-empty, the macOS
+    /// CoreAudio backend builds a per-process tap (kAudioHardwarePropertyTranslatePID...)
+    /// so only audio produced by these processes is captured. Empty = whole system mix.
+    target_pids: Vec<i32>,
+    /// Optional list of bundle-ID prefixes (e.g. "com.google.Chrome", "com.microsoft.teams2").
+    /// CoreAudio enumerates every audio process and unions in the ones whose bundle_id
+    /// starts with any of these. Solves the Chromium audio-helper problem where the
+    /// audio-producing subprocess isn't easily identifiable from `ps`.
+    target_bundle_ids: Vec<String>,
 }
 
 #[napi]
@@ -63,7 +72,29 @@ impl SystemAudioCapture {
             // 48kHz is the standard macOS CoreAudio rate.
             sample_rate: Arc::new(AtomicU32::new(48000)),
             device_id,
+            target_pids: Vec::new(),
+            target_bundle_ids: Vec::new(),
         })
+    }
+
+    /// Restrict capture to only the audio produced by the given OS PIDs.
+    /// Pass an empty array to revert to whole-device capture. Must be called BEFORE `start()`;
+    /// changing PIDs after the capture thread has spawned has no effect until the capture
+    /// is destroyed and re-created.
+    #[napi]
+    pub fn set_target_pids(&mut self, pids: Vec<i32>) {
+        println!("[SystemAudioCapture] target_pids set to {:?}", pids);
+        self.target_pids = pids;
+    }
+
+    /// Restrict capture to processes whose CoreAudio bundle_id starts with any of these
+    /// prefixes (e.g. ["com.google.Chrome", "com.microsoft.teams2"]). Combines additively
+    /// with `set_target_pids`. Use this to target Chromium-based browsers reliably —
+    /// every Chrome audio helper has a `com.google.Chrome.*` bundle id.
+    #[napi]
+    pub fn set_target_bundle_ids(&mut self, bundle_ids: Vec<String>) {
+        println!("[SystemAudioCapture] target_bundle_ids set to {:?}", bundle_ids);
+        self.target_bundle_ids = bundle_ids;
     }
 
     #[napi]
@@ -89,15 +120,23 @@ impl SystemAudioCapture {
         let stop_signal = self.stop_signal.clone();
         let sample_rate_shared = self.sample_rate.clone();
         let device_id = self.device_id.clone();
+        let target_pids = self.target_pids.clone();
+        let target_bundle_ids = self.target_bundle_ids.clone();
 
         // ALL init + DSP runs in background thread — start() returns INSTANTLY
         self.capture_thread = Some(thread::spawn(move || {
             // 1. SpeakerInput Init (takes 5-7 seconds — runs OFF main thread)
             println!("[SystemAudioCapture] Background init starting...");
-            let input = match speaker::SpeakerInput::new(device_id.clone()) {
+            let input = match speaker::SpeakerInput::new_with_filter(
+                device_id.clone(),
+                target_pids.clone(),
+                target_bundle_ids.clone(),
+            ) {
                 Ok(i) => i,
                 Err(e) => {
                     println!("[SystemAudioCapture] Init failed: {}. Trying default...", e);
+                    // Fall back to whole-device global tap on failure (the per-process tap
+                    // can fail on older macOS or if the PID exited between scan and tap).
                     match speaker::SpeakerInput::new(None) {
                         Ok(i) => i,
                         Err(e2) => {
@@ -225,6 +264,62 @@ impl Drop for SystemAudioCapture {
     }
 }
 
+#[napi(object)]
+#[derive(Default)]
+pub struct AudioProcessInfo {
+    /// CoreAudio AudioObjectID for this process (used internally by macOS taps).
+    pub object_id: u32,
+    /// OS PID of the process. -1 if unavailable.
+    pub pid: i32,
+    /// Bundle identifier (e.g. "com.google.Chrome.helper.audio") if available.
+    pub bundle_id: Option<String>,
+    /// True when the process is actively producing audio output right now.
+    pub running_output: bool,
+}
+
+/// Enumerate every CoreAudio process object on the system. Each entry corresponds
+/// to a process that has registered with CoreAudio (typically because it has at
+/// some point opened an audio session). Use this to power a UI picker for
+/// per-process audio capture — much more reliable than `ps` because Chromium's
+/// audio-producing helper subprocess only shows up here.
+///
+/// Returns an empty list on non-macOS or if the CoreAudio API call fails.
+#[cfg(target_os = "macos")]
+#[napi]
+pub fn list_audio_processes() -> Vec<AudioProcessInfo> {
+    use cidre::core_audio as ca;
+    let processes = match ca::hardware::Process::list() {
+        Ok(p) => p,
+        Err(e) => {
+            println!("[list_audio_processes] failed to enumerate: {:?}", e);
+            return Vec::new();
+        }
+    };
+    let mut out = Vec::with_capacity(processes.len());
+    for proc_obj in processes {
+        let object_id = (*proc_obj).0;
+        if object_id == 0 {
+            continue;
+        }
+        let pid = proc_obj.pid().unwrap_or(0) as i32;
+        let bundle_id = proc_obj.bundle_id().ok().map(|s| s.to_string());
+        let running_output = proc_obj.is_running_output().unwrap_or(false);
+        out.push(AudioProcessInfo {
+            object_id,
+            pid,
+            bundle_id,
+            running_output,
+        });
+    }
+    out
+}
+
+#[cfg(not(target_os = "macos"))]
+#[napi]
+pub fn list_audio_processes() -> Vec<AudioProcessInfo> {
+    Vec::new()
+}
+
 // ============================================================================
 // MICROPHONE CAPTURE (CPAL)
 //
@@ -243,6 +338,10 @@ pub struct MicrophoneCapture {
     device_id: Option<String>,
     /// Holds the live CPAL stream. Recreated on each start().
     input: Option<microphone::MicrophoneStream>,
+    /// When true, the next stream creation routes through Apple's voice
+    /// processing AU (AEC + AGC + NS) instead of the cpal path. macOS-only;
+    /// no-op fallback elsewhere.
+    enable_voice_processing: bool,
 }
 
 #[napi]
@@ -268,12 +367,39 @@ impl MicrophoneCapture {
             sample_rate: Arc::new(AtomicU32::new(native_rate)),
             device_id,
             input: Some(input),
+            enable_voice_processing: false,
         })
     }
 
     #[napi]
     pub fn get_sample_rate(&self) -> u32 {
         self.sample_rate.load(Ordering::Acquire)
+    }
+
+    /// Toggle Apple voice processing (AEC + AGC + NS) for this capture.
+    ///
+    /// The flag takes effect on the next `start()` call. If the underlying
+    /// stream is already running we tear it down and recreate it on the new
+    /// backend so the change is observable immediately — interview overlays
+    /// commonly toggle this from the Settings panel mid-session.
+    #[napi]
+    pub fn set_voice_processing(&mut self, enabled: bool) -> napi::Result<()> {
+        if self.enable_voice_processing == enabled {
+            return Ok(());
+        }
+        println!(
+            "[MicrophoneCapture] Voice processing {} via napi (was {}).",
+            if enabled { "ENABLED" } else { "DISABLED" },
+            if self.enable_voice_processing { "on" } else { "off" }
+        );
+        self.enable_voice_processing = enabled;
+
+        // Drop any existing stream so the next start() rebuilds it on the
+        // chosen backend. The DSP thread (if running) is unaffected — its
+        // consumer is held independently and will see end-of-stream when the
+        // backend changes.
+        self.input = None;
+        Ok(())
     }
 
     #[napi]
@@ -288,11 +414,18 @@ impl MicrophoneCapture {
         self.stop_signal.store(false, Ordering::SeqCst);
         let stop_signal = self.stop_signal.clone();
 
-        // If the stream was consumed by a previous start() cycle, recreate it.
-        // This is the fix for the one-shot take_consumer() bug.
+        // If the stream was consumed by a previous start() cycle (or torn
+        // down by a voice-processing toggle), recreate it on the currently
+        // selected backend.
         if self.input.is_none() {
-            println!("[MicrophoneCapture] Recreating CPAL stream for restart...");
-            match microphone::MicrophoneStream::new(self.device_id.clone()) {
+            println!(
+                "[MicrophoneCapture] Recreating stream for restart (AEC={})...",
+                self.enable_voice_processing
+            );
+            match microphone::MicrophoneStream::new_with_options(
+                self.device_id.clone(),
+                self.enable_voice_processing,
+            ) {
                 Ok(i) => {
                     let rate = i.sample_rate();
                     self.sample_rate.store(rate, Ordering::Release);
@@ -405,8 +538,9 @@ impl MicrophoneCapture {
         if let Some(handle) = self.capture_thread.take() {
             let _ = handle.join();
         }
-        // Pause and destroy the CPAL stream so start() recreates it fresh.
-        if let Some(ref input) = self.input {
+        // Pause and destroy the stream so start() recreates it fresh on
+        // whichever backend is currently selected.
+        if let Some(ref mut input) = self.input {
             let _ = input.pause();
         }
         self.input = None;

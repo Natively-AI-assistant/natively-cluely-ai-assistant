@@ -167,6 +167,11 @@ export class SessionTracker {
      */
     private looksLikeCodingQuestion(text: string): boolean {
         if (text.length < 50) return false;
+        const recruiterAdminSignals = [
+            /\b(recruiter|portal|position|role|client|profile|resume|offer|salary|rate|w-?2|contract|notice period|manager|interview request|vendor|beeline|valid id|id proof|driver license)\b/i,
+            /\b(jpmorgan|chase|bank of america|capital one|wells fargo)\b/i,
+        ];
+        const hasRecruiterAdminContext = recruiterAdminSignals.some(p => p.test(text));
         const patterns = [
             /\b(implement|write|code|solve|design|build|create)\b/i,
             /\b(given\s+(an?|the)\s+(array|string|list|tree|graph|matrix|number|integer|node|linked list|stack|queue|heap))\b/i,
@@ -175,8 +180,15 @@ export class SessionTracker {
             /\b(O\(n\)|time complexity|space complexity|optimal|efficient|brute force)\b/i,
             /\b(two sum|three sum|binary search|dynamic programming|BFS|DFS|palindrome|anagram|substring|subarray|rotation)\b/i,
         ];
+        const strongCodingSignals = [
+            /\b(given\s+(an?|the)\s+(array|string|list|tree|graph|matrix|number|integer|node|linked list|stack|queue|heap))\b/i,
+            /\b(O\(n\)|time complexity|space complexity|optimal|efficient|brute force)\b/i,
+            /\b(two sum|three sum|binary search|dynamic programming|BFS|DFS|palindrome|anagram|substring|subarray|rotation)\b/i,
+        ];
         const matchCount = patterns.filter(p => p.test(text)).length;
-        return matchCount >= 2;
+        const hasStrongCodingSignal = strongCodingSignals.some(p => p.test(text));
+        if (hasRecruiterAdminContext && !hasStrongCodingSignal) return false;
+        return matchCount >= 2 && (hasStrongCodingSignal || matchCount >= 3);
     }
 
     // ============================================

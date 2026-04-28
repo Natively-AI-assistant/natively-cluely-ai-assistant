@@ -23,24 +23,8 @@ export function initializeIpcHandlers(appState: AppState): void {
    * Used to gate profile intelligence features (resume upload, JD upload, company research, etc.).
    */
   const isProOrTrialActive = (): boolean => {
-    // 1. Full premium license (Dodo / Gumroad / Natively API subscription)
-    try {
-      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      if (LicenseManager.getInstance().isPremium()) return true;
-    } catch { /* premium module not available */ }
-
-    // 2. Active free trial (token present and not expired)
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const cm = CredentialsManager.getInstance();
-      const token = cm.getTrialToken();
-      if (!token) return false;
-      const expiresAt = cm.getTrialExpiresAt();
-      if (!expiresAt) return false;
-      return new Date(expiresAt).getTime() > Date.now();
-    } catch {
-      return false;
-    }
+    // Local build: paywall disabled — Pro features always unlocked.
+    return true;
   };
 
   // Clears the active mode when the pro license is lost so non-general mode prompts
@@ -103,34 +87,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: false, error: 'Premium features not available in this build.' };
     }
   });
-  safeHandle("license:check-premium", async () => {
-    try {
-      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      return LicenseManager.getInstance().isPremium();
-    } catch {
-      return false;
-    }
-  });
+  safeHandle("license:check-premium", async () => true);
 
   safeHandle("license:get-details", async () => {
-    try {
-      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      return LicenseManager.getInstance().getLicenseDetails();
-    } catch {
-      return { isPremium: false };
-    }
+    return { isPremium: true, plan: 'pro', provider: 'local' };
   });
-  // Async variant: performs Dodo server-side revocation check on startup.
-  // Returns false only if the server definitively revokes the key.
-  // Network errors fail-open (returns cached sync result).
-  safeHandle("license:check-premium-async", async () => {
-    try {
-      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      return await LicenseManager.getInstance().isPremiumAsync();
-    } catch {
-      return false;
-    }
-  });
+  safeHandle("license:check-premium-async", async () => true);
   safeHandle("license:deactivate", async () => {
     try {
       const { LicenseManager } = require('../premium/electron/services/LicenseManager');
@@ -1174,11 +1136,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         const orchestrator = appState.getKnowledgeOrchestrator();
         if (orchestrator) {
           orchestrator.setKnowledgeMode(false);
-          const { DocType } = require('../premium/electron/knowledge/types');
+          const { DocType } = require('./knowledge/types');
           orchestrator.deleteDocumentsByType(DocType.RESUME);
           orchestrator.deleteDocumentsByType(DocType.JD);
         }
-      } catch { /* ignore */ }
+      } catch (e: any) { console.warn('[IPC] trial:end-byok orchestrator wipe failed:', e?.message); }
 
       // 6. Wipe Pro-specific cached data from local SQLite
       //    Targets: company dossiers, knowledge docs (+ cascades), resume nodes, user profile
@@ -1224,7 +1186,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         const orchestrator = appState.getKnowledgeOrchestrator();
         if (orchestrator) {
           orchestrator.setKnowledgeMode(false);
-          const { DocType } = require('../premium/electron/knowledge/types');
+          const { DocType } = require('./knowledge/types');
           orchestrator.deleteDocumentsByType(DocType.RESUME);
           orchestrator.deleteDocumentsByType(DocType.JD);
         }
@@ -2072,6 +2034,33 @@ export function initializeIpcHandlers(appState: AppState): void {
     return AudioDevices.getOutputDevices();
   });
 
+  safeHandle("set-audio-source-pids", async (_evt, pids: number[]) => {
+    appState.setManualAudioSourcePids(Array.isArray(pids) ? pids : []);
+    return { success: true };
+  });
+
+  safeHandle("set-audio-source-filter", async (_evt, filter: { pids?: number[]; bundleIds?: string[] }) => {
+    appState.setManualAudioSourceFilter({
+      pids: Array.isArray(filter?.pids) ? filter.pids : [],
+      bundleIds: Array.isArray(filter?.bundleIds) ? filter.bundleIds : [],
+    });
+    return { success: true };
+  });
+
+  safeHandle("list-audio-processes", async () => {
+    try {
+      const native = require("./audio/nativeModuleLoader").loadNativeModule();
+      if (!native || typeof native.listAudioProcesses !== "function") {
+        return [];
+      }
+      const list = native.listAudioProcesses();
+      return Array.isArray(list) ? list : [];
+    } catch (err) {
+      console.warn("[ipc] list-audio-processes failed:", (err as Error).message);
+      return [];
+    }
+  });
+
   safeHandle("start-audio-test", async (event, deviceId?: string) => {
     await appState.startAudioTest(deviceId);
     return { success: true };
@@ -2079,6 +2068,16 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle("stop-audio-test", async () => {
     appState.stopAudioTest();
+    return { success: true };
+  });
+
+  safeHandle("start-source-audio-test", async (_event, filter?: { pids?: number[]; bundleIds?: string[]; outputDeviceId?: string }) => {
+    await appState.startSourceAudioTest(filter);
+    return { success: true };
+  });
+
+  safeHandle("stop-source-audio-test", async () => {
+    appState.stopSourceAudioTest();
     return { success: true };
   });
 
@@ -2707,7 +2706,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (!orchestrator) {
         return { success: false, error: 'Knowledge engine not initialized. Please ensure API keys are configured.' };
       }
-      const { DocType } = require('../premium/electron/knowledge/types');
+      const { DocType } = require('./knowledge/types');
       const result = await orchestrator.ingestDocument(filePath, DocType.RESUME);
       return result;
     } catch (error: any) {
@@ -2763,7 +2762,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (!orchestrator) {
         return { success: false, error: 'Knowledge engine not initialized' };
       }
-      const { DocType } = require('../premium/electron/knowledge/types');
+      const { DocType } = require('./knowledge/types');
       orchestrator.deleteDocumentsByType(DocType.RESUME);
       return { success: true };
     } catch (error: any) {
@@ -2815,7 +2814,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (!orchestrator) {
         return { success: false, error: 'Knowledge engine not initialized. Please ensure API keys are configured.' };
       }
-      const { DocType } = require('../premium/electron/knowledge/types');
+      const { DocType } = require('./knowledge/types');
       const result = await orchestrator.ingestDocument(filePath, DocType.JD);
       return result;
     } catch (error: any) {
@@ -2830,7 +2829,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (!orchestrator) {
         return { success: false, error: 'Knowledge engine not initialized' };
       }
-      const { DocType } = require('../premium/electron/knowledge/types');
+      const { DocType } = require('./knowledge/types');
       orchestrator.deleteDocumentsByType(DocType.JD);
       return { success: true };
     } catch (error: any) {
@@ -2855,18 +2854,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       const cm = CredentialsManager.getInstance();
       const tavilyApiKey = cm.getTavilyApiKey();
       if (tavilyApiKey) {
-        const { TavilySearchProvider } = require('../premium/electron/knowledge/TavilySearchProvider');
+        const { TavilySearchProvider } = require('./knowledge/TavilySearchProvider');
         engine.setSearchProvider(new TavilySearchProvider(tavilyApiKey));
       } else {
-        const nativelyKey = cm.getNativelyApiKey();
-        if (nativelyKey) {
-          const { NativelySearchProvider } = require('../premium/electron/knowledge/NativelySearchProvider');
-          // Pass the real trial token when key is the __trial__ sentinel so the
-          // server can authenticate via x-trial-token instead of the invalid key.
-          const trialToken = nativelyKey === '__trial__' ? cm.getTrialToken() : undefined;
-          engine.setSearchProvider(new NativelySearchProvider(nativelyKey, trialToken ?? undefined));
-          console.log('[IPC] Company research: using Natively API search (no Tavily key configured)');
-        }
+        engine.setSearchProvider(null);
       }
 
       // Build full JD context so the dossier is tailored to the exact role
@@ -3149,7 +3140,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle("modes:upload-reference-file", async (_, modeId: string) => {
     try {
       if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
-      const result = await dialog.showOpenDialog({
+      const result: any = await dialog.showOpenDialog({
         properties: ['openFile'],
         filters: [
           { name: 'Text & Documents', extensions: ['txt', 'md', 'pdf', 'docx', 'doc'] },
@@ -3258,4 +3249,3 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 }
-

@@ -614,3 +614,371 @@ html[data-platform="linux"] body {
   border-radius: 8px !important;
   overflow: hidden;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   EDITORIAL CONSOLE — meeting overlay refresh
+   Typography-first redesign: serif voice for transcript, mono chrome for
+   technical surfaces (shortcuts, timer, channel indicators), system-ui for
+   body. One accent (phosphor green dark / emerald ink light).
+   ───────────────────────────────────────────────────────────────────────── */
+
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,400;9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap');
+
+:root {
+  --console-serif: 'Fraunces', 'Iowan Old Style', 'Apple Garamond', Georgia, serif;
+  --console-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --console-body: var(--font-system);
+
+  /* Dark — phosphor accent, deep ink panel */
+  --console-accent: #7CFFB2;          /* phosphor green */
+  --console-accent-dim: rgba(124, 255, 178, 0.55);
+  --console-accent-veil: rgba(124, 255, 178, 0.10);
+  --console-them: #E8E1CF;            /* warm ivory — interviewer voice */
+  --console-them-dim: rgba(232, 225, 207, 0.55);
+  --console-them-veil: rgba(232, 225, 207, 0.06);
+  --console-rule: rgba(255, 255, 255, 0.10);
+  --console-rule-strong: rgba(255, 255, 255, 0.18);
+  --console-ink: rgba(255, 255, 255, 0.94);
+  --console-ink-soft: rgba(255, 255, 255, 0.66);
+  --console-ink-dim: rgba(255, 255, 255, 0.42);
+  --console-key-bg: rgba(255, 255, 255, 0.04);
+  --console-key-border: rgba(255, 255, 255, 0.10);
+  --console-key-bg-hover: rgba(255, 255, 255, 0.07);
+}
+
+[data-theme='light'] {
+  --console-accent: #0F6E45;          /* deep emerald ink */
+  --console-accent-dim: rgba(15, 110, 69, 0.62);
+  --console-accent-veil: rgba(15, 110, 69, 0.08);
+  --console-them: #2A1F12;            /* near-black ochre */
+  --console-them-dim: rgba(42, 31, 18, 0.55);
+  --console-them-veil: rgba(42, 31, 18, 0.05);
+  --console-rule: rgba(15, 23, 42, 0.10);
+  --console-rule-strong: rgba(15, 23, 42, 0.20);
+  --console-ink: rgba(17, 24, 39, 0.94);
+  --console-ink-soft: rgba(55, 65, 81, 0.78);
+  --console-ink-dim: rgba(107, 114, 128, 0.78);
+  --console-key-bg: rgba(15, 23, 42, 0.04);
+  --console-key-border: rgba(15, 23, 42, 0.10);
+  --console-key-bg-hover: rgba(15, 23, 42, 0.07);
+}
+
+/* ── Type system ──────────────────────────────────────────────────── */
+.console-serif { font-family: var(--console-serif); font-feature-settings: "ss01", "ss02", "kern", "liga"; }
+.console-mono  { font-family: var(--console-mono); font-feature-settings: "tnum", "zero", "ss02", "kern"; letter-spacing: 0; }
+.console-mono-tight { font-family: var(--console-mono); letter-spacing: -0.01em; font-feature-settings: "tnum", "zero"; }
+
+/* Editorial display — small caps, tight tracking */
+.console-display {
+  font-family: var(--console-mono);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 9.5px;
+  line-height: 1;
+}
+
+.console-label {
+  font-family: var(--console-mono);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 9px;
+  line-height: 1;
+}
+
+/* ── Speaker rules ────────────────────────────────────────────────── */
+.console-them-rule {
+  border-left: 1px solid var(--console-them-dim);
+  padding-left: 12px;
+}
+
+.console-you-rule {
+  border-right: 1px solid var(--console-accent-dim);
+  padding-right: 12px;
+}
+
+.console-them-color { color: var(--console-them); }
+.console-them-soft  { color: var(--console-them-dim); }
+.console-you-color  { color: var(--console-accent); }
+.console-you-soft   { color: var(--console-accent-dim); }
+.console-ink        { color: var(--console-ink); }
+.console-ink-soft   { color: var(--console-ink-soft); }
+.console-ink-dim    { color: var(--console-ink-dim); }
+
+/* ── Hairline divider ─────────────────────────────────────────────── */
+.console-rule {
+  height: 1px;
+  background: linear-gradient(to right,
+    transparent,
+    var(--console-rule) 12%,
+    var(--console-rule) 88%,
+    transparent
+  );
+}
+
+/* ── Action key — typographic chip with mono shortcut ─────────────── */
+.console-key {
+  font-family: var(--console-body);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  color: var(--console-ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 8px;
+  border-radius: 6px;
+  background: var(--console-key-bg);
+  border: 1px solid var(--console-key-border);
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 120ms ease;
+}
+
+.console-key:hover {
+  background: var(--console-key-bg-hover);
+  border-color: var(--console-rule-strong);
+}
+
+.console-key:active {
+  transform: translateY(0.5px);
+}
+
+.console-key-glyph {
+  font-family: var(--console-mono);
+  font-weight: 500;
+  font-size: 10px;
+  color: var(--console-ink-soft);
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 1.5px 5px;
+  border-radius: 3.5px;
+  background: var(--console-key-bg);
+  border: 1px solid var(--console-key-border);
+  min-width: 28px;
+  justify-content: center;
+}
+
+.console-key:hover .console-key-glyph {
+  color: var(--console-accent);
+  border-color: var(--console-accent-dim);
+  background: var(--console-accent-veil);
+}
+
+/* ── Audio tape — left-edge channel meter ─────────────────────────── */
+.console-tape {
+  position: absolute;
+  top: 16px;
+  bottom: 16px;
+  left: 8px;
+  width: 2px;
+  border-radius: 1px;
+  background: linear-gradient(to bottom,
+    transparent,
+    var(--console-rule) 8%,
+    var(--console-rule) 92%,
+    transparent
+  );
+  pointer-events: none;
+  overflow: visible;
+}
+
+.console-tape-bead {
+  position: absolute;
+  left: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  transform: translateY(-50%);
+  transition: background 180ms ease, box-shadow 220ms ease, opacity 220ms ease;
+  opacity: 0;
+}
+
+.console-tape-bead.is-active {
+  opacity: 1;
+}
+
+.console-tape-bead.is-them {
+  background: var(--console-them);
+  box-shadow: 0 0 8px var(--console-them-dim), 0 0 2px var(--console-them);
+}
+
+.console-tape-bead.is-you {
+  background: var(--console-accent);
+  box-shadow: 0 0 10px var(--console-accent-dim), 0 0 2px var(--console-accent);
+}
+
+/* ── Live caret — phosphor cursor for partial transcripts ─────────── */
+@keyframes console-caret {
+  0%, 60% { opacity: 1; }
+  61%, 100% { opacity: 0; }
+}
+
+.console-caret {
+  display: inline-block;
+  width: 7px;
+  height: 1em;
+  margin-left: 4px;
+  vertical-align: -2px;
+  background: var(--console-accent);
+  animation: console-caret 1.05s steps(2, end) infinite;
+}
+
+.console-caret-them {
+  background: var(--console-them);
+}
+
+/* ── Stripe header (replaces top pill body) ───────────────────────── */
+.console-stripe {
+  font-family: var(--console-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--console-ink-soft);
+}
+
+.console-stripe-mark {
+  color: var(--console-ink);
+  letter-spacing: 0.32em;
+}
+
+.console-pulse-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--console-accent);
+  box-shadow: 0 0 6px var(--console-accent-dim);
+}
+
+@keyframes console-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.12); }
+}
+
+.console-pulse-dot.is-pulsing {
+  animation: console-pulse 1.6s ease-in-out infinite;
+}
+
+.console-pulse-dot.is-warn  { background: #E8B546; box-shadow: 0 0 6px rgba(232,181,70,0.55); }
+.console-pulse-dot.is-error { background: #FF6B6B; box-shadow: 0 0 6px rgba(255,107,107,0.55); }
+.console-pulse-dot.is-mute  { background: var(--console-ink-dim); box-shadow: none; }
+
+/* ── Editorial input field ────────────────────────────────────────── */
+.console-input {
+  font-family: var(--console-body);
+  font-size: 13px;
+  letter-spacing: -0.005em;
+  color: var(--console-ink);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--console-rule);
+  border-radius: 0;
+  padding: 10px 36px 10px 0;
+  width: 100%;
+  transition: border-color 160ms ease;
+}
+
+.console-input:focus {
+  outline: none;
+  border-bottom-color: var(--console-accent);
+}
+
+.console-input::placeholder {
+  color: var(--console-ink-dim);
+  font-style: italic;
+}
+
+/* ── Editorial chip — for tertiary controls (model selector, etc.) ── */
+.console-chip {
+  font-family: var(--console-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--console-ink-soft);
+  background: var(--console-key-bg);
+  border: 1px solid var(--console-key-border);
+  border-radius: 4px;
+  padding: 5px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.console-chip:hover {
+  color: var(--console-ink);
+  border-color: var(--console-rule-strong);
+  background: var(--console-key-bg-hover);
+}
+
+/* ── Send button — minimal arrow with phosphor halo when ready ────── */
+.console-send {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--console-ink-dim);
+  background: transparent;
+  border: 1px solid var(--console-rule);
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 220ms ease;
+}
+
+.console-send.is-ready {
+  color: var(--console-accent);
+  border-color: var(--console-accent-dim);
+  background: var(--console-accent-veil);
+  box-shadow: 0 0 16px -4px var(--console-accent-dim);
+}
+
+.console-send.is-ready:hover {
+  background: var(--console-accent);
+  color: #0A0B0E;
+  border-color: var(--console-accent);
+}
+
+[data-theme='light'] .console-send.is-ready:hover {
+  color: #FFFFFF;
+}
+
+/* ── Banner — refined notice strip ────────────────────────────────── */
+.console-banner {
+  font-family: var(--console-body);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 0;
+  border: 1px solid;
+  border-left-width: 2px;
+}
+
+.console-banner-warn  { border-color: var(--console-rule); border-left-color: #E8B546; background: rgba(232,181,70,0.04); }
+.console-banner-error { border-color: var(--console-rule); border-left-color: #FF6B6B; background: rgba(255,107,107,0.04); }
+
+/* ── Staggered entrance ──────────────────────────────────────────── */
+@keyframes console-enter {
+  0%   { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.console-enter {
+  animation: console-enter 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.console-enter-d1 { animation-delay: 60ms; }
+.console-enter-d2 { animation-delay: 120ms; }
+.console-enter-d3 { animation-delay: 180ms; }
+.console-enter-d4 { animation-delay: 240ms; }
+
+/* ── Conversation log — masked scroll, no scrollbar ───────────────── */
+.console-log {
+  scrollbar-width: none;
+  mask-image: linear-gradient(to bottom, transparent 0, black 14px, black calc(100% - 14px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 14px, black calc(100% - 14px), transparent 100%);
+}
+
+.console-log::-webkit-scrollbar { display: none; }

@@ -85,6 +85,20 @@ impl SpeakerInput {
         Ok(Self { device_id })
     }
 
+    /// Per-process audio capture is a macOS-only feature; on Windows we ignore the
+    /// PID list and fall through to the standard WASAPI loopback path.
+    pub fn new_with_pids(device_id: Option<String>, _target_pids: Vec<i32>) -> Result<Self> {
+        Self::new(device_id)
+    }
+
+    pub fn new_with_filter(
+        device_id: Option<String>,
+        _target_pids: Vec<i32>,
+        _bundle_id_prefixes: Vec<String>,
+    ) -> Result<Self> {
+        Self::new(device_id)
+    }
+
     pub fn stream(self) -> SpeakerStream {
         let rb = HeapRb::<f32>::new(RING_BUFFER_SAMPLES);
         let (producer, consumer) = rb.split();

@@ -17,6 +17,7 @@ const KEEPALIVE_INTERVAL_MS = 8000;
 
 export class DeepgramStreamingSTT extends EventEmitter {
     private apiKey: string;
+    private label: string;
     private live: any = null;
     private isActive = false;
     private shouldReconnect = false;
@@ -32,22 +33,23 @@ export class DeepgramStreamingSTT extends EventEmitter {
     private buffer: Buffer[] = [];
     private isConnecting = false;
 
-    constructor(apiKey: string) {
+    constructor(apiKey: string, label: string = 'default') {
         super();
         this.apiKey = apiKey;
+        this.label = label;
     }
 
     public setSampleRate(rate: number): void {
         if (this.sampleRate === rate) return;
         this.sampleRate = rate;
-        console.log(`[DeepgramStreaming] Sample rate set to ${rate}`);
+        console.log(`[DeepgramStreaming/${this.label}] Sample rate set to ${rate}`);
         if (this.isActive) this.restartStream();
     }
 
     public setAudioChannelCount(count: number): void {
         if (this.numChannels === count) return;
         this.numChannels = count;
-        console.log(`[DeepgramStreaming] Channel count set to ${count}`);
+        console.log(`[DeepgramStreaming/${this.label}] Channel count set to ${count}`);
         if (this.isActive) this.restartStream();
     }
 
@@ -55,14 +57,14 @@ export class DeepgramStreamingSTT extends EventEmitter {
         if (key === 'auto') {
             if (this.languageCode === 'multi') return;
             this.languageCode = 'multi';
-            console.log('[DeepgramStreaming] Language set to multilingual (multi)');
+            console.log(`[DeepgramStreaming/${this.label}] Language set to multilingual (multi)`);
             if (this.isActive) this.restartStream();
             return;
         }
         const config = RECOGNITION_LANGUAGES[key];
         if (config && this.languageCode !== config.iso639) {
             this.languageCode = config.iso639;
-            console.log(`[DeepgramStreaming] Language set to ${this.languageCode}`);
+            console.log(`[DeepgramStreaming/${this.label}] Language set to ${this.languageCode}`);
             if (this.isActive) this.restartStream();
         }
     }
@@ -70,7 +72,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
     public setCredentials(_path: string): void { }
 
     private restartStream(): void {
-        console.log('[DeepgramStreaming] Restarting due to config change...');
+        console.log(`[DeepgramStreaming/${this.label}] Restarting due to config change...`);
         this.stop();
         this.start();
     }
@@ -100,7 +102,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
         this.isConnecting = false;
         this.isOpen = false;
         this.buffer = [];
-        console.log('[DeepgramStreaming] Stopped');
+        console.log(`[DeepgramStreaming/${this.label}] Stopped`);
     }
 
     public write(chunk: Buffer): void {
@@ -119,7 +121,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
         try {
             this.live.send(chunk);
         } catch (err: any) {
-            console.error('[DeepgramStreaming] Send error:', err?.message);
+            console.error(`[DeepgramStreaming/${this.label}] Send error:`, err?.message);
         }
     }
 
@@ -127,7 +129,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
         if (this.isConnecting) return;
         this.isConnecting = true;
 
-        console.log(`[DeepgramStreaming] Connecting (rate=${this.sampleRate}, ch=${this.numChannels}, lang=${this.languageCode})...`);
+        console.log(`[DeepgramStreaming/${this.label}] Connecting (rate=${this.sampleRate}, ch=${this.numChannels}, lang=${this.languageCode})...`);
 
         try {
             const { createClient, LiveTranscriptionEvents } = require('@deepgram/sdk');
@@ -150,7 +152,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
             this.live.on(LiveTranscriptionEvents.Open, () => {
                 this.isConnecting = false;
                 this.isOpen = true;
-                console.log('[DeepgramStreaming] Connected');
+                console.log(`[DeepgramStreaming/${this.label}] Connected`);
 
                 // Register Transcript inside Open per SDK README pattern
                 this.live.on(LiveTranscriptionEvents.Transcript, (data: any) => {
@@ -158,7 +160,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
                         const alt = data.channel?.alternatives?.[0];
                         const transcript = alt?.transcript;
                         const isFinal = data.is_final ?? false;
-                        console.log(`[DeepgramStreaming] Transcript event — isFinal=${isFinal}, text="${transcript ?? '(empty)'}"`);
+                        console.log(`[DeepgramStreaming/${this.label}] Transcript event — isFinal=${isFinal}, text="${transcript ?? '(empty)'}"`);
                         if (!transcript) return;
                         this.emit('transcript', {
                             text: transcript,
@@ -166,7 +168,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
                             confidence: alt?.confidence ?? 1.0,
                         });
                     } catch (err) {
-                        console.error('[DeepgramStreaming] Parse error:', err);
+                        console.error(`[DeepgramStreaming/${this.label}] Parse error:`, err);
                     }
                 });
 
@@ -176,7 +178,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
                     try { this.live?.send(chunk); } catch { }
                 }
                 if (buffered.length > 0) {
-                    console.log(`[DeepgramStreaming] Flushed ${buffered.length} buffered chunks`);
+                    console.log(`[DeepgramStreaming/${this.label}] Flushed ${buffered.length} buffered chunks`);
                 }
 
                 // SDK keepAlive() every 8s prevents idle timeout (per Deepgram docs)
@@ -193,14 +195,14 @@ export class DeepgramStreamingSTT extends EventEmitter {
             });
 
             this.live.on(LiveTranscriptionEvents.Error, (err: any) => {
-                console.error('[DeepgramStreaming] Error:', err);
+                console.error(`[DeepgramStreaming/${this.label}] Error:`, err);
                 this.emit('error', err instanceof Error ? err : new Error(String(err)));
             });
 
             this.live.on(LiveTranscriptionEvents.Close, (event: any) => {
                 const code = event?.code ?? 'unknown';
                 const reason = event?.reason || '(empty)';
-                console.log(`[DeepgramStreaming] Closed (code=${code}, reason=${reason})`);
+                console.log(`[DeepgramStreaming/${this.label}] Closed (code=${code}, reason=${reason})`);
 
                 this.isOpen = false;
                 this.isConnecting = false;
@@ -212,7 +214,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
             });
 
         } catch (err: any) {
-            console.error('[DeepgramStreaming] Initialization error:', err?.message);
+            console.error(`[DeepgramStreaming/${this.label}] Initialization error:`, err?.message);
             this.isConnecting = false;
             if (this.shouldReconnect) this.scheduleReconnect();
         }
@@ -226,7 +228,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
         this.buffer = [];
 
         if (this.reconnectAttempts >= RECONNECT_MAX_ATTEMPTS) {
-            console.error(`[DeepgramStreaming] Max reconnect attempts reached — giving up`);
+            console.error(`[DeepgramStreaming/${this.label}] Max reconnect attempts reached — giving up`);
             this.emit('error', new Error('DeepgramStreamingSTT: max reconnect attempts exceeded'));
             return;
         }
@@ -237,7 +239,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
         );
         this.reconnectAttempts++;
 
-        console.log(`[DeepgramStreaming] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${RECONNECT_MAX_ATTEMPTS})...`);
+        console.log(`[DeepgramStreaming/${this.label}] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${RECONNECT_MAX_ATTEMPTS})...`);
 
         this.reconnectTimer = setTimeout(() => {
             this.reconnectTimer = null;

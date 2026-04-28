@@ -130,6 +130,9 @@ export interface ElectronAPI {
   generateSuggestion: (context: string, lastQuestion: string) => Promise<{ suggestion: string }>
   getInputDevices: () => Promise<Array<{ id: string; name: string }>>
   getOutputDevices: () => Promise<Array<{ id: string; name: string }>>
+  listAudioProcesses: () => Promise<Array<{ objectId: number; pid: number; bundleId: string | null; runningOutput: boolean }>>
+  setAudioSourcePids: (pids: number[]) => Promise<{ success: boolean }>
+  setAudioSourceFilter: (filter: { pids?: number[]; bundleIds?: string[] }) => Promise<{ success: boolean }>
   setRecognitionLanguage: (key: string) => Promise<{ success: boolean; error?: string }>
   getAiResponseLanguages: () => Promise<Array<{ label: string; code: string }>>
   setAiResponseLanguage: (language: string) => Promise<{ success: boolean; error?: string }>
@@ -246,6 +249,9 @@ export interface ElectronAPI {
   startAudioTest: (deviceId?: string) => Promise<{ success: boolean }>;
   stopAudioTest: () => Promise<{ success: boolean }>;
   onAudioTestLevel: (callback: (level: number) => void) => () => void;
+  startSourceAudioTest: (filter?: { pids?: number[]; bundleIds?: string[]; outputDeviceId?: string }) => Promise<{ success: boolean }>;
+  stopSourceAudioTest: () => Promise<{ success: boolean }>;
+  onSourceAudioTestLevel: (callback: (level: number) => void) => () => void;
 
   // Database
   flushDatabase: () => Promise<{ success: boolean }>;
