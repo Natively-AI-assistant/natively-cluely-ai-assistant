@@ -4,6 +4,7 @@
 
 import { EventEmitter } from 'events';
 import { LLMHelper } from './LLMHelper';
+import { PromptRegistryStore } from './services/PromptRegistryStore';
 import { SessionTracker, TranscriptSegment, SuggestionTrigger, ContextItem } from './SessionTracker';
 import {
     AnswerLLM, AssistLLM, BrainstormLLM, BugFinderLLM, ClarifyLLM, CodeHintLLM, FollowUpLLM, RecapLLM,
@@ -636,7 +637,6 @@ export class IntelligenceEngine extends EventEmitter {
      * User-defined prompt from Settings → Prompts (custom entries).
      */
     async runCustomPrompt(customId: string, imagePaths?: string[]): Promise<string | null> {
-        const { PromptRegistryStore } = require('../services/PromptRegistryStore');
         const spec = PromptRegistryStore.getInstance().getCustomForRun(customId);
         if (!spec) {
             this.setMode('idle');

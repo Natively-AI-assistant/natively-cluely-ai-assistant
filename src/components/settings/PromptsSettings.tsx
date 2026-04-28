@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { RotateCcw, ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react';
+import { RotateCcw, ChevronDown, ChevronUp, Plus, Trash2, Sparkles } from 'lucide-react';
 import { KeyRecorder } from '../ui/KeyRecorder';
 import { useShortcuts, type ShortcutConfig } from '../../hooks/useShortcuts';
 import { acceleratorToKeys, keysToAccelerator } from '../../utils/keyboardUtils';
@@ -425,6 +425,9 @@ export const PromptsSettings: React.FC = () => {
                                             />
                                             On
                                         </label>
+                                        <span className="text-[10px] text-text-tertiary whitespace-nowrap shrink-0" title="Runs this prompt system-wide">
+                                            Shortcut
+                                        </span>
                                         <KeyRecorder
                                             currentKeys={row.accelerator ? acceleratorToKeys(row.accelerator) : []}
                                             onSave={async (k) => {
@@ -466,6 +469,17 @@ export const PromptsSettings: React.FC = () => {
                                                 className="w-full rounded-lg border border-border-subtle bg-bg-input text-sm px-3 py-2"
                                             />
                                         </div>
+                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                            <label className="text-[11px] font-medium text-text-secondary">Global shortcut</label>
+                                            <KeyRecorder
+                                                currentKeys={row.accelerator ? acceleratorToKeys(row.accelerator) : []}
+                                                onSave={async (k) => {
+                                                    const acc = keysToAccelerator(k);
+                                                    await window.electronAPI.promptRegistryUpdateCustom(row.id, { accelerator: acc });
+                                                    await load();
+                                                }}
+                                            />
+                                        </div>
                                         <textarea
                                             value={draft}
                                             onChange={(e) => setDrafts((d) => ({ ...d, [rowKey]: e.target.value }))}
@@ -490,5 +504,66 @@ export const PromptsSettings: React.FC = () => {
                 </div>
             </section>
         </div>
+    );
+};
+
+/** Lists custom prompt shortcuts under Settings → Keybinds (mirrors Prompts tab). */
+export const CustomPromptsKeybindList: React.FC = () => {
+    const [customs, setCustoms] = useState<CustomRow[]>([]);
+
+    const load = useCallback(async () => {
+        if (!window.electronAPI?.promptRegistryGetState) return;
+        try {
+            const st = await window.electronAPI.promptRegistryGetState();
+            setCustoms((st.customs ?? []) as CustomRow[]);
+        } catch {
+            /* ignore */
+        }
+    }, []);
+
+    useEffect(() => {
+        void load();
+    }, [load]);
+
+    useEffect(() => {
+        if (!window.electronAPI?.onPromptsRegistryChanged) return;
+        return window.electronAPI.onPromptsRegistryChanged(() => void load());
+    }, [load]);
+
+    if (!window.electronAPI?.promptRegistryGetState || customs.length === 0) {
+        return null;
+    }
+
+    return (
+        <>
+            <div className="mt-6 mb-3 space-y-1">
+                <h4 className="text-sm font-bold text-text-primary">Custom prompts</h4>
+                <p className="text-[11px] text-text-secondary">
+                    Shortcuts also editable under Prompts. Empty prompts are omitted from the overlay until they have text.
+                </p>
+            </div>
+            <div className="space-y-1">
+                {customs.map((row) => (
+                    <div key={row.id} className="flex items-center justify-between gap-2 py-1.5 group">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center shrink-0">
+                                <Sparkles size={14} aria-hidden />
+                            </span>
+                            <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors truncate" title={row.label}>
+                                {row.label}
+                            </span>
+                        </div>
+                        <KeyRecorder
+                            currentKeys={row.accelerator ? acceleratorToKeys(row.accelerator) : []}
+                            onSave={async (k) => {
+                                const acc = keysToAccelerator(k);
+                                await window.electronAPI.promptRegistryUpdateCustom(row.id, { accelerator: acc });
+                                await load();
+                            }}
+                        />
+                    </div>
+                ))}
+            </div>
+        </>
     );
 };

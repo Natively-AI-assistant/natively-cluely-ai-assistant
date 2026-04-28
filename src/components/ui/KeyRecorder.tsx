@@ -74,20 +74,26 @@ export const KeyRecorder: React.FC<KeyRecorderProps> = ({ currentKeys, onSave, c
                     {recordedKeys.length > 0 ? recordedKeys.join(' + ') : 'Press keys...'}
                 </div>
             ) : (
-                <div className="flex items-center gap-1">
-                    {currentKeys.map((k, i) => {
-                        let displayKey = k;
-                        if (k === 'ArrowUp') displayKey = '↑';
-                        else if (k === 'ArrowDown') displayKey = '↓';
-                        else if (k === 'ArrowLeft') displayKey = '←';
-                        else if (k === 'ArrowRight') displayKey = '→';
+                <div className="flex items-center gap-1 min-h-[24px]">
+                    {currentKeys.length === 0 ? (
+                        <span className="text-[10px] text-text-tertiary px-1.5 py-0.5 rounded-md border border-dashed border-border-subtle group-hover:border-text-tertiary/50 group-hover:text-text-secondary transition-colors">
+                            Click to set shortcut
+                        </span>
+                    ) : (
+                        currentKeys.map((k, i) => {
+                            let displayKey = k;
+                            if (k === 'ArrowUp') displayKey = '↑';
+                            else if (k === 'ArrowDown') displayKey = '↓';
+                            else if (k === 'ArrowLeft') displayKey = '←';
+                            else if (k === 'ArrowRight') displayKey = '→';
 
-                        return (
-                            <span key={i} className="bg-bg-input text-text-secondary h-6 min-w-[26px] px-1.5 rounded-md text-xs font-sans flex items-center justify-center shadow-sm border border-border-subtle group-hover:border-text-tertiary transition-colors">
-                                {displayKey}
-                            </span>
-                        );
-                    })}
+                            return (
+                                <span key={i} className="bg-bg-input text-text-secondary h-6 min-w-[26px] px-1.5 rounded-md text-xs font-sans flex items-center justify-center shadow-sm border border-border-subtle group-hover:border-text-tertiary transition-colors">
+                                    {displayKey}
+                                </span>
+                            );
+                        })
+                    )}
                 </div>
             )}
         </div>

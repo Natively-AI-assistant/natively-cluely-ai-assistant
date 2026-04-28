@@ -13,7 +13,7 @@ import { AboutSection } from './AboutSection';
 import { HelpSettings } from './settings/HelpSettings';
 import { AIProvidersSettings } from './settings/AIProvidersSettings';
 import { NativelyApiSettings } from './settings/NativelyApiSettings';
-import { PromptsSettings } from './settings/PromptsSettings';
+import { PromptsSettings, CustomPromptsKeybindList } from './settings/PromptsSettings';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
@@ -2847,6 +2847,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         />
                                                     </div>
                                                 ))}
+                                                <CustomPromptsKeybindList />
                                             </div>
                                         </div>
 
