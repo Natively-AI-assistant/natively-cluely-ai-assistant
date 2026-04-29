@@ -39,14 +39,21 @@ impl SpeakerInput {
 
         let output_uid = output_device.uid()?;
         println!("[CoreAudioTap] Target device UID: {}", output_uid);
+        let output_uid_ns = ns::String::with_str(&output_uid.to_string());
 
-        // 2. Create global tap
-        let sub_device = cf::DictionaryOf::with_keys_values(
-            &[ca::sub_device_keys::uid()],
-            &[output_uid.as_type_ref()],
+        // 2. Create a device-scoped tap with explicit mute behavior.
+        // Binding the tap to the output UID avoids the aggregate device starting
+        // successfully while the tap itself only receives zero-filled buffers.
+        // Apple's default is Unmuted but some macOS versions have shipped with
+        // inconsistent defaults — set it explicitly to match AudioCap reference.
+        let mut tap_desc = ca::TapDesc::alloc().init_excluding_processes_and_device(
+            &ns::Array::new(),
+            &output_uid_ns,
+            0,
         );
-
-        let tap_desc = ca::TapDesc::with_mono_global_tap_excluding_processes(&ns::Array::new());
+        tap_desc.set_mono(true);
+        tap_desc.set_mixdown(true);
+        tap_desc.set_mute_behavior(ca::TapMuteBehavior::Unmuted);
         let tap = tap_desc.create_process_tap()?;
         println!("[CoreAudioTap] Tap created: {:?}", tap.uid());
 
@@ -55,11 +62,17 @@ impl SpeakerInput {
             &[tap.uid().unwrap().as_type_ref()],
         );
 
-        // 3. Create aggregate device descriptor
+        // 3. Create aggregate device descriptor.
+        // CoreAudio only accepts `main_sub_device` when the same UID is also present in
+        // `sub_device_list`; otherwise HAL silently leaves the main sub-device empty
+        // and the tap can start without producing input buffers.
         let agg_name = cf::String::from_str("NativelySystemAudioTap");
         let agg_uid = cf::Uuid::new().to_cf_string();
 
-        // Assign arrays to variables first to prevent temporary lifetime drops
+        let sub_device = cf::DictionaryOf::with_keys_values(
+            &[ca::sub_device_keys::uid()],
+            &[output_uid.as_type_ref()],
+        );
         let sub_device_arr = cf::ArrayOf::from_slice(&[sub_device.as_ref()]);
         let sub_tap_arr = cf::ArrayOf::from_slice(&[sub_tap.as_ref()]);
 
@@ -75,7 +88,6 @@ impl SpeakerInput {
                 agg_keys::tap_list(),
             ],
             &[
-                // FIX: Add missing .as_type_ref() calls so all array elements are identical &cf::Type
                 cf::Boolean::value_true().as_type_ref(),
                 cf::Boolean::value_false().as_type_ref(),
                 cf::Boolean::value_true().as_type_ref(),
@@ -162,11 +174,7 @@ extern "C" fn proc(
     if let Some(view) = av::AudioPcmBuf::with_buf_list_no_copy(&ctx.format, input_data, None) {
         if let Some(data) = view.data_f32_at(0) {
             let buffer_channels = input_data.buffers[0].number_channels;
-            let actual_ch = if buffer_channels > 1 {
-                buffer_channels
-            } else {
-                2
-            };
+            let actual_ch = buffer_channels.max(1);
             push_audio(ctx, data, actual_ch);
         }
     } else if ctx.format.common_format() == av::audio::CommonFormat::PcmF32 {
@@ -178,14 +186,8 @@ extern "C" fn proc(
             let data =
                 unsafe { std::slice::from_raw_parts(first_buffer.data as *const f32, float_count) };
 
-            // BUGFIX: macOS CoreAudio Tap notoriously ignores mono ASBD requests
-            // and secretly returns interleaved stereo (L,R,L,R).
             let buffer_channels = first_buffer.number_channels;
-            let actual_ch = if buffer_channels > 1 {
-                buffer_channels
-            } else {
-                2
-            };
+            let actual_ch = buffer_channels.max(1);
 
             push_audio(ctx, data, actual_ch);
         }
