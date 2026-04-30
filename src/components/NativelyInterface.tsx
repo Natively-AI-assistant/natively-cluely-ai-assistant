@@ -31,6 +31,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 // import { ModelSelector } from './ui/ModelSelector'; // REMOVED
+import MeetingContextPanel from './MeetingContextPanel';
 import TopPill from './ui/TopPill';
 import RollingTranscript from './ui/RollingTranscript';
 import LiveConversationPanel, { ConversationTurn } from './ui/LiveConversationPanel';
@@ -149,6 +150,51 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         // Live-update whenever mode is activated/deactivated
         const unsub = window.electronAPI?.onModeChanged?.((data: { id: string | null; name: string | null }) => {
             setActiveModeLabel(data.name);
+        });
+        return () => unsub?.();
+    }, []);
+
+    // Live meeting context (session-scoped — cleared on end-meeting / session-reset)
+    const [isMeetingPanelOpen, setIsMeetingPanelOpen] = useState(false);
+    const [meetingContextChars, setMeetingContextChars] = useState(0);
+
+    useEffect(() => {
+        window.electronAPI?.meetingContextGet?.()
+            .then(({ text }) => setMeetingContextChars(text.length))
+            .catch(() => {});
+        const unsub = window.electronAPI?.onMeetingContextChanged?.((info) => {
+            setMeetingContextChars(info.chars);
+        });
+        return () => unsub?.();
+    }, []);
+
+    // Active mode context status (mode name + reference file count + indexed chunk count)
+    const [contextStatus, setContextStatus] = useState<{
+        modeName: string | null;
+        templateType: string | null;
+        hasCustomContext: boolean;
+        referenceFileCount: number;
+        indexedChunkCount: number;
+    }>({ modeName: null, templateType: null, hasCustomContext: false, referenceFileCount: 0, indexedChunkCount: 0 });
+
+    useEffect(() => {
+        window.electronAPI?.modesGetContextStatus?.()
+            .then((s) => setContextStatus({
+                modeName: s.modeName,
+                templateType: s.templateType,
+                hasCustomContext: s.hasCustomContext,
+                referenceFileCount: s.referenceFileCount,
+                indexedChunkCount: s.indexedChunkCount,
+            }))
+            .catch(() => {});
+        const unsub = window.electronAPI?.onModeContextStatusChanged?.((s) => {
+            setContextStatus({
+                modeName: s.modeName,
+                templateType: s.templateType,
+                hasCustomContext: s.hasCustomContext,
+                referenceFileCount: s.referenceFileCount,
+                indexedChunkCount: s.indexedChunkCount,
+            });
         });
         return () => unsub?.();
     }, []);
@@ -407,6 +453,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
             setLivePartial(null);
             setConversationContext('');
             setAutopilotStatus('idle');
+            // Live meeting context is cleared in main process on session-reset; close the panel
+            // and reset the local count so the pill stops showing stale chars.
+            setIsMeetingPanelOpen(false);
+            setMeetingContextChars(0);
             analytics.trackConversationStarted();
         });
         return () => unsubscribe();
@@ -1829,6 +1879,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
             const target = e.target as HTMLElement;
             const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
 
+            // Cmd/Ctrl + Shift + M → toggle Meeting Context panel.
+            // M chosen over V to avoid clashing with paste-without-formatting in many apps.
+            if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'm' || e.key === 'M')) {
+                e.preventDefault();
+                setIsExpanded(true);
+                setIsMeetingPanelOpen((open) => !open);
+                return;
+            }
+
             if (isShortcutPressed(e, 'toggleVisibility')) {
                 // Always allow toggling visibility
                 e.preventDefault();
@@ -2204,6 +2263,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                                 </div>
                             </div>
 
+                            {/* Meeting Context inline drawer — anchored above input, inside the card */}
+                            <MeetingContextPanel
+                                open={isMeetingPanelOpen}
+                                onClose={() => setIsMeetingPanelOpen(false)}
+                            />
+
                             {/* Input Area */}
                             <div className="px-5 pt-0 pb-4">
                                 {/* Latent Context Preview (Attached Screenshot) */}
@@ -2316,6 +2381,63 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
 
                                         <span className="w-px h-3 bg-[var(--console-rule)]" aria-hidden />
 
+                                        {/* Context pill — aggregated status of what's currently injected
+                                            into the LLM (active mode, reference files, live meeting context).
+                                            Clicking still toggles the meeting context panel (⌘⇧M). */}
+                                        {(() => {
+                                            const showMode = contextStatus.modeName && contextStatus.templateType !== 'general';
+                                            const showFiles = contextStatus.referenceFileCount > 0;
+                                            const showLive = meetingContextChars > 0;
+                                            const anyActive = showMode || showFiles || showLive;
+
+                                            const segments: string[] = [];
+                                            if (showMode) segments.push(contextStatus.modeName!);
+                                            if (showFiles) {
+                                                const ragSuffix = contextStatus.indexedChunkCount > 0 ? ' · RAG' : '';
+                                                segments.push(`${contextStatus.referenceFileCount} file${contextStatus.referenceFileCount === 1 ? '' : 's'}${ragSuffix}`);
+                                            }
+                                            if (showLive) segments.push(`live ${meetingContextChars.toLocaleString()}`);
+
+                                            const titleParts: string[] = ['Click: open Meeting Context (⌘⇧M)'];
+                                            if (showMode) titleParts.push(`Active mode: ${contextStatus.modeName}`);
+                                            if (showFiles) titleParts.push(`${contextStatus.referenceFileCount} reference file${contextStatus.referenceFileCount === 1 ? '' : 's'} attached${contextStatus.indexedChunkCount > 0 ? ` · ${contextStatus.indexedChunkCount} chunks indexed for retrieval` : ' · not indexed yet'}`);
+                                            if (contextStatus.hasCustomContext) titleParts.push('Custom context set');
+                                            if (showLive) titleParts.push(`Live meeting context: ${meetingContextChars.toLocaleString()} chars`);
+
+                                            return (
+                                                <button
+                                                    onClick={() => {
+                                                        setIsExpanded(true);
+                                                        setIsMeetingPanelOpen((open) => !open);
+                                                    }}
+                                                    className={`console-chip no-drag flex items-center gap-1.5 ${
+                                                        anyActive ? 'console-ink' : 'console-ink-soft'
+                                                    }`}
+                                                    title={titleParts.join('\n')}
+                                                >
+                                                    {anyActive && (
+                                                        <span
+                                                            aria-hidden
+                                                            className="w-1.5 h-1.5 rounded-full"
+                                                            style={{
+                                                                background: showLive
+                                                                    ? 'rgb(74, 222, 128)'  // green-400 — live takes priority
+                                                                    : 'rgb(125, 211, 252)', // sky-300 — quieter for static context
+                                                                boxShadow: showLive
+                                                                    ? '0 0 6px rgba(74, 222, 128, 0.6)'
+                                                                    : 'none',
+                                                            }}
+                                                        />
+                                                    )}
+                                                    <span className="truncate max-w-[260px]">
+                                                        {segments.length > 0 ? segments.join(' · ') : 'Context'}
+                                                    </span>
+                                                </button>
+                                            );
+                                        })()}
+
+                                        <span className="w-px h-3 bg-[var(--console-rule)]" aria-hidden />
+
                                         <button
                                             onClick={(e) => {
                                                 if (isSettingsOpen) {
@@ -2365,6 +2487,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                     </motion.div>
                 )}
             </AnimatePresence>
+
         </div>
     );
 };

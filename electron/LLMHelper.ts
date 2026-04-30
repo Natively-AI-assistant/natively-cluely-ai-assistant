@@ -10,8 +10,10 @@ import {
   UNIVERSAL_SYSTEM_PROMPT, UNIVERSAL_ANSWER_PROMPT, UNIVERSAL_WHAT_TO_ANSWER_PROMPT,
   UNIVERSAL_RECAP_PROMPT, UNIVERSAL_FOLLOWUP_PROMPT, UNIVERSAL_FOLLOW_UP_QUESTIONS_PROMPT, UNIVERSAL_ASSIST_PROMPT,
   CUSTOM_SYSTEM_PROMPT, CUSTOM_ANSWER_PROMPT, CUSTOM_WHAT_TO_ANSWER_PROMPT,
-  CUSTOM_RECAP_PROMPT, CUSTOM_FOLLOWUP_PROMPT, CUSTOM_FOLLOW_UP_QUESTIONS_PROMPT, CUSTOM_ASSIST_PROMPT
+  CUSTOM_RECAP_PROMPT, CUSTOM_FOLLOWUP_PROMPT, CUSTOM_FOLLOW_UP_QUESTIONS_PROMPT, CUSTOM_ASSIST_PROMPT,
+  buildSystemPromptWithMeetingLayer
 } from "./llm/prompts"
+import { MeetingContextStore } from './services/MeetingContextStore'
 import { deepVariableReplacer, getByPath, injectImageIntoMessages } from './utils/curlUtils';
 import curl2Json from "@bany/curl-to-json";
 import { CustomProvider, CurlProvider } from './services/CredentialsManager';
@@ -707,7 +709,9 @@ CRITICAL RULES:
       const { ModesManager } = require('./services/ModesManager');
       const modesMgr = ModesManager.getInstance();
       activeModePrompt = modesMgr.getActiveModeSystemPromptSuffix() ?? '';
-      modeContextBlock = modesMgr.buildActiveModeContextBlock() ?? '';
+      // Use the question as the retrieval query so RAG fetches the most relevant
+      // chunks across reference files, instead of dumb-injecting whole files.
+      modeContextBlock = (await modesMgr.buildActiveModeContextBlock(lastQuestion)) ?? '';
     } catch (_modeErr: any) {
       console.warn('[LLMHelper] ModesManager load failed in generateSuggestion (non-fatal):', _modeErr?.message);
     }
@@ -2163,23 +2167,51 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     }
 
     // ============================================================
+    // LIVE MEETING CONTEXT INJECTION (session-scoped, freshest user input)
+    // Merged BEFORE mode context so it counts against `existingLen` when the
+    // mode-context cap is computed → mode context self-trims first on overflow.
+    // ============================================================
+    let hasMeetingContext = false;
+    try {
+      const meetingStore = MeetingContextStore.getInstance();
+      hasMeetingContext = meetingStore.hasContext();
+      const meetingBlock = meetingStore.buildContextBlock();
+      if (meetingBlock) {
+        context = context ? `${meetingBlock}\n\n${context}` : meetingBlock;
+      }
+    } catch (_meetingErr: any) {
+      console.warn('[LLMHelper] MeetingContextStore injection failed (non-fatal):', _meetingErr?.message);
+    }
+
+    // ============================================================
     // ACTIVE MODE INJECTION (Context + System Prompt Suffix)
     // ============================================================
     try {
       const { ModesManager } = require('./services/ModesManager');
       const modesMgr = ModesManager.getInstance();
       const modePromptSuffix = modesMgr.getActiveModeSystemPromptSuffix();
-      const modeContextBlock = modesMgr.buildActiveModeContextBlock();
+      // Use the user message as retrieval query → only the most relevant
+      // chunks of reference files get injected, not the whole files.
+      const modeContextBlock = await modesMgr.buildActiveModeContextBlock(message);
+
+      // Inject MEETING_CONTEXT_LAYER after CONTEXT_INTELLIGENCE_LAYER and before
+      // the ## ACTIVE MODE suffix (which the existing code keeps last). The
+      // helper handles all prompt shapes — appends at end for prompts that
+      // don't contain CONTEXT_INTELLIGENCE_LAYER (recap/refinement/follow-ups).
+      const baseForMode = systemPromptOverride || HARD_SYSTEM_PROMPT;
+      const baseWithMeeting = buildSystemPromptWithMeetingLayer(baseForMode, hasMeetingContext);
 
       if (modePromptSuffix) {
         // Mode prompt supplements the base prompt — preserves KO profile intelligence if already set
-        const baseForMode = systemPromptOverride || HARD_SYSTEM_PROMPT;
-        systemPromptOverride = `${baseForMode}\n\n## ACTIVE MODE\n${modePromptSuffix}`;
+        systemPromptOverride = `${baseWithMeeting}\n\n## ACTIVE MODE\n${modePromptSuffix}`;
+      } else if (hasMeetingContext) {
+        systemPromptOverride = baseWithMeeting;
       }
 
       if (modeContextBlock) {
-        // Guard combined context size: KO block + mode block must not exceed 60KB to protect
-        // the token budget for the actual user question.
+        // Guard combined context size: KO block + meeting block + mode block must not exceed
+        // 60KB to protect the token budget for the actual user question. `existingLen` already
+        // includes the meeting block (merged above), so mode context trims first on overflow.
         const existingLen = context?.length ?? 0;
         const COMBINED_CTX_CAP = 60_000;
         if (existingLen + modeContextBlock.length > COMBINED_CTX_CAP) {

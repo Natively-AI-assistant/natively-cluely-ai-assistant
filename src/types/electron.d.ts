@@ -168,6 +168,22 @@ export interface ElectronAPI {
   // Modes
   modesGetAll: () => Promise<Array<{ id: string; name: string; templateType: string; customContext: string; isActive: boolean; createdAt: string; referenceFileCount: number }>>
   modesGetActive: () => Promise<{ id: string; name: string; templateType: string; customContext: string; isActive: boolean; createdAt: string } | null>
+  modesGetContextStatus: () => Promise<{
+    modeId: string | null
+    modeName: string | null
+    templateType: string | null
+    hasCustomContext: boolean
+    referenceFileCount: number
+    indexedChunkCount: number
+  }>
+  onModeContextStatusChanged: (callback: (status: {
+    modeId: string | null
+    modeName: string | null
+    templateType: string | null
+    hasCustomContext: boolean
+    referenceFileCount: number
+    indexedChunkCount: number
+  }) => void) => () => void
   modesCreate: (params: { name: string; templateType: string }) => Promise<{ success: boolean; mode?: any; error?: string }>
   modesUpdate: (id: string, updates: { name?: string; templateType?: string; customContext?: string }) => Promise<{ success: boolean; error?: string }>
   modesDelete: (id: string) => Promise<{ success: boolean; error?: string }>
@@ -184,6 +200,13 @@ export interface ElectronAPI {
   // Meeting Lifecycle
   startMeeting: (metadata?: any) => Promise<{ success: boolean; error?: string }>
   endMeeting: () => Promise<{ success: boolean; error?: string }>
+
+  // Meeting Context (live, session-scoped)
+  meetingContextGet: () => Promise<{ success: true; text: string }>
+  meetingContextSet: (text: string) => Promise<{ success: boolean; error?: string; chars: number; truncated: boolean }>
+  meetingContextClear: () => Promise<{ success: true }>
+  onMeetingContextChanged: (callback: (info: { chars: number; hasContext: boolean }) => void) => () => void
+
   finalizeMicSTT: () => Promise<void>
   getRecentMeetings: () => Promise<Array<{ id: string; title: string; date: string; duration: string; summary: string }>>
   getMeetingDetails: (id: string) => Promise<any>

@@ -584,6 +584,26 @@ export class DatabaseManager {
             this.db.pragma('user_version = 14');
         }
 
+        // Version 14 → 15: Add mode_reference_chunks for RAG over reference files
+        if (version < 15) {
+            console.log('[DatabaseManager] Applying migration v14 → v15: Add mode_reference_chunks table');
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS mode_reference_chunks (
+                    id TEXT PRIMARY KEY,
+                    file_id TEXT NOT NULL,
+                    mode_id TEXT NOT NULL,
+                    chunk_index INTEGER NOT NULL,
+                    text TEXT NOT NULL,
+                    embedding BLOB,
+                    FOREIGN KEY(file_id) REFERENCES mode_reference_files(id) ON DELETE CASCADE,
+                    FOREIGN KEY(mode_id) REFERENCES modes(id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_mode_reference_chunks_mode ON mode_reference_chunks(mode_id);
+                CREATE INDEX IF NOT EXISTS idx_mode_reference_chunks_file ON mode_reference_chunks(file_id);
+            `);
+            this.db.pragma('user_version = 15');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 
@@ -721,6 +741,77 @@ export class DatabaseManager {
             this.db.prepare('DELETE FROM mode_reference_files WHERE id = ?').run(id);
         } catch (e) {
             console.error('[DatabaseManager] deleteReferenceFile failed:', e);
+        }
+    }
+
+    // ── Reference File Chunks (RAG) ───────────────────────────────
+
+    public insertReferenceChunks(chunks: Array<{
+        id: string;
+        fileId: string;
+        modeId: string;
+        chunkIndex: number;
+        text: string;
+        embedding: Buffer | null;
+    }>): void {
+        if (!this.db || chunks.length === 0) return;
+        try {
+            const stmt = this.db.prepare(`
+                INSERT INTO mode_reference_chunks (id, file_id, mode_id, chunk_index, text, embedding)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `);
+            const txn = this.db.transaction((items: typeof chunks) => {
+                for (const c of items) {
+                    stmt.run(c.id, c.fileId, c.modeId, c.chunkIndex, c.text, c.embedding);
+                }
+            });
+            txn(chunks);
+        } catch (e) {
+            console.error('[DatabaseManager] insertReferenceChunks failed:', e);
+        }
+    }
+
+    public getReferenceChunksForMode(modeId: string): Array<{
+        id: string;
+        file_id: string;
+        mode_id: string;
+        chunk_index: number;
+        text: string;
+        embedding: Buffer | null;
+        file_name?: string;
+    }> {
+        if (!this.db) return [];
+        try {
+            return this.db.prepare(`
+                SELECT c.*, f.file_name
+                FROM mode_reference_chunks c
+                LEFT JOIN mode_reference_files f ON f.id = c.file_id
+                WHERE c.mode_id = ?
+            `).all(modeId) as any[];
+        } catch (e) {
+            console.error('[DatabaseManager] getReferenceChunksForMode failed:', e);
+            return [];
+        }
+    }
+
+    public deleteReferenceChunksForFile(fileId: string): void {
+        if (!this.db) return;
+        try {
+            this.db.prepare('DELETE FROM mode_reference_chunks WHERE file_id = ?').run(fileId);
+        } catch (e) {
+            console.error('[DatabaseManager] deleteReferenceChunksForFile failed:', e);
+        }
+    }
+
+    public countReferenceChunksForMode(modeId: string): number {
+        if (!this.db) return 0;
+        try {
+            const row = this.db.prepare(
+                'SELECT COUNT(*) as n FROM mode_reference_chunks WHERE mode_id = ? AND embedding IS NOT NULL'
+            ).get(modeId) as { n: number } | undefined;
+            return row?.n ?? 0;
+        } catch (e) {
+            return 0;
         }
     }
 

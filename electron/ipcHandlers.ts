@@ -27,6 +27,18 @@ export function initializeIpcHandlers(appState: AppState): void {
     return true;
   };
 
+  const broadcastContextStatus = (): void => {
+    try {
+      const { ModesManager } = require('./services/ModesManager');
+      const status = ModesManager.getInstance().getActiveContextStatus();
+      BrowserWindow.getAllWindows().forEach(win => {
+        if (!win.isDestroyed()) win.webContents.send('mode-context-status-changed', status);
+      });
+    } catch (e: any) {
+      console.warn('[IPC] broadcastContextStatus failed:', e?.message);
+    }
+  };
+
   // Clears the active mode when the pro license is lost so non-general mode prompts
   // and reference files stop being injected into LLM calls.
   const clearActiveModeOnLicenseLoss = (): void => {
@@ -2103,12 +2115,57 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle("end-meeting", async () => {
     try {
       await appState.endMeeting();
+      // Live meeting context is session-scoped — clear on every end-meeting path.
+      try {
+        const { MeetingContextStore } = require('./services/MeetingContextStore');
+        MeetingContextStore.getInstance().clear();
+      } catch (_e) { /* non-fatal */ }
       return { success: true };
     } catch (error: any) {
       console.error("Error ending meeting:", error);
       return { success: false, error: error.message };
     }
   });
+
+  // ==========================================
+  // Meeting Context (live, session-scoped) Handlers
+  // ==========================================
+  {
+    const { MeetingContextStore } = require('./services/MeetingContextStore');
+    const store = MeetingContextStore.getInstance();
+
+    // Broadcast changes to all renderer windows so pills/indicators stay in sync.
+    // Payload omits the body — renderer pulls full text via meeting-context:get when needed.
+    store.on('changed', (info: { chars: number; hasContext: boolean }) => {
+      BrowserWindow.getAllWindows().forEach(win => {
+        if (!win.isDestroyed()) win.webContents.send('meeting-context:changed', info);
+      });
+    });
+
+    safeHandle("meeting-context:get", async () => {
+      return { success: true, text: store.get() };
+    });
+
+    safeHandle("meeting-context:set", async (_evt, text: unknown) => {
+      if (typeof text !== 'string') {
+        return { success: false, error: 'expected string', chars: 0, truncated: false };
+      }
+      // Trim leading/trailing whitespace server-side so the cap reflects meaningful chars only.
+      const trimmed = text.trim();
+      const wasTruncated = trimmed.length > MeetingContextStore.MAX_CHARS;
+      store.set(trimmed); // store enforces MAX_CHARS internally
+      return {
+        success: true,
+        chars: store.get().length,
+        truncated: wasTruncated,
+      };
+    });
+
+    safeHandle("meeting-context:clear", async () => {
+      store.clear();
+      return { success: true };
+    });
+  }
 
   safeHandle("get-recent-meetings", async () => {
     // Fetch from SQLite (limit 50)
@@ -2340,6 +2397,10 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       intelligenceManager.reset();
+      try {
+        const { MeetingContextStore } = require('./services/MeetingContextStore');
+        MeetingContextStore.getInstance().clear();
+      } catch (_e) { /* non-fatal */ }
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -3053,6 +3114,23 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle("modes:get-context-status", async () => {
+    try {
+      const { ModesManager } = require('./services/ModesManager');
+      return ModesManager.getInstance().getActiveContextStatus();
+    } catch (e: any) {
+      console.error('[IPC] modes:get-context-status error:', e);
+      return {
+        modeId: null,
+        modeName: null,
+        templateType: null,
+        hasCustomContext: false,
+        referenceFileCount: 0,
+        indexedChunkCount: 0,
+      };
+    }
+  });
+
   safeHandle("modes:create", async (_, params: { name: string; templateType: string }) => {
     try {
       if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
@@ -3084,6 +3162,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
       }
       mgr.updateMode(id, updates);
+      broadcastContextStatus();
       return { success: true };
     } catch (e: any) {
       console.error('[IPC] modes:update error:', e);
@@ -3120,6 +3199,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       BrowserWindow.getAllWindows().forEach(win => {
         if (!win.isDestroyed()) win.webContents.send('mode-changed', { id, name: activeName });
       });
+      broadcastContextStatus();
       return { success: true };
     } catch (e: any) {
       console.error('[IPC] modes:set-active error:', e);
@@ -3170,6 +3250,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       const { ModesManager } = require('./services/ModesManager');
       const file = ModesManager.getInstance().addReferenceFile({ modeId, fileName, content });
+      broadcastContextStatus();
       return { success: true, file };
     } catch (e: any) {
       console.error('[IPC] modes:upload-reference-file error:', e);
@@ -3182,6 +3263,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
       const { ModesManager } = require('./services/ModesManager');
       ModesManager.getInstance().deleteReferenceFile(id);
+      broadcastContextStatus();
       return { success: true };
     } catch (e: any) {
       console.error('[IPC] modes:delete-reference-file error:', e);

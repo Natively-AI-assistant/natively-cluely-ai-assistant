@@ -167,7 +167,9 @@ STYLE: Calm, neutral, professional, skim-friendly. Short bullets, no sub-bullets
                     const modeContext = (() => {
                         try {
                             const { ModesManager } = require('./services/ModesManager');
-                            const block = ModesManager.getInstance().buildActiveModeContextBlock();
+                            // Recap-time injection: no specific query → use sync fallback
+                            // that truncates whole files. Recap benefits from broad context.
+                            const block = ModesManager.getInstance().buildActiveModeContextBlockSync();
                             return block ? `\n${block}\n` : '';
                         } catch { return ''; }
                     })();

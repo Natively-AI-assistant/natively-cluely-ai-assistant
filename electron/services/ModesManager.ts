@@ -9,6 +9,67 @@ import {
     MODE_TECHNICAL_INTERVIEW_PROMPT,
 } from '../llm/prompts';
 
+type EmbedFn = (text: string) => Promise<number[]>;
+
+// Vector helpers (kept local to avoid coupling to KnowledgeDatabaseManager)
+function vectorToBuffer(vec: number[]): Buffer {
+    const f32 = new Float32Array(vec);
+    return Buffer.from(f32.buffer, f32.byteOffset, f32.byteLength);
+}
+function bufferToVector(buf: Buffer | null): number[] | null {
+    if (!buf) return null;
+    const f32 = new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
+    return Array.from(f32);
+}
+function cosine(a: number[], b: number[]): number {
+    let dot = 0, normA = 0, normB = 0;
+    const len = Math.min(a.length, b.length);
+    for (let i = 0; i < len; i++) {
+        dot += a[i] * b[i];
+        normA += a[i] * a[i];
+        normB += b[i] * b[i];
+    }
+    if (normA === 0 || normB === 0) return 0;
+    return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+// Chunking — paragraph-aware sliding window. Targets ~500-char chunks with
+// soft paragraph boundaries; falls back to hard char-based splits for long
+// blocks. Tuned for embedding small-to-medium models.
+const CHUNK_TARGET = 600;
+const CHUNK_MAX = 900;
+
+function chunkText(raw: string): string[] {
+    const text = raw.trim();
+    if (!text) return [];
+    const paragraphs = text.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+    const chunks: string[] = [];
+    let buffer = '';
+
+    const flush = () => {
+        if (buffer.trim()) chunks.push(buffer.trim());
+        buffer = '';
+    };
+
+    for (const para of paragraphs) {
+        // If a single paragraph blows past CHUNK_MAX, hard-split it
+        if (para.length > CHUNK_MAX) {
+            flush();
+            for (let i = 0; i < para.length; i += CHUNK_TARGET) {
+                chunks.push(para.slice(i, i + CHUNK_TARGET).trim());
+            }
+            continue;
+        }
+        if (buffer.length + para.length + 2 > CHUNK_TARGET && buffer.length > 0) {
+            flush();
+        }
+        buffer = buffer ? `${buffer}\n\n${para}` : para;
+        if (buffer.length >= CHUNK_TARGET) flush();
+    }
+    flush();
+    return chunks;
+}
+
 export type ModeTemplateType =
     | 'general'
     | 'looking-for-work'
@@ -154,6 +215,9 @@ function rowToSection(row: any): ModeNoteSection {
 export class ModesManager {
     private static instance: ModesManager;
 
+    private embedFn: EmbedFn | null = null;
+    private embedQueryFn: EmbedFn | null = null;
+
     private constructor() {}
 
     public static getInstance(): ModesManager {
@@ -162,6 +226,9 @@ export class ModesManager {
         }
         return ModesManager.instance;
     }
+
+    public setEmbedFn(fn: EmbedFn): void { this.embedFn = fn; }
+    public setEmbedQueryFn(fn: EmbedFn): void { this.embedQueryFn = fn; }
 
     // ── Modes ─────────────────────────────────────────────────────
 
@@ -245,6 +312,8 @@ export class ModesManager {
             fileName: params.fileName,
             content: params.content,
         });
+        // Chunk & embed in the background — does not block file creation
+        void this.indexReferenceFile(id, params.modeId, params.content);
         return {
             id,
             modeId: params.modeId,
@@ -255,7 +324,50 @@ export class ModesManager {
     }
 
     public deleteReferenceFile(id: string): void {
+        // Chunks are CASCADE-deleted via FK, but call explicitly for clarity
+        DatabaseManager.getInstance().deleteReferenceChunksForFile(id);
         DatabaseManager.getInstance().deleteReferenceFile(id);
+    }
+
+    /**
+     * Splits a reference file into chunks and stores embeddings. Best-effort —
+     * if embedding fails, chunks are still stored without vectors so they can
+     * be backfilled later (or at least surfaced via fallback truncation).
+     */
+    private async indexReferenceFile(fileId: string, modeId: string, content: string): Promise<void> {
+        const chunks = chunkText(content);
+        if (chunks.length === 0) return;
+
+        const records: Array<{
+            id: string;
+            fileId: string;
+            modeId: string;
+            chunkIndex: number;
+            text: string;
+            embedding: Buffer | null;
+        }> = [];
+
+        for (let i = 0; i < chunks.length; i++) {
+            let embedding: Buffer | null = null;
+            if (this.embedFn) {
+                try {
+                    const vec = await this.embedFn(chunks[i].slice(0, 4000));
+                    if (vec && vec.length > 0) embedding = vectorToBuffer(vec);
+                } catch (e: any) {
+                    console.warn(`[ModesManager] chunk ${i} embedding failed:`, e?.message);
+                }
+            }
+            records.push({
+                id: `chk_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`,
+                fileId,
+                modeId,
+                chunkIndex: i,
+                text: chunks[i],
+                embedding,
+            });
+        }
+
+        DatabaseManager.getInstance().insertReferenceChunks(records);
     }
 
     // ── Note Sections ─────────────────────────────────────────────
@@ -311,15 +423,20 @@ export class ModesManager {
 
     /**
      * Builds a context block to inject before the user message for the active mode.
-     * Includes custom context text and reference file contents.
+     * Includes custom context text and reference file content.
      *
-     * Limits: each file is capped at MAX_FILE_CHARS to prevent context window overflow.
-     * Total block is capped at MAX_TOTAL_CHARS across all files.
+     * Two paths:
+     *   • With a query → vector retrieval picks the top-K most relevant chunks
+     *     across all reference files (smaller, more relevant context).
+     *   • No query (or no embeddings yet) → falls back to truncated full-file
+     *     injection so the feature still works on first run / before indexing.
      */
     private static readonly MAX_FILE_CHARS = 12_000;
     private static readonly MAX_TOTAL_CHARS = 40_000;
+    private static readonly RAG_TOP_K = 6;
+    private static readonly RAG_BUDGET_CHARS = 8_000;
 
-    public buildActiveModeContextBlock(): string {
+    public async buildActiveModeContextBlock(query?: string): Promise<string> {
         const mode = this.getActiveMode();
         if (!mode) return '';
 
@@ -329,7 +446,43 @@ export class ModesManager {
             parts.push(`<user_context>\n${mode.customContext.trim()}\n</user_context>`);
         }
 
-        const files = this.getReferenceFiles(mode.id);
+        // Try retrieval path first — only when we have a query and an embed fn
+        const trimmedQuery = (query ?? '').trim();
+        const embedFn = this.embedQueryFn ?? this.embedFn;
+        const ragBlock = trimmedQuery && embedFn
+            ? await this.retrieveTopChunks(mode.id, trimmedQuery, embedFn)
+            : '';
+
+        if (ragBlock) {
+            parts.push(ragBlock);
+        } else {
+            // Fallback: dumb-inject truncated reference file content
+            parts.push(this.buildTruncatedReferenceBlock(mode.id));
+        }
+
+        return parts.filter(Boolean).join('\n\n');
+    }
+
+    /**
+     * Synchronous variant retained for callers that don't have a query (e.g.,
+     * status pings). Always uses the truncated fallback path. New callers
+     * should prefer the async `buildActiveModeContextBlock(query)`.
+     */
+    public buildActiveModeContextBlockSync(): string {
+        const mode = this.getActiveMode();
+        if (!mode) return '';
+        const parts: string[] = [];
+        if (mode.customContext.trim()) {
+            parts.push(`<user_context>\n${mode.customContext.trim()}\n</user_context>`);
+        }
+        const fallback = this.buildTruncatedReferenceBlock(mode.id);
+        if (fallback) parts.push(fallback);
+        return parts.join('\n\n');
+    }
+
+    private buildTruncatedReferenceBlock(modeId: string): string {
+        const files = this.getReferenceFiles(modeId);
+        const parts: string[] = [];
         let totalChars = 0;
 
         for (const file of files) {
@@ -339,7 +492,6 @@ export class ModesManager {
             const remaining = ModesManager.MAX_TOTAL_CHARS - totalChars;
             if (remaining <= 0) break;
 
-            // Slice first, then append truncation marker so total never exceeds MAX_FILE_CHARS
             const capped = raw.length > ModesManager.MAX_FILE_CHARS
                 ? raw.slice(0, ModesManager.MAX_FILE_CHARS - 14) + '\n[...truncated]'
                 : raw;
@@ -349,7 +501,114 @@ export class ModesManager {
             parts.push(`<reference_file name="${file.fileName}">\n${content}\n</reference_file>`);
             totalChars += content.length;
         }
-
         return parts.join('\n\n');
+    }
+
+    private async retrieveTopChunks(modeId: string, query: string, embedFn: EmbedFn): Promise<string> {
+        const rows = DatabaseManager.getInstance().getReferenceChunksForMode(modeId);
+        const usableRows = rows.filter(r => r.embedding != null);
+        if (usableRows.length === 0) return '';
+
+        let queryVec: number[];
+        try {
+            queryVec = await embedFn(query.slice(0, 2000));
+        } catch (e: any) {
+            console.warn('[ModesManager] retrieval embed failed:', e?.message);
+            return '';
+        }
+        if (!queryVec || queryVec.length === 0) return '';
+
+        const scored: Array<{ row: typeof rows[number]; score: number }> = [];
+        for (const row of usableRows) {
+            const vec = bufferToVector(row.embedding);
+            if (!vec || vec.length !== queryVec.length) continue;
+            scored.push({ row, score: cosine(queryVec, vec) });
+        }
+        scored.sort((a, b) => b.score - a.score);
+
+        const picked = scored.slice(0, ModesManager.RAG_TOP_K);
+        if (picked.length === 0) return '';
+
+        // Group chunks by file_name to keep blocks readable
+        const byFile = new Map<string, string[]>();
+        let charBudget = ModesManager.RAG_BUDGET_CHARS;
+        for (const { row } of picked) {
+            if (charBudget <= 0) break;
+            const text = row.text.length > charBudget
+                ? row.text.slice(0, charBudget) + '…'
+                : row.text;
+            const fileName = row.file_name || 'reference';
+            if (!byFile.has(fileName)) byFile.set(fileName, []);
+            byFile.get(fileName)!.push(text);
+            charBudget -= text.length;
+        }
+
+        const blocks: string[] = [];
+        for (const [fileName, chunks] of byFile.entries()) {
+            const body = chunks.join('\n\n---\n\n');
+            blocks.push(`<reference_file name="${fileName}" retrieved="true">\n${body}\n</reference_file>`);
+        }
+        return blocks.join('\n\n');
+    }
+
+    /**
+     * Status snapshot for the UI — what's currently injected when the active
+     * mode runs. Cheap to call; safe in render paths.
+     */
+    public getActiveContextStatus(): {
+        modeId: string | null;
+        modeName: string | null;
+        templateType: ModeTemplateType | null;
+        hasCustomContext: boolean;
+        referenceFileCount: number;
+        indexedChunkCount: number;
+    } {
+        const mode = this.getActiveMode();
+        if (!mode) {
+            return {
+                modeId: null,
+                modeName: null,
+                templateType: null,
+                hasCustomContext: false,
+                referenceFileCount: 0,
+                indexedChunkCount: 0,
+            };
+        }
+        const files = this.getReferenceFiles(mode.id);
+        const indexedChunkCount = DatabaseManager.getInstance().countReferenceChunksForMode(mode.id);
+        return {
+            modeId: mode.id,
+            modeName: mode.name,
+            templateType: mode.templateType,
+            hasCustomContext: mode.customContext.trim().length > 0,
+            referenceFileCount: files.length,
+            indexedChunkCount,
+        };
+    }
+
+    /**
+     * Re-indexes any reference files that have no chunks yet (e.g. files
+     * uploaded before RAG was enabled, or when embedFn became available
+     * after upload). Idempotent — skips files that already have chunks.
+     */
+    public async reindexMissingReferenceFiles(): Promise<{ indexed: number; skipped: number }> {
+        if (!this.embedFn) return { indexed: 0, skipped: 0 };
+        const db = DatabaseManager.getInstance();
+        const allModes = this.getModes();
+        let indexed = 0;
+        let skipped = 0;
+        for (const mode of allModes) {
+            const files = this.getReferenceFiles(mode.id);
+            for (const file of files) {
+                const existing = db.getReferenceChunksForMode(mode.id).filter(c => c.file_id === file.id);
+                if (existing.length > 0) {
+                    skipped++;
+                    continue;
+                }
+                await this.indexReferenceFile(file.id, mode.id, file.content);
+                indexed++;
+            }
+        }
+        return { indexed, skipped };
     }
 }

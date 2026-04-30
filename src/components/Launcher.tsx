@@ -244,7 +244,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         try {
             const inputDeviceId = localStorage.getItem('preferredInputDeviceId');
             const outputDeviceId = localStorage.getItem('preferredOutputDeviceId');
-            const enableVoiceProcessing = localStorage.getItem('enableVoiceProcessing') !== 'false';
+            const enableVoiceProcessing = localStorage.getItem('enableVoiceProcessing') === 'true';
 
             await window.electronAPI.startMeeting({
                 title: preparedEvent.title,

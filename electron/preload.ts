@@ -310,6 +310,22 @@ interface ElectronAPI {
   // Modes API
   modesGetAll: () => Promise<Array<{ id: string; name: string; templateType: string; customContext: string; isActive: boolean; createdAt: string; referenceFileCount: number }>>;
   modesGetActive: () => Promise<{ id: string; name: string; templateType: string; customContext: string; isActive: boolean; createdAt: string } | null>;
+  modesGetContextStatus: () => Promise<{
+    modeId: string | null;
+    modeName: string | null;
+    templateType: string | null;
+    hasCustomContext: boolean;
+    referenceFileCount: number;
+    indexedChunkCount: number;
+  }>;
+  onModeContextStatusChanged: (callback: (status: {
+    modeId: string | null;
+    modeName: string | null;
+    templateType: string | null;
+    hasCustomContext: boolean;
+    referenceFileCount: number;
+    indexedChunkCount: number;
+  }) => void) => () => void;
   modesCreate: (params: { name: string; templateType: string }) => Promise<{ success: boolean; mode?: any; error?: string }>;
   modesUpdate: (id: string, updates: { name?: string; templateType?: string; customContext?: string }) => Promise<{ success: boolean; error?: string }>;
   modesDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
@@ -715,9 +731,30 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return () => { ipcRenderer.removeListener('mode-changed', subscription); };
   },
 
+  modesGetContextStatus: () => ipcRenderer.invoke('modes:get-context-status'),
+  onModeContextStatusChanged: (callback: (status: any) => void) => {
+    const subscription = (_: any, status: any) => callback(status);
+    ipcRenderer.on('mode-context-status-changed', subscription);
+    return () => { ipcRenderer.removeListener('mode-context-status-changed', subscription); };
+  },
+
   // Meeting Lifecycle
   startMeeting: (metadata?: any) => ipcRenderer.invoke("start-meeting", metadata),
   endMeeting: () => ipcRenderer.invoke("end-meeting"),
+
+  // Meeting Context (live, session-scoped — cleared on session-reset / end-meeting)
+  meetingContextGet: () => ipcRenderer.invoke("meeting-context:get") as Promise<{ success: true; text: string }>,
+  meetingContextSet: (text: string) => ipcRenderer.invoke("meeting-context:set", text) as Promise<{
+    success: boolean; error?: string; chars: number; truncated: boolean;
+  }>,
+  meetingContextClear: () => ipcRenderer.invoke("meeting-context:clear") as Promise<{ success: true }>,
+  onMeetingContextChanged: (callback: (info: { chars: number; hasContext: boolean }) => void) => {
+    const subscription = (_: any, info: { chars: number; hasContext: boolean }) => callback(info);
+    ipcRenderer.on("meeting-context:changed", subscription);
+    return () => {
+      ipcRenderer.removeListener("meeting-context:changed", subscription);
+    };
+  },
   finalizeMicSTT: () => ipcRenderer.invoke("finalize-mic-stt"),
   getRecentMeetings: () => ipcRenderer.invoke("get-recent-meetings"),
   getMeetingDetails: (id: string) => ipcRenderer.invoke("get-meeting-details", id),

@@ -1894,6 +1894,14 @@ export class AppState {
     this.getWindowHelper().getOverlayWindow()?.webContents.send('session-reset');
     this.getWindowHelper().getLauncherWindow()?.webContents.send('session-reset');
 
+    // Live meeting context is session-scoped. Clear any residue from the previous
+    // meeting (covers crash recovery / non-IPC end paths where end-meeting handler
+    // didn't fire). Safe to call when already empty — clear() is a no-op then.
+    try {
+      const { MeetingContextStore } = require('./services/MeetingContextStore');
+      MeetingContextStore.getInstance().clear();
+    } catch (_e) { /* non-fatal */ }
+
     // ★ ASYNC AUDIO INIT: Return INSTANTLY so the IPC response goes back
     // to the renderer immediately, allowing the UI to switch to overlay
     // without waiting for SCK/audio initialization (which takes 5-7 seconds).
@@ -2287,6 +2295,33 @@ export class AppState {
       }
 
       llmHelper.setKnowledgeOrchestrator(this.knowledgeOrchestrator);
+
+      // Wire the same embed pipeline into ModesManager so reference files use RAG
+      try {
+        const { ModesManager } = require('./services/ModesManager');
+        const modesMgr = ModesManager.getInstance();
+        modesMgr.setEmbedFn(async (text: string) => {
+          const pipeline = self.ragManager?.getEmbeddingPipeline();
+          if (!pipeline) throw new Error('RAG pipeline not available');
+          await pipeline.waitForReady();
+          return await pipeline.getEmbedding(text);
+        });
+        modesMgr.setEmbedQueryFn(async (text: string) => {
+          const pipeline = self.ragManager?.getEmbeddingPipeline();
+          if (!pipeline) throw new Error('RAG pipeline not available');
+          await pipeline.waitForReady();
+          return await pipeline.getEmbeddingForQuery(text);
+        });
+        // Backfill any reference files uploaded before RAG was wired up.
+        // Fire-and-forget — runs once at startup, idempotent.
+        void modesMgr.reindexMissingReferenceFiles().then((res: { indexed: number; skipped: number }) => {
+          if (res.indexed > 0) {
+            console.log(`[ModesManager] reindexed ${res.indexed} reference file(s) (${res.skipped} skipped)`);
+          }
+        }).catch((e: any) => console.warn('[ModesManager] reindex failed:', e?.message));
+      } catch (e: any) {
+        console.warn('[AppState] ModesManager RAG wiring failed (non-fatal):', e?.message);
+      }
 
       const sm = SettingsManager.getInstance();
       if (sm.get('knowledgeMode')) {

@@ -922,7 +922,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     // moment the native module ships, the toggle takes effect with no UI
     // change.
     const [enableVoiceProcessing, setEnableVoiceProcessing] = useState<boolean>(() => {
-        return localStorage.getItem('enableVoiceProcessing') !== 'false';
+        return localStorage.getItem('enableVoiceProcessing') === 'true';
     });
 
     const [cameraSnap, setCameraSnap] = useState<boolean>(() =>

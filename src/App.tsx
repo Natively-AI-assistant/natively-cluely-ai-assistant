@@ -356,9 +356,10 @@ const App: React.FC = () => {
       // AEC / voice processing — when on, the main process will request the
       // microphone capture to apply Apple's AUVoiceProcessingIO (or a software
       // echo canceller fallback) so speaker bleed is removed before the mic
-      // signal reaches the STT. Defaults to ON since most users will be on
-      // built-in speakers during interviews.
-      const enableVoiceProcessing = localStorage.getItem('enableVoiceProcessing') !== 'false';
+      // signal reaches the STT. Defaults to OFF: AUVoiceProcessingIO causes
+      // macOS to duck all other system audio while active, making meeting
+      // audio hard to hear. Users on built-in speakers can enable it in Settings.
+      const enableVoiceProcessing = localStorage.getItem('enableVoiceProcessing') === 'true';
 
       // Override output device ID to force SCK if experimental mode is enabled
       // Default to CoreAudio unless experimental is enabled

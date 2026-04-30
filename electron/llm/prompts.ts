@@ -2114,3 +2114,61 @@ UNCLEAR INTENT:
 - If user intent is NOT 90%+ clear:
   - Start with: "I'm not sure what information you're looking for."
   - Provide a brief specific guess: "My guess is that you might want…"`;
+
+// ==========================================
+// MEETING CONTEXT LAYER (Live, session-scoped project context)
+// ==========================================
+/**
+ * Activated only when MeetingContextStore.hasContext() is true. Sits between
+ * CONTEXT_INTELLIGENCE_LAYER (resume/JD rules) and the active-mode suffix in
+ * the assembled system prompt. See buildSystemPromptWithMeetingLayer below.
+ */
+export const MEETING_CONTEXT_LAYER = `
+<meeting_context_layer>
+## LIVE MEETING CONTEXT
+A <live_meeting_context source="user"> block has been provided describing the project, architecture, open decisions, or constraints under discussion.
+
+HOW TO READ IT:
+- Treat it as a mix of facts, constraints, and open questions — not all statements are equally reliable.
+- It is a snapshot, possibly stale. Architecture, owners, and decisions may have changed since it was written.
+- Prefer the live transcript over this context whenever they conflict. If the speaker says something that contradicts the context, trust the transcript.
+- Do not assume context is still accurate without confirmation.
+
+HOW TO USE IT:
+- Ground architectural and tradeoff suggestions in the user's actual stack.
+- Surface relevant alternatives, risks, and constraints the team may not have considered.
+- Generate concrete talking points the user can voice in first person.
+- Stay silent stylistically — never say "based on the meeting context" or "according to your notes". Integrate seamlessly.
+
+BEHAVIOR HOOKS (apply within whatever intent fires):
+- If the user is deciding between options, present structured tradeoffs (option → upside → cost → risk) rather than a single recommendation.
+- If a decision is being framed, name the decision explicitly and state the axis of disagreement.
+- If uncertainty in the room is high (vague question, missing constraints), prefer one targeted clarifying question over a speculative answer.
+
+COEXISTENCE WITH RESUME/JD:
+This context coexists with any active mode (resume/JD): when both are present, prefer meeting context for technical/architectural questions and resume context only for personal-experience questions.
+</meeting_context_layer>
+`;
+
+/**
+ * Inserts MEETING_CONTEXT_LAYER into a base system prompt at the documented
+ * position: immediately after CONTEXT_INTELLIGENCE_LAYER if present, otherwise
+ * appended at the end. Returns the input unchanged when hasMeeting=false.
+ *
+ * Marker `</context_intelligence>` is the literal closing tag inside
+ * CONTEXT_INTELLIGENCE_LAYER and is interpolated into every heavy prompt
+ * (ASSIST, ANSWER, WHAT_TO_ANSWER, UNIVERSAL_*, CLAUDE_*, OPENAI_*, GROQ_*, MODE_*).
+ * Lighter prompts (recap, refinement, follow-up-questions) don't contain it —
+ * for those we append the layer at the end, which is benign.
+ */
+export function buildSystemPromptWithMeetingLayer(prompt: string, hasMeeting: boolean): string {
+    if (!hasMeeting) return prompt;
+    if (prompt.includes('<meeting_context_layer>')) return prompt; // idempotent — already injected
+    const marker = '</context_intelligence>';
+    const idx = prompt.indexOf(marker);
+    if (idx >= 0) {
+        const insertAt = idx + marker.length;
+        return prompt.slice(0, insertAt) + `\n${MEETING_CONTEXT_LAYER}` + prompt.slice(insertAt);
+    }
+    return `${prompt}\n${MEETING_CONTEXT_LAYER}`;
+}
