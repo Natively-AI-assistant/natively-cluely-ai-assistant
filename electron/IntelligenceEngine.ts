@@ -300,7 +300,8 @@ export class IntelligenceEngine extends EventEmitter {
             let fullAnswer = "";
             // RC-03 fix: hold a reference to the generator so we can call .return()
             // to properly terminate the network request when a new generation starts.
-            const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePaths, manualTrigger);
+            const conversationRegister = this.session.getConversationRegister();
+            const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePaths, manualTrigger, conversationRegister);
             let streamAborted = false;
 
             for await (const token of stream) {

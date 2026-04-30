@@ -33,6 +33,19 @@ export interface AssistantResponse {
     questionContext: string;
 }
 
+/**
+ * Structured anti-repetition register, populated on every assistant response.
+ * Replaces the previous strategy of relying on the model to notice repetition
+ * inside the last-3-responses block. Each bucket is bounded — see SessionTracker
+ * MAX_REGISTER_* constants for caps.
+ */
+export interface ConversationRegister {
+    anchorsUsed: Set<string>;       // proper-noun-shaped tokens the candidate has invoked
+    metricsDropped: Set<string>;    // numeric specifics with units / percent
+    projectsMentioned: Set<string>; // anchors the model framed as projects (Title-Case 2-4 word)
+    openersUsed: string[];          // first sentence (or first ~8 words) of recent responses, ordered
+}
+
 export class SessionTracker {
     // Context management (mirrors Swift ContextManager)
     private contextItems: ContextItem[] = [];
@@ -44,6 +57,31 @@ export class SessionTracker {
 
     // Temporal RAG: Track all assistant responses in session for anti-repetition
     private assistantResponseHistory: AssistantResponse[] = [];
+
+    // Structured anti-repetition register — see ConversationRegister.
+    private conversationRegister: ConversationRegister = {
+        anchorsUsed: new Set(),
+        metricsDropped: new Set(),
+        projectsMentioned: new Set(),
+        openersUsed: [],
+    };
+    private static readonly MAX_REGISTER_ANCHORS = 30;
+    private static readonly MAX_REGISTER_METRICS = 30;
+    private static readonly MAX_REGISTER_PROJECTS = 20;
+    private static readonly MAX_REGISTER_OPENERS = 8;
+    // Title-Case proper-noun runs: "NxtHumans", "IPG Scout", "Multi-Agent Orchestrator".
+    // Single capitalised words are too noisy ("I", "The", "So") so we require length>=2 chars
+    // and either a multi-word run, an internal capital (camel/Pascal), or an all-caps token.
+    private static readonly ANCHOR_PATTERN = /\b(?:[A-Z][A-Za-z0-9]+(?:[-/&]?\s+[A-Z][A-Za-z0-9]+){1,3}|[A-Z][a-z]+[A-Z][A-Za-z0-9]+|[A-Z]{2,}[A-Za-z0-9]*)\b/g;
+    // Numbers with a unit or percent — captures "40%", "825K records", "3 weeks", "50k users".
+    private static readonly METRIC_PATTERN = /\b\d+(?:[.,]\d+)?\s*(?:%|percent|x|×|k\b|m\b|bn\b|s\b|ms|seconds?|secs?|minutes?|mins?|hours?|hrs?|days?|weeks?|months?|years?|yrs?|users?|customers?|requests?|rps|qps|tps|gb|mb|kb|tb|records?|rows?|deals?|reps?|engineers?|people)\b/gi;
+    // Stop-list of capitalised tokens that pollute anchor extraction. Keep it short — the
+    // pattern itself already filters single capitalised words.
+    private static readonly ANCHOR_STOPLIST = new Set([
+        'I', 'The', 'A', 'An', 'My', 'Our', 'Their', 'His', 'Her',
+        'So', 'Yes', 'No', 'Well', 'Yeah', 'OK', 'Okay',
+        'Time', 'Space', 'Follow', 'Why',
+    ]);
 
     // Meeting metadata
     private currentMeetingMetadata: {
@@ -299,6 +337,10 @@ export class SessionTracker {
         }
 
         console.log(`[SessionTracker] lastAssistantMessage updated, history size: ${this.assistantResponseHistory.length}`);
+
+        // Structured anti-repetition extraction. Pure-regex; no LLM call.
+        this.updateConversationRegister(cleanText);
+
         this.evictOldEntries();
     }
 
@@ -361,6 +403,10 @@ export class SessionTracker {
 
     getAssistantResponseHistory(): AssistantResponse[] {
         return this.assistantResponseHistory;
+    }
+
+    getConversationRegister(): ConversationRegister {
+        return this.conversationRegister;
     }
 
     getLastInterimInterviewer(): TranscriptSegment | null {
@@ -492,6 +538,12 @@ export class SessionTracker {
         this.codingQuestionSource = null;
         this.codingQuestionSetAt = null;
         this.recentInterviewerBuffer = [];
+        this.conversationRegister = {
+            anchorsUsed: new Set(),
+            metricsDropped: new Set(),
+            projectsMentioned: new Set(),
+            openersUsed: [],
+        };
     }
 
     // ============================================
@@ -502,6 +554,91 @@ export class SessionTracker {
         if (speaker === 'user') return 'user';
         if (speaker === 'assistant') return 'assistant';
         return 'interviewer'; // system audio = interviewer
+    }
+
+    /**
+     * Pure-regex extraction of anchors / metrics / openers from a fresh assistant
+     * response. Intentionally cheap (single pass per pattern, bounded loops). The
+     * model never sees the buckets directly — they are formatted into the
+     * <already_said_this_interview> block by WhatToAnswerLLM.
+     *
+     * Trade-off note: the anchor pattern over-collects (it'll grab phrases like
+     * "New York", "Postgres" mid-sentence). That's fine; the goal is to give the
+     * model a list of "things you've already said" — false positives just nudge
+     * it to vary, which is what we want anyway.
+     */
+    private updateConversationRegister(text: string): void {
+        // Strip code blocks before extraction — code is full of capitalised tokens
+        // (class names, identifiers) that aren't conversational anchors.
+        const conversational = text.replace(/```[\s\S]*?```/g, ' ').replace(/`[^`]+`/g, ' ');
+
+        // 1. Anchors / projects (Title-Case proper noun runs)
+        const anchorMatches = conversational.match(SessionTracker.ANCHOR_PATTERN) || [];
+        for (const raw of anchorMatches) {
+            const candidate = raw.trim();
+            if (!candidate || SessionTracker.ANCHOR_STOPLIST.has(candidate)) continue;
+            this.conversationRegister.anchorsUsed.add(candidate);
+            // Multi-word Title-Case spans (length >= 2 words) read as project / product names
+            // more than as bare anchors — track them separately so the block can mention both.
+            if (/\s/.test(candidate)) {
+                this.conversationRegister.projectsMentioned.add(candidate);
+            }
+        }
+        this.boundSet(this.conversationRegister.anchorsUsed, SessionTracker.MAX_REGISTER_ANCHORS);
+        this.boundSet(this.conversationRegister.projectsMentioned, SessionTracker.MAX_REGISTER_PROJECTS);
+
+        // 2. Metrics with units
+        const metricMatches = conversational.match(SessionTracker.METRIC_PATTERN) || [];
+        for (const raw of metricMatches) {
+            const m = raw.trim().replace(/\s+/g, ' ');
+            if (m) this.conversationRegister.metricsDropped.add(m);
+        }
+        this.boundSet(this.conversationRegister.metricsDropped, SessionTracker.MAX_REGISTER_METRICS);
+
+        // 3. Opener — first sentence (or first ~10 words) of the response, lowercased
+        // for similarity matching. Stored verbatim (truncated) so the model can recognise
+        // a near-repeat.
+        const opener = this.extractOpener(text);
+        if (opener) {
+            // Drop near-duplicates within the recent window — same first 6 lowercase words.
+            const sig = opener.toLowerCase().split(/\s+/).slice(0, 6).join(' ');
+            const seen = this.conversationRegister.openersUsed.some(o =>
+                o.toLowerCase().split(/\s+/).slice(0, 6).join(' ') === sig
+            );
+            if (!seen) {
+                this.conversationRegister.openersUsed.push(opener);
+                if (this.conversationRegister.openersUsed.length > SessionTracker.MAX_REGISTER_OPENERS) {
+                    this.conversationRegister.openersUsed = this.conversationRegister.openersUsed.slice(
+                        -SessionTracker.MAX_REGISTER_OPENERS
+                    );
+                }
+            }
+        }
+    }
+
+    private extractOpener(text: string): string {
+        // Skip code blocks at the start (e.g., a bare code-only response has no opener).
+        const trimmed = text.replace(/^```[\s\S]*?```/, '').trim();
+        if (!trimmed) return '';
+        const firstSentenceMatch = trimmed.match(/^[^.!?\n]{3,}[.!?]/);
+        if (firstSentenceMatch) {
+            return firstSentenceMatch[0].trim().slice(0, 100);
+        }
+        // No sentence boundary in a short reply — take first ~10 words.
+        const words = trimmed.split(/\s+/).slice(0, 10).join(' ');
+        return words.slice(0, 100);
+    }
+
+    /**
+     * Trim a Set to its most recent N entries while preserving insertion order.
+     * Set iteration order in JS is insertion order, so dropping the head is just
+     * "skip the first (size-cap) entries on rebuild".
+     */
+    private boundSet(set: Set<string>, cap: number): void {
+        if (set.size <= cap) return;
+        const arr = Array.from(set);
+        set.clear();
+        for (const v of arr.slice(-cap)) set.add(v);
     }
 
     private evictOldEntries(): void {

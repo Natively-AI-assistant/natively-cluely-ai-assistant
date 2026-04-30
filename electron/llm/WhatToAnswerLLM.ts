@@ -2,6 +2,7 @@ import { LLMHelper } from "../LLMHelper";
 import { UNIVERSAL_WHAT_TO_ANSWER_PROMPT, PERSPECTIVE_LOCK } from "./prompts";
 import { TemporalContext } from "./TemporalContextBuilder";
 import { IntentResult } from "./IntentClassifier";
+import type { ConversationRegister } from "../SessionTracker";
 
 export class WhatToAnswerLLM {
     private llmHelper: LLMHelper;
@@ -24,7 +25,8 @@ export class WhatToAnswerLLM {
         temporalContext?: TemporalContext,
         intentResult?: IntentResult,
         imagePaths?: string[],
-        manualTrigger: boolean = false
+        manualTrigger: boolean = false,
+        register?: ConversationRegister
     ): AsyncGenerator<string> {
         try {
             // Build a rich message context
@@ -47,6 +49,32 @@ ${isTechnical ? `\nCRITICAL: This is a PURE TECHNICAL question. ABSOLUTE RULES:\
                 // Just dump it in context if possible
                 const history = temporalContext.previousResponses.map((r, i) => `${i + 1}. "${r}"`).join('\n');
                 contextParts.push(`PREVIOUS RESPONSES (Avoid Repetition):\n${history}`);
+            }
+
+            // Structured anti-repetition register. Builds an explicit "you've already
+            // said these things" block so the model varies anchors / metrics / openers
+            // instead of just hoping it notices repetition in the previous-responses dump.
+            if (register) {
+                const lines: string[] = [];
+                if (register.anchorsUsed.size > 0) {
+                    lines.push(`- Anchors mentioned: ${Array.from(register.anchorsUsed).join(', ')}`);
+                }
+                if (register.projectsMentioned.size > 0) {
+                    lines.push(`- Projects covered: ${Array.from(register.projectsMentioned).join(', ')}`);
+                }
+                if (register.metricsDropped.size > 0) {
+                    lines.push(`- Metrics already dropped: ${Array.from(register.metricsDropped).join(', ')}`);
+                }
+                if (register.openersUsed.length > 0) {
+                    const recent = register.openersUsed.slice(-4).map(o => `"${o}"`).join(', ');
+                    lines.push(`- Recent openers used: ${recent}`);
+                }
+                if (lines.length > 0) {
+                    contextParts.push(
+                        `<already_said_this_interview>\n${lines.join('\n')}\n</already_said_this_interview>\n` +
+                        `DO NOT reuse anchors, projects, or metrics from above. Vary openers — pick one not in the recent list.`
+                    );
+                }
             }
 
             const extraContext = contextParts.join('\n\n');
