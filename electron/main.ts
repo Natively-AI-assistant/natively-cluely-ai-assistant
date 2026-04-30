@@ -932,6 +932,23 @@ export class AppState {
         );
       }
 
+      // Drop non-conversational system audio (Deepgram non-speech markers,
+      // YouTube/podcast CTAs, repetitive vocalisations) before it reaches
+      // intelligence / autopilot / RAG / UI. Applied AFTER mic→interviewer
+      // relabel so the same guard protects both channels' interviewer-labeled
+      // output. See AppState.shouldSuppressSystemTranscript for the patterns.
+      if (routedSpeaker === 'interviewer') {
+        const suppression = this.shouldSuppressSystemTranscript(segment.text);
+        if (suppression.suppress) {
+          if (segment.isFinal) {
+            console.log(
+              `[Main] Suppressing non-conversational interviewer transcript (${suppression.reason}): "${segment.text.substring(0, 60)}..."`
+            );
+          }
+          return;
+        }
+      }
+
       const transcriptSegment = {
         speaker: routedSpeaker,
         text: segment.text,
@@ -1419,6 +1436,63 @@ export class AppState {
 
     return false;
   }
+
+  /**
+   * Decide whether a transcript segment routed as `interviewer` should be dropped
+   * before it can drive intelligence / autopilot / RAG / UI.
+   *
+   * The autopilot listens to every final interviewer turn and may auto-fire a
+   * suggestion. Without this guard, a YouTube background tab, a Slack ding, or
+   * a podcast intro on a side monitor can all transcribe as confident
+   * interviewer speech and silently trigger a generation.
+   *
+   * Patterns are intentionally tight — the cost of dropping a real interviewer
+   * turn (silent miss) is higher than the cost of letting through a borderline
+   * one (the user can still see / dismiss). When in doubt, keep the segment.
+   * No RMS check here on purpose: an interviewer on speakerphone with the user
+   * on built-in speakers produces sustained mic dominance, and an RMS-only
+   * suppressor would cut them off entirely. Text-shape signals are safer.
+   */
+  private shouldSuppressSystemTranscript(text: string): { suppress: boolean; reason?: string } {
+    const trimmed = (text || '').trim();
+    if (!trimmed) return { suppress: true, reason: 'empty' };
+
+    for (const { name, pattern } of AppState.NON_CONVERSATIONAL_PATTERNS) {
+      if (pattern.test(trimmed)) {
+        return { suppress: true, reason: name };
+      }
+    }
+
+    return { suppress: false };
+  }
+
+  // Tight allow-list of patterns that mark a transcript as not real conversation.
+  // Order doesn't matter (first hit wins for logging). Each pattern is named so
+  // the suppression log line points at the rule that fired.
+  private static readonly NON_CONVERSATIONAL_PATTERNS: Array<{ name: string; pattern: RegExp }> = [
+    // Deepgram smart_format and most other STTs emit bracketed markers for
+    // non-speech audio. These appear verbatim in the transcript and would
+    // otherwise be confidently labeled as interviewer speech.
+    {
+      name: 'non-speech-marker',
+      pattern: /^\s*\[(?:music|applause|laughter|silence|blank_audio|noise|inaudible|cheering|clapping|sigh|cough)\]\s*$/i,
+    },
+    // YouTube / podcast / livestream CTAs. Distinctive enough that real
+    // interview speech doesn't trip them.
+    {
+      name: 'media-cta',
+      pattern: /\b(?:like\s+and\s+subscribe|hit\s+(?:the|that)\s+(?:bell|notification)|smash\s+that\s+like|link\s+in\s+(?:the\s+)?(?:bio|description)|click\s+(?:the\s+)?link|sponsored\s+by\s+\w|brought\s+to\s+you\s+by)\b/i,
+    },
+    // Pure repetition (5+ of the same short word). Catches music lyrics
+    // ("la la la la la"), STT stutters ("is is is is is"), and audio glitches.
+    // Threshold 4 separators (5+ total reps) so things like "very very very very nice"
+    // — unusual but not impossible in real speech — slip through. Cap word length at
+    // 8 chars to keep the pattern targeted at single-syllable filler.
+    {
+      name: 'repetition',
+      pattern: /\b(\w{1,8})\b(?:\s+\1\b){4,}/i,
+    },
+  ];
 
   private async reconfigureAudio(inputDeviceId?: string, outputDeviceId?: string, enableVoiceProcessing?: boolean): Promise<void> {
     console.log(
