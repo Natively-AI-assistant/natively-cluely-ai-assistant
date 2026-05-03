@@ -733,6 +733,34 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
 
         cleanups.push(window.electronAPI.onIntelligenceSuggestedAnswerToken((data) => {
             // Progressive update for 'what_to_answer' mode
+            // Mirrors the guard in onGeminiStreamToken: if this token is the negotiation
+            // coaching JSON sentinel, accumulate the raw JSON silently so the Done handler
+            // can convert it to the card UI. Without this, the raw JSON leaks into the
+            // chat bubble (issue #213).
+            try {
+                const parsed = JSON.parse(data.token);
+                if (parsed?.__negotiationCoaching) {
+                    setMessages(prev => {
+                        const lastMsg = prev[prev.length - 1];
+                        if (lastMsg && lastMsg.isStreaming && lastMsg.intent === 'what_to_answer') {
+                            const updated = [...prev];
+                            updated[prev.length - 1] = { ...lastMsg, text: data.token };
+                            return updated;
+                        }
+                        return [...prev, {
+                            id: Date.now().toString(),
+                            role: 'system',
+                            text: data.token,
+                            intent: 'what_to_answer',
+                            isStreaming: true
+                        }];
+                    });
+                    return;
+                }
+            } catch {
+                // Not JSON — normal token, fall through.
+            }
+
             setMessages(prev => {
                 const lastMsg = prev[prev.length - 1];
 
@@ -759,22 +787,54 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
 
         cleanups.push(window.electronAPI.onIntelligenceSuggestedAnswer((data) => {
             setIsProcessing(false);
+
+            // If the final answer is a negotiation coaching JSON sentinel, route it
+            // to the proper card UI instead of dumping raw JSON into the message bubble.
+            let isCoaching = false;
+            let coachingData: any = null;
+            try {
+                const parsed = JSON.parse(data.answer);
+                if (parsed?.__negotiationCoaching) {
+                    isCoaching = true;
+                    coachingData = parsed.__negotiationCoaching;
+                }
+            } catch {
+                // Not JSON — normal answer.
+            }
+
             setMessages(prev => {
                 const lastMsg = prev[prev.length - 1];
 
                 // If we were streaming, finalize it
                 if (lastMsg && lastMsg.isStreaming && lastMsg.intent === 'what_to_answer') {
-                    // Start new array to avoid mutation
                     const updated = [...prev];
-                    updated[prev.length - 1] = {
-                        ...lastMsg,
-                        text: data.answer, // Ensure final consistency
-                        isStreaming: false
-                    };
+                    updated[prev.length - 1] = isCoaching
+                        ? {
+                            ...lastMsg,
+                            isStreaming: false,
+                            isNegotiationCoaching: true,
+                            negotiationCoachingData: coachingData,
+                            text: '',
+                        }
+                        : {
+                            ...lastMsg,
+                            text: data.answer, // Ensure final consistency
+                            isStreaming: false
+                        };
                     return updated;
                 }
 
                 // If we missed the stream (or not streaming), append fresh
+                if (isCoaching) {
+                    return [...prev, {
+                        id: Date.now().toString(),
+                        role: 'system',
+                        text: '',
+                        intent: 'what_to_answer',
+                        isNegotiationCoaching: true,
+                        negotiationCoachingData: coachingData,
+                    }];
+                }
                 return [...prev, {
                     id: Date.now().toString(),
                     role: 'system',
