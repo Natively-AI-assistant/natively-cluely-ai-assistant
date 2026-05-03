@@ -4,10 +4,16 @@ logs
 /.env
 Sales20260405-60-494j8t.csv
 /Sales20260405-60-494j8t.csv
-
+natively-api
+/natively-api
+/natively
+natively/
+.natively
 env
 /env
 *.log
+/Users/evin/natively-cluely-ai-assistant/natively
+natively
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -218,3 +224,14 @@ templog*.txt
 dodollm.txt
 temp_code_expansion/
 cluelyprompts/
+# Added by code-review-graph
+.code-review-graph/
+pitch-deck.html
+/pitch-deck.html
+Pitch Deck.html
+Cluely.html
+/Cluely.html
+scratch_clean.js
+scratch_clean2.js
+scratch_extract.js
+scratch_svg.html

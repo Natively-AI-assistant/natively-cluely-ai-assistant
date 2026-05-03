@@ -461,7 +461,7 @@ export const AIProvidersSettings: React.FC = () => {
                             }
                             customProviders.forEach(p => opts.push({ id: p.id, name: p.name }));
                             ollamaModels.forEach(m => opts.push({ id: `ollama-${m}`, name: `${m} (Local)` }));
-                            
+
                             if (defaultModel && !opts.find(o => o.id === defaultModel)) {
                                 opts.unshift({ id: defaultModel, name: prettifyModelId(defaultModel) });
                             }

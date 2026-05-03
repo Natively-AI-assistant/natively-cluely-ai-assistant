@@ -256,6 +256,12 @@ export class RestSTT extends EventEmitter {
         this.flushAndUpload();
     }
 
+    public finalize(): void {
+        if (!this.isActive) return;
+        console.log(`[RestSTT] Finalize — flushing buffer immediately`);
+        this.flushAndUpload();
+    }
+
     /**
      * Concatenate buffered chunks, add WAV header, and upload to REST API
      */

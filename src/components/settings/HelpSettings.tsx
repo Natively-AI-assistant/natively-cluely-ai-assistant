@@ -16,18 +16,18 @@ import nativelyIcon from '../icon.png';
 // ----------------------
 
 const MOCK_BUTTONS = [
-    { icon: Pencil,        label: 'What to answer?',   kbd: '⌘1', color: 'blue'    },
-    { icon: MessageSquare, label: 'Clarify',            kbd: '⌘2', color: 'indigo'  },
-    { icon: RefreshCw,     label: 'Recap',              kbd: '⌘7', color: 'amber'   },
-    { icon: HelpCircle,    label: 'Follow Up Question', kbd: '⌘4', color: 'teal'    },
-    { icon: Zap,           label: 'Answer',             kbd: '⌘5', color: 'emerald' },
+    { icon: Pencil, label: 'What to answer?', kbd: '⌘1', color: 'blue' },
+    { icon: MessageSquare, label: 'Clarify', kbd: '⌘2', color: 'indigo' },
+    { icon: RefreshCw, label: 'Recap', kbd: '⌘7', color: 'amber' },
+    { icon: HelpCircle, label: 'Follow Up Question', kbd: '⌘4', color: 'teal' },
+    { icon: Zap, label: 'Answer', kbd: '⌘5', color: 'emerald' },
 ] as const;
 
 const colorMap: Record<string, string> = {
-    blue:    'bg-blue-500/10 text-blue-500 border-blue-500/25',
-    indigo:  'bg-indigo-500/10 text-indigo-400 border-indigo-500/25',
-    amber:   'bg-amber-500/10 text-amber-500 border-amber-500/25',
-    teal:    'bg-teal-500/10 text-teal-500 border-teal-500/25',
+    blue: 'bg-blue-500/10 text-blue-500 border-blue-500/25',
+    indigo: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/25',
+    amber: 'bg-amber-500/10 text-amber-500 border-amber-500/25',
+    teal: 'bg-teal-500/10 text-teal-500 border-teal-500/25',
     emerald: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/25',
 };
 
@@ -236,7 +236,7 @@ const MockMeetingInterfaceAnim = () => {
                             {/* Matches MeetingDetails: speaker + timestamp inline, then text below — no card/border */}
                             {[
                                 { speaker: 'Them', time: '10:32', text: 'Why did you use Redis over Memcached for the cart session?' },
-                                { speaker: 'Me',   time: '10:33', text: 'Because we needed sorted sets for rate limiting and automatic expiry without custom cron jobs.' },
+                                { speaker: 'Me', time: '10:33', text: 'Because we needed sorted sets for rate limiting and automatic expiry without custom cron jobs.' },
                             ].map((entry, i) => (
                                 <div key={i}>
                                     <div className="flex items-center gap-2 mb-1">
@@ -319,85 +319,85 @@ const MockSearchPillAnim = () => {
     return (
         <div className="flex justify-center flex-col items-center py-10 rounded-[26px] border border-border-subtle relative overflow-hidden h-[340px] bg-bg-card">
             <div className="absolute inset-0 bg-black/5 backdrop-blur-[2px]" />
-            <motion.div 
-                 initial={{ y: -10, opacity: 0, scale: 0.95 }}
-                 animate={{ y: 0, opacity: 1, scale: 1 }}
-                 className={`w-[480px] ${isLight ? 'bg-[#F2F2F7]/90' : 'bg-[#161618]/90'} backdrop-blur-xl backdrop-saturate-150 rounded-2xl shadow-md overflow-hidden z-10 transform-gpu relative border border-border-subtle`}
-             >
-                 {/* Input Row */}
-                 <div className="relative flex items-center border-b border-border-muted">
-                     <div className="absolute left-3 flex items-center pointer-events-none">
-                         <Search size={14} className="text-text-tertiary" />
-                     </div>
-                     <div className="w-full bg-transparent pl-9 pr-4 py-2.5 text-[13px] text-text-primary outline-none flex items-center h-[38px]">
+            <motion.div
+                initial={{ y: -10, opacity: 0, scale: 0.95 }}
+                animate={{ y: 0, opacity: 1, scale: 1 }}
+                className={`w-[480px] ${isLight ? 'bg-[#F2F2F7]/90' : 'bg-[#161618]/90'} backdrop-blur-xl backdrop-saturate-150 rounded-2xl shadow-md overflow-hidden z-10 transform-gpu relative border border-border-subtle`}
+            >
+                {/* Input Row */}
+                <div className="relative flex items-center border-b border-border-muted">
+                    <div className="absolute left-3 flex items-center pointer-events-none">
+                        <Search size={14} className="text-text-tertiary" />
+                    </div>
+                    <div className="w-full bg-transparent pl-9 pr-4 py-2.5 text-[13px] text-text-primary outline-none flex items-center h-[38px]">
                         <span className="opacity-90">System</span><motion.span animate={{ opacity: [1, 0, 1] }} transition={{ repeat: Infinity, duration: 1 }} className="w-[1.5px] h-3.5 bg-blue-500 ml-[2px] inline-block" />
-                     </div>
-                 </div>
+                    </div>
+                </div>
 
-                 {/* Results Panel mock */}
-                 <div className="w-[480px]">
-                     <div className="py-2">
-                         {/* Explore Section */}
-                         <div className="px-3 py-1">
-                             <div className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-1">
-                                 Explore
-                             </div>
+                {/* Results Panel mock */}
+                <div className="w-[480px]">
+                    <div className="py-2">
+                        {/* Explore Section */}
+                        <div className="px-3 py-1">
+                            <div className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-1">
+                                Explore
+                            </div>
 
-                             <div className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left bg-bg-item-active transition-colors">
-                                 <div className="w-6 h-6 rounded-md bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shrink-0">
-                                     <Sparkles size={12} className="text-white" />
-                                 </div>
-                                 <span className="text-[13px] text-text-primary truncate">
-                                     System
-                                 </span>
-                             </div>
+                            <div className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left bg-bg-item-active transition-colors">
+                                <div className="w-6 h-6 rounded-md bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shrink-0">
+                                    <Sparkles size={12} className="text-white" />
+                                </div>
+                                <span className="text-[13px] text-text-primary truncate">
+                                    System
+                                </span>
+                            </div>
 
-                             <div className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left hover:bg-bg-item-hover transition-colors">
-                                 <div className="w-6 h-6 rounded-md bg-bg-item-surface flex items-center justify-center shrink-0 border border-border-subtle">
-                                     <Search size={12} className="text-text-secondary" />
-                                 </div>
-                                 <span className="text-[13px] text-text-secondary">
-                                     Search for <span className="text-text-primary">"System"</span>
-                                 </span>
-                             </div>
-                         </div>
+                            <div className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left hover:bg-bg-item-hover transition-colors">
+                                <div className="w-6 h-6 rounded-md bg-bg-item-surface flex items-center justify-center shrink-0 border border-border-subtle">
+                                    <Search size={12} className="text-text-secondary" />
+                                </div>
+                                <span className="text-[13px] text-text-secondary">
+                                    Search for <span className="text-text-primary">"System"</span>
+                                </span>
+                            </div>
+                        </div>
 
-                         {/* Sessions Section */}
-                         <div className="px-3 py-1 mt-1">
-                             <div className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-1">
-                                 Sessions
-                             </div>
+                        {/* Sessions Section */}
+                        <div className="px-3 py-1 mt-1">
+                            <div className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-1">
+                                Sessions
+                            </div>
 
-                             <div className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left hover:bg-bg-item-hover transition-colors">
-                                 <div className="w-6 h-6 rounded-md bg-bg-item-surface flex items-center justify-center shrink-0 border border-border-subtle">
-                                     <FileText size={12} className="text-text-secondary" />
-                                 </div>
-                                 <div className="flex-1 min-w-0">
-                                     <div className="text-[13px] text-text-primary truncate">
-                                         System Design Interview
-                                     </div>
-                                     <div className="text-[11px] text-text-tertiary">
-                                         Jan 12
-                                     </div>
-                                 </div>
-                             </div>
-                             
-                             <div className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left hover:bg-bg-item-hover transition-colors">
-                                 <div className="w-6 h-6 rounded-md bg-bg-item-surface flex items-center justify-center shrink-0 border border-border-subtle">
-                                     <FileText size={12} className="text-text-secondary" />
-                                 </div>
-                                 <div className="flex-1 min-w-0">
-                                     <div className="text-[13px] text-text-primary truncate">
-                                         System Architecture Sync
-                                     </div>
-                                     <div className="text-[11px] text-text-tertiary">
-                                         Jan 08
-                                     </div>
-                                 </div>
-                             </div>
-                         </div>
-                     </div>
-                 </div>
+                            <div className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left hover:bg-bg-item-hover transition-colors">
+                                <div className="w-6 h-6 rounded-md bg-bg-item-surface flex items-center justify-center shrink-0 border border-border-subtle">
+                                    <FileText size={12} className="text-text-secondary" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-[13px] text-text-primary truncate">
+                                        System Design Interview
+                                    </div>
+                                    <div className="text-[11px] text-text-tertiary">
+                                        Jan 12
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left hover:bg-bg-item-hover transition-colors">
+                                <div className="w-6 h-6 rounded-md bg-bg-item-surface flex items-center justify-center shrink-0 border border-border-subtle">
+                                    <FileText size={12} className="text-text-secondary" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-[13px] text-text-primary truncate">
+                                        System Architecture Sync
+                                    </div>
+                                    <div className="text-[11px] text-text-tertiary">
+                                        Jan 08
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </motion.div>
         </div>
     );
@@ -412,7 +412,7 @@ const MockPermissionsAnim = () => {
 
     return (
         <div className="flex justify-center flex-col items-center gap-4 py-8 bg-bg-card rounded-xl border border-border-subtle relative overflow-hidden h-[240px]">
-             <div className="w-[300px] bg-bg-elevated border border-border-subtle rounded-xl shadow-lg p-4 z-10">
+            <div className="w-[300px] bg-bg-elevated border border-border-subtle rounded-xl shadow-lg p-4 z-10">
                 <div className="flex items-center gap-3 mb-4 border-b border-border-subtle pb-3">
                     <div className="w-8 h-8 rounded-full bg-blue-500/20 text-blue-500 flex items-center justify-center">
                         <Monitor className="w-4 h-4" />
@@ -424,13 +424,13 @@ const MockPermissionsAnim = () => {
                         <img src={nativelyIcon} alt="Natively" className="w-6 h-6 object-contain rounded drop-shadow-sm opacity-90" />
                         <span className="text-text-primary text-sm font-medium">Natively</span>
                     </div>
-                    
-                    <motion.div 
+
+                    <motion.div
                         initial={false}
                         animate={{ backgroundColor: toggled ? '#3b82f6' : 'var(--bg-toggle-switch)' }}
                         className="w-10 h-6 rounded-full relative shadow-inner"
                     >
-                        <motion.div 
+                        <motion.div
                             initial={false}
                             animate={{ x: toggled ? 18 : 2 }}
                             className="absolute top-1 left-0 w-4 h-4 bg-white rounded-full shadow-md"
@@ -535,7 +535,7 @@ const MockFastModeAnim = () => {
     return (
         <div className="flex justify-center items-center py-8 bg-bg-card rounded-xl border border-border-subtle relative overflow-hidden h-[240px]">
             <div className="flex flex-col items-center gap-4 z-10">
-                <motion.div 
+                <motion.div
                     className="w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center shadow-[0_0_30px_rgba(249,115,22,0.4)]"
                     animate={{ rotate: 360 }}
                     transition={{ ease: "linear", duration: 8, repeat: Infinity }}
@@ -547,9 +547,9 @@ const MockFastModeAnim = () => {
                     <div className="text-xs text-text-secondary mt-1">Routing via Groq LPU (Response &lt; 0.5s)</div>
                 </div>
             </div>
-            
+
             {/* Background pulses */}
-            <motion.div 
+            <motion.div
                 className="absolute inset-0 border-[6px] border-orange-500/20 rounded-xl"
                 animate={{ scale: [1, 1.05, 1], opacity: [0, 1, 0] }}
                 transition={{ duration: 2, repeat: Infinity }}
@@ -596,7 +596,7 @@ const MockProviderSelectionAnim = () => {
     }, []);
 
     const options = [
-        { id: 'natively', label: 'Natively API', badge: '', recommended: true, desc: 'Ultra-fast low latency transcription', color: 'indigo', icon: <img src={nativelyIcon} className={`w-[14px] h-[14px] object-contain opacity-80 ${isLight ? '' : 'filter brightness-0 invert'}`} alt="Natively"/> },
+        { id: 'natively', label: 'Natively API', badge: '', recommended: true, desc: 'Ultra-fast low latency transcription', color: 'indigo', icon: <img src={nativelyIcon} className={`w-[14px] h-[14px] object-contain opacity-80 ${isLight ? '' : 'filter brightness-0 invert'}`} alt="Natively" /> },
         { id: 'deepgram', label: 'Deepgram Nova-3', badge: 'Saved', recommended: false, desc: 'High-accuracy REST transcription', color: 'purple', icon: <Mic size={14} /> },
         { id: 'google', label: 'Google Cloud', badge: 'Saved', recommended: false, desc: 'gRPC streaming via Service Account', color: 'blue', icon: <Mic size={14} /> },
         { id: 'groq', label: 'Groq Whisper', badge: '', recommended: false, desc: 'Fast LPU whisper transcription', color: 'orange', icon: <Mic size={14} /> },
@@ -608,7 +608,7 @@ const MockProviderSelectionAnim = () => {
 
     return (
         <div className="flex justify-center flex-col items-center py-6 bg-bg-card rounded-xl border border-border-subtle relative overflow-hidden h-[300px]">
-             <div className="w-[340px] flex flex-col gap-2 relative z-10 font-sans">
+            <div className="w-[340px] flex flex-col gap-2 relative z-10 font-sans">
                 <label className="text-xs font-medium text-text-secondary">Speech Provider</label>
                 <div className="relative">
                     <button className={`w-full group bg-bg-input border border-border-subtle shadow-sm rounded-xl p-2.5 pr-3.5 flex items-center justify-between transition-all duration-200 outline-none ${isOpen ? 'ring-2 ring-accent-primary/20 border-accent-primary/50' : 'hover:shadow-md'}`}>
@@ -639,8 +639,8 @@ const MockProviderSelectionAnim = () => {
                                 transition={{ duration: 0.15, ease: "easeOut" }}
                                 className={"absolute top-full left-0 w-full mt-2 backdrop-blur-xl rounded-xl shadow-2xl overflow-hidden z-20 bg-bg-elevated border border-border-subtle"}
                             >
-                                 <div className="max-h-[170px] overflow-hidden relative" style={{ WebkitMaskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)' }}>
-                                    <motion.div 
+                                <div className="max-h-[170px] overflow-hidden relative" style={{ WebkitMaskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)' }}>
+                                    <motion.div
                                         className="p-1.5 space-y-0.5"
                                         animate={{ y: [0, 0, -110, -110, 0, 0] }}
                                         transition={{ duration: 3.5, ease: "easeInOut", repeat: Infinity }}
@@ -667,23 +667,23 @@ const MockProviderSelectionAnim = () => {
                                             );
                                         })}
                                     </motion.div>
-                                 </div>
+                                </div>
                             </motion.div>
                         )}
                     </AnimatePresence>
                 </div>
             </div>
-            
+
             {/* Animated Cursor */}
-            <motion.div 
+            <motion.div
                 className="absolute w-5 h-5 z-30 drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]"
-                animate={{ 
+                animate={{
                     x: isOpen ? 100 : 150,
                     y: isOpen ? 80 : 30
                 }}
                 transition={{ duration: 1.2, ease: 'easeInOut' }}
             >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="white" stroke="black" strokeWidth="1.5"><path d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.42c.45 0 .67-.54.35-.85L6.35 3.35a.5.5 0 0 0-.85.35Z"/></svg>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="white" stroke="black" strokeWidth="1.5"><path d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.42c.45 0 .67-.54.35-.85L6.35 3.35a.5.5 0 0 0-.85.35Z" /></svg>
             </motion.div>
         </div>
     );
@@ -698,7 +698,7 @@ const MockApiKeyFlowAnim = () => {
 
     return (
         <div className="flex justify-center flex-col items-center gap-2 py-8 bg-bg-card rounded-xl border border-border-subtle relative overflow-hidden h-[240px]">
-             <div className="w-[380px] space-y-2 relative z-10">
+            <div className="w-[380px] space-y-2 relative z-10">
                 <label className="text-xs font-medium text-text-secondary block">Groq API Key</label>
                 <div className="flex gap-2">
                     <div className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary flex items-center shadow-inner">
@@ -724,18 +724,18 @@ const MockApiKeyFlowAnim = () => {
                         <Trash2 size={16} />
                     </div>
                 </div>
-             </div>
-             
-             {/* Animated Cursor */}
-            <motion.div 
+            </div>
+
+            {/* Animated Cursor */}
+            <motion.div
                 className="absolute w-5 h-5 z-20 drop-shadow-lg"
-                animate={{ 
+                animate={{
                     x: stage === 0 ? 0 : stage === 1 ? 140 : stage === 2 ? -80 : stage === 4 ? 170 : 170,
                     y: stage === 0 ? 20 : stage === 1 ? 20 : stage === 2 ? 65 : stage === 4 ? 65 : 65
                 }}
                 transition={{ duration: 0.5, ease: 'easeInOut' }}
             >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="white" stroke="black" strokeWidth="1.5"><path d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.42c.45 0 .67-.54.35-.85L6.35 3.35a.5.5 0 0 0-.85.35Z"/></svg>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="white" stroke="black" strokeWidth="1.5"><path d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.42c.45 0 .67-.54.35-.85L6.35 3.35a.5.5 0 0 0-.85.35Z" /></svg>
             </motion.div>
         </div>
     );
@@ -744,7 +744,7 @@ const MockApiKeyFlowAnim = () => {
 const ElevenLabsPermissionsMock = () => {
     return (
         <div className="w-full flex justify-center py-4 bg-bg-elevated rounded-xl border border-border-subtle mb-3 mt-2 shadow-sm">
-             <div className="flex items-center justify-between w-full max-w-[360px]">
+            <div className="flex items-center justify-between w-full max-w-[360px]">
                 <span className="text-[14.5px] text-text-primary font-medium tracking-tight">Speech to Text</span>
                 <div className="flex items-center bg-bg-main p-[3px] rounded-lg border border-border-subtle shadow-inner">
                     <div className="px-3.5 py-1.5 text-[13px] font-medium text-text-secondary">No Access</div>
@@ -879,7 +879,7 @@ const SetupGuide = () => {
 export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({ onNavigate }) => {
     const { shortcuts } = useShortcuts();
     const isLight = useResolvedTheme() === 'light';
-    
+
     // Kbd class applying theme variables natively
     const kbdClass = `px-1.5 py-0.5 rounded text-[10px] font-mono border inline-block bg-bg-item-surface border-border-subtle text-text-secondary shadow-sm`;
 
@@ -896,9 +896,9 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
             </div>
 
             <div className="flex-1 space-y-2">
-                
+
                 {onNavigate && (
-                    <div 
+                    <div
                         onClick={() => onNavigate('natively-api')}
                         className="mb-8 group cursor-pointer bg-bg-card hover:bg-bg-item-surface border border-border-subtle hover:border-white transition-all rounded-2xl flex items-center justify-between p-4 px-5 shadow-sm hover:shadow-md"
                     >
@@ -927,12 +927,12 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                 </div>
 
                 <AccordionSection title="1. App Permissions Setup" icon={<Monitor className="w-4 h-4" />}>
-                     <div className="space-y-4">
+                    <div className="space-y-4">
                         <p>Natively operates entirely on-device, but requires OS permissions to tap into your screen context and global keystrokes. Here is how your system should look:</p>
                         <MockPermissionsAnim />
-                    <div className="space-y-3 mt-4">
+                        <div className="space-y-3 mt-4">
                             <h4 className="font-bold text-base text-text-primary border-b border-border-subtle pb-2">Hardware & Engine Configurations</h4>
-                            
+
                             <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
                                 <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
                                     <Mic size={14} className="text-blue-500" /> Microphone & Speaker Loopback Selection
@@ -960,7 +960,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     </p>
                                 </div>
                             </div>
-                            
+
                             <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
                                 <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
                                     <Globe size={14} className="text-green-500" /> Language & Regional Accents
@@ -979,7 +979,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                 <p className="text-xs opacity-90 mb-2">Provides Natively the ability to read your screen temporarily when you capture context.</p>
                                 <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; Screen Recording</p>
                             </div>
-                            
+
                             <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
                                 <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
                                     <Command className="w-4 h-4 text-purple-500" /> Accessibility
@@ -992,22 +992,22 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                 </AccordionSection>
 
                 <AccordionSection title="2. Audio STT Providers Setup (Microphone)" icon={<Mic className="w-4 h-4" />}>
-                     <div className="space-y-6">
+                    <div className="space-y-6">
                         <p>Natively supports over 8 different Audio engines to transcribe what you hear and say. From the Audio tab in settings, use the overarching dropdown to switch the active engine.</p>
-                        
+
                         <MockProviderSelectionAnim />
 
                         <div className="space-y-4 pt-2">
-                             <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">API Keys & Testing</h4>
-                             <p className="text-xs text-text-secondary">We strongly recommend testing connections before jumping into a live meeting. The system shows successful pings or explicit errors if credits/permissions fail.</p>
-                             
-                             <MockApiKeyFlowAnim />
+                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">API Keys & Testing</h4>
+                            <p className="text-xs text-text-secondary">We strongly recommend testing connections before jumping into a live meeting. The system shows successful pings or explicit errors if credits/permissions fail.</p>
+
+                            <MockApiKeyFlowAnim />
                         </div>
 
                         <div className="space-y-3 pt-4">
-                             <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">Specific Provider Setup</h4>
-                             
-                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
+                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">Specific Provider Setup</h4>
+
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
                                     <span>1. Google Cloud STT</span>
                                     <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.cloud.google.com/apis/credentials') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Link</button>
@@ -1094,121 +1094,121 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                 </AccordionSection>
 
                 <AccordionSection title="3. AI Providers & Prompt Engine" icon={<Key className="w-4 h-4" />}>
-                     <div className="space-y-4">
+                    <div className="space-y-4">
                         <p className="text-sm">Natively uses Large Language Models (LLMs) to reason about your screen and audio context. You can configure cloud providers, local models, or fully custom endpoints.</p>
 
                         <div className="space-y-3 pt-2">
-                             <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">1. Standard Cloud Providers</h4>
-                             
-                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                 <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
-                                     <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
-                                         <span className="flex items-center gap-2">
+                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">1. Standard Cloud Providers</h4>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
+                                    <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
+                                        <span className="flex items-center gap-2">
                                             <img src="https://groq.com/favicon.svg" alt="Groq" className="w-4 h-4 object-contain" /> Groq
-                                         </span>
-                                         <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.groq.com/keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Get Key</button>
-                                     </h5>
-                                     <p className="text-[11px] opacity-80 mb-2">Ultra-fast inference using LPU hardware. Default model: <strong>llama-3.3-70b-versatile</strong>.</p>
-                                     <span className={kbdClass}>gsk_...</span>
-                                 </div>
-                                 <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
-                                     <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
-                                         <span className="flex items-center gap-2">
-                                             <SiOpenai className={`w-3.5 h-3.5 ${isLight ? 'text-black' : 'text-white'}`} /> OpenAI
-                                         </span>
-                                         <button onClick={() => { (window as any).electronAPI?.openExternal('https://platform.openai.com/api-keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Get Key</button>
-                                     </h5>
-                                     <p className="text-[11px] opacity-80 mb-2">Industry standard pipeline. Default models: <strong>gpt-5.4-mini</strong> & <strong>gpt-5.4</strong>.</p>
-                                     <span className={kbdClass}>sk-proj-...</span>
-                                 </div>
-                                 <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
-                                     <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
-                                         <span className="flex items-center gap-2">
-                                            <img src="https://cdn.simpleicons.org/anthropic/000000" style={{filter: isLight ? '' : 'invert(1)'}} alt="Anthropic" className="w-4 h-4 object-contain" /> Anthropic
-                                         </span>
-                                         <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.anthropic.com/settings/keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Get Key</button>
-                                     </h5>
-                                     <p className="text-[11px] opacity-80 mb-2">Superior coding baseline parameters. Default: <strong>claude-4.6-sonnet</strong>.</p>
-                                     <span className={kbdClass}>sk-ant-...</span>
-                                 </div>
-                                 <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
-                                     <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
-                                         <span className="flex items-center gap-2">
+                                        </span>
+                                        <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.groq.com/keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Get Key</button>
+                                    </h5>
+                                    <p className="text-[11px] opacity-80 mb-2">Ultra-fast inference using LPU hardware. Default model: <strong>llama-3.3-70b-versatile</strong>.</p>
+                                    <span className={kbdClass}>gsk_...</span>
+                                </div>
+                                <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
+                                    <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
+                                        <span className="flex items-center gap-2">
+                                            <SiOpenai className={`w-3.5 h-3.5 ${isLight ? 'text-black' : 'text-white'}`} /> OpenAI
+                                        </span>
+                                        <button onClick={() => { (window as any).electronAPI?.openExternal('https://platform.openai.com/api-keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Get Key</button>
+                                    </h5>
+                                    <p className="text-[11px] opacity-80 mb-2">Industry standard pipeline. Default models: <strong>gpt-5.4-mini</strong> & <strong>gpt-5.4</strong>.</p>
+                                    <span className={kbdClass}>sk-proj-...</span>
+                                </div>
+                                <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
+                                    <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
+                                        <span className="flex items-center gap-2">
+                                            <img src="https://cdn.simpleicons.org/anthropic/000000" style={{ filter: isLight ? '' : 'invert(1)' }} alt="Anthropic" className="w-4 h-4 object-contain" /> Anthropic
+                                        </span>
+                                        <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.anthropic.com/settings/keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Get Key</button>
+                                    </h5>
+                                    <p className="text-[11px] opacity-80 mb-2">Superior coding baseline parameters. Default: <strong>claude-4.6-sonnet</strong>.</p>
+                                    <span className={kbdClass}>sk-ant-...</span>
+                                </div>
+                                <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
+                                    <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
+                                        <span className="flex items-center gap-2">
                                             <SiGoogle className="w-3.5 h-3.5 text-blue-500" /> Google Gemini
-                                         </span>
-                                         <button onClick={() => { (window as any).electronAPI?.openExternal('https://aistudio.google.com/app/apikey') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Get Key</button>
-                                     </h5>
-                                     <p className="text-[11px] opacity-80 mb-2">Immense contextual window. Default model: <strong>gemini-3.1-pro</strong>.</p>
-                                     <span className={kbdClass}>AIzaSy...</span>
-                                 </div>
-                             </div>
+                                        </span>
+                                        <button onClick={() => { (window as any).electronAPI?.openExternal('https://aistudio.google.com/app/apikey') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Get Key</button>
+                                    </h5>
+                                    <p className="text-[11px] opacity-80 mb-2">Immense contextual window. Default model: <strong>gemini-3.1-pro</strong>.</p>
+                                    <span className={kbdClass}>AIzaSy...</span>
+                                </div>
+                            </div>
 
-                             <div className="mt-2 bg-bg-item-surface p-4 rounded-xl border border-border-subtle shadow-sm flex gap-3">
-                                 <div className="w-8 h-8 rounded-lg bg-bg-elevated border border-border-subtle flex items-center justify-center shrink-0">
-                                     <Zap className="w-4 h-4 text-accent-primary" />
-                                 </div>
-                                 <p className="text-[11px] text-text-secondary leading-relaxed mt-0.5">
-                                     <strong className="text-text-primary font-bold">Autonomous Registry Sync:</strong> Natively utilizes a 14-day background sync clock (<span className="font-mono bg-bg-elevated border border-border-muted px-1.5 py-0.5 rounded text-[10px] text-text-primary shadow-[inset_0_-1px_0_rgba(0,0,0,0.1)]">v2/api/models</span>) to silently poll upstream APIs. If Anthropic or OpenAI drops a new flagship architecture (e.g. GPT-5), your app dynamically absorbs it into the UI dropdown automatically.
-                                 </p>
-                             </div>
-                             
-                             <div className="p-4 mt-2 rounded-xl border border-border-subtle bg-bg-item-surface">
-                                 <h5 className="font-semibold text-[13px] text-text-primary mb-1">Configuring the Active Model Engine</h5>
-                                 <p className="text-[11px] text-text-secondary leading-relaxed">
-                                     Inside the Launcher UI (above the start button), you can hot-swap your <strong>Active Model</strong>. This dictation is extremely important—it determines the active core reasoning engine. If set to <strong>claude-3-5-sonnet</strong>, the intelligence agent uses Anthropic infrastructure exclusively for screen analysis. Switch to <strong>llama3:8b</strong> beneath it, and the architecture instantly reverts to generating responses via your offline GPU pipeline.
-                                 </p>
-                             </div>
+                            <div className="mt-2 bg-bg-item-surface p-4 rounded-xl border border-border-subtle shadow-sm flex gap-3">
+                                <div className="w-8 h-8 rounded-lg bg-bg-elevated border border-border-subtle flex items-center justify-center shrink-0">
+                                    <Zap className="w-4 h-4 text-accent-primary" />
+                                </div>
+                                <p className="text-[11px] text-text-secondary leading-relaxed mt-0.5">
+                                    <strong className="text-text-primary font-bold">Autonomous Registry Sync:</strong> Natively utilizes a 14-day background sync clock (<span className="font-mono bg-bg-elevated border border-border-muted px-1.5 py-0.5 rounded text-[10px] text-text-primary shadow-[inset_0_-1px_0_rgba(0,0,0,0.1)]">v2/api/models</span>) to silently poll upstream APIs. If Anthropic or OpenAI drops a new flagship architecture (e.g. GPT-5), your app dynamically absorbs it into the UI dropdown automatically.
+                                </p>
+                            </div>
+
+                            <div className="p-4 mt-2 rounded-xl border border-border-subtle bg-bg-item-surface">
+                                <h5 className="font-semibold text-[13px] text-text-primary mb-1">Configuring the Active Model Engine</h5>
+                                <p className="text-[11px] text-text-secondary leading-relaxed">
+                                    Inside the Launcher UI (above the start button), you can hot-swap your <strong>Active Model</strong>. This dictation is extremely important—it determines the active core reasoning engine. If set to <strong>claude-3-5-sonnet</strong>, the intelligence agent uses Anthropic infrastructure exclusively for screen analysis. Switch to <strong>llama3:8b</strong> beneath it, and the architecture instantly reverts to generating responses via your offline GPU pipeline.
+                                </p>
+                            </div>
                         </div>
 
                         <div className="space-y-3 pt-4">
-                             <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">2. Local Models (Ollama)</h4>
-                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-3">
-                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                     You can run Natively completely offline with 100% data privacy using Ollama. Natively automatically scans <span className={kbdClass}>http://localhost:11434</span> for active models.
-                                 </p>
-                                 <ol className="list-decimal pl-4 text-xs space-y-2 opacity-90 text-text-secondary">
-                                     <li>Download Ollama locally via <button onClick={() => { (window as any).electronAPI?.openExternal('https://ollama.com/download') }} className="text-accent-primary hover:underline inline-flex items-center gap-1 font-medium">ollama.com <ExternalLink size={10} /></button></li>
-                                     <li>
-                                        Open Terminal and run our recommended 8B parameter instruction model: 
+                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">2. Local Models (Ollama)</h4>
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-3">
+                                <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
+                                    You can run Natively completely offline with 100% data privacy using Ollama. Natively automatically scans <span className={kbdClass}>http://localhost:11434</span> for active models.
+                                </p>
+                                <ol className="list-decimal pl-4 text-xs space-y-2 opacity-90 text-text-secondary">
+                                    <li>Download Ollama locally via <button onClick={() => { (window as any).electronAPI?.openExternal('https://ollama.com/download') }} className="text-accent-primary hover:underline inline-flex items-center gap-1 font-medium">ollama.com <ExternalLink size={10} /></button></li>
+                                    <li>
+                                        Open Terminal and run our recommended 8B parameter instruction model:
                                         <div className="mt-1 bg-bg-input p-2 rounded border border-border-subtle font-mono text-[11px]">ollama run llama3:8b</div>
-                                     </li>
-                                     <li>Alternatively, for faster generation without GPU, use Microsoft's smaller model:
+                                    </li>
+                                    <li>Alternatively, for faster generation without GPU, use Microsoft's smaller model:
                                         <div className="mt-1 bg-bg-input p-2 rounded border border-border-subtle font-mono text-[11px]">ollama run phi3</div>
-                                     </li>
-                                     <li>Return to Natively's AI Providers overlay, and you will see your Local models ready for usage.</li>
-                                 </ol>
-                             </div>
+                                    </li>
+                                    <li>Return to Natively's AI Providers overlay, and you will see your Local models ready for usage.</li>
+                                </ol>
+                            </div>
                         </div>
 
                         <div className="space-y-3 pt-4">
-                             <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">3. Custom Providers</h4>
-                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-3">
-                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                     Use Custom Providers to hook up any standard external LLM router (like OpenRouter, LMStudio, or proprietary company endpoints). Create a new provider using a cURL command template.
-                                 </p>
-                                 <div className="bg-bg-input p-3 rounded-lg border border-border-subtle space-y-2">
-                                     <div className="text-[11px] font-mono text-text-secondary">
-                                         <div className="text-purple-400">curl</div> <span className="text-blue-400">https://openrouter.ai/api/v1/chat/completions</span> \
-                                         <br/>  -H <span className="text-green-400">"Authorization: Bearer YOUR_KEY"</span> \
-                                         <br/> ...
-                                     </div>
-                                 </div>
-                                 <div className="flex items-start gap-2 mt-2">
-                                     <div className="w-5 h-5 rounded bg-orange-500/20 text-orange-500 flex items-center justify-center shrink-0 mt-0.5"><Zap size={10} /></div>
-                                     <div className="text-xs text-text-secondary leading-relaxed">
-                                         <strong>Crucial: The Response Path.</strong> You must inform Natively how to parse the JSON text back. Deeply nested outputs must define the exact path array. For OpenAI/OpenRouter compliant endpoints, this is strictly: <span className={kbdClass}>choices[0].message.content</span>.
-                                     </div>
-                                 </div>
-                             </div>
+                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">3. Custom Providers</h4>
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-3">
+                                <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
+                                    Use Custom Providers to hook up any standard external LLM router (like OpenRouter, LMStudio, or proprietary company endpoints). Create a new provider using a cURL command template.
+                                </p>
+                                <div className="bg-bg-input p-3 rounded-lg border border-border-subtle space-y-2">
+                                    <div className="text-[11px] font-mono text-text-secondary">
+                                        <div className="text-purple-400">curl</div> <span className="text-blue-400">https://openrouter.ai/api/v1/chat/completions</span> \
+                                        <br />  -H <span className="text-green-400">"Authorization: Bearer YOUR_KEY"</span> \
+                                        <br /> ...
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-2 mt-2">
+                                    <div className="w-5 h-5 rounded bg-orange-500/20 text-orange-500 flex items-center justify-center shrink-0 mt-0.5"><Zap size={10} /></div>
+                                    <div className="text-xs text-text-secondary leading-relaxed">
+                                        <strong>Crucial: The Response Path.</strong> You must inform Natively how to parse the JSON text back. Deeply nested outputs must define the exact path array. For OpenAI/OpenRouter compliant endpoints, this is strictly: <span className={kbdClass}>choices[0].message.content</span>.
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                     </div>
                 </AccordionSection>
 
                 <AccordionSection title="4. Natively Interface Operations" icon={<Monitor className="w-4 h-4" />}>
-                     <div className="space-y-6">
+                    <div className="space-y-6">
                         <p className="text-[13px]">When initialized, Natively hides itself visually while remaining active as a persistent translucent overlay. This is your command center.</p>
-                        
+
                         <div className="relative w-full flex flex-col p-2 sm:p-5 bg-bg-main rounded-[26px] border border-border-subtle shadow-inner">
                             <MockAppInterface />
                             <MockPillControlsAnim />
@@ -1223,28 +1223,28 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                             {([
-                                { Icon: Pencil,        color: 'blue',   title: 'What to Answer?',  badge: null,           bc: '',                                                          kbd: ['⌘','1'],        desc: 'Reads the active transcript and screen, then streams a precise response to read aloud.' },
-                                { Icon: Lightbulb,     color: 'violet', title: 'Brainstorm',        badge: 'Interview ON',  bc: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',  kbd: ['⌘','3'],        desc: 'Recap becomes Brainstorm when Interview Mode is ON — deep multi-step strategies.' },
-                                { Icon: HelpCircle,    color: 'teal',   title: 'Follow Up',         badge: null,           bc: '',                                                          kbd: ['⌘','4'],        desc: 'Suggests the next logical question to keep conversation flowing gracefully.' },
-                                { Icon: Zap,           color: 'emerald',title: 'Answer Now',        badge: null,           bc: '',                                                          kbd: ['⌘','5'],        desc: 'Records your mic + screen context and fires an immediate AI query.' },
-                                { Icon: MessageSquare, color: 'indigo', title: 'Clarify',           badge: null,           bc: '',                                                          kbd: ['⌘','2'],        desc: 'Generates sharp probing questions from latent audio when a topic is unclear.' },
-                                { Icon: RefreshCw,     color: 'amber',  title: 'Recap',             badge: 'Interview OFF', bc: 'bg-red-500/10 text-red-400 border-red-500/30',              kbd: ['⌘','3'],        desc: 'Condenses the last 5 minutes into bullet points when you lose the thread.' },
-                                { Icon: Sparkles,      color: 'sky',    title: 'Code Hint',         badge: null,           bc: '',                                                          kbd: ['⌘','6'],        desc: 'Reads your screen and nudges you toward the correct code implementation.' },
-                                { Icon: Monitor,       color: 'rose',   title: 'Screenshot & Ask',  badge: null,           bc: '',                                                          kbd: ['⌘','⇧','H'],    desc: 'Forces a full-screen capture and immediately processes it through the LLM.' },
-                                { Icon: EyeOff,        color: 'slate',  title: 'Stealth Execute',   badge: null,           bc: '',                                                          kbd: ['⌘','↵'],        desc: 'Processes context in the background without ever revealing the interface.' },
-                            ] as Array<{ Icon: React.ElementType; color: 'blue'|'violet'|'teal'|'emerald'|'indigo'|'amber'|'sky'|'rose'|'slate'; title: string; badge: string|null; bc: string; kbd: string[]; desc: string }>).map(({ Icon, color, title, badge, bc, kbd, desc }) => {
+                                { Icon: Pencil, color: 'blue', title: 'What to Answer?', badge: null, bc: '', kbd: ['⌘', '1'], desc: 'Reads the active transcript and screen, then streams a precise response to read aloud.' },
+                                { Icon: Lightbulb, color: 'violet', title: 'Brainstorm', badge: 'Interview ON', bc: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', kbd: ['⌘', '3'], desc: 'Recap becomes Brainstorm when Interview Mode is ON — deep multi-step strategies.' },
+                                { Icon: HelpCircle, color: 'teal', title: 'Follow Up', badge: null, bc: '', kbd: ['⌘', '4'], desc: 'Suggests the next logical question to keep conversation flowing gracefully.' },
+                                { Icon: Zap, color: 'emerald', title: 'Answer Now', badge: null, bc: '', kbd: ['⌘', '5'], desc: 'Records your mic + screen context and fires an immediate AI query.' },
+                                { Icon: MessageSquare, color: 'indigo', title: 'Clarify', badge: null, bc: '', kbd: ['⌘', '2'], desc: 'Generates sharp probing questions from latent audio when a topic is unclear.' },
+                                { Icon: RefreshCw, color: 'amber', title: 'Recap', badge: 'Interview OFF', bc: 'bg-red-500/10 text-red-400 border-red-500/30', kbd: ['⌘', '3'], desc: 'Condenses the last 5 minutes into bullet points when you lose the thread.' },
+                                { Icon: Sparkles, color: 'sky', title: 'Code Hint', badge: null, bc: '', kbd: ['⌘', '6'], desc: 'Reads your screen and nudges you toward the correct code implementation.' },
+                                { Icon: Monitor, color: 'rose', title: 'Screenshot & Ask', badge: null, bc: '', kbd: ['⌘', '⇧', 'H'], desc: 'Forces a full-screen capture and immediately processes it through the LLM.' },
+                                { Icon: EyeOff, color: 'slate', title: 'Stealth Execute', badge: null, bc: '', kbd: ['⌘', '↵'], desc: 'Processes context in the background without ever revealing the interface.' },
+                            ] as Array<{ Icon: React.ElementType; color: 'blue' | 'violet' | 'teal' | 'emerald' | 'indigo' | 'amber' | 'sky' | 'rose' | 'slate'; title: string; badge: string | null; bc: string; kbd: string[]; desc: string }>).map(({ Icon, color, title, badge, bc, kbd, desc }) => {
                                 const isWindows = typeof navigator !== 'undefined' && /Win/i.test(navigator.platform);
                                 const resolvedKbd = kbd.map(k => k === '⌘' ? (isWindows ? 'Ctrl' : '⌘') : k);
                                 const t = {
-                                    blue:   { bg: 'bg-blue-500/10',    text: 'text-blue-400',    border: 'border-blue-500/20',    glow: 'group-hover:shadow-[0_0_0_1px_rgba(59,130,246,0.2),0_4px_12px_rgba(59,130,246,0.07)]' },
-                                    violet: { bg: 'bg-violet-500/10',  text: 'text-violet-400',  border: 'border-violet-500/20',  glow: 'group-hover:shadow-[0_0_0_1px_rgba(139,92,246,0.2),0_4px_12px_rgba(139,92,246,0.07)]' },
-                                    teal:   { bg: 'bg-teal-500/10',    text: 'text-teal-400',    border: 'border-teal-500/20',    glow: 'group-hover:shadow-[0_0_0_1px_rgba(20,184,166,0.2),0_4px_12px_rgba(20,184,166,0.07)]' },
-                                    emerald:{ bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(16,185,129,0.2),0_4px_12px_rgba(16,185,129,0.07)]' },
-                                    indigo: { bg: 'bg-indigo-500/10',  text: 'text-indigo-400',  border: 'border-indigo-500/20',  glow: 'group-hover:shadow-[0_0_0_1px_rgba(99,102,241,0.2),0_4px_12px_rgba(99,102,241,0.07)]' },
-                                    amber:  { bg: 'bg-amber-500/10',   text: 'text-amber-400',   border: 'border-amber-500/20',   glow: 'group-hover:shadow-[0_0_0_1px_rgba(245,158,11,0.2),0_4px_12px_rgba(245,158,11,0.07)]' },
-                                    sky:    { bg: 'bg-sky-500/10',     text: 'text-sky-400',     border: 'border-sky-500/20',     glow: 'group-hover:shadow-[0_0_0_1px_rgba(14,165,233,0.2),0_4px_12px_rgba(14,165,233,0.07)]' },
-                                    rose:   { bg: 'bg-rose-500/10',    text: 'text-rose-400',    border: 'border-rose-500/20',    glow: 'group-hover:shadow-[0_0_0_1px_rgba(244,63,94,0.2),0_4px_12px_rgba(244,63,94,0.07)]' },
-                                    slate:  { bg: 'bg-slate-500/10',   text: 'text-slate-400',   border: 'border-slate-500/20',   glow: 'group-hover:shadow-[0_0_0_1px_rgba(100,116,139,0.2),0_4px_12px_rgba(100,116,139,0.07)]' },
+                                    blue: { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(59,130,246,0.2),0_4px_12px_rgba(59,130,246,0.07)]' },
+                                    violet: { bg: 'bg-violet-500/10', text: 'text-violet-400', border: 'border-violet-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(139,92,246,0.2),0_4px_12px_rgba(139,92,246,0.07)]' },
+                                    teal: { bg: 'bg-teal-500/10', text: 'text-teal-400', border: 'border-teal-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(20,184,166,0.2),0_4px_12px_rgba(20,184,166,0.07)]' },
+                                    emerald: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(16,185,129,0.2),0_4px_12px_rgba(16,185,129,0.07)]' },
+                                    indigo: { bg: 'bg-indigo-500/10', text: 'text-indigo-400', border: 'border-indigo-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(99,102,241,0.2),0_4px_12px_rgba(99,102,241,0.07)]' },
+                                    amber: { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(245,158,11,0.2),0_4px_12px_rgba(245,158,11,0.07)]' },
+                                    sky: { bg: 'bg-sky-500/10', text: 'text-sky-400', border: 'border-sky-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(14,165,233,0.2),0_4px_12px_rgba(14,165,233,0.07)]' },
+                                    rose: { bg: 'bg-rose-500/10', text: 'text-rose-400', border: 'border-rose-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(244,63,94,0.2),0_4px_12px_rgba(244,63,94,0.07)]' },
+                                    slate: { bg: 'bg-slate-500/10', text: 'text-slate-400', border: 'border-slate-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(100,116,139,0.2),0_4px_12px_rgba(100,116,139,0.07)]' },
                                 }[color];
 
                                 return (
@@ -1289,9 +1289,9 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                 </AccordionSection>
 
                 <AccordionSection title="5. Meeting Intelligence" icon={<Calendar className="w-4 h-4" />}>
-                     <div className="space-y-6">
+                    <div className="space-y-6">
                         <p className="text-[13px]">When an active session concludes, it gets saved directly to your local file system as a complete intelligence dossier spanning the transcript, AI token usage, and automated structural summaries.</p>
-                        
+
                         <MockMeetingInterfaceAnim />
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1328,7 +1328,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                 <MessageSquare className="w-4 h-4 text-accent-primary" /> In-Meeting Semantic Search
                             </h4>
                             <p className="text-[13px] mb-6">Instead of re-reading the entire transcript to find what happened, use the attached RAG interface pinned to the bottom of the Meeting details window.</p>
-                            
+
                             <MockMeetingChatAnim />
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-6">
@@ -1355,7 +1355,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                 </AccordionSection>
 
                 <AccordionSection title="6. Global Search & Shortcuts" icon={<Search className="w-4 h-4" />}>
-                     <div className="space-y-6">
+                    <div className="space-y-6">
                         <p className="text-[13px]">Hit <span className={kbdClass}>Cmd+K</span> anywhere on your computer to invoke the Natively Global Palette. This acts as your Spotlight overlay for interacting directly with the system backbone.</p>
 
                         <MockSearchPillAnim />
@@ -1383,13 +1383,13 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                         <div className="border-t border-border-subtle pt-6">
                             <h4 className="font-bold text-sm text-text-primary border-b border-border-subtle pb-1">Global System Shortcuts</h4>
                             <p className="text-[11px] text-text-secondary mt-1 mb-3">These hotkeys work anywhere on your operating system, regardless of whether Natively is focused or completely hidden. Change them via <strong>Settings &gt; Hotkeys</strong>.</p>
-                            
+
                             <div className="grid gap-3">
                                 <div className="flex items-center justify-between p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                     <div className="flex items-start gap-4">
-                                         <div className="w-8 h-8 rounded shrink-0 bg-bg-input border border-border-subtle flex items-center justify-center mt-0.5">
-                                             <Eye className="w-4 h-4 text-text-primary" />
-                                         </div>
+                                        <div className="w-8 h-8 rounded shrink-0 bg-bg-input border border-border-subtle flex items-center justify-center mt-0.5">
+                                            <Eye className="w-4 h-4 text-text-primary" />
+                                        </div>
                                         <div>
                                             <div className="font-semibold text-sm text-text-primary">Show / Hide Interface</div>
                                             <div className="text-xs text-text-secondary mt-1">Quickly toggle the window visibility. Used as an immediate panic hide.</div>
@@ -1399,49 +1399,49 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                         {(shortcuts.toggleVisibility || ['⌘', 'B']).map((key: string, i: number) => <span key={i} className={kbdClass}>{key}</span>)}
                                     </div>
                                 </div>
-                                
+
                                 <div className="flex items-center justify-between p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                     <div className="flex items-start gap-4">
-                                         <div className="w-8 h-8 rounded shrink-0 bg-bg-input border border-border-subtle flex items-center justify-center mt-0.5">
-                                             <Image className="w-4 h-4 text-text-primary" />
-                                         </div>
+                                        <div className="w-8 h-8 rounded shrink-0 bg-bg-input border border-border-subtle flex items-center justify-center mt-0.5">
+                                            <Image className="w-4 h-4 text-text-primary" />
+                                        </div>
                                         <div>
                                             <div className="font-semibold text-sm text-text-primary">Capture Contextual Screenshot</div>
                                             <div className="text-xs text-text-secondary mt-1">Takes a silent screenshot in the background, feeding the visual data to the LLM context flow.</div>
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
-                                         {(shortcuts.takeScreenshot || ['⌘', 'H']).map((key: string, i: number) => <span key={i} className={kbdClass}>{key}</span>)}
+                                        {(shortcuts.takeScreenshot || ['⌘', 'H']).map((key: string, i: number) => <span key={i} className={kbdClass}>{key}</span>)}
                                     </div>
                                 </div>
 
-                                 <div className="flex items-center justify-between p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <div className="flex items-center justify-between p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                     <div className="flex items-start gap-4">
-                                         <div className="w-8 h-8 rounded shrink-0 bg-bg-input border border-border-subtle flex items-center justify-center mt-0.5">
-                                             <MessageSquare className="w-4 h-4 text-text-primary" />
-                                         </div>
+                                        <div className="w-8 h-8 rounded shrink-0 bg-bg-input border border-border-subtle flex items-center justify-center mt-0.5">
+                                            <MessageSquare className="w-4 h-4 text-text-primary" />
+                                        </div>
                                         <div>
                                             <div className="font-semibold text-sm text-text-primary">Process Captured Context (Execute)</div>
                                             <div className="text-xs text-text-secondary mt-1">Triggers Natively to analyze the captured screenshots and text from the rolling buffer.</div>
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
-                                         {(shortcuts.processScreenshots || ['⌘', 'Enter']).map((key: string, i: number) => <span key={i} className={kbdClass}>{key}</span>)}
+                                        {(shortcuts.processScreenshots || ['⌘', 'Enter']).map((key: string, i: number) => <span key={i} className={kbdClass}>{key}</span>)}
                                     </div>
                                 </div>
 
                                 <div className="flex items-center justify-between p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                     <div className="flex items-start gap-4">
-                                         <div className="w-8 h-8 rounded shrink-0 bg-bg-input border border-border-subtle flex items-center justify-center mt-0.5">
-                                             <Zap className="w-4 h-4 text-text-primary" />
-                                         </div>
+                                        <div className="w-8 h-8 rounded shrink-0 bg-bg-input border border-border-subtle flex items-center justify-center mt-0.5">
+                                            <Zap className="w-4 h-4 text-text-primary" />
+                                        </div>
                                         <div>
                                             <div className="font-semibold text-sm text-text-primary">Capture + Execute Instantly</div>
                                             <div className="text-xs text-text-secondary mt-1">Captures a screenshot AND processes it in one fluid action.</div>
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
-                                         {(shortcuts.captureAndProcess || ['⌘', '⇧', 'Enter']).map((key: string, i: number) => <span key={i} className={kbdClass}>{key}</span>)}
+                                        {(shortcuts.captureAndProcess || ['⌘', '⇧', 'Enter']).map((key: string, i: number) => <span key={i} className={kbdClass}>{key}</span>)}
                                     </div>
                                 </div>
                             </div>
@@ -1452,7 +1452,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
 
                 <AccordionSection title="7. Pro Intelligence" icon={<Star className="w-4 h-4" />}>
-                     <div className="space-y-6">
+                    <div className="space-y-6">
                         {/* Profile */}
                         <div>
                             <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl mb-4">
@@ -1460,7 +1460,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     <User size={14} /> Profile Intelligence System
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                    Instead of telling the AI who you are during every prompt, Profile Intelligence parses your background and universally injects it into all queries so it responds securely customized to your job role. 
+                                    Instead of telling the AI who you are during every prompt, Profile Intelligence parses your background and universally injects it into all queries so it responds securely customized to your job role.
                                 </p>
                             </div>
 
@@ -1481,7 +1481,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                         <CreditCard className="w-4 h-4 text-accent-primary" /> Pro Requirement
                                     </h4>
                                     <p className="text-[11px] text-text-secondary mb-2">
-                                        This is a Natively Pro feature. 
+                                        This is a Natively Pro feature.
                                     </p>
                                     <ol className="text-[11px] text-text-secondary space-y-1 list-decimal pl-4 mb-0">
                                         <li>Get a License at <button onClick={() => { (window as any).electronAPI?.openExternal('https://natively.software/') }} className="text-accent-primary hover:underline font-semibold">natively.software</button></li>
@@ -1525,7 +1525,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                 </div>
                             </div>
                         </div>
-                     </div>
+                    </div>
                 </AccordionSection>
 
                 <AccordionSection title="8. Modes Manager" icon={<LayoutGrid className="w-4 h-4" />}>
@@ -1612,7 +1612,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     By connecting your Google Calendar directly to Natively, the AI automatically gains context on your upcoming meetings, syncs the event data, and reads attendee lists to hyper-personalize your interactions.
                                 </p>
                             </div>
-                            
+
                             <div className="grid md:grid-cols-2 gap-3">
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary">How to Set it Up</h4>
@@ -1635,24 +1635,24 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                         {/* Fast Mode */}
                         <div className="space-y-4">
-                             <h4 className="font-bold text-sm text-text-primary flex items-center gap-2">
-                                 <Zap className="w-4 h-4 text-orange-500" /> Fast Mode (Hardware LPU)
-                             </h4>
-                             <MockFastModeAnim />
-                             <div className="p-4 rounded-xl border bg-orange-500/10 border-orange-500/20">
-                                 <h4 className="font-semibold text-sm mb-2 text-orange-500 flex items-center gap-2">
-                                     <Zap className="w-4 h-4" /> How Fast Mode Works
-                                 </h4>
-                                 <p className="text-xs text-orange-400/80 m-0">
-                                     Fast Mode activates highly efficient models (like Llama 3 8B) layered over Groq hardware LPUs instead of GPUs. This brings latency down from 2-3 seconds to less than 500ms. To enable Fast Mode, navigate to Settings &gt; General Settings popup overlay, and click the Lightning Icon.
-                                 </p>
-                             </div>
+                            <h4 className="font-bold text-sm text-text-primary flex items-center gap-2">
+                                <Zap className="w-4 h-4 text-orange-500" /> Fast Mode (Hardware LPU)
+                            </h4>
+                            <MockFastModeAnim />
+                            <div className="p-4 rounded-xl border bg-orange-500/10 border-orange-500/20">
+                                <h4 className="font-semibold text-sm mb-2 text-orange-500 flex items-center gap-2">
+                                    <Zap className="w-4 h-4" /> How Fast Mode Works
+                                </h4>
+                                <p className="text-xs text-orange-400/80 m-0">
+                                    Fast Mode activates highly efficient models (like Llama 3 8B) layered over Groq hardware LPUs instead of GPUs. This brings latency down from 2-3 seconds to less than 500ms. To enable Fast Mode, navigate to Settings &gt; General Settings popup overlay, and click the Lightning Icon.
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </AccordionSection>
 
                 <AccordionSection title="10. Stealth & Window Control" icon={<Ghost className="w-4 h-4" />}>
-                     <div className="space-y-4">
+                    <div className="space-y-4">
                         <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl mb-4">
                             <h4 className="text-[13px] font-semibold text-indigo-400 flex items-center gap-2 mb-1">
                                 <Ghost size={14} /> Process Disguise & Undetectability
@@ -1686,9 +1686,9 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                 </div>
                             </div>
                         </div>
-                     </div>
+                    </div>
                 </AccordionSection>
-                
+
             </div>
         </div>
     );

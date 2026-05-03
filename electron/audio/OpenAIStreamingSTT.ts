@@ -172,19 +172,26 @@ export class OpenAIStreamingSTT extends EventEmitter {
 
         // Flush any remaining buffered audio to the WS before closing so we
         // don't silently drop up to ~250ms of speech at the end of a session.
+        // Then commit the input buffer so the server transcribes the trailing
+        // audio even if its VAD hasn't tripped on the silence yet.
         if (this.mode === 'ws' && this.ws?.readyState === WebSocket.OPEN &&
-            this.isSessionReady && this.pcmAccumulatorLen > 0) {
-            const combined = new Int16Array(this.pcmAccumulatorLen);
-            let offset = 0;
-            for (const arr of this.pcmAccumulator) {
-                combined.set(arr, offset);
-                offset += arr.length;
+            this.isSessionReady) {
+            if (this.pcmAccumulatorLen > 0) {
+                const combined = new Int16Array(this.pcmAccumulatorLen);
+                let offset = 0;
+                for (const arr of this.pcmAccumulator) {
+                    combined.set(arr, offset);
+                    offset += arr.length;
+                }
+                try {
+                    this.ws.send(JSON.stringify({
+                        type:  'input_audio_buffer.append',
+                        audio: Buffer.from(combined.buffer).toString('base64'),
+                    }));
+                } catch { /* ignore — we're closing anyway */ }
             }
             try {
-                this.ws.send(JSON.stringify({
-                    type:  'input_audio_buffer.append',
-                    audio: Buffer.from(combined.buffer).toString('base64'),
-                }));
+                this.ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
             } catch { /* ignore — we're closing anyway */ }
         }
 
@@ -233,6 +240,41 @@ export class OpenAIStreamingSTT extends EventEmitter {
             this._restFlushAndUpload();
         }
         // WebSocket path: server VAD handles this; nothing to do.
+    }
+
+    public finalize(): void {
+        if (!this.isActive) return;
+        if (this.mode === 'rest') {
+            console.log('[OpenAIStreaming][REST] Finalize — flushing buffer');
+            this._restFlushAndUpload();
+            return;
+        }
+        if (this.ws?.readyState !== WebSocket.OPEN || !this.isSessionReady) return;
+
+        if (this.pcmAccumulatorLen > 0) {
+            const combined = new Int16Array(this.pcmAccumulatorLen);
+            let offset = 0;
+            for (const arr of this.pcmAccumulator) {
+                combined.set(arr, offset);
+                offset += arr.length;
+            }
+            this.pcmAccumulator = [];
+            this.pcmAccumulatorLen = 0;
+            try {
+                this.ws.send(JSON.stringify({
+                    type:  'input_audio_buffer.append',
+                    audio: Buffer.from(combined.buffer).toString('base64'),
+                }));
+            } catch (err) {
+                console.error('[OpenAIStreaming][WS] Finalize append failed:', err);
+            }
+        }
+        try {
+            this.ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+            console.log('[OpenAIStreaming][WS] Finalize — committed input buffer');
+        } catch (err) {
+            console.error('[OpenAIStreaming][WS] Finalize commit failed:', err);
+        }
     }
 
     // ─── WebSocket Path ───────────────────────────────────────────────────────

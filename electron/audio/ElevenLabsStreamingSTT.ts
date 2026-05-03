@@ -106,6 +106,30 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
         console.log('[ElevenLabsStreaming] Stopped');
     }
 
+    public finalize(): void {
+        if (!this.isActive || !this.ws || this.ws.readyState !== WebSocket.OPEN || !this.isSessionReady) return;
+
+        if (this.pcmAccumulatorLen > 0) {
+            const combined = new Int16Array(this.pcmAccumulatorLen);
+            let offset = 0;
+            for (const arr of this.pcmAccumulator) {
+                combined.set(arr, offset);
+                offset += arr.length;
+            }
+            this.pcmAccumulator = [];
+            this.pcmAccumulatorLen = 0;
+            try {
+                this.ws.send(JSON.stringify({
+                    message_type: 'input_audio_chunk',
+                    audio_base_64: Buffer.from(combined.buffer, combined.byteOffset, combined.byteLength).toString('base64'),
+                }));
+                console.log('[ElevenLabsStreaming] Finalize — flushed pending accumulator');
+            } catch (err) {
+                console.error('[ElevenLabsStreaming] Finalize flush failed:', err);
+            }
+        }
+    }
+
     /**
      * Write raw PCM audio data.
      * ElevenLabs WebSocket expects "input_audio_chunk" in base64 16-bit PCM.

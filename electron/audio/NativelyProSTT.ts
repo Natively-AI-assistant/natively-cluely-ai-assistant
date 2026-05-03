@@ -109,6 +109,9 @@ export class NativelyProSTT extends EventEmitter {
     /** No-op — Natively API server handles VAD internally */
     public notifySpeechEnded(): void {}
 
+    /** No-op — Natively API server finalizes via VAD; no client-side flush available */
+    public finalize(): void {}
+
     public setCredentials(_path: string): void {}
 
     // ── Lifecycle ─────────────────────────────────────────────

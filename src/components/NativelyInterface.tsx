@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from 'react';
 import {
     Sparkles,
     Pencil,
@@ -29,7 +29,7 @@ import {
     Check,
     PointerOff
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValue, useTransform, animate } from 'framer-motion';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 // import { ModelSelector } from './ui/ModelSelector'; // REMOVED
@@ -119,6 +119,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const isMotionAnimatingRef = useRef(false);
+    const rafDimUpdateRef = useRef<number | null>(null);
+    const codeExpandedRef = useRef(false);
+    const animationSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const animationControlsRef = useRef<ReturnType<typeof animate> | null>(null);
     // Captures data from onCaptureAndProcess before the React state flush so
     // handleWhatToSay() can access it even in React 18 concurrent mode (where
     // a plain setTimeout(0) may fire before setAttachedContext flushes).
@@ -141,7 +146,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         // Load initial active mode name
         window.electronAPI?.modesGetActive?.()
             .then((mode: { name: string } | null) => setActiveModeLabel(mode?.name ?? null))
-            .catch(() => {});
+            .catch(() => { });
         // Live-update whenever mode is activated/deactivated
         const unsub = window.electronAPI?.onModeChanged?.((data: { id: string | null; name: string | null }) => {
             setActiveModeLabel(data.name);
@@ -159,7 +164,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         // Load persisted mode
         window.electronAPI?.getActionButtonMode?.()?.then((mode: 'recap' | 'brainstorm') => {
             if (mode) setActionButtonMode(mode);
-        }).catch(() => {});
+        }).catch(() => { });
 
         // Listen for live changes from SettingsPopup / IPC
         const unsubscribe = window.electronAPI?.onActionButtonModeChanged?.((mode: 'recap' | 'brainstorm') => {
@@ -182,6 +187,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     const quickActionClass = 'overlay-chip-surface overlay-text-interactive';
     const inputClass = `${isLightTheme ? 'focus:ring-black/10' : 'focus:ring-white/10'} overlay-input-surface overlay-input-text`;
     const controlSurfaceClass = 'overlay-control-surface overlay-text-interactive';
+
+    // ── Code-expansion spring ────────────────────────────────────────────────
+    // shellWidth is animated directly via animate() so spring physics and the
+    // onComplete callback live in the same call — no useSpring wrapper needed.
+    const shellWidth = useMotionValue(600);
+    const scrollMaxH = useTransform(shellWidth, [600, 780], [320, 560]);
 
     useEffect(() => {
         // Load the persisted default model (not the runtime model)
@@ -239,7 +250,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     // Mouse Passthrough State
     const [isMousePassthrough, setIsMousePassthrough] = useState(false);
     useEffect(() => {
-        window.electronAPI?.getOverlayMousePassthrough?.().then(setIsMousePassthrough).catch(() => {});
+        window.electronAPI?.getOverlayMousePassthrough?.().then(setIsMousePassthrough).catch(() => { });
         const unsub = window.electronAPI?.onOverlayMousePassthroughChanged?.((v) => setIsMousePassthrough(v));
         return () => unsub?.();
     }, []);
@@ -261,7 +272,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         // Check current STT config on mount
         window.electronAPI?.getSttProvider?.().then((provider: string) => {
             if (mounted) setSttNotConfigured(provider === 'none');
-        }).catch(() => {});
+        }).catch(() => { });
 
         // Listen for live config changes (e.g. user saves a key in Settings while meeting is active)
         const unsub = window.electronAPI?.onSttConfigChanged?.((data: { configured: boolean; provider: string }) => {
@@ -274,55 +285,247 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     }, []);
 
     // Auto-resize Window
+    // rAF-debounced so Framer Motion's 60fps spring never floods the Electron main
+    // process with setBounds calls. During the expand animation the flag is set and
+    // the observer is fully suppressed; the OS window is pre-sized before the spring
+    // starts. During contraction the flag is clear so the observer follows the spring.
     useLayoutEffect(() => {
         if (!contentRef.current) return;
 
-        const observer = new ResizeObserver((entries) => {
-            for (const entry of entries) {
-                // Use getBoundingClientRect to get the exact rendered size including padding
-                const rect = entry.target.getBoundingClientRect();
-
-                // Send exact dimensions to Electron
-                // Removed buffer to ensure tight fit
-                console.log('[NativelyInterface] ResizeObserver:', Math.ceil(rect.width), Math.ceil(rect.height));
-                window.electronAPI?.updateContentDimensions({
-                    width: Math.ceil(rect.width),
-                    height: Math.ceil(rect.height)
-                });
-            }
-        });
-
-        observer.observe(contentRef.current);
-        return () => observer.disconnect();
-    }, []);
-
-    // Force resize when attachedContext changes (screenshots added/removed)
-    useEffect(() => {
-        if (!contentRef.current) return;
-        // Let the DOM settle, then measure and push new dimensions
-        requestAnimationFrame(() => {
+        const flush = () => {
+            rafDimUpdateRef.current = null;
             if (!contentRef.current) return;
             const rect = contentRef.current.getBoundingClientRect();
             window.electronAPI?.updateContentDimensions({
                 width: Math.ceil(rect.width),
                 height: Math.ceil(rect.height)
             });
+        };
+
+        const observer = new ResizeObserver(() => {
+            if (isMotionAnimatingRef.current) return;
+            if (rafDimUpdateRef.current) cancelAnimationFrame(rafDimUpdateRef.current);
+            rafDimUpdateRef.current = requestAnimationFrame(flush);
+        });
+
+        observer.observe(contentRef.current);
+        return () => {
+            observer.disconnect();
+            if (rafDimUpdateRef.current) {
+                cancelAnimationFrame(rafDimUpdateRef.current);
+                rafDimUpdateRef.current = null;
+            }
+        };
+    }, []);
+
+    // Force resize when attachedContext changes (screenshots added/removed).
+    // If the code-expansion spring is mid-animation, the CSS shell width is an
+    // intermediate value — passing the measured rect.width to setOverlayDimensions
+    // would fight the pre-sized OS window and produce a visible width glitch.
+    // Use the expansion target width instead so only the height is live-updated.
+    useEffect(() => {
+        if (!contentRef.current) return;
+        requestAnimationFrame(() => {
+            if (!contentRef.current) return;
+            const rect = contentRef.current.getBoundingClientRect();
+            const w = isMotionAnimatingRef.current
+                ? (codeExpandedRef.current ? 780 : 600)
+                : Math.ceil(rect.width);
+            window.electronAPI?.updateContentDimensions({ width: w, height: Math.ceil(rect.height) });
         });
     }, [attachedContext]);
 
-    // Force initial sizing safety check
+    // Initial sizing safety check — same animation-gate rule as above.
     useEffect(() => {
         const timer = setTimeout(() => {
             if (contentRef.current) {
                 const rect = contentRef.current.getBoundingClientRect();
-                window.electronAPI?.updateContentDimensions({
-                    width: Math.ceil(rect.width),
-                    height: Math.ceil(rect.height)
-                });
+                const w = isMotionAnimatingRef.current
+                    ? (codeExpandedRef.current ? 780 : 600)
+                    : Math.ceil(rect.width);
+                window.electronAPI?.updateContentDimensions({ width: w, height: Math.ceil(rect.height) });
             }
         }, 600);
         return () => clearTimeout(timer);
     }, []);
+
+    // ── Code-expansion ──────────────────────────────────────────────────────
+    // IPC helper — sends OS window dimensions exactly once per transition.
+    // Called before the spring starts (expand) or after it settles (contract).
+    const syncOSWindow = useCallback((targetWidth: number, targetHeight?: number) => {
+        if (!contentRef.current) return;
+        const h = targetHeight ?? Math.ceil(contentRef.current.getBoundingClientRect().height);
+        window.electronAPI?.updateContentDimensions({ width: targetWidth, height: h });
+    }, []);
+
+    // Centered variant — keeps the shell's horizontal center fixed across width
+    // changes. Pairs with mx-auto on contentRef: when OS window grows by Δ, X
+    // shifts by -Δ/2 and mx-auto adds Δ/2 margin, so net shell shift = 0.
+    const syncOSWindowCentered = useCallback((targetWidth: number, targetHeight?: number) => {
+        if (!contentRef.current) return;
+        const h = targetHeight ?? Math.ceil(contentRef.current.getBoundingClientRect().height);
+        const api = window.electronAPI as any;
+        if (api?.updateContentDimensionsCentered) {
+            api.updateContentDimensionsCentered({ width: targetWidth, height: h });
+        } else {
+            // Fallback for stale preload (dev hot-reload before electron rebuild)
+            window.electronAPI?.updateContentDimensions({ width: targetWidth, height: h });
+        }
+    }, []);
+
+    // Scan [data-code-msg] elements and check if any intersect the scroll container
+    // viewport. Called on every scroll event and after every messages update.
+    const checkCodeVisibility = useCallback(() => {
+        const container = scrollContainerRef.current;
+
+        // Kick off a spring transition to targetWidth.
+        // Uses animate() directly on the MotionValue so we get:
+        //   • onComplete — fires exactly when the spring settles (no guessed timeout)
+        //   • identity guard — stale onComplete from a cancelled animation is a no-op
+        //   • fallback timer — in case onComplete doesn't fire (unmount race)
+        const startTransition = (targetWidth: 600 | 780) => {
+            codeExpandedRef.current = targetWidth === 780;
+            isMotionAnimatingRef.current = true;
+
+            if (animationControlsRef.current) animationControlsRef.current.stop();
+            if (animationSettleTimerRef.current) {
+                clearTimeout(animationSettleTimerRef.current);
+                animationSettleTimerRef.current = null;
+            }
+
+            // ────────────────────────────────────────────────────────────────
+            // Top-pill-fixed expansion strategy
+            // ────────────────────────────────────────────────────────────────
+            // The shell's outer wrapper (contentRef) uses `mx-auto w-fit`, so
+            // it auto-centers within the OS window's content area. To keep the
+            // top pill VISUALLY ANCHORED across the resize:
+            //
+            //   1. Resize OS window CENTERED (X shifts by -widthDelta/2)
+            //   2. mx-auto compensates by adding +widthDelta/2 margin to shell
+            //   → net horizontal shell movement = 0 ✓
+            //
+            // We pre-size the OS window to the FINAL dimensions ONCE before
+            // the spring starts. Then the CSS spring animates shell width
+            // freely INSIDE the now-fixed OS window. mx-auto margins shrink
+            // as the shell grows — visual effect: shell expands symmetrically
+            // from its center while the OS window never moves again.
+            //
+            // Y is naturally top-anchored: setOverlayDimensions* preserves
+            // currentBounds.y, so height growth happens entirely at the bottom.
+            const curH = contentRef.current
+                ? Math.ceil(contentRef.current.getBoundingClientRect().height)
+                : 0;
+            // Expand: 260px headroom (scrollMaxH grows 320→560 = 240px + 20 buffer)
+            // so the bottom doesn't clip mid-spring.
+            const finalH = targetWidth === 780 ? curH + 260 : curH;
+
+            if (targetWidth === 780) {
+                // EXPAND: pre-size OS window to final width AND tall height in
+                // one centered call. mx-auto compensates the X shift; the
+                // height grows downward into transparent space (invisible).
+                syncOSWindowCentered(780, finalH);
+            }
+            // CONTRACT: do nothing here. OS window stays at 780×tallH while the
+            // CSS spring contracts the shell from 780→600 inside it. mx-auto
+            // grows margins symmetrically as the shell shrinks — sides retract
+            // toward the center. Bottom rises via scrollMaxH transform. After
+            // the spring settles, we snap the OS window to final 600 below.
+
+            // Critical-damped spring (ζ=1.0): fastest possible settle (~200ms)
+            // with zero overshoot. stiffness↑ = snappier; damping tuned to ζ=1.
+            const controls = animate(shellWidth, targetWidth, {
+                type: 'spring' as const,
+                stiffness: 500,
+                damping: 40,
+                mass: 0.8,
+                // No onUpdate: OS window already at correct geometry. Per-frame
+                // IPC would only introduce desync between the renderer's CSS
+                // reflow and the main process's window resize.
+                onComplete: () => {
+                    if (animationControlsRef.current !== controls) return;
+                    animationControlsRef.current = null;
+                    if (animationSettleTimerRef.current) {
+                        clearTimeout(animationSettleTimerRef.current);
+                        animationSettleTimerRef.current = null;
+                    }
+                    isMotionAnimatingRef.current = false;
+                    if (codeExpandedRef.current) {
+                        // Expand settle: width unchanged (780→780, widthDelta=0,
+                        // no X shift). Just tighten the height to actual content.
+                        syncOSWindow(780);
+                    } else {
+                        // Contract settle: width 780→600. Use centered so X
+                        // shifts +90, mx-auto loses its 90px margin in lockstep,
+                        // shell stays exactly where it was = no jump.
+                        syncOSWindowCentered(600);
+                    }
+                },
+            });
+            animationControlsRef.current = controls;
+
+            // Fallback: covers unmount-mid-spring race where onComplete doesn't fire.
+            animationSettleTimerRef.current = setTimeout(() => {
+                animationSettleTimerRef.current = null;
+                isMotionAnimatingRef.current = false;
+                if (codeExpandedRef.current) {
+                    syncOSWindow(780);
+                } else {
+                    syncOSWindowCentered(600);
+                }
+            }, 350);
+        };
+
+        // Scroll container unmounted (session reset / messages cleared) — force
+        // contraction so the OS window doesn't stay at 780px with no content.
+        if (!container) {
+            if (codeExpandedRef.current) startTransition(600);
+            return;
+        }
+
+        const codeEls = container.querySelectorAll('[data-code-msg]');
+        let visible = false;
+        if (codeEls.length > 0) {
+            const cRect = container.getBoundingClientRect();
+            for (const el of codeEls) {
+                const r = el.getBoundingClientRect();
+                if (r.bottom > cRect.top && r.top < cRect.bottom) { visible = true; break; }
+            }
+        }
+
+        if (visible !== codeExpandedRef.current) startTransition(visible ? 780 : 600);
+    }, [shellWidth, syncOSWindow, syncOSWindowCentered]);
+
+    // Re-check after every messages update (catches mid-stream code fences).
+    useEffect(() => {
+        const raf = requestAnimationFrame(() => checkCodeVisibility());
+        return () => cancelAnimationFrame(raf);
+    }, [messages, checkCodeVisibility]);
+
+    // Re-attach scroll listener whenever messages change — the scroll container
+    // is conditionally rendered so scrollContainerRef.current is null at mount.
+    useEffect(() => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+        container.addEventListener('scroll', checkCodeVisibility, { passive: true });
+        return () => container.removeEventListener('scroll', checkCodeVisibility);
+    }, [messages, checkCodeVisibility]);
+
+    // Cancel all in-flight async work on unmount.
+    useEffect(() => {
+        return () => {
+            animationControlsRef.current?.stop();
+            animationControlsRef.current = null;
+            if (animationSettleTimerRef.current) {
+                clearTimeout(animationSettleTimerRef.current);
+                animationSettleTimerRef.current = null;
+            }
+            if (rafDimUpdateRef.current) {
+                cancelAnimationFrame(rafDimUpdateRef.current);
+                rafDimUpdateRef.current = null;
+            }
+        };
+    }, []);
+    // ────────────────────────────────────────────────────────────────────────
 
     // Build conversation context from messages
     useEffect(() => {
@@ -808,7 +1011,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
             cleanupToken();
             cleanupFinal();
         };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // intentionally empty — these listeners must survive isExpanded changes
 
     // Quick Actions - Updated to use new Intelligence APIs
@@ -845,7 +1048,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
             }]);
             // Scroll to bottom when user sends message
             setTimeout(() => {
-            	messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
             }, 50);
         }
 
@@ -951,10 +1154,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                 hasScreenshot: true,
                 screenshotPreview: currentAttachments[0].preview
             }]);
-        	// Scroll to bottom when user sends message
-        	setTimeout(() => {
-        		messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        	}, 50);
+            // Scroll to bottom when user sends message
+            setTimeout(() => {
+                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }, 50);
         }
 
         try {
@@ -986,10 +1189,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                 hasScreenshot: true,
                 screenshotPreview: currentAttachments[0].preview
             }]);
-        	// Scroll to bottom when user sends message
-        	setTimeout(() => {
-        		messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        	}, 50);
+            // Scroll to bottom when user sends message
+            setTimeout(() => {
+                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }, 50);
         }
 
         try {
@@ -1086,7 +1289,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                                 text: '',
                             }];
                         }
-                    } catch {}
+                    } catch { }
                     // Normal completion
                     return [...prev.slice(0, -1), { ...lastMsg, isStreaming: false }];
                 }
@@ -1181,7 +1384,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                                     text: '',
                                 }];
                             }
-                        } catch {}
+                        } catch { }
                         // Normal completion
                         return [...prev.slice(0, -1), { ...lastMsg, isStreaming: false }];
                     }
@@ -1270,7 +1473,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                 hasScreenshot: currentAttachments.length > 0,
                 screenshotPreview: currentAttachments[0]?.preview
             }]);
-            
+
             // Scroll to bottom when user sends message
             setTimeout(() => {
                 messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -1975,7 +2178,7 @@ Provide only the answer, nothing else.`;
             else if (action === 'resetCancel') generalHandlers.resetCancel();
             else if (action === 'takeScreenshot') generalHandlers.takeScreenshot();
             else if (action === 'selectiveScreenshot') generalHandlers.selectiveScreenshot();
-            
+
             // Safety reset if it didn't trigger an expansion
             setTimeout(() => { isStealthRef.current = false; }, 500);
         });
@@ -2043,9 +2246,9 @@ Provide only the answer, nothing else.`;
                             appearance={appearance}
                             onLogoClick={() => window.electronAPI?.setWindowMode?.('launcher')}
                         />
-                        <div
-                            className={`relative w-[600px] max-w-full backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col draggable-area overlay-shell-surface ${overlayPanelClass}`}
-                            style={appearance.shellStyle}
+                        <motion.div
+                            className={`relative max-w-full backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col draggable-area overlay-shell-surface ${overlayPanelClass}`}
+                            style={{ ...appearance.shellStyle, width: shellWidth, willChange: 'width', transform: 'translateZ(0)' }}
                         >
 
 
@@ -2067,13 +2270,13 @@ Provide only the answer, nothing else.`;
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
-                                        <button 
+                                        <button
                                             onClick={() => { window.electronAPI.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'); }}
                                             className="px-3 py-1.5 rounded-lg bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-700 dark:text-yellow-500 text-[11px] font-semibold transition-all active:scale-95 border border-yellow-500/20 shadow-sm"
                                         >
                                             Open Settings
                                         </button>
-                                        <button 
+                                        <button
                                             onClick={() => setSystemAudioWarning(null)}
                                             className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-yellow-600/50 hover:text-yellow-700 dark:text-yellow-500/50 dark:hover:text-yellow-400 transition-colors absolute top-1 right-1 opacity-0 group-hover/warning:opacity-100"
                                             title="Dismiss"
@@ -2140,9 +2343,13 @@ Provide only the answer, nothing else.`;
 
                             {/* Chat History - Only show if there are messages OR active states */}
                             {(messages.length > 0 || isManualRecording || isProcessing) && (
-                                <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3 max-h-[clamp(300px,35vh,450px)] no-drag" style={{ scrollbarWidth: 'none' }}>
+                                <motion.div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3 no-drag" style={{ scrollbarWidth: 'none', maxHeight: scrollMaxH }}>
                                     {messages.map((msg) => (
-                                        <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in-up`}>
+                                        <div
+                                            key={msg.id}
+                                            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in-up`}
+                                            {...(msg.role === 'system' && (msg.isCode || msg.text.includes('```')) ? { 'data-code-msg': 'true' } : {})}
+                                        >
                                             <div className={`
                       ${msg.role === 'user' ? 'max-w-[72.25%] px-[13.6px] py-[10.2px]' : 'max-w-[85%] px-4 py-3'} text-[14px] leading-relaxed relative group whitespace-pre-wrap
                       ${msg.role === 'user'
@@ -2217,7 +2424,7 @@ Provide only the answer, nothing else.`;
                                         </div>
                                     )}
                                     <div ref={messagesEndRef} />
-                                </div>
+                                </motion.div>
                             )}
 
                             {/* Quick Actions - Minimal & Clean */}
@@ -2402,8 +2609,8 @@ Provide only the answer, nothing else.`;
                                             w-7 h-7 flex items-center justify-center rounded-lg
                                             interaction-base interaction-press
                                             ${isSettingsOpen
-                                                    ? 'overlay-icon-surface overlay-icon-surface-hover overlay-text-primary'
-                                                    : 'overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive'}
+                                                        ? 'overlay-icon-surface overlay-icon-surface-hover overlay-text-primary'
+                                                        : 'overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive'}
                                         `}
 
                                                 style={appearance.iconStyle}
@@ -2441,7 +2648,7 @@ Provide only the answer, nothing else.`;
                                     <button
                                         onClick={handleManualSubmit}
                                         disabled={!inputValue.trim()}
-                                    className={`
+                                        className={`
                                     w-7 h-7 rounded-full flex items-center justify-center
                                     interaction-base interaction-press
                                     ${inputValue.trim()
@@ -2449,13 +2656,13 @@ Provide only the answer, nothing else.`;
                                                 : 'overlay-icon-surface overlay-text-muted cursor-not-allowed'
                                             }
                                 `}
-                                    style={inputValue.trim() ? undefined : appearance.iconStyle}
+                                        style={inputValue.trim() ? undefined : appearance.iconStyle}
                                     >
                                         <ArrowRight className="w-3.5 h-3.5" />
                                     </button>
                                 </div>
                             </div>
-                        </div>
+                        </motion.div>
                     </motion.div>
                 )}
             </AnimatePresence>

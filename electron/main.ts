@@ -211,6 +211,7 @@ try {
 
 import { CredentialsManager } from "./services/CredentialsManager"
 import { SettingsManager } from "./services/SettingsManager"
+import { PhoneMirrorService } from "./services/PhoneMirrorService"
 import { setVerboseLoggingFlag } from "./verboseLog"
 import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
@@ -1581,19 +1582,27 @@ export class AppState {
 
   public async endMeeting(): Promise<void> {
     console.log('[Main] Ending Meeting...');
-    this.isMeetingActive = false; // Block new data immediately
-    this.broadcastMeetingState();
 
     // Reset Mouse Passthrough so the next meeting overlay starts fresh and focusable
     if (this.overlayMousePassthrough) {
       this.setOverlayMousePassthrough(false);
     }
 
-    // Stop audio captures synchronously — these are fire-and-forget internally
+    // Stop the native captures first so no new audio enters the STT pipeline,
+    // then finalize the STT sessions so any trailing audio gets transcribed.
+    // Only after a brief grace window do we flip isMeetingActive=false — otherwise
+    // late-arriving final transcripts get filtered out by isActive guards downstream
+    // and the user sees their last words vanish.
     this.systemAudioCapture?.stop();
-    this.googleSTT?.stop();
     this.microphoneCapture?.stop();
+    this.googleSTT?.finalize?.();
+    this.googleSTT_User?.finalize?.();
+    await new Promise(resolve => setTimeout(resolve, 250));
+    this.googleSTT?.stop();
     this.googleSTT_User?.stop();
+
+    this.isMeetingActive = false;
+    this.broadcastMeetingState();
 
     // Save session state and reset context — MeetingPersistence.stopMeeting() is
     // already fire-and-forget internally (processAndSaveMeeting runs in background).
@@ -2706,6 +2715,14 @@ async function initializeApp() {
   // Pre-create settings window in background for faster first open
   appState.settingsWindowHelper.preloadWindow()
 
+  // Restore Phone Mirror service if it was enabled in a previous session.
+  // Failure here is non-fatal — the user can re-enable from Settings.
+  if (SettingsManager.getInstance().get('phoneMirrorEnabled')) {
+    PhoneMirrorService.getInstance()
+      .start({ exposeOnLan: !!SettingsManager.getInstance().get('phoneMirrorExposeOnLan'), persist: false })
+      .catch((err) => console.error('[Init] PhoneMirror auto-start failed:', err));
+  }
+
   // One-time macOS screen recording permission prompt.
   //
   // We must fire this AFTER createWindow() so that:
@@ -2846,6 +2863,11 @@ async function initializeApp() {
 
     // Kill Ollama if we started it
     OllamaManager.getInstance().stop();
+
+    // Tear down the Phone Mirror service so the OS port is freed cleanly.
+    PhoneMirrorService.getInstance().dispose().catch((err) =>
+      console.error('[Main] PhoneMirror dispose failed:', err)
+    );
 
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');

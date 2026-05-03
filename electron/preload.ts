@@ -6,6 +6,10 @@ interface ElectronAPI {
     width: number
     height: number
   }) => Promise<void>
+  updateContentDimensionsCentered: (dimensions: {
+    width: number
+    height: number
+  }) => Promise<void>
   getRecognitionLanguages: () => Promise<Record<string, any>>
   getScreenshots: () => Promise<Array<{ path: string; preview: string }>>
   deleteScreenshot: (
@@ -339,6 +343,8 @@ export const PROCESSING_EVENTS = {
 contextBridge.exposeInMainWorld("electronAPI", {
   updateContentDimensions: (dimensions: { width: number; height: number }) =>
     ipcRenderer.invoke("update-content-dimensions", dimensions),
+  updateContentDimensionsCentered: (dimensions: { width: number; height: number }) =>
+    ipcRenderer.invoke("update-content-dimensions-centered", dimensions),
   getRecognitionLanguages: () => ipcRenderer.invoke("get-recognition-languages"),
   takeScreenshot: () => ipcRenderer.invoke("take-screenshot"),
   takeSelectiveScreenshot: () => ipcRenderer.invoke("take-selective-screenshot"),
@@ -520,6 +526,18 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return () => {
       ipcRenderer.removeListener('disguise-changed', subscription)
     }
+  },
+
+  // Phone Mirror — stream live AI responses to a paired phone over the LAN.
+  phoneMirrorGetInfo: () => ipcRenderer.invoke("phone-mirror:get-info"),
+  phoneMirrorEnable: (exposeOnLan: boolean) => ipcRenderer.invoke("phone-mirror:enable", exposeOnLan),
+  phoneMirrorDisable: () => ipcRenderer.invoke("phone-mirror:disable"),
+  phoneMirrorSetLan: (exposeOnLan: boolean) => ipcRenderer.invoke("phone-mirror:set-lan", exposeOnLan),
+  phoneMirrorRotateToken: () => ipcRenderer.invoke("phone-mirror:rotate-token"),
+  onPhoneMirrorStatus: (callback: (info: any) => void) => {
+    const subscription = (_: any, info: any) => callback(info)
+    ipcRenderer.on('phone-mirror:status', subscription)
+    return () => { ipcRenderer.removeListener('phone-mirror:status', subscription) }
   },
 
   onSettingsVisibilityChange: (callback: (isVisible: boolean) => void) => {

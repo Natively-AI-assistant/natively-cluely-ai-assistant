@@ -1615,14 +1615,14 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (data.choices?.[0]?.delta !== undefined) {
       // It's a streaming delta chunk with no extractable content
       return "";
-   	}
+    }
 
     // For streaming responses with empty choices array (e.g., final usage chunk)
     // This handles: { "choices": [], "usage": { ... } }
     if (Array.isArray(data.choices) && data.choices.length === 0) {
       return "";
     }
-    
+
     // Fallback: stringify the whole response (only for non-streaming responses)
     console.warn("[LLMHelper] Could not extract text from custom provider response, returning raw JSON");
     return JSON.stringify(data);
@@ -1913,7 +1913,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           // Event-driven discovery: trigger on 404 / model-not-found errors
           const errMsg = (err.message || '').toLowerCase();
           if (errMsg.includes('404') || errMsg.includes('not found') || errMsg.includes('deprecated')) {
-            this.modelVersionManager.onModelError(provider.name).catch(() => {});
+            this.modelVersionManager.onModelError(provider.name).catch(() => { });
           }
         }
       }
@@ -2059,10 +2059,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     // ============================================================
     const currentFamilyLabel = this.currentModelId === 'natively' ? 'Natively'
       : this.isClaudeModel(this.currentModelId) ? 'Claude'
-      : this.isOpenAiModel(this.currentModelId) ? 'OpenAI'
-      : this.isGroqModel(this.currentModelId) ? 'Groq'
-      : this.isGeminiModel(this.currentModelId) ? 'Gemini'
-      : '';
+        : this.isOpenAiModel(this.currentModelId) ? 'OpenAI'
+          : this.isGroqModel(this.currentModelId) ? 'Groq'
+            : this.isGeminiModel(this.currentModelId) ? 'Gemini'
+              : '';
 
     if (currentFamilyLabel) {
       providers.sort((a, b) => {
@@ -2388,10 +2388,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     const body: Record<string, unknown> = {
       messages: [{ role: 'user', content: userContent }],
-      stream:   true,
+      stream: true,
     };
-    if (this.groqFastTextMode)                                  body.fast_mode = true;
-    if (systemPrompt)                                           body.system    = systemPrompt;
+    if (this.groqFastTextMode) body.fast_mode = true;
+    if (systemPrompt) body.system = systemPrompt;
     if (this.aiResponseLanguage && this.aiResponseLanguage !== 'English') {
       body.language = this.aiResponseLanguage; // 'auto' is forwarded — server handles it
     }
@@ -2411,7 +2411,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     // When the key is the trial sentinel, authenticate with the real trial token.
     const streamHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
-      'Accept':       'text/event-stream',
+      'Accept': 'text/event-stream',
     };
     if (nativelyKey === '__trial__') {
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -2425,9 +2425,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     // 60s timeout covers worst-case: max-token Gemini Pro response streamed over a slow connection.
     // This is intentionally longer than the non-streaming 25s timeout.
     const response = await fetch('https://api.natively.software/v1/chat', {
-      method:  'POST',
+      method: 'POST',
       headers: streamHeaders,
-      body:   JSON.stringify(body),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(60_000),
     });
 
@@ -2440,9 +2440,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     // Protocol: each line starting with "data: " carries a JSON payload.
     //   data: {"delta":"token","model":"llama-3.3-70b"}
     //   data: [DONE]
-    const reader  = response.body!.getReader();
+    const reader = response.body!.getReader();
     const decoder = new TextDecoder();
-    let   buf     = '';
+    let buf = '';
 
     try {
       outer: while (true) {
@@ -2466,7 +2466,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         }
       }
     } finally {
-      try { reader.cancel(); } catch {}  // release the fetch connection cleanly
+      try { reader.cancel(); } catch { }  // release the fetch connection cleanly
     }
   }
 
@@ -2972,29 +2972,29 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
   public async getOllamaModels(): Promise<string[]> {
     const baseUrl = (this.ollamaUrl || "http://127.0.0.1:11434").replace('localhost', '127.0.0.1');
-    
+
     try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 1000); // Fast 1s timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 1000); // Fast 1s timeout
 
-        const response = await fetch(`${baseUrl}/api/tags`, {
-            signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
+      const response = await fetch(`${baseUrl}/api/tags`, {
+        signal: controller.signal
+      });
 
-        if (!response.ok) return [];
+      clearTimeout(timeoutId);
 
-        const data = await response.json();
-        if (data && data.models) {
-            return data.models.map((m: any) => m.name);
-        }
-        
-        return [];
+      if (!response.ok) return [];
+
+      const data = await response.json();
+      if (data && data.models) {
+        return data.models.map((m: any) => m.name);
+      }
+
+      return [];
     } catch (error: any) {
-        // Silently catch connection refused/timeout errors. 
-        // OllamaManager handles logging the startup status.
-        return [];
+      // Silently catch connection refused/timeout errors. 
+      // OllamaManager handles logging the startup status.
+      return [];
     }
   }
 
@@ -3268,7 +3268,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     });
 
     // Suppress unhandled-rejection if the original promise settles after the timeout wins the race
-    promise.catch(() => {});
+    promise.catch(() => { });
 
     return Promise.race([
       promise.then(result => {

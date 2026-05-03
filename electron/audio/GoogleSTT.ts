@@ -161,6 +161,18 @@ export class GoogleSTT extends EventEmitter {
         }
     }
 
+    public finalize(): void {
+        if (!this.isActive || !this.stream) return;
+        console.log(`[GoogleSTT/${this.label}] Finalize — ending gRPC stream to flush final transcript`);
+        try {
+            this.stream.end();
+        } catch (err) {
+            console.error(`[GoogleSTT/${this.label}] Finalize end() failed:`, err);
+        }
+        this.isStreaming = false;
+        this.stream = null;
+    }
+
     private buffer: Buffer[] = [];
     private isConnecting = false;
     private lastConnectAttempt = 0;

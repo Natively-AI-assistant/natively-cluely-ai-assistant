@@ -103,6 +103,16 @@ export class DeepgramStreamingSTT extends EventEmitter {
         console.log('[DeepgramStreaming] Stopped');
     }
 
+    public finalize(): void {
+        if (!this.isActive || !this.isOpen || !this.live) return;
+        try {
+            this.live.finalize();
+            console.log('[DeepgramStreaming] Sent Finalize to flush server buffer');
+        } catch (err: any) {
+            console.error('[DeepgramStreaming] Finalize failed:', err?.message);
+        }
+    }
+
     public write(chunk: Buffer): void {
         if (!this.isActive) return;
 

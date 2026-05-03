@@ -54,10 +54,10 @@ export interface StoredCredentials {
     openaiPreferredModel?: string;
     claudePreferredModel?: string;
     // Free trial state
-    trialToken?:     string;   // server-issued signed token (natively_trial_…)
+    trialToken?: string;   // server-issued signed token (natively_trial_…)
     trialExpiresAt?: string;   // ISO timestamp — local copy for startup check
     trialStartedAt?: string;   // ISO timestamp
-    trialClaimed?:   boolean;  // set true on first claim, never cleared — hides start card permanently
+    trialClaimed?: boolean;  // set true on first claim, never cleared — hides start card permanently
 }
 
 export class CredentialsManager {
@@ -430,10 +430,10 @@ export class CredentialsManager {
     }
 
     public setTrialToken(token: string, expiresAt: string, startedAt: string): void {
-        this.credentials.trialToken     = token;
+        this.credentials.trialToken = token;
         this.credentials.trialExpiresAt = expiresAt;
         this.credentials.trialStartedAt = startedAt;
-        this.credentials.trialClaimed   = true;
+        this.credentials.trialClaimed = true;
         this.saveCredentials();
         console.log('[CredentialsManager] Trial token stored, expires:', expiresAt);
     }

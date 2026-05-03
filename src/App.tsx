@@ -30,6 +30,7 @@ import {
 import { analytics } from "./lib/analytics/analytics.service"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import ModesSettings from "./components/settings/ModesSettings"
+import { ProfileIntelligenceSettings } from "./components/ProfileIntelligenceSettings"
 
 const queryClient = new QueryClient()
 
@@ -89,8 +90,9 @@ const App: React.FC = () => {
   // State
   const [showStartup, setShowStartup] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState('general');
+  const [settingsInitialTab, setSettingsInitialTab] = useState<string>('general');
   const [isModesOpen, setIsModesOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [isPremiumActive, setIsPremiumActive] = useState(false);
   const [hasLoadedLicense, setHasLoadedLicense] = useState(false);
@@ -137,7 +139,7 @@ const App: React.FC = () => {
   } | null>(null);
   const [showTrialExpiredModal, setShowTrialExpiredModal] = useState(false);
 
-  const isAppReady = !isSettingsWindow && !isOverlayWindow && !isModelSelectorWindow && !showStartup && !isSettingsOpen && isLauncherMainView;
+  const isAppReady = !isSettingsWindow && !isOverlayWindow && !isModelSelectorWindow && !showStartup && !isSettingsOpen && isLauncherMainView && !isProfileOpen;
   const { activeAd, dismissAd, previewAd } = useAdCampaigns(
     planDetails,
     hasProfile,
@@ -501,6 +503,9 @@ const App: React.FC = () => {
                       setSettingsInitialTab(tab);
                       setIsSettingsOpen(true);
                     }}
+                    onOpenProfile={() => {
+                      setIsProfileOpen(true);
+                    }}
                     onOpenModes={() => setIsModesOpen(true)}
                     onPageChange={setIsLauncherMainView}
                     ollamaPullStatus={ollamaPullStatus}
@@ -514,7 +519,6 @@ const App: React.FC = () => {
                     setIsSettingsOpen(false);
                   }}
                   initialTab={settingsInitialTab}
-                  isTrialActive={!!activeTrial}
                 />
                 <AnimatePresence>
                   {isModesOpen && (
@@ -535,6 +539,29 @@ const App: React.FC = () => {
                         className="w-[820px] h-[600px] max-w-[95vw] max-h-[90vh] rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-[#141414]"
                       >
                         <ModesSettings onClose={() => setIsModesOpen(false)} isPremium={isPremiumActive} isLoaded={hasLoadedLicense} isTrialActive={!!activeTrial} onOpenNativelyAPI={() => { setIsModesOpen(false); setSettingsInitialTab('natively-api'); setIsSettingsOpen(true); }} />
+                      </motion.div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                <AnimatePresence>
+                  {isProfileOpen && (
+                    <motion.div
+                      key="profile-panel"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+                      onClick={(e) => { if (e.target === e.currentTarget) setIsProfileOpen(false); }}
+                    >
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.97, y: 8 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.97, y: 8 }}
+                        transition={{ duration: 0.18, ease: [0.19, 1, 0.22, 1] }}
+                        className="w-[820px] h-[600px] max-w-[95vw] max-h-[90vh] rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-[#141414]"
+                      >
+                        <ProfileIntelligenceSettings onClose={() => setIsProfileOpen(false)} />
                       </motion.div>
                     </motion.div>
                   )}
@@ -670,16 +697,14 @@ const App: React.FC = () => {
             isOpen={activeAd === 'profile'}
             onDismiss={dismissAd}
             onSetupProfile={() => {
-              setSettingsInitialTab('profile');
-              setIsSettingsOpen(true);
+              setIsProfileOpen(true);
             }}
           />
           <JDAwarenessToaster
             isOpen={activeAd === 'jd'}
             onDismiss={dismissAd}
             onSetupJD={() => {
-              setSettingsInitialTab('profile');
-              setIsSettingsOpen(true);
+              setIsProfileOpen(true);
             }}
           />
           <PremiumPromoToaster
@@ -722,8 +747,7 @@ const App: React.FC = () => {
           setActiveTrial(null);
           // After activation, open settings to Profile Intelligence
           setTimeout(() => {
-            setSettingsInitialTab('profile');
-            setIsSettingsOpen(true);
+            setIsProfileOpen(true);
           }, 300);
         }}
         onDeactivated={() => { setIsPremiumActive(false); setPlanDetails({ isPremium: false }); }}

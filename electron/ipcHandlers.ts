@@ -8,6 +8,7 @@ import * as os from "os";
 import * as path from "path";
 import * as fs from "fs";
 import { AudioDevices } from "./audio/AudioDevices";
+import { PhoneMirrorService } from "./services/PhoneMirrorService";
 
 
 import { RECOGNITION_LANGUAGES, AI_RESPONSE_LANGUAGES } from "./config/languages"
@@ -223,6 +224,20 @@ export function initializeIpcHandlers(appState: AppState): void {
         // EC-05 fix: launcher window resize events were previously silently ignored.
         // Log them so that if the launcher ever sends this IPC it's visible in logs.
         console.log(`[IPC] update-content-dimensions: launcher window resize request ${width}x${height} (ignored — launcher has fixed dimensions)`);
+      }
+    }
+  )
+
+  // Centered variant: keeps horizontal center fixed during width changes.
+  // Used by code-expansion animations to prevent the top pill from sliding sideways.
+  safeHandle(
+    "update-content-dimensions-centered",
+    async (event, { width, height }: { width: number; height: number }) => {
+      if (!width || !height) return
+      const senderWebContents = event.sender
+      const overlayWin = appState.getWindowHelper().getOverlayWindow()
+      if (overlayWin && !overlayWin.isDestroyed() && overlayWin.webContents.id === senderWebContents.id) {
+        appState.getWindowHelper().setOverlayDimensionsCentered(width, height)
       }
     }
   )
@@ -451,6 +466,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         final: true
       }, true);
 
+      // Mirror to phone (no-op if PhoneMirrorService isn't running).
+      try { PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), message); } catch (_) { /* noop */ }
+
       let fullResponse = "";
 
       // Context Injection for "Answer" button (100s rolling window)
@@ -479,12 +497,14 @@ export function initializeIpcHandlers(appState: AppState): void {
             return null;
           }
           event.sender.send("gemini-stream-token", token);
+          try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), token); } catch (_) { /* noop */ }
           fullResponse += token;
         }
 
         // Final check: only send done if we are still the active stream
         if (_chatStreamId === myStreamId) {
           event.sender.send("gemini-stream-done");
+          try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), fullResponse); } catch (_) { /* noop */ }
 
           // Update IntelligenceManager with ASSISTANT message after completion
           if (fullResponse.trim().length > 0) {
@@ -498,6 +518,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         console.error("[IPC] Streaming error:", streamError);
         if (_chatStreamId === myStreamId) {
           event.sender.send("gemini-stream-error", streamError.message || "Unknown streaming error");
+          try { PhoneMirrorService.getInstance().publishError(String(myStreamId), streamError?.message || "Unknown streaming error"); } catch (_) { /* noop */ }
         }
       }
 
@@ -774,10 +795,10 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       // First try to kill it if it's running
       await appState.processingHelper.getLLMHelper().forceRestartOllama();
-      
+
       // The forceRestartOllama now calls OllamaManager.getInstance().init() internally
       // so we don't need to do it again here.
-      
+
       return true;
     } catch (error: any) {
       console.error("[IPC restart-ollama] Failed to restart:", error);
@@ -1038,10 +1059,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       } catch { /* LicenseManager not available — fall back */ }
 
       const res = await fetch('https://api.natively.software/v1/trial/start', {
-        method:  'POST',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ hwid }),
-        signal:  AbortSignal.timeout(10_000),
+        body: JSON.stringify({ hwid }),
+        signal: AbortSignal.timeout(10_000),
       });
 
       if (!res.ok) {
@@ -1081,7 +1102,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       const res = await fetch('https://api.natively.software/v1/trial/status', {
         headers: { 'x-trial-token': token },
-        signal:  AbortSignal.timeout(8_000),
+        signal: AbortSignal.timeout(8_000),
       });
 
       if (!res.ok) {
@@ -1099,18 +1120,18 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle("trial:get-local", async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
-      const cm    = CredentialsManager.getInstance();
+      const cm = CredentialsManager.getInstance();
       const token = cm.getTrialToken();
       if (!token) return { hasToken: false, trialClaimed: cm.getTrialClaimed() };
       return {
-        hasToken:     true,
+        hasToken: true,
         trialClaimed: true,
-        trialToken:   token,
-        expiresAt:    cm.getTrialExpiresAt(),
-        startedAt:    cm.getTrialStartedAt(),
-        expired:      cm.getTrialExpiresAt()
-                        ? new Date(cm.getTrialExpiresAt()!).getTime() < Date.now()
-                        : false,
+        trialToken: token,
+        expiresAt: cm.getTrialExpiresAt(),
+        startedAt: cm.getTrialStartedAt(),
+        expired: cm.getTrialExpiresAt()
+          ? new Date(cm.getTrialExpiresAt()!).getTime() < Date.now()
+          : false,
       };
     } catch {
       return { hasToken: false, trialClaimed: false };
@@ -1125,11 +1146,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (!token) return { ok: true };  // no token to report
 
       await fetch('https://api.natively.software/v1/trial/convert', {
-        method:  'POST',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-trial-token': token },
-        body:    JSON.stringify({ choice }),
-        signal:  AbortSignal.timeout(5_000),
-      }).catch(() => {});  // fire-and-forget — don't block local cleanup on network failure
+        body: JSON.stringify({ choice }),
+        signal: AbortSignal.timeout(5_000),
+      }).catch(() => { });  // fire-and-forget — don't block local cleanup on network failure
 
       return { ok: true };
     } catch {
@@ -1147,11 +1168,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       const token = cm.getTrialToken();
       if (token) {
         fetch('https://api.natively.software/v1/trial/convert', {
-          method:  'POST',
+          method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-trial-token': token },
-          body:    JSON.stringify({ choice: 'byok' }),
-          signal:  AbortSignal.timeout(4_000),
-        }).catch(() => {});
+          body: JSON.stringify({ choice: 'byok' }),
+          signal: AbortSignal.timeout(4_000),
+        }).catch(() => { });
       }
 
       // 2. Clear trial token
@@ -2155,7 +2176,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         await shell.openExternal(url);
         return;
       }
-      
+
       const parsed = new URL(url);
       if (['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
         await shell.openExternal(url);
@@ -3015,7 +3036,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // ── Permissions ──────────────────────────────────────────────
   safeHandle("permissions:check", async () => {
     if (process.platform === 'darwin') {
-      const mic    = systemPreferences.getMediaAccessStatus('microphone')
+      const mic = systemPreferences.getMediaAccessStatus('microphone')
       const screen = systemPreferences.getMediaAccessStatus('screen')
       return { microphone: mic, screen, platform: 'darwin' }
     }
@@ -3255,6 +3276,57 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (e: any) {
       console.error('[IPC] modes:remove-all-note-sections error:', e);
       return { success: false, error: e.message };
+    }
+  });
+
+  // -----------------------------------------------------------------------
+  // Phone Mirror — stream live AI responses to a paired phone over WS.
+  // -----------------------------------------------------------------------
+
+  // Push status updates to the renderer whenever the service starts/stops
+  // or a phone connects/disconnects. Idempotent — multiple windows can listen.
+  PhoneMirrorService.getInstance().onStatusChange((info) => {
+    const win = appState.getMainWindow();
+    win?.webContents.send('phone-mirror:status', info);
+    try {
+      const settingsWin = (appState as any).settingsWindowHelper?.getWindow?.();
+      settingsWin?.webContents?.send('phone-mirror:status', info);
+    } catch (_) { /* settings window may not exist yet */ }
+  });
+
+  safeHandle("phone-mirror:get-info", async () => {
+    return PhoneMirrorService.getInstance().snapshot();
+  });
+
+  safeHandle("phone-mirror:enable", async (_, exposeOnLan?: boolean) => {
+    try {
+      return await PhoneMirrorService.getInstance().start({ exposeOnLan: !!exposeOnLan, persist: true });
+    } catch (e: any) {
+      console.error('[IPC] phone-mirror:enable error:', e);
+      return { error: e?.message || 'failed to start phone mirror' };
+    }
+  });
+
+  safeHandle("phone-mirror:disable", async () => {
+    await PhoneMirrorService.getInstance().stop({ persist: true });
+    return { success: true };
+  });
+
+  safeHandle("phone-mirror:set-lan", async (_, exposeOnLan: boolean) => {
+    try {
+      return await PhoneMirrorService.getInstance().setExposeOnLan(!!exposeOnLan);
+    } catch (e: any) {
+      console.error('[IPC] phone-mirror:set-lan error:', e);
+      return { error: e?.message || 'failed to update lan setting' };
+    }
+  });
+
+  safeHandle("phone-mirror:rotate-token", async () => {
+    try {
+      return await PhoneMirrorService.getInstance().rotateToken();
+    } catch (e: any) {
+      console.error('[IPC] phone-mirror:rotate-token error:', e);
+      return { error: e?.message || 'failed to rotate token' };
     }
   });
 }

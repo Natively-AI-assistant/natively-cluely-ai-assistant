@@ -368,6 +368,27 @@ export interface ElectronAPI {
 
   // Platform
   platform: NodeJS.Platform;
+
+  // Phone Mirror
+  phoneMirrorGetInfo: () => Promise<PhoneMirrorInfo>;
+  phoneMirrorEnable: (exposeOnLan: boolean) => Promise<PhoneMirrorInfo | { error: string }>;
+  phoneMirrorDisable: () => Promise<{ success: true }>;
+  phoneMirrorSetLan: (exposeOnLan: boolean) => Promise<PhoneMirrorInfo | { error: string }>;
+  phoneMirrorRotateToken: () => Promise<PhoneMirrorInfo | { error: string }>;
+  onPhoneMirrorStatus: (callback: (info: PhoneMirrorInfo) => void) => () => void;
+}
+
+export interface PhoneMirrorInfo {
+  running: boolean;
+  enabled: boolean;
+  exposeOnLan: boolean;
+  port: number;
+  loopbackUrl: string | null;
+  primaryUrl: string | null;
+  lanUrls: string[];
+  token: string | null;
+  qrDataUrl: string | null;
+  clients: number;
 }
 
 declare global {

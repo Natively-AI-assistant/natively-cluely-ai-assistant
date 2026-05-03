@@ -120,6 +120,36 @@ export class WindowHelper {
     this.overlayBounds = this.overlayWindow.getBounds()
   }
 
+  // Variant of setOverlayDimensions that keeps the horizontal CENTER of the
+  // window fixed across width changes. Used by code-expansion animations so
+  // the shell (mx-auto centered) doesn't appear to jump sideways when the
+  // window grows: window grows symmetrically (X shifts -widthDelta/2), and
+  // mx-auto compensates by reducing margin equally — net visual movement = 0.
+  public setOverlayDimensionsCentered(width: number, height: number): void {
+    if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return
+
+    const currentBounds = this.overlayWindow.getBounds()
+    const currentContentSize = this.overlayWindow.getContentSize()
+    const workArea = this.getDisplayWorkArea(currentBounds)
+    const maxAllowedWidth = Math.floor(workArea.width * 0.9)
+    const maxAllowedHeight = Math.floor(workArea.height * 0.9)
+    const newWidth = Math.min(Math.max(width, 300), maxAllowedWidth)
+    const newHeight = Math.min(Math.max(height, 1), maxAllowedHeight)
+
+    // Compute X so the content's horizontal center stays put across the resize.
+    const widthDelta = newWidth - currentContentSize[0]
+    const desiredX = currentBounds.x - Math.floor(widthDelta / 2)
+
+    const maxX = workArea.x + workArea.width - newWidth
+    const newX = Math.min(Math.max(desiredX, workArea.x), maxX)
+    const maxY = workArea.y + workArea.height - newHeight
+    const newY = Math.min(Math.max(currentBounds.y, workArea.y), maxY)
+
+    this.overlayWindow.setContentSize(newWidth, newHeight)
+    this.overlayWindow.setPosition(newX, newY)
+    this.overlayBounds = this.overlayWindow.getBounds()
+  }
+
   public createWindow(): void {
     if (this.launcherWindow !== null) return // Already created
 

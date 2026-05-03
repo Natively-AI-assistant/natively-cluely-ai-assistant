@@ -12,6 +12,8 @@ export interface AppSettings {
     actionButtonMode?: 'recap' | 'brainstorm';
     groqFastTextMode?: boolean;
     knowledgeMode?: boolean;
+    phoneMirrorEnabled?: boolean;
+    phoneMirrorExposeOnLan?: boolean;
 }
 
 export class SettingsManager {
