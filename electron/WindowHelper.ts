@@ -397,6 +397,20 @@ export class WindowHelper {
         }
       });
 
+      // Re-assert always-on-top on blur (Windows only). Screen-sharing tools
+      // (Zoom, Lark, Teams, etc.) hook the DWM compositor and can demote even
+      // HWND_TOPMOST windows below their shared content layer. Re-applying the
+      // 'screen-saver' level on every blur keeps the overlay above the share
+      // surface. Skipped on macOS — re-asserting setAlwaysOnTop there triggers
+      // [NSApp activate], which steals focus from the underlying app. See #130.
+      if (process.platform === 'win32') {
+        this.overlayWindow.on('blur', () => {
+          if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
+          if (!this.overlayWindow.isVisible()) return;
+          this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
+        });
+      }
+
       this.overlayWindow.on('close', (e) => {
         if (this.overlayWindow?.isVisible()) {
           e.preventDefault();
