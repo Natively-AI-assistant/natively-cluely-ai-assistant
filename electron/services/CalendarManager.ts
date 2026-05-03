@@ -7,15 +7,26 @@ import path from 'path';
 import { EventEmitter } from 'events';
 
 // Configuration
-// In a real app, these should be in environment variables or build configs
+// GOOGLE_CLIENT_SECRET is intentionally NOT referenced here — the desktop app
+// only needs the (non-secret) client ID to construct the auth URL. Token
+// exchange and refresh are proxied through natively-api, which holds the secret.
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "YOUR_CLIENT_ID_HERE";
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "YOUR_CLIENT_SECRET_HERE";
 const REDIRECT_URI = "http://localhost:11111/auth/callback";
 const SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"];
 const TOKEN_PATH = path.join(app.getPath('userData'), 'calendar_tokens.enc');
+// Base URL for the natively-api proxy. Override with NATIVELY_API_URL for local dev
+// (e.g. http://localhost:3000). Trailing slash is stripped to keep route concat clean.
+const NATIVELY_API_URL = (process.env.NATIVELY_API_URL || 'https://api.natively.software').replace(/\/+$/, '');
 
-if (GOOGLE_CLIENT_ID === "YOUR_CLIENT_ID_HERE" || GOOGLE_CLIENT_SECRET === "YOUR_CLIENT_SECRET_HERE") {
-    console.warn('[CalendarManager] Google OAuth credentials are using defaults. Calendar features will not work until valid credentials are provided via env vars.');
+if (GOOGLE_CLIENT_ID === "YOUR_CLIENT_ID_HERE") {
+    console.warn('[CalendarManager] GOOGLE_CLIENT_ID is using the default placeholder. Calendar features will not work until a valid client ID is provided via env var or build config.');
+}
+
+export interface CalendarAttendee {
+    email: string;
+    name?: string;
+    photoUrl?: string;
+    response?: 'accepted' | 'declined' | 'tentative' | 'needsAction';
 }
 
 export interface CalendarEvent {
@@ -25,6 +36,7 @@ export interface CalendarEvent {
     endTime: string; // ISO
     link?: string;
     source: 'google';
+    attendees?: CalendarAttendee[];
 }
 
 export class CalendarManager extends EventEmitter {
@@ -56,7 +68,23 @@ export class CalendarManager extends EventEmitter {
     // =========================================================================
 
     public async startAuthFlow(): Promise<void> {
+        // Refuse to start if the client ID isn't configured — otherwise we'd
+        // open a Google page that says "OAuth client not found", the user
+        // never hits the callback, and the loopback server below leaks.
+        if (GOOGLE_CLIENT_ID === "YOUR_CLIENT_ID_HERE") {
+            throw new Error('GOOGLE_CLIENT_ID is not configured. Set it in .env and restart the app.');
+        }
+
         return new Promise((resolve, reject) => {
+            let settled = false;
+            const finish = (fn: () => void) => {
+                if (settled) return;
+                settled = true;
+                try { server.close(); } catch { }
+                clearTimeout(timeout);
+                fn();
+            };
+
             // 1. Create Loopback Server
             const server = http.createServer(async (req, res) => {
                 try {
@@ -67,26 +95,31 @@ export class CalendarManager extends EventEmitter {
 
                         if (error) {
                             res.end('Authentication failed! You can close this window.');
-                            server.close();
-                            reject(new Error(error));
+                            finish(() => reject(new Error(error)));
                             return;
                         }
 
                         if (code) {
                             res.end('Authentication successful! You can close this window and return to Natively.');
-                            server.close();
-
-                            // 2. Exchange code for tokens
-                            await this.exchangeCodeForToken(code);
-                            resolve();
+                            // Exchange code for tokens. If this throws, still finish so the server closes.
+                            try {
+                                await this.exchangeCodeForToken(code);
+                                finish(() => resolve());
+                            } catch (err) {
+                                finish(() => reject(err));
+                            }
                         }
                     }
                 } catch (err) {
                     res.end('Authentication error.');
-                    server.close();
-                    reject(err);
+                    finish(() => reject(err));
                 }
             });
+
+            // 5-minute hard timeout — if the user never completes consent, free the port.
+            const timeout = setTimeout(() => {
+                finish(() => reject(new Error('Calendar auth timed out — port released.')));
+            }, 5 * 60 * 1000);
 
             server.listen(11111, () => {
                 // 3. Open Browser
@@ -95,7 +128,7 @@ export class CalendarManager extends EventEmitter {
             });
 
             server.on('error', (err) => {
-                reject(err);
+                finish(() => reject(err));
             });
         });
     }
@@ -133,12 +166,10 @@ export class CalendarManager extends EventEmitter {
 
     private async exchangeCodeForToken(code: string) {
         try {
-            const response = await axios.post('https://oauth2.googleapis.com/token', {
+            // Proxied through natively-api so GOOGLE_CLIENT_SECRET never ships in the desktop app.
+            const response = await axios.post(`${NATIVELY_API_URL}/api/calendar/exchange`, {
                 code,
-                client_id: GOOGLE_CLIENT_ID,
-                client_secret: GOOGLE_CLIENT_SECRET,
                 redirect_uri: REDIRECT_URI,
-                grant_type: 'authorization_code'
             });
 
             this.handleTokenResponse(response.data);
@@ -194,11 +225,9 @@ export class CalendarManager extends EventEmitter {
         }
 
         try {
-            const response = await axios.post('https://oauth2.googleapis.com/token', {
-                client_id: GOOGLE_CLIENT_ID,
-                client_secret: GOOGLE_CLIENT_SECRET,
+            // Proxied through natively-api so GOOGLE_CLIENT_SECRET never ships in the desktop app.
+            const response = await axios.post(`${NATIVELY_API_URL}/api/calendar/refresh`, {
                 refresh_token: this.refreshToken,
-                grant_type: 'refresh_token'
             });
 
             this.handleTokenResponse(response.data);
@@ -341,7 +370,7 @@ export class CalendarManager extends EventEmitter {
         if (!this.accessToken) return [];
 
         const now = new Date();
-        const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+        const horizon = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
         try {
             const response = await axios.get('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
@@ -350,15 +379,17 @@ export class CalendarManager extends EventEmitter {
                 },
                 params: {
                     timeMin: now.toISOString(),
-                    timeMax: tomorrow.toISOString(),
+                    timeMax: horizon.toISOString(),
                     singleEvents: true,
-                    orderBy: 'startTime'
+                    orderBy: 'startTime',
+                    maxResults: 50,
                 }
             });
 
             const items = response.data.items || [];
+            console.log(`[CalendarManager] Google returned ${items.length} raw items in next 7 days`);
 
-            return items
+            const filtered = items
                 .filter((item: any) => {
                     // Filter: >= 5 mins, no all-day
                     if (!item.start.dateTime || !item.end.dateTime) return false; // All-day events have .date instead of .dateTime
@@ -368,14 +399,28 @@ export class CalendarManager extends EventEmitter {
                     const durationMins = (end - start) / 60000;
 
                     return durationMins >= 5;
-                })
+                });
+
+            console.log(`[CalendarManager] After filtering (timed, >=5min): ${filtered.length} events`);
+
+            return filtered
                 .map((item: any) => ({
                     id: item.id,
                     title: item.summary || '(No Title)',
                     startTime: item.start.dateTime,
                     endTime: item.end.dateTime,
                     link: this.resolveMeetingLink(item),
-                    source: 'google'
+                    source: 'google' as const,
+                    attendees: Array.isArray(item.attendees)
+                        ? item.attendees
+                            .filter((a: any) => !a.self && !a.resource && a.email)
+                            .slice(0, 8)
+                            .map((a: any) => ({
+                                email: a.email,
+                                name: a.displayName,
+                                response: a.responseStatus,
+                            }))
+                        : undefined,
                 }));
 
         } catch (error) {

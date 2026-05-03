@@ -228,10 +228,11 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         };
     }, [isShortcutPressed]);
 
-    // Filter next meeting (within 60 mins)
+    // Soonest upcoming meeting (already in progress up to 5 min ago, or any future event in
+    // the API's 7-day window). Used by the right-side calendar card to surface what's next.
     const nextMeeting = upcomingEvents.find(e => {
         const diff = new Date(e.startTime).getTime() - Date.now();
-        return diff > -5 * 60000 && diff < 60 * 60000; // -5 min to +60 min
+        return diff > -5 * 60000;
     });
 
     const handlePrepare = (event: any) => {
@@ -807,91 +808,159 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[300px] h-[300px] bg-emerald-500/10 blur-[100px] pointer-events-none" />
                                             </div>
                                         ) : (
-                                            /* Dynamic Next Meeting OR Default Intro */
-                                            nextMeeting ? (
-                                                <div className={`md:col-span-2 relative group rounded-xl overflow-hidden ${isLight ? 'bg-bg-elevated' : 'bg-bg-secondary'} flex flex-col shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]`}>
-                                                    {/* Header */}
-                                                    <div className="p-5 flex-1 relative z-10">
-                                                        <div className="flex items-center gap-2 mb-2">
-                                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                                            <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">Up Next</span>
-                                                            <span className="text-[11px] text-text-tertiary">• Starts in {Math.max(0, Math.ceil((new Date(nextMeeting.startTime).getTime() - Date.now()) / 60000))} min</span>
-                                                        </div>
-
-                                                        <h2 className="text-xl font-bold text-text-primary leading-tight mb-1 line-clamp-2">
-                                                            {nextMeeting.title}
-                                                        </h2>
-
-                                                        <div className="flex items-center gap-2 text-text-secondary text-xs mt-2">
-                                                            <Calendar size={12} />
-                                                            <span>{new Date(nextMeeting.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - {new Date(nextMeeting.endTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
-                                                            {nextMeeting.link && (
-                                                                <>
-                                                                    <span className="opacity-20">|</span>
-                                                                    <LinkIcon size={12} />
-                                                                    <span className="truncate max-w-[150px]">Meeting Link Found</span>
-                                                                </>
-                                                            )}
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Actions */}
-                                                    <div className="p-4 bg-bg-elevated/50 border-t border-border-subtle flex items-center gap-3">
-                                                        <button
-                                                            onClick={() => handlePrepare(nextMeeting)}
-                                                            className={`flex-1 border px-4 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-2 ${isLight ? 'bg-bg-item-surface hover:bg-bg-item-active border-border-muted text-text-primary' : 'bg-white/10 hover:bg-white/20 border-white/10 text-white'}`}
-                                                        >
-                                                            <Zap size={13} className="text-yellow-400" />
-                                                            Prepare
-                                                        </button>
-                                                        <button
-                                                            onClick={onStartMeeting}
-                                                            className={`px-4 py-2 rounded-lg text-xs font-medium text-text-secondary hover:text-text-primary transition-all ${isLight ? 'hover:bg-bg-item-surface' : 'hover:bg-white/5'}`}
-                                                        >
-                                                            Start now
-                                                        </button>
-                                                    </div>
-
-                                                    {/* Background Decoration */}
-                                                    <div className="absolute top-0 right-0 w-[150px] h-[150px] bg-emerald-500/10 blur-[60px] pointer-events-none" />
-                                                </div>
-                                            ) : (
-                                                <div className="md:col-span-2 h-full">
-                                                    <FeatureSpotlight />
-                                                </div>
-                                            )
+                                            /* Default Intro — natively support & upcoming features.
+                                               Calendar "Up Next" lives in Settings → Calendar, not here. */
+                                            <div className="md:col-span-2 h-full">
+                                                <FeatureSpotlight />
+                                            </div>
                                         )}
 
 
 
-                                        {/* Right Secondary Card */}
-                                        <div className="md:col-span-1 rounded-xl overflow-hidden bg-bg-elevated relative group flex flex-col items-center pt-6 text-center">
-                                            {/* Backdrop Image */}
+                                        {/* Right Secondary Card — violet-tinted, "Calendar Connected" + peeking next meeting */}
+                                        <div className="md:col-span-1 rounded-xl overflow-hidden bg-bg-elevated relative group flex flex-col shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]">
+                                            {/* Backdrop image with violet tint mask */}
                                             <div className="absolute inset-0">
-                                                <img src={calender} alt="" className="w-full h-full object-cover opacity-100 transition-opacity duration-500 translate-x--1 translate-y-[1px] scale-105" />
+                                                <img
+                                                    src={calender}
+                                                    alt=""
+                                                    className="w-full h-full object-cover scale-105 translate-y-[1px]"
+                                                />
+                                                {/* Violet tint mask — only when connected, washes the calendar image into the brand purple */}
+                                                {isCalendarConnected && (
+                                                    <>
+                                                        <div className="absolute inset-0 bg-[#3a2a99]/55 mix-blend-multiply" />
+                                                        <div className="absolute inset-0 bg-gradient-to-b from-violet-700/25 via-violet-800/20 to-indigo-950/35" />
+                                                        {/* Soft top-glow */}
+                                                        <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-[260px] h-[200px] bg-violet-300/20 blur-[80px] pointer-events-none" />
+                                                    </>
+                                                )}
+                                                {/* Subtle grain */}
+                                                <div
+                                                    className="absolute inset-0 opacity-[0.05] mix-blend-overlay pointer-events-none"
+                                                    style={{ backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.55'/></svg>\")" }}
+                                                />
                                             </div>
 
                                             {/* Content Layer */}
-                                            <div className="relative z-10 w-full flex flex-col items-center h-full">
-                                                <h3 className="text-[19px] leading-tight mb-4">
-                                                    {isCalendarConnected ? (
-                                                        <>
-                                                            <span className="block font-semibold text-white">Calendar linked</span>
-                                                            <span className="block font-medium text-white/60 text-[0.95em]">Events synced</span>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <span className="block font-semibold text-white">Link your calendar to</span>
-                                                            <span className="block font-medium text-white/60 text-[0.95em]">see upcoming events</span>
-                                                        </>
-                                                    )}
-                                                </h3>
+                                            {isCalendarConnected ? (() => {
+                                                const eventCount = upcomingEvents.length;
+                                                const summaryLabel = eventCount === 0
+                                                    ? 'No upcoming events'
+                                                    : `${eventCount} upcoming event${eventCount === 1 ? '' : 's'}`;
 
-                                                <ConnectCalendarButton
-                                                    className="-translate-x-0.5"
-                                                    onConnect={() => setIsCalendarConnected(true)}
-                                                />
-                                            </div>
+                                                let timeLabel = '';
+                                                if (nextMeeting) {
+                                                    const start = new Date(nextMeeting.startTime);
+                                                    const now = new Date();
+                                                    const tomorrow = new Date(now.getTime() + 86400000);
+                                                    const isToday = start.toDateString() === now.toDateString();
+                                                    const isTomorrow = start.toDateString() === tomorrow.toDateString();
+                                                    const t = start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                                                    timeLabel = isToday ? `Today at ${t}`
+                                                        : isTomorrow ? `Tomorrow at ${t}`
+                                                        : `${start.toLocaleDateString([], { weekday: 'short' })} at ${t}`;
+                                                }
+
+                                                // Deterministic avatar palette from email/name
+                                                const avatarPalette = [
+                                                    'bg-rose-300/90 text-rose-900',
+                                                    'bg-amber-200/90 text-amber-900',
+                                                    'bg-emerald-200/90 text-emerald-900',
+                                                    'bg-sky-200/90 text-sky-900',
+                                                    'bg-violet-200/90 text-violet-900',
+                                                    'bg-teal-200/90 text-teal-900',
+                                                ];
+                                                const initialsFor = (a: { email: string; name?: string }) => {
+                                                    const src = (a.name || a.email).trim();
+                                                    const parts = src.split(/[\s._-]+/).filter(Boolean);
+                                                    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+                                                    return src.slice(0, 2).toUpperCase();
+                                                };
+                                                const colorFor = (key: string) => {
+                                                    let h = 0;
+                                                    for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
+                                                    return avatarPalette[Math.abs(h) % avatarPalette.length];
+                                                };
+
+                                                const visibleAttendees = (nextMeeting?.attendees || []).slice(0, 3);
+                                                const remaining = Math.max(0, (nextMeeting?.attendees?.length || 0) - visibleAttendees.length);
+
+                                                return (
+                                                    <div className="relative z-10 w-full flex flex-col h-full">
+                                                        {/* Heading block — top-centered */}
+                                                        <div className="px-4 pt-5 text-center">
+                                                            <h3 className="text-[20px] font-semibold text-white leading-[1.15] tracking-[-0.01em]">Calendar linked</h3>
+                                                            <p className="text-[13px] text-white/55 font-medium mt-0.5 tabular-nums">{summaryLabel}</p>
+                                                        </div>
+
+                                                        {/* Calendar Connected pill — translucent violet glass with check */}
+                                                        <div className="px-4 mt-3 flex justify-center">
+                                                            <div className="inline-flex items-center gap-2 rounded-full bg-violet-500/20 ring-1 ring-violet-300/25 backdrop-blur-md px-2 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_4px_18px_-6px_rgba(99,102,241,0.45)]">
+                                                                <span className="w-5 h-5 rounded-full bg-violet-500 ring-1 ring-violet-300/40 flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
+                                                                    <Check size={11} strokeWidth={3} className="text-white" />
+                                                                </span>
+                                                                <span className="text-[12px] font-semibold text-white/95 pr-1.5 tracking-[-0.005em]">Calendar Connected</span>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Peeking next-meeting card — only when an event exists */}
+                                                        {nextMeeting && (
+                                                            <div className="mt-auto px-2 pb-0">
+                                                                {/* Stacked depth shadow card behind */}
+                                                                <div className="relative">
+                                                                    <div className="absolute -top-1.5 left-2 right-2 h-3 rounded-t-[14px] bg-white/[0.06] ring-1 ring-white/[0.06] backdrop-blur-sm" />
+                                                                    <div className="absolute -top-[3px] left-1 right-1 h-3 rounded-t-[14px] bg-white/[0.09] ring-1 ring-white/[0.08] backdrop-blur-sm" />
+
+                                                                    <button
+                                                                        onClick={() => handlePrepare(nextMeeting)}
+                                                                        className="relative w-full text-left rounded-[14px] bg-white/[0.07] ring-1 ring-white/[0.1] backdrop-blur-md px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_8px_24px_-12px_rgba(0,0,0,0.55)] transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-white/[0.11] active:scale-[0.985]"
+                                                                    >
+                                                                        <h4 className="text-[15px] font-semibold text-white leading-tight tracking-[-0.01em] line-clamp-1">
+                                                                            {nextMeeting.title}
+                                                                        </h4>
+                                                                        <div className="mt-1.5 flex items-center justify-between gap-2">
+                                                                            <span className="text-[11.5px] text-cyan-200/85 font-medium tabular-nums">
+                                                                                {timeLabel}
+                                                                            </span>
+                                                                            {visibleAttendees.length > 0 && (
+                                                                                <div className="flex -space-x-1.5">
+                                                                                    {visibleAttendees.map((a: { email: string; name?: string }) => (
+                                                                                        <span
+                                                                                            key={a.email}
+                                                                                            title={a.name || a.email}
+                                                                                            className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded-full ring-[1.5px] ring-[#1f1740] text-[8.5px] font-bold ${colorFor(a.email)}`}
+                                                                                        >
+                                                                                            {initialsFor(a)}
+                                                                                        </span>
+                                                                                    ))}
+                                                                                    {remaining > 0 && (
+                                                                                        <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full ring-[1.5px] ring-[#1f1740] bg-white/15 text-[8.5px] font-bold text-white/85 tabular-nums">
+                                                                                            +{remaining}
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })() : (
+                                                <div className="relative z-10 w-full flex flex-col items-center h-full pt-6 text-center">
+                                                    <h3 className="text-[19px] leading-tight mb-4 tracking-[-0.01em]">
+                                                        <span className="block font-semibold text-white">Link your calendar to</span>
+                                                        <span className="block font-medium text-white/60 text-[0.95em]">see upcoming events</span>
+                                                    </h3>
+
+                                                    <ConnectCalendarButton
+                                                        className="-translate-x-0.5"
+                                                        onConnect={() => setIsCalendarConnected(true)}
+                                                    />
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>

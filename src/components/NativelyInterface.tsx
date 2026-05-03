@@ -1941,6 +1941,37 @@ Provide only the answer, nothing else.`;
     };
 
     useEffect(() => {
+        // Continuous-scroll state. We drive scrolling from a rAF loop instead of
+        // doing one scrollBy per keydown so the speed is decoupled from the OS
+        // key-repeat rate and the chat scrolls smoothly while the key is held.
+        const scrollHold = { up: false, down: false };
+        let scrollRafId: number | null = null;
+        const SCROLL_PX_PER_FRAME = 14; // ~840px/s at 60fps
+
+        const tick = () => {
+            const container = scrollContainerRef.current;
+            if (!container) {
+                scrollRafId = null;
+                return;
+            }
+            let delta = 0;
+            if (scrollHold.up) delta -= SCROLL_PX_PER_FRAME;
+            if (scrollHold.down) delta += SCROLL_PX_PER_FRAME;
+            if (delta !== 0) container.scrollBy({ top: delta, behavior: 'auto' });
+            if (scrollHold.up || scrollHold.down) {
+                scrollRafId = requestAnimationFrame(tick);
+            } else {
+                scrollRafId = null;
+            }
+        };
+        const startScrollLoop = () => {
+            if (scrollRafId === null) scrollRafId = requestAnimationFrame(tick);
+        };
+        const releaseScroll = () => {
+            scrollHold.up = false;
+            scrollHold.down = false;
+        };
+
         const handleKeyDown = (e: KeyboardEvent) => {
             const { handleWhatToSay, handleFollowUp, handleFollowUpQuestions, handleRecap, handleAnswerNow, handleClarify, handleCodeHint, handleBrainstorm } = handlersRef.current;
 
@@ -1975,18 +2006,38 @@ Provide only the answer, nothing else.`;
                 handleBrainstorm();
             } else if (isShortcutPressed(e, 'scrollUp')) {
                 e.preventDefault();
-                scrollContainerRef.current?.scrollBy({ top: -100, behavior: 'smooth' });
+                scrollHold.up = true;
+                startScrollLoop();
             } else if (isShortcutPressed(e, 'scrollDown')) {
                 e.preventDefault();
-                scrollContainerRef.current?.scrollBy({ top: 100, behavior: 'smooth' });
+                scrollHold.down = true;
+                startScrollLoop();
             } else if (isShortcutPressed(e, 'moveWindowUp') || isShortcutPressed(e, 'moveWindowDown')) {
                 // Prevent default scrolling when moving window
                 e.preventDefault();
             }
         };
 
+        const handleKeyUp = (e: KeyboardEvent) => {
+            // Users typically lift the modifier (Cmd/Ctrl) first, so releasing
+            // either it or the arrow stops scrolling.
+            if (e.key === 'ArrowUp') scrollHold.up = false;
+            else if (e.key === 'ArrowDown') scrollHold.down = false;
+            else if (e.key === 'Meta' || e.key === 'Control') releaseScroll();
+        };
+
+        // Window blur swallows keyup; reset to avoid stuck scrolling.
+        const handleBlur = () => releaseScroll();
+
         window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
+        window.addEventListener('keyup', handleKeyUp);
+        window.addEventListener('blur', handleBlur);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('keyup', handleKeyUp);
+            window.removeEventListener('blur', handleBlur);
+            if (scrollRafId !== null) cancelAnimationFrame(scrollRafId);
+        };
     }, [isShortcutPressed]);
 
     // General Global Shortcuts (Rebindable)

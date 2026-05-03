@@ -28,8 +28,12 @@ export const DEFAULT_KEYBINDS: KeybindConfig[] = [
     { id: 'chat:answer', label: 'Answer / Record', accelerator: 'CommandOrControl+5', isGlobal: true, defaultAccelerator: 'CommandOrControl+5' },
     { id: 'chat:codeHint', label: 'Get Code Hint', accelerator: 'CommandOrControl+6', isGlobal: true, defaultAccelerator: 'CommandOrControl+6' },
     { id: 'chat:brainstorm', label: 'Brainstorm Approaches', accelerator: 'CommandOrControl+7', isGlobal: true, defaultAccelerator: 'CommandOrControl+7' },
-    { id: 'chat:scrollUp', label: 'Scroll Up', accelerator: 'CommandOrControl+Up', isGlobal: true, defaultAccelerator: 'CommandOrControl+Up' },
-    { id: 'chat:scrollDown', label: 'Scroll Down', accelerator: 'CommandOrControl+Down', isGlobal: true, defaultAccelerator: 'CommandOrControl+Down' },
+    // Scroll shortcuts must NOT be global: Electron's globalShortcut.register
+    // fires once per press without OS auto-repeat, so holding the key only nudges
+    // the chat by 100px. Keeping these renderer-scoped lets the focused window
+    // receive the OS auto-repeat keydown stream that drives continuous scrolling.
+    { id: 'chat:scrollUp', label: 'Scroll Up', accelerator: 'CommandOrControl+Up', isGlobal: false, defaultAccelerator: 'CommandOrControl+Up' },
+    { id: 'chat:scrollDown', label: 'Scroll Down', accelerator: 'CommandOrControl+Down', isGlobal: false, defaultAccelerator: 'CommandOrControl+Down' },
 
     // Window Movement - Global shortcuts (stealth window positioning)
     { id: 'window:move-up', label: 'Move Window Up', accelerator: 'CommandOrControl+Shift+Up', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Up' },

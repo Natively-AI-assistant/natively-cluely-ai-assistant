@@ -272,7 +272,7 @@ export interface ElectronAPI {
   calendarConnect: () => Promise<{ success: boolean; error?: string }>
   calendarDisconnect: () => Promise<{ success: boolean; error?: string }>
   getCalendarStatus: () => Promise<{ connected: boolean; email?: string }>
-  getUpcomingEvents: () => Promise<Array<{ id: string; title: string; startTime: string; endTime: string; link?: string; source: 'google' }>>
+  getUpcomingEvents: () => Promise<Array<{ id: string; title: string; startTime: string; endTime: string; link?: string; source: 'google'; attendees?: Array<{ email: string; name?: string; photoUrl?: string; response?: 'accepted' | 'declined' | 'tentative' | 'needsAction' }> }>>
   calendarRefresh: () => Promise<{ success: boolean; error?: string }>
 
   // Auto-Update
