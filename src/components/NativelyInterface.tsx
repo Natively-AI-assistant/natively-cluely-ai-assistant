@@ -1941,35 +1941,89 @@ Provide only the answer, nothing else.`;
     };
 
     useEffect(() => {
-        // Continuous-scroll state. We drive scrolling from a rAF loop instead of
-        // doing one scrollBy per keydown so the speed is decoupled from the OS
-        // key-repeat rate and the chat scrolls smoothly while the key is held.
-        const scrollHold = { up: false, down: false };
-        let scrollRafId: number | null = null;
-        const SCROLL_PX_PER_FRAME = 14; // ~840px/s at 60fps
+        // ── Continuous, frame-rate-independent scroll with momentum ──
+        // Velocity is integrated against real elapsed time so 60Hz, 120Hz, and
+        // dropped-frame paths all produce the same physical speed. While a key
+        // is held we ease velocity up to TERMINAL; on release we decay it
+        // exponentially, which is what makes the stop feel weighted instead of
+        // snapped. Sub-pixel motion is preserved via a fractional accumulator,
+        // and we write `scrollTop` directly to bypass any browser scroll-behavior
+        // smoothing that would fight the loop.
+        const TERMINAL_VELOCITY = 1400;   // px/s at full hold
+        const ACCEL_SECONDS = 0.18;       // time to reach terminal from rest
+        const DECAY_HALF_LIFE = 0.09;     // seconds for velocity to halve after release
+        const DECAY_K = Math.LN2 / DECAY_HALF_LIFE;
+        const MIN_VELOCITY = 6;           // px/s — snap to 0 below this
+        const MAX_FRAME_DT = 0.05;        // clamp to absorb tab-throttle hiccups
 
-        const tick = () => {
+        let direction: -1 | 0 | 1 = 0;    // -1 up, 0 idle, 1 down (or both up+down → 0)
+        let upHeld = false;
+        let downHeld = false;
+        let velocity = 0;                 // signed px/s
+        let positionFraction = 0;         // sub-pixel accumulator
+        let lastTs = 0;
+        let rafId: number | null = null;
+
+        const recomputeDirection = () => {
+            direction = upHeld === downHeld ? 0 : upHeld ? -1 : 1;
+        };
+
+        const tick = (ts: number) => {
             const container = scrollContainerRef.current;
             if (!container) {
-                scrollRafId = null;
+                rafId = null;
+                lastTs = 0;
                 return;
             }
-            let delta = 0;
-            if (scrollHold.up) delta -= SCROLL_PX_PER_FRAME;
-            if (scrollHold.down) delta += SCROLL_PX_PER_FRAME;
-            if (delta !== 0) container.scrollBy({ top: delta, behavior: 'auto' });
-            if (scrollHold.up || scrollHold.down) {
-                scrollRafId = requestAnimationFrame(tick);
+            if (lastTs === 0) lastTs = ts;
+            const dt = Math.min((ts - lastTs) / 1000, MAX_FRAME_DT);
+            lastTs = ts;
+
+            if (direction !== 0) {
+                const target = direction * TERMINAL_VELOCITY;
+                const step = (TERMINAL_VELOCITY / ACCEL_SECONDS) * dt;
+                if (Math.abs(target - velocity) <= step) velocity = target;
+                else velocity += Math.sign(target - velocity) * step;
             } else {
-                scrollRafId = null;
+                velocity *= Math.exp(-DECAY_K * dt);
+                if (Math.abs(velocity) < MIN_VELOCITY) velocity = 0;
+            }
+
+            // Cache layout reads once per frame, then a single scrollTop write.
+            const maxScroll = container.scrollHeight - container.clientHeight;
+            const current = container.scrollTop;
+            const move = velocity * dt + positionFraction;
+            const intMove = Math.trunc(move);
+            positionFraction = move - intMove;
+
+            if (intMove !== 0) {
+                let next = current + intMove;
+                if (next <= 0) {
+                    next = 0;
+                    if (velocity < 0) { velocity = 0; positionFraction = 0; }
+                } else if (next >= maxScroll) {
+                    next = maxScroll;
+                    if (velocity > 0) { velocity = 0; positionFraction = 0; }
+                }
+                if (next !== current) container.scrollTop = next;
+            }
+
+            if (direction !== 0 || velocity !== 0) {
+                rafId = requestAnimationFrame(tick);
+            } else {
+                rafId = null;
+                lastTs = 0;
+                positionFraction = 0;
             }
         };
+
         const startScrollLoop = () => {
-            if (scrollRafId === null) scrollRafId = requestAnimationFrame(tick);
+            if (rafId === null) rafId = requestAnimationFrame(tick);
         };
         const releaseScroll = () => {
-            scrollHold.up = false;
-            scrollHold.down = false;
+            upHeld = false;
+            downHeld = false;
+            recomputeDirection();
         };
 
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -2006,11 +2060,13 @@ Provide only the answer, nothing else.`;
                 handleBrainstorm();
             } else if (isShortcutPressed(e, 'scrollUp')) {
                 e.preventDefault();
-                scrollHold.up = true;
+                upHeld = true;
+                recomputeDirection();
                 startScrollLoop();
             } else if (isShortcutPressed(e, 'scrollDown')) {
                 e.preventDefault();
-                scrollHold.down = true;
+                downHeld = true;
+                recomputeDirection();
                 startScrollLoop();
             } else if (isShortcutPressed(e, 'moveWindowUp') || isShortcutPressed(e, 'moveWindowDown')) {
                 // Prevent default scrolling when moving window
@@ -2020,10 +2076,16 @@ Provide only the answer, nothing else.`;
 
         const handleKeyUp = (e: KeyboardEvent) => {
             // Users typically lift the modifier (Cmd/Ctrl) first, so releasing
-            // either it or the arrow stops scrolling.
-            if (e.key === 'ArrowUp') scrollHold.up = false;
-            else if (e.key === 'ArrowDown') scrollHold.down = false;
-            else if (e.key === 'Meta' || e.key === 'Control') releaseScroll();
+            // either it or the arrow ends the hold and lets momentum decay.
+            if (e.key === 'ArrowUp') {
+                upHeld = false;
+                recomputeDirection();
+            } else if (e.key === 'ArrowDown') {
+                downHeld = false;
+                recomputeDirection();
+            } else if (e.key === 'Meta' || e.key === 'Control') {
+                releaseScroll();
+            }
         };
 
         // Window blur swallows keyup; reset to avoid stuck scrolling.
@@ -2036,7 +2098,7 @@ Provide only the answer, nothing else.`;
             window.removeEventListener('keydown', handleKeyDown);
             window.removeEventListener('keyup', handleKeyUp);
             window.removeEventListener('blur', handleBlur);
-            if (scrollRafId !== null) cancelAnimationFrame(scrollRafId);
+            if (rafId !== null) cancelAnimationFrame(rafId);
         };
     }, [isShortcutPressed]);
 
