@@ -138,16 +138,20 @@ impl SpeakerInput {
         device_id: Option<String>,
     ) -> Result<()> {
         let init_result = (|| -> Result<_> {
-            let device = match device_id {
-                Some(ref id) => match find_device_by_id(&Direction::Render, id) {
+            // Resolve target render device. If the saved device_id is stale
+            // (unplugged, renamed, fresh install with leftover settings) we
+            // must NOT panic — fall through to the default. If even that
+            // errors, propagate via ? so init_tx surfaces the failure to JS
+            // instead of letting the thread die silently and leaving callers
+            // with a fake 44100Hz stream that never produces samples.
+            let device = match device_id.as_deref() {
+                Some(id) if !id.is_empty() => match find_device_by_id(&Direction::Render, id) {
                     Some(d) => d,
                     None => get_default_device(&Direction::Render)
-                        .map_err(|e| anyhow::anyhow!("{}", e))
-                        .expect("No default render device"),
+                        .map_err(|e| anyhow::anyhow!("device '{}' not found and default lookup failed: {}", id, e))?,
                 },
-                None => {
-                    get_default_device(&Direction::Render).map_err(|e| anyhow::anyhow!("{}", e))?
-                }
+                _ => get_default_device(&Direction::Render)
+                    .map_err(|e| anyhow::anyhow!("default render device unavailable: {}", e))?,
             };
 
             let mut audio_client = device
