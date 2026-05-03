@@ -20,8 +20,19 @@ import { RECOGNITION_LANGUAGES } from '../config/languages';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
+const DEFAULT_OPENAI_BASE = 'https://api.openai.com';
 const REALTIME_WS_URL = 'wss://api.openai.com/v1/realtime?intent=transcription';
 const REST_ENDPOINT   = 'https://api.openai.com/v1/audio/transcriptions';
+
+/** Derive REST transcription endpoint from a user-supplied base URL.
+ *  Strips a trailing slash so we don't end up with `//v1/...`. Accepts both
+ *  `https://my-host.tld` and `https://my-host.tld/v1` (the latter occurs in the wild). */
+function deriveRestEndpoint(baseUrl: string): string {
+    const trimmed = baseUrl.replace(/\/+$/, '');
+    return /\/v\d+$/.test(trimmed)
+        ? `${trimmed}/audio/transcriptions`
+        : `${trimmed}/v1/audio/transcriptions`;
+}
 
 /** WebSocket model priority order */
 const WS_MODELS = ['gpt-4o-transcribe', 'gpt-4o-mini-transcribe'] as const;
@@ -109,12 +120,24 @@ export class OpenAIStreamingSTT extends EventEmitter {
     private restIsUploading        = false;
     private restFlushPending       = false;
 
+    // Custom OpenAI-compatible endpoint (e.g. self-hosted Speaches). When set, the
+    // WebSocket Realtime path is skipped — third-party servers don't implement it.
+    private restEndpoint: string = REST_ENDPOINT;
+    private isCustomEndpoint = false;
+
     // ─── Constructor ──────────────────────────────────────────────────────────
 
-    constructor(apiKey: string) {
+    constructor(apiKey: string, baseUrl?: string) {
         super();
         this.apiKey = apiKey;
-        console.log('[OpenAIStreaming] Initialized — WebSocket priority (gpt-4o-transcribe → gpt-4o-mini-transcribe → whisper-1 REST)');
+        const effectiveBase = (baseUrl || '').trim();
+        if (effectiveBase && effectiveBase !== DEFAULT_OPENAI_BASE) {
+            this.restEndpoint = deriveRestEndpoint(effectiveBase);
+            this.isCustomEndpoint = true;
+            console.log(`[OpenAIStreaming] Initialized — custom endpoint (REST only): ${this.restEndpoint}`);
+        } else {
+            console.log('[OpenAIStreaming] Initialized — WebSocket priority (gpt-4o-transcribe → gpt-4o-mini-transcribe → whisper-1 REST)');
+        }
     }
 
     // ─── Public Configuration (STTProvider interface) ─────────────────────────
@@ -159,8 +182,16 @@ export class OpenAIStreamingSTT extends EventEmitter {
         this.wsModelIndex   = 0;
         this.wsFailures     = 0;
         this.reconnectAttempts = 0;
-        this.mode           = 'ws';
 
+        // Custom endpoints (e.g. Speaches) don't implement OpenAI's Realtime WebSocket
+        // protocol. Go straight to REST mode for them.
+        if (this.isCustomEndpoint) {
+            this.mode = 'rest';
+            this._switchToRest();
+            return;
+        }
+
+        this.mode = 'ws';
         this._connectWs();
     }
 
@@ -729,7 +760,7 @@ export class OpenAIStreamingSTT extends EventEmitter {
             : '';
         if (lang) form.append('language', lang);
 
-        const response = await axios.post(REST_ENDPOINT, form, {
+        const response = await axios.post(this.restEndpoint, form, {
             headers: {
                 Authorization: `Bearer ${this.apiKey}`,
                 ...form.getHeaders(),

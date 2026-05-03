@@ -881,11 +881,14 @@ export class AppState {
         stt = new GoogleSTT(speaker);
       }
     } else if (sttProvider === 'openai') {
-      // OpenAI: WebSocket Realtime (gpt-4o-transcribe → gpt-4o-mini-transcribe) with whisper-1 REST fallback
+      // OpenAI: WebSocket Realtime (gpt-4o-transcribe → gpt-4o-mini-transcribe) with whisper-1 REST fallback.
+      // If a custom OpenAI-compatible base URL is configured (e.g. Speaches), the STT class
+      // skips the Realtime WS path and uses REST against the custom endpoint.
       const apiKey = CredentialsManager.getInstance().getOpenAiSttApiKey();
+      const baseUrl = CredentialsManager.getInstance().getOpenAiSttBaseUrl();
       if (apiKey) {
-        console.log(`[Main] Using OpenAIStreamingSTT (WebSocket+REST fallback) for ${speaker}`);
-        stt = new OpenAIStreamingSTT(apiKey);
+        console.log(`[Main] Using OpenAIStreamingSTT for ${speaker}${baseUrl ? ` (custom endpoint: ${baseUrl})` : ' (WebSocket+REST fallback)'}`);
+        stt = new OpenAIStreamingSTT(apiKey, baseUrl);
       } else {
         console.warn(`[Main] No API key for OpenAI STT, falling back to GoogleSTT`);
         stt = new GoogleSTT(speaker);

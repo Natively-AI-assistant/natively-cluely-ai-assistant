@@ -80,6 +80,7 @@ interface ElectronAPI {
   getSttProvider: () => Promise<string>
   setGroqSttApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setOpenAiSttApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
+  setOpenAiSttBaseUrl: (url: string) => Promise<{ success: boolean; error?: string }>
   setDeepgramApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setElevenLabsApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setAzureApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
@@ -595,6 +596,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getSttProvider: () => ipcRenderer.invoke("get-stt-provider"),
   setGroqSttApiKey: (apiKey: string) => ipcRenderer.invoke("set-groq-stt-api-key", apiKey),
   setOpenAiSttApiKey: (apiKey: string) => ipcRenderer.invoke("set-openai-stt-api-key", apiKey),
+  setOpenAiSttBaseUrl: (url: string) => ipcRenderer.invoke("set-openai-stt-base-url", url),
   setDeepgramApiKey: (apiKey: string) => ipcRenderer.invoke("set-deepgram-api-key", apiKey),
   setElevenLabsApiKey: (apiKey: string) => ipcRenderer.invoke("set-elevenlabs-api-key", apiKey),
   setAzureApiKey: (apiKey: string) => ipcRenderer.invoke("set-azure-api-key", apiKey),
