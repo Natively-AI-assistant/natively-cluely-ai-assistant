@@ -96,6 +96,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         const stored = localStorage.getItem('natively_interviewer_transcript');
         return stored !== 'false';
     });
+    const [autoScroll, setAutoScroll] = useState(() => {
+        const stored = localStorage.getItem('natively_auto_scroll');
+        return stored === 'true';
+    });
+    const autoScrollRef = useRef(autoScroll);
+    useEffect(() => { autoScrollRef.current = autoScroll; }, [autoScroll]);
 
     // Analytics State
     const requestStartTimeRef = useRef<number | null>(null);
@@ -109,6 +115,24 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         window.addEventListener('storage', handleStorage);
         return () => window.removeEventListener('storage', handleStorage);
     }, []);
+
+    // Sync auto-scroll setting
+    useEffect(() => {
+        const handleStorage = () => {
+            const stored = localStorage.getItem('natively_auto_scroll');
+            setAutoScroll(stored === 'true');
+        };
+        window.addEventListener('storage', handleStorage);
+        return () => window.removeEventListener('storage', handleStorage);
+    }, []);
+
+    // Auto-scroll to bottom on every messages update when toggle is enabled.
+    // Covers user sends, assistant streaming tokens, and tool/system inserts.
+    useEffect(() => {
+        if (!autoScroll) return;
+        if (messages.length === 0) return;
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }, [messages, autoScroll]);
 
     const [rollingTranscript, setRollingTranscript] = useState('');  // For interviewer rolling text bar
     const [isInterviewerSpeaking, setIsInterviewerSpeaking] = useState(false);  // Track if actively speaking
