@@ -376,13 +376,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     const startTransition = useCallback((targetWidth: number) => {
         codeExpandedRef.current = targetWidth === SHELL_WIDTH_EXPANDED;
         if (animationControlsRef.current) animationControlsRef.current.stop();
-        // Apple-style ease-out-expo bezier: steep initial motion that decays
-        // smoothly to a stop. Same family as iOS sheet presentations — feels
-        // like a deliberate, weighted response rather than a snappy toggle.
+        // Symmetric ease-in-out-cubic. Smooth ramp on both ends — no perceived
+        // velocity break at the start or finish, which is what makes a width
+        // animation read as "buttery" rather than "snappy". The cubic poly
+        // is gentle enough that the 1px-per-frame motion at the edges is
+        // visually subliminal at 60Hz, eliminating the "settle" jitter you
+        // get with steeper ease-out curves on width-driven reflow.
         animationControlsRef.current = animate(shellWidth, targetWidth, {
             type: 'tween' as const,
-            ease: [0.16, 1, 0.3, 1],
-            duration: 0.55,
+            ease: [0.65, 0, 0.35, 1],
+            duration: 0.7,
             onComplete: () => { animationControlsRef.current = null; },
         });
     }, [shellWidth, SHELL_WIDTH_EXPANDED]);

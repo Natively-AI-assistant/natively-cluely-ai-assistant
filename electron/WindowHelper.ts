@@ -35,6 +35,11 @@ export class WindowHelper {
   // Constants
   private static readonly OVERLAY_DEFAULT_WIDTH = 600;
   private static readonly OVERLAY_MIN_HEIGHT = 216;
+  // Vertical offset for the meeting overlay's initial position, expressed as
+  // a fraction of the screen's work-area height. 0.015 places the top edge
+  // ~16 px below the work-area top on a 1055-tall display — flush against
+  // the menu bar with a small breathing-room gap.
+  private static readonly OVERLAY_DEFAULT_TOP_RATIO = 0.015;
 
   // Movement variables (apply to active window)
   private step: number = 20
@@ -262,8 +267,7 @@ export class WindowHelper {
     // will also fall back to centered logic — but providing explicit x/y in the
     // constructor is the only reliable guard against OS-level position persistence.
     const overlayDefaultX = Math.floor(workArea.x + (workArea.width - WindowHelper.OVERLAY_DEFAULT_WIDTH) / 2);
-    // Use original vertical offset calculation that positions the overlay higher
-    const overlayDefaultY = Math.floor(workArea.y + (workArea.height - WindowHelper.OVERLAY_DEFAULT_WIDTH) / 2);
+    const overlayDefaultY = Math.floor(workArea.y + workArea.height * WindowHelper.OVERLAY_DEFAULT_TOP_RATIO);
 
     const overlaySettings: Electron.BrowserWindowConstructorOptions = {
       width: WindowHelper.OVERLAY_DEFAULT_WIDTH,
@@ -588,7 +592,7 @@ export class WindowHelper {
           }
         : {
             x: Math.floor(workArea.x + (workArea.width - WindowHelper.OVERLAY_DEFAULT_WIDTH) / 2),
-            y: Math.floor(workArea.y + (workArea.height - WindowHelper.OVERLAY_DEFAULT_WIDTH) / 2),
+            y: Math.floor(workArea.y + workArea.height * WindowHelper.OVERLAY_DEFAULT_TOP_RATIO),
             width: WindowHelper.OVERLAY_DEFAULT_WIDTH,
             height: Math.max(Math.min(currentBounds.height, maxAllowedHeight), WindowHelper.OVERLAY_MIN_HEIGHT)
           };

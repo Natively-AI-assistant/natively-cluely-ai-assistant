@@ -160,6 +160,20 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
       }
       .content .codeblock pre::-webkit-scrollbar { height: 6px; }
       .content .codeblock pre::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+      /* Streaming-fence visual cue. */
+      .content .codeblock.streaming { border-color: rgba(108,240,214,0.18); }
+      .content .codeblock.streaming .codeblock-head { color: var(--accent); }
+      /* ── Syntax tokens. Theme matches the dark surface above; readable in
+         both AMOLED-bright and dim rooms. */
+      .content pre .hl-c    { color: #6b7d99; font-style: italic; }   /* comment */
+      .content pre .hl-s    { color: #a3e9b6; }                        /* string */
+      .content pre .hl-k    { color: #c8a8ff; }                        /* keyword */
+      .content pre .hl-n    { color: #ffd58a; }                        /* number */
+      .content pre .hl-f    { color: #7ec8ff; }                        /* function name */
+      .content pre .hl-t    { color: #ff9bb6; }                        /* tag (html/xml) */
+      .content pre .hl-a    { color: #6cf0d6; }                        /* attribute / property */
+      .content pre .hl-v    { color: #ffb482; font-style: italic; }    /* variable / built-in (self, this) */
+      .content pre .hl-o    { color: #c0d0e0; }                        /* operator / punctuation accent */
       .content hr {
         border: 0; height: 1px;
         background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
@@ -252,6 +266,166 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         const HTML_ESCAPE = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
         function esc(str) { return String(str || '').replace(/[&<>"']/g, function (c) { return HTML_ESCAPE[c]; }); }
 
+        // ───── Syntax highlighter ────────────────────────────────────────
+        // Hand-rolled, language-by-language ordered rules. Each rule is a
+        // [token-class, regex-anchored-at-start]. We walk the source string
+        // left-to-right, taking the first matching rule each step. Token
+        // class shorthand (single char) keeps the served HTML small.
+        // Unknown languages fall back to "generic" which still tints
+        // strings/comments/numbers — useful for SQL dialects, ruby, etc.
+        const LANG_ALIAS = {
+          js: 'js', javascript: 'js', jsx: 'js',
+          ts: 'js', typescript: 'js', tsx: 'js',
+          py: 'py', python: 'py',
+          sh: 'sh', bash: 'sh', shell: 'sh', zsh: 'sh',
+          json: 'json',
+          go: 'go', golang: 'go',
+          rs: 'rs', rust: 'rs',
+          c: 'c', cpp: 'c', 'c++': 'c', cc: 'c', h: 'c', hpp: 'c', java: 'c', cs: 'c', csharp: 'c',
+          html: 'html', xml: 'html', svg: 'html',
+          css: 'css', scss: 'css', sass: 'css',
+          sql: 'sql',
+          yaml: 'yaml', yml: 'yaml',
+        };
+        const HL_RULES = {
+          py: [
+            ['c', /^#[^\\n]*/],
+            ['s', /^(?:"""[\\s\\S]*?(?:"""|$)|'''[\\s\\S]*?(?:'''|$)|"(?:[^"\\\\\\n]|\\\\.)*"|'(?:[^'\\\\\\n]|\\\\.)*')/],
+            ['k', /^\\b(?:def|class|return|if|elif|else|for|while|in|is|not|and|or|import|from|as|with|try|except|finally|raise|lambda|yield|pass|break|continue|global|nonlocal|None|True|False|async|await|del|assert|match|case)\\b/],
+            ['v', /^\\b(?:self|cls)\\b/],
+            ['n', /^\\b(?:0x[0-9a-fA-F]+|0b[01]+|0o[0-7]+|\\d+\\.?\\d*(?:e[+-]?\\d+)?[jJ]?)\\b/],
+            ['f', /^\\b[A-Za-z_]\\w*(?=\\s*\\()/],
+            ['o', /^[+\\-*/%=<>!&|^~?:@]+/],
+          ],
+          js: [
+            ['c', /^(?:\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?(?:\\*\\/|$))/],
+            ['s', /^(?:\`(?:[^\`\\\\]|\\\\.)*(?:\`|$)|"(?:[^"\\\\\\n]|\\\\.)*"|'(?:[^'\\\\\\n]|\\\\.)*')/],
+            ['k', /^\\b(?:const|let|var|function|return|if|else|for|while|do|break|continue|switch|case|default|new|delete|typeof|instanceof|in|of|throw|try|catch|finally|class|extends|super|null|undefined|true|false|async|await|yield|import|export|from|as|static|get|set|public|private|protected|interface|type|enum|namespace|implements|readonly|abstract|declare|void|never|any|unknown|keyof|infer|satisfies)\\b/],
+            ['v', /^\\b(?:this|arguments|console|window|document|globalThis|process|require|module|exports)\\b/],
+            ['n', /^\\b(?:0x[0-9a-fA-F]+|0b[01]+|\\d+\\.?\\d*(?:e[+-]?\\d+)?n?|\\.\\d+(?:e[+-]?\\d+)?)\\b/],
+            ['f', /^\\b[A-Za-z_$][\\w$]*(?=\\s*\\()/],
+            ['o', /^[+\\-*/%=<>!&|^~?:]+/],
+          ],
+          sh: [
+            ['c', /^#[^\\n]*/],
+            ['s', /^(?:"(?:[^"\\\\]|\\\\.)*"|'[^']*')/],
+            ['v', /^\\$(?:\\{[^}]+\\}|[A-Za-z_]\\w*|[0-9!#?@*$])/],
+            ['k', /^\\b(?:if|then|else|elif|fi|for|while|until|do|done|case|esac|in|function|return|exit|echo|export|local|set|unset|test|cd|ls|cat|grep|sed|awk|cut|sort|uniq|head|tail|wc|find|chmod|chown|mkdir|rm|cp|mv|ln|ssh|scp|rsync|curl|wget|sudo|read|printf|trap|source|eval)\\b/],
+            ['n', /^\\b\\d+\\b/],
+            ['o', /^[|&;<>=()$]+/],
+          ],
+          json: [
+            ['a', /^"(?:[^"\\\\]|\\\\.)*"(?=\\s*:)/],
+            ['s', /^"(?:[^"\\\\]|\\\\.)*"/],
+            ['n', /^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?/],
+            ['k', /^\\b(?:true|false|null)\\b/],
+            ['o', /^[{}\\[\\],:]/],
+          ],
+          go: [
+            ['c', /^(?:\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?(?:\\*\\/|$))/],
+            ['s', /^(?:\`[^\`]*(?:\`|$)|"(?:[^"\\\\\\n]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*')/],
+            ['k', /^\\b(?:break|case|chan|const|continue|default|defer|else|fallthrough|for|func|go|goto|if|import|interface|map|package|range|return|select|struct|switch|type|var|nil|true|false|iota)\\b/],
+            ['v', /^\\b(?:append|cap|close|complex|copy|delete|imag|len|make|new|panic|print|println|real|recover|string|int|int8|int16|int32|int64|uint|uint8|uint16|uint32|uint64|byte|rune|float32|float64|bool|error)\\b/],
+            ['n', /^\\b(?:0x[0-9a-fA-F]+|0b[01]+|0o[0-7]+|\\d+\\.?\\d*(?:e[+-]?\\d+)?)\\b/],
+            ['f', /^\\b[A-Za-z_]\\w*(?=\\s*\\()/],
+            ['o', /^[+\\-*/%=<>!&|^~?:]+/],
+          ],
+          rs: [
+            ['c', /^(?:\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?(?:\\*\\/|$))/],
+            ['s', /^(?:b?"(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)')/],
+            ['k', /^\\b(?:as|async|await|break|const|continue|crate|dyn|else|enum|extern|false|fn|for|if|impl|in|let|loop|match|mod|move|mut|pub|ref|return|self|Self|static|struct|super|trait|true|type|unsafe|use|where|while)\\b/],
+            ['v', /^\\b(?:i8|i16|i32|i64|i128|isize|u8|u16|u32|u64|u128|usize|f32|f64|bool|char|str|String|Vec|Option|Result|Box|Rc|Arc|HashMap|HashSet|None|Some|Ok|Err)\\b/],
+            ['n', /^\\b(?:0x[0-9a-fA-F_]+|0b[01_]+|0o[0-7_]+|\\d[\\d_]*\\.?\\d*(?:e[+-]?\\d+)?(?:[iuf](?:8|16|32|64|128|size))?)\\b/],
+            ['f', /^\\b[A-Za-z_]\\w*(?=\\s*[(!])/],
+            ['o', /^[+\\-*/%=<>!&|^~?:@#]+/],
+          ],
+          c: [
+            ['c', /^(?:\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?(?:\\*\\/|$))/],
+            ['s', /^(?:"(?:[^"\\\\\\n]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*')/],
+            ['k', /^\\b(?:auto|break|case|char|const|continue|default|do|double|else|enum|extern|float|for|goto|if|inline|int|long|register|restrict|return|short|signed|sizeof|static|struct|switch|typedef|union|unsigned|void|volatile|while|class|public|private|protected|virtual|new|delete|this|nullptr|namespace|using|template|typename|true|false|try|catch|throw|public|private|protected|abstract|interface|implements|extends|package|import|null|var|let|val|fun|fn)\\b/],
+            ['n', /^\\b(?:0x[0-9a-fA-F]+|\\d+\\.?\\d*(?:[eE][+-]?\\d+)?[fFlLuU]*)\\b/],
+            ['f', /^\\b[A-Za-z_]\\w*(?=\\s*\\()/],
+            ['o', /^[+\\-*/%=<>!&|^~?:]+/],
+          ],
+          html: [
+            ['c', /^<!--[\\s\\S]*?(?:-->|$)/],
+            ['t', /^<\\/?[A-Za-z][\\w-]*/],
+            ['a', /^[A-Za-z_][\\w-]*(?=\\s*=)/],
+            ['s', /^(?:"(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*')/],
+            ['o', /^[<>=\\/]/],
+          ],
+          css: [
+            ['c', /^\\/\\*[\\s\\S]*?(?:\\*\\/|$)/],
+            ['s', /^(?:"(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*')/],
+            ['a', /^[-A-Za-z]+(?=\\s*:)/],
+            ['n', /^-?\\d+\\.?\\d*(?:px|em|rem|vw|vh|vmin|vmax|%|s|ms|deg|rad|turn|fr|ch|ex)?\\b/],
+            ['k', /^@[A-Za-z-]+/],
+            ['t', /^[#.][A-Za-z_][\\w-]*/],
+            ['o', /^[{}();:,>+~]/],
+          ],
+          sql: [
+            ['c', /^(?:--[^\\n]*|\\/\\*[\\s\\S]*?(?:\\*\\/|$))/],
+            ['s', /^'(?:[^']|'')*'/],
+            ['k', /^\\b(?:SELECT|FROM|WHERE|JOIN|INNER|LEFT|RIGHT|FULL|OUTER|CROSS|ON|GROUP|BY|HAVING|ORDER|LIMIT|OFFSET|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|DROP|ALTER|TABLE|INDEX|VIEW|AS|AND|OR|NOT|IN|EXISTS|BETWEEN|LIKE|ILIKE|IS|NULL|TRUE|FALSE|UNION|ALL|DISTINCT|CASE|WHEN|THEN|ELSE|END|WITH|RECURSIVE|PRIMARY|FOREIGN|KEY|REFERENCES|CONSTRAINT|UNIQUE|DEFAULT|CHECK|RETURNING|GRANT|REVOKE|BEGIN|COMMIT|ROLLBACK)\\b/i],
+            ['n', /^\\b\\d+\\.?\\d*\\b/],
+            ['f', /^\\b[A-Za-z_]\\w*(?=\\s*\\()/],
+            ['o', /^[=<>!()*,;.+\\-]/],
+          ],
+          yaml: [
+            ['c', /^#[^\\n]*/],
+            ['a', /^[A-Za-z_][\\w-]*(?=\\s*:)/],
+            ['s', /^(?:"(?:[^"\\\\]|\\\\.)*"|'(?:[^']|'')*'|\\|[\\s\\S]*?$|>[\\s\\S]*?$)/],
+            ['k', /^\\b(?:true|false|null|yes|no|on|off)\\b/i],
+            ['n', /^-?\\d+\\.?\\d*\\b/],
+            ['o', /^[:\\-?>|&*!]/],
+          ],
+          generic: [
+            ['c', /^(?:\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?(?:\\*\\/|$)|#[^\\n]*)/],
+            ['s', /^(?:"(?:[^"\\\\\\n]|\\\\.)*"|'(?:[^'\\\\\\n]|\\\\.)*'|\`(?:[^\`\\\\]|\\\\.)*(?:\`|$))/],
+            ['n', /^\\b(?:0x[0-9a-fA-F]+|\\d+\\.?\\d*)\\b/],
+            ['f', /^\\b[A-Za-z_]\\w*(?=\\s*\\()/],
+          ],
+        };
+        // Order-independent fast path: for any language, the ident/whitespace/
+        // single-char fall-through is the same.
+        function highlightCode(code, lang) {
+          const key = LANG_ALIAS[(lang || '').toLowerCase()] || (lang ? null : null);
+          const rules = (key && HL_RULES[key]) || (lang ? HL_RULES.generic : null);
+          if (!rules) return esc(code);
+          const out = [];
+          let i = 0;
+          const n = code.length;
+          while (i < n) {
+            // Skip whitespace cheaply (no regex per char).
+            const ch = code.charCodeAt(i);
+            if (ch === 32 || ch === 9 || ch === 10 || ch === 13) {
+              const start = i;
+              do { i++; } while (i < n && (code.charCodeAt(i) === 32 || code.charCodeAt(i) === 9 || code.charCodeAt(i) === 10 || code.charCodeAt(i) === 13));
+              out.push(esc(code.slice(start, i)));
+              continue;
+            }
+            const tail = code.slice(i);
+            let consumed = 0;
+            for (let r = 0; r < rules.length; r++) {
+              const rule = rules[r];
+              const m = tail.match(rule[1]);
+              if (m && m[0].length > 0) {
+                out.push('<span class="hl-' + rule[0] + '">' + esc(m[0]) + '</span>');
+                consumed = m[0].length;
+                break;
+              }
+            }
+            if (consumed === 0) {
+              // No rule matched — consume one ident-ish run or one char.
+              const idm = tail.match(/^[A-Za-z_$][\\w$]*/);
+              if (idm) { out.push(esc(idm[0])); consumed = idm[0].length; }
+              else { out.push(esc(code[i])); consumed = 1; }
+            }
+            i += consumed;
+          }
+          return out.join('');
+        }
+
         function renderInline(text) {
           // Order matters: inline code first (so its content doesn't get
           // mangled by other rules), then math, then bold > italic, then links.
@@ -276,12 +450,23 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         function renderMarkdown(src) {
           if (!src) return '';
           // 1. Pull out fenced code blocks first (so their contents stay literal).
+          //    Pass A: closed fences. Pass B: a trailing UNCLOSED fence (live
+          //    streaming case) — anything from the last \`\`\` to end-of-input
+          //    is shown as an "open" code block, so streamed code looks right
+          //    well before the closing fence arrives.
           const fences = [];
           const fenceRe = /\`\`\`([\\w-]*)?\\n?([\\s\\S]*?)\`\`\`/g;
-          const placeheld = src.replace(fenceRe, function (_m, lang, code) {
-            fences.push({ lang: (lang || '').toLowerCase(), code: code.replace(/\\n$/, '') });
+          let placeheld = src.replace(fenceRe, function (_m, lang, code) {
+            fences.push({ lang: (lang || '').toLowerCase(), code: code.replace(/\\n$/, ''), open: false });
             return '\\u0000FENCE' + (fences.length - 1) + '\\u0000';
           });
+          const openFenceRe = /(^|\\n)\`\`\`([\\w-]*)?\\n?([\\s\\S]*)$/;
+          const openMatch = placeheld.match(openFenceRe);
+          if (openMatch) {
+            const startIdx = openMatch.index + openMatch[1].length;
+            fences.push({ lang: (openMatch[2] || '').toLowerCase(), code: openMatch[3], open: true });
+            placeheld = placeheld.slice(0, startIdx) + '\\u0000FENCE' + (fences.length - 1) + '\\u0000';
+          }
 
           // 2. Walk lines, building paragraphs / lists / headings / quotes.
           const lines = placeheld.split(/\\n/);
@@ -321,11 +506,17 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
               flushAll();
               const f = fences[parseInt(fenceMatch[1], 10)];
               const langLabel = f.lang ? esc(f.lang) : 'code';
+              // While streaming an open fence: skip highlighting (it would
+              // re-tokenize on every keystroke) and replace the Copy button
+              // with a "Streaming…" label so the user knows it's live.
+              const body = f.open ? esc(f.code) : highlightCode(f.code, f.lang);
+              const trailing = f.open
+                ? '<span class="codeblock-copy" aria-hidden="true">Streaming…</span>'
+                : '<button type="button" class="codeblock-copy">Copy</button>';
               out.push(
-                '<div class="codeblock" data-lang="' + esc(f.lang) + '">' +
-                '<div class="codeblock-head"><span>' + langLabel + '</span>' +
-                '<button type="button" class="codeblock-copy">Copy</button></div>' +
-                '<pre><code>' + esc(f.code) + '</code></pre>' +
+                '<div class="codeblock' + (f.open ? ' streaming' : '') + '" data-lang="' + esc(f.lang) + '">' +
+                '<div class="codeblock-head"><span>' + langLabel + '</span>' + trailing + '</div>' +
+                '<pre><code>' + body + '</code></pre>' +
                 '</div>'
               );
               continue;
@@ -479,17 +670,17 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           scrollToLatest();
         }
 
-        function appendLiveToken(streamId, token) {
-          if (!live || live.streamId !== streamId) {
-            live = { streamId, content: '', createdAt: new Date().toISOString() };
-          }
-          live.content += token;
+        // Coalesce token-driven renders to one per animation frame so a burst
+        // of buffered tokens (network often delivers 5-20 at once) costs one
+        // re-parse instead of N. requestAnimationFrame also pauses while the
+        // tab is hidden — we'll catch up automatically on visibility return.
+        let liveRenderRaf = 0;
+        function flushLiveRender() {
+          liveRenderRaf = 0;
+          if (!live) return;
           let card = feed.querySelector('.card.live');
           if (!card) { render(); return; }
           const content = card.querySelector('.content');
-          // Re-render the full markdown each tick. Tokens stream slowly relative
-          // to a phone's render budget, but we still scope DOM writes to this
-          // one card so the rest of the feed isn't disturbed.
           content.innerHTML = renderMarkdown(live.content);
           const caret = document.createElement('span');
           caret.className = 'caret';
@@ -498,8 +689,30 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           empty.style.display = 'none';
           scrollToLatest();
         }
+        function scheduleLiveRender() {
+          if (liveRenderRaf) return;
+          if (typeof requestAnimationFrame === 'function') {
+            liveRenderRaf = requestAnimationFrame(flushLiveRender);
+          } else {
+            liveRenderRaf = setTimeout(flushLiveRender, 16);
+          }
+        }
+        function appendLiveToken(streamId, token) {
+          if (!live || live.streamId !== streamId) {
+            live = { streamId, content: '', createdAt: new Date().toISOString() };
+          }
+          live.content += token;
+          scheduleLiveRender();
+        }
 
         function finalizeLive(streamId, content, createdAt) {
+          // Cancel any pending live render — we're about to do a final one
+          // with the canonical (server-confirmed) content.
+          if (liveRenderRaf) {
+            if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(liveRenderRaf);
+            else clearTimeout(liveRenderRaf);
+            liveRenderRaf = 0;
+          }
           if (live && live.streamId === streamId) {
             messages.push({ id: 'a:' + streamId, role: 'assistant', content: content || live.content, createdAt: createdAt || live.createdAt });
             live = null;

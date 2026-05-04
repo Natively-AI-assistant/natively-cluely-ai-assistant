@@ -88,7 +88,15 @@ const App: React.FC = () => {
   }, [isLauncherWindow, isOverlayWindow, isDefault]);
 
   // State
-  const [showStartup, setShowStartup] = useState(true);
+  // One-shot first-run startup sequence. Once the user dismisses it (or any
+  // future code flips the flag), it never appears again on subsequent launches.
+  const [showStartup, setShowStartup] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('natively_seen_startup_v1') !== 'true';
+    } catch {
+      return true;
+    }
+  });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<string>('general');
   const [isModesOpen, setIsModesOpen] = useState(false);
@@ -480,7 +488,10 @@ const App: React.FC = () => {
             initial={{ opacity: 1 }}
             exit={{ opacity: 0, scale: 1.1, pointerEvents: "none", transition: { duration: 0.6, ease: "easeInOut" } }}
           >
-            <StartupSequence onComplete={() => setShowStartup(false)} />
+            <StartupSequence onComplete={() => {
+              try { localStorage.setItem('natively_seen_startup_v1', 'true'); } catch {}
+              setShowStartup(false);
+            }} />
           </motion.div>
         ) : (
           <motion.div

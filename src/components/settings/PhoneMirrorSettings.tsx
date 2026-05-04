@@ -93,7 +93,12 @@ export const PhoneMirrorSettings: React.FC = () => {
                     <Smartphone size={20} className="text-text-primary" />
                 </div>
                 <div className="flex-1">
-                    <h3 className="text-text-primary text-lg font-semibold tracking-tight">Phone Mirror</h3>
+                    <div className="flex items-center gap-2">
+                        <h3 className="text-text-primary text-lg font-semibold tracking-tight">Phone Mirror</h3>
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.08em] bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                            Beta
+                        </span>
+                    </div>
                     <p className="text-text-secondary text-sm mt-1 leading-relaxed">
                         Stream live AI responses from your desktop to a phone browser on the same network.
                         Useful when you're sharing your screen and want the AI output kept off the shared display.
