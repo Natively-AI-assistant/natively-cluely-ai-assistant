@@ -122,6 +122,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     const rafDimUpdateRef = useRef<number | null>(null);
     const codeExpandedRef = useRef(false);
     const animationControlsRef = useRef<ReturnType<typeof animate> | null>(null);
+    // Stability gate for code-visibility transitions. Scroll fires at ~60Hz;
+    // without this, fast scrolls cancel and restart the 0.7s tween repeatedly,
+    // producing stutter (and sometimes a snap when start≈target). The pending
+    // visibility must hold its new state for STABILITY_MS before we commit to
+    // a transition.
+    const stableVisibilityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pendingVisibilityRef = useRef<boolean | null>(null);
     // Captures data from onCaptureAndProcess before the React state flush so
     // handleWhatToSay() can access it even in React 18 concurrent mode (where
     // a plain setTimeout(0) may fire before setAttachedContext flushes).
@@ -392,12 +399,23 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
 
     // Scan [data-code-msg] elements and check if any intersect the scroll container
     // viewport. Called on every scroll event and after every messages update.
+    // Uses a stability gate: the visibility must hold its new state for
+    // STABILITY_MS before a transition fires. This filters out the rapid
+    // visible↔invisible flicker that occurs when a code block crosses the
+    // viewport edge during a fast scroll, which would otherwise interrupt
+    // the 0.7s tween mid-flight and cause stutter.
+    const STABILITY_MS = 120;
     const checkCodeVisibility = useCallback(() => {
         const container = scrollContainerRef.current;
 
         // Scroll container unmounted (session reset / messages cleared) — force
         // contraction so the shell returns to its collapsed width.
         if (!container) {
+            if (stableVisibilityTimerRef.current) {
+                clearTimeout(stableVisibilityTimerRef.current);
+                stableVisibilityTimerRef.current = null;
+            }
+            pendingVisibilityRef.current = null;
             if (codeExpandedRef.current) startTransition(SHELL_WIDTH_COLLAPSED);
             return;
         }
@@ -412,9 +430,32 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
             }
         }
 
-        if (visible !== codeExpandedRef.current) {
-            startTransition(visible ? SHELL_WIDTH_EXPANDED : SHELL_WIDTH_COLLAPSED);
+        // Already in the correct state — clear any pending change so a
+        // mid-flight tween isn't interrupted by a stale timer firing.
+        if (visible === codeExpandedRef.current) {
+            pendingVisibilityRef.current = null;
+            if (stableVisibilityTimerRef.current) {
+                clearTimeout(stableVisibilityTimerRef.current);
+                stableVisibilityTimerRef.current = null;
+            }
+            return;
         }
+
+        // State change detected. If we're already waiting on the SAME pending
+        // change, let the timer continue ticking — don't reset it on every
+        // scroll frame, or fast scroll would never let the timer fire.
+        if (pendingVisibilityRef.current === visible) return;
+
+        pendingVisibilityRef.current = visible;
+        if (stableVisibilityTimerRef.current) clearTimeout(stableVisibilityTimerRef.current);
+        stableVisibilityTimerRef.current = setTimeout(() => {
+            stableVisibilityTimerRef.current = null;
+            const target = pendingVisibilityRef.current;
+            pendingVisibilityRef.current = null;
+            if (target !== null && target !== codeExpandedRef.current) {
+                startTransition(target ? SHELL_WIDTH_EXPANDED : SHELL_WIDTH_COLLAPSED);
+            }
+        }, STABILITY_MS);
     }, [startTransition, SHELL_WIDTH_COLLAPSED, SHELL_WIDTH_EXPANDED]);
 
     // Re-check after every messages update (catches mid-stream code fences).
@@ -441,6 +482,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                 cancelAnimationFrame(rafDimUpdateRef.current);
                 rafDimUpdateRef.current = null;
             }
+            if (stableVisibilityTimerRef.current) {
+                clearTimeout(stableVisibilityTimerRef.current);
+                stableVisibilityTimerRef.current = null;
+            }
+            pendingVisibilityRef.current = null;
         };
     }, []);
     // ────────────────────────────────────────────────────────────────────────

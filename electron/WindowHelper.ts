@@ -36,10 +36,10 @@ export class WindowHelper {
   private static readonly OVERLAY_DEFAULT_WIDTH = 600;
   private static readonly OVERLAY_MIN_HEIGHT = 216;
   // Vertical offset for the meeting overlay's initial position, expressed as
-  // a fraction of the screen's work-area height. 0.015 places the top edge
-  // ~16 px below the work-area top on a 1055-tall display — flush against
-  // the menu bar with a small breathing-room gap.
-  private static readonly OVERLAY_DEFAULT_TOP_RATIO = 0.015;
+  // a fraction of the screen's work-area height. 0.035 places the top edge
+  // ~37 px below the work-area top on a 1055-tall display — comfortably
+  // below the menu bar with visible breathing room.
+  private static readonly OVERLAY_DEFAULT_TOP_RATIO = 0.035;
 
   // Movement variables (apply to active window)
   private step: number = 20
