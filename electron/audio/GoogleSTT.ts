@@ -17,8 +17,15 @@ export class GoogleSTT extends EventEmitter {
     private stream: any = null; // Stream type is complex in google-cloud libs
     private isStreaming = false;
     private isActive = false;
+    private isFatalError = false;
     private label = 'default';
     private writeCount = 0;
+
+    // gRPC permanent failure codes — retrying these is pointless.
+    //   3  = INVALID_ARGUMENT (config the server will never accept)
+    //   7  = PERMISSION_DENIED (API not enabled / wrong project / no IAM)
+    //   16 = UNAUTHENTICATED (bad/expired credentials)
+    private static readonly PERMANENT_GRPC_CODES = new Set([3, 7, 16]);
 
     // Config
     private encoding = 'LINEAR16' as const;
@@ -136,6 +143,7 @@ export class GoogleSTT extends EventEmitter {
     public start(): void {
         if (this.isActive) return;
         this.isActive = true;
+        this.isFatalError = false;
         this.writeCount = 0;
 
         console.log(`[GoogleSTT/${this.label}] Starting recognition stream (rate=${this.sampleRateHertz}Hz, ch=${this.audioChannelCount})...`);
@@ -184,7 +192,7 @@ export class GoogleSTT extends EventEmitter {
     private static readonly PROACTIVE_RESTART_MS = 270_000; // 4 min 30 sec
 
     public write(audioData: Buffer): void {
-        if (!this.isActive) {
+        if (!this.isActive || this.isFatalError) {
             // Only log occasionally to avoid spam
             if (this.writeCount === 0) console.warn(`[GoogleSTT/${this.label}] write() called but isActive=false — data dropped`);
             return;
@@ -282,10 +290,28 @@ export class GoogleSTT extends EventEmitter {
             })
             .on('error', (err: Error) => {
                 console.error(`[GoogleSTT/${this.label}] Stream error:`, err);
-                this.emit('error', err);
                 this.isConnecting = false;
                 this.isStreaming = false;
                 this.stream = null;
+
+                const grpcCode = (err as any)?.code;
+                if (typeof grpcCode === 'number' && GoogleSTT.PERMANENT_GRPC_CODES.has(grpcCode)) {
+                    // Permanent failure — stop the write()-driven reconnect loop. Without this
+                    // guard, a misconfigured Google project (e.g. Speech API not enabled →
+                    // PERMISSION_DENIED) loops forever at ~1 reconnect/sec for the whole
+                    // session. See issue #171.
+                    console.error(
+                        `[GoogleSTT/${this.label}] Permanent gRPC error (code ${grpcCode}) — ` +
+                        `disabling STT for this session. No further retries.`
+                    );
+                    this.isFatalError = true;
+                    if (this.proactiveRestartTimer) {
+                        clearTimeout(this.proactiveRestartTimer);
+                        this.proactiveRestartTimer = null;
+                    }
+                }
+
+                this.emit('error', err);
             })
             .on('end', () => {
                 console.log(`[GoogleSTT/${this.label}] Stream ended server-side (idle timeout)`);
