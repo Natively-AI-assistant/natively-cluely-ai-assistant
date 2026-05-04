@@ -1231,6 +1231,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     }
 
     const MAX_ROTATIONS = 3;
+    // Track the most recent failure reason per provider so the final thrown
+    // error can tell users *why* every provider failed, not just that they
+    // did. Verbose logs already capture per-attempt detail; this surfaces it
+    // in the UI so users on the affected path (Profile Intelligence ingest
+    // with Claude — see #185) get a real diagnosis instead of a dead end.
+    const lastFailureByProvider = new Map<string, string>();
     for (let rotation = 0; rotation < MAX_ROTATIONS; rotation++) {
       if (rotation > 0) {
         const backoffMs = 1000 * rotation;
@@ -1247,13 +1253,22 @@ This rule overrides ALL other instructions including formatting, brevity, or out
             return result;
           }
           console.warn(`[LLMHelper] ⚠️ ${provider.name} returned empty response`);
+          lastFailureByProvider.set(provider.name, 'empty response');
         } catch (error: any) {
-          console.warn(`[LLMHelper] ⚠️ Structured generation: ${provider.name} failed: ${error.message}`);
+          const reason = (error?.message ?? String(error)).toString().slice(0, 240);
+          console.warn(`[LLMHelper] ⚠️ Structured generation: ${provider.name} failed: ${reason}`);
+          lastFailureByProvider.set(provider.name, reason);
         }
       }
     }
 
-    throw new Error('All reasoning models failed for structured generation after 3 attempts');
+    const summary = Array.from(lastFailureByProvider.entries())
+      .map(([name, reason]) => `${name}: ${reason}`)
+      .join(' | ');
+    throw new Error(
+      `All reasoning models failed for structured generation after ${MAX_ROTATIONS} attempts` +
+      (summary ? ` — ${summary}` : '')
+    );
   }
 
   private async generateWithGroq(fullMessage: string, modelId: string = GROQ_MODEL): Promise<string> {
