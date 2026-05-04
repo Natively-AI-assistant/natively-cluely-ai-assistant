@@ -2814,10 +2814,27 @@ async function initializeApp() {
   // by the build step, not re-launched by concurrently while the old process is alive.
   const gotLock = app.requestSingleInstanceLock();
   if (!gotLock) {
-    console.log('[Main] Another instance is already running. Quitting this instance.');
-    app.quit();
+    console.log('[Main] Another instance is already running. Exiting this instance.');
+    // Use app.exit(0) — app.quit() before whenReady can be deferred or no-op'd
+    // (it tries to close all windows first, but none exist yet), leaving the
+    // duplicate process alive long enough to register a second tray icon on
+    // macOS Tahoe + Spotlight launches. exit() terminates immediately and
+    // cannot be intercepted by before-quit handlers.
+    app.exit(0);
     return;
   }
+
+  // When a duplicate launch is attempted (e.g. user invokes Spotlight again
+  // while Natively is running), focus and recenter the existing window so the
+  // launch is visibly handled instead of silently absorbed.
+  app.on('second-instance', () => {
+    try {
+      const appState = AppState.getInstance();
+      appState.centerAndShowWindow();
+    } catch (err) {
+      console.error('[Main] second-instance handler failed:', err);
+    }
+  });
 
   // 2. Wait for app to be ready
   await app.whenReady()
