@@ -84,6 +84,7 @@ export const PhoneMirrorSettings: React.FC = () => {
 
     const lanWarning = info.running && info.exposeOnLan;
     const showQr = info.running && info.qrDataUrl;
+    const lanRequestedButMissing = info.running && info.exposeOnLan && info.lanUrls.length === 0;
 
     return (
         <div className="space-y-6 animated fadeIn">
@@ -156,6 +157,16 @@ export const PhoneMirrorSettings: React.FC = () => {
                     </div>
                 )}
             </div>
+
+            {/* No-LAN-IP warning */}
+            {lanRequestedButMissing && (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-300 text-xs leading-relaxed flex items-start gap-2">
+                    <ShieldAlert size={14} className="mt-0.5 flex-shrink-0" />
+                    <span>
+                        LAN access is on, but no Wi-Fi or Ethernet IP was detected. Connect this Mac to the same Wi-Fi as your phone (VPN tunnels and virtual interfaces don't count). If you've connected, also confirm <strong>System Settings → Network → Firewall</strong> is allowing incoming connections for this app.
+                    </span>
+                </div>
+            )}
 
             {/* Pairing card */}
             {info.running ? (

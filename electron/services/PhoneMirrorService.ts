@@ -190,8 +190,10 @@ export class PhoneMirrorService {
     const lanUrls = this.exposeOnLan
       ? getLanIPs().map((ip) => `http://${ip}:${this.port}/?t=${this.token}`)
       : [];
-    const primaryUrl = lanUrls[0] || loopbackUrl;
-    const qrDataUrl = await safeQr(primaryUrl);
+    // If LAN is on, only advertise a real LAN URL — falling back to 127.0.0.1
+    // would print a QR code the phone cannot reach (loopback ≠ phone).
+    const primaryUrl = this.exposeOnLan ? (lanUrls[0] || null) : loopbackUrl;
+    const qrDataUrl = primaryUrl ? await safeQr(primaryUrl) : null;
     const info: PhoneMirrorInfo = {
       running: true,
       enabled,
@@ -458,14 +460,61 @@ function timingSafeEqualStr(a: string, b: string): boolean {
   return crypto.timingSafeEqual(ab, bb);
 }
 
+// Filter out interfaces a phone on the same WiFi will NEVER be able to reach:
+// - utun*: VPN tunnels (Tailscale, system VPN, WireGuard) — not on the LAN
+// - awdl*, llw*: Apple Wireless Direct Link / low-latency WLAN — peer-to-peer only
+// - anpi*, ap*: Apple Network Privacy / hotspot interfaces
+// - bridge*: Internet Sharing / Thunderbolt bridge — different subnet
+// - vmnet*, vboxnet*, docker*: virtualization-only networks
+// - veth*, br-*: Linux container networks
+const VIRTUAL_IFACE_RE = /^(utun|awdl|llw|anpi|ap\d|bridge|vmnet|vboxnet|docker|veth|br-|gif|stf|tap)/i;
+
+function isPrivateLanIPv4(ip: string): boolean {
+  // RFC1918 — the only ranges a phone on the same Wi-Fi will share with the desktop.
+  if (ip.startsWith('10.')) return true;
+  if (ip.startsWith('192.168.')) return true;
+  if (ip.startsWith('172.')) {
+    const second = parseInt(ip.split('.')[1] || '0', 10);
+    return second >= 16 && second <= 31;
+  }
+  return false;
+}
+
+function rankLanIp(name: string, ip: string): number {
+  // Lower score sorts earlier. We prefer:
+  //   1. en0/en1 (Wi-Fi or Ethernet on macOS) over higher en* (often virtual).
+  //   2. 192.168.x.x (home routers) over 10.x and 172.16-31.x.
+  let score = 100;
+  const m = name.match(/^en(\d+)$/i);
+  if (m) score = parseInt(m[1], 10); // en0 -> 0, en1 -> 1, ...
+  else if (/^eth\d+$|^enp/i.test(name)) score = 2;
+  else if (/^wlan\d+|^wlp/i.test(name)) score = 1;
+  if (ip.startsWith('192.168.')) score += 0;
+  else if (ip.startsWith('10.')) score += 10;
+  else score += 20; // 172.16-31.x
+  return score;
+}
+
 function getLanIPs(): string[] {
-  const out: string[] = [];
+  const candidates: { ip: string; name: string }[] = [];
   const ifaces = os.networkInterfaces();
-  for (const list of Object.values(ifaces)) {
+  for (const [name, list] of Object.entries(ifaces)) {
     if (!list) continue;
+    if (VIRTUAL_IFACE_RE.test(name)) continue;
     for (const a of list) {
-      if (a.family === 'IPv4' && !a.internal) out.push(a.address);
+      if (a.family !== 'IPv4' || a.internal) continue;
+      if (!isPrivateLanIPv4(a.address)) continue;
+      candidates.push({ ip: a.address, name });
     }
+  }
+  candidates.sort((a, b) => rankLanIp(a.name, a.ip) - rankLanIp(b.name, b.ip));
+  // De-dup while preserving order.
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const c of candidates) {
+    if (seen.has(c.ip)) continue;
+    seen.add(c.ip);
+    out.push(c.ip);
   }
   return out;
 }

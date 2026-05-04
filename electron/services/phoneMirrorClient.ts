@@ -97,7 +97,74 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         color: var(--accent); font-size: 10px; font-weight: 700; letter-spacing: 0.6px;
       }
       .card.live .badge { display: inline-block; }
-      .content { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15.5px; line-height: 1.55; }
+      .content { font-size: 15.5px; line-height: 1.6; overflow-wrap: anywhere; word-break: break-word; }
+      .content > :first-child { margin-top: 0; }
+      .content > :last-child { margin-bottom: 0; }
+      .content p { margin: 0 0 10px; }
+      .content strong { font-weight: 700; color: #ffffff; }
+      .content em { font-style: italic; color: rgba(255,255,255,0.92); }
+      .content h1, .content h2, .content h3 {
+        margin: 14px 0 8px; line-height: 1.25; letter-spacing: -0.01em;
+        color: #ffffff; font-weight: 700;
+      }
+      .content h1 { font-size: 19px; }
+      .content h2 { font-size: 17px; }
+      .content h3 { font-size: 15px; }
+      .content ul, .content ol { margin: 6px 0 12px; padding-left: 22px; }
+      .content ul { list-style: disc; }
+      .content ol { list-style: decimal; }
+      .content li { margin: 3px 0; padding-left: 4px; }
+      .content li::marker { color: rgba(255,255,255,0.42); }
+      .content blockquote {
+        margin: 8px 0; padding: 4px 12px;
+        border-left: 2px solid rgba(108,240,214,0.35);
+        color: rgba(255,255,255,0.82); font-style: italic;
+      }
+      .content a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+      .content code.inline {
+        padding: 1px 6px; border-radius: 4px;
+        background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.06);
+        color: #d6e6ff; font: 0.92em ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        word-break: break-word; white-space: pre-wrap;
+      }
+      .content .math {
+        font: 0.95em ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        color: #ffe8a8;
+      }
+      .content .codeblock {
+        margin: 10px 0 14px; border-radius: 10px; overflow: hidden;
+        background: rgba(0,0,0,0.42); border: 1px solid rgba(255,255,255,0.07);
+      }
+      .content .codeblock-head {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 6px 10px 6px 12px;
+        background: rgba(255,255,255,0.03);
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        color: rgba(255,255,255,0.55); font-size: 11px;
+        text-transform: uppercase; letter-spacing: 0.08em;
+      }
+      .content .codeblock-copy {
+        background: transparent; color: rgba(255,255,255,0.55);
+        font-size: 11px; padding: 2px 8px; border-radius: 999px;
+        border: 1px solid rgba(255,255,255,0.08);
+        text-transform: none; letter-spacing: 0;
+        transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
+      }
+      .content .codeblock-copy:active { transform: scale(0.97); }
+      .content .codeblock-copy.copied { color: var(--accent); border-color: rgba(108,240,214,0.32); }
+      .content .codeblock pre {
+        margin: 0; padding: 12px 14px; overflow-x: auto;
+        font: 12.5px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        color: #e6edf3; white-space: pre;
+        scrollbar-width: thin;
+      }
+      .content .codeblock pre::-webkit-scrollbar { height: 6px; }
+      .content .codeblock pre::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+      .content hr {
+        border: 0; height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
+        margin: 14px 0;
+      }
       .content .caret {
         display: inline-block; width: 7px; height: 1em; vertical-align: -2px; margin-left: 2px;
         background: var(--accent); border-radius: 2px;
@@ -176,6 +243,159 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         const subtitle = document.getElementById('subtitle');
         const toast = document.getElementById('toast');
 
+        // ───── Markdown renderer ─────────────────────────────────────────
+        // Tiny, dependency-free, XSS-safe (escapes everything before
+        // re-inserting any tag). Built specifically to match what the
+        // desktop app's ReactMarkdown produces: code fences, inline code,
+        // bold/italic, headings, ordered + unordered lists, blockquotes,
+        // links, $math$, and horizontal rules.
+        const HTML_ESCAPE = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+        function esc(str) { return String(str || '').replace(/[&<>"']/g, function (c) { return HTML_ESCAPE[c]; }); }
+
+        function renderInline(text) {
+          // Order matters: inline code first (so its content doesn't get
+          // mangled by other rules), then math, then bold > italic, then links.
+          let out = esc(text);
+          // \`inline code\`
+          out = out.replace(/\`([^\`\\n]+)\`/g, function (_m, c) { return '<code class="inline">' + c + '</code>'; });
+          // $...$ math (single-dollar, not crossing newlines, not empty)
+          out = out.replace(/(^|[^\\\\])\\$([^$\\n]+?)\\$/g, function (_m, pre, c) { return pre + '<span class="math">' + c + '</span>'; });
+          // **bold** before *italic* so we don't eat the inner asterisks.
+          out = out.replace(/\\*\\*([^*\\n]+?)\\*\\*/g, '<strong>$1</strong>');
+          out = out.replace(/__([^_\\n]+?)__/g, '<strong>$1</strong>');
+          out = out.replace(/(^|[^\\*])\\*([^*\\n]+?)\\*(?!\\*)/g, '$1<em>$2</em>');
+          out = out.replace(/(^|[^_])_([^_\\n]+?)_(?!_)/g, '$1<em>$2</em>');
+          // [text](url) — only allow http(s) and relative links.
+          out = out.replace(/\\[([^\\]\\n]+)\\]\\(([^)\\s]+)\\)/g, function (_m, label, href) {
+            const safe = /^https?:\\/\\//i.test(href) ? href : '#';
+            return '<a href="' + safe + '" target="_blank" rel="noopener noreferrer">' + label + '</a>';
+          });
+          return out;
+        }
+
+        function renderMarkdown(src) {
+          if (!src) return '';
+          // 1. Pull out fenced code blocks first (so their contents stay literal).
+          const fences = [];
+          const fenceRe = /\`\`\`([\\w-]*)?\\n?([\\s\\S]*?)\`\`\`/g;
+          const placeheld = src.replace(fenceRe, function (_m, lang, code) {
+            fences.push({ lang: (lang || '').toLowerCase(), code: code.replace(/\\n$/, '') });
+            return '\\u0000FENCE' + (fences.length - 1) + '\\u0000';
+          });
+
+          // 2. Walk lines, building paragraphs / lists / headings / quotes.
+          const lines = placeheld.split(/\\n/);
+          const out = [];
+          let para = [];
+          let list = null; // { type: 'ul'|'ol', items: string[] }
+          let quote = [];
+
+          function flushPara() {
+            if (!para.length) return;
+            const joined = para.join(' ').trim();
+            if (joined) out.push('<p>' + renderInline(joined) + '</p>');
+            para = [];
+          }
+          function flushList() {
+            if (!list) return;
+            out.push('<' + list.type + '>' + list.items.map(function (i) {
+              return '<li>' + renderInline(i) + '</li>';
+            }).join('') + '</' + list.type + '>');
+            list = null;
+          }
+          function flushQuote() {
+            if (!quote.length) return;
+            out.push('<blockquote>' + renderInline(quote.join(' ')) + '</blockquote>');
+            quote = [];
+          }
+          function flushAll() { flushPara(); flushList(); flushQuote(); }
+
+          for (let i = 0; i < lines.length; i++) {
+            const raw = lines[i];
+            const line = raw;
+            const trimmed = line.trim();
+
+            // Code fence placeholder restores immediately, ending blocks.
+            const fenceMatch = trimmed.match(/^\\u0000FENCE(\\d+)\\u0000$/);
+            if (fenceMatch) {
+              flushAll();
+              const f = fences[parseInt(fenceMatch[1], 10)];
+              const langLabel = f.lang ? esc(f.lang) : 'code';
+              out.push(
+                '<div class="codeblock" data-lang="' + esc(f.lang) + '">' +
+                '<div class="codeblock-head"><span>' + langLabel + '</span>' +
+                '<button type="button" class="codeblock-copy">Copy</button></div>' +
+                '<pre><code>' + esc(f.code) + '</code></pre>' +
+                '</div>'
+              );
+              continue;
+            }
+
+            // Blank line → paragraph break.
+            if (!trimmed) { flushAll(); continue; }
+
+            // Horizontal rule.
+            if (/^(-{3,}|_{3,}|\\*{3,})$/.test(trimmed)) {
+              flushAll(); out.push('<hr />'); continue;
+            }
+
+            // Heading.
+            const h = trimmed.match(/^(#{1,3})\\s+(.+)$/);
+            if (h) { flushAll(); out.push('<h' + h[1].length + '>' + renderInline(h[2]) + '</h' + h[1].length + '>'); continue; }
+
+            // Block quote.
+            const q = trimmed.match(/^>\\s?(.*)$/);
+            if (q) { flushPara(); flushList(); quote.push(q[1]); continue; }
+
+            // Ordered list.
+            const ol = trimmed.match(/^(\\d+)[.)]\\s+(.+)$/);
+            if (ol) {
+              flushPara(); flushQuote();
+              if (!list || list.type !== 'ol') { flushList(); list = { type: 'ol', items: [] }; }
+              list.items.push(ol[2]);
+              continue;
+            }
+
+            // Unordered list.
+            const ul = trimmed.match(/^[-*+]\\s+(.+)$/);
+            if (ul) {
+              flushPara(); flushQuote();
+              if (!list || list.type !== 'ul') { flushList(); list = { type: 'ul', items: [] }; }
+              list.items.push(ul[1]);
+              continue;
+            }
+
+            // Continuation line for the open block.
+            if (list) { list.items[list.items.length - 1] += ' ' + trimmed; continue; }
+            if (quote.length) { quote.push(trimmed); continue; }
+            para.push(trimmed);
+          }
+          flushAll();
+          return out.join('');
+        }
+
+        // Wires copy buttons inside code blocks. Idempotent — safe to call
+        // after each render or token append.
+        function bindCodeCopy(root) {
+          const buttons = (root || feed).querySelectorAll('.codeblock-copy:not([data-bound])');
+          buttons.forEach(function (btn) {
+            btn.dataset.bound = '1';
+            btn.addEventListener('click', async function (e) {
+              e.stopPropagation();
+              const block = btn.closest('.codeblock');
+              const codeEl = block && block.querySelector('pre code');
+              if (!codeEl) return;
+              const text = codeEl.textContent || '';
+              try {
+                if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(text);
+                else throw new Error('insecure');
+                btn.textContent = 'Copied'; btn.classList.add('copied');
+                setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1100);
+              } catch (_) { showToast('Copy blocked'); }
+            });
+          });
+        }
+
         const params = new URLSearchParams(window.location.search);
         const token = params.get('t') || '';
 
@@ -233,11 +453,19 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           meta.append(role, badge, right);
           const content = document.createElement('div');
           content.className = 'content';
-          content.textContent = m.content || '';
-          if (opts && opts.live) {
-            const caret = document.createElement('span');
-            caret.className = 'caret';
-            content.appendChild(caret);
+          // User messages stay verbatim (they're transcripts/typed text).
+          // Assistant messages get the full markdown treatment.
+          if (m.role === 'user') {
+            content.style.whiteSpace = 'pre-wrap';
+            content.textContent = m.content || '';
+          } else {
+            content.innerHTML = renderMarkdown(m.content || '');
+            if (opts && opts.live) {
+              const caret = document.createElement('span');
+              caret.className = 'caret';
+              content.appendChild(caret);
+            }
+            bindCodeCopy(content);
           }
           card.append(meta, content);
           return card;
@@ -256,16 +484,17 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
             live = { streamId, content: '', createdAt: new Date().toISOString() };
           }
           live.content += token;
-          // Fast path: avoid full re-render when only the live card changes.
           let card = feed.querySelector('.card.live');
           if (!card) { render(); return; }
           const content = card.querySelector('.content');
-          // Strip caret, append, re-add caret.
-          const caret = content.querySelector('.caret');
-          if (caret) caret.remove();
-          content.appendChild(document.createTextNode(token));
-          const c = document.createElement('span'); c.className = 'caret';
-          content.appendChild(c);
+          // Re-render the full markdown each tick. Tokens stream slowly relative
+          // to a phone's render budget, but we still scope DOM writes to this
+          // one card so the rest of the feed isn't disturbed.
+          content.innerHTML = renderMarkdown(live.content);
+          const caret = document.createElement('span');
+          caret.className = 'caret';
+          content.appendChild(caret);
+          bindCodeCopy(content);
           empty.style.display = 'none';
           scrollToLatest();
         }

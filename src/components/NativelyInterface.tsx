@@ -119,10 +119,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
-    const isMotionAnimatingRef = useRef(false);
     const rafDimUpdateRef = useRef<number | null>(null);
     const codeExpandedRef = useRef(false);
-    const animationSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const animationControlsRef = useRef<ReturnType<typeof animate> | null>(null);
     // Captures data from onCaptureAndProcess before the React state flush so
     // handleWhatToSay() can access it even in React 18 concurrent mode (where
@@ -189,10 +187,34 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     const controlSurfaceClass = 'overlay-control-surface overlay-text-interactive';
 
     // ── Code-expansion spring ────────────────────────────────────────────────
-    // shellWidth is animated directly via animate() so spring physics and the
-    // onComplete callback live in the same call — no useSpring wrapper needed.
-    const shellWidth = useMotionValue(600);
-    const scrollMaxH = useTransform(shellWidth, [600, 780], [320, 560]);
+    // Architecture: stable canvas, renderer-only animation.
+    //
+    // The OS window is pinned to STABLE_OVERLAY_WIDTH for the entire chat-
+    // expanded session — its width never changes when code becomes visible or
+    // hidden. The shell width animates 600 ↔ 780 purely in renderer CSS via a
+    // Framer spring. mx-auto centers the shell against a STABLE 780 parent, so
+    // its margin animates symmetrically (90 → 0 on expand, 0 → 90 on contract).
+    //
+    // Why this anchors the TopPill to its screen position:
+    //   • OS window X never moves during code expand/contract (no IPC).
+    //   • OS window content area is always 780 wide.
+    //   • TopPill and shell sit in a flex column centered horizontally inside
+    //     that stable canvas → TopPill's screen X is invariant of the spring.
+    //   • OS window Y is preserved by setBounds → TopPill's screen Y is fixed.
+    //   • Shell height growth is driven by content; ResizeObserver feeds height
+    //     (only) to the OS, which extends downward (Y preserved).
+    //
+    // The 90px transparent gutters on each side when shellWidth == 600 are
+    // invisible (window background is transparent) and click-through.
+    const SHELL_WIDTH_COLLAPSED = 600;
+    const SHELL_WIDTH_EXPANDED = 780;
+    const STABLE_OVERLAY_WIDTH = SHELL_WIDTH_EXPANDED;
+    const shellWidth = useMotionValue(SHELL_WIDTH_COLLAPSED);
+    const scrollMaxH = useTransform(shellWidth, [SHELL_WIDTH_COLLAPSED, SHELL_WIDTH_EXPANDED], [320, 560]);
+
+    // isExpanded mirror for closures inside refs/observers that must not
+    // re-bind on every toggle.
+    const isExpandedRef = useRef(true);
 
     useEffect(() => {
         // Load the persisted default model (not the runtime model)
@@ -284,28 +306,41 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         };
     }, []);
 
-    // Auto-resize Window
-    // rAF-debounced so Framer Motion's 60fps spring never floods the Electron main
-    // process with setBounds calls. During the expand animation the flag is set and
-    // the observer is fully suppressed; the OS window is pre-sized before the spring
-    // starts. During contraction the flag is clear so the observer follows the spring.
+    // Keep the closure-free isExpanded mirror in sync.
+    useEffect(() => { isExpandedRef.current = isExpanded; }, [isExpanded]);
+
+    // Single canonical size-reporter. While the chat overlay is expanded we
+    // pin the OS window to STABLE_OVERLAY_WIDTH (=SHELL_WIDTH_EXPANDED) so the
+    // shell can spring 600↔780 in renderer CSS without ever resizing the OS
+    // window — no IPC race, no clip, no jump. Centered IPC is used so the
+    // first chat-mode entry (when the OS window may grow from a smaller mode
+    // into the stable canvas) keeps the TopPill's center fixed; subsequent
+    // height-only updates have widthDelta=0 and don't shift X.
+    const reportShellSize = useCallback(() => {
+        if (!contentRef.current) return;
+        const rect = contentRef.current.getBoundingClientRect();
+        const width = isExpandedRef.current ? STABLE_OVERLAY_WIDTH : Math.ceil(rect.width);
+        const height = Math.ceil(rect.height);
+        const api = window.electronAPI as any;
+        if (api?.updateContentDimensionsCentered) {
+            api.updateContentDimensionsCentered({ width, height });
+        } else {
+            window.electronAPI?.updateContentDimensions({ width, height });
+        }
+    }, [STABLE_OVERLAY_WIDTH]);
+
+    // ResizeObserver: rAF-debounced so the spring can update height without
+    // flooding IPC. Width is constant in expanded mode, so per-frame updates
+    // only carry height changes — no race with the renderer's CSS spring.
     useLayoutEffect(() => {
         if (!contentRef.current) return;
 
-        const flush = () => {
-            rafDimUpdateRef.current = null;
-            if (!contentRef.current) return;
-            const rect = contentRef.current.getBoundingClientRect();
-            window.electronAPI?.updateContentDimensions({
-                width: Math.ceil(rect.width),
-                height: Math.ceil(rect.height)
-            });
-        };
-
         const observer = new ResizeObserver(() => {
-            if (isMotionAnimatingRef.current) return;
             if (rafDimUpdateRef.current) cancelAnimationFrame(rafDimUpdateRef.current);
-            rafDimUpdateRef.current = requestAnimationFrame(flush);
+            rafDimUpdateRef.current = requestAnimationFrame(() => {
+                rafDimUpdateRef.current = null;
+                reportShellSize();
+            });
         });
 
         observer.observe(contentRef.current);
@@ -316,182 +351,51 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                 rafDimUpdateRef.current = null;
             }
         };
-    }, []);
+    }, [reportShellSize]);
 
-    // Force resize when attachedContext changes (screenshots added/removed).
-    // If the code-expansion spring is mid-animation, the CSS shell width is an
-    // intermediate value — passing the measured rect.width to setOverlayDimensions
-    // would fight the pre-sized OS window and produce a visible width glitch.
-    // Use the expansion target width instead so only the height is live-updated.
+    // attachedContext (screenshots add/remove) and initial-sizing safety:
+    // both just re-run the canonical reporter — no more "what width should I
+    // use right now?" branching against animation flags.
     useEffect(() => {
-        if (!contentRef.current) return;
-        requestAnimationFrame(() => {
-            if (!contentRef.current) return;
-            const rect = contentRef.current.getBoundingClientRect();
-            const w = isMotionAnimatingRef.current
-                ? (codeExpandedRef.current ? 780 : 600)
-                : Math.ceil(rect.width);
-            window.electronAPI?.updateContentDimensions({ width: w, height: Math.ceil(rect.height) });
-        });
-    }, [attachedContext]);
+        const id = requestAnimationFrame(reportShellSize);
+        return () => cancelAnimationFrame(id);
+    }, [attachedContext, reportShellSize]);
 
-    // Initial sizing safety check — same animation-gate rule as above.
     useEffect(() => {
-        const timer = setTimeout(() => {
-            if (contentRef.current) {
-                const rect = contentRef.current.getBoundingClientRect();
-                const w = isMotionAnimatingRef.current
-                    ? (codeExpandedRef.current ? 780 : 600)
-                    : Math.ceil(rect.width);
-                window.electronAPI?.updateContentDimensions({ width: w, height: Math.ceil(rect.height) });
-            }
-        }, 600);
+        const timer = setTimeout(reportShellSize, 600);
         return () => clearTimeout(timer);
-    }, []);
+    }, [reportShellSize]);
 
     // ── Code-expansion ──────────────────────────────────────────────────────
-    // IPC helper — sends OS window dimensions exactly once per transition.
-    // Called before the spring starts (expand) or after it settles (contract).
-    const syncOSWindow = useCallback((targetWidth: number, targetHeight?: number) => {
-        if (!contentRef.current) return;
-        const h = targetHeight ?? Math.ceil(contentRef.current.getBoundingClientRect().height);
-        window.electronAPI?.updateContentDimensions({ width: targetWidth, height: h });
-    }, []);
-
-    // Centered variant — keeps the shell's horizontal center fixed across width
-    // changes. Pairs with mx-auto on contentRef: when OS window grows by Δ, X
-    // shifts by -Δ/2 and mx-auto adds Δ/2 margin, so net shell shift = 0.
-    // Returns the IPC promise so callers can await OS commit before animating.
-    const syncOSWindowCentered = useCallback((targetWidth: number, targetHeight?: number): Promise<void> => {
-        if (!contentRef.current) return Promise.resolve();
-        const h = targetHeight ?? Math.ceil(contentRef.current.getBoundingClientRect().height);
-        const api = window.electronAPI as any;
-        if (api?.updateContentDimensionsCentered) {
-            return Promise.resolve(api.updateContentDimensionsCentered({ width: targetWidth, height: h }));
-        }
-        // Fallback for stale preload (dev hot-reload before electron rebuild)
-        return Promise.resolve(window.electronAPI?.updateContentDimensions({ width: targetWidth, height: h }));
-    }, []);
+    // The shell's width animates 600↔780 with a renderer-only spring against a
+    // STABLE 780-wide OS canvas. mx-auto on the wrapper distributes the width
+    // delta as symmetric horizontal margin → expansion grows from the center,
+    // TopPill stays anchored, no IPC during the animation. Height growth is
+    // picked up by the ResizeObserver and forwarded to the OS as height-only
+    // updates (width is unchanged so no X shift, no jump).
+    const startTransition = useCallback((targetWidth: number) => {
+        codeExpandedRef.current = targetWidth === SHELL_WIDTH_EXPANDED;
+        if (animationControlsRef.current) animationControlsRef.current.stop();
+        // Apple-style ease-out-expo bezier: steep initial motion that decays
+        // smoothly to a stop. Same family as iOS sheet presentations — feels
+        // like a deliberate, weighted response rather than a snappy toggle.
+        animationControlsRef.current = animate(shellWidth, targetWidth, {
+            type: 'tween' as const,
+            ease: [0.16, 1, 0.3, 1],
+            duration: 0.55,
+            onComplete: () => { animationControlsRef.current = null; },
+        });
+    }, [shellWidth, SHELL_WIDTH_EXPANDED]);
 
     // Scan [data-code-msg] elements and check if any intersect the scroll container
     // viewport. Called on every scroll event and after every messages update.
     const checkCodeVisibility = useCallback(() => {
         const container = scrollContainerRef.current;
 
-        // Kick off a spring transition to targetWidth.
-        //
-        // ────────────────────────────────────────────────────────────────
-        // Top-pill-fixed expansion strategy (jump-free)
-        // ────────────────────────────────────────────────────────────────
-        // The shell's outer wrapper (contentRef) uses `mx-auto w-fit`, so it
-        // auto-centers within the OS window's content area. The top pill stays
-        // visually anchored because:
-        //
-        //   • OS window is resized CENTERED → X shifts by -widthDelta/2.
-        //   • mx-auto compensates with +widthDelta/2 margin.
-        //   → net horizontal shell movement = 0.
-        //
-        // The crucial sequencing rule:
-        //
-        //   EXPAND (600 → 780): The OS window must be REFRAMED FIRST and
-        //     committed to the compositor BEFORE the spring starts. If the
-        //     spring runs while the OS is still 600 wide, the shell overflows
-        //     the OS window edges, gets clipped, and reveals its growth in
-        //     a single jolt when the OS finally catches up. We `await` the
-        //     IPC and then wait one rAF so the next paint happens with the
-        //     OS window already at 780.
-        //
-        //   CONTRACT (780 → 600): Spring runs FIRST inside the still-large
-        //     780 OS window (no clipping possible). After settle, the OS
-        //     window is reframed centered to 600; mx-auto loses its margin
-        //     in lockstep with the X shift → shell stays put.
-        //
-        // Y is naturally top-anchored: setOverlayDimensions* preserves
-        // currentBounds.y, so height growth happens entirely downward.
-        const startTransition = (targetWidth: 600 | 780) => {
-            codeExpandedRef.current = targetWidth === 780;
-            isMotionAnimatingRef.current = true;
-
-            if (animationControlsRef.current) animationControlsRef.current.stop();
-            if (animationSettleTimerRef.current) {
-                clearTimeout(animationSettleTimerRef.current);
-                animationSettleTimerRef.current = null;
-            }
-
-            const curH = contentRef.current
-                ? Math.ceil(contentRef.current.getBoundingClientRect().height)
-                : 0;
-            // Expand reserves 260px headroom (scrollMaxH grows 320→560 = 240px
-            // + 20 buffer) so the bottom doesn't clip while the shell springs.
-            const finalH = targetWidth === 780 ? curH + 260 : curH;
-
-            // Token to invalidate this transition if a new one starts mid-flight.
-            const token = (startTransition as any)._token = ((startTransition as any)._token ?? 0) + 1;
-            const isCurrent = () => (startTransition as any)._token === token;
-
-            // Critical-damped spring (ζ≈1): fastest settle without overshoot.
-            const runSpring = () => {
-                if (!isCurrent()) return;
-                const controls = animate(shellWidth, targetWidth, {
-                    type: 'spring' as const,
-                    stiffness: 500,
-                    damping: 40,
-                    mass: 0.8,
-                    // No onUpdate: OS geometry is settled before/after the
-                    // spring, never per-frame. Per-frame IPC would reintroduce
-                    // the renderer-vs-main desync this rewrite eliminates.
-                    onComplete: () => {
-                        if (animationControlsRef.current !== controls) return;
-                        animationControlsRef.current = null;
-                        if (animationSettleTimerRef.current) {
-                            clearTimeout(animationSettleTimerRef.current);
-                            animationSettleTimerRef.current = null;
-                        }
-                        isMotionAnimatingRef.current = false;
-                        if (codeExpandedRef.current) {
-                            // Expand settled: OS already at 780; just tighten height.
-                            syncOSWindow(780);
-                        } else {
-                            // Contract settled: now snap OS 780→600 centered.
-                            // mx-auto loses 90px margin as X shifts +90 → no jump.
-                            syncOSWindowCentered(600);
-                        }
-                    },
-                });
-                animationControlsRef.current = controls;
-
-                // Unmount-mid-spring fallback in case onComplete is dropped.
-                animationSettleTimerRef.current = setTimeout(() => {
-                    animationSettleTimerRef.current = null;
-                    isMotionAnimatingRef.current = false;
-                    if (codeExpandedRef.current) syncOSWindow(780);
-                    else syncOSWindowCentered(600);
-                }, 350);
-            };
-
-            if (targetWidth === 780) {
-                // EXPAND: await OS commit, then wait one rAF so the compositor
-                // has actually painted the new bounds, THEN start the spring.
-                // Adds ~16ms of imperceptible setup latency in exchange for a
-                // perfectly clip-free, jump-free expansion.
-                syncOSWindowCentered(780, finalH).then(() => {
-                    if (!isCurrent()) return;
-                    requestAnimationFrame(() => {
-                        if (!isCurrent()) return;
-                        runSpring();
-                    });
-                });
-            } else {
-                // CONTRACT: spring runs immediately inside the still-large
-                // 780 OS window. Reframe to 600 happens in onComplete.
-                runSpring();
-            }
-        };
-
         // Scroll container unmounted (session reset / messages cleared) — force
-        // contraction so the OS window doesn't stay at 780px with no content.
+        // contraction so the shell returns to its collapsed width.
         if (!container) {
-            if (codeExpandedRef.current) startTransition(600);
+            if (codeExpandedRef.current) startTransition(SHELL_WIDTH_COLLAPSED);
             return;
         }
 
@@ -505,8 +409,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
             }
         }
 
-        if (visible !== codeExpandedRef.current) startTransition(visible ? 780 : 600);
-    }, [shellWidth, syncOSWindow, syncOSWindowCentered]);
+        if (visible !== codeExpandedRef.current) {
+            startTransition(visible ? SHELL_WIDTH_EXPANDED : SHELL_WIDTH_COLLAPSED);
+        }
+    }, [startTransition, SHELL_WIDTH_COLLAPSED, SHELL_WIDTH_EXPANDED]);
 
     // Re-check after every messages update (catches mid-stream code fences).
     useEffect(() => {
@@ -528,10 +434,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         return () => {
             animationControlsRef.current?.stop();
             animationControlsRef.current = null;
-            if (animationSettleTimerRef.current) {
-                clearTimeout(animationSettleTimerRef.current);
-                animationSettleTimerRef.current = null;
-            }
             if (rafDimUpdateRef.current) {
                 cancelAnimationFrame(rafDimUpdateRef.current);
                 rafDimUpdateRef.current = null;
@@ -2470,14 +2372,33 @@ Provide only the answer, nothing else.`;
                             {/* Chat History - Only show if there are messages OR active states */}
                             {(messages.length > 0 || isManualRecording || isProcessing) && (
                                 <motion.div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3 no-drag" style={{ scrollbarWidth: 'none', maxHeight: scrollMaxH }}>
-                                    {messages.map((msg) => (
+                                    {messages.map((msg) => {
+                                        // Code messages are the reason the shell expands, so they
+                                        // get the full inner width and reflow with the canvas.
+                                        // Text messages live in a fixed-width centered column so
+                                        // their alignment edges and wrap points stay anchored —
+                                        // expand/contract slides only the canvas, never the text.
+                                        const isCodeMsg = msg.role === 'system' && (msg.isCode || msg.text.includes('```'));
+                                        const rowClass = isCodeMsg
+                                            ? 'w-full'
+                                            : 'w-full max-w-[568px] mx-auto';
+                                        // Bubble max-widths are pinned to the collapsed-shell math
+                                        // (568 inner × original %) so non-code text never re-wraps
+                                        // when the canvas grows or shrinks.
+                                        const bubbleMaxClass = msg.role === 'user'
+                                            ? 'max-w-[410px] px-[13.6px] py-[10.2px]'
+                                            : isCodeMsg
+                                                ? 'max-w-[85%] px-4 py-3'
+                                                : 'max-w-[483px] px-4 py-3';
+                                        return (
                                         <div
                                             key={msg.id}
-                                            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in-up`}
-                                            {...(msg.role === 'system' && (msg.isCode || msg.text.includes('```')) ? { 'data-code-msg': 'true' } : {})}
+                                            className={rowClass}
+                                            {...(isCodeMsg ? { 'data-code-msg': 'true' } : {})}
                                         >
+                                        <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in-up`}>
                                             <div className={`
-                      ${msg.role === 'user' ? 'max-w-[72.25%] px-[13.6px] py-[10.2px]' : 'max-w-[85%] px-4 py-3'} text-[14px] leading-relaxed relative group whitespace-pre-wrap
+                      ${bubbleMaxClass} text-[14px] leading-relaxed relative group whitespace-pre-wrap
                       ${msg.role === 'user'
                                                     ? (isLightTheme
                                                         ? 'bg-blue-500/10 backdrop-blur-md border border-blue-500/20 text-blue-900 rounded-[20px] rounded-tr-[4px] shadow-sm font-medium'
@@ -2518,7 +2439,9 @@ Provide only the answer, nothing else.`;
                                                 {renderMessageText(msg)}
                                             </div>
                                         </div>
-                                    ))}
+                                        </div>
+                                        );
+                                    })}
 
                                     {/* Active Recording State with Live Transcription */}
                                     {isManualRecording && (
