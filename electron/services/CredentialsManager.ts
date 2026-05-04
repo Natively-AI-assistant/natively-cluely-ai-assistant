@@ -37,6 +37,9 @@ export interface StoredCredentials {
     groqSttApiKey?: string;
     groqSttModel?: string;
     openAiSttApiKey?: string;
+    /** Custom OpenAI-compatible STT base URL (e.g. self-hosted Speaches).
+     *  Empty / unset → use https://api.openai.com. */
+    openAiSttBaseUrl?: string;
     deepgramApiKey?: string;
     elevenLabsApiKey?: string;
     azureApiKey?: string;
@@ -142,6 +145,10 @@ export class CredentialsManager {
         return this.credentials.openAiSttApiKey;
     }
 
+    public getOpenAiSttBaseUrl(): string | undefined {
+        return this.credentials.openAiSttBaseUrl;
+    }
+
     public getElevenLabsApiKey(): string | undefined {
         return this.credentials.elevenLabsApiKey;
     }
@@ -245,6 +252,15 @@ export class CredentialsManager {
         this.credentials.openAiSttApiKey = key;
         this.saveCredentials();
         console.log('[CredentialsManager] OpenAI STT API Key updated');
+    }
+
+    public setOpenAiSttBaseUrl(url: string): void {
+        // Store undefined (not empty string) when clearing, so callers can fall back
+        // to the default api.openai.com endpoint with a simple truthiness check.
+        const trimmed = url.trim();
+        this.credentials.openAiSttBaseUrl = trimmed || undefined;
+        this.saveCredentials();
+        console.log(`[CredentialsManager] OpenAI STT Base URL set to: ${trimmed || '(default)'}`);
     }
 
     public setGroqSttModel(model: string): void {

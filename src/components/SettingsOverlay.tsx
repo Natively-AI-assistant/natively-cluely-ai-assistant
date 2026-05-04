@@ -803,6 +803,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     const [sttAzureKey, setSttAzureKey] = useState('');
     const [sttAzureRegion, setSttAzureRegion] = useState('eastus');
     const [sttIbmKey, setSttIbmKey] = useState('');
+    const [sttOpenaiBaseUrl, setSttOpenaiBaseUrl] = useState('');
     const [sttTestStatus, setSttTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
     const [sttTestError, setSttTestError] = useState('');
     const [sttSaving, setSttSaving] = useState(false);
@@ -861,6 +862,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                     if (creds.sttAzureKey) setSttAzureKey(creds.sttAzureKey);
                     if (creds.sttIbmKey) setSttIbmKey(creds.sttIbmKey);
                     if (creds.sttSonioxKey) setSttSonioxKey(creds.sttSonioxKey);
+                    if (typeof creds.openAiSttBaseUrl === 'string') setSttOpenaiBaseUrl(creds.openAiSttBaseUrl);
                 }
             } catch (e) {
                 console.error('Failed to load STT settings:', e);
@@ -2233,6 +2235,35 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                 </button>
                                                             </div>
                                                             <p className="text-[10px] text-text-tertiary">e.g. eastus, westeurope, westus2</p>
+                                                        </div>
+                                                    )}
+
+                                                    {/* OpenAI Custom Base URL — for self-hosted OpenAI-compatible servers (e.g. Speaches).
+                                                        When set, the WebSocket Realtime path is skipped and REST is used against the custom host. */}
+                                                    {sttProvider === 'openai' && (
+                                                        <div className="space-y-1.5">
+                                                            <label className="text-xs font-medium text-text-secondary block">Custom Base URL <span className="text-text-tertiary">(optional)</span></label>
+                                                            <div className="flex gap-2">
+                                                                <input
+                                                                    type="text"
+                                                                    value={sttOpenaiBaseUrl}
+                                                                    onChange={(e) => setSttOpenaiBaseUrl(e.target.value)}
+                                                                    placeholder="https://api.openai.com (default)"
+                                                                    className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary transition-colors"
+                                                                />
+                                                                <button
+                                                                    onClick={async () => {
+                                                                        // @ts-ignore
+                                                                        await window.electronAPI?.setOpenAiSttBaseUrl?.(sttOpenaiBaseUrl.trim());
+                                                                        setSttSaved(true);
+                                                                        setTimeout(() => setSttSaved(false), 2000);
+                                                                    }}
+                                                                    className="px-5 py-2.5 rounded-lg text-xs font-medium bg-bg-input hover:bg-bg-input/80 border border-border-subtle text-text-primary transition-colors"
+                                                                >
+                                                                    Save
+                                                                </button>
+                                                            </div>
+                                                            <p className="text-[10px] text-text-tertiary">Point at any OpenAI-compatible server (e.g. Speaches). Custom servers use REST only — Realtime WebSocket is skipped. Leave blank for default.</p>
                                                         </div>
                                                     )}
 

@@ -1456,6 +1456,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         sttAzureKey: creds.azureApiKey || '',
         sttIbmKey: creds.ibmWatsonApiKey || '',
         sttSonioxKey: creds.sonioxApiKey || '',
+        openAiSttBaseUrl: creds.openAiSttBaseUrl || '',
         hasTavilyKey: hasKey(creds.tavilyApiKey),
         // Dynamic Model Discovery - preferred models
         geminiPreferredModel: creds.geminiPreferredModel || undefined,
@@ -1565,6 +1566,23 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: true };
     } catch (error: any) {
       console.error("Error saving OpenAI STT API key:", error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle("set-openai-stt-base-url", async (_, url: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      CredentialsManager.getInstance().setOpenAiSttBaseUrl(url);
+      // Reconfigure the active pipeline so the new endpoint is used immediately,
+      // matching the behavior of azure/ibmwatson region setters.
+      await appState.reconfigureSttProvider();
+      BrowserWindow.getAllWindows().forEach(win => {
+        if (!win.isDestroyed()) win.webContents.send('credentials-changed');
+      });
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error saving OpenAI STT base URL:", error);
       return { success: false, error: error.message };
     }
   });
@@ -1860,9 +1878,21 @@ export function initializeIpcHandlers(appState: AppState): void {
         );
       } else {
         // Groq / OpenAI: multipart FormData
+        let openAiEndpoint = 'https://api.openai.com/v1/audio/transcriptions';
+        if (provider === 'openai') {
+          // If a custom OpenAI-compatible base URL is configured, test against it.
+          const { CredentialsManager } = require('./services/CredentialsManager');
+          const customBase = (CredentialsManager.getInstance().getOpenAiSttBaseUrl() || '').trim();
+          if (customBase) {
+            const trimmed = customBase.replace(/\/+$/, '');
+            openAiEndpoint = /\/v\d+$/.test(trimmed)
+              ? `${trimmed}/audio/transcriptions`
+              : `${trimmed}/v1/audio/transcriptions`;
+          }
+        }
         const endpoint = provider === 'groq'
           ? 'https://api.groq.com/openai/v1/audio/transcriptions'
-          : 'https://api.openai.com/v1/audio/transcriptions';
+          : openAiEndpoint;
         const model = provider === 'groq' ? 'whisper-large-v3-turbo' : 'whisper-1';
 
         const form = new FormData();
