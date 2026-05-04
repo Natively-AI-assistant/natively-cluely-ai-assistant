@@ -301,6 +301,13 @@ export class WindowHelper {
       this.overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
       this.overlayWindow.setHiddenInMissionControl(true)
       this.overlayWindow.setAlwaysOnTop(true, "floating")
+    } else if (process.platform === "win32") {
+      // 'floating' level (HWND_TOPMOST baseline) is not enough to render above
+      // fullscreen browser windows (F11). 'screen-saver' uses a higher TOPMOST
+      // priority that wins against window-mode fullscreen apps. macOS uses
+      // visibleOnFullScreen above; Windows has no equivalent flag, so the level
+      // itself is what controls fullscreen visibility. See issue #167.
+      this.overlayWindow.setAlwaysOnTop(true, "screen-saver")
     }
 
     this.overlayWindow.loadURL(`${startUrl}?window=overlay`).catch(e => {
@@ -394,6 +401,20 @@ export class WindowHelper {
           this.showContextMenu(this.overlayWindow!, point);
         }
       });
+
+      // Re-assert always-on-top on blur (Windows only). Screen-sharing tools
+      // (Zoom, Lark, Teams, etc.) hook the DWM compositor and can demote even
+      // HWND_TOPMOST windows below their shared content layer. Re-applying the
+      // 'screen-saver' level on every blur keeps the overlay above the share
+      // surface. Skipped on macOS — re-asserting setAlwaysOnTop there triggers
+      // [NSApp activate], which steals focus from the underlying app. See #130.
+      if (process.platform === 'win32') {
+        this.overlayWindow.on('blur', () => {
+          if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
+          if (!this.overlayWindow.isVisible()) return;
+          this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
+        });
+      }
 
       this.overlayWindow.on('close', (e) => {
         if (this.overlayWindow?.isVisible()) {
@@ -501,7 +522,7 @@ export class WindowHelper {
     // switchToOverlay(). Must come before show()/showInactive() so the window
     // lands at the correct level on first paint (issue #136).
     if (process.platform === 'win32') {
-      this.overlayWindow.setAlwaysOnTop(true, 'floating');
+      this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
     }
 
     if (this.appState.getOverlayMousePassthrough()) {
@@ -613,7 +634,7 @@ export class WindowHelper {
           if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
             this.overlayWindow.setOpacity(1);
             // Re-assert z-order on Windows — DWM can silently demote the HWND after hide/show
-            this.overlayWindow.setAlwaysOnTop(true, 'floating');
+            this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
             if (!inactive) this.overlayWindow.focus();
           }
         }, 60);
@@ -628,7 +649,7 @@ export class WindowHelper {
         // Skipped on macOS — calling setAlwaysOnTop triggers [NSApp activate] which
         // steals focus from Zoom/browser even when showInactive() was used.
         if (process.platform === 'win32') {
-          this.overlayWindow.setAlwaysOnTop(true, 'floating');
+          this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
         }
         if (inactive) this.overlayWindow.showInactive(); else this.overlayWindow.show();
         // Only grab focus for explicit user-initiated shows (not shortcut/ghost shows)
