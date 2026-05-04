@@ -361,16 +361,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     // Centered variant — keeps the shell's horizontal center fixed across width
     // changes. Pairs with mx-auto on contentRef: when OS window grows by Δ, X
     // shifts by -Δ/2 and mx-auto adds Δ/2 margin, so net shell shift = 0.
-    const syncOSWindowCentered = useCallback((targetWidth: number, targetHeight?: number) => {
-        if (!contentRef.current) return;
+    // Returns the IPC promise so callers can await OS commit before animating.
+    const syncOSWindowCentered = useCallback((targetWidth: number, targetHeight?: number): Promise<void> => {
+        if (!contentRef.current) return Promise.resolve();
         const h = targetHeight ?? Math.ceil(contentRef.current.getBoundingClientRect().height);
         const api = window.electronAPI as any;
         if (api?.updateContentDimensionsCentered) {
-            api.updateContentDimensionsCentered({ width: targetWidth, height: h });
-        } else {
-            // Fallback for stale preload (dev hot-reload before electron rebuild)
-            window.electronAPI?.updateContentDimensions({ width: targetWidth, height: h });
+            return Promise.resolve(api.updateContentDimensionsCentered({ width: targetWidth, height: h }));
         }
+        // Fallback for stale preload (dev hot-reload before electron rebuild)
+        return Promise.resolve(window.electronAPI?.updateContentDimensions({ width: targetWidth, height: h }));
     }, []);
 
     // Scan [data-code-msg] elements and check if any intersect the scroll container
@@ -379,10 +379,35 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         const container = scrollContainerRef.current;
 
         // Kick off a spring transition to targetWidth.
-        // Uses animate() directly on the MotionValue so we get:
-        //   • onComplete — fires exactly when the spring settles (no guessed timeout)
-        //   • identity guard — stale onComplete from a cancelled animation is a no-op
-        //   • fallback timer — in case onComplete doesn't fire (unmount race)
+        //
+        // ────────────────────────────────────────────────────────────────
+        // Top-pill-fixed expansion strategy (jump-free)
+        // ────────────────────────────────────────────────────────────────
+        // The shell's outer wrapper (contentRef) uses `mx-auto w-fit`, so it
+        // auto-centers within the OS window's content area. The top pill stays
+        // visually anchored because:
+        //
+        //   • OS window is resized CENTERED → X shifts by -widthDelta/2.
+        //   • mx-auto compensates with +widthDelta/2 margin.
+        //   → net horizontal shell movement = 0.
+        //
+        // The crucial sequencing rule:
+        //
+        //   EXPAND (600 → 780): The OS window must be REFRAMED FIRST and
+        //     committed to the compositor BEFORE the spring starts. If the
+        //     spring runs while the OS is still 600 wide, the shell overflows
+        //     the OS window edges, gets clipped, and reveals its growth in
+        //     a single jolt when the OS finally catches up. We `await` the
+        //     IPC and then wait one rAF so the next paint happens with the
+        //     OS window already at 780.
+        //
+        //   CONTRACT (780 → 600): Spring runs FIRST inside the still-large
+        //     780 OS window (no clipping possible). After settle, the OS
+        //     window is reframed centered to 600; mx-auto loses its margin
+        //     in lockstep with the X shift → shell stays put.
+        //
+        // Y is naturally top-anchored: setOverlayDimensions* preserves
+        // currentBounds.y, so height growth happens entirely downward.
         const startTransition = (targetWidth: 600 | 780) => {
             codeExpandedRef.current = targetWidth === 780;
             isMotionAnimatingRef.current = true;
@@ -393,86 +418,74 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                 animationSettleTimerRef.current = null;
             }
 
-            // ────────────────────────────────────────────────────────────────
-            // Top-pill-fixed expansion strategy
-            // ────────────────────────────────────────────────────────────────
-            // The shell's outer wrapper (contentRef) uses `mx-auto w-fit`, so
-            // it auto-centers within the OS window's content area. To keep the
-            // top pill VISUALLY ANCHORED across the resize:
-            //
-            //   1. Resize OS window CENTERED (X shifts by -widthDelta/2)
-            //   2. mx-auto compensates by adding +widthDelta/2 margin to shell
-            //   → net horizontal shell movement = 0 ✓
-            //
-            // We pre-size the OS window to the FINAL dimensions ONCE before
-            // the spring starts. Then the CSS spring animates shell width
-            // freely INSIDE the now-fixed OS window. mx-auto margins shrink
-            // as the shell grows — visual effect: shell expands symmetrically
-            // from its center while the OS window never moves again.
-            //
-            // Y is naturally top-anchored: setOverlayDimensions* preserves
-            // currentBounds.y, so height growth happens entirely at the bottom.
             const curH = contentRef.current
                 ? Math.ceil(contentRef.current.getBoundingClientRect().height)
                 : 0;
-            // Expand: 260px headroom (scrollMaxH grows 320→560 = 240px + 20 buffer)
-            // so the bottom doesn't clip mid-spring.
+            // Expand reserves 260px headroom (scrollMaxH grows 320→560 = 240px
+            // + 20 buffer) so the bottom doesn't clip while the shell springs.
             const finalH = targetWidth === 780 ? curH + 260 : curH;
 
-            if (targetWidth === 780) {
-                // EXPAND: pre-size OS window to final width AND tall height in
-                // one centered call. mx-auto compensates the X shift; the
-                // height grows downward into transparent space (invisible).
-                syncOSWindowCentered(780, finalH);
-            }
-            // CONTRACT: do nothing here. OS window stays at 780×tallH while the
-            // CSS spring contracts the shell from 780→600 inside it. mx-auto
-            // grows margins symmetrically as the shell shrinks — sides retract
-            // toward the center. Bottom rises via scrollMaxH transform. After
-            // the spring settles, we snap the OS window to final 600 below.
+            // Token to invalidate this transition if a new one starts mid-flight.
+            const token = (startTransition as any)._token = ((startTransition as any)._token ?? 0) + 1;
+            const isCurrent = () => (startTransition as any)._token === token;
 
-            // Critical-damped spring (ζ=1.0): fastest possible settle (~200ms)
-            // with zero overshoot. stiffness↑ = snappier; damping tuned to ζ=1.
-            const controls = animate(shellWidth, targetWidth, {
-                type: 'spring' as const,
-                stiffness: 500,
-                damping: 40,
-                mass: 0.8,
-                // No onUpdate: OS window already at correct geometry. Per-frame
-                // IPC would only introduce desync between the renderer's CSS
-                // reflow and the main process's window resize.
-                onComplete: () => {
-                    if (animationControlsRef.current !== controls) return;
-                    animationControlsRef.current = null;
-                    if (animationSettleTimerRef.current) {
-                        clearTimeout(animationSettleTimerRef.current);
-                        animationSettleTimerRef.current = null;
-                    }
+            // Critical-damped spring (ζ≈1): fastest settle without overshoot.
+            const runSpring = () => {
+                if (!isCurrent()) return;
+                const controls = animate(shellWidth, targetWidth, {
+                    type: 'spring' as const,
+                    stiffness: 500,
+                    damping: 40,
+                    mass: 0.8,
+                    // No onUpdate: OS geometry is settled before/after the
+                    // spring, never per-frame. Per-frame IPC would reintroduce
+                    // the renderer-vs-main desync this rewrite eliminates.
+                    onComplete: () => {
+                        if (animationControlsRef.current !== controls) return;
+                        animationControlsRef.current = null;
+                        if (animationSettleTimerRef.current) {
+                            clearTimeout(animationSettleTimerRef.current);
+                            animationSettleTimerRef.current = null;
+                        }
+                        isMotionAnimatingRef.current = false;
+                        if (codeExpandedRef.current) {
+                            // Expand settled: OS already at 780; just tighten height.
+                            syncOSWindow(780);
+                        } else {
+                            // Contract settled: now snap OS 780→600 centered.
+                            // mx-auto loses 90px margin as X shifts +90 → no jump.
+                            syncOSWindowCentered(600);
+                        }
+                    },
+                });
+                animationControlsRef.current = controls;
+
+                // Unmount-mid-spring fallback in case onComplete is dropped.
+                animationSettleTimerRef.current = setTimeout(() => {
+                    animationSettleTimerRef.current = null;
                     isMotionAnimatingRef.current = false;
-                    if (codeExpandedRef.current) {
-                        // Expand settle: width unchanged (780→780, widthDelta=0,
-                        // no X shift). Just tighten the height to actual content.
-                        syncOSWindow(780);
-                    } else {
-                        // Contract settle: width 780→600. Use centered so X
-                        // shifts +90, mx-auto loses its 90px margin in lockstep,
-                        // shell stays exactly where it was = no jump.
-                        syncOSWindowCentered(600);
-                    }
-                },
-            });
-            animationControlsRef.current = controls;
+                    if (codeExpandedRef.current) syncOSWindow(780);
+                    else syncOSWindowCentered(600);
+                }, 350);
+            };
 
-            // Fallback: covers unmount-mid-spring race where onComplete doesn't fire.
-            animationSettleTimerRef.current = setTimeout(() => {
-                animationSettleTimerRef.current = null;
-                isMotionAnimatingRef.current = false;
-                if (codeExpandedRef.current) {
-                    syncOSWindow(780);
-                } else {
-                    syncOSWindowCentered(600);
-                }
-            }, 350);
+            if (targetWidth === 780) {
+                // EXPAND: await OS commit, then wait one rAF so the compositor
+                // has actually painted the new bounds, THEN start the spring.
+                // Adds ~16ms of imperceptible setup latency in exchange for a
+                // perfectly clip-free, jump-free expansion.
+                syncOSWindowCentered(780, finalH).then(() => {
+                    if (!isCurrent()) return;
+                    requestAnimationFrame(() => {
+                        if (!isCurrent()) return;
+                        runSpring();
+                    });
+                });
+            } else {
+                // CONTRACT: spring runs immediately inside the still-large
+                // 780 OS window. Reframe to 600 happens in onComplete.
+                runSpring();
+            }
         };
 
         // Scroll container unmounted (session reset / messages cleared) — force
@@ -2361,7 +2374,7 @@ Provide only the answer, nothing else.`;
                         />
                         <motion.div
                             className={`relative max-w-full backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col draggable-area overlay-shell-surface ${overlayPanelClass}`}
-                            style={{ ...appearance.shellStyle, width: shellWidth, willChange: 'width', transform: 'translateZ(0)' }}
+                            style={{ ...appearance.shellStyle, width: shellWidth, willChange: 'width' }}
                         >
 
 

@@ -115,8 +115,7 @@ export class WindowHelper {
     const newX = Math.min(Math.max(currentX, workArea.x), maxX)
     const newY = Math.min(Math.max(currentY, workArea.y), maxY)
 
-    this.overlayWindow.setContentSize(newWidth, newHeight)
-    this.overlayWindow.setPosition(newX, newY)
+    this.overlayWindow.setBounds({ x: newX, y: newY, width: newWidth, height: newHeight })
     this.overlayBounds = this.overlayWindow.getBounds()
   }
 
@@ -145,8 +144,10 @@ export class WindowHelper {
     const maxY = workArea.y + workArea.height - newHeight
     const newY = Math.min(Math.max(currentBounds.y, workArea.y), maxY)
 
-    this.overlayWindow.setContentSize(newWidth, newHeight)
-    this.overlayWindow.setPosition(newX, newY)
+    // Atomic frame change: a single setBounds avoids the 1-frame split where
+    // the OS window has the new size but the old origin (or vice versa), which
+    // is what causes the shell to visibly slide and snap during code-expansion.
+    this.overlayWindow.setBounds({ x: newX, y: newY, width: newWidth, height: newHeight })
     this.overlayBounds = this.overlayWindow.getBounds()
   }
 

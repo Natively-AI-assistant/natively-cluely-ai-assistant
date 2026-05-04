@@ -117,11 +117,30 @@ impl SystemAudioCapture {
                 }
             };
 
-            let mut stream = input.stream();
+            let mut stream = match input.stream() {
+                Ok(s) => s,
+                Err(e) => {
+                    let msg = format!(
+                        "[SystemAudioCapture] FATAL: stream() failed: {}",
+                        e
+                    );
+                    eprintln!("{}", msg);
+                    tsfn.call(
+                        Err(napi::Error::from_reason(msg)),
+                        ThreadsafeFunctionCallMode::NonBlocking,
+                    );
+                    return;
+                }
+            };
             let mut consumer = match stream.take_consumer() {
                 Some(c) => c,
                 None => {
-                    eprintln!("[SystemAudioCapture] FATAL: Failed to get consumer");
+                    let msg = "[SystemAudioCapture] FATAL: Failed to get consumer".to_string();
+                    eprintln!("{}", msg);
+                    tsfn.call(
+                        Err(napi::Error::from_reason(msg)),
+                        ThreadsafeFunctionCallMode::NonBlocking,
+                    );
                     return;
                 }
             };
@@ -323,6 +342,11 @@ impl MicrophoneCapture {
             .take_consumer()
             .ok_or_else(|| napi::Error::from_reason("Failed to get consumer"))?;
 
+        // Hand the DSP thread a clone of the err_signal so we can surface
+        // CPAL callback-thread errors (USB unplug, device reset, exclusive-
+        // mode steal) to the JS layer instead of just logging to stderr.
+        let err_signal = input_ref.err_signal();
+
         // DSP thread with silence suppression + WebRTC VAD
         self.capture_thread = Some(thread::spawn(move || {
             let mut suppressor = SilenceSuppressor::new(SilenceSuppressionConfig {
@@ -340,6 +364,22 @@ impl MicrophoneCapture {
             loop {
                 if stop_signal.load(Ordering::Relaxed) {
                     break;
+                }
+
+                // Surface any callback-thread error to JS exactly once. After
+                // reporting, we keep looping so a subsequent device recovery
+                // (e.g. user re-plugged the USB mic) is still observed via the
+                // ringbuf — but main.ts will typically destroy + recreate this
+                // capture on receiving the error.
+                if let Ok(mut slot) = err_signal.lock() {
+                    if let Some(msg) = slot.take() {
+                        let full = format!("[MicrophoneCapture] CPAL error: {}", msg);
+                        eprintln!("{}", full);
+                        tsfn.call(
+                            Err(napi::Error::from_reason(full)),
+                            ThreadsafeFunctionCallMode::NonBlocking,
+                        );
+                    }
                 }
 
                 // 1. Drain ALL available samples from ring buffer (lock-free)

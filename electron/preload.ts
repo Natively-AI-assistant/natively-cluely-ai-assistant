@@ -112,6 +112,7 @@ interface ElectronAPI {
   getAiResponseLanguage: () => Promise<string>
   onSttLanguageAutoDetected: (callback: (bcp47: string) => void) => () => void
   onSystemAudioPermissionDenied: (callback: (message: string) => void) => () => void
+  onDeviceSelectionApplied: (callback: (payload: { kind: 'input' | 'output'; requested: string | null; actual: string | null; fellBack: boolean; reason?: string }) => void) => () => void
 
   // STT Status Events
   onSttStatusChanged: (callback: (data: { state: 'connected' | 'reconnecting' | 'failed'; provider: string; error?: string; channel: 'user' | 'interviewer'; reconnectAttempts?: number }) => void) => () => void
@@ -687,6 +688,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     const subscription = (_: any, message: string) => callback(message);
     ipcRenderer.on('system-audio-permission-denied', subscription);
     return () => { ipcRenderer.removeListener('system-audio-permission-denied', subscription); };
+  },
+  onDeviceSelectionApplied: (callback: (payload: { kind: 'input' | 'output'; requested: string | null; actual: string | null; fellBack: boolean; reason?: string }) => void) => {
+    const subscription = (_: any, payload: any) => callback(payload);
+    ipcRenderer.on('device-selection-applied', subscription);
+    return () => { ipcRenderer.removeListener('device-selection-applied', subscription); };
   },
 
   // STT Status Events

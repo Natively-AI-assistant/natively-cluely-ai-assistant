@@ -43,26 +43,19 @@ impl SpeakerInput {
         })
     }
 
-    pub fn stream(self) -> SpeakerStream {
+    pub fn stream(self) -> Result<SpeakerStream> {
         match self.backend {
             BackendInput::CoreAudio(input) => {
-                // We wrap the stream creation to catch potential panics if start_device fails
-                // Ideally core_audio::stream should return Result, but for now we rely on it working if new worked.
-                // If it crashes, we can't easily fallback here without changing signature.
-                // But core_audio::new does most of the heavy lifting.
-                // NOTE: core_audio::stream() currently panics on start failure.
-                // We should assume it works or modify core_audio.rs.
-                // Given the constraints, let's assume if tap creation worked, starting works.
-                let stream = input.stream();
-                SpeakerStream {
+                let stream = input.stream()?;
+                Ok(SpeakerStream {
                     backend: BackendStream::CoreAudio(stream),
-                }
+                })
             }
             BackendInput::Sck(input) => {
-                let stream = input.stream();
-                SpeakerStream {
+                let stream = input.stream()?;
+                Ok(SpeakerStream {
                     backend: BackendStream::Sck(stream),
-                }
+                })
             }
         }
     }

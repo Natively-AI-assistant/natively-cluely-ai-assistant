@@ -250,6 +250,11 @@ export class AppState {
   private isMeetingActive: boolean = false; // Guard for session state leaks
   private _isQuitting: boolean = false;
   private _verboseLogging: boolean = false;
+  // Tracks whether STT sample-rate has been applied for the current capture
+  // session. Reset on every reconfigureAudio / new pipeline build so the next
+  // first-chunk handler reads the freshly-detected native rate.
+  private _sysSttRateApplied: boolean = false;
+  private _micSttRateApplied: boolean = false;
   private _disguiseTimers: NodeJS.Timeout[] = []; // Track forceUpdate timeouts
   private _dockDebounceTimer: NodeJS.Timeout | null = null; // Debounce dock state changes
   private _dockReassertTimers: NodeJS.Timeout[] = []; // Re-assert dock-hidden state after show+focus
@@ -1072,6 +1077,19 @@ export class AppState {
         let _sysChunkCount = 0;
         this.systemAudioCapture.on('data', (chunk: Buffer) => {
           _sysChunkCount++;
+          // Lazy STT rate configuration on first chunk. By the time data
+          // arrives the native module has published the real device rate
+          // (Windows: synchronously after stream() returns; macOS CoreAudio
+          // Tap: once the bg init thread populates the atomic). This avoids
+          // the race where setupSystemAudioPipeline ran before start() and
+          // saw the constructor default 48000.
+          if (!this._sysSttRateApplied && this.googleSTT && this.systemAudioCapture) {
+            const rate = this.systemAudioCapture.getSampleRate();
+            this.googleSTT.setSampleRate(rate);
+            this.googleSTT.setAudioChannelCount?.(1);
+            this._sysSttRateApplied = true;
+            console.log(`[Main] Interviewer STT rate locked from first capture chunk: ${rate}Hz`);
+          }
           if (_sysChunkCount <= 3 || _sysChunkCount % 500 === 0) {
             console.log(`[Main] SystemAudio->STT: chunk #${_sysChunkCount}, ${chunk.length}B, googleSTT=${this.googleSTT ? 'active' : 'NULL'}`);
           }
@@ -1094,6 +1112,13 @@ export class AppState {
       if (!this.microphoneCapture) {
         this.microphoneCapture = new MicrophoneCapture();
         this.microphoneCapture.on('data', (chunk: Buffer) => {
+          if (!this._micSttRateApplied && this.googleSTT_User && this.microphoneCapture) {
+            const rate = this.microphoneCapture.getSampleRate();
+            this.googleSTT_User.setSampleRate(rate);
+            this.googleSTT_User.setAudioChannelCount?.(1);
+            this._micSttRateApplied = true;
+            console.log(`[Main] User STT rate locked from first mic chunk: ${rate}Hz`);
+          }
           this.googleSTT_User?.write(chunk);
         });
         this.microphoneCapture.on('sample_rate_changed', (rate: number) => {
@@ -1104,9 +1129,9 @@ export class AppState {
         this.microphoneCapture.on('speech_ended', () => {
           this.googleSTT_User?.notifySpeechEnded?.();
         });
-        this.microphoneCapture.on('error', (err: Error) => {
-          console.error('[Main] MicrophoneCapture Error:', err);
-        });
+        // Recovery handler also subscribes to 'error'; gives us auto-restart
+        // when the cpal err_fn fires (USB unplug, format change, etc.).
+        this.setupMicRecoveryHandler();
       }
 
       // 2. Initialize STT Services if missing
@@ -1124,20 +1149,14 @@ export class AppState {
         this.googleSTT_User = this.createSTTProvider('user');
       }
 
-      // --- CRITICAL FIX: SYNC SAMPLE RATES ---
-      // Always sync rates, even if just initialized, to ensure consistency
-
-      // 1. Sync System Audio Rate
-      const sysRate = this.systemAudioCapture?.getSampleRate() || 48000;
-      if (this._verboseLogging) console.log(`[Main] Configuring Interviewer STT to ${sysRate}Hz`);
-      this.googleSTT?.setSampleRate(sysRate);
-      this.googleSTT?.setAudioChannelCount?.(1);
-
-      // 2. Sync Mic Rate
-      const micRate = this.microphoneCapture?.getSampleRate() || 48000;
-      if (this._verboseLogging) console.log(`[Main] Configuring User STT to ${micRate}Hz`);
-      this.googleSTT_User?.setSampleRate(micRate);
-      this.googleSTT_User?.setAudioChannelCount?.(1);
+      // STT sample rate is now applied lazily on the first chunk arrival
+      // (see the 'data' handlers above). Pre-configuring here was racy because
+      // SystemAudioCapture's monitor doesn't exist until start() and returns
+      // the constructor default (48000) until the native bg-init thread
+      // publishes the real rate — which on Windows after Fix #2 is known
+      // synchronously, but on macOS CoreAudio Tap takes ~5-7s to propagate.
+      this._sysSttRateApplied = false;
+      this._micSttRateApplied = false;
 
       if (this._verboseLogging) console.log('[Main] Full Audio Pipeline (System + Mic) Initialized (Ready)');
 
@@ -1146,8 +1165,31 @@ export class AppState {
     }
   }
 
+  /**
+   * Broadcast which device the main process actually opened, vs what the
+   * renderer requested. Renderer subscribes to this so it can show a banner
+   * when fallback to default occurred (e.g. saved AirPods name no longer in
+   * the cpal list because they're disconnected). Without this signal the UI
+   * shows "AirPods selected" but capture is silently using built-in mic.
+   */
+  private broadcastDeviceSelection(payload: {
+    kind: 'input' | 'output';
+    requested: string | null;
+    actual: string | null;
+    fellBack: boolean;
+    reason?: string;
+  }): void {
+    console.log(`[Main] device-selection-applied:`, payload);
+    this.broadcast('device-selection-applied', payload);
+  }
+
   private async reconfigureAudio(inputDeviceId?: string, outputDeviceId?: string): Promise<void> {
     console.log(`[Main] Reconfiguring Audio: Input=${inputDeviceId}, Output=${outputDeviceId}`);
+    // Remember the input id so the mic-recovery handler can recreate with the
+    // same selection if the cpal stream errors out mid-meeting.
+    this._lastRequestedInputDeviceId = inputDeviceId || undefined;
+    // Reset mic recovery counter for the new device choice.
+    this._micRecoveryAttempts = 0;
 
     // 1. System Audio (Output Capture)
     if (this.systemAudioCapture) {
@@ -1161,13 +1203,19 @@ export class AppState {
     try {
       console.log('[Main] Initializing SystemAudioCapture...');
       this.systemAudioCapture = new SystemAudioCapture(outputDeviceId || undefined);
-      const rate = this.systemAudioCapture.getSampleRate();
-      console.log(`[Main] SystemAudioCapture rate: ${rate}Hz`);
-      this.googleSTT?.setSampleRate(rate);
+      // Defer rate sync to first-chunk handler — see setupSystemAudioPipeline.
+      this._sysSttRateApplied = false;
 
       let _rcfgSysChunkCount = 0;
       this.systemAudioCapture.on('data', (chunk: Buffer) => {
         _rcfgSysChunkCount++;
+        if (!this._sysSttRateApplied && this.googleSTT && this.systemAudioCapture) {
+          const r = this.systemAudioCapture.getSampleRate();
+          this.googleSTT.setSampleRate(r);
+          this.googleSTT.setAudioChannelCount?.(1);
+          this._sysSttRateApplied = true;
+          console.log(`[Main] (Reconfigured) Interviewer STT rate locked from first chunk: ${r}Hz`);
+        }
         if (_rcfgSysChunkCount <= 3 || _rcfgSysChunkCount % 500 === 0) {
           console.log(`[Main] (Reconfigured) SystemAudio->STT: chunk #${_rcfgSysChunkCount}, ${chunk.length}B, googleSTT=${this.googleSTT ? 'active' : 'NULL'}`);
         }
@@ -1184,17 +1232,28 @@ export class AppState {
       // Without this, audio recovery is lost whenever the user changes their output device.
       this.setupAudioRecoveryHandler();
       console.log('[Main] SystemAudioCapture initialized.');
+      this.broadcastDeviceSelection({
+        kind: 'output',
+        requested: outputDeviceId || null,
+        actual: outputDeviceId || 'default',
+        fellBack: false,
+      });
     } catch (err) {
       console.warn('[Main] Failed to initialize SystemAudioCapture with preferred ID. Falling back to default.', err);
       try {
         this.systemAudioCapture = new SystemAudioCapture(); // Default
-        const rate = this.systemAudioCapture.getSampleRate();
-        console.log(`[Main] SystemAudioCapture (Default) rate: ${rate}Hz`);
-        this.googleSTT?.setSampleRate(rate);
+        this._sysSttRateApplied = false;
 
         let _dfltSysChunkCount = 0;
         this.systemAudioCapture.on('data', (chunk: Buffer) => {
           _dfltSysChunkCount++;
+          if (!this._sysSttRateApplied && this.googleSTT && this.systemAudioCapture) {
+            const r = this.systemAudioCapture.getSampleRate();
+            this.googleSTT.setSampleRate(r);
+            this.googleSTT.setAudioChannelCount?.(1);
+            this._sysSttRateApplied = true;
+            console.log(`[Main] (Default) Interviewer STT rate locked from first chunk: ${r}Hz`);
+          }
           if (_dfltSysChunkCount <= 3 || _dfltSysChunkCount % 500 === 0) {
             console.log(`[Main] (Default) SystemAudio->STT: chunk #${_dfltSysChunkCount}, ${chunk.length}B, googleSTT=${this.googleSTT ? 'active' : 'NULL'}`);
           }
@@ -1209,8 +1268,22 @@ export class AppState {
         });
         // PR #173: Recovery handler on fallback path too
         this.setupAudioRecoveryHandler();
+        this.broadcastDeviceSelection({
+          kind: 'output',
+          requested: outputDeviceId || null,
+          actual: 'default',
+          fellBack: true,
+          reason: (err as Error)?.message || 'unknown',
+        });
       } catch (err2) {
         console.error('[Main] Failed to initialize SystemAudioCapture (Default):', err2);
+        this.broadcastDeviceSelection({
+          kind: 'output',
+          requested: outputDeviceId || null,
+          actual: null,
+          fellBack: true,
+          reason: `Both preferred and default failed: ${(err2 as Error)?.message || 'unknown'}`,
+        });
       }
     }
 
@@ -1224,12 +1297,16 @@ export class AppState {
     try {
       console.log('[Main] Initializing MicrophoneCapture...');
       this.microphoneCapture = new MicrophoneCapture(inputDeviceId || undefined);
-      const rate = this.microphoneCapture.getSampleRate();
-      console.log(`[Main] MicrophoneCapture rate: ${rate}Hz`);
-      this.googleSTT_User?.setSampleRate(rate);
+      this._micSttRateApplied = false;
 
       this.microphoneCapture.on('data', (chunk: Buffer) => {
-        // console.log('[Main] Mic chunk', chunk.length);
+        if (!this._micSttRateApplied && this.googleSTT_User && this.microphoneCapture) {
+          const r = this.microphoneCapture.getSampleRate();
+          this.googleSTT_User.setSampleRate(r);
+          this.googleSTT_User.setAudioChannelCount?.(1);
+          this._micSttRateApplied = true;
+          console.log(`[Main] (Reconfigured) User STT rate locked from first mic chunk: ${r}Hz`);
+        }
         this.googleSTT_User?.write(chunk);
       });
       this.microphoneCapture.on('sample_rate_changed', (rate: number) => {
@@ -1239,19 +1316,30 @@ export class AppState {
       this.microphoneCapture.on('speech_ended', () => {
         this.googleSTT_User?.notifySpeechEnded?.();
       });
-      this.microphoneCapture.on('error', (err: Error) => {
-        console.error('[Main] MicrophoneCapture Error:', err);
-      });
+      // Recovery handler attaches its own 'error' listener; do not add a
+      // duplicate logger here or the same error will be reported twice.
+      this.setupMicRecoveryHandler();
       console.log('[Main] MicrophoneCapture initialized.');
+      this.broadcastDeviceSelection({
+        kind: 'input',
+        requested: inputDeviceId || null,
+        actual: inputDeviceId || 'default',
+        fellBack: false,
+      });
     } catch (err) {
       console.warn('[Main] Failed to initialize MicrophoneCapture with preferred ID. Falling back to default.', err);
       try {
         this.microphoneCapture = new MicrophoneCapture(); // Default
-        const rate = this.microphoneCapture.getSampleRate();
-        console.log(`[Main] MicrophoneCapture (Default) rate: ${rate}Hz`);
-        this.googleSTT_User?.setSampleRate(rate);
+        this._micSttRateApplied = false;
 
         this.microphoneCapture.on('data', (chunk: Buffer) => {
+          if (!this._micSttRateApplied && this.googleSTT_User && this.microphoneCapture) {
+            const r = this.microphoneCapture.getSampleRate();
+            this.googleSTT_User.setSampleRate(r);
+            this.googleSTT_User.setAudioChannelCount?.(1);
+            this._micSttRateApplied = true;
+            console.log(`[Main] (Default) User STT rate locked from first mic chunk: ${r}Hz`);
+          }
           this.googleSTT_User?.write(chunk);
         });
         this.microphoneCapture.on('sample_rate_changed', (rate: number) => {
@@ -1261,11 +1349,23 @@ export class AppState {
         this.microphoneCapture.on('speech_ended', () => {
           this.googleSTT_User?.notifySpeechEnded?.();
         });
-        this.microphoneCapture.on('error', (err: Error) => {
-          console.error('[Main] MicrophoneCapture (Default) Error:', err);
+        this.setupMicRecoveryHandler();
+        this.broadcastDeviceSelection({
+          kind: 'input',
+          requested: inputDeviceId || null,
+          actual: 'default',
+          fellBack: true,
+          reason: (err as Error)?.message || 'unknown',
         });
       } catch (err2) {
         console.error('[Main] Failed to initialize MicrophoneCapture (Default):', err2);
+        this.broadcastDeviceSelection({
+          kind: 'input',
+          requested: inputDeviceId || null,
+          actual: null,
+          fellBack: true,
+          reason: `Both preferred and default failed: ${(err2 as Error)?.message || 'unknown'}`,
+        });
       }
     }
   }
@@ -1376,6 +1476,85 @@ export class AppState {
         console.error(`[AudioRecovery] Recovery attempt #${this._systemAudioRecoveryAttempts} failed:`, recoveryErr);
       } finally {
         this._systemAudioRecoveryInProgress = false;
+      }
+    });
+  }
+
+  // Mic-side equivalent of setupAudioRecoveryHandler. Pre-fix the cpal err_fn
+  // (USB unplug, device-format change, exclusive-mode steal) only logged to
+  // stderr — JS never learned the mic stream had stopped producing samples
+  // and the user's voice silently disappeared from the transcript.
+  private _micRecoveryInProgress = false;
+  private _micRecoveryAttempts = 0;
+  private _micRecoveryTimer: NodeJS.Timeout | null = null;
+  /** Last input device id passed to reconfigureAudio; used by mic recovery. */
+  private _lastRequestedInputDeviceId: string | undefined = undefined;
+
+  private setupMicRecoveryHandler(): void {
+    if (!this.microphoneCapture) return;
+
+    this.microphoneCapture.on('error', async (err: Error) => {
+      if (!this.isMeetingActive) return;
+
+      if (this._micRecoveryInProgress || this._micRecoveryAttempts >= 3) {
+        console.warn(
+          `[MicRecovery] Skipping recovery — already in progress or max attempts (${this._micRecoveryAttempts}/3) reached.`,
+        );
+        return;
+      }
+
+      this._micRecoveryInProgress = true;
+      this._micRecoveryAttempts++;
+      console.warn(
+        `[MicRecovery] MicrophoneCapture error — attempting recovery #${this._micRecoveryAttempts}: ${err.message}`,
+      );
+
+      try {
+        await new Promise<void>(resolve => {
+          this._micRecoveryTimer = setTimeout(resolve, 1500);
+        });
+        this._micRecoveryTimer = null;
+
+        // Tear down + recreate the mic only (don't touch the system-audio
+        // capture; cpal needs a fresh device handle after error).
+        if (this.microphoneCapture) {
+          this.microphoneCapture.destroy();
+          this.microphoneCapture = null;
+        }
+        this._micSttRateApplied = false;
+
+        try {
+          this.microphoneCapture = new MicrophoneCapture(this._lastRequestedInputDeviceId);
+        } catch (createErr) {
+          console.warn('[MicRecovery] Saved device unavailable on recovery, falling back to default.', createErr);
+          this.microphoneCapture = new MicrophoneCapture();
+        }
+
+        // Re-wire the listeners that reconfigureAudio normally sets up.
+        this.microphoneCapture.on('data', (chunk: Buffer) => {
+          if (!this._micSttRateApplied && this.googleSTT_User && this.microphoneCapture) {
+            const r = this.microphoneCapture.getSampleRate();
+            this.googleSTT_User.setSampleRate(r);
+            this.googleSTT_User.setAudioChannelCount?.(1);
+            this._micSttRateApplied = true;
+          }
+          this.googleSTT_User?.write(chunk);
+        });
+        this.microphoneCapture.on('sample_rate_changed', (rate: number) => {
+          this.googleSTT_User?.setSampleRate(rate);
+        });
+        this.microphoneCapture.on('speech_ended', () => {
+          this.googleSTT_User?.notifySpeechEnded?.();
+        });
+        this.setupMicRecoveryHandler(); // re-attach on the new instance
+        this.microphoneCapture.start();
+
+        this._micRecoveryAttempts = 0;
+        console.log('[MicRecovery] MicrophoneCapture restarted successfully.');
+      } catch (recoveryErr: any) {
+        console.error(`[MicRecovery] Recovery attempt #${this._micRecoveryAttempts} failed:`, recoveryErr);
+      } finally {
+        this._micRecoveryInProgress = false;
       }
     });
   }

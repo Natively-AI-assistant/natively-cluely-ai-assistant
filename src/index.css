@@ -562,9 +562,32 @@ a {
   cursor: default !important;
 }
 
-/* Explicit cursor class when pointer is explicitly needed */
-.cursor-pointer {
-  cursor: pointer;
+/* ─── Global cursor lock ─────────────────────────────────────────────────
+   This is a desktop Electron app — the only cursor we ever show is the
+   default arrow. No I-beam on inputs, no pointer on buttons, no resize
+   handles, no text-select carets. This rule overrides:
+     - Browser UA defaults (input → text, button → pointer, link → pointer)
+     - Tailwind `cursor-*` utility classes used throughout the codebase
+     - Any inline `style="cursor: …"` set by libraries/components
+   Keep `!important` and the universal selectors — they're load-bearing. */
+*,
+*::before,
+*::after,
+*:hover,
+*:focus,
+*:active,
+*:focus-within,
+*:focus-visible,
+*[class*="cursor-"],
+input,
+textarea,
+select,
+button,
+a,
+[role="button"],
+[contenteditable],
+[contenteditable="true"] {
+  cursor: default !important;
 }
 
 /* Utilities for sidebar layout */

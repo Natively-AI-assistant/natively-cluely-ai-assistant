@@ -139,14 +139,14 @@ impl SpeakerInput {
         })
     }
 
-    pub fn stream(self) -> SpeakerStream {
-        SpeakerStream {
+    pub fn stream(self) -> Result<SpeakerStream> {
+        Ok(SpeakerStream {
             consumer: self.consumer,
             _device: self.device,
             _ctx: self._ctx,
             _tap: self.tap,
             current_sample_rate: self.current_sample_rate,
-        }
+        })
     }
 }
 

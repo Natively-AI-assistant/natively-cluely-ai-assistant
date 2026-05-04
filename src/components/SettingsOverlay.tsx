@@ -768,6 +768,15 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     const [selectedOutput, setSelectedOutput] = useState('');
     const [micLevel, setMicLevel] = useState(0);
     const [useExperimentalSck, setUseExperimentalSck] = useState(false);
+    // Most-recent device fallback notice. Populated by main process via
+    // 'device-selection-applied' IPC when the saved device couldn't be opened
+    // and the audio pipeline silently fell back to the system default.
+    const [deviceFallbackNotice, setDeviceFallbackNotice] = useState<{
+        kind: 'input' | 'output';
+        requested: string | null;
+        actual: string | null;
+        reason?: string;
+    } | null>(null);
 
     // STT Provider settings
     const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively'>('none');
@@ -1179,6 +1188,32 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         const interval = setInterval(fetchEvents, 60_000);
         return () => { cancelled = true; clearInterval(interval); };
     }, [isOpen, activeTab, calendarStatus.connected]);
+
+    // Listen for device-selection-applied so the user can see when their saved
+    // device couldn't be opened and audio fell back to the system default.
+    // Pre-fix this was silent: settings showed "AirPods" selected but capture
+    // was actually using the built-in mic, leaving users to wonder why their
+    // device choice "doesn't work".
+    useEffect(() => {
+        if (!window.electronAPI?.onDeviceSelectionApplied) return;
+        const unsubscribe = window.electronAPI.onDeviceSelectionApplied((payload) => {
+            if (payload.fellBack) {
+                setDeviceFallbackNotice({
+                    kind: payload.kind,
+                    requested: payload.requested,
+                    actual: payload.actual,
+                    reason: payload.reason,
+                });
+            } else {
+                // Successful apply for this kind — clear any stale notice that
+                // pointed at the same channel.
+                setDeviceFallbackNotice(prev =>
+                    prev && prev.kind === payload.kind ? null : prev
+                );
+            }
+        });
+        return unsubscribe;
+    }, []);
 
     // Use the native mic test path so device IDs stay consistent with the meeting runtime.
     useEffect(() => {
@@ -2258,6 +2293,40 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                     <div>
                                         <h3 className="text-lg font-bold text-text-primary mb-1">Audio Configuration</h3>
                                         <p className="text-xs text-text-secondary mb-5">Manage input and output devices.</p>
+
+                                        {/* Device-fallback banner: shown when main process couldn't
+                                            open the selected device and silently used the default. */}
+                                        {deviceFallbackNotice && (
+                                            <div className="mb-4 flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                                                <AlertCircle size={14} className="text-amber-400 shrink-0 mt-0.5" />
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-xs text-amber-200/90 leading-snug">
+                                                        Selected {deviceFallbackNotice.kind === 'input' ? 'microphone' : 'output device'}
+                                                        {deviceFallbackNotice.requested ? ` "${deviceFallbackNotice.requested}"` : ''} couldn't be opened
+                                                        — using <span className="font-medium">{deviceFallbackNotice.actual ?? 'no device'}</span> instead.
+                                                    </p>
+                                                    {deviceFallbackNotice.reason && (
+                                                        <p className="text-[11px] text-amber-200/60 mt-1 font-mono break-all">{deviceFallbackNotice.reason}</p>
+                                                    )}
+                                                </div>
+                                                <button
+                                                    onClick={() => {
+                                                        // Clear stale localStorage so the next meeting starts clean.
+                                                        if (deviceFallbackNotice.kind === 'input') {
+                                                            localStorage.removeItem('preferredInputDeviceId');
+                                                            setSelectedInput('default');
+                                                        } else {
+                                                            localStorage.removeItem('preferredOutputDeviceId');
+                                                            setSelectedOutput('default');
+                                                        }
+                                                        setDeviceFallbackNotice(null);
+                                                    }}
+                                                    className="shrink-0 text-[11px] font-medium text-amber-400 hover:text-amber-300 transition-colors px-2 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25"
+                                                >
+                                                    Reset
+                                                </button>
+                                            </div>
+                                        )}
 
                                         <div className="space-y-4">
                                             <CustomSelect
