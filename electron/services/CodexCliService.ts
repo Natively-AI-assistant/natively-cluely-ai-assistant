@@ -94,8 +94,6 @@ export class CodexCliService {
     let emitted = false;
 
     const timer = setTimeout(() => child.kill('SIGTERM'), options.timeoutMs);
-    child.stdin.write(options.prompt);
-    child.stdin.end();
 
     const queue: string[] = [];
     let finished = false;
@@ -128,6 +126,13 @@ export class CodexCliService {
       stderr += chunk.toString();
     });
 
+    child.stdin.on('error', error => {
+      if (!failure) {
+        failure = new Error(`Codex CLI stdin failed for "${path}". ${error.message}`);
+      }
+      wake();
+    });
+
     child.on('error', error => {
       clearTimeout(timer);
       failure = new Error(`Codex CLI was not found at "${path}". ${error.message}`);
@@ -144,13 +149,27 @@ export class CodexCliService {
       wake();
     });
 
+    try {
+      child.stdin.write(options.prompt);
+      child.stdin.end();
+    } catch (error: any) {
+      failure = new Error(`Codex CLI stdin failed for "${path}". ${error.message}`);
+      wake();
+    }
+
     while (!finished || queue.length > 0) {
       while (queue.length > 0) yield queue.shift()!;
       if (finished) break;
       await new Promise<void>(resolve => { notify = resolve; });
     }
 
-    if (failure) throw failure;
+    if (failure) {
+      if (emitted) {
+        console.warn('[CodexCliService] Codex CLI stream ended after emitting partial output:', failure.message);
+        return;
+      }
+      throw failure;
+    }
     if (!emitted) {
       const normalized = this.extractText(stdout);
       if (normalized) yield normalized;
@@ -190,9 +209,16 @@ export class CodexCliService {
           else reject(new Error(`Codex CLI exited with code ${code}${stderr ? `: ${this.sanitize(stderr)}` : ''}`));
         });
       });
+      child.stdin.on('error', error => {
+        settle(() => reject(new Error(`Codex CLI stdin failed for "${path}". ${error.message}`)));
+      });
 
-      child.stdin.write(options.prompt);
-      child.stdin.end();
+      try {
+        child.stdin.write(options.prompt);
+        child.stdin.end();
+      } catch (error: any) {
+        settle(() => reject(new Error(`Codex CLI stdin failed for "${path}". ${error.message}`)));
+      }
     });
   }
 

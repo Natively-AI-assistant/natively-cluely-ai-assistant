@@ -2491,15 +2491,6 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       }
     }
 
-    if (this.codexCliConfig.enabled) {
-      try {
-        yield* this.streamWithCodexCli(userContent, finalSystemPrompt, false, imagePaths);
-        return;
-      } catch (e: any) {
-        console.warn('[LLMHelper] Codex CLI last-resort fallback failed:', e.message);
-      }
-    }
-
     throw new Error("No AI provider configured. Please add at least one API key in Settings.");
   }
 
