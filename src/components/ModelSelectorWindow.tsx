@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { Check, Loader2 } from 'lucide-react';
-import { CODEX_CLI_MODEL, STANDARD_CLOUD_MODELS, prettifyModelId } from '../utils/modelUtils';
+import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexCliSelectorId, STANDARD_CLOUD_MODELS, prettifyModelId } from '../utils/modelUtils';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 
 // Define Model Types
@@ -99,7 +99,10 @@ const ModelSelectorWindow = () => {
 
                 // Codex CLI
                 if (codexCliConfig?.enabled) {
-                    models.push({ id: CODEX_CLI_MODEL.id, name: CODEX_CLI_MODEL.name, type: 'codex-cli', provider: 'codex-cli' });
+                    models.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${prettifyModelId(codexCliConfig.model)})`, type: 'codex-cli', provider: 'codex-cli' });
+                    CODEX_CLI_MODEL_PRESETS.forEach(model => {
+                        models.push({ id: codexCliSelectorId(model.id), name: model.name, type: 'codex-cli', provider: 'codex-cli' });
+                    });
                 }
 
                 // Ollama

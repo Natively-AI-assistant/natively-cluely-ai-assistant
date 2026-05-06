@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Edit2, AlertCircle, CheckCircle, Save, ChevronDown, Check, RefreshCw, ExternalLink, Loader2 } from 'lucide-react';
-import { CODEX_CLI_MODEL, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
+import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexCliSelectorId, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
 
@@ -15,13 +15,6 @@ interface ModelOption {
     id: string;
     name: string;
 }
-
-const CODEX_CLI_MODEL_PRESETS: ModelOption[] = [
-    { id: 'gpt-5.5', name: 'ChatGPT 5.5' },
-    { id: 'gpt-5.4', name: 'ChatGPT 5.4' },
-    { id: 'gpt-5.3-codex', name: 'Codex 5.3' },
-    { id: 'gpt-5.3-codex-spark', name: 'Codex Spark 5.3' },
-];
 
 interface ModelSelectProps {
     value: string;
@@ -535,7 +528,13 @@ export const AIProvidersSettings: React.FC = () => {
                                 }
                             }
                             if (codexCliConfig.enabled) {
-                                opts.push({ id: CODEX_CLI_MODEL.id, name: CODEX_CLI_MODEL.name });
+                                opts.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${prettifyModelId(codexCliConfig.model)})` });
+                                CODEX_CLI_MODEL_PRESETS.forEach(model => {
+                                    const id = codexCliSelectorId(model.id);
+                                    if (!opts.find(o => o.id === id)) {
+                                        opts.push({ id, name: `${CODEX_CLI_MODEL.name}: ${model.name}` });
+                                    }
+                                });
                             }
                             customProviders.forEach(p => opts.push({ id: p.id, name: p.name }));
                             ollamaModels.forEach(m => opts.push({ id: `ollama-${m}`, name: `${m} (Local)` }));
@@ -563,7 +562,7 @@ export const AIProvidersSettings: React.FC = () => {
                             <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-0">Fast Response Mode</label>
                             <span className="bg-orange-500/10 text-orange-500 text-[9px] font-bold px-1.5 py-0.5 rounded border border-orange-500/20">NEW</span>
                         </div>
-                        <p className="text-[10px] text-text-secondary mt-0.5">Super fast text responses using Codex CLI fast model, Groq, or Natively. Multimodal requests still use your Default Model.</p>
+                        <p className="text-[10px] text-text-secondary mt-0.5">Super fast responses using the Codex CLI fast model, Groq, or Natively. Turn this off to use the selected normal model.</p>
                         {!canUseFastMode && (
                             <p className="text-[10px] text-orange-500 mt-0.5 font-medium">Requires Groq, Natively API, or Codex CLI to be configured.</p>
                         )}
@@ -591,14 +590,14 @@ export const AIProvidersSettings: React.FC = () => {
             <div className="space-y-5">
                 <div>
                     <h3 className="text-sm font-bold text-text-primary mb-1">Local Provider (Codex CLI)</h3>
-                    <p className="text-xs text-text-secondary">Route text-only responses through a locally authenticated Codex CLI.</p>
+                    <p className="text-xs text-text-secondary">Route text and screenshot responses through a locally authenticated Codex CLI.</p>
                 </div>
 
                 <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle space-y-4">
                     <div className="flex items-center justify-between">
                         <div>
                             <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-0">Enable Codex CLI</label>
-                            <p className="text-[10px] text-text-secondary">Adds Codex CLI as a selectable local backend and text fallback.</p>
+                            <p className="text-[10px] text-text-secondary">Adds Codex CLI as a selectable local backend and fallback.</p>
                         </div>
                         <button
                             type="button"
