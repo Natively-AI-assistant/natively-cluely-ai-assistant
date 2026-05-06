@@ -2303,7 +2303,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     // GROQ FAST TEXT OVERRIDE (Text-Only)
     // Two paths: local Groq key → call Groq directly; Natively API only → send fast_mode:true
     // to the server so it routes to its internal Groq pool (llama-3.3-70b-versatile).
-      if (this.groqFastTextMode && !isMultimodal) {
+    if (this.groqFastTextMode && !isMultimodal) {
       if (this.codexCliConfig.enabled) {
         console.log(`[LLMHelper] ⚡️ Fast Text Mode Active (Streaming). Routing to Codex CLI...`);
         try {
@@ -2319,7 +2319,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           const groqSystem = systemPromptOverride || GROQ_SYSTEM_PROMPT;
           const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
           const groqFullMessage = `${finalGroqSystem}\n\n${userContent}`;
-          yield* this.streamWithGroq(groqFullMessage);
+          const groqModelId = this.isCodexCliModel(this.currentModelId) ? undefined : this.currentModelId;
+          yield* this.streamWithGroq(groqFullMessage, groqModelId);
           return;
         } catch (e: any) {
           console.warn("[LLMHelper] Groq Fast Text streaming failed, falling back:", e.message);

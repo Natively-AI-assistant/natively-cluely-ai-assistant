@@ -30,7 +30,7 @@ export class CodexCliService {
       '--color',
       'never',
       '--sandbox',
-      'workspace-write',
+      'read-only',
       '--skip-git-repo-check',
       '--model',
       model,
@@ -123,6 +123,7 @@ export class CodexCliService {
     });
 
     child.on('error', error => {
+      clearTimeout(timer);
       failure = new Error(`Codex CLI was not found at "${path}". ${error.message}`);
       finished = true;
       wake();
