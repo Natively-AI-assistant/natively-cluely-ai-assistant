@@ -2019,6 +2019,45 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle("get-codex-cli-config", () => {
+    try {
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      return llmHelper.getCodexCliConfig();
+    } catch (error: any) {
+      const { CodexCliService } = require('./services/CodexCliService');
+      return CodexCliService.normalizeConfig({});
+    }
+  });
+
+  safeHandle("set-codex-cli-config", (_, config: any) => {
+    try {
+      const { CodexCliService } = require('./services/CodexCliService');
+      const { SettingsManager } = require('./services/SettingsManager');
+      const normalized = CodexCliService.normalizeConfig(config || {});
+      const sm = SettingsManager.getInstance();
+      sm.set('codexCliEnabled', normalized.enabled);
+      sm.set('codexCliPath', normalized.path);
+      sm.set('codexCliModel', normalized.model);
+      sm.set('codexCliFastModel', normalized.fastModel);
+      sm.set('codexCliTimeoutMs', normalized.timeoutMs);
+      appState.processingHelper.getLLMHelper().setCodexCliConfig(normalized);
+      return { success: true, config: normalized };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle("test-codex-cli", async (_, config?: any) => {
+    try {
+      const { CodexCliService } = require('./services/CodexCliService');
+      const current = appState.processingHelper.getLLMHelper().getCodexCliConfig();
+      const normalized = CodexCliService.normalizeConfig({ ...current, ...(config || {}) });
+      return await CodexCliService.validateExecutable(normalized.path);
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
   safeHandle("set-model", async (_, modelId: string) => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
@@ -3360,4 +3399,3 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 }
-

@@ -35,6 +35,12 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
     },
 };
 
+export const CODEX_CLI_MODEL = {
+    id: 'codex-cli',
+    name: 'Codex CLI',
+    desc: 'Local CLI transport',
+};
+
 export const prettifyModelId = (id: string): string => {
     if (!id) return '';
     return id.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());

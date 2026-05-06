@@ -162,6 +162,9 @@ interface ElectronAPI {
   // Groq Fast Text Mode
   getGroqFastTextMode: () => Promise<{ enabled: boolean }>
   setGroqFastTextMode: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
+  getCodexCliConfig: () => Promise<{ enabled: boolean; path: string; model: string; fastModel: string; timeoutMs: number }>
+  setCodexCliConfig: (config: { enabled: boolean; path: string; model: string; fastModel: string; timeoutMs: number }) => Promise<{ success: boolean; error?: string; config?: { enabled: boolean; path: string; model: string; fastModel: string; timeoutMs: number } }>
+  testCodexCli: (config?: { enabled?: boolean; path?: string; model?: string; fastModel?: string; timeoutMs?: number }) => Promise<{ success: boolean; error?: string }>
 
   // Demo
   seedDemo: () => Promise<{ success: boolean }>
@@ -908,6 +911,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Groq Fast Text Mode
   getGroqFastTextMode: () => ipcRenderer.invoke('get-groq-fast-text-mode'),
   setGroqFastTextMode: (enabled: boolean) => ipcRenderer.invoke('set-groq-fast-text-mode', enabled),
+  getCodexCliConfig: () => ipcRenderer.invoke('get-codex-cli-config'),
+  setCodexCliConfig: (config: { enabled: boolean; path: string; model: string; fastModel: string; timeoutMs: number }) => ipcRenderer.invoke('set-codex-cli-config', config),
+  testCodexCli: (config?: { enabled?: boolean; path?: string; model?: string; fastModel?: string; timeoutMs?: number }) => ipcRenderer.invoke('test-codex-cli', config),
 
   // Demo
   seedDemo: () => ipcRenderer.invoke('seed-demo'),

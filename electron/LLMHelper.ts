@@ -19,6 +19,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import axios from 'axios';
 import { createProviderRateLimiters, RateLimiter } from './services/RateLimiter';
+import { CodexCliConfig, CodexCliService, DEFAULT_CODEX_CLI_CONFIG } from './services/CodexCliService';
 const execAsync = promisify(exec);
 
 interface OllamaResponse {
@@ -55,6 +56,7 @@ export class LLMHelper {
   private customProvider: CustomProvider | null = null;
   private activeCurlProvider: CurlProvider | null = null;
   private groqFastTextMode: boolean = false;
+  private codexCliConfig: CodexCliConfig = DEFAULT_CODEX_CLI_CONFIG;
   private knowledgeOrchestrator: any = null;
   private customNotes: string = '';
   private aiResponseLanguage: string = 'auto';
@@ -200,6 +202,15 @@ export class LLMHelper {
     return this.groqFastTextMode;
   }
 
+  public setCodexCliConfig(config: Partial<CodexCliConfig>) {
+    this.codexCliConfig = CodexCliService.normalizeConfig(config);
+    console.log(`[LLMHelper] Codex CLI ${this.codexCliConfig.enabled ? 'enabled' : 'disabled'} with model: ${this.codexCliConfig.model}`);
+  }
+
+  public getCodexCliConfig(): CodexCliConfig {
+    return this.codexCliConfig;
+  }
+
   public getAiResponseLanguage(): string {
     return this.aiResponseLanguage;
   }
@@ -232,6 +243,10 @@ export class LLMHelper {
 
   private isGeminiModel(modelId: string): boolean {
     return modelId.startsWith("gemini-") || modelId.startsWith("models/");
+  }
+
+  private isCodexCliModel(modelId: string): boolean {
+    return modelId === "codex-cli";
   }
   // ---------------------------
 
@@ -266,13 +281,38 @@ export class LLMHelper {
     // Standard Cloud Models
     this.useOllama = false;
     this.customProvider = null;
+    this.activeCurlProvider = null;
     this.currentModelId = targetModelId;
 
     // Update specific model props if needed
     if (targetModelId === GEMINI_PRO_MODEL) this.geminiModel = GEMINI_PRO_MODEL;
     if (targetModelId === GEMINI_FLASH_MODEL) this.geminiModel = GEMINI_FLASH_MODEL;
 
-    console.log(`[LLMHelper] Switched to Cloud Model: ${targetModelId}`);
+    console.log(`[LLMHelper] Switched to Model: ${targetModelId}`);
+  }
+
+  private buildCodexCliPrompt(userContent: string, systemPrompt?: string): string {
+    return systemPrompt ? `${systemPrompt}\n\n${userContent}` : userContent;
+  }
+
+  private async generateWithCodexCli(userContent: string, systemPrompt?: string, fastMode = false): Promise<string> {
+    if (!this.codexCliConfig.enabled) throw new Error('Codex CLI transport is disabled.');
+    const model = fastMode ? this.codexCliConfig.fastModel : this.codexCliConfig.model;
+    return CodexCliService.run(this.codexCliConfig.path, {
+      prompt: this.buildCodexCliPrompt(userContent, systemPrompt),
+      model,
+      timeoutMs: this.codexCliConfig.timeoutMs,
+    });
+  }
+
+  private async *streamWithCodexCli(userContent: string, systemPrompt?: string, fastMode = false): AsyncGenerator<string, void, unknown> {
+    if (!this.codexCliConfig.enabled) throw new Error('Codex CLI transport is disabled.');
+    const model = fastMode ? this.codexCliConfig.fastModel : this.codexCliConfig.model;
+    yield* CodexCliService.stream(this.codexCliConfig.path, {
+      prompt: this.buildCodexCliPrompt(userContent, systemPrompt),
+      model,
+      timeoutMs: this.codexCliConfig.timeoutMs,
+    });
   }
 
   public switchToCurl(provider: CurlProvider) {
@@ -930,7 +970,20 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         groq: buildMessage(finalGroqPrompt),
       };
 
+      // System prompts for OpenAI/Claude/Codex CLI (skipped if skipSystemPrompt)
+      const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(OPENAI_SYSTEM_PROMPT);
+      const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(CLAUDE_SYSTEM_PROMPT);
+
       // GROQ FAST TEXT OVERRIDE (Text-Only)
+      if (this.groqFastTextMode && !isMultimodal && this.codexCliConfig.enabled) {
+        console.log(`[LLMHelper] ⚡️ Fast Text Mode Active. Routing to Codex CLI...`);
+        try {
+          return await this.generateWithCodexCli(userContent, openaiSystemPrompt, true);
+        } catch (e: any) {
+          console.warn("[LLMHelper] Codex CLI Fast Text failed, falling back to standard fast routing:", e.message);
+        }
+      }
+
       if (this.groqFastTextMode && !isMultimodal && this.groqClient) {
         console.log(`[LLMHelper] ⚡️ Groq Fast Text Mode Active. Routing to Groq...`);
         try {
@@ -941,12 +994,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         }
       }
 
-      // System prompts for OpenAI/Claude (skipped if skipSystemPrompt)
-      const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(OPENAI_SYSTEM_PROMPT);
-      const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(CLAUDE_SYSTEM_PROMPT);
-
       if (this.useOllama) {
         return await this.callOllama(combinedMessages.gemini, imagePaths?.[0]);
+      }
+
+      if (this.isCodexCliModel(this.currentModelId) && !isMultimodal && this.codexCliConfig.enabled) {
+        return await this.generateWithCodexCli(userContent, openaiSystemPrompt);
       }
 
       if (this.activeCurlProvider) {
@@ -1049,6 +1102,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         }
         if (this.groqClient) {
           providers.push({ name: `Groq (${textGroq})`, execute: () => this.generateWithGroq(combinedMessages.groq, textGroq) });
+        }
+        if (this.codexCliConfig.enabled) {
+          providers.push({ name: `Codex CLI (${this.codexCliConfig.model})`, execute: () => this.generateWithCodexCli(userContent, openaiSystemPrompt) });
         }
         if (this.client) {
           providers.push({
@@ -2061,12 +2117,15 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         providers.push({ name: `Groq (meta-llama/llama-4-scout-17b-16e-instruct)`, execute: () => this.streamWithGroqMultimodal(userContent, imagePaths!, openaiSystemPrompt) });
       }
     } else {
-      // TEXT-ONLY PROVIDER ORDER: [Natively] → Groq → OpenAI → Claude → Gemini Flash → Gemini Pro
+      // TEXT-ONLY PROVIDER ORDER: [Natively] -> Groq -> Codex CLI -> OpenAI -> Claude -> Gemini Flash -> Gemini Pro
       if (this.hasNatively()) {
         providers.push({ name: 'Natively API', execute: () => this.streamWithNatively(userContent, openaiSystemPrompt) });
       }
       if (this.groqClient) {
         providers.push({ name: `Groq (${textGroq})`, execute: () => this.streamWithGroq(combinedMessages.groq, textGroq) });
+      }
+      if (this.codexCliConfig.enabled) {
+        providers.push({ name: `Codex CLI (${this.codexCliConfig.model})`, execute: () => this.streamWithCodexCli(userContent, openaiSystemPrompt) });
       }
       if (this.openaiClient) {
         providers.push({ name: `OpenAI (${textOpenAI})`, execute: () => this.streamWithOpenai(userContent, openaiSystemPrompt, textOpenAI) });
@@ -2244,14 +2303,23 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     // GROQ FAST TEXT OVERRIDE (Text-Only)
     // Two paths: local Groq key → call Groq directly; Natively API only → send fast_mode:true
     // to the server so it routes to its internal Groq pool (llama-3.3-70b-versatile).
-    if (this.groqFastTextMode && !isMultimodal) {
+      if (this.groqFastTextMode && !isMultimodal) {
+      if (this.codexCliConfig.enabled) {
+        console.log(`[LLMHelper] ⚡️ Fast Text Mode Active (Streaming). Routing to Codex CLI...`);
+        try {
+          yield* this.streamWithCodexCli(userContent, finalSystemPrompt, true);
+          return;
+        } catch (e: any) {
+          console.warn("[LLMHelper] Codex CLI Fast Text streaming failed, falling back:", e.message);
+        }
+      }
       if (this.groqClient) {
         console.log(`[LLMHelper] ⚡️ Groq Fast Text Mode Active (Streaming). Routing to local Groq...`);
         try {
           const groqSystem = systemPromptOverride || GROQ_SYSTEM_PROMPT;
           const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
           const groqFullMessage = `${finalGroqSystem}\n\n${userContent}`;
-          yield* this.streamWithGroq(groqFullMessage, this.currentModelId);
+          yield* this.streamWithGroq(groqFullMessage);
           return;
         } catch (e: any) {
           console.warn("[LLMHelper] Groq Fast Text streaming failed, falling back:", e.message);
@@ -2273,6 +2341,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     // 1. Ollama Streaming
     if (this.useOllama) {
       yield* this.streamWithOllama(message, context, finalSystemPrompt, imagePaths);
+      return;
+    }
+
+    if (this.isCodexCliModel(this.currentModelId) && !isMultimodal && this.codexCliConfig.enabled) {
+      yield* this.streamWithCodexCli(userContent, finalSystemPrompt);
       return;
     }
 
@@ -2395,6 +2468,15 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         return;
       } catch (e: any) {
         console.warn('[LLMHelper] Natively last-resort fallback failed:', e.message);
+      }
+    }
+
+    if (this.codexCliConfig.enabled && !isMultimodal) {
+      try {
+        yield* this.streamWithCodexCli(userContent, finalSystemPrompt);
+        return;
+      } catch (e: any) {
+        console.warn('[LLMHelper] Codex CLI last-resort fallback failed:', e.message);
       }
     }
 
@@ -3068,8 +3150,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     }
   }
 
-  public getCurrentProvider(): "ollama" | "gemini" | "custom" {
+  public getCurrentProvider(): "ollama" | "gemini" | "custom" | "codex-cli" {
     if (this.customProvider) return "custom";
+    if (this.isCodexCliModel(this.currentModelId)) return "codex-cli";
     return this.useOllama ? "ollama" : "gemini";
   }
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Edit2, AlertCircle, CheckCircle, Save, ChevronDown, Check, RefreshCw, ExternalLink, Loader2 } from 'lucide-react';
-import { STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
+import { CODEX_CLI_MODEL, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
 
@@ -15,6 +15,13 @@ interface ModelOption {
     id: string;
     name: string;
 }
+
+const CODEX_CLI_MODEL_PRESETS: ModelOption[] = [
+    { id: 'gpt-5.5', name: 'ChatGPT 5.5' },
+    { id: 'gpt-5.4', name: 'ChatGPT 5.4' },
+    { id: 'gpt-5.3-codex', name: 'Codex 5.3' },
+    { id: 'gpt-5.3-codex-spark', name: 'Codex Spark 5.3' },
+];
 
 interface ModelSelectProps {
     value: string;
@@ -77,6 +84,39 @@ const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, pla
     );
 };
 
+const CodexCliModelField: React.FC<{
+    label: string;
+    value: string;
+    placeholder: string;
+    onChange: (value: string) => void;
+    onSelect: (value: string) => void;
+    onSave: () => void;
+}> = ({ label, value, placeholder, onChange, onSelect, onSave }) => (
+    <label className="space-y-1">
+        <span className="text-[10px] font-medium text-text-secondary uppercase tracking-wide">{label}</span>
+        <div className="flex gap-2">
+            <input
+                value={value}
+                onChange={e => onChange(e.target.value)}
+                onBlur={onSave}
+                className="min-w-0 flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary font-mono focus:outline-none focus:border-accent-primary"
+                placeholder={placeholder}
+            />
+            <ModelSelect
+                value={value}
+                options={value && !CODEX_CLI_MODEL_PRESETS.some(option => option.id === value)
+                    ? [{ id: value, name: prettifyModelId(value) }, ...CODEX_CLI_MODEL_PRESETS]
+                    : CODEX_CLI_MODEL_PRESETS}
+                onChange={(modelId) => {
+                    onChange(modelId);
+                    onSelect(modelId);
+                }}
+                placeholder="Preset"
+            />
+        </div>
+    </label>
+);
+
 export const AIProvidersSettings: React.FC = () => {
     // --- Standard Providers ---
     const [apiKey, setApiKey] = useState('');
@@ -88,8 +128,6 @@ export const AIProvidersSettings: React.FC = () => {
     const [savedStatus, setSavedStatus] = useState<Record<string, boolean>>({});
     const [savingStatus, setSavingStatus] = useState<Record<string, boolean>>({});
     const [hasStoredKey, setHasStoredKey] = useState<Record<string, boolean>>({});
-    // Fast mode is available with a local Groq key OR via the Natively API (server-side Groq pool)
-    const canUseFastMode = !!(hasStoredKey.groq || hasStoredKey.natively);
     const [testStatus, setTestStatus] = useState<Record<string, 'idle' | 'testing' | 'success' | 'error'>>({});
     const [testError, setTestError] = useState<Record<string, string>>({});
 
@@ -108,10 +146,16 @@ export const AIProvidersSettings: React.FC = () => {
     const [ollamaRestarted, setOllamaRestarted] = useState(false);
     const [isRefreshingOllama, setIsRefreshingOllama] = useState(false);
 
+    // --- Local (Codex CLI) ---
+    const [codexCliConfig, setCodexCliConfig] = useState({ enabled: false, path: 'codex', model: 'gpt-5.4', fastModel: 'gpt-5.3-codex-spark', timeoutMs: 60000 });
+    const [codexCliStatus, setCodexCliStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+    const [codexCliError, setCodexCliError] = useState('');
+
     // --- Default Model ---
     const [defaultModel, setDefaultModel] = useState<string>('gemini-3.1-flash-lite-preview');
     const [fastResponseMode, setFastResponseMode] = useState(false);
     const [credentialsLoaded, setCredentialsLoaded] = useState(false);
+    const canUseFastMode = !!(hasStoredKey.groq || hasStoredKey.natively || codexCliConfig.enabled);
 
     // --- Dynamic Model Discovery ---
     const [preferredModels, setPreferredModels] = useState<Record<string, string>>({});
@@ -146,6 +190,9 @@ export const AIProvidersSettings: React.FC = () => {
                 // Now it's safe to read fast mode — hasStoredKey is already set so
                 // canUseFastMode will be correct when the enforcement effect runs.
                 // @ts-ignore
+                const cliConfig = await window.electronAPI?.getCodexCliConfig?.();
+                if (cliConfig) setCodexCliConfig(cliConfig);
+
                 const fastMode = await window.electronAPI?.getGroqFastTextMode();
                 if (fastMode) setFastResponseMode(fastMode.enabled);
 
@@ -268,6 +315,34 @@ export const AIProvidersSettings: React.FC = () => {
         } catch (e) {
             console.error("Fix failed", e);
             setOllamaStatus('not-found');
+        }
+    };
+
+    const saveCodexCliConfig = async (next = codexCliConfig) => {
+        const normalized = { ...next, timeoutMs: Number(next.timeoutMs) || 60000 };
+        setCodexCliConfig(normalized);
+        const result = await window.electronAPI?.setCodexCliConfig?.(normalized);
+        if (result?.config) setCodexCliConfig(result.config);
+        return result;
+    };
+
+    const handleTestCodexCli = async () => {
+        setCodexCliStatus('testing');
+        setCodexCliError('');
+        try {
+            const saveResult = await saveCodexCliConfig();
+            const configToTest = saveResult?.config || codexCliConfig;
+            const result = await window.electronAPI?.testCodexCli?.(configToTest);
+            if (result?.success) {
+                setCodexCliStatus('success');
+                setTimeout(() => setCodexCliStatus('idle'), 3000);
+            } else {
+                setCodexCliStatus('error');
+                setCodexCliError(result?.error || 'Codex CLI test failed');
+            }
+        } catch (e: any) {
+            setCodexCliStatus('error');
+            setCodexCliError(e.message || 'Codex CLI test failed');
         }
     };
 
@@ -459,6 +534,9 @@ export const AIProvidersSettings: React.FC = () => {
                                     opts.push({ id: pm, name: prettifyModelId(pm) });
                                 }
                             }
+                            if (codexCliConfig.enabled) {
+                                opts.push({ id: CODEX_CLI_MODEL.id, name: CODEX_CLI_MODEL.name });
+                            }
                             customProviders.forEach(p => opts.push({ id: p.id, name: p.name }));
                             ollamaModels.forEach(m => opts.push({ id: `ollama-${m}`, name: `${m} (Local)` }));
 
@@ -478,22 +556,22 @@ export const AIProvidersSettings: React.FC = () => {
                 {/* Fast Response Mode */}
                 <div
                     className={`bg-bg-item-surface rounded-xl p-5 border border-border-subtle flex items-center justify-between ${!canUseFastMode ? 'opacity-50 grayscale' : ''}`}
-                    title={!canUseFastMode ? "Requires a Groq API Key or Natively API to be configured" : ""}
+                    title={!canUseFastMode ? "Requires Groq, Natively API, or Codex CLI to be configured" : ""}
                 >
                     <div>
                         <div className="flex items-center gap-2">
                             <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-0">Fast Response Mode</label>
                             <span className="bg-orange-500/10 text-orange-500 text-[9px] font-bold px-1.5 py-0.5 rounded border border-orange-500/20">NEW</span>
                         </div>
-                        <p className="text-[10px] text-text-secondary mt-0.5">Super fast responses using Groq Llama 3 for text. Multimodal requests still use your Default Model.</p>
+                        <p className="text-[10px] text-text-secondary mt-0.5">Super fast text responses using Codex CLI fast model, Groq, or Natively. Multimodal requests still use your Default Model.</p>
                         {!canUseFastMode && (
-                            <p className="text-[10px] text-orange-500 mt-0.5 font-medium">Requires a Groq API Key or Natively API to be configured.</p>
+                            <p className="text-[10px] text-orange-500 mt-0.5 font-medium">Requires Groq, Natively API, or Codex CLI to be configured.</p>
                         )}
                     </div>
                     <div
                         onClick={async () => {
                             if (!canUseFastMode) {
-                                alert("Please configure a Groq API Key or Natively API first to enable Fast Response Mode.");
+                                alert("Please configure Groq, Natively API, or Codex CLI first to enable Fast Response Mode.");
                                 return;
                             }
                             const newState = !fastResponseMode;
@@ -505,6 +583,99 @@ export const AIProvidersSettings: React.FC = () => {
                         className={`w-11 h-6 rounded-full relative transition-colors ${!canUseFastMode ? 'cursor-not-allowed bg-bg-toggle-switch' : fastResponseMode ? 'bg-orange-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
                     >
                         <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${fastResponseMode ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </div>
+                </div>
+            </div>
+
+            {/* Local (Codex CLI) Provider */}
+            <div className="space-y-5">
+                <div>
+                    <h3 className="text-sm font-bold text-text-primary mb-1">Local Provider (Codex CLI)</h3>
+                    <p className="text-xs text-text-secondary">Route text-only responses through a locally authenticated Codex CLI.</p>
+                </div>
+
+                <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-0">Enable Codex CLI</label>
+                            <p className="text-[10px] text-text-secondary">Adds Codex CLI as a selectable local backend and text fallback.</p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={async () => {
+                                const next = { ...codexCliConfig, enabled: !codexCliConfig.enabled };
+                                await saveCodexCliConfig(next);
+                            }}
+                            className={`w-11 h-6 rounded-full relative transition-colors ${codexCliConfig.enabled ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                        >
+                            <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${codexCliConfig.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <label className="space-y-1">
+                            <span className="text-[10px] font-medium text-text-secondary uppercase tracking-wide">Executable</span>
+                            <input
+                                value={codexCliConfig.path}
+                                onChange={e => setCodexCliConfig(prev => ({ ...prev, path: e.target.value }))}
+                                onBlur={() => saveCodexCliConfig()}
+                                className="w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary font-mono focus:outline-none focus:border-accent-primary"
+                                placeholder="codex"
+                            />
+                        </label>
+                        <label className="space-y-1">
+                            <span className="text-[10px] font-medium text-text-secondary uppercase tracking-wide">Timeout (ms)</span>
+                            <input
+                                type="number"
+                                value={codexCliConfig.timeoutMs}
+                                onChange={e => setCodexCliConfig(prev => ({ ...prev, timeoutMs: Number(e.target.value) }))}
+                                onBlur={() => saveCodexCliConfig()}
+                                className="w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary font-mono focus:outline-none focus:border-accent-primary"
+                                min={1000}
+                            />
+                        </label>
+                        <CodexCliModelField
+                            label="Normal Model"
+                            value={codexCliConfig.model}
+                            placeholder="gpt-5.5"
+                            onChange={(model) => setCodexCliConfig(prev => ({ ...prev, model }))}
+                            onSelect={(model) => saveCodexCliConfig({ ...codexCliConfig, model })}
+                            onSave={() => saveCodexCliConfig()}
+                        />
+                        <CodexCliModelField
+                            label="Fast Model"
+                            value={codexCliConfig.fastModel}
+                            placeholder="gpt-5.3-codex-spark"
+                            onChange={(fastModel) => setCodexCliConfig(prev => ({ ...prev, fastModel }))}
+                            onSelect={(fastModel) => saveCodexCliConfig({ ...codexCliConfig, fastModel })}
+                            onSave={() => saveCodexCliConfig()}
+                        />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="min-h-5">
+                            {codexCliStatus === 'success' && (
+                                <div className="flex items-center gap-2 text-xs text-green-400">
+                                    <CheckCircle size={14} />
+                                    <span>Codex CLI detected</span>
+                                </div>
+                            )}
+                            {codexCliStatus === 'error' && (
+                                <div className="flex items-center gap-2 text-xs text-red-400">
+                                    <AlertCircle size={14} />
+                                    <span>{codexCliError}</span>
+                                </div>
+                            )}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={handleTestCodexCli}
+                            disabled={codexCliStatus === 'testing'}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-bg-input hover:bg-bg-elevated border border-border-subtle rounded-lg text-xs font-medium text-text-primary transition-colors disabled:opacity-60"
+                        >
+                            {codexCliStatus === 'testing' ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                            Test CLI
+                        </button>
                     </div>
                 </div>
             </div>
