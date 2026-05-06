@@ -12,6 +12,7 @@ export interface CodexCliRunOptions {
   prompt: string;
   model: string;
   timeoutMs: number;
+  imagePaths?: string[];
 }
 
 export const DEFAULT_CODEX_CLI_CONFIG: CodexCliConfig = {
@@ -23,8 +24,8 @@ export const DEFAULT_CODEX_CLI_CONFIG: CodexCliConfig = {
 };
 
 export class CodexCliService {
-  public static buildArgs(model: string): string[] {
-    return [
+  public static buildArgs(model: string, imagePaths: string[] = []): string[] {
+    const args = [
       'exec',
       '--json',
       '--color',
@@ -35,6 +36,11 @@ export class CodexCliService {
       '--model',
       model,
     ];
+    for (const imagePath of imagePaths) {
+      if (!imagePath) continue;
+      args.push('--image', imagePath);
+    }
+    return args;
   }
 
   public static normalizeConfig(config: Partial<CodexCliConfig> = {}): CodexCliConfig {
@@ -80,7 +86,7 @@ export class CodexCliService {
   }
 
   public static async *stream(path: string, options: CodexCliRunOptions): AsyncGenerator<string, void, unknown> {
-    const args = this.buildArgs(options.model);
+    const args = this.buildArgs(options.model, options.imagePaths);
     const child = spawn(path, args, { stdio: ['pipe', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
@@ -154,7 +160,7 @@ export class CodexCliService {
 
   private static async collect(path: string, options: CodexCliRunOptions): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
-      const child = spawn(path, this.buildArgs(options.model), { stdio: ['pipe', 'pipe', 'pipe'] });
+      const child = spawn(path, this.buildArgs(options.model, options.imagePaths), { stdio: ['pipe', 'pipe', 'pipe'] });
       let stdout = '';
       let stderr = '';
       let settled = false;

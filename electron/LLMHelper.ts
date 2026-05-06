@@ -295,23 +295,25 @@ export class LLMHelper {
     return systemPrompt ? `${systemPrompt}\n\n${userContent}` : userContent;
   }
 
-  private async generateWithCodexCli(userContent: string, systemPrompt?: string, fastMode = false): Promise<string> {
+  private async generateWithCodexCli(userContent: string, systemPrompt?: string, fastMode = false, imagePaths?: string[]): Promise<string> {
     if (!this.codexCliConfig.enabled) throw new Error('Codex CLI transport is disabled.');
     const model = fastMode ? this.codexCliConfig.fastModel : this.codexCliConfig.model;
     return CodexCliService.run(this.codexCliConfig.path, {
       prompt: this.buildCodexCliPrompt(userContent, systemPrompt),
       model,
       timeoutMs: this.codexCliConfig.timeoutMs,
+      imagePaths,
     });
   }
 
-  private async *streamWithCodexCli(userContent: string, systemPrompt?: string, fastMode = false): AsyncGenerator<string, void, unknown> {
+  private async *streamWithCodexCli(userContent: string, systemPrompt?: string, fastMode = false, imagePaths?: string[]): AsyncGenerator<string, void, unknown> {
     if (!this.codexCliConfig.enabled) throw new Error('Codex CLI transport is disabled.');
     const model = fastMode ? this.codexCliConfig.fastModel : this.codexCliConfig.model;
     yield* CodexCliService.stream(this.codexCliConfig.path, {
       prompt: this.buildCodexCliPrompt(userContent, systemPrompt),
       model,
       timeoutMs: this.codexCliConfig.timeoutMs,
+      imagePaths,
     });
   }
 
@@ -998,8 +1000,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         return await this.callOllama(combinedMessages.gemini, imagePaths?.[0]);
       }
 
-      if (this.isCodexCliModel(this.currentModelId) && !isMultimodal && this.codexCliConfig.enabled) {
-        return await this.generateWithCodexCli(userContent, openaiSystemPrompt);
+      if (this.isCodexCliModel(this.currentModelId) && this.codexCliConfig.enabled) {
+        return await this.generateWithCodexCli(userContent, openaiSystemPrompt, false, imagePaths);
       }
 
       if (this.activeCurlProvider) {
@@ -1070,6 +1072,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         // MULTIMODAL PROVIDER ORDER: [Natively] -> OpenAI -> Gemini Flash -> Claude -> Gemini Pro -> Groq -> Custom/Ollama
         if (this.hasNatively()) {
           providers.push({ name: 'Natively API', execute: () => this.generateWithNatively(userContent, openaiSystemPrompt, imagePaths) });
+        }
+        if (this.codexCliConfig.enabled) {
+          providers.push({ name: `Codex CLI (${this.codexCliConfig.model})`, execute: () => this.generateWithCodexCli(userContent, openaiSystemPrompt, false, imagePaths) });
         }
         if (this.openaiClient) {
           providers.push({ name: `OpenAI (${textOpenAI})`, execute: () => this.generateWithOpenai(userContent, openaiSystemPrompt, imagePaths, textOpenAI) });
@@ -2097,9 +2102,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     const textGroq = this.modelVersionManager.getTextTieredModels(TextModelFamily.GROQ).tier1;
 
     if (isMultimodal) {
-      // MULTIMODAL PROVIDER ORDER: [Natively] -> OpenAI -> Gemini Flash -> Claude -> Gemini Pro -> Groq Scout 4
+      // MULTIMODAL PROVIDER ORDER: [Natively] -> Codex CLI -> OpenAI -> Gemini Flash -> Claude -> Gemini Pro -> Groq Scout 4
       if (this.hasNatively()) {
         providers.push({ name: 'Natively API', execute: () => this.streamWithNatively(userContent, openaiSystemPrompt, imagePaths) });
+      }
+      if (this.codexCliConfig.enabled) {
+        providers.push({ name: `Codex CLI (${this.codexCliConfig.model})`, execute: () => this.streamWithCodexCli(userContent, openaiSystemPrompt, false, imagePaths) });
       }
       if (this.openaiClient) {
         providers.push({ name: `OpenAI (${textOpenAI})`, execute: () => this.streamWithOpenaiMultimodal(userContent, imagePaths!, openaiSystemPrompt, textOpenAI) });
@@ -2345,8 +2353,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       return;
     }
 
-    if (this.isCodexCliModel(this.currentModelId) && !isMultimodal && this.codexCliConfig.enabled) {
-      yield* this.streamWithCodexCli(userContent, finalSystemPrompt);
+    if (this.isCodexCliModel(this.currentModelId) && this.codexCliConfig.enabled) {
+      yield* this.streamWithCodexCli(userContent, finalSystemPrompt, false, imagePaths);
       return;
     }
 
@@ -2472,9 +2480,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       }
     }
 
-    if (this.codexCliConfig.enabled && !isMultimodal) {
+    if (this.codexCliConfig.enabled) {
       try {
-        yield* this.streamWithCodexCli(userContent, finalSystemPrompt);
+        yield* this.streamWithCodexCli(userContent, finalSystemPrompt, false, imagePaths);
         return;
       } catch (e: any) {
         console.warn('[LLMHelper] Codex CLI last-resort fallback failed:', e.message);
