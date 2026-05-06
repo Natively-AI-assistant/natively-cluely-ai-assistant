@@ -45,6 +45,7 @@ import { analytics, detectProviderType } from '../lib/analytics/analytics.servic
 import { useShortcuts } from '../hooks/useShortcuts';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { getOverlayAppearance, OVERLAY_OPACITY_DEFAULT } from '../lib/overlayAppearance';
+import { getCodexCliModelDisplayName } from '../utils/modelUtils';
 
 interface Message {
     id: string;
@@ -2803,6 +2804,8 @@ Provide only the answer, nothing else.`;
                                             <span className="truncate min-w-0 flex-1">
                                                 {(() => {
                                                     const m = currentModel;
+                                                    const codexCliName = getCodexCliModelDisplayName(m);
+                                                    if (codexCliName) return codexCliName;
                                                     if (m.startsWith('ollama-')) return m.replace('ollama-', '');
                                                     if (m === 'gemini-3.1-flash-lite-preview') return 'Gemini 3.1 Flash';
                                                     if (m === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';

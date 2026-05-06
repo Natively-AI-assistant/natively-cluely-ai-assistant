@@ -50,6 +50,15 @@ export const CODEX_CLI_MODEL_PRESETS = [
 
 export const codexCliSelectorId = (modelId: string): string => `codex-cli:${modelId}`;
 
+export const getCodexCliModelDisplayName = (id: string): string | null => {
+    if (id === CODEX_CLI_MODEL.id) return CODEX_CLI_MODEL.name;
+    if (!id.startsWith('codex-cli:')) return null;
+
+    const modelId = id.slice('codex-cli:'.length);
+    const preset = CODEX_CLI_MODEL_PRESETS.find(model => model.id === modelId);
+    return preset?.name || prettifyModelId(modelId);
+};
+
 export const prettifyModelId = (id: string): string => {
     if (!id) return '';
     return id.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
