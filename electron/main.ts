@@ -2491,6 +2491,12 @@ export class AppState {
     this.modelSelectorWindowHelper.setContentProtection(state)
     this.cropperWindowHelper.setContentProtection(state)
 
+    if (process.platform === 'win32') {
+      this.windowHelper.syncOverlayActivationPolicy();
+      this.settingsWindowHelper.syncActivationPolicy();
+      this.modelSelectorWindowHelper.syncActivationPolicy();
+    }
+
     // Persist state via SettingsManager
     SettingsManager.getInstance().set('isUndetectable', state);
 

@@ -48,6 +48,31 @@ export class WindowHelper {
     this.appState = appState
   }
 
+  private isWindowsUndetectable(): boolean {
+    return process.platform === 'win32' && this.appState.getUndetectable();
+  }
+
+  private shouldOverlayBeFocusable(): boolean {
+    return !this.isWindowsUndetectable();
+  }
+
+  private shouldShowOverlayInactive(inactive?: boolean): boolean {
+    return !!inactive || this.isWindowsUndetectable();
+  }
+
+  private shouldFocusOverlay(inactive?: boolean): boolean {
+    return !inactive && this.shouldOverlayBeFocusable();
+  }
+
+  public syncOverlayActivationPolicy(): void {
+    if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
+    this.overlayWindow.setFocusable(this.shouldOverlayBeFocusable());
+  }
+
+  public shouldChildWindowAvoidActivation(): boolean {
+    return this.isWindowsUndetectable() && this.currentWindowMode === 'overlay';
+  }
+
   private getDisplayWorkArea(bounds?: Electron.Rectangle): Electron.Rectangle {
     if (bounds) {
       return screen.getDisplayMatching(bounds).workArea
@@ -287,7 +312,7 @@ export class WindowHelper {
       transparent: true,
       backgroundColor: "#00000000",
       alwaysOnTop: true,
-      focusable: true,
+      focusable: this.shouldOverlayBeFocusable(),
       resizable: false, // Enforce automatic resizing only
       movable: true,
       skipTaskbar: true, // Don't show separately in dock/taskbar
@@ -498,14 +523,19 @@ export class WindowHelper {
       // visible window makes macOS treat the app as having NO active windows.
       // In that state, macOS may stop delivering Carbon/IOKit global hotkey
       // events to the process — silently breaking every globalShortcut binding.
-      // Keeping the window focusable costs nothing: in passthrough mode the
-      // user is in another app and will not accidentally focus the overlay.
+      // Keeping the window focusable costs nothing outside Windows undetectable
+      // mode: in passthrough mode the user is in another app and will not
+      // accidentally focus the overlay.
       this.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+      if (this.isWindowsUndetectable()) {
+        this.overlayWindow.setFocusable(false);
+      }
       console.log('[WindowHelper] Overlay mouse passthrough ON');
     } else {
       this.overlayWindow.setIgnoreMouseEvents(false);
-      // Restore full interactivity when passthrough is turned off.
-      this.overlayWindow.setFocusable(true);
+      // Restore interactivity unless Windows undetectable mode must keep the
+      // HWND non-activating so the foreground app does not receive blur/focus.
+      this.overlayWindow.setFocusable(this.shouldOverlayBeFocusable());
       console.log('[WindowHelper] Overlay mouse passthrough OFF');
     }
   }
@@ -517,6 +547,7 @@ export class WindowHelper {
 
     // Restore opacity in case it was zeroed by hideMainWindow() before a screenshot.
     this.overlayWindow.setOpacity(1);
+    this.syncOverlayActivationPolicy();
 
     // Re-assert z-order on Windows before showing — same DWM demotion risk as
     // switchToOverlay(). Must come before show()/showInactive() so the window
@@ -525,7 +556,7 @@ export class WindowHelper {
       this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
     }
 
-    if (this.appState.getOverlayMousePassthrough()) {
+    if (this.appState.getOverlayMousePassthrough() || this.isWindowsUndetectable()) {
       // In passthrough/stealth mode: appear on screen without stealing OS focus.
       // The underlying app (Zoom, browser, etc.) must keep focus.
       this.overlayWindow.showInactive();
@@ -534,7 +565,7 @@ export class WindowHelper {
       this.overlayWindow.showInactive();
       // Bring to front without a full app-activate (avoids dock bounce on macOS).
       // setAlwaysOnTop is already set at creation; a focus() call alone is safe.
-      this.overlayWindow.focus();
+      if (this.shouldFocusOverlay()) this.overlayWindow.focus();
     }
   }
 
@@ -594,6 +625,8 @@ export class WindowHelper {
 
     // Show Overlay FIRST
     if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+      this.syncOverlayActivationPolicy();
+
       const currentBounds = this.overlayWindow.getBounds();
       const savedBounds = this.overlayBounds
         ? {
@@ -624,8 +657,9 @@ export class WindowHelper {
       // Restore opacity before showing (it may have been zeroed by hideMainWindow).
       if (process.platform === 'win32' && this.contentProtection) {
         // Opacity Shield: Show at 0 opacity first to prevent frame leak
+        const showInactive = this.shouldShowOverlayInactive(inactive);
         this.overlayWindow.setOpacity(0);
-        if (inactive) this.overlayWindow.showInactive(); else this.overlayWindow.show();
+        if (showInactive) this.overlayWindow.showInactive(); else this.overlayWindow.show();
         this.overlayWindow.setContentProtection(true);
         // Small delay to ensure Windows DWM processes the flag before making it opaque
 
@@ -635,7 +669,7 @@ export class WindowHelper {
             this.overlayWindow.setOpacity(1);
             // Re-assert z-order on Windows — DWM can silently demote the HWND after hide/show
             this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
-            if (!inactive) this.overlayWindow.focus();
+            if (this.shouldFocusOverlay(inactive)) this.overlayWindow.focus();
           }
         }, 60);
       } else {
@@ -651,9 +685,10 @@ export class WindowHelper {
         if (process.platform === 'win32') {
           this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
         }
-        if (inactive) this.overlayWindow.showInactive(); else this.overlayWindow.show();
+        const showInactive = this.shouldShowOverlayInactive(inactive);
+        if (showInactive) this.overlayWindow.showInactive(); else this.overlayWindow.show();
         // Only grab focus for explicit user-initiated shows (not shortcut/ghost shows)
-        if (!inactive) this.overlayWindow.focus();
+        if (this.shouldFocusOverlay(inactive)) this.overlayWindow.focus();
       }
       this.isWindowVisible = true;
     }

@@ -34,6 +34,19 @@ export class ModelSelectorWindowHelper {
         this.windowHelper = wh;
     }
 
+    private shouldAvoidActivation(): boolean {
+        return !!this.windowHelper?.shouldChildWindowAvoidActivation();
+    }
+
+    private shouldActivate(requestedActivate: boolean): boolean {
+        return requestedActivate && !this.shouldAvoidActivation();
+    }
+
+    public syncActivationPolicy(): void {
+        if (!this.window || this.window.isDestroyed()) return;
+        this.window.setFocusable(!this.shouldAvoidActivation());
+    }
+
     public getWindow(): BrowserWindow | null {
         return this.window
     }
@@ -50,7 +63,8 @@ export class ModelSelectorWindowHelper {
             return
         }
 
-        const activate = options.activate ?? true;
+        const activate = this.shouldActivate(options.activate ?? true);
+        this.syncActivationPolicy();
 
         // Set parent and align window settings
         const mainWin = this.windowHelper?.getMainWindow();
@@ -140,6 +154,7 @@ export class ModelSelectorWindowHelper {
             backgroundColor: "#00000000",
             show: false,
             skipTaskbar: true,
+            focusable: !this.shouldAvoidActivation(),
             webPreferences: {
                 nodeIntegration: false,
                 contextIsolation: true,
@@ -220,6 +235,7 @@ export class ModelSelectorWindowHelper {
         this.contentProtection = enable;
         if (this.window && !this.window.isDestroyed()) {
             this.window.setContentProtection(enable);
+            this.syncActivationPolicy();
         }
     }
 }

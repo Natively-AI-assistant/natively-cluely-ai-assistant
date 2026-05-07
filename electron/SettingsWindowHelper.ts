@@ -58,6 +58,19 @@ export class SettingsWindowHelper {
         this.windowHelper = wh;
     }
 
+    private shouldAvoidActivation(): boolean {
+        return !!this.windowHelper?.shouldChildWindowAvoidActivation();
+    }
+
+    private shouldActivate(requestedActivate: boolean): boolean {
+        return requestedActivate && !this.shouldAvoidActivation();
+    }
+
+    public syncActivationPolicy(): void {
+        if (!this.settingsWindow || this.settingsWindow.isDestroyed()) return;
+        this.settingsWindow.setFocusable(!this.shouldAvoidActivation());
+    }
+
     public toggleWindow(x?: number, y?: number): void {
         const mainWindow = BrowserWindow.getAllWindows().find(w => !w.isDestroyed() && w !== this.settingsWindow);
         if (mainWindow && x !== undefined && y !== undefined) {
@@ -88,7 +101,8 @@ export class SettingsWindowHelper {
             return
         }
 
-        const activate = options.activate ?? true;
+        const activate = this.shouldActivate(options.activate ?? true);
+        this.syncActivationPolicy();
 
         // Set parent to ensure it stays on top of the correct window
         const mainWin = this.windowHelper?.getMainWindow();
@@ -160,6 +174,7 @@ export class SettingsWindowHelper {
             backgroundColor: "#00000000",
             show: false,
             skipTaskbar: true,
+            focusable: !this.shouldAvoidActivation(),
             webPreferences: {
                 nodeIntegration: false,
                 contextIsolation: true,
@@ -241,6 +256,7 @@ export class SettingsWindowHelper {
 
         if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
             this.settingsWindow.setContentProtection(enable);
+            this.syncActivationPolicy();
         }
     }
 }
