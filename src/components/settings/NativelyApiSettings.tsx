@@ -533,7 +533,7 @@ export const NativelyApiSettings: React.FC = () => {
                             <div className="flex items-center justify-center gap-3.5 mb-5 text-[11.5px] font-medium text-text-primary bg-bg-input px-3.5 py-2 rounded-[8px] border border-border-subtle shadow-[inset_0_1px_rgba(255,255,255,0.02)]">
                                 <div className="flex flex-col items-center gap-1">
                                     <Clock size={14} strokeWidth={2} className="text-blue-500" />
-                                    <span>30 min</span>
+                                    <span>10 min</span>
                                 </div>
                                 <div className="w-px h-5 bg-border-subtle/80" />
                                 <div className="flex flex-col items-center gap-1">

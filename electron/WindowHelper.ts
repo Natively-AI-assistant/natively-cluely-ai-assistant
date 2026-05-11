@@ -292,12 +292,6 @@ export class WindowHelper {
       movable: true,
       skipTaskbar: true, // Don't show separately in dock/taskbar
       hasShadow: false, // Prevent shadow from adding perceived size/artifacts
-      // macOS NSPanel + nonactivating: lets the overlay become the key window
-      // (and receive keystrokes for the chat input) without activating Natively
-      // in the dock / menu bar / screen-share, so the user's foreground app
-      // stays "in front." Required for the chat:focusInput stealth-typing path.
-      // Windows/Linux fall back to a regular focusable window.
-      ...(isMac ? { type: 'panel' as const } : {}),
     }
 
     this.overlayWindow = new BrowserWindow(overlaySettings)

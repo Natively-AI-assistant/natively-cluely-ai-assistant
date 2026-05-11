@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import {
     Github, Twitter, Shield, Cpu, Database,
-    Heart, Linkedin, Instagram, Mail, MicOff, Star, Bug, Globe, Sparkles, Zap, Camera, LayoutGrid, User, Volume2, Activity, MessageSquare, Link, Smartphone, Calendar, ListTodo, Users, WifiOff
+    Heart, Linkedin, Instagram, Mail, MicOff, Star, Bug, Globe, Sparkles, Zap, Camera, LayoutGrid, User
 } from 'lucide-react';
 import evinProfile from '../assets/evin.png';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
@@ -64,17 +64,17 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
 
             {/* What's New Section */}
             <div>
-                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">What's New in v2.6</h4>
+                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">What's New in v2.5</h4>
                 <div className="bg-bg-item-surface rounded-xl border border-border-subtle overflow-hidden">
                     <div className="p-3 border-b border-border-subtle bg-bg-card/50">
                         <div className="flex items-start gap-4">
                             <div className="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400 shrink-0">
-                                <Smartphone size={20} />
+                                <LayoutGrid size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Phone Link Integration</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">Modes Manager</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Connect your iOS or Android device to seamlessly use it as a wireless remote microphone or companion screen for your meeting notes.
+                                    Seven specialized AI personas — Interview, Sales, Recruiting, Team Meet, Lecture, Technical, and General. Each mode injects a tailored system prompt, reference files, and smart note sections into every response.
                                 </p>
                             </div>
                         </div>
@@ -83,26 +83,12 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                     <div className="p-3 border-b border-border-subtle bg-bg-card/50">
                         <div className="flex items-start gap-4">
                             <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-400 shrink-0">
-                                <Calendar size={20} />
+                                <User size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Auto-Calendar Sync</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">Custom Context in Profile Intelligence</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Natively now securely connects to Google Calendar and Outlook to automatically pull context and prepare for your upcoming meetings.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="p-3 border-b border-border-subtle bg-bg-card/50">
-                        <div className="flex items-start gap-4">
-                            <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400 shrink-0">
-                                <ListTodo size={20} />
-                            </div>
-                            <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Smart Task Sync</h5>
-                                <p className="text-xs text-text-secondary leading-relaxed">
-                                    Action items are now auto-extracted with extreme precision and can be instantly exported to Jira, Linear, or Asana boards.
+                                    A free-form textarea in Profile Intelligence lets you inject any personal context — sales stats, product notes, LeetCode patterns, preferences — into every AI call as a structured block. Auto-saves as you type.
                                 </p>
                             </div>
                         </div>
@@ -111,12 +97,12 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                     <div className="p-3 border-b border-border-subtle bg-bg-card/50">
                         <div className="flex items-start gap-4">
                             <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400 shrink-0">
-                                <Users size={20} />
+                                <Shield size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Speaker Identification</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">Real-Time Pro License Sync</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Advanced real-time speaker diarization automatically tags individual speakers by name throughout the meeting transcript.
+                                    Pro feature gates (Modes, Profile Intelligence) now update instantly when you activate or deactivate a license — no restart needed. Active mode is automatically cleared on license loss.
                                 </p>
                             </div>
                         </div>
@@ -124,13 +110,13 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
 
                     <div className="p-3 bg-bg-card/50">
                         <div className="flex items-start gap-4">
-                            <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-400 shrink-0">
-                                <WifiOff size={20} />
+                            <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400 shrink-0">
+                                <Zap size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Expanded Offline Mode</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">STT Stability & Resilience</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Now featuring 100% offline transcription and intelligent note generation using specialized, lightning-fast on-device SLMs.
+                                    Deepgram reconnect storms are now prevented via exponential backoff and connection staggering. Server-side key pooling supports up to 6 Deepgram and ElevenLabs keys with automatic rotation on failure.
                                 </p>
                             </div>
                         </div>

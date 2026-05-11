@@ -112,15 +112,17 @@ export class CropperWindowHelper {
                 return;
             }
 
+            const screenBounds = this.toScreenBounds(bounds);
+
             // Validate input data for security
-            if (!this.validateBounds(bounds)) {
-                console.error('[CropperWindowHelper] Invalid bounds received:', bounds);
+            if (!this.validateBounds(screenBounds)) {
+                console.error('[CropperWindowHelper] Invalid bounds received:', { local: bounds, screen: screenBounds });
                 this.rejectCurrentSelection(null);
                 this.hideOrClose();
                 return;
             }
 
-            this.resolveCurrentSelection(bounds);
+            this.resolveCurrentSelection(screenBounds);
             this.hideOrClose();
         };
 
@@ -143,6 +145,33 @@ export class CropperWindowHelper {
             }
         };
         app.on('before-quit', this.beforeQuitHandler);
+    }
+
+    /**
+     * Renderer mouse coordinates are local to the transparent cropper window.
+     * Convert them into Electron's virtual-screen coordinate space before
+     * validation/capture, otherwise monitors left/above the primary get rejected
+     * or cropped from the wrong display.
+     */
+    private toScreenBounds(bounds: Electron.Rectangle): Electron.Rectangle {
+        const rounded: Electron.Rectangle = {
+            x: Math.round(bounds.x),
+            y: Math.round(bounds.y),
+            width: Math.round(bounds.width),
+            height: Math.round(bounds.height)
+        };
+
+        if (!this.cropperWindow || this.cropperWindow.isDestroyed()) {
+            return rounded;
+        }
+
+        const windowBounds = this.cropperWindow.getBounds();
+        return {
+            x: windowBounds.x + rounded.x,
+            y: windowBounds.y + rounded.y,
+            width: rounded.width,
+            height: rounded.height
+        };
     }
 
     /**
@@ -332,8 +361,14 @@ export class CropperWindowHelper {
                 console.log(`[CropperWindowHelper] Cursor at ${JSON.stringify(cursorPosition)}, display bounds: ${targetDisplay ? JSON.stringify(targetDisplay.bounds) : 'unknown'}`);
                 console.log(`[CropperWindowHelper] HUD position: ${JSON.stringify(hudPosition)}`);
                 
-                // Send reset with HUD position
-                this.cropperWindow.webContents.send('reset-cropper', { hudPosition });
+                const cropperBounds = this.cropperWindow.getBounds();
+                const localHudPosition = {
+                    x: hudPosition.x - cropperBounds.x,
+                    y: hudPosition.y - cropperBounds.y
+                };
+
+                // Send reset with cropper-window-local HUD position
+                this.cropperWindow.webContents.send('reset-cropper', { hudPosition: localHudPosition });
                 this.applyOpacityShield();
             } else {
                 // Window doesn't exist yet — createWindow will call applyOpacityShield

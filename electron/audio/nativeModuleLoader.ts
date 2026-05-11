@@ -178,67 +178,50 @@ export function loadNativeModule(): NativeModule | null {
     // Lazily import app to avoid "Cannot use require of electron module" errors
     // when this module is accidentally imported in a renderer or worker context.
     let appPath: string;
-    let isDev = false;
-    let verboseLogging = false;
     try {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const { app } = require('electron') as typeof import('electron');
         appPath = app.getAppPath();
-        // Match the isDev predicate used in WindowHelper.ts: BOTH
-        // NODE_ENV=development AND !app.isPackaged are required.
-        isDev = process.env.NODE_ENV === 'development' && !app.isPackaged;
     } catch (e) {
         console.error('[nativeModuleLoader] app.getAppPath() not available:', e);
         cached = null;
         return null;
     }
 
-    // Honor the verboseLogging setting when available. SettingsManager throws
-    // if accessed before app.whenReady() — wrap in a try/catch so this loader
-    // remains safe to invoke during early boot.
-    try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const { SettingsManager } = require('../services/SettingsManager');
-        verboseLogging = !!SettingsManager.getInstance().get('verboseLogging');
-    } catch {
-        // Settings unavailable — default to quiet logging.
-    }
-
     const binary = getNativeBinaryName();
 
-    const packagedPath = process.resourcesPath
-        ? path.join(process.resourcesPath, 'app.asar.unpacked', 'native-module', binary)
-        : null;
-    const devPath = path.join(appPath, 'native-module', binary);
-    const devFallbackPath = path.join(appPath, '..', 'native-module', binary);
+    const candidates: string[] = [];
 
-    // In dev, the packaged path never exists; trying it first produces a
-    // scary-looking "Cannot find module" + Require stack on every boot.
-    // Order the dev paths first when running unpacked so the happy path
-    // logs nothing alarming. In packaged builds the asar.unpacked path
-    // MUST be tried first — see the comment block above on why.
-    const candidates: string[] = isDev
-        ? [devPath, devFallbackPath, ...(packagedPath ? [packagedPath] : [])]
-        : [...(packagedPath ? [packagedPath] : []), devPath, devFallbackPath];
+    // 1. Production/electron:dev — app.asar.unpacked via process.resourcesPath.
+    //    NOTE: process.resourcesPath is set in BOTH packaged apps AND when
+    //    running `npm run electron:dev` (it points to the Electron binary's
+    //    resources dir). The path below won't exist in electron:dev so this
+    //    candidate simply fails and we fall through to #2. That is correct
+    //    behavior — the warn log is expected and harmless.
+    if (process.resourcesPath) {
+        candidates.push(
+            path.join(process.resourcesPath, 'app.asar.unpacked', 'native-module', binary)
+        );
+    }
+
+    // 2. Development — app.getAppPath() returns the project root directly
+    candidates.push(path.join(appPath, 'native-module', binary));
+
+    // 3. Development fallback — one level up if launched from a subdirectory
+    candidates.push(path.join(appPath, '..', 'native-module', binary));
 
     for (const filePath of candidates) {
         try {
             const mod = require(filePath);
             validateNativeModule(mod);
             cached = mod;
-            if (verboseLogging) {
-                console.log(`[nativeModuleLoader] Loaded ${binary} from: ${filePath}`);
-            }
+            console.log(`[nativeModuleLoader] Loaded ${binary} from: ${filePath}`);
             return cached;
         } catch (err: unknown) {
-            // First-attempt failures are expected in dev (packaged path missing)
-            // and harmless — only log a one-liner at debug level. The final
-            // "failed to load from all paths" error below still fires loudly
-            // if every candidate fails.
+            // Log per-path failure so developers can diagnose ABI mismatches,
+            // missing builds, or wrong paths — not just a generic "failed" message.
             const msg = err instanceof Error ? err.message : String(err);
-            if (verboseLogging) {
-                console.warn(`[nativeModuleLoader] Could not load from ${filePath}: ${msg}`);
-            }
+            console.warn(`[nativeModuleLoader] Could not load from ${filePath}: ${msg}`);
         }
     }
 

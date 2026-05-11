@@ -1,3 +1,10 @@
+export type SkillSummary = {
+  id: string
+  name: string
+  description: string
+  source: 'userData' | 'builtin'
+}
+
 export interface ElectronAPI {
   updateContentDimensions: (dimensions: {
     width: number
@@ -148,7 +155,7 @@ export interface ElectronAPI {
 
   // Intelligence Mode IPC
   generateAssist: () => Promise<{ insight: string | null }>
-  generateWhatToSay: (question?: string, imagePaths?: string[]) => Promise<{ answer: string | null; question?: string; error?: string }>
+  generateWhatToSay: (question?: string, imagePaths?: string[], options?: { skillId?: string }) => Promise<{ answer: string | null; question?: string; error?: string; skillName?: string }>
   generateClarify: () => Promise<{ clarification: string | null }>
   generateCodeHint: (imagePaths?: string[], problemStatement?: string) => Promise<{ hint: string | null }>
   generateBrainstorm: (imagePaths?: string[], problemStatement?: string) => Promise<{ script: string | null }>
@@ -216,10 +223,16 @@ export interface ElectronAPI {
   onSessionReset: (callback: () => void) => () => void;
 
   // Streaming listeners
-  streamGeminiChat: (message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean }) => Promise<void>
+  streamGeminiChat: (message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean, skipModeInjection?: boolean, skillId?: string }) => Promise<void>
   onGeminiStreamToken: (callback: (token: string) => void) => () => void
   onGeminiStreamDone: (callback: () => void) => () => void
   onGeminiStreamError: (callback: (error: string) => void) => () => void;
+
+  // Skills
+  skillsList: () => Promise<SkillSummary[]>
+  skillsGet: (id: string) => Promise<(SkillSummary & { instructions: string }) | null>
+  skillsRefresh: () => Promise<SkillSummary[]>
+  skillsOpenFolder: () => Promise<{ success: boolean; path: string; error?: string }>
 
   // Model Management
   getDefaultModel: () => Promise<{ model: string }>;

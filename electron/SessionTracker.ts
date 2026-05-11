@@ -91,6 +91,17 @@ export class SessionTracker {
         this.currentMeetingMetadata = metadata;
     }
 
+    public beginSession(metadata?: any): void {
+        this.reset();
+        if (metadata && (metadata.title || metadata.calendarEventId || metadata.source)) {
+            this.currentMeetingMetadata = {
+                title: metadata.title,
+                calendarEventId: metadata.calendarEventId,
+                source: metadata.source,
+            };
+        }
+    }
+
     public getMeetingMetadata() {
         return this.currentMeetingMetadata;
     }
@@ -158,6 +169,7 @@ export class SessionTracker {
         this.codingQuestionSource = null;
         this.codingQuestionSetAt = null;
         this.recentInterviewerBuffer = [];
+        this.currentMeetingMetadata = null;
     }
 
     /**

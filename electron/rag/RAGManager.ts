@@ -312,14 +312,6 @@ export class RAGManager {
     }
 
     /**
-     * Check if JIT indexing has produced at least one queryable (embedded) chunk.
-     * Prevents wasted queryMeeting() calls that immediately throw NO_MEETING_EMBEDDINGS.
-     */
-    hasLiveChunks(): boolean {
-        return this.liveIndexer.hasIndexedChunks();
-    }
-
-    /**
      * Delete RAG data for a meeting
      */
     deleteMeetingData(meetingId: string): void {

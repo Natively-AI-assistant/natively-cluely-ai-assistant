@@ -613,7 +613,7 @@ export class ScreenshotHelper {
         if (process.platform === 'darwin') {
           await this.captureWithDesktopCapturer(screenshotPath, undefined, preferredDisplay);
         } else if (process.platform === 'win32') {
-          await this.captureWithDesktopCapturer(screenshotPath);
+          await this.captureWithDesktopCapturer(screenshotPath, undefined, preferredDisplay);
         } else {
           await shellExecAsync(this.getScreenshotCommand(screenshotPath, false))
         }
@@ -636,7 +636,7 @@ export class ScreenshotHelper {
         if (process.platform === 'darwin') {
           await this.captureWithDesktopCapturer(screenshotPath, undefined, preferredDisplay);
         } else if (process.platform === 'win32') {
-          await this.captureWithDesktopCapturer(screenshotPath);
+          await this.captureWithDesktopCapturer(screenshotPath, undefined, preferredDisplay);
         } else {
           await shellExecAsync(this.getScreenshotCommand(screenshotPath, false))
         }

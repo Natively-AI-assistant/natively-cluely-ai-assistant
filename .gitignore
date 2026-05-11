@@ -235,13 +235,3 @@ scratch_clean.js
 scratch_clean2.js
 scratch_extract.js
 scratch_svg.html
-.agent
-.agents
-.claude
-.codex
-diff_settings.txt
-PERF_AUDIT.md
-refactor_profile.py
-refactor.js
-skills-lock.json
-windowswork.md

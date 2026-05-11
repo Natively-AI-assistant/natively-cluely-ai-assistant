@@ -5,6 +5,12 @@ import { estimateTokens } from "./modelCapabilities";
 import { TemporalContext } from "./TemporalContextBuilder";
 import { IntentResult } from "./IntentClassifier";
 
+export interface ActiveSkillContext {
+    id: string;
+    name: string;
+    promptBlock: string;
+}
+
 export class WhatToAnswerLLM {
     private llmHelper: LLMHelper;
 
@@ -25,7 +31,8 @@ export class WhatToAnswerLLM {
         cleanedTranscript: string,
         temporalContext?: TemporalContext,
         intentResult?: IntentResult,
-        imagePaths?: string[]
+        imagePaths?: string[],
+        activeSkill?: ActiveSkillContext
     ): AsyncGenerator<string> {
         try {
             // Build a rich message context
@@ -56,9 +63,12 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 ? `${extraContext}\n\nCONVERSATION:\n${workingTranscript}`
                 : workingTranscript;
 
-            const promptOverride = this.llmHelper.getPromptTier() === 'tiny' ? TINY_WHAT_TO_ANSWER_PROMPT : UNIVERSAL_WHAT_TO_ANSWER_PROMPT;
+            const basePrompt = this.llmHelper.getPromptTier() === 'tiny' ? TINY_WHAT_TO_ANSWER_PROMPT : UNIVERSAL_WHAT_TO_ANSWER_PROMPT;
+            const promptOverride = activeSkill
+                ? `${basePrompt}\n\n## ACTIVE SKILL\n${activeSkill.promptBlock}`
+                : basePrompt;
 
-            yield* this.llmHelper.streamChat(fullMessage, imagePaths, undefined, promptOverride, false, true);
+            yield* this.llmHelper.streamChat(fullMessage, imagePaths, undefined, promptOverride, !!activeSkill, true);
 
         } catch (error) {
             console.error("[WhatToAnswerLLM] Stream failed:", error);

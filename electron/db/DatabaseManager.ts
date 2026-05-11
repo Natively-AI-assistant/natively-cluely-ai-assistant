@@ -704,7 +704,7 @@ export class DatabaseManager {
     }
 
     public addReferenceFile(file: { id: string; modeId: string; fileName: string; content: string }): void {
-        if (!this.db) throw new Error('Database not initialized');
+        if (!this.db) return;
         try {
             this.db.prepare(`
                 INSERT INTO mode_reference_files (id, mode_id, file_name, content)
@@ -712,7 +712,6 @@ export class DatabaseManager {
             `).run(file.id, file.modeId, file.fileName, file.content);
         } catch (e) {
             console.error('[DatabaseManager] addReferenceFile failed:', e);
-            throw e;
         }
     }
 
@@ -983,6 +982,8 @@ export class DatabaseManager {
             INSERT INTO ai_interactions (meeting_id, type, timestamp, user_query, ai_response, metadata_json)
             VALUES (?, ?, ?, ?, ?, ?)
         `);
+        const deleteTranscripts = this.db.prepare('DELETE FROM transcripts WHERE meeting_id = ?');
+        const deleteInteractions = this.db.prepare('DELETE FROM ai_interactions WHERE meeting_id = ?');
 
         const summaryJson = JSON.stringify({
             legacySummary: meeting.summary,
@@ -1005,6 +1006,7 @@ export class DatabaseManager {
 
             // 2. Insert Transcript
             if (meeting.transcript) {
+                deleteTranscripts.run(meeting.id);
                 for (const segment of meeting.transcript) {
                     insertTranscript.run(
                         meeting.id,
@@ -1017,6 +1019,7 @@ export class DatabaseManager {
 
             // 3. Insert Interactions
             if (meeting.usage) {
+                deleteInteractions.run(meeting.id);
                 for (const usage of meeting.usage) {
                     let metadata = null;
                     if (usage.items) {

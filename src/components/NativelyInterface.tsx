@@ -27,7 +27,8 @@ import {
     Code,
     Copy,
     Check,
-    PointerOff
+    PointerOff,
+    Info
 } from 'lucide-react';
 import { motion, AnimatePresence, useMotionValue, useTransform, animate } from 'framer-motion';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -56,6 +57,13 @@ interface Message {
     screenshotPreview?: string;
     isCode?: boolean;
     intent?: string;
+    skillName?: string;
+    runInfo?: {
+        action: string;
+        model: string;
+        provider?: string;
+        skills: string[];
+    };
     isNegotiationCoaching?: boolean;
     negotiationCoachingData?: {
         tacticalNote: string;
@@ -67,6 +75,26 @@ interface Message {
         currency: string;
     };
 }
+
+interface SkillSummary {
+    id: string;
+    name: string;
+    description: string;
+    source: 'userData' | 'builtin';
+}
+
+const normalizeSkillLookup = (value: string) =>
+    value.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+
+const parseSkillInvocationToken = (value: string) => {
+    const match = value.match(/^\s*([$\/])([A-Za-z0-9._-]+)(?:\s+([\s\S]*)|$)/);
+    if (!match) return null;
+    return {
+        marker: match[1],
+        token: match[2],
+        prompt: match[3] ?? '',
+    };
+};
 
 interface NativelyInterfaceProps {
     onEndMeeting?: () => void;
@@ -197,6 +225,12 @@ const MessageRow = React.memo(function MessageRow({
                             {msg.isStreaming && <span className="w-1 h-1 bg-green-500 rounded-full animate-pulse" />}
                         </div>
                     )}
+                    {msg.role === 'user' && msg.skillName && (
+                        <div className={`flex items-center gap-1 text-[10px] opacity-80 mb-1 border-b pb-1 ${isLightTheme ? 'border-black/10' : 'border-white/10'}`}>
+                            <Sparkles className="w-2.5 h-2.5" />
+                            <span>Skill: {msg.skillName}</span>
+                        </div>
+                    )}
                     {msg.role === 'user' && msg.hasScreenshot && (
                         <div className={`flex items-center gap-1 text-[10px] opacity-70 mb-1 border-b pb-1 ${isLightTheme ? 'border-black/10' : 'border-white/10'}`}>
                             <Image className="w-2.5 h-2.5" />
@@ -212,6 +246,36 @@ const MessageRow = React.memo(function MessageRow({
                         >
                             <Copy className="w-3.5 h-3.5" />
                         </button>
+                    )}
+                    {msg.role === 'system' && msg.runInfo && (
+                        <div className={`absolute top-2 ${msg.isStreaming ? 'right-2' : 'right-9'} z-20 group/info`}>
+                            <button
+                                type="button"
+                                className="p-1.5 rounded-md opacity-70 group-hover:opacity-100 transition-opacity overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive"
+                                aria-label="Response details"
+                            >
+                                <Info className="w-3.5 h-3.5" />
+                            </button>
+                            <div className={`
+                                pointer-events-none absolute right-0 top-full mt-2 w-[230px]
+                                rounded-lg border px-3 py-2 text-[11px] leading-relaxed shadow-xl
+                                opacity-0 translate-y-1 group-hover/info:opacity-100 group-hover/info:translate-y-0
+                                transition-all duration-150
+                                ${isLightTheme ? 'bg-white/95 border-black/10 text-slate-700' : 'bg-zinc-950/95 border-white/10 text-zinc-200'}
+                            `}>
+                                <div className="font-semibold mb-1 overlay-text-primary">Response details</div>
+                                <div className="grid grid-cols-[48px_minmax(0,1fr)] gap-x-2 gap-y-1">
+                                    <span className="overlay-text-muted">Action</span>
+                                    <span className="truncate">{msg.runInfo.action}</span>
+                                    <span className="overlay-text-muted">Model</span>
+                                    <span className="truncate">{msg.runInfo.model}</span>
+                                    <span className="overlay-text-muted">Provider</span>
+                                    <span className="truncate">{msg.runInfo.provider || 'Auto'}</span>
+                                    <span className="overlay-text-muted">Skills</span>
+                                    <span className="truncate">{msg.runInfo.skills.length > 0 ? msg.runInfo.skills.join(', ') : 'None'}</span>
+                                </div>
+                            </div>
+                        </div>
                     )}
                     {renderMessageText(msg)}
                 </div>
@@ -340,6 +404,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
 
     // Latent Context State (Screenshots attached but not sent)
     const [attachedContext, setAttachedContext] = useState<Array<{ path: string, preview: string }>>([]);
+    const [skills, setSkills] = useState<SkillSummary[]>([]);
+    const [selectedSkill, setSelectedSkill] = useState<SkillSummary | null>(null);
+    const [isSkillsOpen, setIsSkillsOpen] = useState(false);
+    const skillsMenuRef = useRef<HTMLDivElement>(null);
 
     // Settings State with Persistence
     const [isUndetectable, setIsUndetectable] = useState(false);
@@ -366,6 +434,38 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     // Model Selection State
     const [currentModel, setCurrentModel] = useState<string>('gemini-3-flash-preview');
 
+    const getModelDisplayName = useCallback((model: string) => {
+        const codexCliName = getCodexCliModelDisplayName(model);
+        if (codexCliName) return codexCliName;
+        if (model.startsWith('ollama-')) return model.replace('ollama-', '');
+        if (model === 'gemini-3.1-flash-lite-preview') return 'Gemini 3.1 Flash';
+        if (model === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
+        if (model === 'llama-3.3-70b-versatile') return 'Groq Llama 3.3';
+        if (model === 'gpt-5.4') return 'GPT 5.4';
+        if (model === 'claude-sonnet-4-6') return 'Sonnet 4.6';
+        return model;
+    }, []);
+
+    const createRunInfo = useCallback(async (action: string, skill?: SkillSummary | null): Promise<NonNullable<Message['runInfo']>> => {
+        try {
+            const config = await window.electronAPI?.getCurrentLlmConfig?.();
+            const model = config?.model || currentModel;
+            return {
+                action,
+                model: getModelDisplayName(model),
+                provider: config?.provider || detectProviderType(model),
+                skills: skill ? [skill.name] : [],
+            };
+        } catch {
+            return {
+                action,
+                model: getModelDisplayName(currentModel),
+                provider: detectProviderType(currentModel),
+                skills: skill ? [skill.name] : [],
+            };
+        }
+    }, [currentModel, getModelDisplayName]);
+
     // Dynamic Action Button Mode (Recap vs Brainstorm)
     const [actionButtonMode, setActionButtonMode] = useState<'recap' | 'brainstorm'>('recap');
 
@@ -381,6 +481,69 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         });
         return () => { unsubscribe?.(); };
     }, []);
+
+    const refreshSkills = useCallback(async () => {
+        try {
+            const list = await window.electronAPI?.skillsList?.();
+            setSkills(Array.isArray(list) ? list : []);
+        } catch (error) {
+            console.error('[NativelyInterface] Failed to load skills:', error);
+            setSkills([]);
+        }
+    }, []);
+
+    useEffect(() => {
+        refreshSkills();
+    }, [refreshSkills]);
+
+    useEffect(() => {
+        if (!isSkillsOpen) return;
+
+        const handlePointerDown = (event: MouseEvent) => {
+            const target = event.target as Node;
+            if (skillsMenuRef.current && !skillsMenuRef.current.contains(target)) {
+                setIsSkillsOpen(false);
+            }
+        };
+
+        window.addEventListener('mousedown', handlePointerDown);
+        return () => window.removeEventListener('mousedown', handlePointerDown);
+    }, [isSkillsOpen]);
+
+    const findSkillByToken = useCallback((token: string): SkillSummary | null => {
+        const wanted = normalizeSkillLookup(token);
+        if (!wanted) return null;
+        return skills.find(skill =>
+            skill.id === wanted ||
+            normalizeSkillLookup(skill.name) === wanted
+        ) ?? null;
+    }, [skills]);
+
+    const skillAutocomplete = useMemo(() => {
+        const match = inputValue.match(/^\s*([$\/])([A-Za-z0-9._-]*)$/);
+        if (!match) return null;
+        const marker = match[1];
+        const prefix = normalizeSkillLookup(match[2] ?? '');
+        const matches = skills
+            .filter(skill => {
+                if (!prefix) return true;
+                return skill.id.startsWith(prefix) || normalizeSkillLookup(skill.name).startsWith(prefix);
+            })
+            .slice(0, 6);
+        if (matches.length === 0) return null;
+        return { marker, matches };
+    }, [inputValue, skills]);
+
+    const resolveSkillSubmission = useCallback((rawInput: string): { prompt: string; skill: SkillSummary | null } => {
+        const typed = parseSkillInvocationToken(rawInput);
+        if (typed) {
+            const invokedSkill = findSkillByToken(typed.token);
+            if (invokedSkill) {
+                return { prompt: typed.prompt, skill: invokedSkill };
+            }
+        }
+        return { prompt: rawInput, skill: selectedSkill };
+    }, [findSkillByToken, selectedSkill]);
 
     const codeTheme = isLightTheme ? oneLight : vscDarkPlus;
     const codeLineNumberColor = isLightTheme ? 'rgba(15,23,42,0.35)' : 'rgba(255,255,255,0.2)';
@@ -1375,6 +1538,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         setIsExpanded(true);
         setIsProcessing(true);
         analytics.trackCommandExecuted('what_to_say');
+        const activeSkill = selectedSkill;
+        const runInfo = await createRunInfo('What to answer', activeSkill);
 
         // Capture and clear attached image context.
         // Also merge in any screenshot from the capture-and-process shortcut that
@@ -1393,7 +1558,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                 role: 'user',
                 text: 'What should I say about this?',
                 hasScreenshot: true,
-                screenshotPreview: currentAttachments[0].preview
+                screenshotPreview: currentAttachments[0].preview,
+                skillName: activeSkill?.name
             }]);
             // Scroll to bottom when user sends message
             setTimeout(() => {
@@ -1401,15 +1567,66 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
             }, 50);
         }
 
+        if (activeSkill) {
+            setSelectedSkill(null);
+            setIsSkillsOpen(false);
+        }
+
+        setMessages(prev => [...prev, {
+            id: Date.now().toString(),
+            role: 'system',
+            text: '',
+            intent: 'what_to_answer',
+            isStreaming: true,
+            runInfo
+        }]);
+
         try {
             // Pass imagePath if attached
-            await window.electronAPI.generateWhatToSay(undefined, currentAttachments.length > 0 ? currentAttachments.map(s => s.path) : undefined);
+            const result = await window.electronAPI.generateWhatToSay(
+                undefined,
+                currentAttachments.length > 0 ? currentAttachments.map(s => s.path) : undefined,
+                activeSkill ? { skillId: activeSkill.id } : undefined
+            );
+            if (result?.error) {
+                setMessages(prev => {
+                    const errorMessage: Message = {
+                        id: Date.now().toString(),
+                        role: 'system',
+                        text: `Error: ${result.error}`,
+                        runInfo
+                    };
+                    const lastMsg = prev[prev.length - 1];
+                    if (lastMsg?.isStreaming && lastMsg.intent === 'what_to_answer' && !lastMsg.text) {
+                        return prev.slice(0, -1).concat(errorMessage);
+                    }
+                    return [...prev, errorMessage];
+                });
+                return;
+            }
+            if (!result?.answer) {
+                setMessages(prev => {
+                    const lastMsg = prev[prev.length - 1];
+                    if (lastMsg?.isStreaming && lastMsg.intent === 'what_to_answer' && !lastMsg.text) {
+                        return prev.slice(0, -1);
+                    }
+                    return prev;
+                });
+            }
         } catch (err) {
-            setMessages(prev => [...prev, {
-                id: Date.now().toString(),
-                role: 'system',
-                text: `Error: ${err}`
-            }]);
+            setMessages(prev => {
+                const errorMessage: Message = {
+                    id: Date.now().toString(),
+                    role: 'system',
+                    text: `Error: ${err}`,
+                    runInfo
+                };
+                const lastMsg = prev[prev.length - 1];
+                if (lastMsg?.isStreaming && lastMsg.intent === 'what_to_answer' && !lastMsg.text) {
+                    return prev.slice(0, -1).concat(errorMessage);
+                }
+                return [...prev, errorMessage];
+            });
         } finally {
             setIsProcessing(false);
         }
@@ -1839,21 +2056,28 @@ Provide only the answer, nothing else.`;
     };
 
     const handleManualSubmit = async () => {
-        if (!inputValue.trim() && attachedContext.length === 0) return;
-
-        const userText = inputValue;
         const currentAttachments = attachedContext;
+        const resolved = resolveSkillSubmission(inputValue);
+        const activeSkill = resolved.skill;
+        const userText = resolved.prompt.trim();
+        const messageText = userText || (currentAttachments.length > 0 ? 'Analyze this screenshot' : '');
+
+        if (!messageText && currentAttachments.length === 0) return;
+        const runInfo = await createRunInfo('Manual chat', activeSkill);
 
         // Clear inputs immediately
         setInputValue('');
         setAttachedContext([]);
+        setSelectedSkill(null);
+        setIsSkillsOpen(false);
 
         setMessages(prev => [...prev, {
             id: Date.now().toString(),
             role: 'user',
-            text: userText || (currentAttachments.length > 0 ? 'Analyze this screenshot' : ''),
+            text: messageText,
             hasScreenshot: currentAttachments.length > 0,
-            screenshotPreview: currentAttachments[0]?.preview
+            screenshotPreview: currentAttachments[0]?.preview,
+            skillName: activeSkill?.name
         }]);
 
         // Scroll to bottom when user sends message
@@ -1866,7 +2090,8 @@ Provide only the answer, nothing else.`;
             id: Date.now().toString(),
             role: 'system',
             text: '',
-            isStreaming: true
+            isStreaming: true,
+            runInfo
         }]);
 
         setIsExpanded(true);
@@ -1874,8 +2099,8 @@ Provide only the answer, nothing else.`;
 
         try {
             // JIT RAG pre-flight: try to use indexed meeting context first
-            if (currentAttachments.length === 0) {
-                const ragResult = await window.electronAPI.ragQueryLive?.(userText || '');
+            if (!activeSkill && currentAttachments.length === 0) {
+                const ragResult = await window.electronAPI.ragQueryLive?.(messageText);
                 if (ragResult?.success) {
                     // JIT RAG handled it — response streamed via rag:stream-chunk events
                     return;
@@ -1885,9 +2110,12 @@ Provide only the answer, nothing else.`;
             // Pass imagePath if attached, AND conversation context
             requestStartTimeRef.current = Date.now();
             await window.electronAPI.streamGeminiChat(
-                userText || 'Analyze this screenshot',
+                messageText,
                 currentAttachments.length > 0 ? currentAttachments.map(s => s.path) : undefined,
-                conversationContext // Pass context so "answer this" works
+                conversationContext, // Pass context so "answer this" works
+                activeSkill
+                    ? { skillId: activeSkill.id, ignoreKnowledgeMode: true, skipModeInjection: true }
+                    : undefined
             );
         } catch (err) {
             setIsProcessing(false);
@@ -1898,13 +2126,15 @@ Provide only the answer, nothing else.`;
                     return prev.slice(0, -1).concat({
                         id: Date.now().toString(),
                         role: 'system',
-                        text: `❌ Error starting stream: ${err}`
+                        text: `❌ Error starting stream: ${err}`,
+                        runInfo
                     });
                 }
                 return [...prev, {
                     id: Date.now().toString(),
                     role: 'system',
-                    text: `❌ Error: ${err}`
+                    text: `❌ Error: ${err}`,
+                    runInfo
                 }];
             });
         }
@@ -2639,17 +2869,6 @@ Provide only the answer, nothing else.`;
             else if (action === 'scrollDown') inertialScrollRef.current?.kick('vert', 1);
             else if (action === 'scrollLeft') inertialScrollRef.current?.kick('horiz', -1);
             else if (action === 'scrollRight') inertialScrollRef.current?.kick('horiz', 1);
-            else if (action === 'focusInput') {
-                // Stealth-focus the chat input: the panel-type overlay (macOS) is
-                // already key without activating the app. We just need the input
-                // element to be the active DOM target so keystrokes land in it.
-                // Defer to next frame so an expand-from-collapsed has time to
-                // mount the input before .focus() runs.
-                setIsExpanded(true);
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => textInputRef.current?.focus());
-                });
-            }
             else if (action === 'processScreenshots') generalHandlers.processScreenshots();
             else if (action === 'resetCancel') generalHandlers.resetCancel();
             else if (action === 'takeScreenshot') generalHandlers.takeScreenshot();
@@ -3155,6 +3374,25 @@ Provide only the answer, nothing else.`;
                                     </div>
                                 )}
 
+                                {selectedSkill && (
+                                    <div className={`mb-2 flex items-center justify-between gap-2 rounded-lg px-2.5 py-2 border ${subtleSurfaceClass}`} style={appearance.subtleStyle}>
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <Sparkles className="w-3.5 h-3.5 overlay-text-interactive shrink-0" />
+                                            <span className="text-[11px] font-medium overlay-text-primary truncate">
+                                                Skill: {selectedSkill.name}
+                                            </span>
+                                        </div>
+                                        <button
+                                            onClick={() => setSelectedSkill(null)}
+                                            className="p-1 rounded-full transition-colors overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive shrink-0"
+                                            title="Clear skill"
+                                            style={appearance.iconStyle}
+                                        >
+                                            <X className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                )}
+
                                 {/* Stealth hotkey conflict banner — shown if globalShortcut.register()
                                     failed for chat:focusInput (typically because Cmd+Shift+Space is
                                     already claimed by another app, or by macOS in some configs).
@@ -3236,6 +3474,31 @@ Provide only the answer, nothing else.`;
                                         style={appearance.inputStyle}
                                     />
 
+                                    {skillAutocomplete && (
+                                        <div
+                                            className={`absolute left-0 right-0 bottom-full mb-2 z-50 rounded-xl overflow-hidden border shadow-lg backdrop-blur-2xl no-drag ${controlSurfaceClass}`}
+                                            style={appearance.controlStyle}
+                                        >
+                                            {skillAutocomplete.matches.map((skill) => (
+                                                <button
+                                                    key={skill.id}
+                                                    onMouseDown={(e) => e.preventDefault()}
+                                                    onClick={() => {
+                                                        setInputValue(`${skillAutocomplete.marker}${skill.id} `);
+                                                        requestAnimationFrame(() => textInputRef.current?.focus());
+                                                    }}
+                                                    className="w-full flex items-start gap-2 px-3 py-2 text-left hover:bg-white/10 transition-colors"
+                                                >
+                                                    <Sparkles className="w-3.5 h-3.5 mt-0.5 overlay-text-interactive shrink-0" />
+                                                    <span className="min-w-0 flex-1">
+                                                        <span className="block text-[12px] font-medium overlay-text-primary truncate">{skill.name}</span>
+                                                        <span className="block text-[10.5px] overlay-text-muted truncate">{skill.description}</span>
+                                                    </span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+
                                     {/* Custom Rich Placeholder */}
                                     {!inputValue && (
                                         <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none text-[13px] overlay-text-muted">
@@ -3286,21 +3549,84 @@ Provide only the answer, nothing else.`;
                                             style={appearance.controlStyle}
                                         >
                                             <span className="truncate min-w-0 flex-1">
-                                                {(() => {
-                                                    const m = currentModel;
-                                                    const codexCliName = getCodexCliModelDisplayName(m);
-                                                    if (codexCliName) return codexCliName;
-                                                    if (m.startsWith('ollama-')) return m.replace('ollama-', '');
-                                                    if (m === 'gemini-3.1-flash-lite-preview') return 'Gemini 3.1 Flash';
-                                                    if (m === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
-                                                    if (m === 'llama-3.3-70b-versatile') return 'Groq Llama 3.3';
-                                                    if (m === 'gpt-5.4') return 'GPT 5.4';
-                                                    if (m === 'claude-sonnet-4-6') return 'Sonnet 4.6';
-                                                    return m;
-                                                })()}
+                                                {getModelDisplayName(currentModel)}
                                             </span>
                                             <ChevronDown size={14} className="shrink-0 transition-transform" />
                                         </button>
+
+                                        <div ref={skillsMenuRef} className="relative no-drag">
+                                            <button
+                                                onClick={async () => {
+                                                    if (!isSkillsOpen) await refreshSkills();
+                                                    setIsSkillsOpen(prev => !prev);
+                                                }}
+                                                className={`
+                                                    flex items-center gap-2 px-3 py-1.5
+                                                    border rounded-lg transition-colors
+                                                    text-xs font-medium w-[108px]
+                                                    interaction-base interaction-press
+                                                    ${selectedSkill ? 'text-sky-400' : ''}
+                                                    ${controlSurfaceClass}
+                                                `}
+                                                style={appearance.controlStyle}
+                                                title={selectedSkill ? `Skill: ${selectedSkill.name}` : 'Skills'}
+                                            >
+                                                <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                                                <span className="truncate min-w-0 flex-1">
+                                                    {selectedSkill ? selectedSkill.name : 'Skills'}
+                                                </span>
+                                                <ChevronDown size={13} className="shrink-0 transition-transform" />
+                                            </button>
+
+                                            <AnimatePresence>
+                                                {isSkillsOpen && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                        exit={{ opacity: 0, y: 6, scale: 0.98 }}
+                                                        transition={{ duration: 0.12 }}
+                                                        className={`absolute left-0 bottom-full mb-2 z-50 w-[260px] rounded-xl overflow-hidden border shadow-lg backdrop-blur-2xl ${controlSurfaceClass}`}
+                                                        style={appearance.controlStyle}
+                                                    >
+                                                        <div className="max-h-[220px] overflow-y-auto custom-scrollbar py-1">
+                                                            {skills.length > 0 ? skills.map((skill) => (
+                                                                <button
+                                                                    key={skill.id}
+                                                                    onClick={() => {
+                                                                        setSelectedSkill(skill);
+                                                                        setIsSkillsOpen(false);
+                                                                        requestAnimationFrame(() => textInputRef.current?.focus());
+                                                                    }}
+                                                                    className="w-full flex items-start gap-2 px-3 py-2.5 text-left hover:bg-white/10 transition-colors"
+                                                                >
+                                                                    <Sparkles className="w-3.5 h-3.5 mt-0.5 overlay-text-interactive shrink-0" />
+                                                                    <span className="min-w-0 flex-1">
+                                                                        <span className="block text-[12px] font-medium overlay-text-primary truncate">{skill.name}</span>
+                                                                        <span className="block text-[10.5px] overlay-text-muted truncate">{skill.description}</span>
+                                                                    </span>
+                                                                    {selectedSkill?.id === skill.id && <Check className="w-3.5 h-3.5 mt-0.5 text-sky-400 shrink-0" />}
+                                                                </button>
+                                                            )) : (
+                                                                <div className="px-3 py-3 text-[11px] overlay-text-muted">
+                                                                    No skills found.
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="border-t border-white/10 p-1">
+                                                            <button
+                                                                onClick={async () => {
+                                                                    await window.electronAPI?.skillsOpenFolder?.();
+                                                                    await refreshSkills();
+                                                                }}
+                                                                className="w-full px-3 py-2 text-left text-[11px] rounded-lg hover:bg-white/10 transition-colors overlay-text-interactive"
+                                                            >
+                                                                Open skills folder
+                                                            </button>
+                                                        </div>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
 
                                         <div className="w-px h-3 mx-1" style={appearance.dividerStyle} />
 
@@ -3371,16 +3697,16 @@ Provide only the answer, nothing else.`;
 
                                     <button
                                         onClick={handleManualSubmit}
-                                        disabled={!inputValue.trim()}
+                                        disabled={!inputValue.trim() && attachedContext.length === 0}
                                         className={`
                                     w-7 h-7 rounded-full flex items-center justify-center
                                     interaction-base interaction-press
-                                    ${inputValue.trim()
+                                    ${inputValue.trim() || attachedContext.length > 0
                                                 ? 'bg-[#007AFF] text-white shadow-lg shadow-blue-500/20 hover:bg-[#0071E3]'
                                                 : 'overlay-icon-surface overlay-text-muted cursor-not-allowed'
                                             }
                                 `}
-                                        style={inputValue.trim() ? undefined : appearance.iconStyle}
+                                        style={inputValue.trim() || attachedContext.length > 0 ? undefined : appearance.iconStyle}
                                     >
                                         <ArrowRight className="w-3.5 h-3.5" />
                                     </button>

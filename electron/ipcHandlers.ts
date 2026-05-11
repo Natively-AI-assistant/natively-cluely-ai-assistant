@@ -11,6 +11,8 @@ import { AudioDevices } from "./audio/AudioDevices";
 import { PhoneMirrorService } from "./services/PhoneMirrorService";
 import { CodexCliService } from "./services/CodexCliService";
 import { SettingsManager } from "./services/SettingsManager";
+import { SkillsManager } from "./services/SkillsManager";
+import { HARD_SYSTEM_PROMPT } from "./llm/prompts";
 
 
 import { RECOGNITION_LANGUAGES, AI_RESPONSE_LANGUAGES } from "./config/languages"
@@ -59,6 +61,14 @@ export function initializeIpcHandlers(appState: AppState): void {
       });
       console.log('[IPC] Active mode cleared due to license loss');
     } catch (e) { /* non-fatal */ }
+  };
+
+  const emitScreenshotAttached = (data: { path: string; preview: string }) => {
+    BrowserWindow.getAllWindows().forEach(win => {
+      if (!win.isDestroyed()) {
+        win.webContents.send("screenshot-attached", data);
+      }
+    });
   };
 
   // --- NEW Test Helper ---
@@ -267,7 +277,9 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const screenshotPath = await appState.takeScreenshot()
       const preview = await appState.getImagePreview(screenshotPath)
-      return { path: screenshotPath, preview }
+      const result = { path: screenshotPath, preview }
+      emitScreenshotAttached(result)
+      return result
     } catch (error) {
       // console.error("Error taking screenshot:", error)
       throw error
@@ -278,7 +290,9 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const screenshotPath = await appState.takeSelectiveScreenshot()
       const preview = await appState.getImagePreview(screenshotPath)
-      return { path: screenshotPath, preview }
+      const result = { path: screenshotPath, preview }
+      emitScreenshotAttached(result)
+      return result
     } catch (error) {
       // EC-04 fix: cast unknown error to Error before accessing .message
       if ((error as Error).message === "Selection cancelled") {
@@ -459,13 +473,29 @@ export function initializeIpcHandlers(appState: AppState): void {
   const IDENTITY_PROBE_RE = /^\s*(who\s+(are|r)\s+(you|u|this|natively)|what\s+(are|r)\s+(you|u)|are\s+you\s+(chatgpt|gpt[-\s]?\d?|claude|gemini|llama|an?\s+(ai|bot|llm|model|assistant))|what('?s|\s+is)\s+your\s+(name|model)|which\s+(ai|model|llm)\s+are\s+you|who\s+(made|built|created|developed|trained)\s+(you|this|natively)|what\s+model\s+(are\s+you|do\s+you\s+use)|introduce\s+yourself)\s*\??\s*$/i;
   const CREATOR_PROBE_RE = /^\s*(who\s+(made|built|created|developed|trained)\s+(you|this|natively))\s*\??\s*$/i;
 
-  safeHandle("gemini-chat-stream", async (event, message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean }) => {
+  safeHandle("gemini-chat-stream", async (event, message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean, skipModeInjection?: boolean, skillId?: string }) => {
     try {
       console.log("[IPC] gemini-chat-stream started using LLMHelper.streamChat");
       const llmHelper = appState.processingHelper.getLLMHelper();
 
       // Claim a new stream ID — any prior stream will detect this and stop emitting.
       const myStreamId = ++_chatStreamId;
+
+      let systemPromptOverride: string | undefined = options?.skipSystemPrompt ? "" : CHAT_MODE_PROMPT;
+      let ignoreKnowledgeMode = !!options?.ignoreKnowledgeMode;
+      let skipModeInjection = !!options?.skipModeInjection;
+      let skillName: string | null = null;
+
+      if (options?.skillId) {
+        const skill = SkillsManager.getInstance().getSkill(options.skillId);
+        if (!skill) {
+          throw new Error(`Skill not found: ${options.skillId}`);
+        }
+        skillName = skill.name;
+        systemPromptOverride = `${HARD_SYSTEM_PROMPT}\n\n## ACTIVE SKILL\n${SkillsManager.getInstance().buildPromptBlock(skill)}`;
+        ignoreKnowledgeMode = true;
+        skipModeInjection = true;
+      }
 
       const intelligenceManager = appState.getIntelligenceManager();
 
@@ -531,11 +561,14 @@ export function initializeIpcHandlers(appState: AppState): void {
       // framing in HARD_SYSTEM_PROMPT/ASSIST_MODE_PROMPT that was causing coding
       // questions to be answered with "At Aetherbot AI, I was responsible for..."
       // (resume hijack via CONTEXT_INTELLIGENCE_LAYER's "you ARE the user").
-      const systemPromptOverride: string | undefined = options?.skipSystemPrompt ? "" : CHAT_MODE_PROMPT;
+      // Skill handling above may replace the default chat prompt.
 
       try {
         // USE streamChat which handles routing
-        const stream = llmHelper.streamChat(message, imagePaths, context, systemPromptOverride, options?.ignoreKnowledgeMode);
+        if (skillName) {
+          console.log(`[IPC] Applying skill for stream ${myStreamId}: ${skillName}`);
+        }
+        const stream = llmHelper.streamChat(message, imagePaths, context, systemPromptOverride, ignoreKnowledgeMode, skipModeInjection);
 
         for await (const token of stream) {
           // Bail if a newer stream has taken over (user triggered a new request)
@@ -2336,6 +2369,34 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // ==========================================
+  // Skills IPC Handlers
+  // ==========================================
+
+  safeHandle("skills:list", async () => {
+    return SkillsManager.getInstance().listSkills();
+  });
+
+  safeHandle("skills:get", async (_, id: string) => {
+    const skill = SkillsManager.getInstance().getSkill(id);
+    if (!skill) return null;
+    return {
+      id: skill.id,
+      name: skill.name,
+      description: skill.description,
+      source: skill.source,
+      instructions: skill.instructions,
+    };
+  });
+
+  safeHandle("skills:refresh", async () => {
+    return SkillsManager.getInstance().listSkills();
+  });
+
+  safeHandle("skills:open-folder", async () => {
+    return SkillsManager.getInstance().openSkillsFolder();
+  });
+
+  // ==========================================
   // Intelligence Mode Handlers
   // ==========================================
 
@@ -2351,16 +2412,32 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // MODE 2: What Should I Say (Primary auto-answer)
-  safeHandle("generate-what-to-say", async (_, question?: string, imagePaths?: string[]) => {
+  safeHandle("generate-what-to-say", async (_, question?: string, imagePaths?: string[], options?: { skillId?: string }) => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
+      let activeSkill: { id: string; name: string; promptBlock: string } | undefined;
+
+      if (options?.skillId) {
+        const skillsManager = SkillsManager.getInstance();
+        const skill = skillsManager.getSkill(options.skillId);
+        if (!skill) {
+          throw new Error(`Skill not found: ${options.skillId}`);
+        }
+        activeSkill = {
+          id: skill.id,
+          name: skill.name,
+          promptBlock: skillsManager.buildPromptBlock(skill),
+        };
+      }
+
       // Question and imagePaths are now optional - IntelligenceManager infers from transcript
-      const answer = await intelligenceManager.runWhatShouldISay(question, 0.8, imagePaths);
-      return { answer, question: question || 'inferred from context' };
+      const answer = await intelligenceManager.runWhatShouldISay(question, 0.8, imagePaths, activeSkill);
+      return { answer, question: question || 'inferred from context', skillName: activeSkill?.name };
     } catch (error: any) {
       // Return graceful fallback instead of throwing
       return {
-        question: question || 'unknown'
+        question: question || 'unknown',
+        error: error?.message || String(error)
       };
     }
   });
@@ -2736,12 +2813,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { fallback: true };
     }
 
-    // Check if JIT indexing is active AND has at least one embedded chunk.
-    // isLiveIndexingActive() only tells us the indexer is running — it may have
-    // received segments but not yet produced queryable embeddings. Calling
-    // queryMeeting() with zero chunks throws NO_MEETING_EMBEDDINGS, adding
-    // ~300ms of wasted try/catch overhead before the fallback fires.
-    if (!ragManager.isLiveIndexingActive('live-meeting-current') || !ragManager.hasLiveChunks()) {
+    // Check if JIT indexing is active and has chunks
+    if (!ragManager.isLiveIndexingActive('live-meeting-current')) {
       return { fallback: true };
     }
 
@@ -3321,7 +3394,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle("modes:upload-reference-file", async (_, modeId: string) => {
     try {
       if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
-      const result = await dialog.showOpenDialog({
+      const result: any = await dialog.showOpenDialog({
         properties: ['openFile'],
         filters: [
           { name: 'Text & Documents', extensions: ['txt', 'md', 'pdf', 'docx', 'doc'] },
@@ -3337,10 +3410,9 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       let content = '';
       if (ext === '.pdf') {
-        const { PDFParse } = require('pdf-parse');
+        const pdfParse = require('pdf-parse');
         const buffer = fs.readFileSync(filePath);
-        const parser = new PDFParse({ data: buffer });
-        const data = await parser.getText();
+        const data = await pdfParse(buffer);
         content = data.text;
       } else if (ext === '.docx' || ext === '.doc') {
         const mammoth = require('mammoth');

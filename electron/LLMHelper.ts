@@ -139,15 +139,6 @@ export class LLMHelper {
     console.log("[LLMHelper] Gemini API Key updated.");
   }
 
-  // Thinking-mode models burn num_predict in <think> blocks unless `think:false` is sent.
-  private isThinkingModel(modelId: string): boolean {
-    if (!modelId) return false;
-    return /^qwen3/i.test(modelId)
-      || /qwq/i.test(modelId)
-      || /deepseek-r1/i.test(modelId)
-      || /(^|[^a-z])o1([^a-z]|$)/i.test(modelId);
-  }
-
   public setGroqApiKey(apiKey: string) {
     this.groqClient = new Groq({ apiKey });
     this._groqLocalDisabled = false;
@@ -430,20 +421,18 @@ export class LLMHelper {
 
       console.log(`[LLMHelper] Ollama call → model=${this.ollamaModel} sysLen=${sys.length} userLen=${userContent.length} images=${images?.length ?? 0}`);
 
-      const ollamaBody: any = {
-        model: this.ollamaModel,
-        messages,
-        stream: false,
-        options: {
-          temperature: 0.7,
-          top_p: 0.9,
-        }
-      };
-      if (this.isThinkingModel(this.ollamaModel)) ollamaBody.think = false;
       const response = await fetch(`${this.ollamaUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(ollamaBody),
+        body: JSON.stringify({
+          model: this.ollamaModel,
+          messages,
+          stream: false,
+          options: {
+            temperature: 0.7,
+            top_p: 0.9,
+          }
+        }),
         signal: AbortSignal.timeout(120_000),
       });
 
@@ -912,16 +901,6 @@ ANSWER DIRECTLY:`;
     const systemPrompt = this.injectLanguageInstruction(basePrompt);
 
     try {
-      if (this.codexCliConfig.enabled) {
-        // Codex CLI takes priority when enabled — same precedence as in chat().
-        try {
-          const text = await this.generateWithCodexCli(lastQuestion, basePrompt);
-          if (text && text.trim().length > 0) return this.processResponse(text);
-          console.warn('[LLMHelper] Codex CLI suggestion empty, falling back.');
-        } catch (e: any) {
-          console.warn(`[LLMHelper] Codex CLI suggestion failed: ${e.message}. Falling back.`);
-        }
-      }
       if (this.useOllama) {
         return await this.callOllama(systemPrompt);
       } else if (this.customProvider || this.activeCurlProvider) {
@@ -1375,16 +1354,6 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     type ProviderAttempt = { name: string; execute: () => Promise<string> };
     const providers: ProviderAttempt[] = [];
 
-    // Priority 0: Codex CLI (when enabled). Structured-JSON workloads still
-    // benefit from the user's selected backend; downstream callers run their
-    // own JSON-extraction regex so prose-around-JSON is tolerated.
-    if (this.codexCliConfig.enabled) {
-      providers.push({
-        name: `Codex CLI (${this.codexCliConfig.model})`,
-        execute: () => this.generateWithCodexCli(message),
-      });
-    }
-
     // Priority 1: OpenAI
     if (this.openaiClient) {
       providers.push({ name: `OpenAI (${OPENAI_MODEL})`, execute: () => this.generateWithOpenai(message) });
@@ -1636,13 +1605,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       body.language = this.aiResponseLanguage; // 'auto' is forwarded — server handles it
     }
 
-    // 8s hard cap: a `fetch failed` network error without this can stall the provider
-    // waterfall for 25-30s before the OS-level TCP reset fires.
     const response = await fetch(endpointUrl, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(25000),
     });
 
     if (!response.ok) {
@@ -2194,27 +2161,6 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     }
 
     // ──────────────────────────────────────────────────────────────────
-    // Codex CLI runs FIRST when enabled — same priority as in chat() so
-    // every AI feature that flows through generateWithVisionFallback
-    // (analyzeImageFiles, generateRollingScript, debugSolutionWithImages,
-    // extractProblemFromImages, generateSolution) honors the user's pick.
-    // On failure we fall back to the cloud tier rotation below.
-    // ──────────────────────────────────────────────────────────────────
-    if (this.codexCliConfig.enabled) {
-      try {
-        console.log(`[LLMHelper] 🚀 [Codex CLI] Attempting (${this.codexCliConfig.model}, ${isMultimodal ? imagePaths.length + ' image(s)' : 'text-only'})...`);
-        const text = await this.generateWithCodexCli(userPrompt, systemPrompt, false, isMultimodal ? imagePaths : undefined);
-        if (text && text.trim().length > 0) {
-          console.log(`[LLMHelper] ✅ [Codex CLI] succeeded.`);
-          return text;
-        }
-        console.warn(`[LLMHelper] ⚠️ [Codex CLI] returned empty response, falling back to cloud tiers.`);
-      } catch (e: any) {
-        console.warn(`[LLMHelper] ⚠️ [Codex CLI] failed: ${e.message}. Falling back to cloud tiers.`);
-      }
-    }
-
-    // ──────────────────────────────────────────────────────────────────
     // Execute 3-tier rotation with exponential backoff between tiers
     // ──────────────────────────────────────────────────────────────────
     const tiers = [
@@ -2481,14 +2427,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     // ============================================================
     // KNOWLEDGE MODE INTERCEPT (Streaming)
-    // Skip when fast-text mode is active — intent classification +
-    // hybrid search add 300-800ms that defeat the purpose of fast mode.
     // ============================================================
-    const shouldRunKnowledge = !ignoreKnowledgeMode &&
-      !this.groqFastTextMode &&
-      this.knowledgeOrchestrator?.isKnowledgeMode();
-
-    if (shouldRunKnowledge) {
+    if (!ignoreKnowledgeMode && this.knowledgeOrchestrator?.isKnowledgeMode()) {
       try {
         // Feed to depth scorer only (not negotiation tracker) — mirrors non-streaming path fix.
         this.knowledgeOrchestrator.feedForDepthScoring(message);
@@ -2850,28 +2790,14 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       streamHeaders['x-natively-key'] = nativelyKey;
     }
 
-    // Connect-only timeout: 10s to establish the TCP+TLS+HTTP handshake.
-    // Once the server sends the first response byte (headers received), we clear
-    // the timer so the SSE stream can run as long as needed.
-    // IMPORTANT: AbortSignal.timeout() applies to the ENTIRE request lifetime, not
-    // just the connection phase — using it here would kill Flash mid-stream at 10s
-    // and Pro at 10s even when actively yielding tokens. The AbortController pattern
-    // below correctly scopes the timeout to the connection phase only.
-    const _connectController = new AbortController();
-    const _connectTimer = setTimeout(() => _connectController.abort(new Error('Natively API connect timeout (10s)')), 10_000);
-    let response: Response;
-    try {
-      response = await fetch('https://api.natively.software/v1/chat', {
-        method: 'POST',
-        headers: streamHeaders,
-        body: JSON.stringify(body),
-        signal: _connectController.signal,
-      });
-    } finally {
-      // Connection established (or failed) — stop the connect-phase timer.
-      // The stream body will now be read without any timeout.
-      clearTimeout(_connectTimer);
-    }
+    // 60s timeout covers worst-case: max-token Gemini Pro response streamed over a slow connection.
+    // This is intentionally longer than the non-streaming 25s timeout.
+    const response = await fetch('https://api.natively.software/v1/chat', {
+      method: 'POST',
+      headers: streamHeaders,
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(60_000),
+    });
 
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}) as Record<string, unknown>);
@@ -3204,18 +3130,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
   private async * streamWithGeminiParallelRace(fullMessage: string, imagePaths?: string[], systemInstruction?: string): AsyncGenerator<string, void, unknown> {
     if (!this.client) throw new Error("Gemini client not initialized");
 
-    // BUG-1 fix: use a shared AbortController so the winning model cancels the loser.
-    // Previously, both Flash AND Pro ran to full completion — only the winner's response
-    // was used, but the loser's entire API call (tokens + compute) was silently wasted.
-    // Note: the Google GenAI SDK does not expose AbortSignal on generateContent, so the
-    // underlying HTTP call for the loser still runs to completion. We cancel our WAIT
-    // for the result — the HTTP connection is released when the SDK call eventually settles.
-    // Timing reference: Flash ≤15s (≤30s with images), Pro ≤30s.
     const raceController = new AbortController();
 
     const race = async (model: string): Promise<string> => {
       const result = await this.collectStreamResponse(fullMessage, model, imagePaths, raceController.signal, systemInstruction);
-      // This model won — signal the other to stop waiting for its result.
+      // This model won; signal the other to stop waiting for its result.
       raceController.abort(new Error(`${model} won the race`));
       return result;
     };
@@ -3224,16 +3143,14 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     try {
       result = await Promise.any([race(GEMINI_FLASH_MODEL), race(GEMINI_PRO_MODEL)]);
     } catch (agg: any) {
-      // Promise.any throws AggregateError when ALL promises reject.
-      // agg.message is always the unhelpful 'All promises were rejected' —
-      // unwrap individual errors so the caller's catch logs Flash+Pro failure details.
       const details = Array.isArray(agg.errors)
         ? agg.errors.map((e: any) => e?.message ?? String(e)).join(' | ')
         : agg.message;
       throw new Error(`Both Gemini models failed in parallel race: ${details}`);
     }
 
-    // Yield in chunks to simulate incremental streaming UX.
+    // Yield the collected response character by character to simulate streaming
+    // (Or yield in chunks for efficiency)
     const chunkSize = 10;
     for (let i = 0; i < result.length; i += chunkSize) {
       yield result.substring(i, i + chunkSize);
@@ -3241,14 +3158,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
   }
 
   /**
-   * Collect full response from a Gemini model (non-streaming, used by parallel race).
-   * Accepts an AbortSignal so the losing model can be cancelled by the winner.
-   * Timing reference: Flash 10-15s (up to 30s with images), Pro up to 30s.
+   * Collect full response from a Gemini model (non-streaming for race)
    */
   private async collectStreamResponse(fullMessage: string, model: string, imagePaths?: string[], signal?: AbortSignal, systemInstruction?: string): Promise<string> {
     if (!this.client) throw new Error("Gemini client not initialized");
 
-    // Bail immediately if already cancelled (e.g. the other model already won).
     if (signal?.aborted) throw new Error(`Gemini ${model} request cancelled before start`);
 
     const contents: any[] = [{ text: fullMessage }];
@@ -3266,9 +3180,6 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       }
     }
 
-    // Wrap the API call in an abort-aware race so the signal can interrupt it.
-    // The Google GenAI SDK does not natively support AbortSignal on generateContent,
-    // so we implement manual cancellation via Promise.race.
     const apiCall = this.client.models.generateContent({
       model: model,
       contents: contents,
@@ -3281,12 +3192,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     });
 
     if (signal) {
-      // If the signal is already aborted before the API resolves, race resolves with rejection.
       const abortPromise = new Promise<never>((_, reject) => {
         if (signal.aborted) { reject(new Error(`Gemini ${model} aborted`)); return; }
         signal.addEventListener('abort', () => reject(new Error(`Gemini ${model} aborted`)), { once: true });
       });
-      // Suppress unhandled rejection on the losing API call promise.
       apiCall.catch(() => {});
       const response = await Promise.race([apiCall, abortPromise]);
       return response.text || "";
@@ -3340,17 +3249,15 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     const decoder = new TextDecoder();
     let buffer = '';
     try {
-      const streamBody: any = {
-        model: this.ollamaModel,
-        messages,
-        stream: true,
-        options: { temperature: 0.7 }
-      };
-      if (this.isThinkingModel(this.ollamaModel)) streamBody.think = false;
       const response = await fetch(`${this.ollamaUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(streamBody),
+        body: JSON.stringify({
+          model: this.ollamaModel,
+          messages,
+          stream: true,
+          options: { temperature: 0.7 }
+        }),
         signal: AbortSignal.timeout(120_000),
       });
 
@@ -3897,14 +3804,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     }
 
     // ATTEMPT 1: Natively API (if configured — first in chain)
-    // Inner fetch timeout: 8s (AbortSignal.timeout in generateWithNatively).
-    // Outer safety net: 10s — covers JSON parsing + any overhead after the fetch resolves.
     if (this.hasNatively()) {
       try {
         console.log(`[LLMHelper] Attempting Natively API for summary...`);
         const text = await this.withTimeout(
           this.generateWithNatively(`Context:\n${context}`, systemPrompt),
-          10000,
+          60000,
           'Natively Summary'
         );
         if (text.trim().length > 0) {
@@ -3913,24 +3818,6 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         }
       } catch (e: any) {
         console.warn(`[LLMHelper] ⚠️ Natively API summary failed: ${e.message}. Falling back...`);
-      }
-    }
-
-    // ATTEMPT 2: Codex CLI (if user has it enabled — text-only path)
-    if (this.codexCliConfig.enabled) {
-      console.log(`[LLMHelper] Attempting Codex CLI for summary...`);
-      try {
-        const text = await this.withTimeout(
-          this.generateWithCodexCli(`Context:\n${context}`, systemPrompt),
-          Math.max(this.codexCliConfig.timeoutMs, 60000),
-          'Codex CLI Summary'
-        );
-        if (text.trim().length > 0) {
-          console.log(`[LLMHelper] ✅ Codex CLI summary generated successfully.`);
-          return this.processResponse(text);
-        }
-      } catch (e: any) {
-        console.warn(`[LLMHelper] ⚠️ Codex CLI summary failed: ${e.message}. Falling back...`);
       }
     }
 

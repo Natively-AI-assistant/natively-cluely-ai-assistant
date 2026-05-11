@@ -12,11 +12,6 @@ import { LocalEmbeddingProvider } from './providers/LocalEmbeddingProvider';
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_BASE_MS = 2000;
-// BUG-5: Maximum time to wait for a single embed() call.
-// A frozen API (network partition / provider hang) would otherwise lock isProcessing=true
-// forever, silently stalling the entire pipeline until app restart.
-// 30s is generous for large chunks on slow connections (typical: 200-800ms).
-const EMBED_TIMEOUT_MS = 30_000;
 
 /**
  * EmbeddingPipeline - Handles post-meeting embedding generation
@@ -146,14 +141,6 @@ export class EmbeddingPipeline {
                 this.db.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES ('last_embedding_provider', ?)").run(this.provider.name);
             } catch (_) { /* non-fatal — DB may not have app_state yet in edge cases */ }
         }
-
-        // Flush any queue items submitted during the startup race window (i.e. before the
-        // provider was ready). processQueue() is idempotent and a no-op if the queue is empty.
-        setTimeout(() => {
-            this.processQueue().catch(err => {
-                console.warn('[EmbeddingPipeline] Post-init queue flush failed (non-fatal):', err.message);
-            });
-        }, 0);
     }
 
     /**
@@ -407,57 +394,24 @@ export class EmbeddingPipeline {
     }
 
     /**
-     * Get embedding for a document chunk (for storage).
-     * Routes through embedWithTimeout() so a frozen API cannot stall the live indexer.
+     * Get embedding for a document chunk (for storage)
      */
+
     async getEmbedding(text: string): Promise<number[]> {
         if (!this.provider) {
             throw new Error('Embedding provider not initialized');
         }
-        return this.embedWithTimeout(this.provider, text, 'live-chunk');
+        return this.provider.embed(text);
     }
 
     /**
-     * Get embedding for a search query (may use different prefix for asymmetric models).
-     * Routes through embedWithTimeout() so a frozen API cannot stall the query path.
+     * Get embedding for a search query (may use different prefix for asymmetric models)
      */
     async getEmbeddingForQuery(text: string): Promise<number[]> {
         if (!this.provider) {
             throw new Error('Embedding provider not initialized');
         }
-        // embedQuery() uses a query-specific prefix for asymmetric models (e.g. Nomic).
-        // Wrap with a manual timeout since embedQuery is not covered by embedWithTimeout directly.
-        return new Promise<number[]>((resolve, reject) => {
-            const timer = setTimeout(() => {
-                reject(new Error(
-                    `[EmbeddingPipeline] embedQuery() timed out after ${EMBED_TIMEOUT_MS}ms for live-query via ${this.provider!.name}`
-                ));
-            }, EMBED_TIMEOUT_MS);
-            this.provider!.embedQuery(text).then(
-                (result) => { clearTimeout(timer); resolve(result); },
-                (err)    => { clearTimeout(timer); reject(err); }
-            );
-        });
-    }
-
-    /**
-     * BUG-5 fix: Wraps a single embed() call with a hard timeout so a frozen API
-     * (network partition, provider hang) cannot lock isProcessing=true indefinitely.
-     * Throws if the provider does not respond within EMBED_TIMEOUT_MS (30s).
-     */
-    private async embedWithTimeout(provider: IEmbeddingProvider, text: string, chunkLabel: string): Promise<number[]> {
-        return new Promise<number[]>((resolve, reject) => {
-            const timer = setTimeout(() => {
-                reject(new Error(
-                    `[EmbeddingPipeline] embed() timed out after ${EMBED_TIMEOUT_MS}ms for ${chunkLabel} via ${provider.name}`
-                ));
-            }, EMBED_TIMEOUT_MS);
-
-            provider.embed(text).then(
-                (result) => { clearTimeout(timer); resolve(result); },
-                (err)    => { clearTimeout(timer); reject(err); }
-            );
-        });
+        return this.provider.embedQuery(text);
     }
 
     /**
@@ -474,7 +428,7 @@ export class EmbeddingPipeline {
             return;
         }
 
-        const embedding = await this.embedWithTimeout(p, row.cleaned_text, `chunk ${chunkId}`);
+        const embedding = await p.embed(row.cleaned_text);
         this.vectorStore.storeEmbedding(chunkId, embedding);
 
         // Record provider metadata on the meeting after first successful embedding
@@ -506,7 +460,7 @@ export class EmbeddingPipeline {
             return;
         }
 
-        const embedding = await this.embedWithTimeout(p, row.summary_text, `summary:${meetingId}`);
+        const embedding = await p.embed(row.summary_text);
         this.vectorStore.storeSummaryEmbedding(meetingId, embedding);
 
         // P2-8: record provider metadata on the meeting row so that provider-switch
