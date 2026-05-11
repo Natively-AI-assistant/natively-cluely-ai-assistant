@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react" // forcing refresh
+import React, { useState, useEffect } from "react" // forcing refresh
 import { QueryClient, QueryClientProvider } from "react-query"
 import { ToastProvider, ToastViewport } from "./components/ui/toast"
 import NativelyInterface from "./components/NativelyInterface"
@@ -101,22 +101,6 @@ const App: React.FC = () => {
   const [settingsInitialTab, setSettingsInitialTab] = useState<string>('general');
   const [isModesOpen, setIsModesOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const openSettingsExclusive = useCallback((tab: string = 'general') => {
-    setIsModesOpen(false);
-    setIsProfileOpen(false);
-    setSettingsInitialTab(tab);
-    setIsSettingsOpen(true);
-  }, []);
-  const openProfileExclusive = useCallback(() => {
-    setIsModesOpen(false);
-    setIsSettingsOpen(false);
-    setIsProfileOpen(true);
-  }, []);
-  const openModesExclusive = useCallback(() => {
-    setIsProfileOpen(false);
-    setIsSettingsOpen(false);
-    setIsModesOpen(true);
-  }, []);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [isPremiumActive, setIsPremiumActive] = useState(false);
   const [hasLoadedLicense, setHasLoadedLicense] = useState(false);
@@ -287,7 +271,8 @@ const App: React.FC = () => {
 
     // Listen for open-settings-tab events from other windows (e.g. overlay Modes button)
     const removeOpenSettingsTab = window.electronAPI?.onOpenSettingsTab?.((tab: string) => {
-      openSettingsExclusive(tab);
+      setSettingsInitialTab(tab);
+      setIsSettingsOpen(true);
     });
 
     // Listen for meeting processing completion to trigger post-meeting ads
@@ -527,9 +512,14 @@ const App: React.FC = () => {
                 <div id="launcher-container" className="h-full w-full relative">
                   <Launcher
                     onStartMeeting={handleStartMeeting}
-                    onOpenSettings={(tab = 'general') => openSettingsExclusive(tab)}
-                    onOpenProfile={() => openProfileExclusive()}
-                    onOpenModes={() => openModesExclusive()}
+                    onOpenSettings={(tab = 'general') => {
+                      setSettingsInitialTab(tab);
+                      setIsSettingsOpen(true);
+                    }}
+                    onOpenProfile={() => {
+                      setIsProfileOpen(true);
+                    }}
+                    onOpenModes={() => setIsModesOpen(true)}
                     onPageChange={setIsLauncherMainView}
                     ollamaPullStatus={ollamaPullStatus}
                     ollamaPullPercent={ollamaPullPercent}
@@ -555,23 +545,13 @@ const App: React.FC = () => {
                       onClick={(e) => { if (e.target === e.currentTarget) setIsModesOpen(false); }}
                     >
                       <motion.div
-                        initial={{ opacity: 0, scale: 0.92, y: 18, filter: 'blur(12px)' }}
-                        animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
-                        exit={{ opacity: 0, scale: 0.96, y: 8, filter: 'blur(8px)' }}
-                        transition={{
-                          opacity: { duration: 0.32, ease: [0.23, 1, 0.32, 1] },
-                          filter: { duration: 0.34, ease: [0.23, 1, 0.32, 1] },
-                          scale: { type: 'spring', stiffness: 320, damping: 34, mass: 0.9 },
-                          y: { type: 'spring', stiffness: 320, damping: 34, mass: 0.9 },
-                        }}
-                        style={{
-                          willChange: 'transform, opacity, filter',
-                          transformOrigin: 'center',
-                          boxShadow: '0 30px 80px -20px rgba(0,0,0,0.65), 0 16px 40px -12px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.06)',
-                        }}
-                        className="w-[820px] h-[600px] max-w-[95vw] max-h-[90vh] rounded-2xl overflow-hidden border border-white/10 bg-[#141414]"
+                        initial={{ opacity: 0, scale: 0.97, y: 8 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.97, y: 8 }}
+                        transition={{ duration: 0.18, ease: [0.19, 1, 0.22, 1] }}
+                        className="w-[820px] h-[600px] max-w-[95vw] max-h-[90vh] rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-[#141414]"
                       >
-                        <ModesSettings onClose={() => setIsModesOpen(false)} isPremium={isPremiumActive} isLoaded={hasLoadedLicense} isTrialActive={!!activeTrial} onOpenNativelyAPI={() => openSettingsExclusive('natively-api')} />
+                        <ModesSettings onClose={() => setIsModesOpen(false)} isPremium={isPremiumActive} isLoaded={hasLoadedLicense} isTrialActive={!!activeTrial} onOpenNativelyAPI={() => { setIsModesOpen(false); setSettingsInitialTab('natively-api'); setIsSettingsOpen(true); }} />
                       </motion.div>
                     </motion.div>
                   )}
@@ -588,25 +568,13 @@ const App: React.FC = () => {
                       onClick={(e) => { if (e.target === e.currentTarget) setIsProfileOpen(false); }}
                     >
                       <motion.div
-                        initial={{ opacity: 0, scale: 0.92, y: 18, filter: 'blur(12px)' }}
-                        animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
-                        exit={{ opacity: 0, scale: 0.96, y: 8, filter: 'blur(8px)' }}
-                        transition={{
-                          opacity: { duration: 0.32, ease: [0.23, 1, 0.32, 1] },
-                          filter: { duration: 0.34, ease: [0.23, 1, 0.32, 1] },
-                          scale: { type: 'spring', stiffness: 320, damping: 34, mass: 0.9 },
-                          y: { type: 'spring', stiffness: 320, damping: 34, mass: 0.9 },
-                        }}
-                        style={{
-                          willChange: 'transform, opacity, filter',
-                          transformOrigin: 'center',
-                          boxShadow: '0 30px 80px -20px rgba(0,0,0,0.65), 0 16px 40px -12px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.06)',
-                        }}
-                        className="w-[820px] h-[600px] max-w-[95vw] max-h-[90vh] rounded-2xl overflow-hidden border border-white/10 bg-[#141414]"
+                        initial={{ opacity: 0, scale: 0.97, y: 8 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.97, y: 8 }}
+                        transition={{ duration: 0.18, ease: [0.19, 1, 0.22, 1] }}
+                        className="w-[820px] h-[600px] max-w-[95vw] max-h-[90vh] rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-[#141414]"
                       >
-                        <ProfileIntelligenceSettings
-                          onClose={() => setIsProfileOpen(false)}
-                        />
+                        <ProfileIntelligenceSettings onClose={() => setIsProfileOpen(false)} />
                       </motion.div>
                     </motion.div>
                   )}
@@ -667,7 +635,10 @@ const App: React.FC = () => {
         <FreeTrialBanner
           expiresAt={activeTrial.expiresAt}
           usage={activeTrial.usage}
-          onUpgrade={() => openSettingsExclusive('api')}
+          onUpgrade={() => {
+            setSettingsInitialTab('api');
+            setIsSettingsOpen(true);
+          }}
         />
       )}
 
@@ -697,7 +668,8 @@ const App: React.FC = () => {
         }}
         onManualSetup={() => {
           setShowTrialPromo(false);
-          openSettingsExclusive('api');
+          setSettingsInitialTab('api');
+          setIsSettingsOpen(true);
         }}
       />
 
@@ -726,7 +698,10 @@ const App: React.FC = () => {
         <NativelyApiPromoToaster
           isOpen={activeAd === 'natively_api'}
           onDismiss={() => dismissAd('natively_api')}
-          onOpenSettings={(tab: string) => openSettingsExclusive(tab)}
+          onOpenSettings={(tab: string) => {
+            setSettingsInitialTab(tab);
+            setIsSettingsOpen(true);
+          }}
         />
       )}
       {(isLauncherMainView || !!activeAd) && (
@@ -734,12 +709,16 @@ const App: React.FC = () => {
           <ProfileFeatureToaster
             isOpen={activeAd === 'profile'}
             onDismiss={dismissAd}
-            onSetupProfile={() => openProfileExclusive()}
+            onSetupProfile={() => {
+              setIsProfileOpen(true);
+            }}
           />
           <JDAwarenessToaster
             isOpen={activeAd === 'jd'}
             onDismiss={dismissAd}
-            onSetupJD={() => openProfileExclusive()}
+            onSetupJD={() => {
+              setIsProfileOpen(true);
+            }}
           />
           <PremiumPromoToaster
             isOpen={activeAd === 'promo'}
@@ -781,7 +760,7 @@ const App: React.FC = () => {
           setActiveTrial(null);
           // After activation, open settings to Profile Intelligence
           setTimeout(() => {
-            openProfileExclusive();
+            setIsProfileOpen(true);
           }, 300);
         }}
         onDeactivated={() => { setIsPremiumActive(false); setPlanDetails({ isPremium: false }); }}

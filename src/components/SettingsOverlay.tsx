@@ -15,6 +15,7 @@ import { AIProvidersSettings } from './settings/AIProvidersSettings';
 import { NativelyApiSettings } from './settings/NativelyApiSettings';
 import { NativelyProSettings } from './settings/NativelyProSettings';
 import { PhoneMirrorSettings } from './settings/PhoneMirrorSettings';
+import { SkillsSettings } from './settings/SkillsSettings';
 import { NativelyLogoMark } from './NativelyLogoMark';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useShortcuts } from '../hooks/useShortcuts';
@@ -1303,7 +1304,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         onClick={() => setActiveTab('natively-api')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'natively-api' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
-                                        <NativelyLogoMark size={16} className={activeTab === 'natively-api' ? 'text-blue-500' : 'text-blue-500/70'} />
+                                        <Zap size={16} className={activeTab === 'natively-api' ? 'text-blue-500' : 'text-blue-500/70'} />
                                         <span>Natively API</span>
                                     </button>
                                     <button
@@ -1318,6 +1319,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'ai-providers' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
                                         <FlaskConical size={16} /> AI Providers
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('skills')}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'skills' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                    >
+                                        <Sparkles size={16} /> Skills
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('calendar')}
@@ -1863,6 +1870,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                             
                             {activeTab === 'ai-providers' && (
                                 <AIProvidersSettings />
+                            )}
+                            {activeTab === 'skills' && (
+                                <SkillsSettings />
                             )}
                             {activeTab === 'natively-api' && (
                                 <NativelyApiSettings />
@@ -2718,9 +2728,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
                                                                             {/* Trailing action — magnetic button */}
                                                                             {ev.link ? (
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() => window.electronAPI?.openExternal(ev.link!)}
+                                                                                <a
+                                                                                    href={ev.link}
+                                                                                    target="_blank"
+                                                                                    rel="noopener noreferrer"
                                                                                     title={ev.link}
                                                                                     className="self-center shrink-0 group/btn inline-flex items-center gap-1.5 rounded-full pl-3 pr-1.5 py-1.5 bg-white/[0.05] hover:bg-white/[0.1] ring-1 ring-white/[0.07] text-text-primary text-[11px] font-medium transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] active:scale-[0.97] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                                                                                 >
@@ -2728,7 +2739,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                                     <span className="w-5 h-5 rounded-full bg-white/[0.08] ring-1 ring-white/[0.08] flex items-center justify-center transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover/btn:translate-x-[1px] group-hover/btn:-translate-y-[1px]">
                                                                                         <ExternalLink size={9} strokeWidth={2} />
                                                                                     </span>
-                                                                                </button>
+                                                                                </a>
                                                                             ) : (
                                                                                 <span
                                                                                     aria-label="No meeting link"

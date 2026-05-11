@@ -27,21 +27,6 @@ bytemuck = "1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cidre = { version = "0.11.10", features = ["ca", "cm", "av", "cat", "dispatch", "ns", "sc", "cf", "blocks", "objc"] }
-# Used by stealth_window to access NSWindow APIs Electron doesn't expose
-# (becomesKeyOnlyIfNeeded, hidesOnDeactivate, collectionBehavior). objc2 is
-# the actively-maintained Rust↔Objective-C bridge; objc2-app-kit gives strongly
-# typed AppKit bindings so we can avoid raw msg_send! ergonomics.
-objc2 = "0.5"
-objc2-app-kit = { version = "0.2", features = ["NSWindow", "NSResponder"] }
-objc2-foundation = "0.2"
-# CGEventTap: session-wide keyboard interception for true Cluely-grade
-# stealth input. The tap captures keystrokes BEFORE they reach the
-# foreground app, so the user can type into Natively while Zoom/browser
-# stays as the OS-level frontmost+key application throughout. core-graphics
-# wraps CGEventTapCreate/CGEventGetFlags/CGEventKeyboardGetUnicodeString;
-# core-foundation gives us the CFRunLoop the tap must attach to.
-core-graphics = "0.24"
-core-foundation = "0.10"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 wasapi = "0.13.0"

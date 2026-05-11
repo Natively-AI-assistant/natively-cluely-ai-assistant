@@ -289,30 +289,12 @@ export class GoogleSTT extends EventEmitter {
                 interimResults: true,
             })
             .on('error', (err: Error) => {
+                console.error(`[GoogleSTT/${this.label}] Stream error:`, err);
                 this.isConnecting = false;
                 this.isStreaming = false;
                 this.stream = null;
 
                 const grpcCode = (err as any)?.code;
-
-                // Google's streamingRecognize closes the stream with code 11
-                // ("Audio Timeout Error: Long duration elapsed without audio")
-                // after ~10s of silence. The lazy-reconnect path in write()
-                // recovers automatically on the next chunk, so this is benign
-                // and recurs every silent stretch. Log a single warn line and
-                // do NOT re-emit as an error — bubbling it up trips the
-                // consecutive-error counter in main.ts and spams the renderer
-                // with reconnecting/failed STT status updates during normal
-                // silence.
-                const isIdleTimeout = grpcCode === 11
-                    || /Audio Timeout Error/i.test(err.message || '');
-                if (isIdleTimeout) {
-                    console.warn(`[GoogleSTT/${this.label}] Stream idle-timed-out (Google's 10s no-audio limit), reconnecting on next chunk.`);
-                    return;
-                }
-
-                console.error(`[GoogleSTT/${this.label}] Stream error:`, err);
-
                 if (typeof grpcCode === 'number' && GoogleSTT.PERMANENT_GRPC_CODES.has(grpcCode)) {
                     // Permanent failure — stop the write()-driven reconnect loop. Without this
                     // guard, a misconfigured Google project (e.g. Speech API not enabled →

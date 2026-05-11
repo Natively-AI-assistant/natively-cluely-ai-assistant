@@ -973,9 +973,9 @@ export class ModelVersionManager {
           return parsed;
         }
 
-        // Schema migration: v3 → v4 (forces baseline reconciliation for stale Gemini 1.5 entries)
+        // Schema migration: v3 -> v4 (forces baseline reconciliation for stale Gemini 1.5 entries)
         if (parsed.schemaVersion === 3) {
-          console.log('[ModelVersionManager] Migrating v3 → v4 state (reconciling stale baselines)');
+          console.log('[ModelVersionManager] Migrating v3 -> v4 state (reconciling stale baselines)');
           this.reconcileBaselines(parsed);
           parsed.schemaVersion = SCHEMA_VERSION;
           return parsed;
@@ -1032,11 +1032,11 @@ export class ModelVersionManager {
   /**
    * Reset any family whose persisted baseline diverges from the current
    * hardcoded baseline. This handles the case where a dev bumps a baseline
-   * in code (e.g. retired Gemini 1.5 → Gemini 3.1) — without this, loaders
+   * in code (e.g. retired Gemini 1.5 -> Gemini 3.1) - without this, loaders
    * would keep promoting the stale baseline as Tier 1 indefinitely.
    *
    * Also resets families whose tier1 is older than the current baseline
-   * (defensive — catches any other source of drift).
+   * (defensive - catches any other source of drift).
    */
   private reconcileBaselines(state: PersistedState): void {
     const expected: Record<string, string> = {
@@ -1057,8 +1057,8 @@ export class ModelVersionManager {
 
       if (baselineMismatch || tier1OlderThanBaseline) {
         console.log(
-          `[ModelVersionManager] 🔄 Reconciling stale family "${family}": ` +
-          `baseline ${entry.baseline} → ${currentBaseline}, tier1 ${entry.tier1} → ${currentBaseline}`
+          `[ModelVersionManager] Reconciling stale family "${family}": ` +
+          `baseline ${entry.baseline} -> ${currentBaseline}, tier1 ${entry.tier1} -> ${currentBaseline}`
         );
         entry.baseline = currentBaseline;
         entry.tier1 = currentBaseline;

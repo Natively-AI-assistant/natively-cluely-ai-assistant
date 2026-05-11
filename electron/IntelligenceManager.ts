@@ -12,6 +12,7 @@ import { LLMHelper } from './LLMHelper';
 import { SessionTracker } from './SessionTracker';
 import { IntelligenceEngine } from './IntelligenceEngine';
 import { MeetingPersistence } from './MeetingPersistence';
+import type { ActiveSkillContext } from './llm/WhatToAnswerLLM';
 
 // Re-export types for backward compatibility
 export type { TranscriptSegment, SuggestionTrigger, ContextItem } from './SessionTracker';
@@ -142,8 +143,8 @@ export class IntelligenceManager extends EventEmitter {
         return this.engine.runAssistMode();
     }
 
-    async runWhatShouldISay(question?: string, confidence?: number, imagePaths?: string[]): Promise<string | null> {
-        return this.engine.runWhatShouldISay(question, confidence, imagePaths);
+    async runWhatShouldISay(question?: string, confidence?: number, imagePaths?: string[], activeSkill?: ActiveSkillContext): Promise<string | null> {
+        return this.engine.runWhatShouldISay(question, confidence, imagePaths, activeSkill);
     }
 
     async runFollowUp(intent: string, userRequest?: string): Promise<string | null> {
@@ -202,6 +203,11 @@ export class IntelligenceManager extends EventEmitter {
     // ============================================
     // Meeting Lifecycle (delegates to persistence)
     // ============================================
+
+    startMeeting(metadata?: any): void {
+        this.session.beginSession(metadata);
+        this.engine.reset();
+    }
 
     async stopMeeting(): Promise<string | null> {
         return this.persistence.stopMeeting();

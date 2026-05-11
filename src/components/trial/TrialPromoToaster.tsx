@@ -222,7 +222,7 @@ export const TrialPromoToaster: React.FC<Props> = ({
                     Try everything. No card needed.
                   </h2>
                   <p style={{ fontSize: '13px', lineHeight: 1.66, color: T.t3, margin: '0 auto', maxWidth: '330px' }}>
-                    Full Natively API access — AI chat, meeting transcription, and company research — free for 30 minutes. Bound to this device. No sign-in.
+                    Full Natively API access — AI chat, meeting transcription, and company research — free for 10 minutes. Bound to this device. No sign-in.
                   </p>
                 </motion.div>
 

@@ -176,6 +176,12 @@ const SettingsPopup = () => {
         return () => observer.disconnect();
     }, []);
 
+    const handleScreenshot = () => {
+        window.electronAPI?.takeScreenshot?.().catch((error: unknown) => {
+            console.error('[SettingsPopup] Failed to take screenshot:', error);
+        });
+    };
+
     const popupPanelClass = isLightTheme
         ? 'bg-[#F3F4F6]/92 border-black/10 shadow-black/10'
         : 'bg-[#1E1E1E]/80 border-white/10 shadow-black/40';
@@ -347,7 +353,18 @@ const SettingsPopup = () => {
                 </div>
 
                 {/* Screenshot */}
-                <div className={`flex items-center justify-between px-3 py-2 rounded-lg transition-colors duration-200 group interaction-base interaction-press ${itemHoverClass}`}>
+                <div
+                    className={`flex items-center justify-between px-3 py-2 rounded-lg transition-colors duration-200 group interaction-base interaction-press ${itemHoverClass}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={handleScreenshot}
+                    onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            handleScreenshot();
+                        }
+                    }}
+                >
                     <div className="flex items-center gap-3">
                         <Camera className={`w-3.5 h-3.5 transition-colors ${iconInactiveClass}`} />
                         <span className={`text-[12px] transition-colors ${labelInactiveClass}`}>Screenshot</span>

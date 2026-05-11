@@ -557,10 +557,10 @@ export const AIProvidersSettings: React.FC = () => {
 
                 {/* Fast Response Mode */}
                 <div
-                    className={`bg-bg-item-surface rounded-xl p-5 border border-border-subtle flex items-center justify-between gap-4 ${!canUseFastMode ? 'opacity-50 grayscale' : ''}`}
+                    className={`bg-bg-item-surface rounded-xl p-5 border border-border-subtle flex items-center justify-between ${!canUseFastMode ? 'opacity-50 grayscale' : ''}`}
                     title={!canUseFastMode ? "Requires Groq, Natively API, or Codex CLI to be configured" : ""}
                 >
-                    <div className="flex-1">
+                    <div>
                         <div className="flex items-center gap-2">
                             <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-0">Fast Response Mode</label>
                             <span className="bg-orange-500/10 text-orange-500 text-[9px] font-bold px-1.5 py-0.5 rounded border border-orange-500/20">NEW</span>
@@ -582,102 +582,10 @@ export const AIProvidersSettings: React.FC = () => {
                             // @ts-ignore
                             await window.electronAPI?.setGroqFastTextMode(newState);
                         }}
-                        className={`shrink-0 w-11 h-6 rounded-full relative cursor-pointer transition-colors ${!canUseFastMode ? 'cursor-not-allowed bg-bg-toggle-switch' : fastResponseMode ? 'bg-orange-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                        className={`w-11 h-6 rounded-full relative transition-colors ${!canUseFastMode ? 'cursor-not-allowed bg-bg-toggle-switch' : fastResponseMode ? 'bg-orange-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
                     >
                         <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${fastResponseMode ? 'translate-x-5' : 'translate-x-0'}`} />
                     </div>
-                </div>
-            </div>
-
-            {/* Cloud Providers */}
-            <div className="space-y-5">
-                <div>
-                    <h3 className="text-sm font-bold text-text-primary mb-1">Cloud Providers</h3>
-                    <p className="text-xs text-text-secondary mb-2">Add API keys to unlock cloud AI models.</p>
-                </div>
-
-                <div className="space-y-4">
-
-                    {/* Gemini */}
-                    <ProviderCard
-                        providerId="gemini"
-                        providerName="Gemini"
-                        apiKey={apiKey}
-                        preferredModel={preferredModels.gemini}
-                        hasStoredKey={!!hasStoredKey.gemini}
-                        onKeyChange={setApiKey}
-                        onSaveKey={async () => { await handleSaveKey('gemini', apiKey, setApiKey); }}
-                        onRemoveKey={() => handleRemoveKey('gemini', setApiKey)}
-                        onTestConnection={() => handleTestConnection('gemini', apiKey)}
-                        testStatus={testStatus.gemini || 'idle'}
-                        testError={testError.gemini}
-                        savingStatus={!!savingStatus.gemini}
-                        savedStatus={!!savedStatus.gemini}
-                        keyPlaceholder="AIzaSy..."
-                        keyUrl="https://aistudio.google.com/app/apikey"
-                        onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, gemini: model }))}
-                    />
-
-                    {/* Groq */}
-                    <ProviderCard
-                        providerId="groq"
-                        providerName="Groq"
-                        apiKey={groqApiKey}
-                        preferredModel={preferredModels.groq}
-                        hasStoredKey={!!hasStoredKey.groq}
-                        onKeyChange={setGroqApiKey}
-                        onSaveKey={async () => { await handleSaveKey('groq', groqApiKey, setGroqApiKey); }}
-                        onRemoveKey={() => handleRemoveKey('groq', setGroqApiKey)}
-                        onTestConnection={() => handleTestConnection('groq', groqApiKey)}
-                        testStatus={testStatus.groq || 'idle'}
-                        testError={testError.groq}
-                        savingStatus={!!savingStatus.groq}
-                        savedStatus={!!savedStatus.groq}
-                        keyPlaceholder="gsk_..."
-                        keyUrl="https://console.groq.com/keys"
-                        onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, groq: model }))}
-                    />
-
-                    {/* OpenAI */}
-                    <ProviderCard
-                        providerId="openai"
-                        providerName="OpenAI"
-                        apiKey={openaiApiKey}
-                        preferredModel={preferredModels.openai}
-                        hasStoredKey={!!hasStoredKey.openai}
-                        onKeyChange={setOpenaiApiKey}
-                        onSaveKey={async () => { await handleSaveKey('openai', openaiApiKey, setOpenaiApiKey); }}
-                        onRemoveKey={() => handleRemoveKey('openai', setOpenaiApiKey)}
-                        onTestConnection={() => handleTestConnection('openai', openaiApiKey)}
-                        testStatus={testStatus.openai || 'idle'}
-                        testError={testError.openai}
-                        savingStatus={!!savingStatus.openai}
-                        savedStatus={!!savedStatus.openai}
-                        keyPlaceholder="sk-..."
-                        keyUrl="https://platform.openai.com/api-keys"
-                        onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, openai: model }))}
-                    />
-
-                    {/* Claude */}
-                    <ProviderCard
-                        providerId="claude"
-                        providerName="Claude"
-                        apiKey={claudeApiKey}
-                        preferredModel={preferredModels.claude}
-                        hasStoredKey={!!hasStoredKey.claude}
-                        onKeyChange={setClaudeApiKey}
-                        onSaveKey={async () => { await handleSaveKey('claude', claudeApiKey, setClaudeApiKey); }}
-                        onRemoveKey={() => handleRemoveKey('claude', setClaudeApiKey)}
-                        onTestConnection={() => handleTestConnection('claude', claudeApiKey)}
-                        testStatus={testStatus.claude || 'idle'}
-                        testError={testError.claude}
-                        savingStatus={!!savingStatus.claude}
-                        savedStatus={!!savedStatus.claude}
-                        keyPlaceholder="sk-ant-..."
-                        keyUrl="https://console.anthropic.com/settings/keys"
-                        onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, claude: model }))}
-                    />
-
                 </div>
             </div>
 
@@ -771,6 +679,98 @@ export const AIProvidersSettings: React.FC = () => {
                             Test CLI
                         </button>
                     </div>
+                </div>
+            </div>
+
+            {/* Cloud Providers */}
+            <div className="space-y-5">
+                <div>
+                    <h3 className="text-sm font-bold text-text-primary mb-1">Cloud Providers</h3>
+                    <p className="text-xs text-text-secondary mb-2">Add API keys to unlock cloud AI models.</p>
+                </div>
+
+                <div className="space-y-4">
+
+                    {/* Gemini */}
+                    <ProviderCard
+                        providerId="gemini"
+                        providerName="Gemini"
+                        apiKey={apiKey}
+                        preferredModel={preferredModels.gemini}
+                        hasStoredKey={!!hasStoredKey.gemini}
+                        onKeyChange={setApiKey}
+                        onSaveKey={async () => { await handleSaveKey('gemini', apiKey, setApiKey); }}
+                        onRemoveKey={() => handleRemoveKey('gemini', setApiKey)}
+                        onTestConnection={() => handleTestConnection('gemini', apiKey)}
+                        testStatus={testStatus.gemini || 'idle'}
+                        testError={testError.gemini}
+                        savingStatus={!!savingStatus.gemini}
+                        savedStatus={!!savedStatus.gemini}
+                        keyPlaceholder="AIzaSy..."
+                        keyUrl="https://aistudio.google.com/app/apikey"
+                        onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, gemini: model }))}
+                    />
+
+                    {/* Groq */}
+                    <ProviderCard
+                        providerId="groq"
+                        providerName="Groq"
+                        apiKey={groqApiKey}
+                        preferredModel={preferredModels.groq}
+                        hasStoredKey={!!hasStoredKey.groq}
+                        onKeyChange={setGroqApiKey}
+                        onSaveKey={async () => { await handleSaveKey('groq', groqApiKey, setGroqApiKey); }}
+                        onRemoveKey={() => handleRemoveKey('groq', setGroqApiKey)}
+                        onTestConnection={() => handleTestConnection('groq', groqApiKey)}
+                        testStatus={testStatus.groq || 'idle'}
+                        testError={testError.groq}
+                        savingStatus={!!savingStatus.groq}
+                        savedStatus={!!savedStatus.groq}
+                        keyPlaceholder="gsk_..."
+                        keyUrl="https://console.groq.com/keys"
+                        onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, groq: model }))}
+                    />
+
+                    {/* OpenAI */}
+                    <ProviderCard
+                        providerId="openai"
+                        providerName="OpenAI"
+                        apiKey={openaiApiKey}
+                        preferredModel={preferredModels.openai}
+                        hasStoredKey={!!hasStoredKey.openai}
+                        onKeyChange={setOpenaiApiKey}
+                        onSaveKey={async () => { await handleSaveKey('openai', openaiApiKey, setOpenaiApiKey); }}
+                        onRemoveKey={() => handleRemoveKey('openai', setOpenaiApiKey)}
+                        onTestConnection={() => handleTestConnection('openai', openaiApiKey)}
+                        testStatus={testStatus.openai || 'idle'}
+                        testError={testError.openai}
+                        savingStatus={!!savingStatus.openai}
+                        savedStatus={!!savedStatus.openai}
+                        keyPlaceholder="sk-..."
+                        keyUrl="https://platform.openai.com/api-keys"
+                        onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, openai: model }))}
+                    />
+
+                    {/* Claude */}
+                    <ProviderCard
+                        providerId="claude"
+                        providerName="Claude"
+                        apiKey={claudeApiKey}
+                        preferredModel={preferredModels.claude}
+                        hasStoredKey={!!hasStoredKey.claude}
+                        onKeyChange={setClaudeApiKey}
+                        onSaveKey={async () => { await handleSaveKey('claude', claudeApiKey, setClaudeApiKey); }}
+                        onRemoveKey={() => handleRemoveKey('claude', setClaudeApiKey)}
+                        onTestConnection={() => handleTestConnection('claude', claudeApiKey)}
+                        testStatus={testStatus.claude || 'idle'}
+                        testError={testError.claude}
+                        savingStatus={!!savingStatus.claude}
+                        savedStatus={!!savedStatus.claude}
+                        keyPlaceholder="sk-ant-..."
+                        keyUrl="https://console.anthropic.com/settings/keys"
+                        onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, claude: model }))}
+                    />
+
                 </div>
             </div>
 

@@ -4,7 +4,7 @@ import {
     Command, Monitor, Mic, Settings, Zap, Key, User, Play, Image, ArrowUp, FileText, Sparkles, Search, ChevronUp, Copy,
     FileJson, MessageSquare, Briefcase, Eye, EyeOff, Ghost, ChevronDown, ChevronRight, HelpCircle, Upload, CheckCircle2,
     RefreshCw, Trash2, Check, ExternalLink, Volume2, Globe, Brain, Cpu, Calendar, Star, CreditCard, X, Pencil, Lightbulb,
-    SlidersHorizontal, PointerOff, ArrowRight, LayoutGrid, Smartphone, Wifi, Lock, DollarSign, Building2
+    SlidersHorizontal, PointerOff, ArrowRight, LayoutGrid
 } from 'lucide-react';
 import { SiOpenai, SiGoogle } from 'react-icons/si';
 import { useShortcuts } from '../../hooks/useShortcuts';
@@ -816,10 +816,6 @@ const SetupGuide = () => {
             desc: 'Open Settings → AI Providers and choose a built-in model, or add a Groq or OpenRouter key.',
         },
         {
-            title: 'Personalize (Optional)',
-            desc: 'Drop your resume + JD in Profile Intelligence, link your Google Calendar, or pick a Mode tailored to your session.',
-        },
-        {
             title: "You're all set.",
             desc: null,
         },
@@ -1496,34 +1492,6 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                         </div>
 
                         <div className="border-t border-border-subtle pt-5 mt-2">
-                            <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl mb-4">
-                                <h4 className="text-[13px] font-semibold text-purple-400 flex items-center gap-2 mb-1">
-                                    <Briefcase size={14} /> Job Description Targeting
-                                </h4>
-                                <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                    Drop a target <strong>JD PDF</strong> alongside your resume. Natively extracts the role title, level, company, and required technologies, then biases every prompt to align your responses with that exact spec — perfect for staying on-message during a final loop.
-                                </p>
-                            </div>
-
-                            <div className="grid md:grid-cols-2 gap-3 mb-5">
-                                <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                    <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <Building2 className="w-4 h-4 text-purple-400" /> Company Intelligence
-                                    </h4>
-                                    <p className="text-[11px] text-text-secondary leading-relaxed">
-                                        After uploading a JD, hit <strong>Research Now</strong> to compile a live dossier on the company — recent news, product surface area, culture signals — cached and injected into every reply so you sound briefed without prep.
-                                    </p>
-                                </div>
-                                <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                    <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <DollarSign className="w-4 h-4 text-emerald-500" /> Negotiation Script
-                                    </h4>
-                                    <p className="text-[11px] text-text-secondary leading-relaxed">
-                                        Generate a <strong>tailored salary script</strong> calibrated against the active JD's level and your background. Live coaching shows up inline during compensation conversations.
-                                    </p>
-                                </div>
-                            </div>
-
                             <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl mb-4">
                                 <h4 className="text-[13px] font-semibold text-emerald-500 flex items-center gap-2 mb-1">
                                     <FileText size={14} /> Custom Context Notes
@@ -1610,12 +1578,12 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     </ul>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">Custom Modes & Templates</h4>
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">Custom Modes</h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                        <li>Click <strong>+ New Mode</strong> for a blank slate</li>
-                                        <li>Browse the <strong>Templates Gallery</strong> for ready-made personas</li>
-                                        <li>Edit the <strong>Real-time Prompt</strong> with the inline Save action</li>
-                                        <li>Define <strong>Note Section Templates</strong> per mode for capture format</li>
+                                        <li>Click <strong>+ New Mode</strong> to create from scratch</li>
+                                        <li>Or use <strong>Natively Templates</strong> for a preset start</li>
+                                        <li>Write a custom real-time prompt for the AI</li>
+                                        <li>Add your own note section templates</li>
                                     </ul>
                                 </div>
                             </div>
@@ -1660,22 +1628,6 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                         When tracking live meetings, Natively uses the connected calendar context to instantly figure out <strong>who you are talking to</strong>. This powers the Follow-Up Email system, letting you auto-draft post-meeting notes to confirmed attendees.
                                     </p>
                                 </div>
-                                <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                    <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <LayoutGrid className="w-4 h-4 text-blue-500" /> Launcher Peek Stack
-                                    </h4>
-                                    <p className="text-[11px] text-text-secondary">
-                                        The Launcher's Calendar card now displays your <strong>next real meeting</strong> with a stacked-card visual hinting at what comes after it — no need to switch tabs to see what's queued.
-                                    </p>
-                                </div>
-                                <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                    <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <ExternalLink className="w-4 h-4 text-emerald-500" /> One-Click Join
-                                    </h4>
-                                    <p className="text-[11px] text-text-secondary">
-                                        Each upcoming event shows a <strong>Join Now</strong> button that opens the meeting link in your <strong>system default browser</strong> (so it lands in the right Chrome/Safari profile), not an in-app webview.
-                                    </p>
-                                </div>
                             </div>
                         </div>
 
@@ -1699,47 +1651,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="10. Phone Mirror" icon={<Smartphone className="w-4 h-4" />}>
-                    <div className="space-y-4">
-                        <div className="p-3 bg-sky-500/10 border border-sky-500/20 rounded-xl mb-2">
-                            <h4 className="text-[13px] font-semibold text-sky-400 flex items-center gap-2 mb-1">
-                                <Smartphone size={14} /> Stream Natively to Your Phone
-                            </h4>
-                            <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                Phone Mirror spins up a small local web server so you can watch Natively's live transcript and AI answers from your phone or tablet — handy when your screen is being shared and you don't want the overlay visible.
-                            </p>
-                        </div>
-
-                        <div className="grid md:grid-cols-2 gap-3">
-                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                    <Wifi className="w-4 h-4 text-sky-500" /> Enable & Connect
-                                </h4>
-                                <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                    <li>Open <strong>Settings → Phone Mirror</strong></li>
-                                    <li>Toggle on, then scan the generated QR code from your phone</li>
-                                    <li>Loopback by default — flip <strong>Expose on LAN</strong> to reach it from another device on the same Wi-Fi</li>
-                                </ul>
-                            </div>
-                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                    <Lock className="w-4 h-4 text-amber-500" /> Token-Gated Security
-                                </h4>
-                                <p className="text-[11px] text-text-secondary">
-                                    Every session is protected by a single-use bearer token baked into the QR. If a device leaves your trust circle, hit <strong>Rotate Token</strong> to invalidate every existing connection in one tap.
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="p-3 border border-orange-500/20 bg-orange-500/5 rounded-lg">
-                            <p className="text-[10px] text-orange-400 m-0">
-                                <strong>⚠️ LAN exposure:</strong> Only enable <em>Expose on LAN</em> on networks you trust. The token stops casual snoops, but anyone who captures the QR or copies the URL can read your live transcript until you rotate.
-                            </p>
-                        </div>
-                    </div>
-                </AccordionSection>
-
-                <AccordionSection title="11. Stealth & Window Control" icon={<Ghost className="w-4 h-4" />}>
+                <AccordionSection title="10. Stealth & Window Control" icon={<Ghost className="w-4 h-4" />}>
                     <div className="space-y-4">
                         <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl mb-4">
                             <h4 className="text-[13px] font-semibold text-indigo-400 flex items-center gap-2 mb-1">

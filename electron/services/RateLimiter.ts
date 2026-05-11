@@ -4,9 +4,9 @@
  * when the bucket is empty.
  *
  * BUG-4 fixes:
- *   1. MAX_QUEUE_DEPTH cap — prevents unbounded memory growth under sustained load
- *      (e.g. fast-text mode at 1 req/s with a 6 req/min limit → 54 waiters in 60s).
- *   2. destroy() now rejects waiters instead of resolving them — the old behaviour
+ *   1. MAX_QUEUE_DEPTH cap - prevents unbounded memory growth under sustained load
+ *      (e.g. fast-text mode at 1 req/s with a 6 req/min limit -> 54 waiters in 60s).
+ *   2. destroy() now rejects waiters instead of resolving them - the old behaviour
  *      called resolve() with no token, silently bypassing the rate limit on shutdown.
  */
 export class RateLimiter {
@@ -17,10 +17,10 @@ export class RateLimiter {
     private waitQueue: Array<{ resolve: () => void; reject: (err: Error) => void }> = [];
     private refillTimer: ReturnType<typeof setInterval> | null = null;
 
-    // Hard cap on pending waiters — beyond this depth, new callers get an immediate
+    // Hard cap on pending waiters - beyond this depth, new callers get an immediate
     // rejection instead of queuing. Prevents memory explosion during rate-limit storms.
     // 20 queued requests = ~33s of wait at 6 req/min (Groq free tier) before the first
-    // queued request even starts — anything beyond that is an abuse pattern.
+    // queued request even starts - anything beyond that is an abuse pattern.
     private readonly MAX_QUEUE_DEPTH = 20;
 
     /**
@@ -40,7 +40,7 @@ export class RateLimiter {
     /**
      * Acquire a token. Resolves immediately if available.
      * If the bucket is empty, waits up to MAX_QUEUE_DEPTH slots.
-     * Throws RateLimitQueueFullError if the queue is full — callers should catch and fail-fast.
+     * Throws RateLimitQueueFullError if the queue is full - callers should catch and fail-fast.
      */
     public async acquire(): Promise<void> {
         this.refill();
@@ -52,7 +52,7 @@ export class RateLimiter {
 
         if (this.waitQueue.length >= this.MAX_QUEUE_DEPTH) {
             throw new Error(
-                `Rate limiter queue full (${this.MAX_QUEUE_DEPTH} waiters) — request rejected to prevent memory overflow`
+                `Rate limiter queue full (${this.MAX_QUEUE_DEPTH} waiters) - request rejected to prevent memory overflow`
             );
         }
 
@@ -86,11 +86,11 @@ export class RateLimiter {
             this.refillTimer = null;
         }
         // BUG-4 fix: reject (not resolve) all queued waiters on destroy.
-        // Previously called resolve() which let callers proceed without a token —
+        // Previously called resolve() which let callers proceed without a token -
         // silently bypassing the rate limit on app shutdown.
         while (this.waitQueue.length > 0) {
             const waiter = this.waitQueue.shift()!;
-            waiter.reject(new Error('RateLimiter destroyed — request cancelled'));
+            waiter.reject(new Error('RateLimiter destroyed - request cancelled'));
         }
     }
 }

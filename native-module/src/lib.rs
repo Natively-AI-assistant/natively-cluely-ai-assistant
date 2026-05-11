@@ -18,12 +18,6 @@ pub mod microphone;
 pub mod silence_suppression;
 pub mod speaker;
 
-#[cfg(target_os = "macos")]
-pub mod stealth_window;
-
-#[cfg(target_os = "macos")]
-pub mod keyboard_tap;
-
 use crate::audio_config::{CHUNK_BATCH_COUNT, CHUNK_BATCH_TIMEOUT_MS, DSP_POLL_MS};
 use crate::silence_suppression::{FrameAction, SilenceSuppressionConfig, SilenceSuppressor};
 use std::time::Instant;

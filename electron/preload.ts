@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer } from "electron"
 
+type SkillSummary = {
+  id: string
+  name: string
+  description: string
+  source: 'userData' | 'builtin'
+}
+
 // Types for the exposed Electron API
 interface ElectronAPI {
   updateContentDimensions: (dimensions: {
@@ -121,7 +128,7 @@ interface ElectronAPI {
 
   // Intelligence Mode IPC
   generateAssist: () => Promise<{ insight: string | null }>
-  generateWhatToSay: (question?: string, imagePaths?: string[]) => Promise<{ answer: string | null; question?: string; error?: string }>
+  generateWhatToSay: (question?: string, imagePaths?: string[], options?: { skillId?: string }) => Promise<{ answer: string | null; question?: string; error?: string; skillName?: string }>
   generateFollowUp: (intent: string, userRequest?: string) => Promise<{ refined: string | null; intent: string }>
   generateRecap: () => Promise<{ summary: string | null }>
   submitManualQuestion: (question: string) => Promise<{ answer: string | null; question: string }>
@@ -215,10 +222,16 @@ interface ElectronAPI {
   onOverlayMousePassthroughChanged: (callback: (enabled: boolean) => void) => () => void
 
   // Streaming listeners
-  streamGeminiChat: (message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean }) => Promise<void>
+  streamGeminiChat: (message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean, skipModeInjection?: boolean, skillId?: string }) => Promise<void>
   onGeminiStreamToken: (callback: (token: string) => void) => () => void
   onGeminiStreamDone: (callback: () => void) => () => void
   onGeminiStreamError: (callback: (error: string) => void) => () => void
+
+  // Skills
+  skillsList: () => Promise<SkillSummary[]>
+  skillsGet: (id: string) => Promise<(SkillSummary & { instructions: string }) | null>
+  skillsRefresh: () => Promise<SkillSummary[]>
+  skillsOpenFolder: () => Promise<{ success: boolean; path: string; error?: string }>
 
 
   onUndetectableChanged: (callback: (state: boolean) => void) => () => void
@@ -736,7 +749,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   // Intelligence Mode IPC
   generateAssist: () => ipcRenderer.invoke("generate-assist"),
-  generateWhatToSay: (question?: string, imagePaths?: string[]) => ipcRenderer.invoke("generate-what-to-say", question, imagePaths),
+  generateWhatToSay: (question?: string, imagePaths?: string[], options?: { skillId?: string }) => ipcRenderer.invoke("generate-what-to-say", question, imagePaths, options),
   generateClarify: () => ipcRenderer.invoke("generate-clarify"),
   generateCodeHint: (imagePaths?: string[], problemStatement?: string) => ipcRenderer.invoke("generate-code-hint", imagePaths, problemStatement),
   generateBrainstorm: (imagePaths?: string[], problemStatement?: string) => ipcRenderer.invoke("generate-brainstorm", imagePaths, problemStatement),
@@ -915,7 +928,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
 
   // Streaming Chat
-  streamGeminiChat: (message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean }) => ipcRenderer.invoke("gemini-chat-stream", message, imagePaths, context, options),
+  streamGeminiChat: (message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean, skipModeInjection?: boolean, skillId?: string }) => ipcRenderer.invoke("gemini-chat-stream", message, imagePaths, context, options),
 
   onGeminiStreamToken: (callback: (token: string) => void) => {
     const subscription = (_: any, token: string) => callback(token)
@@ -940,6 +953,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.removeListener("gemini-stream-error", subscription)
     }
   },
+
+  // Skills
+  skillsList: () => ipcRenderer.invoke('skills:list'),
+  skillsGet: (id: string) => ipcRenderer.invoke('skills:get', id),
+  skillsRefresh: () => ipcRenderer.invoke('skills:refresh'),
+  skillsOpenFolder: () => ipcRenderer.invoke('skills:open-folder'),
 
   // Model Management
   getDefaultModel: () => ipcRenderer.invoke('get-default-model'),
