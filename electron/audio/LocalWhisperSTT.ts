@@ -34,6 +34,7 @@
 import { EventEmitter } from 'events';
 import { Worker } from 'worker_threads';
 import path from 'path';
+import fs from 'fs';
 import { resampleToF32 } from './whisper/audioResampler';
 import { VadProcessor } from './whisper/vadProcessor';
 import { filterHallucination } from './whisper/hallucinationFilter';
@@ -41,6 +42,18 @@ import { configureTransformersCache } from './whisper/modelManager';
 import { modelPreloader } from './whisper/modelPreloader';
 import { buildWorkerInitMessage } from './whisper/inferenceConfig';
 import type { WorkerOutMessage } from './whisper/types';
+
+// esbuild bundles this module into dist-electron/electron/main.js, so
+// __dirname resolves to dist-electron/electron/ rather than this file's
+// own directory. Check both candidate locations to support bundled and
+// unbundled execution.
+function resolveWhisperWorkerPath(): string {
+    const candidates = [
+        path.join(__dirname, 'whisper', 'whisperWorker.js'),
+        path.join(__dirname, 'audio', 'whisper', 'whisperWorker.js'),
+    ];
+    return candidates.find(p => fs.existsSync(p)) ?? candidates[0];
+}
 
 export class LocalWhisperSTT extends EventEmitter {
     private readonly modelId: string;
@@ -568,7 +581,7 @@ export class LocalWhisperSTT extends EventEmitter {
             this.flushPending();
         } else {
             console.log(`[LocalWhisperSTT] Cold-starting worker for ${this.modelId}`);
-            const workerPath = path.join(__dirname, 'whisper', 'whisperWorker.js');
+            const workerPath = resolveWhisperWorkerPath();
             this.worker = new Worker(workerPath);
             this.attachWorkerListeners();
             this.worker.postMessage(buildWorkerInitMessage(this.modelId));
