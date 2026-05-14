@@ -18,6 +18,7 @@ import { PermissionsToaster }   from "./components/onboarding/PermissionsToaster
 import { AlertCircle } from "lucide-react"
 import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity } from "./lib/overlayAppearance"
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
+import { isMac } from './utils/platformUtils'
 import {
   JDAwarenessToaster,
   ProfileFeatureToaster,
@@ -390,7 +391,8 @@ const App: React.FC = () => {
 
       // Override output device ID to force SCK if experimental mode is enabled
       // Default to CoreAudio unless experimental is enabled
-      if (useExperimentalSck) {
+      // SCK is macOS-only — ignore the flag on other platforms
+      if (useExperimentalSck && isMac) {
         console.log("[App] Using ScreenCaptureKit backend (Experimental).");
         outputDeviceId = "sck";
       } else {
