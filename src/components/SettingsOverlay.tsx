@@ -6,7 +6,7 @@ import {
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
     ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Settings, Activity, ExternalLink, Trash2,
     Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff,
-    Star, AlertCircle, Gift, Smartphone, Cpu
+    Star, AlertCircle, Gift, Smartphone, Cpu, UserSearch
 } from 'lucide-react';
 import { analytics } from '../lib/analytics/analytics.service';
 import { AboutSection } from './AboutSection';
@@ -349,9 +349,10 @@ interface SettingsOverlayProps {
     isOpen: boolean;
     onClose: () => void;
     initialTab?: string;
+    onOpenProfile?: () => void;
 }
 
-const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, initialTab = 'general' }) => {
+const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, initialTab = 'general', onOpenProfile }) => {
     const isLight = useResolvedTheme() === 'light';
     const [activeTab, setActiveTab] = useState(initialTab);
     
@@ -1251,8 +1252,15 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     // Use the native mic test path so device IDs stay consistent with the meeting runtime.
     useEffect(() => {
         if (isOpen && activeTab === 'audio') {
-            const unsubscribe = window.electronAPI?.onAudioTestLevel?.((level) => {
+            const unsubscribeTest = window.electronAPI?.onAudioTestLevel?.((level) => {
                 setMicLevel(Math.max(0, Math.min(100, level * 100)));
+            });
+
+            // Also listen for real audio levels during meetings
+            const unsubscribeLive = window.electronAPI?.onAudioLevel?.((data) => {
+                if (data.channel === 'mic') {
+                    setMicLevel(data.level * 100);
+                }
             });
 
             window.electronAPI?.startAudioTest(selectedInput || undefined).catch((error) => {
@@ -1261,7 +1269,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
             });
 
             return () => {
-                unsubscribe?.();
+                unsubscribeTest?.();
+                unsubscribeLive?.();
                 window.electronAPI?.stopAudioTest?.().catch((error) => {
                     console.error("Error stopping native microphone test:", error);
                 });
@@ -1366,6 +1375,18 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors flex items-center gap-3 ${activeTab === 'help' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
                                         <HelpCircle size={16} /> Setup & Help
+                                    </button>
+
+                                    <button
+                                        onClick={() => {
+                                            if (onOpenProfile) {
+                                                onOpenProfile();
+                                            }
+                                        }}
+                                        className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"
+                                    >
+                                        <UserSearch size={16} className="text-blue-500/70" />
+                                        <span>Profile Intelligence</span>
                                     </button>
 
                                     <button
@@ -2497,15 +2518,30 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                             />
 
                                             <div>
-                                                <div className="flex justify-between text-xs text-text-secondary mb-2 px-1">
-                                                    <span>Input Level</span>
+                                                <div className="flex justify-between text-xs text-text-secondary mb-3 px-1">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Activity size={12} className={micLevel > 0 ? 'text-green-400' : 'text-text-tertiary'} />
+                                                        <span>Microphone Test</span>
+                                                    </div>
+                                                    <span className={`font-medium transition-colors ${micLevel > 1 ? 'text-green-400' : 'text-text-tertiary'}`}>
+                                                        {micLevel > 1 ? 'Picking up sound...' : 'Speak into your mic'}
+                                                    </span>
                                                 </div>
-                                                <div className="h-1.5 bg-bg-input rounded-full overflow-hidden">
-                                                    <div
-                                                        className="h-full bg-green-500 transition-all duration-100 ease-out"
-                                                        style={{ width: `${micLevel}%` }}
-                                                    />
+                                                <div className="h-4 bg-bg-input rounded-xl overflow-hidden p-1 flex items-center gap-0.5 border border-border-subtle shadow-inner">
+                                                    {[...Array(24)].map((_, i) => (
+                                                        <div 
+                                                            key={i}
+                                                            className={`h-full flex-1 rounded-sm transition-all duration-75 ${
+                                                                (i + 1) * (100 / 24) <= micLevel 
+                                                                    ? (i < 16 ? 'bg-green-500' : (i < 20 ? 'bg-yellow-500' : 'bg-red-500')) 
+                                                                    : 'bg-bg-item-surface/30'
+                                                            }`}
+                                                        />
+                                                    ))}
                                                 </div>
+                                                <p className="text-[10px] text-text-tertiary mt-2 px-1 text-center">
+                                                    If the bars don't move while you speak, check your hardware or privacy settings.
+                                                </p>
                                             </div>
 
                                             <div className="h-px bg-border-subtle my-2" />

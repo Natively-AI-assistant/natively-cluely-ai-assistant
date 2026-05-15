@@ -140,6 +140,7 @@ export interface ElectronAPI {
   onSystemAudioPermissionDenied: (callback: (message: string) => void) => () => void
   onDeviceSelectionApplied: (callback: (payload: { kind: 'input' | 'output'; requested: string | null; actual: string | null; fellBack: boolean; reason?: string }) => void) => () => void
   onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; attempt: number; maxAttempts: number; terminal?: boolean; stuck?: boolean }) => void) => () => void
+  onAudioCaptureSuccess: (callback: (payload: { channel: 'system' | 'mic' }) => void) => () => void
 
   // STT Status Events
   onSttStatusChanged: (callback: (data: { state: 'connected' | 'reconnecting' | 'failed'; provider: string; error?: string; channel: 'user' | 'interviewer'; reconnectAttempts?: number }) => void) => () => void
@@ -231,6 +232,7 @@ export interface ElectronAPI {
 
   // Settings Window
   toggleSettingsWindow: (coords?: { x: number; y: number }) => Promise<void>;
+  openPrivacySettings: (type: 'microphone' | 'screen') => Promise<void>;
 
   // Groq Fast Text Mode
   getGroqFastTextMode: () => Promise<{ enabled: boolean }>;
@@ -257,6 +259,7 @@ export interface ElectronAPI {
   startAudioTest: (deviceId?: string) => Promise<{ success: boolean }>;
   stopAudioTest: () => Promise<{ success: boolean }>;
   onAudioTestLevel: (callback: (level: number) => void) => () => void;
+  onAudioLevel: (callback: (data: { channel: 'mic' | 'system', level: number }) => void) => () => void;
 
   // Database
   flushDatabase: () => Promise<{ success: boolean }>;
@@ -355,6 +358,8 @@ export interface ElectronAPI {
   profileResetNegotiation: () => Promise<{ success: boolean; error?: string }>
   profileGetNotes: () => Promise<{ success: boolean; content: string; error?: string }>
   profileSaveNotes: (content: string) => Promise<{ success: boolean; error?: string }>
+  profileGetPersona: () => Promise<string>
+  profileSavePersona: (content: string) => Promise<{ success: boolean; error?: string }>
 
   // Tavily Search API
   setTavilyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>

@@ -74,11 +74,11 @@ impl SilenceSuppressionConfig {
     /// sounds which the ML VAD model rigidly suppresses, breaking the STT pipeline (#127).
     pub fn for_system_audio() -> Self {
         Self {
-            speech_threshold_rms: 30.0,
+            speech_threshold_rms: 20.0,
             speech_hangover: Duration::from_millis(600), // increased from 300ms to preserve context across brief pauses
             silence_keepalive_interval: Duration::from_millis(100),
             adaptive_multiplier: 3.0,
-            adaptive_min_floor: 10.0,
+            adaptive_min_floor: 5.0,
             ema_alpha: 0.02,
             native_sample_rate: 48000,
             use_vad: false,
@@ -91,11 +91,11 @@ impl SilenceSuppressionConfig {
     /// hardware DSP (like macOS Apple Silicon) sound "unnatural" to strict models (#128).
     pub fn for_microphone() -> Self {
         Self {
-            speech_threshold_rms: 100.0,
+            speech_threshold_rms: 50.0,
             speech_hangover: Duration::from_millis(500), // increased from 150ms to prevent clipping trailing consonants (s, t, etc)
             silence_keepalive_interval: Duration::from_millis(100),
             adaptive_multiplier: 3.0,
-            adaptive_min_floor: 20.0,
+            adaptive_min_floor: 10.0,
             ema_alpha: 0.02,
             native_sample_rate: 48000,
             use_vad: true,

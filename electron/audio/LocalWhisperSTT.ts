@@ -568,7 +568,7 @@ export class LocalWhisperSTT extends EventEmitter {
             this.flushPending();
         } else {
             console.log(`[LocalWhisperSTT] Cold-starting worker for ${this.modelId}`);
-            const workerPath = path.join(__dirname, 'whisper', 'whisperWorker.js');
+            const workerPath = path.join(__dirname, 'audio', 'whisper', 'whisperWorker.js');
             this.worker = new Worker(workerPath);
             this.attachWorkerListeners();
             this.worker.postMessage(buildWorkerInitMessage(this.modelId));

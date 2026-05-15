@@ -8,6 +8,7 @@ interface TopPillProps {
     onQuit: () => void;
     appearance: OverlayAppearance;
     onLogoClick?: () => void;
+    micLevel?: number;
 }
 
 export default function TopPill({
@@ -16,6 +17,7 @@ export default function TopPill({
     onQuit,
     appearance,
     onLogoClick,
+    micLevel,
 }: TopPillProps) {
     return (
         <div className="flex justify-center mt-2 select-none z-50">
@@ -32,27 +34,35 @@ export default function TopPill({
                 style={appearance.pillStyle}
             >
                 {/* LOGO BUTTON */}
-                <button
-                    onClick={onLogoClick}
-                    className={`
-            w-8 h-8
-            rounded-full
-            overlay-icon-surface
-            overlay-icon-surface-hover
-            flex items-center justify-center
-            relative overflow-hidden
-            interaction-base interaction-press
-          `}
-                    style={appearance.iconStyle}
-                >
-                    <img
-                        src={icon}
-                        alt="Natively"
-                        className="w-[24px] h-[24px] object-contain opacity-95 scale-105 force-black-icon"
-                        draggable="false"
-                        onDragStart={(e) => e.preventDefault()}
-                    />
-                </button>
+                <div className="relative">
+                    <button
+                        onClick={onLogoClick}
+                        className={`
+                w-8 h-8
+                rounded-full
+                overlay-icon-surface
+                overlay-icon-surface-hover
+                flex items-center justify-center
+                relative overflow-hidden
+                interaction-base interaction-press
+              `}
+                        style={appearance.iconStyle}
+                    >
+                        <img
+                            src={icon}
+                            alt="Natively"
+                            className="w-[24px] h-[24px] object-contain opacity-95 scale-105 force-black-icon"
+                            draggable="false"
+                            onDragStart={(e) => e.preventDefault()}
+                        />
+                    </button>
+                    {micLevel !== undefined && micLevel > 2 && (
+                        <div 
+                            className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-bg-main shadow-sm animate-pulse"
+                            title="Microphone Active"
+                        />
+                    )}
+                </div>
 
                 {/* CENTER SEGMENT */}
                 <button

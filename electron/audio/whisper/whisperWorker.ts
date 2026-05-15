@@ -236,12 +236,9 @@ parentPort.on('message', async (msg: any) => {
       let language: string | null = LANG_MAP[msg.language] ?? null;
       const streaming: boolean = !!msg.streaming;
 
-      // English-only checkpoints (Distil-Whisper + .en variants) have no
-      // multilingual decoder. Force language='english' regardless of the
-      // user's auto/non-English setting so the model isn't asked to
-      // transcribe phonetically into the wrong language.
-      if (ENGLISH_ONLY_MODELS.has(loadedModelId)) {
-        language = 'english';
+      const isEnglishOnly = ENGLISH_ONLY_MODELS.has(loadedModelId);
+      if (isEnglishOnly) {
+        language = null; // Transformers.js v3 strictly forbids passing language/task to English-only models
       }
 
       // Streaming partial passes use deterministic settings so consecutive
@@ -252,7 +249,6 @@ parentPort.on('message', async (msg: any) => {
       const opts: any = streaming
         ? {
             sampling_rate: 16000,
-            task: 'transcribe',
             temperature: 0,
             no_speech_threshold: 0.6,
             // Whisper's anti-loop check — drops outputs whose token gzip
@@ -266,12 +262,13 @@ parentPort.on('message', async (msg: any) => {
           }
         : {
             sampling_rate: 16000,
-            task: 'transcribe',
             condition_on_previous_text: false,
             compression_ratio_threshold: 2.4,
             logprob_threshold: -1.0,
             no_speech_threshold: 0.6,
           };
+          
+      if (!isEnglishOnly) opts.task = 'transcribe';
       if (language) opts.language = language;
 
       // Use the pre-tokenized prompt cache populated by setPrompt messages.

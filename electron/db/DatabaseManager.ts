@@ -584,6 +584,20 @@ export class DatabaseManager {
             this.db.pragma('user_version = 14');
         }
 
+        // Version 14 → 15: Add profile_persona table
+        if (version < 15) {
+            console.log('[DatabaseManager] Applying migration v14 → v15: Add profile_persona table');
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS profile_persona (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    content TEXT NOT NULL DEFAULT '',
+                    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                );
+                INSERT OR IGNORE INTO profile_persona (id, content) VALUES (1, '');
+            `);
+            this.db.pragma('user_version = 15');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 
@@ -610,6 +624,32 @@ export class DatabaseManager {
             ).run(content);
         } catch (e) {
             console.error('[DatabaseManager] saveCustomNotes failed:', e);
+        }
+    }
+
+    // ============================================
+    // Profile Persona (System Prompt)
+    // ============================================
+
+    public getPersona(): string {
+        if (!this.db) return '';
+        try {
+            const row = this.db.prepare('SELECT content FROM profile_persona WHERE id = 1').get() as { content: string } | undefined;
+            return row?.content ?? '';
+        } catch (e) {
+            console.error('[DatabaseManager] getPersona failed:', e);
+            return '';
+        }
+    }
+
+    public savePersona(content: string): void {
+        if (!this.db) return;
+        try {
+            this.db.prepare(
+                'INSERT INTO profile_persona (id, content, updated_at) VALUES (1, ?, datetime(\'now\')) ON CONFLICT(id) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at'
+            ).run(content);
+        } catch (e) {
+            console.error('[DatabaseManager] savePersona failed:', e);
         }
     }
 
