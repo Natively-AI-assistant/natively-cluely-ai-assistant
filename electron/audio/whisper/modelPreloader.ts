@@ -52,8 +52,8 @@ class ModelPreloader {
 
         console.log(`[ModelPreloader] Warming worker for ${modelId}...`);
 
-        // __dirname at runtime = dist-electron/electron/audio/whisper/
-        const workerPath = path.join(__dirname, 'whisperWorker.js');
+        // __dirname at runtime (bundled in main.js) = dist-electron/electron/
+        const workerPath = path.join(__dirname, 'audio', 'whisper', 'whisperWorker.js');
         const w = new Worker(workerPath);
         this.loadingWorker = w;
 

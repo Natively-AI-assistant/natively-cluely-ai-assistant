@@ -353,7 +353,10 @@ fn build_input_stream(
                     // REAL-TIME SAFE: Only lock-free push
                     if channels > 1 {
                         for chunk in data.chunks(channels) {
-                            let _ = producer.try_push(chunk[0]);
+                            // Mix channels to mono: (ch1 + ch2 + ... + chN) / N
+                            let sum: f32 = chunk.iter().sum();
+                            let mono = sum / channels as f32;
+                            let _ = producer.try_push(mono);
                         }
                     } else {
                         let _ = producer.push_slice(data);
@@ -380,8 +383,10 @@ fn build_input_stream(
                     // REAL-TIME SAFE: Convert and push
                     if channels > 1 {
                         for chunk in data.chunks(channels) {
-                            let sample = chunk[0] as f32 / 32768.0;
-                            let _ = producer.try_push(sample);
+                            // Mix channels to mono: (ch1 + ch2 + ... + chN) / N
+                            let sum: f32 = chunk.iter().map(|&s| s as f32).sum();
+                            let mono = (sum / channels as f32) / 32768.0;
+                            let _ = producer.try_push(mono);
                         }
                     } else {
                         for &sample in data {
@@ -410,8 +415,10 @@ fn build_input_stream(
                     // REAL-TIME SAFE: Convert and push
                     if channels > 1 {
                         for chunk in data.chunks(channels) {
-                            let sample = chunk[0] as f32 / 2147483648.0;
-                            let _ = producer.try_push(sample);
+                            // Mix channels to mono: (ch1 + ch2 + ... + chN) / N
+                            let sum: f32 = chunk.iter().map(|&s| s as f32).sum();
+                            let mono = (sum / channels as f32) / 2147483648.0;
+                            let _ = producer.try_push(mono);
                         }
                     } else {
                         for &sample in data {

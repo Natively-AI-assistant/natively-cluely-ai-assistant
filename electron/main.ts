@@ -277,6 +277,12 @@ export class AppState {
   private _dockReassertTimers: NodeJS.Timeout[] = []; // Re-assert dock-hidden state after show+focus
   private _ollamaBootstrapPromise: Promise<void> | null = null;
   private screenshotCaptureInProgress: boolean = false;
+  private _lastSystemVolumeLogAt: number = 0;
+  private _lastMicVolumeLogAt: number = 0;
+  private _lastMicLevelBroadcastAt: number = 0;
+  private _lastSysLevelBroadcastAt: number = 0;
+  private _micAudioObservedInSession: boolean = false;
+  private _systemAudioObservedInSession: boolean = false;
 
 
   // Processing events
@@ -1253,6 +1259,14 @@ export class AppState {
    */
   private wireSystemCapture(capture: SystemAudioCapture, label: string = ''): void {
     const prefix = label ? `[Main] ${label} ` : '[Main] ';
+    
+    // CRITICAL: Clean up existing listeners before re-wiring to avoid duplicates
+    capture.removeAllListeners('data');
+    capture.removeAllListeners('sample_rate_changed');
+    capture.removeAllListeners('speech_ended');
+    capture.removeAllListeners('start');
+    capture.removeAllListeners('stop');
+
     let chunkCount = 0;
     // Watchdog: if no chunks arrive within 8s of capture start, the most likely
     // causes are (a) Screen Recording permission was revoked between the TCC
@@ -1357,31 +1371,40 @@ export class AppState {
         this._sysSttRateApplied = true;
         console.log(`${prefix}Interviewer STT rate locked from first chunk: ${rate}Hz`);
       }
-      if (chunkCount <= 3 || chunkCount % 500 === 0) {
-        console.log(`${prefix}SystemAudio->STT: chunk #${chunkCount}, ${chunk.length}B, googleSTT=${this.googleSTT ? 'active' : 'NULL'}`);
+      // Periodic volume logging for diagnostics (every 5s)
+      const currentTime = Date.now();
+      if (!this._lastSystemVolumeLogAt || currentTime - this._lastSystemVolumeLogAt > 5000) {
+        this._lastSystemVolumeLogAt = currentTime;
+        const rms = this.calculateRMS(chunk);
+        console.log(`${prefix}System Audio Volume: RMS=${rms.toFixed(1)}`);
       }
 
-      // TCC zero-fill check. Skip work entirely once latched off.
-      if (!zerofillLatched && !zerofillTriggered) {
-        if (firstChunkAt === 0) firstChunkAt = Date.now();
-        // Stride-sample 16 samples across the chunk — sufficient to catch any
-        // real audio content, ~32× cheaper than scanning all 960 samples.
+      // TCC zero-fill check. Skip work entirely once session-level latch is set.
+      if (!this._systemAudioObservedInSession) {
+        if (firstChunkAt === 0) firstChunkAt = currentTime;
+        // Stride-sample every byte. If we see ANY non-zero value, the driver is alive.
+        // Digital silence (all zeros) is what we are actually watching for.
         let peak = 0;
-        const stride = Math.max(2, (chunk.length >> 5) & ~1); // even byte offset
-        for (let i = 0; i + 1 < chunk.length; i += stride) {
-          const s = chunk.readInt16LE(i);
-          const a = s < 0 ? -s : s;
-          if (a > peak) { peak = a; if (peak > 8) break; }
+        for (let i = 0; i < chunk.length; i++) {
+          if (chunk[i] !== 0) { peak = 100; break; }
         }
         if (peak > 8) {
-          // Real audio observed — disable the detector for the rest of the session.
-          zerofillLatched = true;
-        } else if (Date.now() - firstChunkAt >= ZEROFILL_OBSERVATION_MS) {
+          // Real audio observed — disable the detector for the rest of the meeting.
+          this._systemAudioObservedInSession = true;
+          this.broadcast("audio-capture-success", { channel: "system" });
+          if (zerofillTriggered) {
+            console.log(`${prefix}SystemAudio finally observed after initial silent period. Clearing warning.`);
+          }
+        } else if (!zerofillTriggered && Date.now() - firstChunkAt >= ZEROFILL_OBSERVATION_MS) {
           zerofillTriggered = true;
-          console.warn(`${prefix}SystemAudio chunks all zero-filled for ${ZEROFILL_OBSERVATION_MS / 1000}s — TCC denial suspected (Screen Recording grant may not apply to this binary).`);
+          console.warn(`${prefix}SystemAudio chunks all zero-filled for ${ZEROFILL_OBSERVATION_MS / 1000}s — capture failure suspected.`);
+          const message = process.platform === 'darwin'
+            ? 'System audio is being captured but every sample is silent. This usually means macOS Screen Recording permission needs to be re-granted to this build of Natively. Open System Settings → Privacy & Security → Screen Recording, toggle Natively off and back on, then restart the app.'
+            : 'System audio is being captured but every sample is silent. This may indicate a driver issue, an incorrect output device selection, or that the selected device is muted.';
+          
           this.broadcast('audio-capture-failed', {
             channel: 'system',
-            message: 'System audio is being captured but every sample is silent. This usually means macOS Screen Recording permission needs to be re-granted to this build of Natively. Open System Settings → Privacy & Security → Screen Recording, toggle Natively off and back on, then restart the app. (If you recently rebuilt or updated, the previous grant may not apply.)',
+            message: message,
             attempt: 0,
             maxAttempts: 3,
             terminal: false,
@@ -1406,6 +1429,14 @@ export class AppState {
 
   private wireMicCapture(capture: MicrophoneCapture, label: string = ''): void {
     const prefix = label ? `[Main] ${label} ` : '[Main] ';
+    
+    // CRITICAL: Clean up existing listeners before re-wiring to avoid duplicates
+    capture.removeAllListeners('data');
+    capture.removeAllListeners('sample_rate_changed');
+    capture.removeAllListeners('speech_ended');
+    capture.removeAllListeners('start');
+    capture.removeAllListeners('stop');
+
     let chunkCount = 0;
     // Mirror of the system-audio stuck watchdog: if the cpal callback never
     // produces samples within 8s of start (USB mic that disappears on open,
@@ -1445,7 +1476,7 @@ export class AppState {
     // Same shape as the system tap zero-fill: chunks arrive on cadence but every
     // sample is 0. Without this, the user just sees an empty user transcript
     // and assumes the meeting itself is broken.
-    const ZEROFILL_OBSERVATION_MS = 12000;
+    const ZEROFILL_OBSERVATION_MS = 30000; // Increased to 30s for mic
     let firstChunkAt = 0;
     let zerofillLatched = false;
     let zerofillTriggered = false;
@@ -1471,23 +1502,47 @@ export class AppState {
         console.log(`${prefix}User STT rate locked from first mic chunk: ${rate}Hz`);
       }
 
-      if (!zerofillLatched && !zerofillTriggered) {
+      // Periodic volume logging for diagnostics (every 5s)
+      if (!this._lastMicVolumeLogAt || now - this._lastMicVolumeLogAt > 5000) {
+        this._lastMicVolumeLogAt = now;
+        const rms = this.calculateRMS(chunk);
+        console.log(`${prefix}Mic Audio Volume: RMS=${rms.toFixed(1)}`);
+      }
+
+      // Throttled broadcast for the Voice Tester (every 100ms)
+      if (now - this._lastMicLevelBroadcastAt > 100) {
+        this._lastMicLevelBroadcastAt = now;
+        const rms = this.calculateRMS(chunk);
+        // Normalize RMS to 0.0 - 1.0 range for the UI. 
+        // 16-bit PCM max amplitude is 32767. 1000-5000 is typical speaking level.
+        const level = Math.min(1.0, rms / 10000); 
+        this.broadcast('audio-level', { channel: 'mic', level });
+      }
+
+      if (!this._micAudioObservedInSession) {
         if (firstChunkAt === 0) firstChunkAt = now;
+        // Stride-sample every byte.
         let peak = 0;
-        const stride = Math.max(2, (chunk.length >> 5) & ~1);
-        for (let i = 0; i + 1 < chunk.length; i += stride) {
-          const s = chunk.readInt16LE(i);
-          const a = s < 0 ? -s : s;
-          if (a > peak) { peak = a; if (peak > 8) break; }
+        for (let i = 0; i < chunk.length; i++) {
+          if (chunk[i] !== 0) { peak = 100; break; }
         }
+
         if (peak > 8) {
-          zerofillLatched = true;
-        } else if (now - firstChunkAt >= ZEROFILL_OBSERVATION_MS) {
+          this._micAudioObservedInSession = true;
+          this.broadcast('audio-capture-success', { channel: 'mic' });
+          if (zerofillTriggered) {
+            console.log(`${prefix}Mic audio finally detected after initial zero-fill period. Clearing warning.`);
+          }
+        } else if (!zerofillTriggered && (now - firstChunkAt >= ZEROFILL_OBSERVATION_MS)) {
           zerofillTriggered = true;
           console.warn(`${prefix}Mic chunks all zero-filled for ${ZEROFILL_OBSERVATION_MS / 1000}s — TCC denial or device-mute suspected.`);
+          const message = process.platform === 'darwin'
+            ? 'Your microphone is connected but every audio sample is silent. Check that (1) macOS Microphone permission is granted to Natively in System Settings → Privacy & Security → Microphone, and (2) your input device is unmuted in the menu bar.'
+            : 'Your microphone is connected but every audio sample is silent. Check that your microphone is unmuted in Windows Settings and not in use by another app in exclusive mode.';
+          
           this.broadcast('audio-capture-failed', {
             channel: 'mic',
-            message: 'Your microphone is connected but every audio sample is silent. Check that (1) macOS Microphone permission is granted to Natively in System Settings → Privacy & Security → Microphone, (2) your input device is unmuted in the menu bar, and (3) no other app is holding the mic in exclusive mode.',
+            message: message,
             attempt: 0,
             maxAttempts: 3,
             terminal: false,
@@ -2095,7 +2150,9 @@ export class AppState {
       this.systemAudioCapture?.start();
       this.microphoneCapture?.start();
       this.googleSTT?.start();
-      this.googleSTT_User?.start();
+      // Stagger user STT start to prevent ONNX Runtime EACCES file lock collisions
+      // when two workers try to load the exact same model file at the same millisecond.
+      setTimeout(() => this.googleSTT_User?.start(), 1500);
     }
 
     console.log('[Main] STT Provider reconfigured');
@@ -2341,6 +2398,22 @@ export class AppState {
         return;
       }
 
+      const isPermissionError = process.platform === 'win32' && 
+        (err.message.includes('Access is denied') || err.message.includes('0x80070005'));
+      
+      if (isPermissionError) {
+        console.warn(`[MicRecovery] Windows Microphone access denied detected: ${err.message}. Notifying UI.`);
+        this.broadcast('audio-capture-failed', {
+          channel: 'mic',
+          message: 'Microphone access is denied by Windows. Please enable "Allow apps to access your microphone" AND "Allow desktop apps to access your microphone" in Windows Privacy settings, then restart Natively.',
+          attempt: 0,
+          maxAttempts: 3,
+          terminal: true,
+          stuck: false,
+        });
+        return;
+      }
+
       this._micRecoveryInProgress = true;
       this._micRecoveryAttempts++;
       console.warn(
@@ -2500,6 +2573,21 @@ export class AppState {
     }
   }
 
+  /**
+   * Calculate RMS volume of 16-bit PCM buffer
+   */
+  private calculateRMS(buffer: Buffer): number {
+    if (buffer.length === 0) return 0;
+    let sum = 0;
+    const samples = buffer.length / 2;
+    // Sample every 4th sample for performance
+    for (let i = 0; i < buffer.length; i += 8) {
+      const sample = buffer.readInt16LE(i);
+      sum += sample * sample;
+    }
+    return Math.sqrt(sum / (samples / 4));
+  }
+
   public async startMeeting(metadata?: any): Promise<void> {
     console.log('[Main] Starting Meeting...', metadata);
 
@@ -2525,6 +2613,8 @@ export class AppState {
       clearTimeout(this._systemAudioRecoveryTimer);
       this._systemAudioRecoveryTimer = null;
     }
+    this._micAudioObservedInSession = false;
+    this._systemAudioObservedInSession = false;
 
     if (!(await ensureMacMicrophoneAccess('meeting start'))) {
       const message = 'Microphone access denied. Please allow microphone access in System Settings.';
@@ -2608,7 +2698,8 @@ export class AppState {
 
         // Start Microphone
         this.microphoneCapture?.start();
-        this.googleSTT_User?.start();
+        // Stagger user STT start to prevent ONNX Runtime EACCES file lock collisions
+        setTimeout(() => this.googleSTT_User?.start(), 1500);
 
         // Start JIT RAG live indexing
         if (this.ragManager) {

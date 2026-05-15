@@ -429,6 +429,10 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
     const [customNotesSaved, setCustomNotesSaved] = useState(false);
     const customNotesDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    const [persona, setPersona] = useState('');
+    const [personaSaved, setPersonaSaved] = useState(false);
+    const personaDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     useEffect(() => {
         // Fetch premium details — canonical source of truth. Sync the
         // localStorage cache so the next mount paints with the correct state.
@@ -453,6 +457,8 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
         window.electronAPI?.profileGetProfile?.().then((data: any) => {
             setProfileData(data);
             if (data?.negotiationScript) setNegotiationScript(data.negotiationScript);
+            if (data?.customNotes) setCustomNotes(data.customNotes);
+            if (data?.persona) setPersona(data.persona);
         }).catch(() => { });
         window.electronAPI?.profileGetNotes?.().then((res: any) => {
             if (res?.success) setCustomNotes(res.content ?? '');
@@ -856,7 +862,36 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         </p>
                                                     </div>
                                                 </div>
-                                                <div className="space-y-3">
+                                                <div className="space-y-4">
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {[
+                                                            { label: 'Achievements', text: '• Promoted to Senior Engineer in 14 months (top 5% of cohort)\n• Spearheaded migration to React/Next.js, reducing LCP by 45%\n• Mentored 4 junior engineers; 2 promoted within first year' },
+                                                            { label: 'Target Comp', text: '• Target Total Comp: $180,000 - $210,000\n• Minimum Base: $160,000\n• Prefer RSUs over cash bonus' },
+                                                            { label: 'Technical Stack', text: '• Proficient: TypeScript, React, Node.js, PostgreSQL\n• Familiar: Go, AWS (Lambda, S3, RDS), Kubernetes\n• Learning: Rust, LLM fine-tuning' }
+                                                        ].map((tpl) => (
+                                                            <button
+                                                                key={tpl.label}
+                                                                onClick={() => {
+                                                                    if (customNotes && !confirm('Append this template to your current context?')) return;
+                                                                    const newVal = customNotes ? `${customNotes}\n\n${tpl.text}` : tpl.text;
+                                                                    setCustomNotes(newVal);
+                                                                    setCustomNotesSaved(false);
+                                                                    if (customNotesDebounceRef.current) clearTimeout(customNotesDebounceRef.current);
+                                                                    customNotesDebounceRef.current = setTimeout(async () => {
+                                                                        try {
+                                                                            await window.electronAPI?.profileSaveNotes?.(newVal);
+                                                                            setCustomNotesSaved(true);
+                                                                            setTimeout(() => setCustomNotesSaved(false), 2000);
+                                                                        } catch (_) {}
+                                                                    }, 800);
+                                                                }}
+                                                                className="px-3 py-1.5 rounded-lg bg-bg-input border border-border-subtle text-[10px] font-bold text-text-secondary hover:text-text-primary hover:border-accent-primary/40 transition-all flex items-center gap-1.5 shadow-sm"
+                                                            >
+                                                                <Sparkles size={10} className="text-accent-primary" />
+                                                                {tpl.label}
+                                                            </button>
+                                                        ))}
+                                                    </div>
                                                     <textarea
                                                         value={customNotes}
                                                         onChange={(e) => {
@@ -883,6 +918,88 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         </p>
                                                         <span className={`text-[10px] tabular-nums ${customNotes.length > 3600 ? 'text-amber-500' : 'text-text-tertiary'}`}>
                                                             {customNotes.length}/4000
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </BezelCard>
+
+                                    <BezelCard delay={0.35}>
+                                            <div className="p-5">
+                                                <div className="flex items-center gap-4 mb-4">
+                                                    <div className="w-10 h-10 rounded-lg bg-bg-input border border-border-subtle flex items-center justify-center text-accent-primary shrink-0">
+                                                        <Sparkles size={20} />
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                            <h4 className="text-sm font-bold text-text-primary">AI Persona</h4>
+                                                            {personaSaved && (
+                                                                <span className="text-[9px] font-bold text-emerald-500 px-1.5 py-0.5 bg-emerald-500/10 rounded-full border border-emerald-500/20 uppercase tracking-wide flex items-center gap-1">
+                                                                    <Check size={8} /> Updated
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-[11px] text-text-secondary mt-0.5">
+                                                            Set the AI's behavior, tone, and role (System Prompt).
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-4">
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {[
+                                                            { label: 'Mock Interviewer', text: 'You are a senior hiring manager. Conduct a mock interview for my target position.\n- Ask 1 behavioral + 1 technical question per interaction.\n- Provide constructive feedback on my answers.\n- Use a professional, polite tone.' },
+                                                            { label: 'Executive Coach', text: 'Act as an Executive Coach. Help me refine my professional presence, communication style, and leadership approach. Be direct, challenging, and insightful.' },
+                                                            { label: 'Tech Lead', text: 'Act as a FAANG Tech Lead. Focus purely on technical depth, architecture, and system design trade-offs. Challenge my technical assumptions and ask for O(n) optimizations.' },
+                                                            { label: 'Concise Mode', text: 'Keep all your responses extremely short (under 2 sentences). No fluff, no pleasantries, no meta-talk. Just the core answer.' }
+                                                        ].map((tpl) => (
+                                                            <button
+                                                                key={tpl.label}
+                                                                onClick={() => {
+                                                                    if (persona && !confirm('Overwrite your current persona with this template?')) return;
+                                                                    setPersona(tpl.text);
+                                                                    setPersonaSaved(false);
+                                                                    if (personaDebounceRef.current) clearTimeout(personaDebounceRef.current);
+                                                                    personaDebounceRef.current = setTimeout(async () => {
+                                                                        try {
+                                                                            await window.electronAPI?.profileSavePersona?.(tpl.text);
+                                                                            setPersonaSaved(true);
+                                                                            setTimeout(() => setPersonaSaved(false), 2000);
+                                                                        } catch (_) {}
+                                                                    }, 800);
+                                                                }}
+                                                                className="px-3 py-1.5 rounded-lg bg-bg-input border border-border-subtle text-[10px] font-bold text-text-secondary hover:text-text-primary hover:border-accent-primary/40 transition-all flex items-center gap-1.5 shadow-sm"
+                                                            >
+                                                                <Sparkles size={10} className="text-accent-primary" />
+                                                                {tpl.label}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                    <textarea
+                                                        value={persona}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            if (val.length > 4000) return;
+                                                            setPersona(val);
+                                                            setPersonaSaved(false);
+                                                            if (personaDebounceRef.current) clearTimeout(personaDebounceRef.current);
+                                                            personaDebounceRef.current = setTimeout(async () => {
+                                                                try {
+                                                                    await window.electronAPI?.profileSavePersona?.(val);
+                                                                    setPersonaSaved(true);
+                                                                    setTimeout(() => setPersonaSaved(false), 2000);
+                                                                } catch (_) {}
+                                                            }, 800);
+                                                        }}
+                                                        placeholder={`Example: You are a senior hiring manager at a top tech company. Conduct a realistic interview for a Senior Software Engineer role...`}
+                                                        rows={5}
+                                                        className="w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2.5 text-xs text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/20 transition-all resize-none leading-relaxed"
+                                                    />
+                                                    <div className="flex items-center justify-between px-0.5">
+                                                        <p className="text-[10px] text-text-tertiary italic">
+                                                            Overrides base system behavior · Applied in real-time
+                                                        </p>
+                                                        <span className={`text-[10px] tabular-nums ${persona.length > 3600 ? 'text-amber-500' : 'text-text-tertiary'}`}>
+                                                            {persona.length}/4000
                                                         </span>
                                                     </div>
                                                 </div>

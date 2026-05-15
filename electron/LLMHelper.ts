@@ -71,8 +71,9 @@ export class LLMHelper {
   private codexCliConfig: CodexCliConfig = DEFAULT_CODEX_CLI_CONFIG;
   private knowledgeOrchestrator: any = null;
   private negotiationCoachingHandler: ((payload: unknown) => void) | null = null;
-  private customNotes: string = '';
-  private aiResponseLanguage: string = 'auto';
+  private customNotes: string = "";
+  private personaPrompt: string = "";
+  private aiResponseLanguage: string = "English";
   private sttLanguage: string = 'english-us';
   private nativelyKey: string | null = null;
 
@@ -93,9 +94,7 @@ export class LLMHelper {
   // but 10× the cost.
   private _claudeCacheFirstHitLogged: boolean = false;
 
-  constructor(apiKey?: string, useOllama: boolean = false, ollamaModel?: string, ollamaUrl?: string, groqApiKey?: string, openaiApiKey?: string, claudeApiKey?: string) {
-    this.useOllama = useOllama
-
+  constructor(apiKey?: string, groqApiKey?: string, openaiApiKey?: string, claudeApiKey?: string) {
     // Initialize rate limiters
     this.rateLimiters = createProviderRateLimiters();
 
@@ -123,14 +122,7 @@ export class LLMHelper {
       console.log(`[LLMHelper] Claude client initialized with model: ${CLAUDE_MODEL}`)
     }
 
-    if (useOllama) {
-      this.ollamaUrl = ollamaUrl || "http://127.0.0.1:11434"
-      this.ollamaModel = ollamaModel || ""
-      console.log(`[LLMHelper] Using Ollama with model: ${this.ollamaModel || '(auto-detect)'}`)
-
-      // Auto-detect first installed model when none specified.
-      this.initializeOllamaModel()
-    } else if (apiKey) {
+    if (apiKey) {
       this.apiKey = apiKey
       // Initialize with v1alpha API version for Gemini 3 support
       this.client = new GoogleGenAI({
@@ -1019,6 +1011,12 @@ ANSWER DIRECTLY:`;
 
   public setCustomNotes(notes: string): void {
     this.customNotes = notes;
+    console.log(`[LLMHelper] Custom notes updated (${notes.length} chars)`);
+  }
+
+  public setPersonaPrompt(prompt: string): void {
+    this.personaPrompt = prompt;
+    console.log(`[LLMHelper] Persona prompt updated (${prompt.length} chars)`);
   }
 
   public getKnowledgeOrchestrator(): any {
@@ -2696,7 +2694,14 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     // Determine the system prompt to use
     // logic: if override provided, use it. otherwise use HARD_SYSTEM_PROMPT (which is the universal base)
-    const baseSystemPrompt = systemPromptOverride || HARD_SYSTEM_PROMPT;
+    let baseSystemPrompt = systemPromptOverride || HARD_SYSTEM_PROMPT;
+
+    // --- PERSONA INJECTION ---
+    // If a custom persona is defined, prepend it to the system prompt to set the behavioral tone.
+    if (this.personaPrompt?.trim()) {
+      baseSystemPrompt = `## ROLE & PERSONA\n${this.personaPrompt.trim()}\n\n${baseSystemPrompt}`;
+    }
+
     const finalSystemPrompt = this.injectLanguageInstruction(baseSystemPrompt);
 
     // Helper to build combined user message
@@ -4088,6 +4093,32 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         }
       } catch (e: any) {
         console.warn(`[LLMHelper] ⚠️ Natively API summary failed: ${e.message}. Falling back...`);
+      }
+    }
+
+    // ATTEMPT 1.5: Ollama (if configured)
+    if (this.useOllama) {
+      console.log(`[LLMHelper] Attempting Ollama for summary...`);
+      try {
+        // Collect the async generator into a Promise so withTimeout works.
+        const collectChunks = async (): Promise<string> => {
+          let result = '';
+          for await (const chunk of this.streamChat(`Context:\n${context}`, undefined, undefined, systemPrompt, true)) {
+            result += chunk;
+          }
+          return result;
+        };
+        const text = await this.withTimeout(
+          collectChunks(),
+          180000, // Summarizing long meetings on local LLMs can take time
+          'Ollama Summary'
+        );
+        if (text.trim().length > 0) {
+          console.log(`[LLMHelper] ✅ Ollama summary generated successfully.`);
+          return this.processResponse(text);
+        }
+      } catch (e: any) {
+        console.warn(`[LLMHelper] ⚠️ Ollama summary failed: ${e.message}. Falling back...`);
       }
     }
 

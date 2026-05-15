@@ -16,7 +16,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     // In dev: __dirname = dist-electron/electron/rag/providers → need 4 levels up to project root.
     // In prod: app.isPackaged = true → use process.resourcesPath (electron-builder extraResources).
     this.modelPath = path.join(
-      app.isPackaged ? process.resourcesPath : path.join(__dirname, '../../../../resources'),
+      app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), 'resources'),
       'models'
     );
   }

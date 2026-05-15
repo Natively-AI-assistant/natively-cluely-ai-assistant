@@ -124,6 +124,7 @@ interface ElectronAPI {
   onSystemAudioPermissionDenied: (callback: (message: string) => void) => () => void
   onDeviceSelectionApplied: (callback: (payload: { kind: 'input' | 'output'; requested: string | null; actual: string | null; fellBack: boolean; reason?: string }) => void) => () => void
   onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; attempt: number; maxAttempts: number; terminal?: boolean; stuck?: boolean }) => void) => () => void
+  onAudioCaptureSuccess: (callback: (payload: { channel: 'system' | 'mic' }) => void) => () => void
 
   // STT Status Events
   onSttStatusChanged: (callback: (data: { state: 'connected' | 'reconnecting' | 'failed'; provider: string; error?: string; channel: 'user' | 'interviewer'; reconnectAttempts?: number }) => void) => () => void
@@ -179,6 +180,7 @@ interface ElectronAPI {
 
   // Settings Window
   toggleSettingsWindow: (coords?: { x: number; y: number }) => Promise<void>
+  openPrivacySettings: (type: 'microphone' | 'screen') => Promise<void>
 
   // Groq Fast Text Mode
   getGroqFastTextMode: () => Promise<{ enabled: boolean }>
@@ -321,6 +323,8 @@ interface ElectronAPI {
   profileGenerateNegotiation: (force?: boolean) => Promise<{ success: boolean; script?: any; error?: string }>;
   profileGetNegotiationState: () => Promise<{ success: boolean; state?: any; isActive?: boolean; error?: string }>;
   profileResetNegotiation: () => Promise<{ success: boolean; error?: string }>;
+  profileGetPersona: () => Promise<string>;
+  profileSavePersona: (content: string) => Promise<{ success: boolean; error?: string }>;
 
   // Tavily Search API
   setTavilyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
@@ -758,9 +762,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return () => { ipcRenderer.removeListener('device-selection-applied', subscription); };
   },
   onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; attempt: number; maxAttempts: number; terminal?: boolean; stuck?: boolean }) => void) => {
-    const subscription = (_: any, payload: any) => callback(payload);
+    const subscription = (event: any, payload: any) => callback(payload);
     ipcRenderer.on('audio-capture-failed', subscription);
-    return () => { ipcRenderer.removeListener('audio-capture-failed', subscription); };
+    return () => ipcRenderer.removeListener('audio-capture-failed', subscription);
+  },
+  onAudioCaptureSuccess: (callback: (payload: { channel: 'system' | 'mic' }) => void) => {
+    const subscription = (event: any, payload: any) => callback(payload);
+    ipcRenderer.on('audio-capture-success', subscription);
+    return () => ipcRenderer.removeListener('audio-capture-success', subscription);
   },
 
   // STT Status Events
@@ -989,6 +998,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   // Settings Window
   toggleSettingsWindow: (coords?: { x: number; y: number }) => ipcRenderer.invoke('toggle-settings-window', coords),
+  openPrivacySettings: (type: 'microphone' | 'screen') => ipcRenderer.invoke('open-privacy-settings', type),
 
   // Groq Fast Text Mode
   getGroqFastTextMode: () => ipcRenderer.invoke('get-groq-fast-text-mode'),
@@ -1019,6 +1029,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on('audio-test-level', subscription)
     return () => {
       ipcRenderer.removeListener('audio-test-level', subscription)
+    }
+  },
+  onAudioLevel: (callback: (data: { channel: 'mic' | 'system', level: number }) => void) => {
+    const subscription = (_: any, data: { channel: 'mic' | 'system', level: number }) => callback(data)
+    ipcRenderer.on('audio-level', subscription)
+    return () => {
+      ipcRenderer.removeListener('audio-level', subscription)
     }
   },
 
@@ -1251,6 +1268,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   profileResetNegotiation: () => ipcRenderer.invoke('profile:reset-negotiation'),
   profileGetNotes: () => ipcRenderer.invoke('profile:get-notes'),
   profileSaveNotes: (content: string) => ipcRenderer.invoke('profile:save-notes', content),
+  profileGetPersona: () => ipcRenderer.invoke('profile:get-persona'),
+  profileSavePersona: (content: string) => ipcRenderer.invoke('profile:save-persona', content),
 
   // Tavily Search API
   setTavilyApiKey: (apiKey: string) => ipcRenderer.invoke('set-tavily-api-key', apiKey),
