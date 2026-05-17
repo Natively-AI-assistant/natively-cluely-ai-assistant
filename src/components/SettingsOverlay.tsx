@@ -28,6 +28,7 @@ import {
     getDefaultOverlayOpacity,
 } from '../lib/overlayAppearance';
 import { getMeetingInterfaceTheme, setMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
+import { isMac } from '../utils/platformUtils';
 import { KeyRecorder } from './ui/KeyRecorder';
 import { ProfileVisualizer, PremiumUpgradeModal } from '../premium';
 import icon from './icon.png';
@@ -2571,35 +2572,37 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
                                             <div className="h-px bg-border-subtle my-2" />
 
-                                            {/* SCK Backend Toggle */}
-                                            <div className="bg-amber-500/5 rounded-xl border border-amber-500/20 p-4">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-start gap-3">
-                                                        <div className="mt-0.5 p-1.5 rounded-lg bg-amber-500/10 text-amber-500">
-                                                            <FlaskConical size={18} />
-                                                        </div>
-                                                        <div>
-                                                            <div className="flex items-center gap-2 mb-0.5">
-                                                                <h3 className="text-sm font-bold text-text-primary">SCK Backend</h3>
-                                                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-400 uppercase tracking-wide">Alternative</span>
+                                            {isMac && (
+                                                /* SCK Backend Toggle — macOS only (ScreenCaptureKit) */
+                                                <div className="bg-amber-500/5 rounded-xl border border-amber-500/20 p-4">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-start gap-3">
+                                                            <div className="mt-0.5 p-1.5 rounded-lg bg-amber-500/10 text-amber-500">
+                                                                <FlaskConical size={18} />
                                                             </div>
-                                                            <p className="text-xs text-text-secondary leading-relaxed max-w-[300px]">
-                                                                Use the ScreenCaptureKit backend. An optimized alternative to CoreAudio if you experience any capture issues.
-                                                            </p>
+                                                            <div>
+                                                                <div className="flex items-center gap-2 mb-0.5">
+                                                                    <h3 className="text-sm font-bold text-text-primary">SCK Backend</h3>
+                                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-400 uppercase tracking-wide">Alternative</span>
+                                                                </div>
+                                                                <p className="text-xs text-text-secondary leading-relaxed max-w-[300px]">
+                                                                    Use the ScreenCaptureKit backend. An optimized alternative to CoreAudio if you experience any capture issues.
+                                                                </p>
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                    <div
-                                                        onClick={() => {
-                                                            const newState = !useExperimentalSck;
-                                                            setUseExperimentalSck(newState);
-                                                            window.localStorage.setItem('useExperimentalSckBackend', newState ? 'true' : 'false');
-                                                        }}
-                                                        className={`w-11 h-6 rounded-full relative transition-colors shrink-0 ${useExperimentalSck ? 'bg-amber-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                    >
-                                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${useExperimentalSck ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                        <div
+                                                            onClick={() => {
+                                                                const newState = !useExperimentalSck;
+                                                                setUseExperimentalSck(newState);
+                                                                window.localStorage.setItem('useExperimentalSckBackend', newState ? 'true' : 'false');
+                                                            }}
+                                                            className={`w-11 h-6 rounded-full relative transition-colors shrink-0 ${useExperimentalSck ? 'bg-amber-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                        >
+                                                            <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${useExperimentalSck ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
