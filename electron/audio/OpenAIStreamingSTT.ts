@@ -207,22 +207,18 @@ export class OpenAIStreamingSTT extends EventEmitter {
         // Then commit the input buffer so the server transcribes the trailing
         // audio even if its VAD hasn't tripped on the silence yet.
         if (this.mode === 'ws' && this.ws?.readyState === WebSocket.OPEN &&
-            this.isSessionReady) {
-            if (this.pcmAccumulatorLen > 0) {
-                const combined = new Int16Array(this.pcmAccumulatorLen);
-                let offset = 0;
-                for (const arr of this.pcmAccumulator) {
-                    combined.set(arr, offset);
-                    offset += arr.length;
-                }
-                try {
-                    this.ws.send(JSON.stringify({
-                        type:  'input_audio_buffer.append',
-                        audio: Buffer.from(combined.buffer).toString('base64'),
-                    }));
-                } catch { /* ignore — we're closing anyway */ }
+            this.isSessionReady && this.pcmAccumulatorLen > 0) {
+            const combined = new Int16Array(this.pcmAccumulatorLen);
+            let offset = 0;
+            for (const arr of this.pcmAccumulator) {
+                combined.set(arr, offset);
+                offset += arr.length;
             }
             try {
+                this.ws.send(JSON.stringify({
+                    type:  'input_audio_buffer.append',
+                    audio: Buffer.from(combined.buffer).toString('base64'),
+                }));
                 this.ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
             } catch { /* ignore — we're closing anyway */ }
         }
@@ -297,15 +293,11 @@ export class OpenAIStreamingSTT extends EventEmitter {
                     type:  'input_audio_buffer.append',
                     audio: Buffer.from(combined.buffer).toString('base64'),
                 }));
+                this.ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+                console.log('[OpenAIStreaming][WS] Finalize — committed input buffer');
             } catch (err) {
-                console.error('[OpenAIStreaming][WS] Finalize append failed:', err);
+                console.error('[OpenAIStreaming][WS] Finalize append/commit failed:', err);
             }
-        }
-        try {
-            this.ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
-            console.log('[OpenAIStreaming][WS] Finalize — committed input buffer');
-        } catch (err) {
-            console.error('[OpenAIStreaming][WS] Finalize commit failed:', err);
         }
     }
 
@@ -322,8 +314,7 @@ export class OpenAIStreamingSTT extends EventEmitter {
         // streamingStttWsOptions: IPv4-only DNS + 15s handshake cap (dnsHelpers.ts).
         this.ws = new WebSocket(REALTIME_WS_URL, streamingStttWsOptions({
             headers: {
-                Authorization:   `Bearer ${this.apiKey}`,
-                'OpenAI-Beta':   'realtime=v1',
+                Authorization: `Bearer ${this.apiKey}`,
             },
         }) as any);
 
@@ -367,31 +358,16 @@ export class OpenAIStreamingSTT extends EventEmitter {
                 : '';
 
             this.ws!.send(JSON.stringify({
-                type: 'session.update',
+                type: 'transcription_session.update',
                 session: {
-                    audio: {
-                        input: {
-                            format: {
-                                type: 'audio/pcm',
-                                rate: WS_SAMPLE_RATE,
-                            },
-                            transcription: {
-                                model,
-                                prompt: '',
-                                language: lang || '',
-                            },
-                            // Server VAD — offload voice activity detection entirely to the server
-                            turn_detection: {
-                                type:                'server_vad',
-                                threshold:           0.5,
-                                prefix_padding_ms:   300,
-                                silence_duration_ms: 500,
-                            },
-                            // Server-side noise reduction
-                            noise_reduction: {
-                                type: 'near_field',
-                            },
-                        },
+                    input_audio_format: 'pcm16',
+                    input_audio_transcription: { model, language: lang || '' },
+                    input_audio_noise_reduction: { type: 'near_field' },
+                    turn_detection: {
+                        type:                'server_vad',
+                        threshold:           0.5,
+                        prefix_padding_ms:   300,
+                        silence_duration_ms: 500,
                     },
                 },
             }));
@@ -471,7 +447,7 @@ export class OpenAIStreamingSTT extends EventEmitter {
                 this._flushRingBuffer();
                 break;
 
-            case 'transcript.text.delta':
+            case 'conversation.item.input_audio_transcription.delta':
                 if (msg.delta) {
                     this.emit('transcript', {
                         text:       msg.delta,
@@ -481,11 +457,11 @@ export class OpenAIStreamingSTT extends EventEmitter {
                 }
                 break;
 
-            case 'transcript.text.done':
-                if (msg.text) {
-                    console.log(`[OpenAIStreaming] Final transcript received`, { length: msg.text.length });
+            case 'conversation.item.input_audio_transcription.completed':
+                if (msg.transcript) {
+                    console.log(`[OpenAIStreaming] Final transcript received`, { length: msg.transcript.length });
                     this.emit('transcript', {
-                        text:       msg.text,
+                        text:       msg.transcript,
                         isFinal:    true,
                         confidence: 1.0,
                     });
