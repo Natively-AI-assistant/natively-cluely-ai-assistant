@@ -23,7 +23,9 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         --accent: #6cf0d6;
         --accent-2: #55a6ff;
         --danger: #ff5d6c;
-        --bar-h: 84px;
+        --input-h: 56px;
+        --actions-h: 52px;
+        --bar-h: calc(var(--input-h) + var(--actions-h) + 20px);
       }
       * { box-sizing: border-box; }
       html, body { min-height: 100%; }
@@ -44,6 +46,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         min-height: 100dvh;
         padding: env(safe-area-inset-top) 14px env(safe-area-inset-bottom);
       }
+      /* ── Top bar ─────────────────────────────── */
       .topbar {
         position: sticky; top: 0; z-index: 5;
         display: flex; align-items: center; justify-content: space-between; gap: 16px;
@@ -62,15 +65,17 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
       .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--danger); }
       .status.connected { color: var(--text); }
       .status.connected .dot { background: var(--accent); animation: pulse 1.8s ease-in-out infinite; }
+      /* ── Feed ────────────────────────────────── */
       .feed {
         display: flex; flex-direction: column; gap: 12px; min-height: 0;
-        overflow-y: auto; padding: 12px 0 calc(var(--bar-h) + 20px);
+        overflow-y: auto; padding: 12px 0 calc(var(--bar-h) + 24px);
         scroll-behavior: smooth; overscroll-behavior: contain;
       }
       .empty {
-        display: grid; place-items: center; min-height: 58dvh;
+        display: grid; place-items: center; min-height: 50dvh;
         color: var(--muted); text-align: center; font-size: 14px; line-height: 1.55; padding: 0 16px;
       }
+      /* ── Cards ───────────────────────────────── */
       .card {
         position: relative; padding: 14px 14px 16px;
         border: 1px solid var(--line-soft); border-radius: 10px;
@@ -83,6 +88,11 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         background: linear-gradient(180deg, rgba(20,28,40,0.92), rgba(15,21,30,0.96));
         border-color: rgba(85,166,255,0.16);
       }
+      .card.screenshot-card {
+        background: rgba(8,12,18,0.95);
+        border-color: rgba(85,166,255,0.14);
+        padding: 10px 14px;
+      }
       .meta {
         display: flex; align-items: center; justify-content: space-between; gap: 12px;
         margin-bottom: 8px; color: var(--muted); font-size: 11px;
@@ -91,6 +101,12 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
       .role { display: inline-flex; align-items: center; gap: 6px; }
       .role .pip { width: 6px; height: 6px; border-radius: 999px; background: var(--accent); }
       .role.user .pip { background: var(--accent-2); }
+      .label-tag {
+        padding: 2px 8px;
+        border: 1px solid rgba(108,240,214,0.22); border-radius: 999px;
+        color: var(--accent); font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
+        text-transform: uppercase;
+      }
       .badge {
         display: none; padding: 3px 7px;
         border: 1px solid rgba(108,240,214,0.32); border-radius: 999px;
@@ -160,20 +176,18 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
       }
       .content .codeblock pre::-webkit-scrollbar { height: 6px; }
       .content .codeblock pre::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
-      /* Streaming-fence visual cue. */
       .content .codeblock.streaming { border-color: rgba(108,240,214,0.18); }
       .content .codeblock.streaming .codeblock-head { color: var(--accent); }
-      /* ── Syntax tokens. Theme matches the dark surface above; readable in
-         both AMOLED-bright and dim rooms. */
-      .content pre .hl-c    { color: #6b7d99; font-style: italic; }   /* comment */
-      .content pre .hl-s    { color: #a3e9b6; }                        /* string */
-      .content pre .hl-k    { color: #c8a8ff; }                        /* keyword */
-      .content pre .hl-n    { color: #ffd58a; }                        /* number */
-      .content pre .hl-f    { color: #7ec8ff; }                        /* function name */
-      .content pre .hl-t    { color: #ff9bb6; }                        /* tag (html/xml) */
-      .content pre .hl-a    { color: #6cf0d6; }                        /* attribute / property */
-      .content pre .hl-v    { color: #ffb482; font-style: italic; }    /* variable / built-in (self, this) */
-      .content pre .hl-o    { color: #c0d0e0; }                        /* operator / punctuation accent */
+      /* ── Syntax tokens ─────────────────────── */
+      .content pre .hl-c    { color: #6b7d99; font-style: italic; }
+      .content pre .hl-s    { color: #a3e9b6; }
+      .content pre .hl-k    { color: #c8a8ff; }
+      .content pre .hl-n    { color: #ffd58a; }
+      .content pre .hl-f    { color: #7ec8ff; }
+      .content pre .hl-t    { color: #ff9bb6; }
+      .content pre .hl-a    { color: #6cf0d6; }
+      .content pre .hl-v    { color: #ffb482; font-style: italic; }
+      .content pre .hl-o    { color: #c0d0e0; }
       .content hr {
         border: 0; height: 1px;
         background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
@@ -184,24 +198,75 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         background: var(--accent); border-radius: 2px;
         animation: blink 1s steps(2, end) infinite;
       }
-      .actions {
+      /* ── Bottom panel ─────────────────────── */
+      .bottom-panel {
         position: fixed; left: 14px; right: 14px;
-        bottom: calc(14px + env(safe-area-inset-bottom));
-        display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 9px;
-        min-height: 56px; padding: 8px;
-        border: 1px solid var(--line-soft); border-radius: 12px;
-        background: rgba(8,12,17,0.86);
-        backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+        bottom: calc(8px + env(safe-area-inset-bottom));
+        display: flex; flex-direction: column; gap: 8px;
+        padding: 8px;
+        border: 1px solid var(--line-soft); border-radius: 14px;
+        background: rgba(8,12,17,0.88);
+        backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
         box-shadow: 0 16px 42px rgba(0,0,0,0.45);
       }
-      .action {
-        min-width: 0; min-height: 42px; border-radius: 8px;
-        background: var(--panel-2); color: var(--text);
-        font-size: 13px; font-weight: 600; letter-spacing: 0.2px;
-        transition: transform 160ms cubic-bezier(0.16,1,0.3,1), background 160ms;
+      /* Quick actions row */
+      .quick-actions {
+        display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px;
+        scrollbar-width: none;
       }
-      .action:active { transform: scale(0.98) translateY(1px); }
-      .action.primary { background: linear-gradient(180deg, var(--accent), #4dd9bd); color: #00261d; }
+      .quick-actions::-webkit-scrollbar { display: none; }
+      .qa-btn {
+        flex: 0 0 auto;
+        height: 30px; padding: 0 10px;
+        border-radius: 6px; border: 1px solid var(--line-soft);
+        background: rgba(255,255,255,0.04); color: var(--muted);
+        font-size: 11.5px; font-weight: 600; letter-spacing: 0.2px;
+        white-space: nowrap;
+        transition: background 140ms, color 140ms, border-color 140ms;
+      }
+      .qa-btn:active { transform: scale(0.96); }
+      .qa-btn.working {
+        color: var(--accent); border-color: rgba(108,240,214,0.32);
+        background: rgba(108,240,214,0.06);
+      }
+      .qa-btn.screenshot-btn {
+        color: var(--accent-2); border-color: rgba(85,166,255,0.28);
+        background: rgba(85,166,255,0.05);
+      }
+      /* Chat input row */
+      .input-row {
+        display: flex; gap: 8px; align-items: center;
+      }
+      .chat-input {
+        flex: 1; min-width: 0; height: 40px; padding: 0 12px;
+        background: rgba(255,255,255,0.05); border: 1px solid var(--line-soft);
+        border-radius: 8px; color: var(--text); font: inherit; font-size: 14px;
+        outline: none;
+        transition: border-color 160ms;
+      }
+      .chat-input::placeholder { color: var(--muted); }
+      .chat-input:focus { border-color: rgba(108,240,214,0.4); }
+      .send-btn {
+        flex: 0 0 40px; height: 40px; border-radius: 8px;
+        background: linear-gradient(180deg, var(--accent), #4dd9bd); color: #00261d;
+        font-size: 18px; font-weight: 700;
+        display: flex; align-items: center; justify-content: center;
+        transition: transform 120ms;
+      }
+      .send-btn:active { transform: scale(0.94); }
+      .send-btn:disabled { opacity: 0.42; pointer-events: none; }
+      /* Row of utility buttons */
+      .util-row {
+        display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 7px;
+      }
+      .util-btn {
+        height: 38px; border-radius: 8px;
+        background: var(--panel-2); color: var(--text);
+        font-size: 12px; font-weight: 600; letter-spacing: 0.2px;
+        transition: transform 140ms cubic-bezier(0.16,1,0.3,1), background 140ms;
+      }
+      .util-btn:active { transform: scale(0.97) translateY(1px); }
+      /* ── Toast ─────────────────────────────── */
       .toast {
         position: fixed; left: 50%; top: calc(env(safe-area-inset-top) + 70px);
         transform: translateX(-50%);
@@ -209,9 +274,10 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         background: rgba(8,12,17,0.92); color: var(--text);
         border: 1px solid var(--line-soft);
         font-size: 12px; opacity: 0; pointer-events: none;
-        transition: opacity 160ms ease;
+        transition: opacity 160ms ease; z-index: 20;
       }
       .toast.show { opacity: 1; }
+      /* ── Keyframes ─────────────────────────── */
       @keyframes pulse {
         0%,100% { box-shadow: 0 0 0 0 rgba(108,240,214,0.36); }
         50% { box-shadow: 0 0 0 7px rgba(108,240,214,0); }
@@ -235,15 +301,35 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
 
       <section class="feed" id="feed" aria-live="polite">
         <div class="empty" id="empty">
-          Waiting for the next response from your desktop.
+          Waiting for responses from your desktop.<br/>
+          <span style="font-size:12px;opacity:0.6;margin-top:6px;display:block;">Use the actions below or type a message.</span>
         </div>
       </section>
 
-      <nav class="actions" aria-label="Actions">
-        <button class="action" id="clearButton" type="button">Clear</button>
-        <button class="action primary" id="copyButton" type="button">Copy</button>
-        <button class="action" id="scrollButton" type="button">Bottom</button>
-      </nav>
+      <div class="bottom-panel">
+        <!-- Quick action shortcuts -->
+        <div class="quick-actions" id="quickActions">
+          <button class="qa-btn" data-action="whatToAnswer" type="button">What to Say</button>
+          <button class="qa-btn" data-action="codeHint" type="button">Code Hint</button>
+          <button class="qa-btn" data-action="clarify" type="button">Clarify</button>
+          <button class="qa-btn" data-action="brainstorm" type="button">Brainstorm</button>
+          <button class="qa-btn" data-action="answer" type="button">Answer</button>
+          <button class="qa-btn" data-action="followUp" type="button">Follow Up</button>
+          <button class="qa-btn" data-action="dynamicAction4" type="button">Recap</button>
+          <button class="qa-btn screenshot-btn" id="screenshotBtn" type="button" title="Capture desktop screenshot for AI prompt">📷 Capture</button>
+        </div>
+        <!-- Chat input -->
+        <div class="input-row">
+          <input class="chat-input" id="chatInput" type="text" placeholder="Ask anything…" autocomplete="off" autocorrect="off" spellcheck="false" />
+          <button class="send-btn" id="sendBtn" type="button" aria-label="Send">↑</button>
+        </div>
+        <!-- Utility buttons -->
+        <div class="util-row">
+          <button class="util-btn" id="clearButton" type="button">Clear</button>
+          <button class="util-btn" id="copyButton" type="button">Copy</button>
+          <button class="util-btn" id="scrollButton" type="button">Bottom</button>
+        </div>
+      </div>
 
       <div class="toast" id="toast" role="status"></div>
     </main>
@@ -256,23 +342,14 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         const statusText = document.getElementById('statusText');
         const subtitle = document.getElementById('subtitle');
         const toast = document.getElementById('toast');
+        const chatInput = document.getElementById('chatInput');
+        const sendBtn = document.getElementById('sendBtn');
 
         // ───── Markdown renderer ─────────────────────────────────────────
-        // Tiny, dependency-free, XSS-safe (escapes everything before
-        // re-inserting any tag). Built specifically to match what the
-        // desktop app's ReactMarkdown produces: code fences, inline code,
-        // bold/italic, headings, ordered + unordered lists, blockquotes,
-        // links, $math$, and horizontal rules.
         const HTML_ESCAPE = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
         function esc(str) { return String(str || '').replace(/[&<>"']/g, function (c) { return HTML_ESCAPE[c]; }); }
 
         // ───── Syntax highlighter ────────────────────────────────────────
-        // Hand-rolled, language-by-language ordered rules. Each rule is a
-        // [token-class, regex-anchored-at-start]. We walk the source string
-        // left-to-right, taking the first matching rule each step. Token
-        // class shorthand (single char) keeps the served HTML small.
-        // Unknown languages fall back to "generic" which still tints
-        // strings/comments/numbers — useful for SQL dialects, ruby, etc.
         const LANG_ALIAS = {
           js: 'js', javascript: 'js', jsx: 'js',
           ts: 'js', typescript: 'js', tsx: 'js',
@@ -386,8 +463,6 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
             ['f', /^\\b[A-Za-z_]\\w*(?=\\s*\\()/],
           ],
         };
-        // Order-independent fast path: for any language, the ident/whitespace/
-        // single-char fall-through is the same.
         function highlightCode(code, lang) {
           const key = LANG_ALIAS[(lang || '').toLowerCase()] || (lang ? null : null);
           const rules = (key && HL_RULES[key]) || (lang ? HL_RULES.generic : null);
@@ -396,7 +471,6 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           let i = 0;
           const n = code.length;
           while (i < n) {
-            // Skip whitespace cheaply (no regex per char).
             const ch = code.charCodeAt(i);
             if (ch === 32 || ch === 9 || ch === 10 || ch === 13) {
               const start = i;
@@ -416,7 +490,6 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
               }
             }
             if (consumed === 0) {
-              // No rule matched — consume one ident-ish run or one char.
               const idm = tail.match(/^[A-Za-z_$][\\w$]*/);
               if (idm) { out.push(esc(idm[0])); consumed = idm[0].length; }
               else { out.push(esc(code[i])); consumed = 1; }
@@ -427,19 +500,13 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         }
 
         function renderInline(text) {
-          // Order matters: inline code first (so its content doesn't get
-          // mangled by other rules), then math, then bold > italic, then links.
           let out = esc(text);
-          // \`inline code\`
           out = out.replace(/\`([^\`\\n]+)\`/g, function (_m, c) { return '<code class="inline">' + c + '</code>'; });
-          // $...$ math (single-dollar, not crossing newlines, not empty)
           out = out.replace(/(^|[^\\\\])\\$([^$\\n]+?)\\$/g, function (_m, pre, c) { return pre + '<span class="math">' + c + '</span>'; });
-          // **bold** before *italic* so we don't eat the inner asterisks.
           out = out.replace(/\\*\\*([^*\\n]+?)\\*\\*/g, '<strong>$1</strong>');
           out = out.replace(/__([^_\\n]+?)__/g, '<strong>$1</strong>');
           out = out.replace(/(^|[^\\*])\\*([^*\\n]+?)\\*(?!\\*)/g, '$1<em>$2</em>');
           out = out.replace(/(^|[^_])_([^_\\n]+?)_(?!_)/g, '$1<em>$2</em>');
-          // [text](url) — only allow http(s) and relative links.
           out = out.replace(/\\[([^\\]\\n]+)\\]\\(([^)\\s]+)\\)/g, function (_m, label, href) {
             const safe = /^https?:\\/\\//i.test(href) ? href : '#';
             return '<a href="' + safe + '" target="_blank" rel="noopener noreferrer">' + label + '</a>';
@@ -449,11 +516,6 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
 
         function renderMarkdown(src) {
           if (!src) return '';
-          // 1. Pull out fenced code blocks first (so their contents stay literal).
-          //    Pass A: closed fences. Pass B: a trailing UNCLOSED fence (live
-          //    streaming case) — anything from the last \`\`\` to end-of-input
-          //    is shown as an "open" code block, so streamed code looks right
-          //    well before the closing fence arrives.
           const fences = [];
           const fenceRe = /\`\`\`([\\w-]*)?\\n?([\\s\\S]*?)\`\`\`/g;
           let placeheld = src.replace(fenceRe, function (_m, lang, code) {
@@ -468,11 +530,10 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
             placeheld = placeheld.slice(0, startIdx) + '\\u0000FENCE' + (fences.length - 1) + '\\u0000';
           }
 
-          // 2. Walk lines, building paragraphs / lists / headings / quotes.
           const lines = placeheld.split(/\\n/);
           const out = [];
           let para = [];
-          let list = null; // { type: 'ul'|'ol', items: string[] }
+          let list = null;
           let quote = [];
 
           function flushPara() {
@@ -497,18 +558,13 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
 
           for (let i = 0; i < lines.length; i++) {
             const raw = lines[i];
-            const line = raw;
-            const trimmed = line.trim();
+            const trimmed = raw.trim();
 
-            // Code fence placeholder restores immediately, ending blocks.
             const fenceMatch = trimmed.match(/^\\u0000FENCE(\\d+)\\u0000$/);
             if (fenceMatch) {
               flushAll();
               const f = fences[parseInt(fenceMatch[1], 10)];
               const langLabel = f.lang ? esc(f.lang) : 'code';
-              // While streaming an open fence: skip highlighting (it would
-              // re-tokenize on every keystroke) and replace the Copy button
-              // with a "Streaming…" label so the user knows it's live.
               const body = f.open ? esc(f.code) : highlightCode(f.code, f.lang);
               const trailing = f.open
                 ? '<span class="codeblock-copy" aria-hidden="true">Streaming…</span>'
@@ -522,23 +578,12 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
               continue;
             }
 
-            // Blank line → paragraph break.
             if (!trimmed) { flushAll(); continue; }
-
-            // Horizontal rule.
-            if (/^(-{3,}|_{3,}|\\*{3,})$/.test(trimmed)) {
-              flushAll(); out.push('<hr />'); continue;
-            }
-
-            // Heading.
+            if (/^(-{3,}|_{3,}|\\*{3,})$/.test(trimmed)) { flushAll(); out.push('<hr />'); continue; }
             const h = trimmed.match(/^(#{1,3})\\s+(.+)$/);
             if (h) { flushAll(); out.push('<h' + h[1].length + '>' + renderInline(h[2]) + '</h' + h[1].length + '>'); continue; }
-
-            // Block quote.
             const q = trimmed.match(/^>\\s?(.*)$/);
             if (q) { flushPara(); flushList(); quote.push(q[1]); continue; }
-
-            // Ordered list.
             const ol = trimmed.match(/^(\\d+)[.)]\\s+(.+)$/);
             if (ol) {
               flushPara(); flushQuote();
@@ -546,8 +591,6 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
               list.items.push(ol[2]);
               continue;
             }
-
-            // Unordered list.
             const ul = trimmed.match(/^[-*+]\\s+(.+)$/);
             if (ul) {
               flushPara(); flushQuote();
@@ -555,8 +598,6 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
               list.items.push(ul[1]);
               continue;
             }
-
-            // Continuation line for the open block.
             if (list) { list.items[list.items.length - 1] += ' ' + trimmed; continue; }
             if (quote.length) { quote.push(trimmed); continue; }
             para.push(trimmed);
@@ -565,8 +606,6 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           return out.join('');
         }
 
-        // Wires copy buttons inside code blocks. Idempotent — safe to call
-        // after each render or token append.
         function bindCodeCopy(root) {
           const buttons = (root || feed).querySelectorAll('.codeblock-copy:not([data-bound])');
           buttons.forEach(function (btn) {
@@ -587,11 +626,12 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           });
         }
 
+        // ───── Connection ─────────────────────────────────────────────────
         const params = new URLSearchParams(window.location.search);
         const token = params.get('t') || '';
 
-        const messages = [];           // {id, role, content, createdAt}
-        let live = null;               // { streamId, content, createdAt }
+        const messages = [];        // { id, role, content, createdAt, label? }
+        let live = null;            // { streamId, content, createdAt }
         let socket = null;
         let reconnectTimer = null;
         let reconnectDelay = 800;
@@ -606,7 +646,9 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         function setConnected(isConnected) {
           status.classList.toggle('connected', isConnected);
           statusText.textContent = isConnected ? 'Connected' : 'Offline';
-          subtitle.textContent = isConnected ? 'Live mirror active' : 'Reconnecting';
+          subtitle.textContent = isConnected ? 'Live mirror active' : 'Reconnecting…';
+          sendBtn.disabled = !isConnected;
+          document.querySelectorAll('.qa-btn').forEach(function (b) { b.disabled = !isConnected; });
         }
 
         function fmtTime(value) {
@@ -626,6 +668,25 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         }
 
         function buildCard(m, opts) {
+          // Screenshot-queued notification card (no image — stays on desktop)
+          if (m.type === 'screenshot-queued') {
+            const card = document.createElement('article');
+            card.className = 'card screenshot-card';
+            card.dataset.id = m.id || '';
+            const meta = document.createElement('div');
+            meta.className = 'meta';
+            const role = document.createElement('span');
+            role.className = 'role';
+            const pip = document.createElement('span'); pip.className = 'pip';
+            const lbl = document.createElement('span'); lbl.textContent = '📷 Screenshot queued for AI';
+            role.append(pip, lbl);
+            const right = document.createElement('span'); right.textContent = fmtTime(m.createdAt);
+            meta.append(role, right);
+            card.append(meta);
+            return card;
+          }
+
+          // Normal message card
           const card = document.createElement('article');
           card.className = 'card' + (m.role === 'user' ? ' user' : '') + (opts && opts.live ? ' live' : '');
           card.dataset.id = m.id || '';
@@ -637,15 +698,18 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           const roleLabel = document.createElement('span');
           roleLabel.textContent = m.role === 'user' ? 'You' : 'Assistant';
           role.append(pip, roleLabel);
+          // Label tag for shortcut-triggered responses
+          const labelTag = document.createElement('span');
+          labelTag.className = 'label-tag';
+          labelTag.style.display = m.label ? 'inline-block' : 'none';
+          if (m.label) labelTag.textContent = m.label;
           const right = document.createElement('span');
           right.textContent = fmtTime(m.createdAt);
           const badge = document.createElement('span');
           badge.className = 'badge'; badge.textContent = 'Live';
-          meta.append(role, badge, right);
+          meta.append(role, labelTag, badge, right);
           const content = document.createElement('div');
           content.className = 'content';
-          // User messages stay verbatim (they're transcripts/typed text).
-          // Assistant messages get the full markdown treatment.
           if (m.role === 'user') {
             content.style.whiteSpace = 'pre-wrap';
             content.textContent = m.content || '';
@@ -670,10 +734,6 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           scrollToLatest();
         }
 
-        // Coalesce token-driven renders to one per animation frame so a burst
-        // of buffered tokens (network often delivers 5-20 at once) costs one
-        // re-parse instead of N. requestAnimationFrame also pauses while the
-        // tab is hidden — we'll catch up automatically on visibility return.
         let liveRenderRaf = 0;
         function flushLiveRender() {
           liveRenderRaf = 0;
@@ -706,8 +766,6 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         }
 
         function finalizeLive(streamId, content, createdAt) {
-          // Cancel any pending live render — we're about to do a final one
-          // with the canonical (server-confirmed) content.
           if (liveRenderRaf) {
             if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(liveRenderRaf);
             else clearTimeout(liveRenderRaf);
@@ -723,8 +781,17 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           }
         }
 
+        // ───── Send command to server ─────────────────────────────────────
+        function sendCommand(cmd) {
+          if (socket && socket.readyState === WebSocket.OPEN) {
+            try { socket.send(JSON.stringify(cmd)); } catch (_) {}
+          }
+        }
+
+        // ───── Event handler ──────────────────────────────────────────────
         function handleEvent(ev) {
           if (!ev || typeof ev !== 'object') return;
+
           if (ev.type === 'history' && Array.isArray(ev.messages)) {
             messages.length = 0;
             for (const m of ev.messages) messages.push(m);
@@ -754,12 +821,31 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
             showToast('Stream error');
             return;
           }
+          // Non-streaming assistant response from shortcut-triggered actions
+          if (ev.type === 'assistant') {
+            messages.push({ id: ev.id, role: 'assistant', content: ev.content, createdAt: ev.createdAt, label: ev.label });
+            render();
+            scrollToLatest(true);
+            return;
+          }
+          // Ack events from stealth operations (screenshot captured, etc.)
+          if (ev.type === 'ack') {
+            showToast(ev.message || ev.action);
+            // For screenshot acks, also add a small card to the feed.
+            if (ev.action === 'screenshot') {
+              const id = 'ack-' + Date.now();
+              messages.push({ id, type: 'screenshot-queued', createdAt: new Date().toISOString() });
+              render();
+              scrollToLatest(true);
+            }
+            return;
+          }
           if (ev.type === 'status') {
-            // server-pushed status, ignored visually beyond connection state
             return;
           }
         }
 
+        // ───── WebSocket ──────────────────────────────────────────────────
         function connect() {
           clearTimeout(reconnectTimer);
           const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -800,11 +886,44 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           } catch (e) { wakeLock = null; }
         }
 
+        // ───── Interaction handlers ───────────────────────────────────────
+        // Send chat message
+        function submitChat() {
+          const msg = chatInput.value.trim();
+          if (!msg) return;
+          sendCommand({ type: 'chat', message: msg });
+          chatInput.value = '';
+        }
+        sendBtn.addEventListener('click', submitChat);
+        chatInput.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitChat(); }
+        });
+
+        // Quick action buttons
+        document.querySelectorAll('.qa-btn[data-action]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            const action = btn.dataset.action;
+            sendCommand({ type: 'action', action });
+            btn.classList.add('working');
+            setTimeout(function () { btn.classList.remove('working'); }, 1200);
+          });
+        });
+
+        // Screenshot button — triggers a stealth desktop capture queued for AI.
+        // The image stays on the PC; only a confirmation toast appears on the phone.
+        document.getElementById('screenshotBtn').addEventListener('click', function () {
+          sendCommand({ type: 'screenshot' });
+          showToast('Capturing…');
+        });
+
+        // Utility buttons
         document.getElementById('clearButton').addEventListener('click', () => {
           messages.length = 0; live = null; render();
         });
         document.getElementById('copyButton').addEventListener('click', async () => {
-          const parts = messages.map((m) => (m.role === 'user' ? 'You: ' : '') + m.content);
+          const parts = messages
+            .filter(function (m) { return !m.type || m.type !== 'screenshot-queued'; })
+            .map((m) => (m.role === 'user' ? 'You: ' : (m.label ? '[' + m.label + '] ' : '')) + m.content);
           if (live && live.content) parts.push(live.content);
           const text = parts.join('\\n\\n');
           if (!text) return;
@@ -831,6 +950,10 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           status.classList.remove('connected');
           return;
         }
+
+        // Start disconnected — buttons disabled until connected
+        sendBtn.disabled = true;
+        document.querySelectorAll('.qa-btn').forEach(function (b) { b.disabled = true; });
 
         requestWakeLock();
         connect();

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { sliceSafeHandleBlock, findSafeHandle } from './ipcTestUtils.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../../..');
@@ -25,13 +26,15 @@ function read(relativePath) {
 test('get-stored-credentials IPC does not return raw STT API keys', () => {
   const source = read('electron/ipcHandlers.ts');
 
-  // Find the get-stored-credentials handler
-  const handlerStart = source.indexOf('safeHandle("get-stored-credentials"');
-  assert.ok(handlerStart >= 0, 'get-stored-credentials handler should exist');
+  // Find the get-stored-credentials handler (single or double quotes)
+  const handlerMatch = source.match(/safeHandle\(['"]get-stored-credentials['"]/);
+  assert.ok(handlerMatch && handlerMatch.index !== undefined, 'get-stored-credentials handler should exist');
 
   // Extract just this handler (until the next safeHandle)
-  const nextHandler = source.indexOf('safeHandle("', handlerStart + 10);
-  const handlerEnd = nextHandler === -1 ? source.length : nextHandler;
+  const handlerStart = handlerMatch.index;
+  const searchFrom = handlerStart + handlerMatch[0].length;
+  const nextRel = source.slice(searchFrom).search(/safeHandle\(['"]/);
+  const handlerEnd = nextRel === -1 ? source.length : searchFrom + nextRel;
   const handler = source.slice(handlerStart, handlerEnd);
 
   // STT keys should be boolean-only or masked, NOT raw key values
@@ -67,7 +70,7 @@ test('get-stored-credentials IPC does not return raw STT API keys', () => {
 test('error fallback in get-stored-credentials does not return raw STT keys', () => {
   const source = read('electron/ipcHandlers.ts');
 
-  const handlerStart = source.indexOf('safeHandle("get-stored-credentials"');
+  const handlerStart = source.search(/safeHandle\(['"]get-stored-credentials['"]/);
   assert.ok(handlerStart >= 0, 'get-stored-credentials handler should exist');
 
   // Find the catch block that returns the error fallback object
@@ -99,10 +102,7 @@ test('renderer settings overlay does not rely on raw STT keys from IPC', () => {
 
 test('STT key fields in IPC response follow masked or boolean-only pattern', () => {
   const source = read('electron/ipcHandlers.ts');
-  const handlerStart = source.indexOf('safeHandle("get-stored-credentials"');
-  const nextHandler = source.indexOf('safeHandle("', handlerStart + 10);
-  const handlerEnd = nextHandler === -1 ? source.length : nextHandler;
-  const handler = source.slice(handlerStart, handlerEnd);
+  const handler = sliceSafeHandleBlock(source, 'get-stored-credentials');
 
   // Count stt*Key field assignments
   const keyFieldMatches = handler.match(/stt(Groq|Openai|Deepgram|ElevenLabs|Azure|Ibm|Soniox)Key:/g) || [];

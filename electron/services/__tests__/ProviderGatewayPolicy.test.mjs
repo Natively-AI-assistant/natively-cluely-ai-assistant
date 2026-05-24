@@ -108,8 +108,8 @@ test('SettingsManager exposes providerDataScopes setting', () => {
 test('IPC handlers expose get/set provider-data-scopes and broadcast updates', () => {
   const ipc = read('electron/ipcHandlers.ts');
 
-  assert.match(ipc, /safeHandle\("get-provider-data-scopes"/);
-  assert.match(ipc, /safeHandle\("set-provider-data-scopes"/);
+  assert.match(ipc, /safeHandle\(['"]get-provider-data-scopes['"]/);
+  assert.match(ipc, /safeHandle\(['"]set-provider-data-scopes['"]/);
   assert.match(ipc, /webContents\.send\('provider-data-scopes-changed', sanitized\)/);
   assert.match(ipc, /SettingsManager\.getInstance\(\)\.set\('providerDataScopes'/);
 });
