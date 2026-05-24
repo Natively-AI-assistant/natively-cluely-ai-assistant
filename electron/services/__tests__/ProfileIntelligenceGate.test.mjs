@@ -13,6 +13,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { findSafeHandle, sliceSafeHandleBlock } from './ipcTestUtils.mjs';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -33,13 +34,10 @@ describe('Profile Intelligence IPC: Pro/trial gate', () => {
     test(`handler "${handler}" calls isProOrTrialActive() before doing work`, () => {
       // Find the handler body — start at safeHandle("name", and run until the
       // matching });
-      const marker = `safeHandle("${handler}"`;
-      const idx = source.indexOf(marker);
+      const idx = findSafeHandle(source, handler);
       assert.ok(idx >= 0, `Handler ${handler} not found in ipcHandlers.ts`);
 
-      // Take a generous window from the handler start. Real handlers fit in
-      // well under 3000 chars.
-      const slice = source.slice(idx, idx + 3000);
+      const slice = sliceSafeHandleBlock(source, handler).slice(0, 3000);
 
       // The gate call must appear before the orchestrator is invoked. We
       // assert presence; ordering is verified by a separate index check.
@@ -68,10 +66,9 @@ describe('Profile Intelligence IPC: Pro/trial gate', () => {
   }
 
   test('profile:get-status returns safe defaults when premium is unavailable (does not call ingest)', () => {
-    const marker = `safeHandle("profile:get-status"`;
-    const idx = source.indexOf(marker);
+    const idx = findSafeHandle(source, 'profile:get-status');
     assert.ok(idx >= 0);
-    const slice = source.slice(idx, idx + 1500);
+    const slice = sliceSafeHandleBlock(source, 'profile:get-status').slice(0, 1500);
     // get-status is intentionally NOT gated (it just reports status) — it
     // should return a falsy hasProfile when the orchestrator is missing.
     assert.ok(slice.includes('hasProfile: false'), 'profile:get-status must default to hasProfile=false when orchestrator missing');

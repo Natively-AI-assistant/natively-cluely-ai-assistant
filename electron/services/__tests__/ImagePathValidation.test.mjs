@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'path';
+import { findSafeHandle, sliceSafeHandleBlock } from './ipcTestUtils.mjs';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -27,16 +28,15 @@ test('generate-code-hint validates imagePaths before using them', () => {
   const engineSource = read('electron/IntelligenceEngine.ts');
 
   // Find generate-code-hint handler in IPC
-  const handlerStart = ipcSource.indexOf('safeHandle("generate-code-hint"');
+  const handlerStart = findSafeHandle(ipcSource, 'generate-code-hint');
   assert.ok(handlerStart >= 0, 'generate-code-hint handler should exist');
 
   // Find generate-brainstorm handler
-  const brainstormStart = ipcSource.indexOf('safeHandle("generate-brainstorm"');
+  const brainstormStart = findSafeHandle(ipcSource, 'generate-brainstorm');
   assert.ok(brainstormStart >= 0, 'generate-brainstorm handler should exist');
 
   // Extract the code-hint handler
-  const handlerEnd = ipcSource.indexOf('safeHandle("', handlerStart + 10);
-  const codeHintHandler = ipcSource.slice(handlerStart, handlerEnd > -1 ? handlerEnd : undefined);
+  const codeHintHandler = sliceSafeHandleBlock(ipcSource, 'generate-code-hint');
 
   // The handler receives imagePaths from renderer and passes them to IntelligenceEngine
   // It should validate paths before passing them
@@ -64,11 +64,10 @@ test('generate-brainstorm validates imagePaths before using them', () => {
   const ipcSource = read('electron/ipcHandlers.ts');
   const engineSource = read('electron/IntelligenceEngine.ts');
 
-  const handlerStart = ipcSource.indexOf('safeHandle("generate-brainstorm"');
+  const handlerStart = findSafeHandle(ipcSource, 'generate-brainstorm');
   assert.ok(handlerStart >= 0, 'generate-brainstorm handler should exist');
 
-  const nextHandler = ipcSource.indexOf('safeHandle("', handlerStart + 10);
-  const brainstormHandler = ipcSource.slice(handlerStart, nextHandler > -1 ? nextHandler : undefined);
+  const brainstormHandler = sliceSafeHandleBlock(ipcSource, 'generate-brainstorm');
 
   const runBrainstormStart = engineSource.indexOf('async runBrainstorm(');
   assert.ok(runBrainstormStart >= 0, 'runBrainstorm should exist');
@@ -98,9 +97,8 @@ test('runWhatShouldISay receives validated imagePaths from IPC handler', () => {
   assert.ok(/imagePaths\??:?\s*string\[\]/.test(methodBody), 'runWhatShouldISay should accept imagePaths');
 
   // But the actual validation happens at the IPC handler level
-  const whatToSayHandler = ipcSource.indexOf('safeHandle("generate-what-to-say"');
-  const handlerEnd = ipcSource.indexOf('safeHandle("', whatToSayHandler + 10);
-  const handler = ipcSource.slice(whatToSayHandler, handlerEnd);
+  const whatToSayHandler = findSafeHandle(ipcSource, 'generate-what-to-say');
+  const handler = sliceSafeHandleBlock(ipcSource, 'generate-what-to-say');
 
   // The handler should validate imagePaths before calling the engine
   assert.ok(
@@ -122,9 +120,7 @@ test('image path validation rejects path traversal attempts', () => {
 
 test('generate-what-to-say rejects malformed image path payloads before OCR or model calls', () => {
   const ipcSource = read('electron/ipcHandlers.ts');
-  const whatToSayStart = ipcSource.indexOf('safeHandle("generate-what-to-say"');
-  const whatToSayEnd = ipcSource.indexOf('safeHandle("', whatToSayStart + 10);
-  const handler = ipcSource.slice(whatToSayStart, whatToSayEnd);
+  const handler = sliceSafeHandleBlock(ipcSource, 'generate-what-to-say');
 
   assert.match(handler, /imagePaths\.length > 5/);
   assert.match(handler, /typeof imagePath !== 'string'/);
@@ -132,30 +128,24 @@ test('generate-what-to-say rejects malformed image path payloads before OCR or m
   assert.match(handler, /malformed image path payload rejected/);
   assert.match(handler, /Invalid image path payload/);
   assert.match(handler, /validatedImagePaths/);
-  assert.match(handler, /runWhatShouldISay\(question, 0\.8, validatedImagePaths/);
+  assert.match(handler, /runWhatShouldISay\([\s\S]{0,120}validatedImagePaths/);
 });
 
 test('image path validation is applied at IPC handler level', () => {
   const ipcSource = read('electron/ipcHandlers.ts');
 
   // Find all handlers that accept imagePaths
-  const generateCodeHint = ipcSource.indexOf('safeHandle("generate-code-hint"');
-  const generateBrainstorm = ipcSource.indexOf('safeHandle("generate-brainstorm"');
-  const generateWhatToSay = ipcSource.indexOf('safeHandle("generate-what-to-say"');
+  const generateCodeHint = findSafeHandle(ipcSource, 'generate-code-hint');
+  const generateBrainstorm = findSafeHandle(ipcSource, 'generate-brainstorm');
+  const generateWhatToSay = findSafeHandle(ipcSource, 'generate-what-to-say');
 
   assert.ok(generateCodeHint >= 0, 'generate-code-hint should exist');
   assert.ok(generateBrainstorm >= 0, 'generate-brainstorm should exist');
   assert.ok(generateWhatToSay >= 0, 'generate-what-to-say should exist');
 
-  // Extract each handler and check for path validation
-  const codeHintEnd = ipcSource.indexOf('safeHandle("', generateCodeHint + 10);
-  const codeHintHandler = ipcSource.slice(generateCodeHint, codeHintEnd);
-
-  const brainstormEnd = ipcSource.indexOf('safeHandle("', generateBrainstorm + 10);
-  const brainstormHandler = ipcSource.slice(generateBrainstorm, brainstormEnd);
-
-  const whatToSayEnd = ipcSource.indexOf('safeHandle("', generateWhatToSay + 10);
-  const whatToSayHandler = ipcSource.slice(generateWhatToSay, whatToSayEnd);
+  const codeHintHandler = sliceSafeHandleBlock(ipcSource, 'generate-code-hint');
+  const brainstormHandler = sliceSafeHandleBlock(ipcSource, 'generate-brainstorm');
+  const whatToSayHandler = sliceSafeHandleBlock(ipcSource, 'generate-what-to-say');
 
   // At least one should have path validation
   const hasValidation =

@@ -828,14 +828,6 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
             scrollToLatest(true);
             return;
           }
-          // Desktop screenshot queued-for-AI acknowledgement.
-          // The image itself stays on the PC — we just log it in the feed.
-          if (ev.type === 'screenshot') {
-            messages.push({ id: ev.id, type: 'screenshot-queued', createdAt: ev.createdAt });
-            render();
-            scrollToLatest(true);
-            return;
-          }
           // Ack events from stealth operations (screenshot captured, etc.)
           if (ev.type === 'ack') {
             showToast(ev.message || ev.action);

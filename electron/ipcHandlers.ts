@@ -778,8 +778,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     const launcherWin = appState.getWindowHelper().getLauncherWindow();
     if (launcherWin && !launcherWin.isDestroyed()) {
       launcherWin.webContents.send('settings:open-tab', tab);
-      launcherWin.show();
-      launcherWin.focus();
+      if (appState.getUndetectable()) {
+        launcherWin.showInactive();
+      } else {
+        launcherWin.show();
+        launcherWin.focus();
+      }
     }
   });
 
@@ -4695,35 +4699,76 @@ export function initializeIpcHandlers(appState: AppState): void {
       // but without requiring a renderer event sender. Tokens are pushed directly to
       // the phone over WebSocket; desktop renderer also receives them so both views
       // stay in sync.
-      const myStreamId = crypto.randomUUID();
+      const myStreamId = ++_chatStreamId;
       const message = cmd.message;
       const phoneMirror = PhoneMirrorService.getInstance();
+      const intelligenceManager = appState.getIntelligenceManager();
 
-      try { phoneMirror.publishUserMessage(myStreamId, message); } catch (_) {}
+      // Capture rolling context BEFORE adding the new user message — same ordering
+      // as gemini-chat-stream so Recap / Follow Up / What to Answer see phone turns.
+      let context: string | undefined;
+      try {
+        const snap = intelligenceManager.getFormattedContext(100);
+        if (snap && snap.trim().length > 0) context = snap;
+      } catch (ctxErr) {
+        console.warn('[PhoneMirror] Failed to capture pre-turn context:', ctxErr);
+      }
+
+      intelligenceManager.addTranscript(
+        { text: message, speaker: 'user', timestamp: Date.now(), final: true },
+        true,
+      );
+
+      try {
+        phoneMirror.publishUserMessage(String(myStreamId), message);
+      } catch (_) {}
       // Notify renderer so it can display the incoming phone message too.
-      win?.webContents.send('phone-mirror:incoming-chat', { message, streamId: myStreamId });
+      win?.webContents.send('phone-mirror:incoming-chat', {
+        message,
+        streamId: String(myStreamId),
+      });
 
       try {
         const llmHelper = appState.processingHelper.getLLMHelper();
-        const stream = llmHelper.streamChat(message);
+        const stream = llmHelper.streamChat(message, undefined, context, CHAT_MODE_PROMPT);
         let full = '';
         for await (const token of stream) {
+          // Bail if a newer stream has taken over (phone or desktop chat).
+          if (_chatStreamId !== myStreamId) {
+            console.log(
+              `[PhoneMirror] phone-chat ${myStreamId} superseded by ${_chatStreamId}, stopping.`,
+            );
+            return;
+          }
           // Cancel early if all phones have disconnected — no point burning LLM
           // tokens when nobody is receiving them and we have no desktop renderer
           // context to show the result in either.
           if (!phoneMirror.hasClients() && win?.isDestroyed()) break;
-          try { phoneMirror.publishToken(myStreamId, token); } catch (_) {}
+          try {
+            phoneMirror.publishToken(String(myStreamId), token);
+          } catch (_) {}
           win?.webContents.send('gemini-stream-token', token);
           full += token;
         }
-        try { phoneMirror.publishDone(myStreamId, full); } catch (_) {}
-        win?.webContents.send('gemini-stream-done');
+        if (_chatStreamId === myStreamId) {
+          try {
+            phoneMirror.publishDone(String(myStreamId), full);
+          } catch (_) {}
+          win?.webContents.send('gemini-stream-done');
+          if (full.trim().length > 0) {
+            intelligenceManager.addAssistantMessage(full);
+            intelligenceManager.logUsage('chat', message, full);
+          }
+        }
       } catch (err: any) {
         console.error('[PhoneMirror] phone-chat stream error:', err);
-        try { phoneMirror.publishError(myStreamId, err?.message || 'stream error'); } catch (_) {}
-        win?.webContents.send('gemini-stream-error', err?.message || 'stream error');
+        if (_chatStreamId === myStreamId) {
+          try {
+            phoneMirror.publishError(String(myStreamId), err?.message || 'stream error');
+          } catch (_) {}
+          win?.webContents.send('gemini-stream-error', err?.message || 'stream error');
+        }
       }
-
     } else if (cmd.type === 'screenshot') {
       // Stealth screenshot: capture on PC → add to screenshot queue → ack to phone.
       // The image is NOT sent to the phone — it stays on the desktop for AI use.

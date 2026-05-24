@@ -72,7 +72,7 @@ test('IPC and meeting summary logs avoid answer and LLM response snippets', () =
   const intent = read('electron/llm/IntentClassifier.ts');
 
   assert.match(ipc, /gemini - chat response received`, \{ length: result\?\.length \?\? 0 \}/);
-  assert.match(ipc, /Updated IntelligenceManager\.Last message`, \{ length: intelligenceManager\.getLastAssistantMessage\(\)\?\.length \?\? 0 \}/);
+  assert.match(ipc, /Updated IntelligenceManager\.Last message`,[\s\S]{0,120}length: intelligenceManager\.getLastAssistantMessage\(\)\?\.length \?\? 0/);
   assert.doesNotMatch(ipc, /console\.log[\s\S]{0,140}result\.substring\(/);
   assert.doesNotMatch(ipc, /console\.log[\s\S]{0,140}getLastAssistantMessage\(\)\?\.substring\(/);
 

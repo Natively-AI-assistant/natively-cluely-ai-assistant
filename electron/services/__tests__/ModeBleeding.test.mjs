@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
+import { findSafeHandle, sliceSafeHandleBlock } from './ipcTestUtils.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -109,12 +110,10 @@ describe('BUG-MODE-BLEEDING: Mode-context clearing on mode switch', () => {
     const source = fs.readFileSync(sourcePath, 'utf8');
 
     // Find the modes:set-active handler
-    const handlerStart = source.indexOf('safeHandle("modes:set-active"');
+    const handlerStart = findSafeHandle(source, 'modes:set-active');
     assert.ok(handlerStart >= 0, 'modes:set-active handler should exist');
 
-    // Extract handler body (up to next safeHandle or end of handler)
-    const handlerEnd = source.indexOf('safeHandle("modes:get', handlerStart + 10);
-    const handlerBody = source.slice(handlerStart, handlerEnd > 0 ? handlerEnd : handlerStart + 3000);
+    const handlerBody = sliceSafeHandleBlock(source, 'modes:set-active');
 
     // Must call clearSessionContext before setActiveMode
     const clearIndex = handlerBody.indexOf('clearSessionContext');

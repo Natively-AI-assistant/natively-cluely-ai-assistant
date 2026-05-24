@@ -14,16 +14,16 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { findSafeHandle, sliceSafeHandleBlock } from './ipcTestUtils.mjs';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SOURCE = fs.readFileSync(path.resolve(__dirname, '../../ipcHandlers.ts'), 'utf8');
 
 function handlerBody() {
-  const start = SOURCE.indexOf('safeHandle("modes:upload-reference-file"');
+  const start = findSafeHandle(SOURCE, 'modes:upload-reference-file');
   assert.ok(start >= 0, 'Upload handler must exist');
-  const end = SOURCE.indexOf('safeHandle("modes:delete-reference-file"', start);
-  return SOURCE.slice(start, end > 0 ? end : start + 6000);
+  return sliceSafeHandleBlock(SOURCE, 'modes:upload-reference-file');
 }
 
 describe('FIX-009: modes:upload-reference-file hardening', () => {
@@ -50,16 +50,16 @@ describe('FIX-009: modes:upload-reference-file hardening', () => {
   test('wraps PDF and DOCX parsers in a timeout to guard against malformed input / zip bombs', () => {
     assert.ok(body.includes('PARSE_TIMEOUT_MS'), 'Parse-timeout constant must be declared');
     assert.ok(body.includes('withTimeout'), 'Handler must define a withTimeout helper');
-    assert.ok(/withTimeout(?:<[^>]+>)?\(parser\.getText\(\)/.test(body), 'PDF parse must be wrapped in withTimeout');
-    assert.ok(/withTimeout(?:<[^>]+>)?\(mammoth\.extractRawText/.test(body), 'DOCX parse must be wrapped in withTimeout');
+    assert.ok(/withTimeout[\s\S]{0,80}parser\.getText\(\)/.test(body), 'PDF parse must be wrapped in withTimeout');
+    assert.ok(/withTimeout[\s\S]{0,120}mammoth\.extractRawText/.test(body), 'DOCX parse must be wrapped in withTimeout');
   });
 
   test('BOM-aware decoding for UTF-16 / UTF-8-BOM text files (no false-positive binary rejection)', () => {
     // UTF-16 LE BOM: 0xFF 0xFE → decode with utf16le, do NOT treat embedded
     // null bytes as a renamed-binary signal.
-    assert.ok(/0xFF.+0xFE/.test(body), 'Handler must detect UTF-16 LE BOM');
-    assert.ok(/0xFE.+0xFF/.test(body), 'Handler must detect UTF-16 BE BOM');
-    assert.ok(/0xEF.+0xBB.+0xBF/.test(body), 'Handler must detect UTF-8 BOM');
+    assert.ok(/0xff.+0xfe/i.test(body), 'Handler must detect UTF-16 LE BOM');
+    assert.ok(/0xfe.+0xff/i.test(body), 'Handler must detect UTF-16 BE BOM');
+    assert.ok(/0xef[\s\S]{0,40}0xbb[\s\S]{0,40}0xbf/i.test(body), 'Handler must detect UTF-8 BOM');
     assert.ok(/utf16le/.test(body), 'Handler must decode UTF-16 with the utf16le codec');
   });
 

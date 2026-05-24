@@ -28,7 +28,6 @@ export type StreamEvent =
   | { type: 'done'; streamId: string; content: string; createdAt: string }
   | { type: 'error'; streamId: string; message: string }
   | { type: 'assistant'; id: string; content: string; label: string; createdAt: string }
-  | { type: 'screenshot'; id: string; dataUrl: string; createdAt: string }
   | { type: 'ack'; action: string; message: string };
 
 /** Command sent from the phone browser to the desktop. */
@@ -71,6 +70,8 @@ export class PhoneMirrorService {
   private statusListeners = new Set<StatusListener>();
   private phoneCommandListeners = new Set<(cmd: PhoneCommand) => void>();
   private cachedInfo: PhoneMirrorInfo | null = null;
+  private cachedQrUrl: string | null = null;
+  private cachedQrDataUrl: string | null = null;
   private starting: Promise<PhoneMirrorInfo> | null = null;
   // Debounce rapid connect/disconnect status events to avoid redundant QR re-renders.
   private statusDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -129,6 +130,7 @@ export class PhoneMirrorService {
 
   async rotateToken(): Promise<PhoneMirrorInfo> {
     this.token = generateToken();
+    this.invalidateQrCache();
     this.disconnectAllClients(4401, 'Token rotated');
     const info = await this.snapshot();
     this.emitStatus(info);
@@ -168,8 +170,7 @@ export class PhoneMirrorService {
     if (!this.isRunning()) return;
     const createdAt = new Date().toISOString();
     const content =
-      fullContent ||
-      (this.livePartial?.streamId === streamId ? this.livePartial.content : '');
+      fullContent || (this.livePartial?.streamId === streamId ? this.livePartial.content : '');
     if (content.trim()) {
       const msg: PersistedMessage = { id: 'a:' + streamId, role: 'assistant', content, createdAt };
       this.recordHistory(msg);
@@ -201,16 +202,6 @@ export class PhoneMirrorService {
     };
     this.recordHistory(msg);
     this.broadcast({ type: 'assistant', id: msg.id, content: msg.content, label, createdAt });
-  }
-
-  /**
-   * Push a desktop screenshot thumbnail to the phone.  The dataUrl must be a
-   * data:image/jpeg;base64,... string — callers are responsible for compressing
-   * before calling this method so the WebSocket payload stays under ~200 KB.
-   */
-  publishScreenshot(id: string, dataUrl: string): void {
-    if (!this.isRunning() || !dataUrl) return;
-    this.broadcast({ type: 'screenshot', id, dataUrl, createdAt: new Date().toISOString() });
   }
 
   /**
@@ -264,7 +255,19 @@ export class PhoneMirrorService {
     // If LAN is on, only advertise a real LAN URL — falling back to 127.0.0.1
     // would print a QR code the phone cannot reach (loopback ≠ phone).
     const primaryUrl = this.exposeOnLan ? lanUrls[0] || null : loopbackUrl;
-    const qrDataUrl = primaryUrl ? await safeQr(primaryUrl) : null;
+    let qrDataUrl: string | null = null;
+    if (primaryUrl) {
+      if (this.cachedQrUrl === primaryUrl && this.cachedQrDataUrl) {
+        qrDataUrl = this.cachedQrDataUrl;
+      } else {
+        qrDataUrl = await safeQr(primaryUrl);
+        this.cachedQrUrl = primaryUrl;
+        this.cachedQrDataUrl = qrDataUrl;
+      }
+    } else {
+      this.cachedQrUrl = null;
+      this.cachedQrDataUrl = null;
+    }
     const info: PhoneMirrorInfo = {
       running: true,
       enabled,
@@ -291,6 +294,7 @@ export class PhoneMirrorService {
   private async _start(exposeOnLan: boolean, persistEnabled: boolean): Promise<PhoneMirrorInfo> {
     this.exposeOnLan = exposeOnLan;
     this.token = generateToken();
+    this.invalidateQrCache();
 
     const host = exposeOnLan ? '0.0.0.0' : '127.0.0.1';
     const basePort = DEFAULT_PORT;
@@ -490,7 +494,7 @@ export class PhoneMirrorService {
 
     ws.on('close', () => {
       clearInterval(ping);
-      this.emitStatus(); // update client count
+      this.emitStatusClientCount();
     });
     ws.on('error', () => {
       /* swallow — close fires next */
@@ -533,7 +537,7 @@ export class PhoneMirrorService {
     });
 
     console.log(`[PhoneMirror] phone connected from ${req.socket.remoteAddress}`);
-    this.emitStatus();
+    this.emitStatusClientCount();
   }
 
   private broadcast(event: StreamEvent): void {
@@ -586,6 +590,23 @@ export class PhoneMirrorService {
         c.close(code, reason);
       } catch (_) {}
     }
+  }
+
+  private invalidateQrCache(): void {
+    this.cachedQrUrl = null;
+    this.cachedQrDataUrl = null;
+  }
+
+  private emitStatusClientCount(): void {
+    if (this.statusListeners.size === 0) return;
+    const clients = this.wss ? this.wss.clients.size : 0;
+    if (this.cachedInfo && clients !== this.cachedInfo.clients) {
+      const info = { ...this.cachedInfo, clients };
+      this.cachedInfo = info;
+      this.emitStatus(info);
+      return;
+    }
+    this.emitStatus();
   }
 
   private emitStatus(prebuilt?: PhoneMirrorInfo): void {
