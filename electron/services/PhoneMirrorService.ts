@@ -26,13 +26,22 @@ export type StreamEvent =
   | { type: 'user'; id: string; content: string; createdAt: string }
   | { type: 'token'; streamId: string; token: string }
   | { type: 'done'; streamId: string; content: string; createdAt: string }
-  | { type: 'error'; streamId: string; message: string };
+  | { type: 'error'; streamId: string; message: string }
+  | { type: 'assistant'; id: string; content: string; label: string; createdAt: string }
+  | { type: 'screenshot'; id: string; dataUrl: string; createdAt: string };
+
+/** Command sent from the phone browser to the desktop. */
+export type PhoneCommand =
+  | { type: 'chat'; message: string }
+  | { type: 'action'; action: string }
+  | { type: 'screenshot' };
 
 interface PersistedMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   createdAt: string;
+  label?: string;
 }
 
 const DEFAULT_PORT = 4123;
@@ -58,6 +67,7 @@ export class PhoneMirrorService {
   private livePartial: { streamId: string; tokens: string[] } | null = null;
   private rateBuckets = new Map<string, { count: number; resetAt: number }>();
   private statusListeners = new Set<StatusListener>();
+  private phoneCommandListeners = new Set<(cmd: PhoneCommand) => void>();
   private cachedInfo: PhoneMirrorInfo | null = null;
   private starting: Promise<PhoneMirrorInfo> | null = null;
 
@@ -123,6 +133,7 @@ export class PhoneMirrorService {
   async dispose(): Promise<void> {
     await this._teardown();
     this.statusListeners.clear();
+    this.phoneCommandListeners.clear();
   }
 
   // ----- public publishing API (called from ipcHandlers) -----
@@ -164,6 +175,44 @@ export class PhoneMirrorService {
     if (!this.isRunning()) return;
     this.broadcast({ type: 'error', streamId, message: String(message || 'Stream error') });
     if (this.livePartial?.streamId === streamId) this.livePartial = null;
+  }
+
+  /**
+   * Publish a non-streaming assistant response (e.g. from shortcut-triggered actions like
+   * Code Hint, What to Answer, Brainstorm, Recap, etc.).  The label is shown in the phone
+   * UI as the card's header (e.g. "Code Hint", "What to Answer").
+   */
+  publishAssistantMessage(id: string, content: string, label: string): void {
+    if (!this.isRunning() || !content?.trim()) return;
+    const createdAt = new Date().toISOString();
+    const msg: PersistedMessage = {
+      id: 'a:' + id,
+      role: 'assistant',
+      content,
+      createdAt,
+      label,
+    };
+    this.recordHistory(msg);
+    this.broadcast({ type: 'assistant', id: msg.id, content: msg.content, label, createdAt });
+  }
+
+  /**
+   * Push a desktop screenshot thumbnail to the phone.  The dataUrl must be a
+   * data:image/jpeg;base64,... string — callers are responsible for compressing
+   * before calling this method so the WebSocket payload stays under ~200 KB.
+   */
+  publishScreenshot(id: string, dataUrl: string): void {
+    if (!this.isRunning() || !dataUrl) return;
+    this.broadcast({ type: 'screenshot', id, dataUrl, createdAt: new Date().toISOString() });
+  }
+
+  /**
+   * Subscribe to commands sent from the phone browser.
+   * Returns an unsubscribe function.
+   */
+  onPhoneCommand(listener: (cmd: PhoneCommand) => void): () => void {
+    this.phoneCommandListeners.add(listener);
+    return () => this.phoneCommandListeners.delete(listener);
   }
 
   // ----- snapshot / status -----
@@ -382,8 +431,30 @@ export class PhoneMirrorService {
     });
     ws.on('error', () => { /* swallow — close fires next */ });
 
-    // Phone is read-only: ignore any inbound frames except control frames.
-    ws.on('message', () => { /* intentionally ignored */ });
+    // Parse and route commands from the phone browser.
+    ws.on('message', (data: any) => {
+      try {
+        const raw = typeof data === 'string' ? data : (data as Buffer).toString('utf8');
+        if (raw.length > 4096) return; // guard oversized payloads
+        const cmd = JSON.parse(raw) as unknown;
+        if (!cmd || typeof cmd !== 'object') return;
+        const c = cmd as Record<string, unknown>;
+
+        let validated: PhoneCommand | null = null;
+        if (c.type === 'chat' && typeof c.message === 'string' && c.message.trim().length > 0 && c.message.length <= 2000) {
+          validated = { type: 'chat', message: c.message.trim() };
+        } else if (c.type === 'action' && typeof c.action === 'string' && /^[a-zA-Z:_-]{1,64}$/.test(c.action)) {
+          validated = { type: 'action', action: c.action };
+        } else if (c.type === 'screenshot') {
+          validated = { type: 'screenshot' };
+        }
+
+        if (validated) {
+          console.log(`[PhoneMirror] phone command: ${validated.type}`);
+          this.emitPhoneCommand(validated);
+        }
+      } catch (_) { /* malformed JSON — ignore */ }
+    });
 
     console.log(`[PhoneMirror] phone connected from ${req.socket.remoteAddress}`);
     this.emitStatus();
@@ -437,6 +508,12 @@ export class PhoneMirrorService {
     const info = prebuilt || (await this.snapshot());
     for (const l of this.statusListeners) {
       try { l(info); } catch (_) { /* noop */ }
+    }
+  }
+
+  private emitPhoneCommand(cmd: PhoneCommand): void {
+    for (const l of this.phoneCommandListeners) {
+      try { l(cmd); } catch (_) { /* noop */ }
     }
   }
 }

@@ -7,6 +7,7 @@ import { DatabaseManager } from "./db/DatabaseManager"; // Import Database Manag
 import * as os from "os";
 import * as path from "path";
 import * as fs from "fs";
+import * as crypto from "crypto";
 import { AudioDevices } from "./audio/AudioDevices";
 import { PhoneMirrorService } from "./services/PhoneMirrorService";
 import { CodexCliService } from "./services/CodexCliService";
@@ -2578,6 +2579,9 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const insight = await intelligenceManager.runAssistMode();
+      if (insight) {
+        try { PhoneMirrorService.getInstance().publishAssistantMessage(crypto.randomUUID(), insight, 'Assist'); } catch (_) {}
+      }
       return { insight };
     } catch (error: any) {
       throw error;
@@ -2681,6 +2685,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         screenContext,
         promptInstruction: typeof options?.promptInstruction === 'string' ? options.promptInstruction : undefined,
       });
+      if (answer) {
+        try { PhoneMirrorService.getInstance().publishAssistantMessage(crypto.randomUUID(), answer, 'What to Answer'); } catch (_) {}
+      }
       return {
         answer,
         question: question || 'inferred from context',
@@ -2711,6 +2718,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (clarification === null) {
         const win = appState.getMainWindow();
         win?.webContents.send('intelligence-error', { error: 'Could not generate a clarifying question. Try again after some audio context is available.', mode: 'clarify' });
+      } else {
+        try { PhoneMirrorService.getInstance().publishAssistantMessage(crypto.randomUUID(), clarification, 'Clarify'); } catch (_) {}
       }
       return { clarification };
     } catch (error: any) {
@@ -2783,6 +2792,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         optimizedPaths.length > 0 ? optimizedPaths : undefined,
         problemStatement
       );
+      if (hint) {
+        try { PhoneMirrorService.getInstance().publishAssistantMessage(crypto.randomUUID(), hint, 'Code Hint'); } catch (_) {}
+      }
       return { hint };
     } catch (error: any) {
       throw error;
@@ -2824,6 +2836,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         optimizedPaths.length > 0 ? optimizedPaths : undefined,
         problemStatement
       );
+      if (script) {
+        try { PhoneMirrorService.getInstance().publishAssistantMessage(crypto.randomUUID(), script, 'Brainstorm'); } catch (_) {}
+      }
       return { script };
     } catch (error: any) {
       throw error;
@@ -2856,6 +2871,9 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const refined = await intelligenceManager.runFollowUp(intent, userRequest);
+      if (refined) {
+        try { PhoneMirrorService.getInstance().publishAssistantMessage(crypto.randomUUID(), refined, 'Follow Up'); } catch (_) {}
+      }
       return { refined, intent };
     } catch (error: any) {
       throw error;
@@ -2867,6 +2885,9 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const summary = await intelligenceManager.runRecap();
+      if (summary) {
+        try { PhoneMirrorService.getInstance().publishAssistantMessage(crypto.randomUUID(), summary, 'Recap'); } catch (_) {}
+      }
       return { summary };
     } catch (error: any) {
       throw error;
@@ -2878,6 +2899,9 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const questions = await intelligenceManager.runFollowUpQuestions();
+      if (questions) {
+        try { PhoneMirrorService.getInstance().publishAssistantMessage(crypto.randomUUID(), questions, 'Follow-Up Questions'); } catch (_) {}
+      }
       return { questions };
     } catch (error: any) {
       throw error;
@@ -2889,6 +2913,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const answer = await intelligenceManager.runManualAnswer(question);
+      if (answer) {
+        try {
+          PhoneMirrorService.getInstance().publishUserMessage(crypto.randomUUID(), question);
+          PhoneMirrorService.getInstance().publishAssistantMessage(crypto.randomUUID(), answer, 'Answer');
+        } catch (_) {}
+      }
       return { answer, question };
     } catch (error: any) {
       throw error;
@@ -4140,6 +4170,92 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (e: any) {
       console.error('[IPC] phone-mirror:rotate-token error:', e);
       return { error: e?.message || 'failed to rotate token' };
+    }
+  });
+
+  // Push a desktop screenshot thumbnail to connected phones.
+  // The caller can optionally pass a pre-captured path; if absent, a fresh
+  // screenshot is taken.  The image is resized to 800 px wide and compressed
+  // to JPEG so the WebSocket payload stays well under 200 KB.
+  safeHandle("phone-mirror:push-screenshot", async (_, screenshotPath?: string) => {
+    try {
+      let imgPath = screenshotPath;
+      if (!imgPath) {
+        imgPath = await appState.takeScreenshot(false);
+      }
+      const buf = await fs.promises.readFile(imgPath);
+      const sharp = require('sharp') as typeof import('sharp');
+      const compressed = await sharp(buf)
+        .resize({ width: 800, withoutEnlargement: true })
+        .jpeg({ quality: 70 })
+        .toBuffer();
+      const dataUrl = 'data:image/jpeg;base64,' + compressed.toString('base64');
+      PhoneMirrorService.getInstance().publishScreenshot(crypto.randomUUID(), dataUrl);
+      return { success: true };
+    } catch (e: any) {
+      console.error('[IPC] phone-mirror:push-screenshot error:', e);
+      return { error: e?.message || 'failed to push screenshot' };
+    }
+  });
+
+  // Route commands sent by the phone browser back to the Electron renderer so
+  // the existing action system (global-shortcut events, chat stream) handles
+  // them without duplicating logic.
+  PhoneMirrorService.getInstance().onPhoneCommand(async (cmd) => {
+    const win = appState.getMainWindow();
+
+    if (cmd.type === 'action') {
+      // Re-use the same global-shortcut dispatch path the keyboard uses.
+      // This keeps phone actions identical to key-triggered stealth actions.
+      const allWindows = BrowserWindow.getAllWindows();
+      allWindows.forEach(w => {
+        if (!w.isDestroyed()) w.webContents.send('global-shortcut', { action: cmd.action });
+      });
+
+    } else if (cmd.type === 'chat') {
+      // Stream a phone-initiated chat through the LLM exactly like gemini-chat-stream
+      // but without requiring a renderer event sender. Tokens are pushed directly to
+      // the phone over WebSocket; desktop renderer also receives them so both views
+      // stay in sync.
+      const myStreamId = crypto.randomUUID();
+      const message = cmd.message;
+
+      try { PhoneMirrorService.getInstance().publishUserMessage(myStreamId, message); } catch (_) {}
+      // Notify renderer so it can display the incoming phone message too
+      win?.webContents.send('phone-mirror:incoming-chat', { message, streamId: myStreamId });
+
+      try {
+        const llmHelper = appState.processingHelper.getLLMHelper();
+        const stream = llmHelper.streamChat(message);
+        let full = '';
+        for await (const token of stream) {
+          try { PhoneMirrorService.getInstance().publishToken(myStreamId, token); } catch (_) {}
+          win?.webContents.send('gemini-stream-token', token);
+          full += token;
+        }
+        try { PhoneMirrorService.getInstance().publishDone(myStreamId, full); } catch (_) {}
+        win?.webContents.send('gemini-stream-done');
+      } catch (err: any) {
+        console.error('[PhoneMirror] phone-chat stream error:', err);
+        try { PhoneMirrorService.getInstance().publishError(myStreamId, err?.message || 'stream error'); } catch (_) {}
+        win?.webContents.send('gemini-stream-error', err?.message || 'stream error');
+      }
+
+    } else if (cmd.type === 'screenshot') {
+      // Capture a fresh screenshot and push it back to the phone.
+      try {
+        const imgPath = await appState.takeScreenshot(false);
+        const buf = await fs.promises.readFile(imgPath);
+        const sharp = require('sharp') as typeof import('sharp');
+        const compressed = await sharp(buf)
+          .resize({ width: 800, withoutEnlargement: true })
+          .jpeg({ quality: 70 })
+          .toBuffer();
+        const dataUrl = 'data:image/jpeg;base64,' + compressed.toString('base64');
+        PhoneMirrorService.getInstance().publishScreenshot(crypto.randomUUID(), dataUrl);
+      } catch (e: any) {
+        console.error('[PhoneMirror] phone screenshot request failed:', e);
+      }
     }
   });
 }

@@ -594,10 +594,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
   phoneMirrorDisable: () => ipcRenderer.invoke("phone-mirror:disable"),
   phoneMirrorSetLan: (exposeOnLan: boolean) => ipcRenderer.invoke("phone-mirror:set-lan", exposeOnLan),
   phoneMirrorRotateToken: () => ipcRenderer.invoke("phone-mirror:rotate-token"),
+  phoneMirrorPushScreenshot: (screenshotPath?: string) => ipcRenderer.invoke("phone-mirror:push-screenshot", screenshotPath),
   onPhoneMirrorStatus: (callback: (info: any) => void) => {
     const subscription = (_: any, info: any) => callback(info)
     ipcRenderer.on('phone-mirror:status', subscription)
     return () => { ipcRenderer.removeListener('phone-mirror:status', subscription) }
+  },
+  onPhoneMirrorIncomingChat: (callback: (data: { message: string; streamId: string }) => void) => {
+    const subscription = (_: any, data: any) => callback(data)
+    ipcRenderer.on('phone-mirror:incoming-chat', subscription)
+    return () => { ipcRenderer.removeListener('phone-mirror:incoming-chat', subscription) }
   },
 
   onSettingsVisibilityChange: (callback: (isVisible: boolean) => void) => {
