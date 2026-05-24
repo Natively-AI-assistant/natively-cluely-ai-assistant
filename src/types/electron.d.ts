@@ -474,6 +474,9 @@ export interface ElectronAPI {
   phoneMirrorSetLan: (exposeOnLan: boolean) => Promise<PhoneMirrorInfo | { error: string }>;
   phoneMirrorRotateToken: () => Promise<PhoneMirrorInfo | { error: string }>;
   onPhoneMirrorStatus: (callback: (info: PhoneMirrorInfo) => void) => () => void;
+  onPhoneMirrorIncomingChat: (
+    callback: (data: { message: string; streamId: string }) => void,
+  ) => () => void;
 }
 
 export interface PhoneMirrorInfo {

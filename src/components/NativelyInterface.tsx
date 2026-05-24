@@ -2103,6 +2103,33 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       }),
     );
 
+    // Phone-initiated chat: main process streams tokens via gemini-stream-*; this
+    // event adds the user turn + streaming placeholder before tokens arrive.
+    cleanups.push(
+      window.electronAPI.onPhoneMirrorIncomingChat(({ message }) => {
+        flushToken();
+        requestStartTimeRef.current = Date.now();
+        const userId = Date.now().toString();
+        const placeholderId = `${userId}-reply`;
+        setMessages((prev) => [
+          ...prev,
+          { id: userId, role: 'user', text: message },
+          {
+            id: placeholderId,
+            role: 'system',
+            text: '',
+            intent: 'chat',
+            isStreaming: true,
+          },
+        ]);
+        setIsExpanded(true);
+        setIsProcessing(true);
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 50);
+      }),
+    );
+
     // JIT RAG Stream listeners (for live meeting RAG responses)
     if (window.electronAPI.onRAGStreamChunk) {
       cleanups.push(
