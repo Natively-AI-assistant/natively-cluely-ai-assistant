@@ -90,12 +90,8 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
       }
       .card.screenshot-card {
         background: rgba(8,12,18,0.95);
-        border-color: rgba(108,240,214,0.12);
-        padding: 10px;
-      }
-      .card.screenshot-card img {
-        width: 100%; border-radius: 7px; display: block;
-        border: 1px solid rgba(255,255,255,0.06);
+        border-color: rgba(85,166,255,0.14);
+        padding: 10px 14px;
       }
       .meta {
         display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -320,7 +316,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           <button class="qa-btn" data-action="answer" type="button">Answer</button>
           <button class="qa-btn" data-action="followUp" type="button">Follow Up</button>
           <button class="qa-btn" data-action="dynamicAction4" type="button">Recap</button>
-          <button class="qa-btn screenshot-btn" id="screenshotBtn" type="button">📷 Screenshot</button>
+          <button class="qa-btn screenshot-btn" id="screenshotBtn" type="button" title="Capture desktop screenshot for AI prompt">📷 Capture</button>
         </div>
         <!-- Chat input -->
         <div class="input-row">
@@ -672,8 +668,8 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         }
 
         function buildCard(m, opts) {
-          // Screenshot card
-          if (m.type === 'screenshot') {
+          // Screenshot-queued notification card (no image — stays on desktop)
+          if (m.type === 'screenshot-queued') {
             const card = document.createElement('article');
             card.className = 'card screenshot-card';
             card.dataset.id = m.id || '';
@@ -682,14 +678,11 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
             const role = document.createElement('span');
             role.className = 'role';
             const pip = document.createElement('span'); pip.className = 'pip';
-            const lbl = document.createElement('span'); lbl.textContent = 'Desktop Screenshot';
+            const lbl = document.createElement('span'); lbl.textContent = '📷 Screenshot queued for AI';
             role.append(pip, lbl);
             const right = document.createElement('span'); right.textContent = fmtTime(m.createdAt);
             meta.append(role, right);
-            const img = document.createElement('img');
-            img.src = m.dataUrl; img.alt = 'Desktop screenshot';
-            img.style.marginTop = '8px';
-            card.append(meta, img);
+            card.append(meta);
             return card;
           }
 
@@ -835,11 +828,24 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
             scrollToLatest(true);
             return;
           }
-          // Desktop screenshot
+          // Desktop screenshot queued-for-AI acknowledgement.
+          // The image itself stays on the PC — we just log it in the feed.
           if (ev.type === 'screenshot') {
-            messages.push({ id: ev.id, type: 'screenshot', dataUrl: ev.dataUrl, createdAt: ev.createdAt });
+            messages.push({ id: ev.id, type: 'screenshot-queued', createdAt: ev.createdAt });
             render();
             scrollToLatest(true);
+            return;
+          }
+          // Ack events from stealth operations (screenshot captured, etc.)
+          if (ev.type === 'ack') {
+            showToast(ev.message || ev.action);
+            // For screenshot acks, also add a small card to the feed.
+            if (ev.action === 'screenshot') {
+              const id = 'ack-' + Date.now();
+              messages.push({ id, type: 'screenshot-queued', createdAt: new Date().toISOString() });
+              render();
+              scrollToLatest(true);
+            }
             return;
           }
           if (ev.type === 'status') {
@@ -911,10 +917,11 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           });
         });
 
-        // Screenshot button
+        // Screenshot button — triggers a stealth desktop capture queued for AI.
+        // The image stays on the PC; only a confirmation toast appears on the phone.
         document.getElementById('screenshotBtn').addEventListener('click', function () {
           sendCommand({ type: 'screenshot' });
-          showToast('Requesting screenshot…');
+          showToast('Capturing…');
         });
 
         // Utility buttons
@@ -923,7 +930,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         });
         document.getElementById('copyButton').addEventListener('click', async () => {
           const parts = messages
-            .filter(function (m) { return !m.type || m.type !== 'screenshot'; })
+            .filter(function (m) { return !m.type || m.type !== 'screenshot-queued'; })
             .map((m) => (m.role === 'user' ? 'You: ' : (m.label ? '[' + m.label + '] ' : '')) + m.content);
           if (live && live.content) parts.push(live.content);
           const text = parts.join('\\n\\n');

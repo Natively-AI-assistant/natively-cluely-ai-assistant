@@ -1,10 +1,10 @@
+import crypto from 'crypto';
+import { app } from 'electron';
 import http from 'http';
 import os from 'os';
-import crypto from 'crypto';
-import { URL } from 'url';
-import { WebSocketServer, WebSocket } from 'ws';
 import QRCode from 'qrcode';
-import { app } from 'electron';
+import { URL } from 'url';
+import { WebSocket, WebSocketServer } from 'ws';
 import { SettingsManager } from './SettingsManager';
 import { PHONE_MIRROR_HTML } from './phoneMirrorClient';
 
@@ -28,7 +28,8 @@ export type StreamEvent =
   | { type: 'done'; streamId: string; content: string; createdAt: string }
   | { type: 'error'; streamId: string; message: string }
   | { type: 'assistant'; id: string; content: string; label: string; createdAt: string }
-  | { type: 'screenshot'; id: string; dataUrl: string; createdAt: string };
+  | { type: 'screenshot'; id: string; dataUrl: string; createdAt: string }
+  | { type: 'ack'; action: string; message: string };
 
 /** Command sent from the phone browser to the desktop. */
 export type PhoneCommand =
@@ -64,12 +65,15 @@ export class PhoneMirrorService {
   private token = '';
   private exposeOnLan = false;
   private history: PersistedMessage[] = [];
-  private livePartial: { streamId: string; tokens: string[] } | null = null;
+  // Single string instead of token array: O(1) append, O(1) replay (one WS frame).
+  private livePartial: { streamId: string; content: string } | null = null;
   private rateBuckets = new Map<string, { count: number; resetAt: number }>();
   private statusListeners = new Set<StatusListener>();
   private phoneCommandListeners = new Set<(cmd: PhoneCommand) => void>();
   private cachedInfo: PhoneMirrorInfo | null = null;
   private starting: Promise<PhoneMirrorInfo> | null = null;
+  // Debounce rapid connect/disconnect status events to avoid redundant QR re-renders.
+  private statusDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   static getInstance(): PhoneMirrorService {
     if (!PhoneMirrorService._instance) PhoneMirrorService._instance = new PhoneMirrorService();
@@ -91,7 +95,8 @@ export class PhoneMirrorService {
       return this.snapshot();
     }
 
-    const exposeOnLan = opts?.exposeOnLan ?? !!SettingsManager.getInstance().get('phoneMirrorExposeOnLan');
+    const exposeOnLan =
+      opts?.exposeOnLan ?? !!SettingsManager.getInstance().get('phoneMirrorExposeOnLan');
     this.starting = this._start(exposeOnLan, opts?.persist !== false);
     try {
       return await this.starting;
@@ -153,16 +158,18 @@ export class PhoneMirrorService {
   publishToken(streamId: string, token: string): void {
     if (!this.isRunning() || !token) return;
     if (!this.livePartial || this.livePartial.streamId !== streamId) {
-      this.livePartial = { streamId, tokens: [] };
+      this.livePartial = { streamId, content: '' };
     }
-    this.livePartial.tokens.push(token);
+    this.livePartial.content += token;
     this.broadcast({ type: 'token', streamId, token });
   }
 
   publishDone(streamId: string, fullContent: string): void {
     if (!this.isRunning()) return;
     const createdAt = new Date().toISOString();
-    const content = fullContent || (this.livePartial?.streamId === streamId ? this.livePartial.tokens.join('') : '');
+    const content =
+      fullContent ||
+      (this.livePartial?.streamId === streamId ? this.livePartial.content : '');
     if (content.trim()) {
       const msg: PersistedMessage = { id: 'a:' + streamId, role: 'assistant', content, createdAt };
       this.recordHistory(msg);
@@ -207,6 +214,21 @@ export class PhoneMirrorService {
   }
 
   /**
+   * Broadcast a one-shot acknowledgement to all connected phones.
+   * Used for stealth operations that succeed silently on the desktop side
+   * (e.g. "Screenshot captured — queued for AI") so the phone shows a toast.
+   */
+  publishAck(action: string, message: string): void {
+    if (!this.isRunning()) return;
+    this.broadcast({ type: 'ack', action, message });
+  }
+
+  /** Returns true when at least one phone browser is connected. */
+  hasClients(): boolean {
+    return !!this.wss && this.wss.clients.size > 0;
+  }
+
+  /**
    * Subscribe to commands sent from the phone browser.
    * Returns an unsubscribe function.
    */
@@ -241,7 +263,7 @@ export class PhoneMirrorService {
       : [];
     // If LAN is on, only advertise a real LAN URL — falling back to 127.0.0.1
     // would print a QR code the phone cannot reach (loopback ≠ phone).
-    const primaryUrl = this.exposeOnLan ? (lanUrls[0] || null) : loopbackUrl;
+    const primaryUrl = this.exposeOnLan ? lanUrls[0] || null : loopbackUrl;
     const qrDataUrl = primaryUrl ? await safeQr(primaryUrl) : null;
     const info: PhoneMirrorInfo = {
       running: true,
@@ -274,7 +296,11 @@ export class PhoneMirrorService {
     const basePort = DEFAULT_PORT;
     const server = http.createServer((req, res) => this.handleHttp(req, res));
     server.on('clientError', (_err, socket) => {
-      try { socket.destroy(); } catch (_) { /* noop */ }
+      try {
+        socket.destroy();
+      } catch (_) {
+        /* noop */
+      }
     });
 
     const port = await listenWithProbe(server, host, basePort, PORT_PROBE_RANGE);
@@ -283,7 +309,9 @@ export class PhoneMirrorService {
 
     const wss = new WebSocketServer({ noServer: true });
     this.wss = wss;
-    server.on('upgrade', (req, socket, head) => this.handleUpgrade(req as http.IncomingMessage, socket as any, head));
+    server.on('upgrade', (req, socket, head) =>
+      this.handleUpgrade(req as http.IncomingMessage, socket as any, head),
+    );
     wss.on('connection', (ws, req) => this.handleWsConnection(ws, req));
 
     if (persistEnabled) {
@@ -298,6 +326,11 @@ export class PhoneMirrorService {
   }
 
   private async _teardown(): Promise<void> {
+    // Cancel any pending debounced status emit so it doesn't fire after teardown.
+    if (this.statusDebounceTimer !== null) {
+      clearTimeout(this.statusDebounceTimer);
+      this.statusDebounceTimer = null;
+    }
     const wss = this.wss;
     const server = this.server;
     this.wss = null;
@@ -308,7 +341,11 @@ export class PhoneMirrorService {
     this.rateBuckets.clear();
     if (wss) {
       for (const c of wss.clients) {
-        try { c.close(1001, 'shutting down'); } catch (_) { /* noop */ }
+        try {
+          c.close(1001, 'shutting down');
+        } catch (_) {
+          /* noop */
+        }
       }
       await new Promise<void>((resolve) => wss.close(() => resolve()));
     }
@@ -374,8 +411,12 @@ export class PhoneMirrorService {
       return;
     }
     let url: URL;
-    try { url = new URL(req.url || '/', 'http://localhost'); }
-    catch { socket.destroy(); return; }
+    try {
+      url = new URL(req.url || '/', 'http://localhost');
+    } catch {
+      socket.destroy();
+      return;
+    }
 
     if (url.pathname !== '/ws') {
       socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
@@ -392,11 +433,16 @@ export class PhoneMirrorService {
     }
 
     const wss = this.wss;
-    if (!wss) { socket.destroy(); return; }
+    if (!wss) {
+      socket.destroy();
+      return;
+    }
 
     // Drop any client that doesn't complete handshake quickly — avoids slow-loris.
     let upgraded = false;
-    const handshakeTimer = setTimeout(() => { if (!upgraded) socket.destroy(); }, HANDSHAKE_TIMEOUT_MS);
+    const handshakeTimer = setTimeout(() => {
+      if (!upgraded) socket.destroy();
+    }, HANDSHAKE_TIMEOUT_MS);
     wss.handleUpgrade(req, socket, head, (ws) => {
       upgraded = true;
       clearTimeout(handshakeTimer);
@@ -408,28 +454,47 @@ export class PhoneMirrorService {
     // Send recent history immediately so a phone joining mid-session has context.
     try {
       ws.send(JSON.stringify({ type: 'history', messages: this.history.slice(-HISTORY_LIMIT) }));
-      // Replay live partial too, so a late joiner sees the in-flight response.
-      if (this.livePartial) {
-        for (const t of this.livePartial.tokens) {
-          ws.send(JSON.stringify({ type: 'token', streamId: this.livePartial.streamId, token: t }));
-        }
+      // Replay in-flight partial as a SINGLE token frame containing the full
+      // accumulated content so far.  Previously this sent one frame per token
+      // (up to 500+ frames for a long response) — now it's always 1 frame.
+      if (this.livePartial && this.livePartial.content) {
+        ws.send(
+          JSON.stringify({
+            type: 'token',
+            streamId: this.livePartial.streamId,
+            token: this.livePartial.content,
+          }),
+        );
       }
-    } catch (_) { /* client may be gone already */ }
+    } catch (_) {
+      /* client may be gone already */
+    }
 
     // Keepalive heartbeat. Drop dead clients within ~45s.
     let alive = true;
-    ws.on('pong', () => { alive = true; });
+    ws.on('pong', () => {
+      alive = true;
+    });
     const ping = setInterval(() => {
-      if (!alive) { try { ws.terminate(); } catch (_) {} return; }
+      if (!alive) {
+        try {
+          ws.terminate();
+        } catch (_) {}
+        return;
+      }
       alive = false;
-      try { ws.ping(); } catch (_) {}
+      try {
+        ws.ping();
+      } catch (_) {}
     }, 15_000);
 
     ws.on('close', () => {
       clearInterval(ping);
       this.emitStatus(); // update client count
     });
-    ws.on('error', () => { /* swallow — close fires next */ });
+    ws.on('error', () => {
+      /* swallow — close fires next */
+    });
 
     // Parse and route commands from the phone browser.
     ws.on('message', (data: any) => {
@@ -441,9 +506,18 @@ export class PhoneMirrorService {
         const c = cmd as Record<string, unknown>;
 
         let validated: PhoneCommand | null = null;
-        if (c.type === 'chat' && typeof c.message === 'string' && c.message.trim().length > 0 && c.message.length <= 2000) {
+        if (
+          c.type === 'chat' &&
+          typeof c.message === 'string' &&
+          c.message.trim().length > 0 &&
+          c.message.length <= 2000
+        ) {
           validated = { type: 'chat', message: c.message.trim() };
-        } else if (c.type === 'action' && typeof c.action === 'string' && /^[a-zA-Z:_-]{1,64}$/.test(c.action)) {
+        } else if (
+          c.type === 'action' &&
+          typeof c.action === 'string' &&
+          /^[a-zA-Z:_-]{1,64}$/.test(c.action)
+        ) {
           validated = { type: 'action', action: c.action };
         } else if (c.type === 'screenshot') {
           validated = { type: 'screenshot' };
@@ -453,7 +527,9 @@ export class PhoneMirrorService {
           console.log(`[PhoneMirror] phone command: ${validated.type}`);
           this.emitPhoneCommand(validated);
         }
-      } catch (_) { /* malformed JSON — ignore */ }
+      } catch (_) {
+        /* malformed JSON — ignore */
+      }
     });
 
     console.log(`[PhoneMirror] phone connected from ${req.socket.remoteAddress}`);
@@ -462,20 +538,27 @@ export class PhoneMirrorService {
 
   private broadcast(event: StreamEvent): void {
     const wss = this.wss;
-    if (!wss) return;
+    // Skip JSON serialization entirely when no phones are watching — this path
+    // is hot (every LLM token goes through it) so the early-exit matters.
+    if (!wss || wss.clients.size === 0) return;
     const payload = JSON.stringify(event);
     for (const client of wss.clients) {
       if (client.readyState !== WebSocket.OPEN) continue;
       // Backpressure guard: skip if buffered amount has run away (slow client).
       if ((client as any).bufferedAmount > 1_000_000) continue;
-      try { client.send(payload); } catch (_) { /* noop */ }
+      try {
+        client.send(payload);
+      } catch (_) {
+        /* noop */
+      }
     }
   }
 
   private recordHistory(msg: PersistedMessage): void {
     this.history.push(msg);
+    // slice+reassign is O(1) GC pressure vs splice(0,n) which shifts every element.
     if (this.history.length > HISTORY_LIMIT * 2) {
-      this.history.splice(0, this.history.length - HISTORY_LIMIT);
+      this.history = this.history.slice(-HISTORY_LIMIT);
     }
   }
 
@@ -499,21 +582,38 @@ export class PhoneMirrorService {
   private disconnectAllClients(code: number, reason: string): void {
     if (!this.wss) return;
     for (const c of this.wss.clients) {
-      try { c.close(code, reason); } catch (_) {}
+      try {
+        c.close(code, reason);
+      } catch (_) {}
     }
   }
 
-  private async emitStatus(prebuilt?: PhoneMirrorInfo): Promise<void> {
+  private emitStatus(prebuilt?: PhoneMirrorInfo): void {
     if (this.statusListeners.size === 0) return;
-    const info = prebuilt || (await this.snapshot());
-    for (const l of this.statusListeners) {
-      try { l(info); } catch (_) { /* noop */ }
-    }
+    // Debounce: rapid connect/disconnect storms (bad network, iOS reconnect loop)
+    // used to regenerate the QR code on every event — each safeQr() call costs
+    // ~3 ms CPU.  Coalesce into one emission within a 150 ms window.
+    if (this.statusDebounceTimer !== null) clearTimeout(this.statusDebounceTimer);
+    this.statusDebounceTimer = setTimeout(async () => {
+      this.statusDebounceTimer = null;
+      const info = prebuilt || (await this.snapshot());
+      for (const l of this.statusListeners) {
+        try {
+          l(info);
+        } catch (_) {
+          /* noop */
+        }
+      }
+    }, 150);
   }
 
   private emitPhoneCommand(cmd: PhoneCommand): void {
     for (const l of this.phoneCommandListeners) {
-      try { l(cmd); } catch (_) { /* noop */ }
+      try {
+        l(cmd);
+      } catch (_) {
+        /* noop */
+      }
     }
   }
 }
@@ -544,7 +644,8 @@ function timingSafeEqualStr(a: string, b: string): boolean {
 // - bridge*: Internet Sharing / Thunderbolt bridge — different subnet
 // - vmnet*, vboxnet*, docker*: virtualization-only networks
 // - veth*, br-*: Linux container networks
-const VIRTUAL_IFACE_RE = /^(utun|awdl|llw|anpi|ap\d|bridge|vmnet|vboxnet|docker|veth|br-|gif|stf|tap)/i;
+const VIRTUAL_IFACE_RE =
+  /^(utun|awdl|llw|anpi|ap\d|bridge|vmnet|vboxnet|docker|veth|br-|gif|stf|tap)/i;
 
 function isPrivateLanIPv4(ip: string): boolean {
   // RFC1918 — the only ranges a phone on the same Wi-Fi will share with the desktop.
@@ -563,7 +664,8 @@ function rankLanIp(name: string, ip: string): number {
   //   2. 192.168.x.x (home routers) over 10.x and 172.16-31.x.
   let score = 100;
   const m = name.match(/^en(\d+)$/i);
-  if (m) score = parseInt(m[1], 10); // en0 -> 0, en1 -> 1, ...
+  if (m)
+    score = parseInt(m[1], 10); // en0 -> 0, en1 -> 1, ...
   else if (/^eth\d+$|^enp/i.test(name)) score = 2;
   else if (/^wlan\d+|^wlp/i.test(name)) score = 1;
   if (ip.startsWith('192.168.')) score += 0;
@@ -596,7 +698,12 @@ function getLanIPs(): string[] {
   return out;
 }
 
-async function listenWithProbe(server: http.Server, host: string, basePort: number, range: number): Promise<number> {
+async function listenWithProbe(
+  server: http.Server,
+  host: string,
+  basePort: number,
+  range: number,
+): Promise<number> {
   for (let i = 0; i < range; i++) {
     const port = basePort + i;
     const ok = await tryListen(server, host, port);
@@ -615,12 +722,21 @@ async function listenWithProbe(server: http.Server, host: string, basePort: numb
 
 function tryListen(server: http.Server, host: string, port: number): Promise<boolean> {
   return new Promise((resolve) => {
-    const onError = () => { server.removeListener('listening', onListening); resolve(false); };
-    const onListening = () => { server.removeListener('error', onError); resolve(true); };
+    const onError = () => {
+      server.removeListener('listening', onListening);
+      resolve(false);
+    };
+    const onListening = () => {
+      server.removeListener('error', onError);
+      resolve(true);
+    };
     server.once('error', onError);
     server.once('listening', onListening);
-    try { server.listen(port, host); }
-    catch (_) { resolve(false); }
+    try {
+      server.listen(port, host);
+    } catch (_) {
+      resolve(false);
+    }
   });
 }
 

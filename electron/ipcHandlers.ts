@@ -1,25 +1,26 @@
 // ipcHandlers.ts
 
-import { app, ipcMain, shell, dialog, desktopCapturer, systemPreferences, BrowserWindow, screen } from "electron"
-import { AppState } from "./main"
-import { GEMINI_FLASH_MODEL } from "./IntelligenceManager"
-import { DatabaseManager } from "./db/DatabaseManager"; // Import Database Manager
-import * as os from "os";
-import * as path from "path";
-import * as fs from "fs";
-import * as crypto from "crypto";
-import { AudioDevices } from "./audio/AudioDevices";
-import { PhoneMirrorService } from "./services/PhoneMirrorService";
-import { CodexCliService } from "./services/CodexCliService";
-import { SettingsManager } from "./services/SettingsManager";
+import * as crypto from 'crypto';
+import { app, BrowserWindow, dialog, ipcMain, shell, systemPreferences } from 'electron';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { AudioDevices } from './audio/AudioDevices';
+import { DatabaseManager } from './db/DatabaseManager'; // Import Database Manager
+import { AppState } from './main';
+import { CodexCliService } from './services/CodexCliService';
+import { PhoneMirrorService } from './services/PhoneMirrorService';
+import { SettingsManager } from './services/SettingsManager';
 
-
-import { RECOGNITION_LANGUAGES, AI_RESPONSE_LANGUAGES } from "./config/languages"
-import { TRIAL_SENTINEL_KEY } from "./config/constants"
-import { CHAT_MODE_PROMPT } from "./llm/prompts"
+import { TRIAL_SENTINEL_KEY } from './config/constants';
+import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
+import { CHAT_MODE_PROMPT } from './llm/prompts';
 
 export function initializeIpcHandlers(appState: AppState): void {
-  const safeHandle = (channel: string, listener: (event: any, ...args: any[]) => Promise<any> | any) => {
+  const safeHandle = (
+    channel: string,
+    listener: (event: any, ...args: any[]) => Promise<any> | any,
+  ) => {
     ipcMain.removeHandler(channel);
     ipcMain.handle(channel, listener);
   };
@@ -33,7 +34,9 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { LicenseManager } = require('../premium/electron/services/LicenseManager');
       if (LicenseManager.getInstance().isPremium()) return true;
-    } catch { /* premium module not available */ }
+    } catch {
+      /* premium module not available */
+    }
 
     // 2. Active free trial (token present and not expired)
     try {
@@ -58,22 +61,24 @@ export function initializeIpcHandlers(appState: AppState): void {
       db.clearProfilePersona?.();
       const llmHelper = appState.processingHelper?.getLLMHelper?.();
       llmHelper?.setPersonaPrompt?.('');
-      BrowserWindow.getAllWindows().forEach(win => {
+      BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) win.webContents.send('modes-active-cleared');
       });
       console.log('[IPC] Premium-only context cleared due to license loss');
-    } catch (e) { /* non-fatal */ }
+    } catch (e) {
+      /* non-fatal */
+    }
   };
 
   // --- NEW Test Helper ---
-  safeHandle("test-release-fetch", async () => {
+  safeHandle('test-release-fetch', async () => {
     try {
-      console.log("[IPC] Manual Test Fetch triggered (forcing refresh)...");
+      console.log('[IPC] Manual Test Fetch triggered (forcing refresh)...');
       const { ReleaseNotesManager } = require('./update/ReleaseNotesManager');
       const notes = await ReleaseNotesManager.getInstance().fetchReleaseNotes('latest', true);
 
       if (notes) {
-        console.log("[IPC] Notes fetched for:", notes.version);
+        console.log('[IPC] Notes fetched for:', notes.version);
         const info = {
           version: notes.version || 'latest',
           files: [] as any[],
@@ -81,26 +86,27 @@ export function initializeIpcHandlers(appState: AppState): void {
           sha512: '',
           releaseName: notes.summary,
           releaseNotes: notes.fullBody,
-          parsedNotes: notes
+          parsedNotes: notes,
         };
         // Send to renderer
-        appState.getMainWindow()?.webContents.send("update-available", info);
+        appState.getMainWindow()?.webContents.send('update-available', info);
         return { success: true };
       }
-      return { success: false, error: "No notes returned" };
+      return { success: false, error: 'No notes returned' };
     } catch (err: any) {
-      console.error("[IPC] test-release-fetch failed:", err);
+      console.error('[IPC] test-release-fetch failed:', err);
       return { success: false, error: err.message };
     }
   });
 
-  safeHandle("license:activate", async (event, key: string) => {
+  safeHandle('license:activate', async (event, key: string) => {
     try {
       const { LicenseManager } = require('../premium/electron/services/LicenseManager');
       const result = await LicenseManager.getInstance().activateLicense(key);
       if (result?.success) {
-        BrowserWindow.getAllWindows().forEach(win => {
-          if (!win.isDestroyed()) win.webContents.send('license-status-changed', { isPremium: true });
+        BrowserWindow.getAllWindows().forEach((win) => {
+          if (!win.isDestroyed())
+            win.webContents.send('license-status-changed', { isPremium: true });
         });
       }
       return result;
@@ -112,7 +118,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: false, error: 'Premium features not available in this build.' };
     }
   });
-  safeHandle("license:check-premium", async () => {
+  safeHandle('license:check-premium', async () => {
     try {
       const { LicenseManager } = require('../premium/electron/services/LicenseManager');
       return LicenseManager.getInstance().isPremium();
@@ -121,7 +127,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("license:get-details", async () => {
+  safeHandle('license:get-details', async () => {
     try {
       const { LicenseManager } = require('../premium/electron/services/LicenseManager');
       return LicenseManager.getInstance().getLicenseDetails();
@@ -132,7 +138,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Async variant: performs Dodo server-side revocation check on startup.
   // Returns false only if the server definitively revokes the key.
   // Network errors fail-open (returns cached sync result).
-  safeHandle("license:check-premium-async", async () => {
+  safeHandle('license:check-premium-async', async () => {
     try {
       const { LicenseManager } = require('../premium/electron/services/LicenseManager');
       return await LicenseManager.getInstance().isPremiumAsync();
@@ -140,7 +146,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       return false;
     }
   });
-  safeHandle("license:deactivate", async () => {
+  safeHandle('license:deactivate', async () => {
     try {
       const { LicenseManager } = require('../premium/electron/services/LicenseManager');
       // deactivate() is async — it calls the Dodo server to free the activation slot
@@ -153,16 +159,21 @@ export function initializeIpcHandlers(appState: AppState): void {
           orchestrator.setKnowledgeMode(false);
           console.log('[IPC] Knowledge mode auto-disabled due to license deactivation');
         }
-      } catch (e) { /* ignore */ }
+      } catch (e) {
+        /* ignore */
+      }
       // Notify all windows so the license UI (ProGate, settings) refreshes immediately
       clearActiveModeOnLicenseLoss();
-      BrowserWindow.getAllWindows().forEach(win => {
-        if (!win.isDestroyed()) win.webContents.send('license-status-changed', { isPremium: false });
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed())
+          win.webContents.send('license-status-changed', { isPremium: false });
       });
-    } catch { /* LicenseManager not available */ }
+    } catch {
+      /* LicenseManager not available */
+    }
     return { success: true };
   });
-  safeHandle("license:get-hardware-id", async () => {
+  safeHandle('license:get-hardware-id', async () => {
     try {
       const { LicenseManager } = require('../premium/electron/services/LicenseManager');
       return LicenseManager.getInstance().getHardwareId();
@@ -171,15 +182,15 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("get-recognition-languages", async () => {
+  safeHandle('get-recognition-languages', async () => {
     return RECOGNITION_LANGUAGES;
   });
 
-  safeHandle("get-ai-response-languages", async () => {
+  safeHandle('get-ai-response-languages', async () => {
     return AI_RESPONSE_LANGUAGES;
   });
 
-  safeHandle("set-ai-response-language", async (_, language: string) => {
+  safeHandle('set-ai-response-language', async (_, language: string) => {
     // Validate: must be a non-empty string
     if (!language || typeof language !== 'string' || !language.trim()) {
       console.warn('[IPC] set-ai-response-language: invalid or empty language received, ignoring.');
@@ -195,68 +206,83 @@ export function initializeIpcHandlers(appState: AppState): void {
       llmHelper.setAiResponseLanguage(sanitizedLanguage);
       console.log(`[IPC] AI response language updated to: ${sanitizedLanguage}`);
     } else {
-      console.warn('[IPC] set-ai-response-language: processingHelper or LLMHelper not ready, language saved to disk only.');
+      console.warn(
+        '[IPC] set-ai-response-language: processingHelper or LLMHelper not ready, language saved to disk only.',
+      );
     }
     return { success: true };
   });
 
-  safeHandle("get-stt-language", async () => {
+  safeHandle('get-stt-language', async () => {
     const { CredentialsManager } = require('./services/CredentialsManager');
     return CredentialsManager.getInstance().getSttLanguage();
   });
 
-  safeHandle("get-ai-response-language", async () => {
+  safeHandle('get-ai-response-language', async () => {
     const { CredentialsManager } = require('./services/CredentialsManager');
     return CredentialsManager.getInstance().getAiResponseLanguage();
   });
   safeHandle(
-    "update-content-dimensions",
+    'update-content-dimensions',
     async (event, { width, height }: { width: number; height: number }) => {
-      if (!width || !height) return
+      if (!width || !height) return;
 
-      const senderWebContents = event.sender
-      const settingsWin = appState.settingsWindowHelper.getSettingsWindow()
-      const overlayWin = appState.getWindowHelper().getOverlayWindow()
-      const launcherWin = appState.getWindowHelper().getLauncherWindow()
+      const senderWebContents = event.sender;
+      const settingsWin = appState.settingsWindowHelper.getSettingsWindow();
+      const overlayWin = appState.getWindowHelper().getOverlayWindow();
+      const launcherWin = appState.getWindowHelper().getLauncherWindow();
 
-      if (settingsWin && !settingsWin.isDestroyed() && settingsWin.webContents.id === senderWebContents.id) {
-        appState.settingsWindowHelper.setWindowDimensions(settingsWin, width, height)
+      if (
+        settingsWin &&
+        !settingsWin.isDestroyed() &&
+        settingsWin.webContents.id === senderWebContents.id
+      ) {
+        appState.settingsWindowHelper.setWindowDimensions(settingsWin, width, height);
       } else if (
-        overlayWin && !overlayWin.isDestroyed() && overlayWin.webContents.id === senderWebContents.id
+        overlayWin &&
+        !overlayWin.isDestroyed() &&
+        overlayWin.webContents.id === senderWebContents.id
       ) {
         // NativelyInterface logic - Resize ONLY the overlay window using dedicated method
-        appState.getWindowHelper().setOverlayDimensions(width, height)
+        appState.getWindowHelper().setOverlayDimensions(width, height);
       } else if (
-        launcherWin && !launcherWin.isDestroyed() && launcherWin.webContents.id === senderWebContents.id
+        launcherWin &&
+        !launcherWin.isDestroyed() &&
+        launcherWin.webContents.id === senderWebContents.id
       ) {
         // EC-05 fix: launcher window resize events were previously silently ignored.
         // Log them so that if the launcher ever sends this IPC it's visible in logs.
-        console.log(`[IPC] update-content-dimensions: launcher window resize request ${width}x${height} (ignored — launcher has fixed dimensions)`);
+        console.log(
+          `[IPC] update-content-dimensions: launcher window resize request ${width}x${height} (ignored — launcher has fixed dimensions)`,
+        );
       }
-    }
-  )
+    },
+  );
 
   // Centered variant: keeps horizontal center fixed during width changes.
   // Used by code-expansion animations to prevent the top pill from sliding sideways.
   safeHandle(
-    "update-content-dimensions-centered",
+    'update-content-dimensions-centered',
     async (event, { width, height }: { width: number; height: number }) => {
-      if (!width || !height) return
-      const senderWebContents = event.sender
-      const overlayWin = appState.getWindowHelper().getOverlayWindow()
-      if (overlayWin && !overlayWin.isDestroyed() && overlayWin.webContents.id === senderWebContents.id) {
-        appState.getWindowHelper().setOverlayDimensionsCentered(width, height)
+      if (!width || !height) return;
+      const senderWebContents = event.sender;
+      const overlayWin = appState.getWindowHelper().getOverlayWindow();
+      if (
+        overlayWin &&
+        !overlayWin.isDestroyed() &&
+        overlayWin.webContents.id === senderWebContents.id
+      ) {
+        appState.getWindowHelper().setOverlayDimensionsCentered(width, height);
       }
-    }
-  )
+    },
+  );
 
-  safeHandle("set-window-mode", async (event, mode: 'launcher' | 'overlay', inactive?: boolean) => {
+  safeHandle('set-window-mode', async (event, mode: 'launcher' | 'overlay', inactive?: boolean) => {
     appState.getWindowHelper().setWindowMode(mode, inactive);
     return { success: true };
-  })
+  });
 
-
-  safeHandle("delete-screenshot", async (event, filePath: string) => {
+  safeHandle('delete-screenshot', async (event, filePath: string) => {
     // Guard: only allow deletion of files within the app's own userData directory
     const userDataDir = app.getPath('userData');
     const resolved = path.resolve(filePath);
@@ -265,137 +291,138 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: false, error: 'Path not allowed' };
     }
     return appState.deleteScreenshot(resolved);
-  })
+  });
 
-  safeHandle("take-screenshot", async () => {
+  safeHandle('take-screenshot', async () => {
     try {
-      const screenshotPath = await appState.takeScreenshot()
-      const preview = await appState.getImagePreview(screenshotPath)
-      return { path: screenshotPath, preview }
+      const screenshotPath = await appState.takeScreenshot();
+      const preview = await appState.getImagePreview(screenshotPath);
+      return { path: screenshotPath, preview };
     } catch (error) {
       // console.error("Error taking screenshot:", error)
-      throw error
+      throw error;
     }
-  })
+  });
 
-  safeHandle("take-selective-screenshot", async () => {
+  safeHandle('take-selective-screenshot', async () => {
     try {
-      const screenshotPath = await appState.takeSelectiveScreenshot()
-      const preview = await appState.getImagePreview(screenshotPath)
-      return { path: screenshotPath, preview }
+      const screenshotPath = await appState.takeSelectiveScreenshot();
+      const preview = await appState.getImagePreview(screenshotPath);
+      return { path: screenshotPath, preview };
     } catch (error) {
       // EC-04 fix: cast unknown error to Error before accessing .message
-      if ((error as Error).message === "Selection cancelled") {
-        return { cancelled: true }
+      if ((error as Error).message === 'Selection cancelled') {
+        return { cancelled: true };
       }
-      throw error
+      throw error;
     }
-  })
+  });
 
-  safeHandle("get-screenshots", async () => {
+  safeHandle('get-screenshots', async () => {
     // console.log({ view: appState.getView() })
     try {
-      let previews = []
-      if (appState.getView() === "queue") {
+      let previews = [];
+      if (appState.getView() === 'queue') {
         previews = await Promise.all(
           appState.getScreenshotQueue().map(async (path) => ({
             path,
-            preview: await appState.getImagePreview(path)
-          }))
-        )
+            preview: await appState.getImagePreview(path),
+          })),
+        );
       } else {
         previews = await Promise.all(
           appState.getExtraScreenshotQueue().map(async (path) => ({
             path,
-            preview: await appState.getImagePreview(path)
-          }))
-        )
+            preview: await appState.getImagePreview(path),
+          })),
+        );
       }
       // previews.forEach((preview: any) => console.log(preview.path))
-      return previews
+      return previews;
     } catch (error) {
       // console.error("Error getting screenshots:", error)
-      throw error
+      throw error;
     }
-  })
+  });
 
-  safeHandle("toggle-window", async () => {
-    appState.toggleMainWindow()
-  })
+  safeHandle('toggle-window', async () => {
+    appState.toggleMainWindow();
+  });
 
-  safeHandle("show-window", async (event, inactive?: boolean) => {
+  safeHandle('show-window', async (event, inactive?: boolean) => {
     // Default show main window (Launcher usually)
-    appState.showMainWindow(inactive)
-  })
+    appState.showMainWindow(inactive);
+  });
 
-  safeHandle("hide-window", async () => {
-    appState.hideMainWindow()
-  })
+  safeHandle('hide-window', async () => {
+    appState.hideMainWindow();
+  });
 
-  safeHandle("show-overlay", async () => {
+  safeHandle('show-overlay', async () => {
     appState.getWindowHelper().showOverlay();
-  })
+  });
 
-  safeHandle("hide-overlay", async () => {
+  safeHandle('hide-overlay', async () => {
     appState.getWindowHelper().hideOverlay();
-  })
+  });
 
-  safeHandle("get-meeting-active", async () => {
+  safeHandle('get-meeting-active', async () => {
     return appState.getIsMeetingActive();
-  })
+  });
 
-  safeHandle("reset-queues", async () => {
+  safeHandle('reset-queues', async () => {
     try {
-      appState.clearQueues()
+      appState.clearQueues();
       // console.log("Screenshot queues have been cleared.")
-      return { success: true }
+      return { success: true };
     } catch (error: any) {
       // console.error("Error resetting queues:", error)
-      return { success: false, error: error.message }
+      return { success: false, error: error.message };
     }
-  })
+  });
 
   // Donation IPC Handlers
-  safeHandle("get-donation-status", async () => {
+  safeHandle('get-donation-status', async () => {
     const { DonationManager } = require('./DonationManager');
     const manager = DonationManager.getInstance();
     return {
       shouldShow: manager.shouldShowToaster(),
       hasDonated: manager.getDonationState().hasDonated,
-      lifetimeShows: manager.getDonationState().lifetimeShows
+      lifetimeShows: manager.getDonationState().lifetimeShows,
     };
   });
 
-  safeHandle("mark-donation-toast-shown", async () => {
+  safeHandle('mark-donation-toast-shown', async () => {
     const { DonationManager } = require('./DonationManager');
     DonationManager.getInstance().markAsShown();
     return { success: true };
   });
 
-  safeHandle("set-donation-complete", async () => {
+  safeHandle('set-donation-complete', async () => {
     const { DonationManager } = require('./DonationManager');
     DonationManager.getInstance().setHasDonated(true);
     return { success: true };
   });
 
-
   // Generate suggestion from transcript - Natively-style text-only reasoning
-  safeHandle("generate-suggestion", async (event, context: string, lastQuestion: string) => {
+  safeHandle('generate-suggestion', async (event, context: string, lastQuestion: string) => {
     try {
-      const suggestion = await appState.processingHelper.getLLMHelper().generateSuggestion(context, lastQuestion)
-      return { suggestion }
+      const suggestion = await appState.processingHelper
+        .getLLMHelper()
+        .generateSuggestion(context, lastQuestion);
+      return { suggestion };
     } catch (error: any) {
       // console.error("Error generating suggestion:", error)
-      throw error
+      throw error;
     }
-  })
+  });
 
-  safeHandle("finalize-mic-stt", async () => {
+  safeHandle('finalize-mic-stt', async () => {
     appState.finalizeMicSTT();
   });
 
   // IPC handler for analyzing image from file path
-  safeHandle("analyze-image-file", async (event, filePath: string) => {
+  safeHandle('analyze-image-file', async (event, filePath: string) => {
     // Guard: only allow reading files within the app's own userData directory
     const userDataDir = app.getPath('userData');
     const resolved = path.resolve(filePath);
@@ -404,52 +431,68 @@ export function initializeIpcHandlers(appState: AppState): void {
       throw new Error('Path not allowed');
     }
     try {
-      const result = await appState.processingHelper.getLLMHelper().analyzeImageFiles([resolved])
-      return result
-    } catch (error: any) {
-      throw error
-    }
-  })
-
-  safeHandle("gemini-chat", async (event, message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean }) => {
-    try {
-      const result = await appState.processingHelper.getLLMHelper().chatWithGemini(message, imagePaths, context, options?.skipSystemPrompt);
-
-      console.log(`[IPC] gemini - chat response received`, { length: result?.length ?? 0 });
-
-      // Don't process empty responses
-      if (!result || result.trim().length === 0) {
-        console.warn("[IPC] Empty response from LLM, not updating IntelligenceManager");
-        return "I apologize, but I couldn't generate a response. Please try again.";
-      }
-
-      // Sync with IntelligenceManager so Follow-Up/Recap work
-      const intelligenceManager = appState.getIntelligenceManager();
-
-      // 1. Add user question to context (as 'user')
-      // CRITICAL: Skip refinement check to prevent auto-triggering follow-up logic
-      // The user's manual question is a NEW input, not a refinement of previous answer.
-      intelligenceManager.addTranscript({
-        text: message,
-        speaker: 'user',
-        timestamp: Date.now(),
-        final: true
-      }, true);
-
-      // 2. Add assistant response and set as last message
-      console.log(`[IPC] Updating IntelligenceManager with assistant message...`);
-      intelligenceManager.addAssistantMessage(result);
-      console.log(`[IPC] Updated IntelligenceManager.Last message`, { length: intelligenceManager.getLastAssistantMessage()?.length ?? 0 });
-
-      // Log Usage
-      intelligenceManager.logUsage('chat', message, result);
-
+      const result = await appState.processingHelper.getLLMHelper().analyzeImageFiles([resolved]);
       return result;
     } catch (error: any) {
-      // console.error("Error in gemini-chat handler:", error);
       throw error;
     }
   });
+
+  safeHandle(
+    'gemini-chat',
+    async (
+      event,
+      message: string,
+      imagePaths?: string[],
+      context?: string,
+      options?: { skipSystemPrompt?: boolean },
+    ) => {
+      try {
+        const result = await appState.processingHelper
+          .getLLMHelper()
+          .chatWithGemini(message, imagePaths, context, options?.skipSystemPrompt);
+
+        console.log(`[IPC] gemini - chat response received`, { length: result?.length ?? 0 });
+
+        // Don't process empty responses
+        if (!result || result.trim().length === 0) {
+          console.warn('[IPC] Empty response from LLM, not updating IntelligenceManager');
+          return "I apologize, but I couldn't generate a response. Please try again.";
+        }
+
+        // Sync with IntelligenceManager so Follow-Up/Recap work
+        const intelligenceManager = appState.getIntelligenceManager();
+
+        // 1. Add user question to context (as 'user')
+        // CRITICAL: Skip refinement check to prevent auto-triggering follow-up logic
+        // The user's manual question is a NEW input, not a refinement of previous answer.
+        intelligenceManager.addTranscript(
+          {
+            text: message,
+            speaker: 'user',
+            timestamp: Date.now(),
+            final: true,
+          },
+          true,
+        );
+
+        // 2. Add assistant response and set as last message
+        console.log(`[IPC] Updating IntelligenceManager with assistant message...`);
+        intelligenceManager.addAssistantMessage(result);
+        console.log(`[IPC] Updated IntelligenceManager.Last message`, {
+          length: intelligenceManager.getLastAssistantMessage()?.length ?? 0,
+        });
+
+        // Log Usage
+        intelligenceManager.logUsage('chat', message, result);
+
+        return result;
+      } catch (error: any) {
+        // console.error("Error in gemini-chat handler:", error);
+        throw error;
+      }
+    },
+  );
 
   // Streaming IPC Handler
   // SECURITY FIX (P0-1): Monotonic stream ID prevents interleaved tokens from concurrent stream requests.
@@ -460,295 +503,356 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Matches narrow identity/meta probes only. Kept tight so coding/normal asks don't trip it.
   // Prevents the small fast-mode model from over-firing the "I'm Natively" canned reply
   // (which used to escape the prompt's hard rule for any ambiguous input).
-  const IDENTITY_PROBE_RE = /^\s*(who\s+(are|r)\s+(you|u|this|natively)|what\s+(are|r)\s+(you|u)|are\s+you\s+(chatgpt|gpt[-\s]?\d?|claude|gemini|llama|an?\s+(ai|bot|llm|model|assistant))|what('?s|\s+is)\s+your\s+(name|model)|which\s+(ai|model|llm)\s+are\s+you|who\s+(made|built|created|developed|trained)\s+(you|this|natively)|what\s+model\s+(are\s+you|do\s+you\s+use)|introduce\s+yourself)\s*\??\s*$/i;
-  const CREATOR_PROBE_RE = /^\s*(who\s+(made|built|created|developed|trained)\s+(you|this|natively))\s*\??\s*$/i;
+  const IDENTITY_PROBE_RE =
+    /^\s*(who\s+(are|r)\s+(you|u|this|natively)|what\s+(are|r)\s+(you|u)|are\s+you\s+(chatgpt|gpt[-\s]?\d?|claude|gemini|llama|an?\s+(ai|bot|llm|model|assistant))|what('?s|\s+is)\s+your\s+(name|model)|which\s+(ai|model|llm)\s+are\s+you|who\s+(made|built|created|developed|trained)\s+(you|this|natively)|what\s+model\s+(are\s+you|do\s+you\s+use)|introduce\s+yourself)\s*\??\s*$/i;
+  const CREATOR_PROBE_RE =
+    /^\s*(who\s+(made|built|created|developed|trained)\s+(you|this|natively))\s*\??\s*$/i;
 
-  safeHandle("gemini-chat-stream", async (event, message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean }) => {
-    try {
-      console.log("[IPC] gemini-chat-stream started using LLMHelper.streamChat");
-      const llmHelper = appState.processingHelper.getLLMHelper();
-
-      // Claim a new stream ID — any prior stream will detect this and stop emitting.
-      const myStreamId = ++_chatStreamId;
-
-      const intelligenceManager = appState.getIntelligenceManager();
-
-      // Identity probe short-circuit — bypasses the LLM entirely so small models can't
-      // reframe the canned reply or misfire it on coding asks (the original bug).
-      // Regex is `^...$` anchored, so non-probe questions cannot match.
-      if (!imagePaths?.length && typeof message === 'string') {
-        const identityHit = CREATOR_PROBE_RE.test(message)
-          ? "I was developed by Evin John."
-          : (IDENTITY_PROBE_RE.test(message) ? "I'm Natively, an AI assistant." : null);
-        if (identityHit) {
-          intelligenceManager.addTranscript({ text: message, speaker: 'user', timestamp: Date.now(), final: true }, true);
-          try { PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), message); } catch (_) { /* noop */ }
-          // Guard against a newer chat stream having taken over while we were computing
-          // the canned reply — matches the protection the LLM path uses around its token
-          // loop. Prevents cross-stream UI bleed.
-          if (_chatStreamId !== myStreamId) {
-            console.log(`[IPC] gemini-chat-stream ${myStreamId} (identity probe) superseded by ${_chatStreamId}, skipping emit.`);
-            return null;
-          }
-          event.sender.send("gemini-stream-token", identityHit);
-          event.sender.send("gemini-stream-done");
-          try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), identityHit); } catch (_) { /* noop */ }
-          try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), identityHit); } catch (_) { /* noop */ }
-          intelligenceManager.addAssistantMessage(identityHit);
-          intelligenceManager.logUsage('chat', message, identityHit);
-          return null;
-        }
-      }
-
-      // Capture rolling context BEFORE adding the new user message — otherwise the
-      // 100s window would echo back the user's just-typed message as both context and
-      // question, confusing small models (the "20-char context" log line was just an echo).
-      let autoContextSnapshot: string | undefined;
-      if (!context) {
-        try {
-          const snap = intelligenceManager.getFormattedContext(100);
-          if (snap && snap.trim().length > 0) autoContextSnapshot = snap;
-        } catch (ctxErr) {
-          console.warn("[IPC] Failed to capture pre-turn context:", ctxErr);
-        }
-      }
-
-      // Now add USER message to IntelligenceManager (after context snapshot)
-      intelligenceManager.addTranscript({
-        text: message,
-        speaker: 'user',
-        timestamp: Date.now(),
-        final: true
-      }, true);
-
-      // Mirror to phone (no-op if PhoneMirrorService isn't running).
-      try { PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), message); } catch (_) { /* noop */ }
-
-      let fullResponse = "";
-
-      if (!context && autoContextSnapshot) {
-        context = autoContextSnapshot;
-        console.log(`[IPC] Auto-injected 100s context for gemini-chat-stream (${context.length} chars)`);
-      }
-
-      // Use CHAT_MODE_PROMPT for general chat — bypasses the interview-copilot
-      // framing in HARD_SYSTEM_PROMPT/ASSIST_MODE_PROMPT that was causing coding
-      // questions to be answered with "At Aetherbot AI, I was responsible for..."
-      // (resume hijack via CONTEXT_INTELLIGENCE_LAYER's "you ARE the user").
-      const systemPromptOverride: string | undefined = options?.skipSystemPrompt ? "" : CHAT_MODE_PROMPT;
-
+  safeHandle(
+    'gemini-chat-stream',
+    async (
+      event,
+      message: string,
+      imagePaths?: string[],
+      context?: string,
+      options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean },
+    ) => {
       try {
-        // USE streamChat which handles routing
-        const stream = llmHelper.streamChat(message, imagePaths, context, systemPromptOverride, options?.ignoreKnowledgeMode);
+        console.log('[IPC] gemini-chat-stream started using LLMHelper.streamChat');
+        const llmHelper = appState.processingHelper.getLLMHelper();
 
-        for await (const token of stream) {
-          // Bail if a newer stream has taken over (user triggered a new request)
-          if (_chatStreamId !== myStreamId) {
-            console.log(`[IPC] gemini-chat-stream ${myStreamId} superseded by ${_chatStreamId}, stopping.`);
+        // Claim a new stream ID — any prior stream will detect this and stop emitting.
+        const myStreamId = ++_chatStreamId;
+
+        const intelligenceManager = appState.getIntelligenceManager();
+
+        // Identity probe short-circuit — bypasses the LLM entirely so small models can't
+        // reframe the canned reply or misfire it on coding asks (the original bug).
+        // Regex is `^...$` anchored, so non-probe questions cannot match.
+        if (!imagePaths?.length && typeof message === 'string') {
+          const identityHit = CREATOR_PROBE_RE.test(message)
+            ? 'I was developed by Evin John.'
+            : IDENTITY_PROBE_RE.test(message)
+              ? "I'm Natively, an AI assistant."
+              : null;
+          if (identityHit) {
+            intelligenceManager.addTranscript(
+              { text: message, speaker: 'user', timestamp: Date.now(), final: true },
+              true,
+            );
+            try {
+              PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), message);
+            } catch (_) {
+              /* noop */
+            }
+            // Guard against a newer chat stream having taken over while we were computing
+            // the canned reply — matches the protection the LLM path uses around its token
+            // loop. Prevents cross-stream UI bleed.
+            if (_chatStreamId !== myStreamId) {
+              console.log(
+                `[IPC] gemini-chat-stream ${myStreamId} (identity probe) superseded by ${_chatStreamId}, skipping emit.`,
+              );
+              return null;
+            }
+            event.sender.send('gemini-stream-token', identityHit);
+            event.sender.send('gemini-stream-done');
+            try {
+              PhoneMirrorService.getInstance().publishToken(String(myStreamId), identityHit);
+            } catch (_) {
+              /* noop */
+            }
+            try {
+              PhoneMirrorService.getInstance().publishDone(String(myStreamId), identityHit);
+            } catch (_) {
+              /* noop */
+            }
+            intelligenceManager.addAssistantMessage(identityHit);
+            intelligenceManager.logUsage('chat', message, identityHit);
             return null;
           }
-          event.sender.send("gemini-stream-token", token);
-          try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), token); } catch (_) { /* noop */ }
-          fullResponse += token;
         }
 
-        // Final check: only send done if we are still the active stream
-        if (_chatStreamId === myStreamId) {
-          event.sender.send("gemini-stream-done");
-          try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), fullResponse); } catch (_) { /* noop */ }
-
-          // Update IntelligenceManager with ASSISTANT message after completion
-          if (fullResponse.trim().length > 0) {
-            intelligenceManager.addAssistantMessage(fullResponse);
-            // Log Usage for streaming chat
-            intelligenceManager.logUsage('chat', message, fullResponse);
+        // Capture rolling context BEFORE adding the new user message — otherwise the
+        // 100s window would echo back the user's just-typed message as both context and
+        // question, confusing small models (the "20-char context" log line was just an echo).
+        let autoContextSnapshot: string | undefined;
+        if (!context) {
+          try {
+            const snap = intelligenceManager.getFormattedContext(100);
+            if (snap && snap.trim().length > 0) autoContextSnapshot = snap;
+          } catch (ctxErr) {
+            console.warn('[IPC] Failed to capture pre-turn context:', ctxErr);
           }
         }
 
-      } catch (streamError: any) {
-        console.error("[IPC] Streaming error:", streamError);
-        if (_chatStreamId === myStreamId) {
-          event.sender.send("gemini-stream-error", streamError.message || "Unknown streaming error");
-          try { PhoneMirrorService.getInstance().publishError(String(myStreamId), streamError?.message || "Unknown streaming error"); } catch (_) { /* noop */ }
+        // Now add USER message to IntelligenceManager (after context snapshot)
+        intelligenceManager.addTranscript(
+          {
+            text: message,
+            speaker: 'user',
+            timestamp: Date.now(),
+            final: true,
+          },
+          true,
+        );
+
+        // Mirror to phone (no-op if PhoneMirrorService isn't running).
+        try {
+          PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), message);
+        } catch (_) {
+          /* noop */
         }
+
+        let fullResponse = '';
+
+        if (!context && autoContextSnapshot) {
+          context = autoContextSnapshot;
+          console.log(
+            `[IPC] Auto-injected 100s context for gemini-chat-stream (${context.length} chars)`,
+          );
+        }
+
+        // Use CHAT_MODE_PROMPT for general chat — bypasses the interview-copilot
+        // framing in HARD_SYSTEM_PROMPT/ASSIST_MODE_PROMPT that was causing coding
+        // questions to be answered with "At Aetherbot AI, I was responsible for..."
+        // (resume hijack via CONTEXT_INTELLIGENCE_LAYER's "you ARE the user").
+        const systemPromptOverride: string | undefined = options?.skipSystemPrompt
+          ? ''
+          : CHAT_MODE_PROMPT;
+
+        try {
+          // USE streamChat which handles routing
+          const stream = llmHelper.streamChat(
+            message,
+            imagePaths,
+            context,
+            systemPromptOverride,
+            options?.ignoreKnowledgeMode,
+          );
+
+          for await (const token of stream) {
+            // Bail if a newer stream has taken over (user triggered a new request)
+            if (_chatStreamId !== myStreamId) {
+              console.log(
+                `[IPC] gemini-chat-stream ${myStreamId} superseded by ${_chatStreamId}, stopping.`,
+              );
+              return null;
+            }
+            event.sender.send('gemini-stream-token', token);
+            try {
+              PhoneMirrorService.getInstance().publishToken(String(myStreamId), token);
+            } catch (_) {
+              /* noop */
+            }
+            fullResponse += token;
+          }
+
+          // Final check: only send done if we are still the active stream
+          if (_chatStreamId === myStreamId) {
+            event.sender.send('gemini-stream-done');
+            try {
+              PhoneMirrorService.getInstance().publishDone(String(myStreamId), fullResponse);
+            } catch (_) {
+              /* noop */
+            }
+
+            // Update IntelligenceManager with ASSISTANT message after completion
+            if (fullResponse.trim().length > 0) {
+              intelligenceManager.addAssistantMessage(fullResponse);
+              // Log Usage for streaming chat
+              intelligenceManager.logUsage('chat', message, fullResponse);
+            }
+          }
+        } catch (streamError: any) {
+          console.error('[IPC] Streaming error:', streamError);
+          if (_chatStreamId === myStreamId) {
+            event.sender.send(
+              'gemini-stream-error',
+              streamError.message || 'Unknown streaming error',
+            );
+            try {
+              PhoneMirrorService.getInstance().publishError(
+                String(myStreamId),
+                streamError?.message || 'Unknown streaming error',
+              );
+            } catch (_) {
+              /* noop */
+            }
+          }
+        }
+
+        return null; // Return null as data is sent via events
+      } catch (error: any) {
+        console.error('[IPC] Error in gemini-chat-stream setup:', error);
+        throw error;
       }
+    },
+  );
 
-      return null; // Return null as data is sent via events
+  safeHandle('quit-app', () => {
+    app.quit();
+  });
 
-    } catch (error: any) {
-      console.error("[IPC] Error in gemini-chat-stream setup:", error);
-      throw error;
+  safeHandle('quit-and-install-update', async () => {
+    try {
+      console.log('[IPC] Quit and install update requested');
+      await appState.quitAndInstallUpdate();
+      return { success: true };
+    } catch (err: any) {
+      console.error('[IPC] quit-and-install-update failed:', err);
+      return { success: false, error: err.message };
     }
   });
 
-
-
-  safeHandle("quit-app", () => {
-    app.quit()
-  })
-
-  safeHandle("quit-and-install-update", async () => {
-    try {
-      console.log('[IPC] Quit and install update requested')
-      await appState.quitAndInstallUpdate()
-      return { success: true }
-    } catch (err: any) {
-      console.error('[IPC] quit-and-install-update failed:', err)
-      return { success: false, error: err.message }
-    }
-  })
-
-  safeHandle("delete-meeting", async (_, id: string) => {
+  safeHandle('delete-meeting', async (_, id: string) => {
     return DatabaseManager.getInstance().deleteMeeting(id);
   });
 
-  safeHandle("check-for-updates", async () => {
+  safeHandle('check-for-updates', async () => {
     try {
-      console.log('[IPC] Manual update check requested')
-      await appState.checkForUpdates()
-      return { success: true }
+      console.log('[IPC] Manual update check requested');
+      await appState.checkForUpdates();
+      return { success: true };
     } catch (err: any) {
-      console.error('[IPC] check-for-updates failed:', err)
-      return { success: false, error: err.message }
+      console.error('[IPC] check-for-updates failed:', err);
+      return { success: false, error: err.message };
     }
-  })
+  });
 
-  safeHandle("download-update", async () => {
+  safeHandle('download-update', async () => {
     try {
-      console.log('[IPC] Download update requested')
-      appState.downloadUpdate()
-      return { success: true }
+      console.log('[IPC] Download update requested');
+      appState.downloadUpdate();
+      return { success: true };
     } catch (err: any) {
-      console.error('[IPC] download-update failed:', err)
-      return { success: false, error: err.message }
+      console.error('[IPC] download-update failed:', err);
+      return { success: false, error: err.message };
     }
-  })
+  });
 
   // Window movement handlers
-  safeHandle("move-window-left", async () => {
-    appState.moveWindowLeft()
-  })
+  safeHandle('move-window-left', async () => {
+    appState.moveWindowLeft();
+  });
 
-  safeHandle("move-window-right", async () => {
-    appState.moveWindowRight()
-  })
+  safeHandle('move-window-right', async () => {
+    appState.moveWindowRight();
+  });
 
-  safeHandle("move-window-up", async () => {
-    appState.moveWindowUp()
-  })
+  safeHandle('move-window-up', async () => {
+    appState.moveWindowUp();
+  });
 
-  safeHandle("move-window-down", async () => {
-    appState.moveWindowDown()
-  })
+  safeHandle('move-window-down', async () => {
+    appState.moveWindowDown();
+  });
 
-  safeHandle("center-and-show-window", async () => {
-    appState.centerAndShowWindow()
-  })
+  safeHandle('center-and-show-window', async () => {
+    appState.centerAndShowWindow();
+  });
 
   // Window Controls
-  safeHandle("window-minimize", async () => {
+  safeHandle('window-minimize', async () => {
     appState.getWindowHelper().minimizeWindow();
   });
 
-  safeHandle("window-maximize", async () => {
+  safeHandle('window-maximize', async () => {
     appState.getWindowHelper().maximizeWindow();
   });
 
-  safeHandle("window-close", async () => {
+  safeHandle('window-close', async () => {
     appState.getWindowHelper().closeWindow();
   });
 
-  safeHandle("window-is-maximized", async () => {
+  safeHandle('window-is-maximized', async () => {
     return appState.getWindowHelper().isMainWindowMaximized();
   });
 
   // Settings Window
-  safeHandle("toggle-settings-window", (event, { x, y } = {}) => {
-    appState.settingsWindowHelper.toggleWindow(x, y)
-  })
+  safeHandle('toggle-settings-window', (event, { x, y } = {}) => {
+    appState.settingsWindowHelper.toggleWindow(x, y);
+  });
 
   // Open the launcher's SettingsOverlay on a specific tab (callable from any window)
-  safeHandle("settings:open-tab", (_, tab: string) => {
+  safeHandle('settings:open-tab', (_, tab: string) => {
     const launcherWin = appState.getWindowHelper().getLauncherWindow();
     if (launcherWin && !launcherWin.isDestroyed()) {
       launcherWin.webContents.send('settings:open-tab', tab);
       launcherWin.show();
       launcherWin.focus();
     }
-  })
+  });
 
-  safeHandle("close-settings-window", () => {
-    appState.settingsWindowHelper.closeWindow()
-  })
+  safeHandle('close-settings-window', () => {
+    appState.settingsWindowHelper.closeWindow();
+  });
 
+  safeHandle('set-undetectable', async (_, state: boolean) => {
+    appState.setUndetectable(state);
+    return { success: true };
+  });
 
+  safeHandle('set-disguise', async (_, mode: 'terminal' | 'settings' | 'activity' | 'none') => {
+    appState.setDisguise(mode);
+    return { success: true };
+  });
 
-  safeHandle("set-undetectable", async (_, state: boolean) => {
-    appState.setUndetectable(state)
-    return { success: true }
-  })
-
-  safeHandle("set-disguise", async (_, mode: 'terminal' | 'settings' | 'activity' | 'none') => {
-    appState.setDisguise(mode)
-    return { success: true }
-  })
-
-  safeHandle("get-undetectable", async () => {
-    return appState.getUndetectable()
-  })
+  safeHandle('get-undetectable', async () => {
+    return appState.getUndetectable();
+  });
 
   // Adapted from public PR #113 — verify premium interaction
-  safeHandle("set-overlay-mouse-passthrough", async (_, enabled: boolean) => {
-    appState.setOverlayMousePassthrough(enabled)
-    return { success: true }
-  })
+  safeHandle('set-overlay-mouse-passthrough', async (_, enabled: boolean) => {
+    appState.setOverlayMousePassthrough(enabled);
+    return { success: true };
+  });
 
-  safeHandle("toggle-overlay-mouse-passthrough", async () => {
-    const enabled = appState.toggleOverlayMousePassthrough()
-    return { success: true, enabled }
-  })
+  safeHandle('toggle-overlay-mouse-passthrough', async () => {
+    const enabled = appState.toggleOverlayMousePassthrough();
+    return { success: true, enabled };
+  });
 
-  safeHandle("get-overlay-mouse-passthrough", async () => {
-    return appState.getOverlayMousePassthrough()
-  })
+  safeHandle('get-overlay-mouse-passthrough', async () => {
+    return appState.getOverlayMousePassthrough();
+  });
 
-  safeHandle("get-disguise", async () => {
-    return appState.getDisguise()
-  })
+  safeHandle('get-disguise', async () => {
+    return appState.getDisguise();
+  });
 
-  safeHandle("set-open-at-login", async (_, openAtLogin: boolean) => {
+  safeHandle('set-open-at-login', async (_, openAtLogin: boolean) => {
     app.setLoginItemSettings({
       openAtLogin,
       openAsHidden: false,
-      path: app.getPath('exe') // Explicitly point to executable for production reliability
+      path: app.getPath('exe'), // Explicitly point to executable for production reliability
     });
     return { success: true };
   });
 
-  safeHandle("get-open-at-login", async () => {
+  safeHandle('get-open-at-login', async () => {
     const settings = app.getLoginItemSettings();
     return settings.openAtLogin;
   });
 
-  safeHandle("get-verbose-logging", async () => {
+  safeHandle('get-verbose-logging', async () => {
     return appState.getVerboseLogging();
   });
 
-  safeHandle("set-verbose-logging", async (_, enabled: boolean) => {
+  safeHandle('set-verbose-logging', async (_, enabled: boolean) => {
     appState.setVerboseLogging(enabled);
     return { success: true };
   });
 
-  safeHandle("get-meeting-retention", async () => {
+  safeHandle('get-meeting-retention', async () => {
     return SettingsManager.getInstance().get('meetingRetention') ?? 'forever';
   });
 
-  safeHandle("set-meeting-retention", async (_, retention: 'forever' | '7d' | '30d' | 'never') => {
+  safeHandle('set-meeting-retention', async (_, retention: 'forever' | '7d' | '30d' | 'never') => {
     if (!['forever', '7d', '30d', 'never'].includes(retention)) {
       return { success: false, error: 'invalid_retention' };
     }
     SettingsManager.getInstance().set('meetingRetention', retention);
-    BrowserWindow.getAllWindows().forEach(win => {
+    BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) {
         win.webContents.send('meeting-retention-changed', retention);
       }
@@ -756,15 +860,22 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
-  safeHandle("get-provider-data-scopes", async () => {
+  safeHandle('get-provider-data-scopes', async () => {
     return SettingsManager.getInstance().get('providerDataScopes') ?? {};
   });
 
-  safeHandle("set-provider-data-scopes", async (_, scopes: Record<string, boolean>) => {
+  safeHandle('set-provider-data-scopes', async (_, scopes: Record<string, boolean>) => {
     if (!scopes || typeof scopes !== 'object') {
       return { success: false, error: 'invalid_scopes' };
     }
-    const allowedKeys = new Set(['transcript', 'screenshots', 'reference_files', 'profile_history', 'embeddings', 'post_call_summary']);
+    const allowedKeys = new Set([
+      'transcript',
+      'screenshots',
+      'reference_files',
+      'profile_history',
+      'embeddings',
+      'post_call_summary',
+    ]);
     const sanitized: Record<string, boolean> = {};
     for (const [key, value] of Object.entries(scopes)) {
       if (allowedKeys.has(key) && typeof value === 'boolean') {
@@ -772,7 +883,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
     }
     SettingsManager.getInstance().set('providerDataScopes', sanitized as any);
-    BrowserWindow.getAllWindows().forEach(win => {
+    BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) {
         win.webContents.send('provider-data-scopes-changed', sanitized);
       }
@@ -780,33 +891,36 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
-  safeHandle("get-screen-understanding-mode", async () => {
+  safeHandle('get-screen-understanding-mode', async () => {
     return SettingsManager.getInstance().getScreenUnderstandingMode();
   });
 
-  safeHandle("set-screen-understanding-mode", async (_, mode: 'vision_first' | 'vision_only' | 'private_vision') => {
-    if (!['vision_first', 'vision_only', 'private_vision'].includes(mode)) {
-      return { success: false, error: 'invalid_mode' };
-    }
-    SettingsManager.getInstance().setScreenUnderstandingMode(mode);
-    BrowserWindow.getAllWindows().forEach(win => {
-      if (!win.isDestroyed()) {
-        win.webContents.send('screen-understanding-mode-changed', mode);
+  safeHandle(
+    'set-screen-understanding-mode',
+    async (_, mode: 'vision_first' | 'vision_only' | 'private_vision') => {
+      if (!['vision_first', 'vision_only', 'private_vision'].includes(mode)) {
+        return { success: false, error: 'invalid_mode' };
       }
-    });
-    return { success: true };
-  });
+      SettingsManager.getInstance().setScreenUnderstandingMode(mode);
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) {
+          win.webContents.send('screen-understanding-mode-changed', mode);
+        }
+      });
+      return { success: true };
+    },
+  );
 
-  safeHandle("get-technical-interview-vision-first", async () => {
+  safeHandle('get-technical-interview-vision-first', async () => {
     return SettingsManager.getInstance().getTechnicalInterviewVisionFirst();
   });
 
-  safeHandle("set-technical-interview-vision-first", async (_, enabled: boolean) => {
+  safeHandle('set-technical-interview-vision-first', async (_, enabled: boolean) => {
     if (typeof enabled !== 'boolean') {
       return { success: false, error: 'invalid_value' };
     }
     SettingsManager.getInstance().set('technicalInterviewVisionFirst', enabled);
-    BrowserWindow.getAllWindows().forEach(win => {
+    BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) {
         win.webContents.send('technical-interview-vision-first-changed', enabled);
       }
@@ -817,15 +931,15 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Legacy alias for renderer builds that still call the old IPC name.
   // Maps the deprecated technicalInterviewDirectVision channel onto the new
   // technicalInterviewVisionFirst getter/setter so old renderer builds keep working.
-  safeHandle("get-technical-interview-direct-vision", async () => {
+  safeHandle('get-technical-interview-direct-vision', async () => {
     return SettingsManager.getInstance().getTechnicalInterviewVisionFirst();
   });
-  safeHandle("set-technical-interview-direct-vision", async (_, enabled: boolean) => {
+  safeHandle('set-technical-interview-direct-vision', async (_, enabled: boolean) => {
     if (typeof enabled !== 'boolean') {
       return { success: false, error: 'invalid_value' };
     }
     SettingsManager.getInstance().set('technicalInterviewVisionFirst', enabled);
-    BrowserWindow.getAllWindows().forEach(win => {
+    BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) {
         win.webContents.send('technical-interview-vision-first-changed', enabled);
       }
@@ -833,7 +947,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
-  safeHandle("get-log-file-path", async () => {
+  safeHandle('get-log-file-path', async () => {
     try {
       return path.join(app.getPath('documents'), 'natively_debug.log');
     } catch {
@@ -841,7 +955,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("open-log-file", async () => {
+  safeHandle('open-log-file', async () => {
     try {
       const logPath = path.join(app.getPath('documents'), 'natively_debug.log');
       // Ensure the file exists before opening
@@ -857,26 +971,24 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   // Fire-and-forget: renderer forwards its console output to the main-process log file.
   // Only written when verbose logging is enabled.
-  ipcMain.on("forward-log-to-file", (_event, level: string, msg: string) => {
+  ipcMain.on('forward-log-to-file', (_event, level: string, msg: string) => {
     if (!appState.getVerboseLogging()) return;
-    const tag = level === 'error' ? '[RENDERER-ERROR]' : level === 'warn' ? '[RENDERER-WARN]' : '[RENDERER]';
+    const tag =
+      level === 'error' ? '[RENDERER-ERROR]' : level === 'warn' ? '[RENDERER-WARN]' : '[RENDERER]';
     console.log(`${tag} ${msg}`);
   });
 
-  safeHandle("get-arch", async () => {
+  safeHandle('get-arch', async () => {
     return process.arch;
   });
 
-  safeHandle("get-os-version", async () => {
+  safeHandle('get-os-version', async () => {
     const platform = process.platform;
     if (platform === 'darwin') {
       const darwinMajor = parseInt(os.release().split('.')[0] || '0', 10);
       // Darwin 25+ = macOS 26+ (calendar-year scheme), Darwin 20-24 = macOS 11-15
-      const macosMajor = darwinMajor >= 25
-        ? darwinMajor + 1
-        : darwinMajor >= 20
-          ? darwinMajor - 9
-          : null;
+      const macosMajor =
+        darwinMajor >= 25 ? darwinMajor + 1 : darwinMajor >= 20 ? darwinMajor - 9 : null;
       return macosMajor ? `macOS ${macosMajor}` : `macOS ${os.release()}`;
     }
     if (platform === 'win32') {
@@ -889,13 +1001,13 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // LLM Model Management Handlers
-  safeHandle("get-current-llm-config", async () => {
+  safeHandle('get-current-llm-config', async () => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
       return {
         provider: llmHelper.getCurrentProvider(),
         model: llmHelper.getCurrentModel(),
-        isOllama: llmHelper.isUsingOllama()
+        isOllama: llmHelper.isUsingOllama(),
       };
     } catch (error: any) {
       // console.error("Error getting current LLM config:", error);
@@ -903,7 +1015,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("get-available-ollama-models", async () => {
+  safeHandle('get-available-ollama-models', async () => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
       const models = await llmHelper.getOllamaModels();
@@ -914,7 +1026,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("switch-to-ollama", async (_, model?: string, url?: string) => {
+  safeHandle('switch-to-ollama', async (_, model?: string, url?: string) => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
       await llmHelper.switchToOllama(model, url);
@@ -925,13 +1037,13 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("force-restart-ollama", async () => {
+  safeHandle('force-restart-ollama', async () => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
       const success = await llmHelper.forceRestartOllama();
       return { success };
     } catch (error: any) {
-      console.error("Error force restarting Ollama:", error);
+      console.error('Error force restarting Ollama:', error);
       return { success: false, error: error.message };
     }
   });
@@ -946,12 +1058,12 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       return true;
     } catch (error: any) {
-      console.error("[IPC restart-ollama] Failed to restart:", error);
+      console.error('[IPC restart-ollama] Failed to restart:', error);
       return false;
     }
   });
 
-  safeHandle("ensure-ollama-running", async () => {
+  safeHandle('ensure-ollama-running', async () => {
     try {
       const { OllamaManager } = require('./services/OllamaManager');
       await OllamaManager.getInstance().init();
@@ -961,7 +1073,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("switch-to-gemini", async (_, apiKey?: string, modelId?: string) => {
+  safeHandle('switch-to-gemini', async (_, apiKey?: string, modelId?: string) => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
       await llmHelper.switchToGemini(apiKey, modelId);
@@ -980,7 +1092,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Dedicated API key setters (for Settings UI Save buttons)
-  safeHandle("set-gemini-api-key", async (_, apiKey: string) => {
+  safeHandle('set-gemini-api-key', async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setGeminiApiKey(apiKey);
@@ -998,12 +1110,12 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       return { success: true };
     } catch (error: any) {
-      console.error("Error saving Gemini API key:", error);
+      console.error('Error saving Gemini API key:', error);
       return { success: false, error: error.message };
     }
   });
 
-  safeHandle("set-groq-api-key", async (_, apiKey: string) => {
+  safeHandle('set-groq-api-key', async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setGroqApiKey(apiKey);
@@ -1019,12 +1131,12 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       return { success: true };
     } catch (error: any) {
-      console.error("Error saving Groq API key:", error);
+      console.error('Error saving Groq API key:', error);
       return { success: false, error: error.message };
     }
   });
 
-  safeHandle("set-openai-api-key", async (_, apiKey: string) => {
+  safeHandle('set-openai-api-key', async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setOpenaiApiKey(apiKey);
@@ -1040,12 +1152,12 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       return { success: true };
     } catch (error: any) {
-      console.error("Error saving OpenAI API key:", error);
+      console.error('Error saving OpenAI API key:', error);
       return { success: false, error: error.message };
     }
   });
 
-  safeHandle("set-claude-api-key", async (_, apiKey: string) => {
+  safeHandle('set-claude-api-key', async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setClaudeApiKey(apiKey);
@@ -1061,7 +1173,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       return { success: true };
     } catch (error: any) {
-      console.error("Error saving Claude API key:", error);
+      console.error('Error saving Claude API key:', error);
       return { success: false, error: error.message };
     }
   });
@@ -1070,7 +1182,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   const _usageCache = new Map<string, { data: any; ts: number }>();
   const USAGE_CACHE_TTL_MS = 60_000;
 
-  safeHandle("set-natively-api-key", async (_, apiKey: string) => {
+  safeHandle('set-natively-api-key', async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
@@ -1085,7 +1197,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const defaultModel = cm.getDefaultModel();
       const providers = [...(cm.getCurlProviders() || []), ...(cm.getCustomProviders() || [])];
       llmHelper.setModel(defaultModel, providers);
-      BrowserWindow.getAllWindows().forEach(win => {
+      BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) win.webContents.send('model-changed', defaultModel);
       });
 
@@ -1094,7 +1206,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       // the old STT provider (e.g. Google) until the app restarts.
       const newSttProvider = cm.getSttProvider();
       if (newSttProvider !== prevSttProvider) {
-        console.log(`[IPC] set-natively-api-key: STT provider changed ${prevSttProvider} → ${newSttProvider}, reconfiguring pipeline`);
+        console.log(
+          `[IPC] set-natively-api-key: STT provider changed ${prevSttProvider} → ${newSttProvider}, reconfiguring pipeline`,
+        );
         await appState.reconfigureSttProvider();
       }
 
@@ -1107,17 +1221,23 @@ export function initializeIpcHandlers(appState: AppState): void {
           if (result.success) {
             console.log('[IPC] set-natively-api-key: Pro auto-activated via API plan.');
             // Notify all windows so the license UI refreshes immediately
-            BrowserWindow.getAllWindows().forEach(win => {
-              if (!win.isDestroyed()) win.webContents.send('license-status-changed', { isPremium: true });
+            BrowserWindow.getAllWindows().forEach((win) => {
+              if (!win.isDestroyed())
+                win.webContents.send('license-status-changed', { isPremium: true });
             });
           } else if (result.skipped) {
-            console.log('[IPC] set-natively-api-key: existing Gumroad/Dodo license preserved — Pro not overwritten.');
+            console.log(
+              '[IPC] set-natively-api-key: existing Gumroad/Dodo license preserved — Pro not overwritten.',
+            );
           } else {
             console.log('[IPC] set-natively-api-key: Pro not activated —', result.error);
           }
         } catch (e: any) {
           // LicenseManager not available in this build — non-fatal
-          console.warn('[IPC] set-natively-api-key: LicenseManager unavailable for Pro auto-activation:', e?.message);
+          console.warn(
+            '[IPC] set-natively-api-key: LicenseManager unavailable for Pro auto-activation:',
+            e?.message,
+          );
         }
       } else {
         // API key was cleared — deactivate any natively_api Pro license so premium is revoked.
@@ -1129,20 +1249,26 @@ export function initializeIpcHandlers(appState: AppState): void {
           const details = lm.getLicenseDetails();
           if (details.isPremium && details.provider === 'natively_api') {
             await lm.deactivate();
-            console.log('[IPC] set-natively-api-key: key cleared — natively_api Pro license deactivated.');
+            console.log(
+              '[IPC] set-natively-api-key: key cleared — natively_api Pro license deactivated.',
+            );
             clearActiveModeOnLicenseLoss();
-            BrowserWindow.getAllWindows().forEach(win => {
-              if (!win.isDestroyed()) win.webContents.send('license-status-changed', { isPremium: false });
+            BrowserWindow.getAllWindows().forEach((win) => {
+              if (!win.isDestroyed())
+                win.webContents.send('license-status-changed', { isPremium: false });
             });
           }
         } catch (e: any) {
-          console.warn('[IPC] set-natively-api-key: LicenseManager unavailable for Pro deactivation on key clear:', e?.message);
+          console.warn(
+            '[IPC] set-natively-api-key: LicenseManager unavailable for Pro deactivation on key clear:',
+            e?.message,
+          );
         }
       }
 
       return { success: true };
     } catch (error: any) {
-      console.error("Error saving Natively API key:", error);
+      console.error('Error saving Natively API key:', error);
       return { success: false, error: error.message };
     } finally {
       // Always bust the cache when the key changes so the next usage fetch is fresh
@@ -1150,8 +1276,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-
-  safeHandle("get-natively-usage", async () => {
+  safeHandle('get-natively-usage', async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const key = CredentialsManager.getInstance().getNativelyApiKey();
@@ -1168,10 +1293,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         signal: AbortSignal.timeout(8000),
       });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as any;
+        const body = (await res.json().catch(() => ({}))) as any;
         return { ok: false, error: body.error || 'request_failed', status: res.status };
       }
-      const data = await res.json() as any;
+      const data = (await res.json()) as any;
       const result = { ok: true, ...data };
 
       // Cache the successful response
@@ -1183,7 +1308,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Allow other handlers to force-invalidate the usage cache (e.g. after key change)
-  safeHandle("invalidate-natively-usage-cache", () => {
+  safeHandle('invalidate-natively-usage-cache', () => {
     _usageCache.clear();
     return { ok: true };
   });
@@ -1191,7 +1316,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // ── Free Trial IPC ───────────────────────────────────────────────────────────
 
   // Start or resume a free trial. Fetches HWID, calls server, persists token locally.
-  safeHandle("trial:start", async () => {
+  safeHandle('trial:start', async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
@@ -1201,7 +1326,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       try {
         const { LicenseManager } = require('../premium/electron/services/LicenseManager');
         hwid = LicenseManager.getInstance().getHardwareId() || 'unavailable';
-      } catch { /* LicenseManager not available — fall back */ }
+      } catch {
+        /* LicenseManager not available — fall back */
+      }
 
       const res = await fetch('https://api.natively.software/v1/trial/start', {
         method: 'POST',
@@ -1211,18 +1338,18 @@ export function initializeIpcHandlers(appState: AppState): void {
       });
 
       if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as any;
+        const body = (await res.json().catch(() => ({}))) as any;
         return { ok: false, error: body.error || 'request_failed', status: res.status };
       }
 
-      const data = await res.json() as any;
+      const data = (await res.json()) as any;
 
       if (data.ok && data.trial_token && !data.expired) {
         cm.setTrialToken(data.trial_token, data.expires_at, data.started_at);
 
         // Auto-configure natively as the model + STT provider during trial
         const prevSttProvider = cm.getSttProvider();
-        cm.setNativelyApiKey(TRIAL_SENTINEL_KEY);   // sentinel — activates natively model routing
+        cm.setNativelyApiKey(TRIAL_SENTINEL_KEY); // sentinel — activates natively model routing
         const newSttProvider = cm.getSttProvider();
         if (newSttProvider !== prevSttProvider) {
           await appState.reconfigureSttProvider();
@@ -1240,7 +1367,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Poll the server for live trial status (remaining time + usage counters).
-  safeHandle("trial:status", async () => {
+  safeHandle('trial:status', async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const token = CredentialsManager.getInstance().getTrialToken();
@@ -1252,7 +1379,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       });
 
       if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as any;
+        const body = (await res.json().catch(() => ({}))) as any;
         return { ok: false, error: body.error || 'request_failed', status: res.status };
       }
 
@@ -1263,7 +1390,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Return local trial state from credentials (no network call — safe for startup check).
-  safeHandle("trial:get-local", async () => {
+  safeHandle('trial:get-local', async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
@@ -1284,18 +1411,18 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Record the user's post-trial choice in analytics and clean up local state.
-  safeHandle("trial:convert", async (_, choice: string) => {
+  safeHandle('trial:convert', async (_, choice: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const token = CredentialsManager.getInstance().getTrialToken();
-      if (!token) return { ok: true };  // no token to report
+      if (!token) return { ok: true }; // no token to report
 
       await fetch('https://api.natively.software/v1/trial/convert', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-trial-token': token },
         body: JSON.stringify({ choice }),
         signal: AbortSignal.timeout(5_000),
-      }).catch(() => { });  // fire-and-forget — don't block local cleanup on network failure
+      }).catch(() => {}); // fire-and-forget — don't block local cleanup on network failure
 
       return { ok: true };
     } catch {
@@ -1304,7 +1431,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // End trial via BYOK path: wipe Pro-ingested data, clear trial token + natively key.
-  safeHandle("trial:end-byok", async () => {
+  safeHandle('trial:end-byok', async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
@@ -1317,7 +1444,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           headers: { 'Content-Type': 'application/json', 'x-trial-token': token },
           body: JSON.stringify({ choice: 'byok' }),
           signal: AbortSignal.timeout(4_000),
-        }).catch(() => { });
+        }).catch(() => {});
       }
 
       // 2. Clear trial token
@@ -1333,7 +1460,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       try {
         const { LicenseManager } = require('../premium/electron/services/LicenseManager');
         await LicenseManager.getInstance().deactivate();
-      } catch { /* LicenseManager not available in this build */ }
+      } catch {
+        /* LicenseManager not available in this build */
+      }
 
       // 5. Disable knowledge mode + wipe orchestrator in-memory caches for resume/JD
       try {
@@ -1344,7 +1473,9 @@ export function initializeIpcHandlers(appState: AppState): void {
           orchestrator.deleteDocumentsByType(DocType.RESUME);
           orchestrator.deleteDocumentsByType(DocType.JD);
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
 
       // 6. Wipe Pro-specific cached data from local SQLite
       //    Targets: company dossiers, knowledge docs (+ cascades), resume nodes, user profile
@@ -1366,7 +1497,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       // 7. Notify all windows to refresh license + model state
       clearActiveModeOnLicenseLoss();
-      BrowserWindow.getAllWindows().forEach(win => {
+      BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) {
           win.webContents.send('license-status-changed', { isPremium: false });
           win.webContents.send('trial-ended', { choice: 'byok' });
@@ -1383,7 +1514,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Wipe only Pro profile data (resume + JD + company dossiers) without clearing
   // trial token or natively key. Called automatically when trial expires so that
   // profile intelligence data can't linger in SQLite after the trial window closes.
-  safeHandle("trial:wipe-profile-data", async () => {
+  safeHandle('trial:wipe-profile-data', async () => {
     try {
       // 1. Disable knowledge mode + wipe orchestrator in-memory caches
       try {
@@ -1394,7 +1525,9 @@ export function initializeIpcHandlers(appState: AppState): void {
           orchestrator.deleteDocumentsByType(DocType.RESUME);
           orchestrator.deleteDocumentsByType(DocType.JD);
         }
-      } catch { /* ignore — orchestrator may not be initialised */ }
+      } catch {
+        /* ignore — orchestrator may not be initialised */
+      }
 
       // 2. Wipe Pro-specific SQLite tables
       //    NOT wiped: meetings, transcripts, audio chunks (user's own recordings)
@@ -1420,7 +1553,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Custom Provider Handlers
-  safeHandle("get-custom-providers", async () => {
+  safeHandle('get-custom-providers', async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
@@ -1430,17 +1563,18 @@ export function initializeIpcHandlers(appState: AppState): void {
       const legacyProviders = cm.getCustomProviders() || [];
       return [...curlProviders, ...legacyProviders];
     } catch (error: any) {
-      console.error("Error getting custom providers:", error);
+      console.error('Error getting custom providers:', error);
       return [];
     }
   });
 
-  safeHandle("save-custom-provider", async (_, provider: unknown) => {
+  safeHandle('save-custom-provider', async (_, provider: unknown) => {
     try {
       // SECURITY FIX (P1-2): Validate provider payload shape before persisting.
       // Prevents malformed/malicious renderer data from polluting CredentialsManager.
       if (
-        typeof provider !== 'object' || provider === null ||
+        typeof provider !== 'object' ||
+        provider === null ||
         typeof (provider as any).id !== 'string' ||
         typeof (provider as any).name !== 'string' ||
         typeof (provider as any).curlCommand !== 'string'
@@ -1454,7 +1588,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       // We do NOT require the string to start with 'curl' — curlCommand is a template field,
       // not necessarily a raw CLI string, and over-constraining it would break valid providers.
       if (!curlCmd.includes('{{TEXT}}')) {
-        return { success: false, error: 'curlCommand must contain {{TEXT}} placeholder for the prompt' };
+        return {
+          success: false,
+          error: 'curlCommand must contain {{TEXT}} placeholder for the prompt',
+        };
       }
 
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -1462,12 +1599,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       CredentialsManager.getInstance().saveCurlProvider(provider);
       return { success: true };
     } catch (error: any) {
-      console.error("Error saving custom provider:", error);
+      console.error('Error saving custom provider:', error);
       return { success: false, error: error.message };
     }
   });
 
-  safeHandle("delete-custom-provider", async (_, id: string) => {
+  safeHandle('delete-custom-provider', async (_, id: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       // Try deleting from both storages to be safe
@@ -1475,24 +1612,23 @@ export function initializeIpcHandlers(appState: AppState): void {
       CredentialsManager.getInstance().deleteCustomProvider(id);
       return { success: true };
     } catch (error: any) {
-      console.error("Error deleting custom provider:", error);
+      console.error('Error deleting custom provider:', error);
       return { success: false, error: error.message };
     }
   });
 
-  safeHandle("switch-to-custom-provider", async (_, providerId: string) => {
+  safeHandle('switch-to-custom-provider', async (_, providerId: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
       // BUG-05 fix: providers may be in either the curl or legacy custom store —
       // merge both when looking up by id so neither store is silently ignored.
-      const provider = [
-        ...(cm.getCurlProviders() || []),
-        ...(cm.getCustomProviders() || [])
-      ].find((p: any) => p.id === providerId);
+      const provider = [...(cm.getCurlProviders() || []), ...(cm.getCustomProviders() || [])].find(
+        (p: any) => p.id === providerId,
+      );
 
       if (!provider) {
-        throw new Error("Provider not found");
+        throw new Error('Provider not found');
       }
 
       const llmHelper = appState.processingHelper.getLLMHelper();
@@ -1503,52 +1639,53 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       return { success: true };
     } catch (error: any) {
-      console.error("Error switching to custom provider:", error);
+      console.error('Error switching to custom provider:', error);
       return { success: false, error: error.message };
     }
   });
 
-
   // cURL Provider Handlers
-  safeHandle("get-curl-providers", async () => {
+  safeHandle('get-curl-providers', async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       return CredentialsManager.getInstance().getCurlProviders();
     } catch (error: any) {
-      console.error("Error getting curl providers:", error);
+      console.error('Error getting curl providers:', error);
       return [];
     }
   });
 
-  safeHandle("save-curl-provider", async (_, provider: any) => {
+  safeHandle('save-curl-provider', async (_, provider: any) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().saveCurlProvider(provider);
       return { success: true };
     } catch (error: any) {
-      console.error("Error saving curl provider:", error);
+      console.error('Error saving curl provider:', error);
       return { success: false, error: error.message };
     }
   });
 
-  safeHandle("delete-curl-provider", async (_, id: string) => {
+  safeHandle('delete-curl-provider', async (_, id: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().deleteCurlProvider(id);
       return { success: true };
     } catch (error: any) {
-      console.error("Error deleting curl provider:", error);
+      console.error('Error deleting curl provider:', error);
       return { success: false, error: error.message };
     }
   });
 
-  safeHandle("switch-to-curl-provider", async (_, providerId: string) => {
+  safeHandle('switch-to-curl-provider', async (_, providerId: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
-      const provider = CredentialsManager.getInstance().getCurlProviders().find((p: any) => p.id === providerId);
+      const provider = CredentialsManager.getInstance()
+        .getCurlProviders()
+        .find((p: any) => p.id === providerId);
 
       if (!provider) {
-        throw new Error("Provider not found");
+        throw new Error('Provider not found');
       }
 
       const llmHelper = appState.processingHelper.getLLMHelper();
@@ -1559,13 +1696,13 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       return { success: true };
     } catch (error: any) {
-      console.error("Error switching to curl provider:", error);
+      console.error('Error switching to curl provider:', error);
       return { success: false, error: error.message };
     }
   });
 
   // Get stored API keys (masked for UI display)
-  safeHandle("get-stored-credentials", async () => {
+  safeHandle('get-stored-credentials', async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const creds = CredentialsManager.getInstance().getAllCredentials();
@@ -1611,7 +1748,33 @@ export function initializeIpcHandlers(appState: AppState): void {
       };
     } catch (error: any) {
       // SECURITY FIX (P0): Error fallback returns masked keys, not raw strings
-      return { hasGeminiKey: false, hasGroqKey: false, hasOpenaiKey: false, hasClaudeKey: false, hasNativelyKey: false, googleServiceAccountPath: null, sttProvider: 'none', groqSttModel: 'whisper-large-v3-turbo', hasSttGroqKey: false, hasSttOpenaiKey: false, hasDeepgramKey: false, hasElevenLabsKey: false, hasAzureKey: false, azureRegion: 'eastus', hasIbmWatsonKey: false, ibmWatsonRegion: 'us-south', hasSonioxKey: false, hasTavilyKey: false, sttGroqKey: '', sttOpenaiKey: '', sttDeepgramKey: '', sttElevenLabsKey: '', sttAzureKey: '', sttIbmKey: '', sttSonioxKey: '' };
+      return {
+        hasGeminiKey: false,
+        hasGroqKey: false,
+        hasOpenaiKey: false,
+        hasClaudeKey: false,
+        hasNativelyKey: false,
+        googleServiceAccountPath: null,
+        sttProvider: 'none',
+        groqSttModel: 'whisper-large-v3-turbo',
+        hasSttGroqKey: false,
+        hasSttOpenaiKey: false,
+        hasDeepgramKey: false,
+        hasElevenLabsKey: false,
+        hasAzureKey: false,
+        azureRegion: 'eastus',
+        hasIbmWatsonKey: false,
+        ibmWatsonRegion: 'us-south',
+        hasSonioxKey: false,
+        hasTavilyKey: false,
+        sttGroqKey: '',
+        sttOpenaiKey: '',
+        sttDeepgramKey: '',
+        sttElevenLabsKey: '',
+        sttAzureKey: '',
+        sttIbmKey: '',
+        sttSonioxKey: '',
+      };
     }
   });
 
@@ -1619,67 +1782,90 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Dynamic Model Discovery Handlers
   // ==========================================
 
-  safeHandle("fetch-provider-models", async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude', apiKey: string) => {
-    try {
-      // Fall back to stored key if no key was explicitly provided
-      let key = apiKey?.trim();
-      if (!key) {
+  safeHandle(
+    'fetch-provider-models',
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude', apiKey: string) => {
+      try {
+        // Fall back to stored key if no key was explicitly provided
+        let key = apiKey?.trim();
+        if (!key) {
+          const { CredentialsManager } = require('./services/CredentialsManager');
+          const cm = CredentialsManager.getInstance();
+          if (provider === 'gemini') key = cm.getGeminiApiKey();
+          else if (provider === 'groq') key = cm.getGroqApiKey();
+          else if (provider === 'openai') key = cm.getOpenaiApiKey();
+          else if (provider === 'claude') key = cm.getClaudeApiKey();
+        }
+
+        if (!key) {
+          return { success: false, error: 'No API key available. Please save a key first.' };
+        }
+
+        const { fetchProviderModels } = require('./utils/modelFetcher');
+        const models = await fetchProviderModels(provider, key);
+        return { success: true, models };
+      } catch (error: any) {
+        console.error(`[IPC] Failed to fetch ${provider} models:`, error);
+        const msg =
+          error?.response?.data?.error?.message || error.message || 'Failed to fetch models';
+        return { success: false, error: msg };
+      }
+    },
+  );
+
+  safeHandle(
+    'set-provider-preferred-model',
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude', modelId: string) => {
+      try {
         const { CredentialsManager } = require('./services/CredentialsManager');
-        const cm = CredentialsManager.getInstance();
-        if (provider === 'gemini') key = cm.getGeminiApiKey();
-        else if (provider === 'groq') key = cm.getGroqApiKey();
-        else if (provider === 'openai') key = cm.getOpenaiApiKey();
-        else if (provider === 'claude') key = cm.getClaudeApiKey();
+        CredentialsManager.getInstance().setPreferredModel(provider, modelId);
+      } catch (error: any) {
+        console.error(`[IPC] Failed to set preferred model for ${provider}:`, error);
       }
-
-      if (!key) {
-        return { success: false, error: 'No API key available. Please save a key first.' };
-      }
-
-      const { fetchProviderModels } = require('./utils/modelFetcher');
-      const models = await fetchProviderModels(provider, key);
-      return { success: true, models };
-    } catch (error: any) {
-      console.error(`[IPC] Failed to fetch ${provider} models:`, error);
-      const msg = error?.response?.data?.error?.message || error.message || 'Failed to fetch models';
-      return { success: false, error: msg };
-    }
-  });
-
-  safeHandle("set-provider-preferred-model", async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude', modelId: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setPreferredModel(provider, modelId);
-    } catch (error: any) {
-      console.error(`[IPC] Failed to set preferred model for ${provider}:`, error);
-    }
-  });
+    },
+  );
 
   // ==========================================
   // STT Provider Management Handlers
   // ==========================================
 
-  safeHandle("set-stt-provider", async (_, provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively') => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setSttProvider(provider);
+  safeHandle(
+    'set-stt-provider',
+    async (
+      _,
+      provider:
+        | 'none'
+        | 'google'
+        | 'groq'
+        | 'openai'
+        | 'deepgram'
+        | 'elevenlabs'
+        | 'azure'
+        | 'ibmwatson'
+        | 'soniox'
+        | 'natively',
+    ) => {
+      try {
+        const { CredentialsManager } = require('./services/CredentialsManager');
+        CredentialsManager.getInstance().setSttProvider(provider);
 
-      // Reconfigure the audio pipeline to use the new STT provider
-      await appState.reconfigureSttProvider();
+        // Reconfigure the audio pipeline to use the new STT provider
+        await appState.reconfigureSttProvider();
 
-      // Notify all windows so the settings UI reflects the change immediately
-      BrowserWindow.getAllWindows().forEach(win => {
-        if (!win.isDestroyed()) win.webContents.send('credentials-changed');
-      });
+        // Notify all windows so the settings UI reflects the change immediately
+        BrowserWindow.getAllWindows().forEach((win) => {
+          if (!win.isDestroyed()) win.webContents.send('credentials-changed');
+        });
 
-      return { success: true };
-    } catch (error: any) {
-      console.error("Error setting STT provider:", error);
-      return { success: false, error: error.message };
-    }
-  });
+        return { success: true };
+      } catch (error: any) {
+        console.error('Error setting STT provider:', error);
+        return { success: false, error: error.message };
+      }
+    },
+  );
 
-  safeHandle("get-stt-provider", async () => {
+  safeHandle('get-stt-provider', async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       return CredentialsManager.getInstance().getSttProvider();
@@ -1688,66 +1874,66 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("set-groq-stt-api-key", async (_, apiKey: string) => {
+  safeHandle('set-groq-stt-api-key', async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setGroqSttApiKey(apiKey);
-      BrowserWindow.getAllWindows().forEach(win => {
+      BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) win.webContents.send('credentials-changed');
       });
       return { success: true };
     } catch (error: any) {
-      console.error("Error saving Groq STT API key:", error);
+      console.error('Error saving Groq STT API key:', error);
       return { success: false, error: error.message };
     }
   });
 
-  safeHandle("set-openai-stt-api-key", async (_, apiKey: string) => {
+  safeHandle('set-openai-stt-api-key', async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setOpenAiSttApiKey(apiKey);
-      BrowserWindow.getAllWindows().forEach(win => {
+      BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) win.webContents.send('credentials-changed');
       });
       return { success: true };
     } catch (error: any) {
-      console.error("Error saving OpenAI STT API key:", error);
+      console.error('Error saving OpenAI STT API key:', error);
       return { success: false, error: error.message };
     }
   });
 
-  safeHandle("set-openai-stt-base-url", async (_, url: string) => {
+  safeHandle('set-openai-stt-base-url', async (_, url: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setOpenAiSttBaseUrl(url);
       // Reconfigure the active pipeline so the new endpoint is used immediately,
       // matching the behavior of azure/ibmwatson region setters.
       await appState.reconfigureSttProvider();
-      BrowserWindow.getAllWindows().forEach(win => {
+      BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) win.webContents.send('credentials-changed');
       });
       return { success: true };
     } catch (error: any) {
-      console.error("Error saving OpenAI STT base URL:", error);
+      console.error('Error saving OpenAI STT base URL:', error);
       return { success: false, error: error.message };
     }
   });
 
-  safeHandle("set-deepgram-api-key", async (_, apiKey: string) => {
+  safeHandle('set-deepgram-api-key', async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setDeepgramApiKey(apiKey);
-      BrowserWindow.getAllWindows().forEach(win => {
+      BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) win.webContents.send('credentials-changed');
       });
       return { success: true };
     } catch (error: any) {
-      console.error("Error saving Deepgram API key:", error);
+      console.error('Error saving Deepgram API key:', error);
       return { success: false, error: error.message };
     }
   });
 
-  safeHandle("set-groq-stt-model", async (_, model: string) => {
+  safeHandle('set-groq-stt-model', async (_, model: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setGroqSttModel(model);
@@ -1757,37 +1943,37 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       return { success: true };
     } catch (error: any) {
-      console.error("Error setting Groq STT model:", error);
+      console.error('Error setting Groq STT model:', error);
       return { success: false, error: error.message };
     }
   });
 
-  safeHandle("set-elevenlabs-api-key", async (_, apiKey: string) => {
+  safeHandle('set-elevenlabs-api-key', async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setElevenLabsApiKey(apiKey);
-      BrowserWindow.getAllWindows().forEach(win => {
+      BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) win.webContents.send('credentials-changed');
       });
       return { success: true };
     } catch (error: any) {
-      console.error("Error saving ElevenLabs API key:", error);
+      console.error('Error saving ElevenLabs API key:', error);
       return { success: false, error: error.message };
     }
   });
 
-  safeHandle("set-azure-api-key", async (_, apiKey: string) => {
+  safeHandle('set-azure-api-key', async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setAzureApiKey(apiKey);
       return { success: true };
     } catch (error: any) {
-      console.error("Error saving Azure API key:", error);
+      console.error('Error saving Azure API key:', error);
       return { success: false, error: error.message };
     }
   });
 
-  safeHandle("set-azure-region", async (_, region: string) => {
+  safeHandle('set-azure-region', async (_, region: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setAzureRegion(region);
@@ -1797,37 +1983,37 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       return { success: true };
     } catch (error: any) {
-      console.error("Error setting Azure region:", error);
+      console.error('Error setting Azure region:', error);
       return { success: false, error: error.message };
     }
   });
 
-  safeHandle("set-ibmwatson-api-key", async (_, apiKey: string) => {
+  safeHandle('set-ibmwatson-api-key', async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setIbmWatsonApiKey(apiKey);
       return { success: true };
     } catch (error: any) {
-      console.error("Error saving IBM Watson API key:", error);
+      console.error('Error saving IBM Watson API key:', error);
       return { success: false, error: error.message };
     }
   });
 
-  safeHandle("set-soniox-api-key", async (_, apiKey: string) => {
+  safeHandle('set-soniox-api-key', async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setSonioxApiKey(apiKey);
-      BrowserWindow.getAllWindows().forEach(win => {
+      BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) win.webContents.send('credentials-changed');
       });
       return { success: true };
     } catch (error: any) {
-      console.error("Error saving Soniox API key:", error);
+      console.error('Error saving Soniox API key:', error);
       return { success: false, error: error.message };
     }
   });
 
-  safeHandle("set-ibmwatson-region", async (_, region: string) => {
+  safeHandle('set-ibmwatson-region', async (_, region: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setIbmWatsonRegion(region);
@@ -1837,7 +2023,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       return { success: true };
     } catch (error: any) {
-      console.error("Error setting IBM Watson region:", error);
+      console.error('Error setting IBM Watson region:', error);
       return { success: false, error: error.message };
     }
   });
@@ -1848,221 +2034,248 @@ export function initializeIpcHandlers(appState: AppState): void {
     return msg.replace(/:\s*[a-zA-Z0-9*]+\*+[a-zA-Z0-9*]+\.?$/g, '').trim();
   };
 
-  safeHandle("test-stt-connection", async (_, provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox', apiKey: string, region?: string) => {
-    console.log(`[IPC] Received test - stt - connection request for provider: ${provider} `);
-    try {
-      if (provider === 'deepgram') {
-        const WebSocket = require('ws');
-        const token = apiKey.trim();
-        return await new Promise<{ success: boolean; error?: string }>((resolve) => {
-          const url = 'wss://api.deepgram.com/v1/listen?model=nova-2&encoding=linear16&sample_rate=16000&channels=1';
-          const ws = new WebSocket(url, {
-            headers: { Authorization: `Token ${token}` },
-          });
+  safeHandle(
+    'test-stt-connection',
+    async (
+      _,
+      provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox',
+      apiKey: string,
+      region?: string,
+    ) => {
+      console.log(`[IPC] Received test - stt - connection request for provider: ${provider} `);
+      try {
+        if (provider === 'deepgram') {
+          const WebSocket = require('ws');
+          const token = apiKey.trim();
+          return await new Promise<{ success: boolean; error?: string }>((resolve) => {
+            const url =
+              'wss://api.deepgram.com/v1/listen?model=nova-2&encoding=linear16&sample_rate=16000&channels=1';
+            const ws = new WebSocket(url, {
+              headers: { Authorization: `Token ${token}` },
+            });
 
-          const timeout = setTimeout(() => {
-            ws.close();
-            console.error('[IPC] Deepgram test failed: Connection timed out');
-            resolve({ success: false, error: 'Connection timed out' });
-          }, 15000);
+            const timeout = setTimeout(() => {
+              ws.close();
+              console.error('[IPC] Deepgram test failed: Connection timed out');
+              resolve({ success: false, error: 'Connection timed out' });
+            }, 15000);
 
-          ws.on('open', () => {
-            clearTimeout(timeout);
-            try { ws.send(JSON.stringify({ type: 'CloseStream' })); } catch { }
-            ws.close();
-            resolve({ success: true });
-          });
+            ws.on('open', () => {
+              clearTimeout(timeout);
+              try {
+                ws.send(JSON.stringify({ type: 'CloseStream' }));
+              } catch {}
+              ws.close();
+              resolve({ success: true });
+            });
 
-          ws.on('unexpected-response', (request: any, response: any) => {
-            clearTimeout(timeout);
-            const status = response.statusCode;
-            let body = '';
-            response.on('data', (chunk: Buffer) => { body += chunk.toString(); });
-            response.on('end', () => {
-              const errMsg = `Unexpected server response: ${status} - ${body}`;
-              console.error(`[IPC] Deepgram test failed: ${errMsg}`);
-              resolve({ success: false, error: errMsg });
+            ws.on('unexpected-response', (request: any, response: any) => {
+              clearTimeout(timeout);
+              const status = response.statusCode;
+              let body = '';
+              response.on('data', (chunk: Buffer) => {
+                body += chunk.toString();
+              });
+              response.on('end', () => {
+                const errMsg = `Unexpected server response: ${status} - ${body}`;
+                console.error(`[IPC] Deepgram test failed: ${errMsg}`);
+                resolve({ success: false, error: errMsg });
+              });
+            });
+
+            ws.on('error', (err: any) => {
+              clearTimeout(timeout);
+              console.error(`[IPC] Deepgram test error: ${err.message}`);
+              resolve({ success: false, error: err.message || 'Connection failed' });
             });
           });
-
-          ws.on('error', (err: any) => {
-            clearTimeout(timeout);
-            console.error(`[IPC] Deepgram test error: ${err.message}`);
-            resolve({ success: false, error: err.message || 'Connection failed' });
-          });
-        });
-      }
-
-      if (provider === 'soniox') {
-        // Test Soniox via WebSocket connection.
-        // With a valid key, Soniox accepts the config and then silently waits for audio —
-        // it never sends a response message. With an invalid key it immediately sends an
-        // error message and closes. So the strategy is:
-        //   • If we receive an error message → fail
-        //   • If the connection errors at the WS level → fail
-        //   • If 2.5 s pass after sending the config with no error → success
-        const WebSocket = require('ws');
-        return await new Promise<{ success: boolean; error?: string }>((resolve) => {
-          let resolved = false;
-          const done = (result: { success: boolean; error?: string }) => {
-            if (resolved) return;
-            resolved = true;
-            try { ws.close(); } catch { }
-            resolve(result);
-          };
-
-          const ws = new WebSocket('wss://stt-rt.soniox.com/transcribe-websocket');
-
-          // Hard connect timeout — server unreachable
-          const connectTimeout = setTimeout(() => {
-            done({ success: false, error: 'Connection timed out' });
-          }, 10000);
-
-          ws.on('open', () => {
-            clearTimeout(connectTimeout);
-            ws.send(JSON.stringify({
-              api_key: apiKey,
-              model: 'stt-rt-v4',
-              audio_format: 'pcm_s16le',
-              sample_rate: 16000,
-              num_channels: 1,
-            }));
-            // Give Soniox 2.5 s to reject the key; silence means the key is valid
-            setTimeout(() => done({ success: true }), 2500);
-          });
-
-          ws.on('message', (msg: any) => {
-            try {
-              const res = JSON.parse(msg.toString());
-              if (res.error_code) {
-                done({ success: false, error: `${res.error_code}: ${res.error_message}` });
-              }
-              // Non-error message is unexpected but treat as success
-            } catch {
-              // Unparseable message — treat as success
-            }
-          });
-
-          ws.on('error', (err: any) => {
-            clearTimeout(connectTimeout);
-            done({ success: false, error: err.message || 'Connection failed' });
-          });
-
-          ws.on('close', (code: number) => {
-            // Abnormal close before we resolved means the server rejected us
-            if (!resolved && code !== 1000) {
-              done({ success: false, error: `Server closed connection (code ${code})` });
-            }
-          });
-        });
-      }
-
-      const axios = require('axios');
-      const FormData = require('form-data');
-
-      // Generate a tiny silent WAV (0.5s of silence at 16kHz mono 16-bit)
-      const numSamples = 8000;
-      const pcmData = Buffer.alloc(numSamples * 2);
-      const wavHeader = Buffer.alloc(44);
-      wavHeader.write('RIFF', 0);
-      wavHeader.writeUInt32LE(36 + pcmData.length, 4);
-      wavHeader.write('WAVE', 8);
-      wavHeader.write('fmt ', 12);
-      wavHeader.writeUInt32LE(16, 16);
-      wavHeader.writeUInt16LE(1, 20);
-      wavHeader.writeUInt16LE(1, 22);
-      wavHeader.writeUInt32LE(16000, 24);
-      wavHeader.writeUInt32LE(32000, 28);
-      wavHeader.writeUInt16LE(2, 32);
-      wavHeader.writeUInt16LE(16, 34);
-      wavHeader.write('data', 36);
-      wavHeader.writeUInt32LE(pcmData.length, 40);
-      const testWav = Buffer.concat([wavHeader, pcmData]);
-
-      if (provider === 'elevenlabs') {
-        // ElevenLabs: Use /v1/voices to validate the API key (minimal scope required).
-        // Scoped keys may lack speech_to_text or user_read but still be usable once permissions are added.
-        try {
-          await axios.get('https://api.elevenlabs.io/v1/voices', {
-            headers: { 'xi-api-key': apiKey },
-            timeout: 10000,
-          });
-        } catch (elErr: any) {
-          const elStatus = elErr?.response?.data?.detail?.status;
-          // If the error is "invalid_api_key", the key itself is wrong — fail.
-          // Any other error (missing permission, etc.) means the key IS valid, just possibly scoped.
-          if (elStatus === 'invalid_api_key') {
-            throw elErr;
-          }
-          // Key is valid but scoped — pass with a warning
-          console.log('[IPC] ElevenLabs key is valid but may have restricted scopes. Saving key.');
         }
-      } else if (provider === 'azure') {
-        // Azure: raw binary with subscription key
-        const azureRegion = region || 'eastus';
-        await axios.post(
-          `https://${azureRegion}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=en-US`,
-          testWav,
-          {
-            headers: { 'Ocp-Apim-Subscription-Key': apiKey, 'Content-Type': 'audio/wav' },
-            timeout: 15000,
+
+        if (provider === 'soniox') {
+          // Test Soniox via WebSocket connection.
+          // With a valid key, Soniox accepts the config and then silently waits for audio —
+          // it never sends a response message. With an invalid key it immediately sends an
+          // error message and closes. So the strategy is:
+          //   • If we receive an error message → fail
+          //   • If the connection errors at the WS level → fail
+          //   • If 2.5 s pass after sending the config with no error → success
+          const WebSocket = require('ws');
+          return await new Promise<{ success: boolean; error?: string }>((resolve) => {
+            let resolved = false;
+            const done = (result: { success: boolean; error?: string }) => {
+              if (resolved) return;
+              resolved = true;
+              try {
+                ws.close();
+              } catch {}
+              resolve(result);
+            };
+
+            const ws = new WebSocket('wss://stt-rt.soniox.com/transcribe-websocket');
+
+            // Hard connect timeout — server unreachable
+            const connectTimeout = setTimeout(() => {
+              done({ success: false, error: 'Connection timed out' });
+            }, 10000);
+
+            ws.on('open', () => {
+              clearTimeout(connectTimeout);
+              ws.send(
+                JSON.stringify({
+                  api_key: apiKey,
+                  model: 'stt-rt-v4',
+                  audio_format: 'pcm_s16le',
+                  sample_rate: 16000,
+                  num_channels: 1,
+                }),
+              );
+              // Give Soniox 2.5 s to reject the key; silence means the key is valid
+              setTimeout(() => done({ success: true }), 2500);
+            });
+
+            ws.on('message', (msg: any) => {
+              try {
+                const res = JSON.parse(msg.toString());
+                if (res.error_code) {
+                  done({ success: false, error: `${res.error_code}: ${res.error_message}` });
+                }
+                // Non-error message is unexpected but treat as success
+              } catch {
+                // Unparseable message — treat as success
+              }
+            });
+
+            ws.on('error', (err: any) => {
+              clearTimeout(connectTimeout);
+              done({ success: false, error: err.message || 'Connection failed' });
+            });
+
+            ws.on('close', (code: number) => {
+              // Abnormal close before we resolved means the server rejected us
+              if (!resolved && code !== 1000) {
+                done({ success: false, error: `Server closed connection (code ${code})` });
+              }
+            });
+          });
+        }
+
+        const axios = require('axios');
+        const FormData = require('form-data');
+
+        // Generate a tiny silent WAV (0.5s of silence at 16kHz mono 16-bit)
+        const numSamples = 8000;
+        const pcmData = Buffer.alloc(numSamples * 2);
+        const wavHeader = Buffer.alloc(44);
+        wavHeader.write('RIFF', 0);
+        wavHeader.writeUInt32LE(36 + pcmData.length, 4);
+        wavHeader.write('WAVE', 8);
+        wavHeader.write('fmt ', 12);
+        wavHeader.writeUInt32LE(16, 16);
+        wavHeader.writeUInt16LE(1, 20);
+        wavHeader.writeUInt16LE(1, 22);
+        wavHeader.writeUInt32LE(16000, 24);
+        wavHeader.writeUInt32LE(32000, 28);
+        wavHeader.writeUInt16LE(2, 32);
+        wavHeader.writeUInt16LE(16, 34);
+        wavHeader.write('data', 36);
+        wavHeader.writeUInt32LE(pcmData.length, 40);
+        const testWav = Buffer.concat([wavHeader, pcmData]);
+
+        if (provider === 'elevenlabs') {
+          // ElevenLabs: Use /v1/voices to validate the API key (minimal scope required).
+          // Scoped keys may lack speech_to_text or user_read but still be usable once permissions are added.
+          try {
+            await axios.get('https://api.elevenlabs.io/v1/voices', {
+              headers: { 'xi-api-key': apiKey },
+              timeout: 10000,
+            });
+          } catch (elErr: any) {
+            const elStatus = elErr?.response?.data?.detail?.status;
+            // If the error is "invalid_api_key", the key itself is wrong — fail.
+            // Any other error (missing permission, etc.) means the key IS valid, just possibly scoped.
+            if (elStatus === 'invalid_api_key') {
+              throw elErr;
+            }
+            // Key is valid but scoped — pass with a warning
+            console.log(
+              '[IPC] ElevenLabs key is valid but may have restricted scopes. Saving key.',
+            );
           }
-        );
-      } else if (provider === 'ibmwatson') {
-        // IBM Watson: raw binary with Basic auth
-        const ibmRegion = region || 'us-south';
-        await axios.post(
-          `https://api.${ibmRegion}.speech-to-text.watson.cloud.ibm.com/v1/recognize`,
-          testWav,
-          {
+        } else if (provider === 'azure') {
+          // Azure: raw binary with subscription key
+          const azureRegion = region || 'eastus';
+          await axios.post(
+            `https://${azureRegion}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=en-US`,
+            testWav,
+            {
+              headers: { 'Ocp-Apim-Subscription-Key': apiKey, 'Content-Type': 'audio/wav' },
+              timeout: 15000,
+            },
+          );
+        } else if (provider === 'ibmwatson') {
+          // IBM Watson: raw binary with Basic auth
+          const ibmRegion = region || 'us-south';
+          await axios.post(
+            `https://api.${ibmRegion}.speech-to-text.watson.cloud.ibm.com/v1/recognize`,
+            testWav,
+            {
+              headers: {
+                Authorization: `Basic ${Buffer.from(`apikey:${apiKey}`).toString('base64')}`,
+                'Content-Type': 'audio/wav',
+              },
+              timeout: 15000,
+            },
+          );
+        } else {
+          // Groq / OpenAI: multipart FormData
+          let openAiEndpoint = 'https://api.openai.com/v1/audio/transcriptions';
+          if (provider === 'openai') {
+            // If a custom OpenAI-compatible base URL is configured, test against it.
+            const { CredentialsManager } = require('./services/CredentialsManager');
+            const customBase = (
+              CredentialsManager.getInstance().getOpenAiSttBaseUrl() || ''
+            ).trim();
+            if (customBase) {
+              const trimmed = customBase.replace(/\/+$/, '');
+              openAiEndpoint = /\/v\d+$/.test(trimmed)
+                ? `${trimmed}/audio/transcriptions`
+                : `${trimmed}/v1/audio/transcriptions`;
+            }
+          }
+          const endpoint =
+            provider === 'groq'
+              ? 'https://api.groq.com/openai/v1/audio/transcriptions'
+              : openAiEndpoint;
+          const model = provider === 'groq' ? 'whisper-large-v3-turbo' : 'whisper-1';
+
+          const form = new FormData();
+          form.append('file', testWav, { filename: 'test.wav', contentType: 'audio/wav' });
+          form.append('model', model);
+
+          await axios.post(endpoint, form, {
             headers: {
-              Authorization: `Basic ${Buffer.from(`apikey:${apiKey}`).toString('base64')}`,
-              'Content-Type': 'audio/wav',
+              Authorization: `Bearer ${apiKey}`,
+              ...form.getHeaders(),
             },
             timeout: 15000,
-          }
-        );
-      } else {
-        // Groq / OpenAI: multipart FormData
-        let openAiEndpoint = 'https://api.openai.com/v1/audio/transcriptions';
-        if (provider === 'openai') {
-          // If a custom OpenAI-compatible base URL is configured, test against it.
-          const { CredentialsManager } = require('./services/CredentialsManager');
-          const customBase = (CredentialsManager.getInstance().getOpenAiSttBaseUrl() || '').trim();
-          if (customBase) {
-            const trimmed = customBase.replace(/\/+$/, '');
-            openAiEndpoint = /\/v\d+$/.test(trimmed)
-              ? `${trimmed}/audio/transcriptions`
-              : `${trimmed}/v1/audio/transcriptions`;
-          }
+          });
         }
-        const endpoint = provider === 'groq'
-          ? 'https://api.groq.com/openai/v1/audio/transcriptions'
-          : openAiEndpoint;
-        const model = provider === 'groq' ? 'whisper-large-v3-turbo' : 'whisper-1';
 
-        const form = new FormData();
-        form.append('file', testWav, { filename: 'test.wav', contentType: 'audio/wav' });
-        form.append('model', model);
-
-        await axios.post(endpoint, form, {
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            ...form.getHeaders(),
-          },
-          timeout: 15000,
-        });
+        return { success: true };
+      } catch (error: any) {
+        const respData = error?.response?.data;
+        const rawMsg =
+          respData?.error?.message ||
+          respData?.detail?.message ||
+          respData?.message ||
+          error.message ||
+          'Connection failed';
+        const msg = sanitizeErrorMessage(rawMsg);
+        console.error('STT connection test failed:', msg);
+        return { success: false, error: msg };
       }
-
-      return { success: true };
-    } catch (error: any) {
-      const respData = error?.response?.data;
-      const rawMsg = respData?.error?.message || respData?.detail?.message || respData?.message || error.message || 'Connection failed';
-      const msg = sanitizeErrorMessage(rawMsg);
-      console.error("STT connection test failed:", msg);
-      return { success: false, error: msg };
-    }
-  });
+    },
+  );
 
   // ==========================================
   // Local Whisper STT Handlers
@@ -2070,7 +2283,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   const activeWhisperDownloads = new Set<string>();
 
-  safeHandle("local-whisper-get-models", async () => {
+  safeHandle('local-whisper-get-models', async () => {
     try {
       const { getAvailableModels } = require('./audio/whisper/modelManager');
       const models = getAvailableModels();
@@ -2082,7 +2295,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("local-whisper-set-model", async (_, modelId: string) => {
+  safeHandle('local-whisper-set-model', async (_, modelId: string) => {
     try {
       SettingsManager.getInstance().set('localWhisperModel', modelId);
       return { success: true };
@@ -2094,7 +2307,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Per-channel model overrides (mic / system audio). When enabled, the two
   // STT instances pick their own model via these slots. When disabled, both
   // fall back to localWhisperModel (the existing global setting).
-  safeHandle("local-whisper-get-channel-config", async () => {
+  safeHandle('local-whisper-get-channel-config', async () => {
     const sm = SettingsManager.getInstance();
     return {
       enabled: !!sm.get('localWhisperPerChannelEnabled'),
@@ -2104,19 +2317,23 @@ export function initializeIpcHandlers(appState: AppState): void {
     };
   });
 
-  safeHandle("local-whisper-set-channel-config", async (_, cfg: { enabled?: boolean; micModelId?: string; systemModelId?: string }) => {
-    try {
-      const sm = SettingsManager.getInstance();
-      if (typeof cfg?.enabled === 'boolean') sm.set('localWhisperPerChannelEnabled', cfg.enabled);
-      if (typeof cfg?.micModelId === 'string') sm.set('localWhisperModelMic', cfg.micModelId);
-      if (typeof cfg?.systemModelId === 'string') sm.set('localWhisperModelSystem', cfg.systemModelId);
-      return { success: true };
-    } catch (e: any) {
-      return { success: false, error: e.message };
-    }
-  });
+  safeHandle(
+    'local-whisper-set-channel-config',
+    async (_, cfg: { enabled?: boolean; micModelId?: string; systemModelId?: string }) => {
+      try {
+        const sm = SettingsManager.getInstance();
+        if (typeof cfg?.enabled === 'boolean') sm.set('localWhisperPerChannelEnabled', cfg.enabled);
+        if (typeof cfg?.micModelId === 'string') sm.set('localWhisperModelMic', cfg.micModelId);
+        if (typeof cfg?.systemModelId === 'string')
+          sm.set('localWhisperModelSystem', cfg.systemModelId);
+        return { success: true };
+      } catch (e: any) {
+        return { success: false, error: e.message };
+      }
+    },
+  );
 
-  safeHandle("local-whisper-delete-model", async (_, modelId: string) => {
+  safeHandle('local-whisper-delete-model', async (_, modelId: string) => {
     try {
       const { deleteModel } = require('./audio/whisper/modelManager');
       deleteModel(modelId);
@@ -2126,7 +2343,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("local-whisper-start-download", async (event, modelId: string) => {
+  safeHandle('local-whisper-start-download', async (event, modelId: string) => {
     if (activeWhisperDownloads.has(modelId)) {
       return { success: false, error: 'already-downloading' };
     }
@@ -2166,13 +2383,16 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("local-whisper-preload", async (_, modelId: string) => {
+  safeHandle('local-whisper-preload', async (_, modelId: string) => {
     try {
       const { modelPreloader } = require('./audio/whisper/modelPreloader');
       const { isModelCached } = require('./audio/whisper/modelManager');
       const { resolveInferenceConfig } = require('./audio/whisper/inferenceConfig');
       const { SettingsManager } = require('./services/SettingsManager');
-      const id = modelId || SettingsManager.getInstance().get('localWhisperModel') || 'Xenova/whisper-tiny.en';
+      const id =
+        modelId ||
+        SettingsManager.getInstance().get('localWhisperModel') ||
+        'Xenova/whisper-tiny.en';
       // Pass active dtype so the cache check verifies the SPECIFIC ONNX
       // files (e.g. encoder_model.onnx for fp32) are present — not just
       // "directory non-empty". Otherwise a v2-cached _quantized.onnx-only
@@ -2189,95 +2409,119 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("local-whisper-get-hardware", () => {
+  safeHandle('local-whisper-get-hardware', () => {
     const { detectHardware } = require('./audio/whisper/hardwareDetect');
     return detectHardware();
   });
 
-  safeHandle("test-llm-connection", async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude', apiKey?: string) => {
-    console.log(`[IPC] Received test-llm-connection request for provider: ${provider}`);
-    try {
-      if (!apiKey || !apiKey.trim()) {
-        const { CredentialsManager } = require('./services/CredentialsManager');
-        const creds = CredentialsManager.getInstance();
-        if (provider === 'gemini') apiKey = creds.getGeminiApiKey();
-        else if (provider === 'groq') apiKey = creds.getGroqApiKey();
-        else if (provider === 'openai') apiKey = creds.getOpenaiApiKey();
-        else if (provider === 'claude') apiKey = creds.getClaudeApiKey();
+  safeHandle(
+    'test-llm-connection',
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude', apiKey?: string) => {
+      console.log(`[IPC] Received test-llm-connection request for provider: ${provider}`);
+      try {
+        if (!apiKey || !apiKey.trim()) {
+          const { CredentialsManager } = require('./services/CredentialsManager');
+          const creds = CredentialsManager.getInstance();
+          if (provider === 'gemini') apiKey = creds.getGeminiApiKey();
+          else if (provider === 'groq') apiKey = creds.getGroqApiKey();
+          else if (provider === 'openai') apiKey = creds.getOpenaiApiKey();
+          else if (provider === 'claude') apiKey = creds.getClaudeApiKey();
+        }
+
+        if (!apiKey || !apiKey.trim()) {
+          return { success: false, error: 'No API key provided' };
+        }
+
+        const axios = require('axios');
+        let response;
+
+        if (provider === 'gemini') {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent`;
+          response = await axios.post(
+            url,
+            {
+              contents: [{ parts: [{ text: 'Hello' }] }],
+            },
+            {
+              headers: { 'x-goog-api-key': apiKey },
+              timeout: 15000,
+            },
+          );
+        } else if (provider === 'groq') {
+          response = await axios.post(
+            'https://api.groq.com/openai/v1/chat/completions',
+            {
+              model: 'llama-3.3-70b-versatile',
+              messages: [{ role: 'user', content: 'Hello' }],
+            },
+            {
+              headers: { Authorization: `Bearer ${apiKey}` },
+              timeout: 15000,
+            },
+          );
+        } else if (provider === 'openai') {
+          response = await axios.post(
+            'https://api.openai.com/v1/chat/completions',
+            {
+              model: 'gpt-4o-mini',
+              messages: [{ role: 'user', content: 'Hello' }],
+            },
+            {
+              headers: { Authorization: `Bearer ${apiKey}` },
+              timeout: 15000,
+            },
+          );
+        } else if (provider === 'claude') {
+          response = await axios.post(
+            'https://api.anthropic.com/v1/messages',
+            {
+              model: 'claude-sonnet-4-6',
+              max_tokens: 10,
+              messages: [{ role: 'user', content: 'Hello' }],
+            },
+            {
+              headers: {
+                'x-api-key': apiKey,
+                'anthropic-version': '2023-06-01',
+                'content-type': 'application/json',
+              },
+              timeout: 15000,
+            },
+          );
+        }
+
+        if (response && (response.status === 200 || response.status === 201)) {
+          return { success: true };
+        } else {
+          return { success: false, error: 'Request failed with status ' + response?.status };
+        }
+      } catch (error: any) {
+        // CRITICAL: do NOT log the raw axios error — it includes the request config
+        // with the Authorization header (full API key) and is dumped verbatim by
+        // Node's util.inspect. Strip to a safe shape before logging.
+        const safeInfo = {
+          provider,
+          status: error?.response?.status,
+          statusText: error?.response?.statusText,
+          code: error?.code,
+          message: error?.message,
+          responseError: error?.response?.data?.error?.message || error?.response?.data?.message,
+        };
+        console.error('LLM connection test failed:', safeInfo);
+        const rawMsg =
+          error?.response?.data?.error?.message ||
+          error?.response?.data?.message ||
+          (error.response?.data?.error?.type
+            ? `${error.response.data.error.type}: ${error.response.data.error.message}`
+            : error.message) ||
+          'Connection failed';
+        const msg = sanitizeErrorMessage(rawMsg);
+        return { success: false, error: msg };
       }
+    },
+  );
 
-      if (!apiKey || !apiKey.trim()) {
-        return { success: false, error: 'No API key provided' };
-      }
-
-      const axios = require('axios');
-      let response;
-
-      if (provider === 'gemini') {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent`;
-        response = await axios.post(url, {
-          contents: [{ parts: [{ text: "Hello" }] }]
-        }, {
-          headers: { 'x-goog-api-key': apiKey },
-          timeout: 15000
-        });
-      } else if (provider === 'groq') {
-        response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
-          model: "llama-3.3-70b-versatile",
-          messages: [{ role: "user", content: "Hello" }]
-        }, {
-          headers: { Authorization: `Bearer ${apiKey}` },
-          timeout: 15000
-        });
-      } else if (provider === 'openai') {
-        response = await axios.post('https://api.openai.com/v1/chat/completions', {
-          model: "gpt-4o-mini",
-          messages: [{ role: "user", content: "Hello" }]
-        }, {
-          headers: { Authorization: `Bearer ${apiKey}` },
-          timeout: 15000
-        });
-      } else if (provider === 'claude') {
-        response = await axios.post('https://api.anthropic.com/v1/messages', {
-          model: "claude-sonnet-4-6",
-          max_tokens: 10,
-          messages: [{ role: "user", content: "Hello" }]
-        }, {
-          headers: {
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-            'content-type': 'application/json'
-          },
-          timeout: 15000
-        });
-      }
-
-      if (response && (response.status === 200 || response.status === 201)) {
-        return { success: true };
-      } else {
-        return { success: false, error: 'Request failed with status ' + response?.status };
-      }
-
-    } catch (error: any) {
-      // CRITICAL: do NOT log the raw axios error — it includes the request config
-      // with the Authorization header (full API key) and is dumped verbatim by
-      // Node's util.inspect. Strip to a safe shape before logging.
-      const safeInfo = {
-        provider,
-        status: error?.response?.status,
-        statusText: error?.response?.statusText,
-        code: error?.code,
-        message: error?.message,
-        responseError: error?.response?.data?.error?.message || error?.response?.data?.message,
-      };
-      console.error("LLM connection test failed:", safeInfo);
-      const rawMsg = error?.response?.data?.error?.message || error?.response?.data?.message || (error.response?.data?.error?.type ? `${error.response.data.error.type}: ${error.response.data.error.message}` : error.message) || 'Connection failed';
-      const msg = sanitizeErrorMessage(rawMsg);
-      return { success: false, error: msg };
-    }
-  });
-
-  safeHandle("get-groq-fast-text-mode", () => {
+  safeHandle('get-groq-fast-text-mode', () => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
       return { enabled: llmHelper.getGroqFastTextMode() };
@@ -2287,7 +2531,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Set Groq Fast Text Mode
-  safeHandle("set-groq-fast-text-mode", (_, enabled: boolean) => {
+  safeHandle('set-groq-fast-text-mode', (_, enabled: boolean) => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
       llmHelper.setGroqFastTextMode(enabled);
@@ -2296,7 +2540,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       SettingsManager.getInstance().set('groqFastTextMode', enabled);
 
       // Broadcast to all windows
-      BrowserWindow.getAllWindows().forEach(win => {
+      BrowserWindow.getAllWindows().forEach((win) => {
         win.webContents.send('groq-fast-text-changed', enabled);
       });
 
@@ -2306,7 +2550,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("get-codex-cli-config", () => {
+  safeHandle('get-codex-cli-config', () => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
       return llmHelper.getCodexCliConfig();
@@ -2315,7 +2559,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("set-codex-cli-config", (_, config: any) => {
+  safeHandle('set-codex-cli-config', (_, config: any) => {
     try {
       const normalized = CodexCliService.normalizeConfig(config || {});
       const sm = SettingsManager.getInstance();
@@ -2332,7 +2576,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("test-codex-cli", async (_, config?: any) => {
+  safeHandle('test-codex-cli', async (_, config?: any) => {
     try {
       const current = appState.processingHelper.getLLMHelper().getCodexCliConfig();
       const normalized = CodexCliService.normalizeConfig({ ...current, ...(config || {}) });
@@ -2340,7 +2584,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       // If auto-detection found a different working path, persist it so
       // subsequent chat calls don't re-ENOENT.
       if (result.success && result.resolvedPath && result.resolvedPath !== normalized.path) {
-        const updated = CodexCliService.normalizeConfig({ ...normalized, path: result.resolvedPath });
+        const updated = CodexCliService.normalizeConfig({
+          ...normalized,
+          path: result.resolvedPath,
+        });
         const sm = SettingsManager.getInstance();
         sm.set('codexCliPath', updated.path);
         appState.processingHelper.getLLMHelper().setCodexCliConfig(updated);
@@ -2352,7 +2599,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("set-model", async (_, modelId: string) => {
+  safeHandle('set-model', async (_, modelId: string) => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -2369,7 +2616,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       appState.modelSelectorWindowHelper.hideWindow();
 
       // Broadcast to all windows so NativelyInterface can update its selector (session-only update)
-      BrowserWindow.getAllWindows().forEach(win => {
+      BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) {
           win.webContents.send('model-changed', modelId);
         }
@@ -2377,13 +2624,13 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       return { success: true };
     } catch (error: any) {
-      console.error("Error setting model:", error);
+      console.error('Error setting model:', error);
       return { success: false, error: error.message };
     }
   });
 
   // Persist default model (from Settings) + update runtime + broadcast to all windows
-  safeHandle("set-default-model", async (_, modelId: string) => {
+  safeHandle('set-default-model', async (_, modelId: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
@@ -2400,7 +2647,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       appState.modelSelectorWindowHelper.hideWindow();
 
       // Broadcast to all windows so NativelyInterface can update its selector
-      BrowserWindow.getAllWindows().forEach(win => {
+      BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) {
           win.webContents.send('model-changed', modelId);
         }
@@ -2408,34 +2655,34 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       return { success: true };
     } catch (error: any) {
-      console.error("Error setting default model:", error);
+      console.error('Error setting default model:', error);
       return { success: false, error: error.message };
     }
   });
 
   // Read the persisted default model
-  safeHandle("get-default-model", async () => {
+  safeHandle('get-default-model', async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
       return { model: cm.getDefaultModel() };
     } catch (error: any) {
-      console.error("Error getting default model:", error);
+      console.error('Error getting default model:', error);
       return { model: 'gemini-3.1-flash-lite-preview' };
     }
   });
 
   // --- Model Selector Window IPC ---
 
-  safeHandle("show-model-selector", (_, coords: { x: number; y: number }) => {
+  safeHandle('show-model-selector', (_, coords: { x: number; y: number }) => {
     appState.modelSelectorWindowHelper.showWindow(coords.x, coords.y);
   });
 
-  safeHandle("hide-model-selector", () => {
+  safeHandle('hide-model-selector', () => {
     appState.modelSelectorWindowHelper.hideWindow();
   });
 
-  safeHandle("toggle-model-selector", (_, coords: { x: number; y: number }) => {
+  safeHandle('toggle-model-selector', (_, coords: { x: number; y: number }) => {
     appState.modelSelectorWindowHelper.toggleWindow(coords.x, coords.y);
   });
 
@@ -2445,41 +2692,39 @@ export function initializeIpcHandlers(appState: AppState): void {
   // → never receives blur). The overlay's renderer fires this IPC on every
   // mousedown that isn't on the toggle button itself; if the model selector
   // is open, we close it. No-op when closed (toggleWindow handled the open).
-  safeHandle("model-selector:close-if-open", () => {
+  safeHandle('model-selector:close-if-open', () => {
     const win = appState.modelSelectorWindowHelper.getWindow();
     if (win && !win.isDestroyed() && win.isVisible()) {
       appState.modelSelectorWindowHelper.hideWindow();
     }
   });
 
-
-
   // Native Audio Service Handlers
   // Native Audio handlers removed as part of migration to driverless architecture
-  safeHandle("native-audio-status", async () => {
+  safeHandle('native-audio-status', async () => {
     // Always return true or pseudo-status since it's "driverless"
     return { connected: true };
   });
 
-  safeHandle("get-input-devices", async () => {
+  safeHandle('get-input-devices', async () => {
     return AudioDevices.getInputDevices();
   });
 
-  safeHandle("get-output-devices", async () => {
+  safeHandle('get-output-devices', async () => {
     return AudioDevices.getOutputDevices();
   });
 
-  safeHandle("start-audio-test", async (event, deviceId?: string) => {
+  safeHandle('start-audio-test', async (event, deviceId?: string) => {
     await appState.startAudioTest(deviceId);
     return { success: true };
   });
 
-  safeHandle("stop-audio-test", async () => {
+  safeHandle('stop-audio-test', async () => {
     appState.stopAudioTest();
     return { success: true };
   });
 
-  safeHandle("set-recognition-language", async (_, key: string) => {
+  safeHandle('set-recognition-language', async (_, key: string) => {
     appState.setRecognitionLanguage(key);
     return { success: true };
   });
@@ -2488,45 +2733,45 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Meeting Lifecycle Handlers
   // ==========================================
 
-  safeHandle("start-meeting", async (event, metadata?: any) => {
+  safeHandle('start-meeting', async (event, metadata?: any) => {
     try {
       await appState.startMeeting(metadata);
       return { success: true };
     } catch (error: any) {
-      console.error("Error starting meeting:", error);
+      console.error('Error starting meeting:', error);
       return { success: false, error: error.message };
     }
   });
 
-  safeHandle("end-meeting", async () => {
+  safeHandle('end-meeting', async () => {
     try {
       await appState.endMeeting();
       return { success: true };
     } catch (error: any) {
-      console.error("Error ending meeting:", error);
+      console.error('Error ending meeting:', error);
       return { success: false, error: error.message };
     }
   });
 
-  safeHandle("get-recent-meetings", async () => {
+  safeHandle('get-recent-meetings', async () => {
     // Fetch from SQLite (limit 50)
     return DatabaseManager.getInstance().getRecentMeetings(50);
   });
 
-  safeHandle("get-meeting-details", async (event, id) => {
+  safeHandle('get-meeting-details', async (event, id) => {
     // Helper to fetch full details
     return DatabaseManager.getInstance().getMeetingDetails(id);
   });
 
-  safeHandle("update-meeting-title", async (_, { id, title }: { id: string; title: string }) => {
+  safeHandle('update-meeting-title', async (_, { id, title }: { id: string; title: string }) => {
     return DatabaseManager.getInstance().updateMeetingTitle(id, title);
   });
 
-  safeHandle("update-meeting-summary", async (_, { id, updates }: { id: string; updates: any }) => {
+  safeHandle('update-meeting-summary', async (_, { id, updates }: { id: string; updates: any }) => {
     return DatabaseManager.getInstance().updateMeetingSummary(id, updates);
   });
 
-  safeHandle("seed-demo", async () => {
+  safeHandle('seed-demo', async () => {
     DatabaseManager.getInstance().seedDemoMeeting();
 
     // Ensure RAG embeddings exist for the demo meeting.
@@ -2540,12 +2785,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
-  safeHandle("flush-database", async () => {
+  safeHandle('flush-database', async () => {
     const result = DatabaseManager.getInstance().clearAllData();
     return { success: result };
   });
 
-  safeHandle("open-external", async (event, url: string) => {
+  safeHandle('open-external', async (event, url: string) => {
     try {
       if (typeof url !== 'string') {
         console.warn('[IPC] Blocked invalid open-external request', { reason: 'non-string' });
@@ -2553,17 +2798,24 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
 
       const parsed = new URL(url);
-      const allowedWebUrl = parsed.protocol === 'https:' && parsed.hostname === 'mail.google.com' && parsed.pathname === '/mail/';
+      const allowedWebUrl =
+        parsed.protocol === 'https:' &&
+        parsed.hostname === 'mail.google.com' &&
+        parsed.pathname === '/mail/';
       // x-apple.systempreferences is a macOS-only URI scheme. Allowing it on
       // Windows let renderer regressions hand Windows shell an unknown
       // protocol → Microsoft Store popup (issue #252). Gate the allowlist on
       // the actual platform so the IPC layer is the last line of defense.
-      const allowedSystemSettingsUrl = parsed.protocol === 'x-apple.systempreferences:' && process.platform === 'darwin';
+      const allowedSystemSettingsUrl =
+        parsed.protocol === 'x-apple.systempreferences:' && process.platform === 'darwin';
 
       if (allowedWebUrl || allowedSystemSettingsUrl) {
         await shell.openExternal(url);
       } else {
-        console.warn('[IPC] Blocked open-external request', { protocol: parsed.protocol, hostname: parsed.hostname });
+        console.warn('[IPC] Blocked open-external request', {
+          protocol: parsed.protocol,
+          hostname: parsed.hostname,
+        });
       }
     } catch {
       console.warn('[IPC] Invalid URL in open-external');
@@ -2575,12 +2827,18 @@ export function initializeIpcHandlers(appState: AppState): void {
   // ==========================================
 
   // MODE 1: Assist (Passive observation)
-  safeHandle("generate-assist", async () => {
+  safeHandle('generate-assist', async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const insight = await intelligenceManager.runAssistMode();
       if (insight) {
-        try { PhoneMirrorService.getInstance().publishAssistantMessage(crypto.randomUUID(), insight, 'Assist'); } catch (_) {}
+        try {
+          PhoneMirrorService.getInstance().publishAssistantMessage(
+            crypto.randomUUID(),
+            insight,
+            'Assist',
+          );
+        } catch (_) {}
       }
       return { insight };
     } catch (error: any) {
@@ -2596,120 +2854,157 @@ export function initializeIpcHandlers(appState: AppState): void {
   // here to run Tesseract OCR before answering. That path is now removed from the runtime —
   // Natively answers from the image directly via a vision-capable provider. Do not re-introduce
   // OCR here unless a future explicit OCR-only mode is reintroduced.
-  safeHandle("generate-what-to-say", async (_, question?: string, imagePaths?: string[], options?: { promptInstruction?: string }) => {
-    try {
-      let screenContext: any;
-      let screenContextStatus: 'not_available' | 'available' | 'failed' = 'not_available';
-      let visionProviderUsed: string | undefined;
-      let visionModelUsed: string | undefined;
-      let visionAttempts: number | undefined;
-      let visionFailureReason: string | undefined;
+  safeHandle(
+    'generate-what-to-say',
+    async (
+      _,
+      question?: string,
+      imagePaths?: string[],
+      options?: { promptInstruction?: string },
+    ) => {
+      try {
+        let screenContext: any;
+        let screenContextStatus: 'not_available' | 'available' | 'failed' = 'not_available';
+        let visionProviderUsed: string | undefined;
+        let visionModelUsed: string | undefined;
+        let visionAttempts: number | undefined;
+        let visionFailureReason: string | undefined;
 
-      const validatedImagePaths: string[] | undefined = imagePaths?.length ? [] : undefined;
+        const validatedImagePaths: string[] | undefined = imagePaths?.length ? [] : undefined;
 
-      // SECURITY (P0): Validate image paths if provided from renderer
-      if (imagePaths && imagePaths.length > 0) {
-        if (!Array.isArray(imagePaths) || imagePaths.length > 5 || imagePaths.some(imagePath => typeof imagePath !== 'string' || imagePath.trim().length === 0)) {
-          console.warn('[IPC] generate-what-to-say: malformed image path payload rejected');
-          return {
-            answer: null,
-            question: question || 'unknown',
-            screenContextStatus,
-            error: 'Invalid image path payload'
-          };
-        }
-
-        const { app } = require('electron');
-        const { validateImagePath } = require('./utils/curlUtils');
-        const userDataDir = app.getPath('userData');
-
-        for (const imagePath of imagePaths) {
-          const validation = validateImagePath(imagePath, userDataDir);
-          if (!validation.isValid) {
-            console.warn(`[IPC] generate-what-to-say: invalid image path rejected: ${validation.reason}`);
+        // SECURITY (P0): Validate image paths if provided from renderer
+        if (imagePaths && imagePaths.length > 0) {
+          if (
+            !Array.isArray(imagePaths) ||
+            imagePaths.length > 5 ||
+            imagePaths.some(
+              (imagePath) => typeof imagePath !== 'string' || imagePath.trim().length === 0,
+            )
+          ) {
+            console.warn('[IPC] generate-what-to-say: malformed image path payload rejected');
             return {
               answer: null,
               question: question || 'unknown',
               screenContextStatus,
-              error: `Invalid image path: ${validation.reason}`
+              error: 'Invalid image path payload',
             };
           }
-          validatedImagePaths!.push(imagePath);
+
+          const { app } = require('electron');
+          const { validateImagePath } = require('./utils/curlUtils');
+          const userDataDir = app.getPath('userData');
+
+          for (const imagePath of imagePaths) {
+            const validation = validateImagePath(imagePath, userDataDir);
+            if (!validation.isValid) {
+              console.warn(
+                `[IPC] generate-what-to-say: invalid image path rejected: ${validation.reason}`,
+              );
+              return {
+                answer: null,
+                question: question || 'unknown',
+                screenContextStatus,
+                error: `Invalid image path: ${validation.reason}`,
+              };
+            }
+            validatedImagePaths!.push(imagePath);
+          }
+
+          // Vision-first: run the ScreenUnderstandingService so the image is hashed, optimized,
+          // and routed through the vision provider fallback chain. The structured result becomes
+          // the screenContext that PromptAssembler consumes.
+          try {
+            const {
+              getScreenUnderstandingService,
+            } = require('./services/screen/ScreenUnderstandingService');
+            const { CredentialsManager } = require('./services/CredentialsManager');
+            const sus = getScreenUnderstandingService();
+            const settings = SettingsManager.getInstance();
+            const credentials = CredentialsManager.getInstance();
+            const providerScopes = settings.get('providerDataScopes') || {};
+
+            const sur = await sus.understand({
+              modeId: 'what-to-say',
+              transcript: question,
+              userAction: 'what_to_say',
+              qualityMode: 'balanced',
+              imagePaths: validatedImagePaths,
+              screenUnderstandingMode: settings.getScreenUnderstandingMode(),
+              technicalInterviewVisionFirst: settings.getTechnicalInterviewVisionFirst(),
+              providerPolicy: {
+                localOnly: settings.getScreenUnderstandingMode() === 'private_vision',
+                allowScreenshots: providerScopes.screenshots !== false,
+                visionAvailable: credentials.anyVisionProviderConfigured?.() ?? true,
+                localVisionAvailable: credentials.anyLocalVisionProviderConfigured?.() ?? false,
+              },
+            });
+
+            screenContext = sur.status === 'available' ? sur : undefined;
+            screenContextStatus =
+              sur.status === 'available'
+                ? 'available'
+                : sur.status === 'failed'
+                  ? 'failed'
+                  : 'not_available';
+            visionProviderUsed = sur.providerUsed;
+            visionModelUsed = sur.modelUsed;
+            visionAttempts = Array.isArray(sur.attempts) ? sur.attempts.length : undefined;
+            visionFailureReason = sur.failureReason;
+          } catch (sErr: any) {
+            screenContextStatus = 'failed';
+            console.warn('[IPC] generate-what-to-say: ScreenUnderstandingService failed', {
+              errorClass: sErr?.name || 'Error',
+            });
+          }
         }
 
-        // Vision-first: run the ScreenUnderstandingService so the image is hashed, optimized,
-        // and routed through the vision provider fallback chain. The structured result becomes
-        // the screenContext that PromptAssembler consumes.
-        try {
-          const { getScreenUnderstandingService } = require('./services/screen/ScreenUnderstandingService');
-          const { CredentialsManager } = require('./services/CredentialsManager');
-          const sus = getScreenUnderstandingService();
-          const settings = SettingsManager.getInstance();
-          const credentials = CredentialsManager.getInstance();
-          const providerScopes = settings.get('providerDataScopes') || {};
-
-          const sur = await sus.understand({
-            modeId: 'what-to-say',
-            transcript: question,
-            userAction: 'what_to_say',
-            qualityMode: 'balanced',
-            imagePaths: validatedImagePaths,
-            screenUnderstandingMode: settings.getScreenUnderstandingMode(),
-            technicalInterviewVisionFirst: settings.getTechnicalInterviewVisionFirst(),
-            providerPolicy: {
-              localOnly: settings.getScreenUnderstandingMode() === 'private_vision',
-              allowScreenshots: providerScopes.screenshots !== false,
-              visionAvailable: credentials.anyVisionProviderConfigured?.() ?? true,
-              localVisionAvailable: credentials.anyLocalVisionProviderConfigured?.() ?? false,
-            },
-          });
-
-          screenContext = sur.status === 'available' ? sur : undefined;
-          screenContextStatus = sur.status === 'available' ? 'available' : (sur.status === 'failed' ? 'failed' : 'not_available');
-          visionProviderUsed = sur.providerUsed;
-          visionModelUsed = sur.modelUsed;
-          visionAttempts = Array.isArray(sur.attempts) ? sur.attempts.length : undefined;
-          visionFailureReason = sur.failureReason;
-        } catch (sErr: any) {
-          screenContextStatus = 'failed';
-          console.warn('[IPC] generate-what-to-say: ScreenUnderstandingService failed', {
-            errorClass: sErr?.name || 'Error',
-          });
+        const intelligenceManager = appState.getIntelligenceManager();
+        // Question and imagePaths are now optional - IntelligenceManager infers from transcript
+        const answer = await intelligenceManager.runWhatShouldISay(
+          question,
+          0.8,
+          validatedImagePaths,
+          {
+            skipCooldown: process.env.NODE_ENV === 'test',
+            screenContext,
+            promptInstruction:
+              typeof options?.promptInstruction === 'string'
+                ? options.promptInstruction
+                : undefined,
+          },
+        );
+        if (answer) {
+          try {
+            PhoneMirrorService.getInstance().publishAssistantMessage(
+              crypto.randomUUID(),
+              answer,
+              'What to Answer',
+            );
+          } catch (_) {}
         }
+        return {
+          answer,
+          question: question || 'inferred from context',
+          screenContextStatus,
+          visionProviderUsed,
+          visionModelUsed,
+          visionAttempts,
+          visionFailureReason,
+          imageCount: validatedImagePaths?.length || 0,
+          usedImageInput: Boolean(validatedImagePaths?.length),
+        };
+      } catch (error: any) {
+        console.error('[IPC] generate-what-to-say error:', error);
+        return {
+          answer: null,
+          question: question || 'unknown',
+          error: error?.message || 'unknown_error',
+        };
       }
+    },
+  );
 
-      const intelligenceManager = appState.getIntelligenceManager();
-      // Question and imagePaths are now optional - IntelligenceManager infers from transcript
-      const answer = await intelligenceManager.runWhatShouldISay(question, 0.8, validatedImagePaths, {
-        skipCooldown: process.env.NODE_ENV === 'test',
-        screenContext,
-        promptInstruction: typeof options?.promptInstruction === 'string' ? options.promptInstruction : undefined,
-      });
-      if (answer) {
-        try { PhoneMirrorService.getInstance().publishAssistantMessage(crypto.randomUUID(), answer, 'What to Answer'); } catch (_) {}
-      }
-      return {
-        answer,
-        question: question || 'inferred from context',
-        screenContextStatus,
-        visionProviderUsed,
-        visionModelUsed,
-        visionAttempts,
-        visionFailureReason,
-        imageCount: validatedImagePaths?.length || 0,
-        usedImageInput: Boolean(validatedImagePaths?.length),
-      };
-    } catch (error: any) {
-      console.error('[IPC] generate-what-to-say error:', error);
-      return {
-        answer: null,
-        question: question || 'unknown',
-        error: error?.message || 'unknown_error'
-      };
-    }
-  });
-
-  safeHandle("generate-clarify", async () => {
+  safeHandle('generate-clarify', async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const clarification = await intelligenceManager.runClarify();
@@ -2717,9 +3012,19 @@ export function initializeIpcHandlers(appState: AppState): void {
       // We must still ensure the frontend un-sticks — emit an error so onIntelligenceError fires.
       if (clarification === null) {
         const win = appState.getMainWindow();
-        win?.webContents.send('intelligence-error', { error: 'Could not generate a clarifying question. Try again after some audio context is available.', mode: 'clarify' });
+        win?.webContents.send('intelligence-error', {
+          error:
+            'Could not generate a clarifying question. Try again after some audio context is available.',
+          mode: 'clarify',
+        });
       } else {
-        try { PhoneMirrorService.getInstance().publishAssistantMessage(crypto.randomUUID(), clarification, 'Clarify'); } catch (_) {}
+        try {
+          PhoneMirrorService.getInstance().publishAssistantMessage(
+            crypto.randomUUID(),
+            clarification,
+            'Clarify',
+          );
+        } catch (_) {}
       }
       return { clarification };
     } catch (error: any) {
@@ -2746,7 +3051,10 @@ export function initializeIpcHandlers(appState: AppState): void {
           const out = await optimizer.optimize(p, { profile, provider: 'openai', cacheKey: p });
           optimized.push(out.path);
         } catch (err: any) {
-          console.warn(`[IPC] ${handlerLabel}: image optimization failed for ${p}, using original`, { errorClass: err?.name });
+          console.warn(
+            `[IPC] ${handlerLabel}: image optimization failed for ${p}, using original`,
+            { errorClass: err?.name },
+          );
           optimized.push(p);
         }
       }
@@ -2756,15 +3064,13 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   }
 
-  safeHandle("generate-code-hint", async (_, imagePaths?: string[], problemStatement?: string) => {
+  safeHandle('generate-code-hint', async (_, imagePaths?: string[], problemStatement?: string) => {
     try {
       // If no explicit images were passed from the frontend, fall back to the
       // screenshot queue so the AI can always "see" the user's screen.
       const screenshotQueue = appState.getScreenshotQueue();
       const resolvedImagePaths: string[] =
-        imagePaths && imagePaths.length > 0
-          ? imagePaths
-          : screenshotQueue;
+        imagePaths && imagePaths.length > 0 ? imagePaths : screenshotQueue;
 
       // SECURITY (P0): Validate image paths if provided from renderer
       if (imagePaths && imagePaths.length > 0) {
@@ -2775,25 +3081,39 @@ export function initializeIpcHandlers(appState: AppState): void {
         for (const imagePath of imagePaths) {
           const validation = validateImagePath(imagePath, userDataDir);
           if (!validation.isValid) {
-            console.warn(`[IPC] generate-code-hint: invalid image path rejected: ${validation.reason}`);
+            console.warn(
+              `[IPC] generate-code-hint: invalid image path rejected: ${validation.reason}`,
+            );
             return { error: `Invalid image path: ${validation.reason}`, hint: null };
           }
         }
       }
 
-      console.log(`[IPC] generate-code-hint: using ${resolvedImagePaths.length} image(s) (${imagePaths?.length ? 'explicit' : 'queue fallback'})`);
+      console.log(
+        `[IPC] generate-code-hint: using ${resolvedImagePaths.length} image(s) (${imagePaths?.length ? 'explicit' : 'queue fallback'})`,
+      );
 
       // VISION-FIRST: optimize the screenshot(s) with Sharp before they reach the LLM,
       // using the 'technical' profile so code text stays sharp at 1536px.
-      const optimizedPaths = await optimizeImagesForVision(resolvedImagePaths, 'generate-code-hint', 'technical');
+      const optimizedPaths = await optimizeImagesForVision(
+        resolvedImagePaths,
+        'generate-code-hint',
+        'technical',
+      );
 
       const intelligenceManager = appState.getIntelligenceManager();
       const hint = await intelligenceManager.runCodeHint(
         optimizedPaths.length > 0 ? optimizedPaths : undefined,
-        problemStatement
+        problemStatement,
       );
       if (hint) {
-        try { PhoneMirrorService.getInstance().publishAssistantMessage(crypto.randomUUID(), hint, 'Code Hint'); } catch (_) {}
+        try {
+          PhoneMirrorService.getInstance().publishAssistantMessage(
+            crypto.randomUUID(),
+            hint,
+            'Code Hint',
+          );
+        } catch (_) {}
       }
       return { hint };
     } catch (error: any) {
@@ -2801,15 +3121,13 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("generate-brainstorm", async (_, imagePaths?: string[], problemStatement?: string) => {
+  safeHandle('generate-brainstorm', async (_, imagePaths?: string[], problemStatement?: string) => {
     try {
       // If no explicit images were passed from the frontend, fall back to the
       // screenshot queue so the AI can always "see" the user's screen.
       const screenshotQueue = appState.getScreenshotQueue();
       const resolvedImagePaths: string[] =
-        imagePaths && imagePaths.length > 0
-          ? imagePaths
-          : screenshotQueue;
+        imagePaths && imagePaths.length > 0 ? imagePaths : screenshotQueue;
 
       // SECURITY (P0): Validate image paths if provided from renderer
       if (imagePaths && imagePaths.length > 0) {
@@ -2820,24 +3138,38 @@ export function initializeIpcHandlers(appState: AppState): void {
         for (const imagePath of imagePaths) {
           const validation = validateImagePath(imagePath, userDataDir);
           if (!validation.isValid) {
-            console.warn(`[IPC] generate-brainstorm: invalid image path rejected: ${validation.reason}`);
+            console.warn(
+              `[IPC] generate-brainstorm: invalid image path rejected: ${validation.reason}`,
+            );
             return { error: `Invalid image path: ${validation.reason}`, script: null };
           }
         }
       }
 
-      console.log(`[IPC] generate-brainstorm: using ${resolvedImagePaths.length} image(s) (${imagePaths?.length ? 'explicit' : 'queue fallback'})`);
+      console.log(
+        `[IPC] generate-brainstorm: using ${resolvedImagePaths.length} image(s) (${imagePaths?.length ? 'explicit' : 'queue fallback'})`,
+      );
 
       // VISION-FIRST: balanced profile (1280px) — brainstorm doesn't need code-sharp text.
-      const optimizedPaths = await optimizeImagesForVision(resolvedImagePaths, 'generate-brainstorm', 'balanced');
+      const optimizedPaths = await optimizeImagesForVision(
+        resolvedImagePaths,
+        'generate-brainstorm',
+        'balanced',
+      );
 
       const intelligenceManager = appState.getIntelligenceManager();
       const script = await intelligenceManager.runBrainstorm(
         optimizedPaths.length > 0 ? optimizedPaths : undefined,
-        problemStatement
+        problemStatement,
       );
       if (script) {
-        try { PhoneMirrorService.getInstance().publishAssistantMessage(crypto.randomUUID(), script, 'Brainstorm'); } catch (_) {}
+        try {
+          PhoneMirrorService.getInstance().publishAssistantMessage(
+            crypto.randomUUID(),
+            script,
+            'Brainstorm',
+          );
+        } catch (_) {}
       }
       return { script };
     } catch (error: any) {
@@ -2846,18 +3178,18 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Dynamic Action Button Mode (Recap vs Brainstorm)
-  safeHandle("get-action-button-mode", () => {
+  safeHandle('get-action-button-mode', () => {
     const { SettingsManager } = require('./services/SettingsManager');
     const sm = SettingsManager.getInstance();
     return sm.get('actionButtonMode') ?? 'recap';
   });
 
-  safeHandle("set-action-button-mode", (_, mode: 'recap' | 'brainstorm') => {
+  safeHandle('set-action-button-mode', (_, mode: 'recap' | 'brainstorm') => {
     const { SettingsManager } = require('./services/SettingsManager');
     const sm = SettingsManager.getInstance();
     sm.set('actionButtonMode', mode);
 
-    BrowserWindow.getAllWindows().forEach(win => {
+    BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) {
         win.webContents.send('action-button-mode-changed', mode);
       }
@@ -2867,12 +3199,18 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // MODE 3: Follow-Up (Refinement)
-  safeHandle("generate-follow-up", async (_, intent: string, userRequest?: string) => {
+  safeHandle('generate-follow-up', async (_, intent: string, userRequest?: string) => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const refined = await intelligenceManager.runFollowUp(intent, userRequest);
       if (refined) {
-        try { PhoneMirrorService.getInstance().publishAssistantMessage(crypto.randomUUID(), refined, 'Follow Up'); } catch (_) {}
+        try {
+          PhoneMirrorService.getInstance().publishAssistantMessage(
+            crypto.randomUUID(),
+            refined,
+            'Follow Up',
+          );
+        } catch (_) {}
       }
       return { refined, intent };
     } catch (error: any) {
@@ -2881,12 +3219,18 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // MODE 4: Recap (Summary)
-  safeHandle("generate-recap", async () => {
+  safeHandle('generate-recap', async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const summary = await intelligenceManager.runRecap();
       if (summary) {
-        try { PhoneMirrorService.getInstance().publishAssistantMessage(crypto.randomUUID(), summary, 'Recap'); } catch (_) {}
+        try {
+          PhoneMirrorService.getInstance().publishAssistantMessage(
+            crypto.randomUUID(),
+            summary,
+            'Recap',
+          );
+        } catch (_) {}
       }
       return { summary };
     } catch (error: any) {
@@ -2895,12 +3239,18 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // MODE 6: Follow-Up Questions
-  safeHandle("generate-follow-up-questions", async () => {
+  safeHandle('generate-follow-up-questions', async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const questions = await intelligenceManager.runFollowUpQuestions();
       if (questions) {
-        try { PhoneMirrorService.getInstance().publishAssistantMessage(crypto.randomUUID(), questions, 'Follow-Up Questions'); } catch (_) {}
+        try {
+          PhoneMirrorService.getInstance().publishAssistantMessage(
+            crypto.randomUUID(),
+            questions,
+            'Follow-Up Questions',
+          );
+        } catch (_) {}
       }
       return { questions };
     } catch (error: any) {
@@ -2909,14 +3259,18 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // MODE 5: Manual Answer (Fallback)
-  safeHandle("submit-manual-question", async (_, question: string) => {
+  safeHandle('submit-manual-question', async (_, question: string) => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const answer = await intelligenceManager.runManualAnswer(question);
       if (answer) {
         try {
           PhoneMirrorService.getInstance().publishUserMessage(crypto.randomUUID(), question);
-          PhoneMirrorService.getInstance().publishAssistantMessage(crypto.randomUUID(), answer, 'Answer');
+          PhoneMirrorService.getInstance().publishAssistantMessage(
+            crypto.randomUUID(),
+            answer,
+            'Answer',
+          );
         } catch (_) {}
       }
       return { answer, question };
@@ -2926,13 +3280,13 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Get current intelligence context
-  safeHandle("get-intelligence-context", async () => {
+  safeHandle('get-intelligence-context', async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       return {
         context: intelligenceManager.getFormattedContext(),
         lastAssistantMessage: intelligenceManager.getLastAssistantMessage(),
-        activeMode: intelligenceManager.getActiveMode()
+        activeMode: intelligenceManager.getActiveMode(),
       };
     } catch (error: any) {
       throw error;
@@ -2940,7 +3294,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Reset intelligence state
-  safeHandle("reset-intelligence", async () => {
+  safeHandle('reset-intelligence', async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       intelligenceManager.reset();
@@ -2953,7 +3307,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Phase 3 — Dynamic Actions IPC. Accept/dismiss/list. The action emission
   // direction is push-only (intelligence-dynamic-action channel from main →
   // renderer); these handlers are the renderer → main control plane.
-  safeHandle("dynamic-action:accept", async (_, actionId: string) => {
+  safeHandle('dynamic-action:accept', async (_, actionId: string) => {
     try {
       if (typeof actionId !== 'string' || !actionId) {
         return { success: false, error: 'invalid_action_id' };
@@ -2968,9 +3322,15 @@ export function initializeIpcHandlers(appState: AppState): void {
           name: 'dynamic_action_accepted',
           sessionId: action.sessionId,
           modeId: action.modeId,
-          properties: { actionId: action.id, actionType: action.type, modeTemplateType: action.modeTemplateType },
+          properties: {
+            actionId: action.id,
+            actionType: action.type,
+            modeTemplateType: action.modeTemplateType,
+          },
         });
-      } catch { /* non-fatal */ }
+      } catch {
+        /* non-fatal */
+      }
       // Caller (renderer) is expected to follow up with a normal Ask-AI call
       // using action.promptInstruction. We return the action so the renderer
       // can populate the answer prompt without a second round-trip.
@@ -2980,7 +3340,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("dynamic-action:dismiss", async (_, actionId: string) => {
+  safeHandle('dynamic-action:dismiss', async (_, actionId: string) => {
     try {
       if (typeof actionId !== 'string' || !actionId) {
         return { success: false, error: 'invalid_action_id' };
@@ -2991,14 +3351,16 @@ export function initializeIpcHandlers(appState: AppState): void {
       try {
         const { telemetryService } = require('./services/telemetry/TelemetryService');
         telemetryService.track({ name: 'dynamic_action_dismissed', properties: { actionId } });
-      } catch { /* non-fatal */ }
+      } catch {
+        /* non-fatal */
+      }
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error?.message ?? 'internal_error' };
     }
   });
 
-  safeHandle("dynamic-action:list", async () => {
+  safeHandle('dynamic-action:list', async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       return { success: true, actions: intelligenceManager.getActiveDynamicActions() };
@@ -3007,23 +3369,29 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("test-inject-transcript", async (_, segment: { speaker: string; text: string; timestamp?: number; final?: boolean }) => {
-    try {
-      if (process.env.NODE_ENV !== 'test') return { success: false, error: 'test_only' };
-      const intelligenceManager = appState.getIntelligenceManager();
-      intelligenceManager.addTranscript({
-        speaker: segment.speaker,
-        text: segment.text,
-        timestamp: segment.timestamp ?? Date.now(),
-        final: segment.final ?? true,
-      }, true);
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
-  });
+  safeHandle(
+    'test-inject-transcript',
+    async (_, segment: { speaker: string; text: string; timestamp?: number; final?: boolean }) => {
+      try {
+        if (process.env.NODE_ENV !== 'test') return { success: false, error: 'test_only' };
+        const intelligenceManager = appState.getIntelligenceManager();
+        intelligenceManager.addTranscript(
+          {
+            speaker: segment.speaker,
+            text: segment.text,
+            timestamp: segment.timestamp ?? Date.now(),
+            final: segment.final ?? true,
+          },
+          true,
+        );
+        return { success: true };
+      } catch (error: any) {
+        return { success: false, error: error.message };
+      }
+    },
+  );
 
-  safeHandle("test-get-mode-context", async () => {
+  safeHandle('test-get-mode-context', async () => {
     try {
       if (process.env.NODE_ENV !== 'test') return { success: false, error: 'test_only' };
       const { ModesManager } = require('./services/ModesManager');
@@ -3038,13 +3406,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-
   // Service Account Selection
-  safeHandle("select-service-account", async () => {
+  safeHandle('select-service-account', async () => {
     try {
       const result: any = await dialog.showOpenDialog({
         properties: ['openFile'],
-        filters: [{ name: 'JSON', extensions: ['json'] }]
+        filters: [{ name: 'JSON', extensions: ['json'] }],
       });
 
       if (result.canceled || result.filePaths.length === 0) {
@@ -3062,7 +3429,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       return { success: true, path: filePath };
     } catch (error: any) {
-      console.error("Error selecting service account:", error);
+      console.error('Error selecting service account:', error);
       return { success: false, error: error.message };
     }
   });
@@ -3071,15 +3438,15 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Theme System Handlers
   // ==========================================
 
-  safeHandle("theme:get-mode", () => {
+  safeHandle('theme:get-mode', () => {
     const tm = appState.getThemeManager();
     return {
       mode: tm.getMode(),
-      resolved: tm.getResolvedTheme()
+      resolved: tm.getResolvedTheme(),
     };
   });
 
-  safeHandle("theme:set-mode", (_, mode: 'system' | 'light' | 'dark') => {
+  safeHandle('theme:set-mode', (_, mode: 'system' | 'light' | 'dark') => {
     appState.getThemeManager().setMode(mode);
     return { success: true };
   });
@@ -3088,34 +3455,34 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Calendar Integration Handlers
   // ==========================================
 
-  safeHandle("calendar-connect", async () => {
+  safeHandle('calendar-connect', async () => {
     try {
       const { CalendarManager } = require('./services/CalendarManager');
       await CalendarManager.getInstance().startAuthFlow();
       return { success: true };
     } catch (error: any) {
-      console.error("Calendar auth error:", error);
+      console.error('Calendar auth error:', error);
       return { success: false, error: error.message };
     }
   });
 
-  safeHandle("calendar-disconnect", async () => {
+  safeHandle('calendar-disconnect', async () => {
     const { CalendarManager } = require('./services/CalendarManager');
     await CalendarManager.getInstance().disconnect();
     return { success: true };
   });
 
-  safeHandle("get-calendar-status", async () => {
+  safeHandle('get-calendar-status', async () => {
     const { CalendarManager } = require('./services/CalendarManager');
     return CalendarManager.getInstance().getConnectionStatus();
   });
 
-  safeHandle("get-upcoming-events", async () => {
+  safeHandle('get-upcoming-events', async () => {
     const { CalendarManager } = require('./services/CalendarManager');
     return CalendarManager.getInstance().getUpcomingEvents();
   });
 
-  safeHandle("calendar-refresh", async () => {
+  safeHandle('calendar-refresh', async () => {
     const { CalendarManager } = require('./services/CalendarManager');
     await CalendarManager.getInstance().refreshState();
     return { success: true };
@@ -3125,7 +3492,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Follow-up Email Handlers
   // ==========================================
 
-  safeHandle("generate-followup-email", async (_, input: any) => {
+  safeHandle('generate-followup-email', async (_, input: any) => {
     try {
       const { FOLLOWUP_EMAIL_PROMPT, GROQ_FOLLOWUP_EMAIL_PROMPT } = require('./llm/prompts');
       const { buildFollowUpEmailPromptInput } = require('./utils/emailUtils');
@@ -3140,26 +3507,32 @@ export function initializeIpcHandlers(appState: AppState): void {
       const groqPrompt = `${GROQ_FOLLOWUP_EMAIL_PROMPT}\n\nMEETING DETAILS:\n${contextString}`;
 
       // Use chatWithGemini with alternateGroqMessage for fallback
-      const emailBody = await llmHelper.chatWithGemini(geminiPrompt, undefined, undefined, true, groqPrompt);
+      const emailBody = await llmHelper.chatWithGemini(
+        geminiPrompt,
+        undefined,
+        undefined,
+        true,
+        groqPrompt,
+      );
 
       return emailBody;
     } catch (error: any) {
-      console.error("Error generating follow-up email:", error);
+      console.error('Error generating follow-up email:', error);
       throw error;
     }
   });
 
-  safeHandle("extract-emails-from-transcript", async (_, transcript: Array<{ text: string }>) => {
+  safeHandle('extract-emails-from-transcript', async (_, transcript: Array<{ text: string }>) => {
     try {
       const { extractEmailsFromTranscript } = require('./utils/emailUtils');
       return extractEmailsFromTranscript(transcript);
     } catch (error: any) {
-      console.error("Error extracting emails:", error);
+      console.error('Error extracting emails:', error);
       return [];
     }
   });
 
-  safeHandle("get-calendar-attendees", async (_, eventId: string) => {
+  safeHandle('get-calendar-attendees', async (_, eventId: string) => {
     try {
       const { CalendarManager } = require('./services/CalendarManager');
       const cm = CalendarManager.getInstance();
@@ -3169,30 +3542,35 @@ export function initializeIpcHandlers(appState: AppState): void {
       const event = events?.find((e: any) => e.id === eventId);
 
       if (event && event.attendees) {
-        return event.attendees.map((a: any) => ({
-          email: a.email,
-          name: a.displayName || a.email?.split('@')[0] || ''
-        })).filter((a: any) => a.email);
+        return event.attendees
+          .map((a: any) => ({
+            email: a.email,
+            name: a.displayName || a.email?.split('@')[0] || '',
+          }))
+          .filter((a: any) => a.email);
       }
 
       return [];
     } catch (error: any) {
-      console.error("Error getting calendar attendees:", error);
+      console.error('Error getting calendar attendees:', error);
       return [];
     }
   });
 
-  safeHandle("open-mailto", async (_, { to, subject, body }: { to: string; subject: string; body: string }) => {
-    try {
-      const { buildMailtoLink } = require('./utils/emailUtils');
-      const mailtoUrl = buildMailtoLink(to, subject, body);
-      await shell.openExternal(mailtoUrl);
-      return { success: true };
-    } catch (error: any) {
-      console.error("Error opening mailto:", error);
-      return { success: false, error: error.message };
-    }
-  });
+  safeHandle(
+    'open-mailto',
+    async (_, { to, subject, body }: { to: string; subject: string; body: string }) => {
+      try {
+        const { buildMailtoLink } = require('./utils/emailUtils');
+        const mailtoUrl = buildMailtoLink(to, subject, body);
+        await shell.openExternal(mailtoUrl);
+        return { success: true };
+      } catch (error: any) {
+        console.error('Error opening mailto:', error);
+        return { success: false, error: error.message };
+      }
+    },
+  );
 
   // ==========================================
   // RAG (Retrieval-Augmented Generation) Handlers
@@ -3202,57 +3580,64 @@ export function initializeIpcHandlers(appState: AppState): void {
   const activeRAGQueries = new Map<string, AbortController>();
 
   // Query meeting with RAG (meeting-scoped)
-  safeHandle("rag:query-meeting", async (event, { meetingId, query }: { meetingId: string; query: string }) => {
-    const ragManager = appState.getRAGManager();
+  safeHandle(
+    'rag:query-meeting',
+    async (event, { meetingId, query }: { meetingId: string; query: string }) => {
+      const ragManager = appState.getRAGManager();
 
-    if (!ragManager || !ragManager.isReady()) {
-      // Fallback to regular chat if RAG not available
-      console.log("[RAG] Not ready, falling back to regular chat");
-      return { fallback: true };
-    }
-
-    // For completed meetings, check if post-meeting RAG is processed.
-    // For live meetings with JIT indexing, let RAGManager.queryMeeting() decide.
-    if (!ragManager.isMeetingProcessed(meetingId) && !ragManager.isLiveIndexingActive(meetingId)) {
-      console.log(`[RAG] Meeting ${meetingId} not processed and no JIT indexing, falling back to regular chat`);
-      return { fallback: true };
-    }
-
-    const abortController = new AbortController();
-    const queryKey = `meeting-${meetingId}`;
-    activeRAGQueries.set(queryKey, abortController);
-
-    try {
-      const stream = ragManager.queryMeeting(meetingId, query, abortController.signal);
-
-      for await (const chunk of stream) {
-        if (abortController.signal.aborted) break;
-        event.sender.send("rag:stream-chunk", { meetingId, chunk });
+      if (!ragManager || !ragManager.isReady()) {
+        // Fallback to regular chat if RAG not available
+        console.log('[RAG] Not ready, falling back to regular chat');
+        return { fallback: true };
       }
 
-      event.sender.send("rag:stream-complete", { meetingId });
-      return { success: true };
+      // For completed meetings, check if post-meeting RAG is processed.
+      // For live meetings with JIT indexing, let RAGManager.queryMeeting() decide.
+      if (
+        !ragManager.isMeetingProcessed(meetingId) &&
+        !ragManager.isLiveIndexingActive(meetingId)
+      ) {
+        console.log(
+          `[RAG] Meeting ${meetingId} not processed and no JIT indexing, falling back to regular chat`,
+        );
+        return { fallback: true };
+      }
 
-    } catch (error: any) {
-      if (error.name !== 'AbortError') {
-        const msg = error.message || "";
-        // If specific RAG failures, return fallback to use transcript window
-        if (msg.includes('NO_RELEVANT_CONTEXT') || msg.includes('NO_MEETING_EMBEDDINGS')) {
-          console.log(`[RAG] Query failed with '${msg}', falling back to regular chat`);
-          return { fallback: true };
+      const abortController = new AbortController();
+      const queryKey = `meeting-${meetingId}`;
+      activeRAGQueries.set(queryKey, abortController);
+
+      try {
+        const stream = ragManager.queryMeeting(meetingId, query, abortController.signal);
+
+        for await (const chunk of stream) {
+          if (abortController.signal.aborted) break;
+          event.sender.send('rag:stream-chunk', { meetingId, chunk });
         }
 
-        console.error("[RAG] Query error:", error);
-        event.sender.send("rag:stream-error", { meetingId, error: msg });
+        event.sender.send('rag:stream-complete', { meetingId });
+        return { success: true };
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          const msg = error.message || '';
+          // If specific RAG failures, return fallback to use transcript window
+          if (msg.includes('NO_RELEVANT_CONTEXT') || msg.includes('NO_MEETING_EMBEDDINGS')) {
+            console.log(`[RAG] Query failed with '${msg}', falling back to regular chat`);
+            return { fallback: true };
+          }
+
+          console.error('[RAG] Query error:', error);
+          event.sender.send('rag:stream-error', { meetingId, error: msg });
+        }
+        return { success: false, error: error.message };
+      } finally {
+        activeRAGQueries.delete(queryKey);
       }
-      return { success: false, error: error.message };
-    } finally {
-      activeRAGQueries.delete(queryKey);
-    }
-  });
+    },
+  );
 
   // Query live meeting with JIT RAG
-  safeHandle("rag:query-live", async (event, { query }: { query: string }) => {
+  safeHandle('rag:query-live', async (event, { query }: { query: string }) => {
     const ragManager = appState.getRAGManager();
 
     if (!ragManager || !ragManager.isReady()) {
@@ -3277,22 +3662,21 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       for await (const chunk of stream) {
         if (abortController.signal.aborted) break;
-        event.sender.send("rag:stream-chunk", { live: true, chunk });
+        event.sender.send('rag:stream-chunk', { live: true, chunk });
       }
 
-      event.sender.send("rag:stream-complete", { live: true });
+      event.sender.send('rag:stream-complete', { live: true });
       return { success: true };
-
     } catch (error: any) {
       if (error.name !== 'AbortError') {
-        const msg = error.message || "";
+        const msg = error.message || '';
         // If JIT RAG failed (no embeddings yet, no relevant context), fallback to regular chat
         if (msg.includes('NO_RELEVANT_CONTEXT') || msg.includes('NO_MEETING_EMBEDDINGS')) {
           console.log(`[RAG] JIT query failed with '${msg}', falling back to regular live chat`);
           return { fallback: true };
         }
-        console.error("[RAG] Live query error:", error);
-        event.sender.send("rag:stream-error", { live: true, error: msg });
+        console.error('[RAG] Live query error:', error);
+        event.sender.send('rag:stream-error', { live: true, error: msg });
       }
       return { success: false, error: error.message };
     } finally {
@@ -3301,7 +3685,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Query global (cross-meeting search)
-  safeHandle("rag:query-global", async (event, { query }: { query: string }) => {
+  safeHandle('rag:query-global', async (event, { query }: { query: string }) => {
     const ragManager = appState.getRAGManager();
 
     if (!ragManager || !ragManager.isReady()) {
@@ -3317,15 +3701,14 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       for await (const chunk of stream) {
         if (abortController.signal.aborted) break;
-        event.sender.send("rag:stream-chunk", { global: true, chunk });
+        event.sender.send('rag:stream-chunk', { global: true, chunk });
       }
 
-      event.sender.send("rag:stream-complete", { global: true });
+      event.sender.send('rag:stream-complete', { global: true });
       return { success: true };
-
     } catch (error: any) {
       if (error.name !== 'AbortError') {
-        event.sender.send("rag:stream-error", { global: true, error: error.message });
+        event.sender.send('rag:stream-error', { global: true, error: error.message });
       }
       return { success: false, error: error.message };
     } finally {
@@ -3334,19 +3717,22 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Cancel active RAG query
-  safeHandle("rag:cancel-query", async (_, { meetingId, global }: { meetingId?: string; global?: boolean }) => {
-    const queryKey = global ? 'global' : `meeting-${meetingId}`;
+  safeHandle(
+    'rag:cancel-query',
+    async (_, { meetingId, global }: { meetingId?: string; global?: boolean }) => {
+      const queryKey = global ? 'global' : `meeting-${meetingId}`;
 
-    // Cancel any matching key
-    for (const [key, controller] of activeRAGQueries) {
-      if (key.startsWith(queryKey) || (global && key.startsWith('global'))) {
-        controller.abort();
-        activeRAGQueries.delete(key);
+      // Cancel any matching key
+      for (const [key, controller] of activeRAGQueries) {
+        if (key.startsWith(queryKey) || (global && key.startsWith('global'))) {
+          controller.abort();
+          activeRAGQueries.delete(key);
+        }
       }
-    }
 
-    return { success: true };
-  });
+      return { success: true };
+    },
+  );
 
   // Check if meeting has RAG embeddings
   safeHandle('rag:is-meeting-processed', async (_, meetingId: string) => {
@@ -3373,14 +3759,14 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Get RAG queue status
-  safeHandle("rag:get-queue-status", async () => {
+  safeHandle('rag:get-queue-status', async () => {
     const ragManager = appState.getRAGManager();
     if (!ragManager) return { pending: 0, processing: 0, completed: 0, failed: 0 };
     return ragManager.getQueueStatus();
   });
 
   // Retry pending embeddings
-  safeHandle("rag:retry-embeddings", async () => {
+  safeHandle('rag:retry-embeddings', async () => {
     const ragManager = appState.getRAGManager();
     if (!ragManager) return { success: false };
     await ragManager.retryPendingEmbeddings();
@@ -3391,16 +3777,23 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Profile Engine IPC Handlers
   // ==========================================
 
-  safeHandle("profile:upload-resume", async (_, filePath: string) => {
+  safeHandle('profile:upload-resume', async (_, filePath: string) => {
     try {
       // Premium gate: require active license or free trial for profile features
       if (!isProOrTrialActive()) {
-        return { success: false, error: 'Pro license required. Please activate a license key to use Profile Intelligence features.' };
+        return {
+          success: false,
+          error:
+            'Pro license required. Please activate a license key to use Profile Intelligence features.',
+        };
       }
       console.log(`[IPC] profile:upload-resume called with: ${filePath}`);
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
-        return { success: false, error: 'Knowledge engine not initialized. Please ensure API keys are configured.' };
+        return {
+          success: false,
+          error: 'Knowledge engine not initialized. Please ensure API keys are configured.',
+        };
       }
       const { DocType } = require('../premium/electron/knowledge/types');
       const result = await orchestrator.ingestDocument(filePath, DocType.RESUME);
@@ -3411,7 +3804,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("profile:get-status", async () => {
+  safeHandle('profile:get-status', async () => {
     try {
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
@@ -3424,18 +3817,22 @@ export function initializeIpcHandlers(appState: AppState): void {
         profileMode: status.activeMode,
         name: status.resumeSummary?.name,
         role: status.resumeSummary?.role,
-        totalExperienceYears: status.resumeSummary?.totalExperienceYears
+        totalExperienceYears: status.resumeSummary?.totalExperienceYears,
       };
     } catch (error: any) {
       return { hasProfile: false, profileMode: false };
     }
   });
 
-  safeHandle("profile:set-mode", async (_, enabled: boolean) => {
+  safeHandle('profile:set-mode', async (_, enabled: boolean) => {
     try {
       // Premium gate: only allow enabling profile mode with active license or free trial
       if (enabled && !isProOrTrialActive()) {
-        return { success: false, error: 'Pro license required. Please activate a license key to use Profile Intelligence features.' };
+        return {
+          success: false,
+          error:
+            'Pro license required. Please activate a license key to use Profile Intelligence features.',
+        };
       }
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
@@ -3452,7 +3849,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("profile:delete", async () => {
+  safeHandle('profile:delete', async () => {
     try {
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
@@ -3466,7 +3863,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("profile:get-profile", async () => {
+  safeHandle('profile:get-profile', async () => {
     try {
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) return null;
@@ -3476,13 +3873,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("profile:select-file", async () => {
+  safeHandle('profile:select-file', async () => {
     try {
       const result: any = await dialog.showOpenDialog({
         properties: ['openFile'],
-        filters: [
-          { name: 'Resume Files', extensions: ['pdf', 'docx', 'txt'] }
-        ]
+        filters: [{ name: 'Resume Files', extensions: ['pdf', 'docx', 'txt'] }],
       });
 
       if (result.canceled || result.filePaths.length === 0) {
@@ -3499,16 +3894,23 @@ export function initializeIpcHandlers(appState: AppState): void {
   // JD & Research IPC Handlers
   // ==========================================
 
-  safeHandle("profile:upload-jd", async (_, filePath: string) => {
+  safeHandle('profile:upload-jd', async (_, filePath: string) => {
     try {
       // Premium gate
       if (!isProOrTrialActive()) {
-        return { success: false, error: 'Pro license required. Please activate a license key to use Profile Intelligence features.' };
+        return {
+          success: false,
+          error:
+            'Pro license required. Please activate a license key to use Profile Intelligence features.',
+        };
       }
       console.log(`[IPC] profile:upload-jd called with: ${filePath}`);
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
-        return { success: false, error: 'Knowledge engine not initialized. Please ensure API keys are configured.' };
+        return {
+          success: false,
+          error: 'Knowledge engine not initialized. Please ensure API keys are configured.',
+        };
       }
       const { DocType } = require('../premium/electron/knowledge/types');
       const result = await orchestrator.ingestDocument(filePath, DocType.JD);
@@ -3519,7 +3921,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("profile:delete-jd", async () => {
+  safeHandle('profile:delete-jd', async () => {
     try {
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
@@ -3533,11 +3935,15 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("profile:research-company", async (_, companyName: string) => {
+  safeHandle('profile:research-company', async (_, companyName: string) => {
     try {
       // Premium gate
       if (!isProOrTrialActive()) {
-        return { success: false, error: 'Pro license required. Please activate a license key to use Profile Intelligence features.' };
+        return {
+          success: false,
+          error:
+            'Pro license required. Please activate a license key to use Profile Intelligence features.',
+        };
       }
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
@@ -3550,33 +3956,43 @@ export function initializeIpcHandlers(appState: AppState): void {
       const cm = CredentialsManager.getInstance();
       const tavilyApiKey = cm.getTavilyApiKey();
       if (tavilyApiKey) {
-        const { TavilySearchProvider } = require('../premium/electron/knowledge/TavilySearchProvider');
+        const {
+          TavilySearchProvider,
+        } = require('../premium/electron/knowledge/TavilySearchProvider');
         engine.setSearchProvider(new TavilySearchProvider(tavilyApiKey));
       } else {
         const nativelyKey = cm.getNativelyApiKey();
         if (nativelyKey) {
-          const { NativelySearchProvider } = require('../premium/electron/knowledge/NativelySearchProvider');
+          const {
+            NativelySearchProvider,
+          } = require('../premium/electron/knowledge/NativelySearchProvider');
           // Pass the real trial token when key is the __trial__ sentinel so the
           // server can authenticate via x-trial-token instead of the invalid key.
           const trialToken = nativelyKey === TRIAL_SENTINEL_KEY ? cm.getTrialToken() : undefined;
-          engine.setSearchProvider(new NativelySearchProvider(nativelyKey, trialToken ?? undefined));
-          console.log('[IPC] Company research: using Natively API search (no Tavily key configured)');
+          engine.setSearchProvider(
+            new NativelySearchProvider(nativelyKey, trialToken ?? undefined),
+          );
+          console.log(
+            '[IPC] Company research: using Natively API search (no Tavily key configured)',
+          );
         }
       }
 
       // Build full JD context so the dossier is tailored to the exact role
       const profileData = orchestrator.getProfileData();
       const activeJD = profileData?.activeJD;
-      const jdCtx = activeJD ? {
-        title: activeJD.title,
-        location: activeJD.location,
-        level: activeJD.level,
-        technologies: activeJD.technologies,
-        requirements: activeJD.requirements,
-        keywords: activeJD.keywords,
-        compensation_hint: activeJD.compensation_hint,
-        min_years_experience: activeJD.min_years_experience,
-      } : {};
+      const jdCtx = activeJD
+        ? {
+            title: activeJD.title,
+            location: activeJD.location,
+            level: activeJD.level,
+            technologies: activeJD.technologies,
+            requirements: activeJD.requirements,
+            keywords: activeJD.keywords,
+            compensation_hint: activeJD.compensation_hint,
+            min_years_experience: activeJD.min_years_experience,
+          }
+        : {};
       const dossier = await engine.researchCompany(companyName, jdCtx, true);
       const searchQuotaExhausted = (engine.searchProvider as any)?.quotaExhausted === true;
       return { success: true, dossier, searchQuotaExhausted };
@@ -3586,11 +4002,15 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("profile:generate-negotiation", async (_, force: boolean = false) => {
+  safeHandle('profile:generate-negotiation', async (_, force: boolean = false) => {
     try {
       // Premium gate
       if (!isProOrTrialActive()) {
-        return { success: false, error: 'Pro license required. Please activate a license key to use Profile Intelligence features.' };
+        return {
+          success: false,
+          error:
+            'Pro license required. Please activate a license key to use Profile Intelligence features.',
+        };
       }
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
@@ -3607,7 +4027,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         script = await orchestrator.generateNegotiationScriptOnDemand();
       }
       if (!script) {
-        return { success: false, error: 'Could not generate negotiation script. Ensure a resume and job description are uploaded.' };
+        return {
+          success: false,
+          error:
+            'Could not generate negotiation script. Ensure a resume and job description are uploaded.',
+        };
       }
       return { success: true, script };
     } catch (error: any) {
@@ -3616,7 +4040,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("profile:get-negotiation-state", async () => {
+  safeHandle('profile:get-negotiation-state', async () => {
     try {
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) return { success: false, error: 'Engine not ready' };
@@ -3631,7 +4055,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("profile:reset-negotiation", async () => {
+  safeHandle('profile:reset-negotiation', async () => {
     try {
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) return { success: false };
@@ -3646,7 +4070,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Profile Custom Notes
   // ==========================================
 
-  safeHandle("profile:get-notes", async () => {
+  safeHandle('profile:get-notes', async () => {
     try {
       const content = DatabaseManager.getInstance().getCustomNotes();
       return { success: true, content };
@@ -3655,7 +4079,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("profile:save-notes", async (_, content: string) => {
+  safeHandle('profile:save-notes', async (_, content: string) => {
     try {
       // Enforce a max length of 4000 chars to prevent prompt bloat
       const trimmed = typeof content === 'string' ? content.slice(0, 4000) : '';
@@ -3674,7 +4098,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("profile:get-persona", async () => {
+  safeHandle('profile:get-persona', async () => {
     try {
       if (!isProOrTrialActive()) return { success: false, content: '', error: 'pro_required' };
       const content = DatabaseManager.getInstance().getPersona();
@@ -3686,7 +4110,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("profile:save-persona", async (_, content: string) => {
+  safeHandle('profile:save-persona', async (_, content: string) => {
     try {
       if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
       if (typeof content !== 'string') return { success: false, error: 'invalid_persona' };
@@ -3706,7 +4130,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Tavily Search API Credentials
   // ==========================================
 
-  safeHandle("set-tavily-api-key", async (_, apiKey: string) => {
+  safeHandle('set-tavily-api-key', async (_, apiKey: string) => {
     try {
       if (apiKey && !apiKey.startsWith('tvly-')) {
         return { success: false, error: 'Invalid Tavily API key. Keys must start with "tvly-".' };
@@ -3723,11 +4147,11 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Overlay Opacity (Stealth Mode)
   // ==========================================
 
-  safeHandle("set-overlay-opacity", async (_, opacity: number) => {
+  safeHandle('set-overlay-opacity', async (_, opacity: number) => {
     // Clamp to valid range
     const clamped = Math.min(1.0, Math.max(0.35, opacity));
     // Broadcast to all renderer windows so the overlay picks it up in real-time
-    BrowserWindow.getAllWindows().forEach(win => {
+    BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) {
         win.webContents.send('overlay-opacity-changed', clamped);
       }
@@ -3736,30 +4160,30 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // ── Permissions ──────────────────────────────────────────────
-  safeHandle("permissions:check", async () => {
+  safeHandle('permissions:check', async () => {
     if (process.platform === 'darwin') {
-      const mic = systemPreferences.getMediaAccessStatus('microphone')
-      const screen = systemPreferences.getMediaAccessStatus('screen')
-      return { microphone: mic, screen, platform: 'darwin' }
+      const mic = systemPreferences.getMediaAccessStatus('microphone');
+      const screen = systemPreferences.getMediaAccessStatus('screen');
+      return { microphone: mic, screen, platform: 'darwin' };
     }
     // Windows/Linux: no TCC — permissions handled by OS at install/first-use time
-    return { microphone: 'granted', screen: 'granted', platform: process.platform }
-  })
+    return { microphone: 'granted', screen: 'granted', platform: process.platform };
+  });
 
-  safeHandle("permissions:request-mic", async () => {
-    if (process.platform !== 'darwin') return true
+  safeHandle('permissions:request-mic', async () => {
+    if (process.platform !== 'darwin') return true;
     try {
-      return await systemPreferences.askForMediaAccess('microphone')
+      return await systemPreferences.askForMediaAccess('microphone');
     } catch {
-      return false
+      return false;
     }
-  })
+  });
 
   // ==========================================
   // Modes IPC Handlers
   // ==========================================
 
-  safeHandle("modes:get-all", async () => {
+  safeHandle('modes:get-all', async () => {
     try {
       const { ModesManager } = require('./services/ModesManager');
       const mgr = ModesManager.getInstance();
@@ -3775,7 +4199,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("modes:get-active", async () => {
+  safeHandle('modes:get-active', async () => {
     try {
       const { ModesManager } = require('./services/ModesManager');
       return ModesManager.getInstance().getActiveMode();
@@ -3785,7 +4209,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("modes:create", async (_, params: { name: string; templateType: string }) => {
+  safeHandle('modes:create', async (_, params: { name: string; templateType: string }) => {
     try {
       if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
       const { ModesManager } = require('./services/ModesManager');
@@ -3800,30 +4224,37 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("modes:update", async (_, id: string, updates: { name?: string; templateType?: string; customContext?: string }) => {
-    try {
-      const { ModesManager } = require('./services/ModesManager');
-      const mgr = ModesManager.getInstance();
-      // Gate: changing templateType to a non-general template requires pro.
-      // Also gate if the existing mode is already non-general (editing a pro mode requires pro).
-      if (!isProOrTrialActive()) {
-        if (updates.templateType && updates.templateType !== 'general') {
-          return { success: false, error: 'pro_required' };
+  safeHandle(
+    'modes:update',
+    async (
+      _,
+      id: string,
+      updates: { name?: string; templateType?: string; customContext?: string },
+    ) => {
+      try {
+        const { ModesManager } = require('./services/ModesManager');
+        const mgr = ModesManager.getInstance();
+        // Gate: changing templateType to a non-general template requires pro.
+        // Also gate if the existing mode is already non-general (editing a pro mode requires pro).
+        if (!isProOrTrialActive()) {
+          if (updates.templateType && updates.templateType !== 'general') {
+            return { success: false, error: 'pro_required' };
+          }
+          const existing = mgr.getModes().find((m: any) => m.id === id);
+          if (existing && existing.templateType !== 'general') {
+            return { success: false, error: 'pro_required' };
+          }
         }
-        const existing = mgr.getModes().find((m: any) => m.id === id);
-        if (existing && existing.templateType !== 'general') {
-          return { success: false, error: 'pro_required' };
-        }
+        mgr.updateMode(id, updates);
+        return { success: true };
+      } catch (e: any) {
+        console.error('[IPC] modes:update error:', e);
+        return { success: false, error: e.message };
       }
-      mgr.updateMode(id, updates);
-      return { success: true };
-    } catch (e: any) {
-      console.error('[IPC] modes:update error:', e);
-      return { success: false, error: e.message };
-    }
-  });
+    },
+  );
 
-  safeHandle("modes:delete", async (_, id: string) => {
+  safeHandle('modes:delete', async (_, id: string) => {
     try {
       if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
       const { ModesManager } = require('./services/ModesManager');
@@ -3835,12 +4266,14 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("modes:set-active", async (_, id: string | null) => {
+  safeHandle('modes:set-active', async (_, id: string | null) => {
     try {
       // Allow clearing (null) or setting general mode without pro; all other modes require pro
       if (id !== null) {
         const { ModesManager } = require('./services/ModesManager');
-        const targetMode = ModesManager.getInstance().getModes().find((m: any) => m.id === id);
+        const targetMode = ModesManager.getInstance()
+          .getModes()
+          .find((m: any) => m.id === id);
         if (targetMode && targetMode.templateType !== 'general' && !isProOrTrialActive()) {
           return { success: false, error: 'pro_required' };
         }
@@ -3851,13 +4284,15 @@ export function initializeIpcHandlers(appState: AppState): void {
       try {
         const appStateIntMgr = appState.getIntelligenceManager();
         if (appStateIntMgr) appStateIntMgr.clearSessionContext();
-      } catch { /* non-fatal — session may not exist during startup */ }
+      } catch {
+        /* non-fatal — session may not exist during startup */
+      }
 
       ModesManager.getInstance().setActiveMode(id);
       // Broadcast mode change to all windows so indicators update immediately
       const activeMode = id ? ModesManager.getInstance().getActiveMode() : null;
       const activeName = activeMode?.name ?? null;
-      BrowserWindow.getAllWindows().forEach(win => {
+      BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) win.webContents.send('mode-changed', { id, name: activeName });
       });
       // Phase 3 — re-bind dynamic action engine so the new mode's trigger pack
@@ -3874,7 +4309,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         } else if (appStateIntMgr && !id) {
           appStateIntMgr.clearDynamicActionContext();
         }
-      } catch { /* non-fatal */ }
+      } catch {
+        /* non-fatal */
+      }
       // Phase 6 — mode_switched telemetry (no PII).
       try {
         const { telemetryService } = require('./services/telemetry/TelemetryService');
@@ -3883,7 +4320,9 @@ export function initializeIpcHandlers(appState: AppState): void {
           modeId: activeMode?.id,
           properties: { modeTemplateType: activeMode?.templateType, cleared: !id },
         });
-      } catch { /* non-fatal */ }
+      } catch {
+        /* non-fatal */
+      }
       return { success: true };
     } catch (e: any) {
       console.error('[IPC] modes:set-active error:', e);
@@ -3891,7 +4330,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("modes:get-reference-files", async (_, modeId: string) => {
+  safeHandle('modes:get-reference-files', async (_, modeId: string) => {
     try {
       const { ModesManager } = require('./services/ModesManager');
       return ModesManager.getInstance().getReferenceFiles(modeId);
@@ -3901,7 +4340,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("modes:upload-reference-file", async (_, modeId: string) => {
+  safeHandle('modes:upload-reference-file', async (_, modeId: string) => {
     try {
       if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
       // Server-side allow-list. The dialog filter is a hint to users — never
@@ -3910,8 +4349,19 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Plain-text formats parse trivially; PDF and DOCX go through their
       // dedicated parsers below.
       const ALLOWED_EXTENSIONS = new Set([
-        '.txt', '.md', '.markdown', '.json', '.csv', '.tsv', '.xml', '.html', '.htm', '.log',
-        '.pdf', '.docx', '.doc',
+        '.txt',
+        '.md',
+        '.markdown',
+        '.json',
+        '.csv',
+        '.tsv',
+        '.xml',
+        '.html',
+        '.htm',
+        '.log',
+        '.pdf',
+        '.docx',
+        '.doc',
       ]);
       // 10 MiB per file. Anything larger is almost always a database dump,
       // a media file, or a misclicked archive; the modes layer would just
@@ -3921,7 +4371,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       const result: any = await dialog.showOpenDialog({
         properties: ['openFile'],
         filters: [
-          { name: 'Text & Documents', extensions: ['txt', 'md', 'json', 'csv', 'xml', 'html', 'pdf', 'docx', 'doc'] },
+          {
+            name: 'Text & Documents',
+            extensions: ['txt', 'md', 'json', 'csv', 'xml', 'html', 'pdf', 'docx', 'doc'],
+          },
           { name: 'All Files', extensions: ['*'] },
         ],
       });
@@ -3947,12 +4400,16 @@ export function initializeIpcHandlers(appState: AppState): void {
       try {
         stats = fs.lstatSync(filePath);
       } catch {
-        return { success: false, error: 'Could not read the selected file. It may have moved or been deleted.' };
+        return {
+          success: false,
+          error: 'Could not read the selected file. It may have moved or been deleted.',
+        };
       }
       if (!stats.isFile()) {
         return {
           success: false,
-          error: 'Selected path is not a regular file (it may be a symlink, device, or directory). Pick a real document file.',
+          error:
+            'Selected path is not a regular file (it may be a symlink, device, or directory). Pick a real document file.',
         };
       }
       if (stats.size > MAX_FILE_BYTES) {
@@ -3970,7 +4427,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
         return Promise.race([
           p,
-          new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)),
+          new Promise<T>((_, reject) =>
+            setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms),
+          ),
         ]);
       }
 
@@ -3984,7 +4443,11 @@ export function initializeIpcHandlers(appState: AppState): void {
           content = data.text;
         } else if (ext === '.docx' || ext === '.doc') {
           const mammoth = require('mammoth');
-          const result2: any = await withTimeout<any>(mammoth.extractRawText({ path: filePath }), PARSE_TIMEOUT_MS, 'DOCX parse');
+          const result2: any = await withTimeout<any>(
+            mammoth.extractRawText({ path: filePath }),
+            PARSE_TIMEOUT_MS,
+            'DOCX parse',
+          );
           content = result2.value;
         } else {
           // Plain-text family. Read raw bytes first so we can detect text
@@ -3996,9 +4459,9 @@ export function initializeIpcHandlers(appState: AppState): void {
           }
           // BOM-aware decode. UTF-16 files have many embedded null bytes; we
           // must NOT treat those as a binary-rename signal.
-          if (probe.length >= 2 && probe[0] === 0xFF && probe[1] === 0xFE) {
+          if (probe.length >= 2 && probe[0] === 0xff && probe[1] === 0xfe) {
             content = probe.subarray(2).toString('utf16le');
-          } else if (probe.length >= 2 && probe[0] === 0xFE && probe[1] === 0xFF) {
+          } else if (probe.length >= 2 && probe[0] === 0xfe && probe[1] === 0xff) {
             // UTF-16 BE → swap pairs then decode as utf16le.
             const swapped = Buffer.allocUnsafe(probe.length - 2);
             for (let i = 2; i + 1 < probe.length; i += 2) {
@@ -4006,7 +4469,12 @@ export function initializeIpcHandlers(appState: AppState): void {
               swapped[i - 1] = probe[i];
             }
             content = swapped.toString('utf16le');
-          } else if (probe.length >= 3 && probe[0] === 0xEF && probe[1] === 0xBB && probe[2] === 0xBF) {
+          } else if (
+            probe.length >= 3 &&
+            probe[0] === 0xef &&
+            probe[1] === 0xbb &&
+            probe[2] === 0xbf
+          ) {
             content = probe.subarray(3).toString('utf8');
           } else {
             // No BOM. Sniff the first 2 KiB for a null byte — that's the
@@ -4024,7 +4492,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       } catch (parseErr: any) {
         // Parser-specific failures (timeout, malformed PDF, zip-bomb DOCX).
         // Log detail to main-process; return a generic message.
-        console.error('[IPC] modes:upload-reference-file parser error:', parseErr?.message ?? parseErr);
+        console.error(
+          '[IPC] modes:upload-reference-file parser error:',
+          parseErr?.message ?? parseErr,
+        );
         return {
           success: false,
           error: `Could not parse "${fileName}". The file may be corrupt, password-protected, or in an unsupported variant of ${ext}.`,
@@ -4046,11 +4517,14 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Do not leak raw error.message to the renderer (may contain absolute
       // paths or library internals). Return a generic message; the detail is
       // already in the main-process log above.
-      return { success: false, error: 'Could not read the selected file. Please try a different file or contact support.' };
+      return {
+        success: false,
+        error: 'Could not read the selected file. Please try a different file or contact support.',
+      };
     }
   });
 
-  safeHandle("modes:delete-reference-file", async (_, id: string) => {
+  safeHandle('modes:delete-reference-file', async (_, id: string) => {
     try {
       if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
       const { ModesManager } = require('./services/ModesManager');
@@ -4064,7 +4538,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   // ── Note Sections ──────────────────────────────────────────────
 
-  safeHandle("modes:get-note-sections", async (_, modeId: string) => {
+  safeHandle('modes:get-note-sections', async (_, modeId: string) => {
     try {
       const { ModesManager } = require('./services/ModesManager');
       return ModesManager.getInstance().getNoteSections(modeId);
@@ -4074,31 +4548,37 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("modes:add-note-section", async (_, modeId: string, title: string, description: string) => {
-    try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
-      const { ModesManager } = require('./services/ModesManager');
-      const section = ModesManager.getInstance().addNoteSection({ modeId, title, description });
-      return { success: true, section };
-    } catch (e: any) {
-      console.error('[IPC] modes:add-note-section error:', e);
-      return { success: false, error: e.message };
-    }
-  });
+  safeHandle(
+    'modes:add-note-section',
+    async (_, modeId: string, title: string, description: string) => {
+      try {
+        if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+        const { ModesManager } = require('./services/ModesManager');
+        const section = ModesManager.getInstance().addNoteSection({ modeId, title, description });
+        return { success: true, section };
+      } catch (e: any) {
+        console.error('[IPC] modes:add-note-section error:', e);
+        return { success: false, error: e.message };
+      }
+    },
+  );
 
-  safeHandle("modes:update-note-section", async (_, id: string, updates: { title?: string; description?: string }) => {
-    try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
-      const { ModesManager } = require('./services/ModesManager');
-      ModesManager.getInstance().updateNoteSection(id, updates);
-      return { success: true };
-    } catch (e: any) {
-      console.error('[IPC] modes:update-note-section error:', e);
-      return { success: false, error: e.message };
-    }
-  });
+  safeHandle(
+    'modes:update-note-section',
+    async (_, id: string, updates: { title?: string; description?: string }) => {
+      try {
+        if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+        const { ModesManager } = require('./services/ModesManager');
+        ModesManager.getInstance().updateNoteSection(id, updates);
+        return { success: true };
+      } catch (e: any) {
+        console.error('[IPC] modes:update-note-section error:', e);
+        return { success: false, error: e.message };
+      }
+    },
+  );
 
-  safeHandle("modes:delete-note-section", async (_, id: string) => {
+  safeHandle('modes:delete-note-section', async (_, id: string) => {
     try {
       if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
       const { ModesManager } = require('./services/ModesManager');
@@ -4110,7 +4590,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("modes:remove-all-note-sections", async (_, modeId: string) => {
+  safeHandle('modes:remove-all-note-sections', async (_, modeId: string) => {
     try {
       if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
       const { ModesManager } = require('./services/ModesManager');
@@ -4134,28 +4614,33 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const settingsWin = (appState as any).settingsWindowHelper?.getWindow?.();
       settingsWin?.webContents?.send('phone-mirror:status', info);
-    } catch (_) { /* settings window may not exist yet */ }
+    } catch (_) {
+      /* settings window may not exist yet */
+    }
   });
 
-  safeHandle("phone-mirror:get-info", async () => {
+  safeHandle('phone-mirror:get-info', async () => {
     return PhoneMirrorService.getInstance().snapshot();
   });
 
-  safeHandle("phone-mirror:enable", async (_, exposeOnLan?: boolean) => {
+  safeHandle('phone-mirror:enable', async (_, exposeOnLan?: boolean) => {
     try {
-      return await PhoneMirrorService.getInstance().start({ exposeOnLan: !!exposeOnLan, persist: true });
+      return await PhoneMirrorService.getInstance().start({
+        exposeOnLan: !!exposeOnLan,
+        persist: true,
+      });
     } catch (e: any) {
       console.error('[IPC] phone-mirror:enable error:', e);
       return { error: e?.message || 'failed to start phone mirror' };
     }
   });
 
-  safeHandle("phone-mirror:disable", async () => {
+  safeHandle('phone-mirror:disable', async () => {
     await PhoneMirrorService.getInstance().stop({ persist: true });
     return { success: true };
   });
 
-  safeHandle("phone-mirror:set-lan", async (_, exposeOnLan: boolean) => {
+  safeHandle('phone-mirror:set-lan', async (_, exposeOnLan: boolean) => {
     try {
       return await PhoneMirrorService.getInstance().setExposeOnLan(!!exposeOnLan);
     } catch (e: any) {
@@ -4164,7 +4649,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("phone-mirror:rotate-token", async () => {
+  safeHandle('phone-mirror:rotate-token', async () => {
     try {
       return await PhoneMirrorService.getInstance().rotateToken();
     } catch (e: any) {
@@ -4173,28 +4658,22 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  // Push a desktop screenshot thumbnail to connected phones.
-  // The caller can optionally pass a pre-captured path; if absent, a fresh
-  // screenshot is taken.  The image is resized to 800 px wide and compressed
-  // to JPEG so the WebSocket payload stays well under 200 KB.
-  safeHandle("phone-mirror:push-screenshot", async (_, screenshotPath?: string) => {
+  // Stealth screenshot capture triggered from the phone UI.
+  // Takes a screenshot on the PC (adding it to the screenshot queue so it can
+  // be used in the next AI prompt), then broadcasts an ack so the phone shows
+  // a confirmation toast.  The image is NOT sent to the phone — the phone is
+  // just a remote shutter; the screenshot stays on the desktop for AI use.
+  safeHandle('phone-mirror:push-screenshot', async (_, screenshotPath?: string) => {
     try {
-      let imgPath = screenshotPath;
-      if (!imgPath) {
-        imgPath = await appState.takeScreenshot(false);
-      }
-      const buf = await fs.promises.readFile(imgPath);
-      const sharp = require('sharp') as typeof import('sharp');
-      const compressed = await sharp(buf)
-        .resize({ width: 800, withoutEnlargement: true })
-        .jpeg({ quality: 70 })
-        .toBuffer();
-      const dataUrl = 'data:image/jpeg;base64,' + compressed.toString('base64');
-      PhoneMirrorService.getInstance().publishScreenshot(crypto.randomUUID(), dataUrl);
-      return { success: true };
+      const imgPath = screenshotPath || (await appState.takeScreenshot(false));
+      PhoneMirrorService.getInstance().publishAck(
+        'screenshot',
+        'Screenshot captured — queued for AI',
+      );
+      return { success: true, path: imgPath };
     } catch (e: any) {
       console.error('[IPC] phone-mirror:push-screenshot error:', e);
-      return { error: e?.message || 'failed to push screenshot' };
+      return { error: e?.message || 'failed to capture screenshot' };
     }
   });
 
@@ -4208,10 +4687,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Re-use the same global-shortcut dispatch path the keyboard uses.
       // This keeps phone actions identical to key-triggered stealth actions.
       const allWindows = BrowserWindow.getAllWindows();
-      allWindows.forEach(w => {
+      allWindows.forEach((w) => {
         if (!w.isDestroyed()) w.webContents.send('global-shortcut', { action: cmd.action });
       });
-
     } else if (cmd.type === 'chat') {
       // Stream a phone-initiated chat through the LLM exactly like gemini-chat-stream
       // but without requiring a renderer event sender. Tokens are pushed directly to
@@ -4219,9 +4697,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       // stay in sync.
       const myStreamId = crypto.randomUUID();
       const message = cmd.message;
+      const phoneMirror = PhoneMirrorService.getInstance();
 
-      try { PhoneMirrorService.getInstance().publishUserMessage(myStreamId, message); } catch (_) {}
-      // Notify renderer so it can display the incoming phone message too
+      try { phoneMirror.publishUserMessage(myStreamId, message); } catch (_) {}
+      // Notify renderer so it can display the incoming phone message too.
       win?.webContents.send('phone-mirror:incoming-chat', { message, streamId: myStreamId });
 
       try {
@@ -4229,32 +4708,35 @@ export function initializeIpcHandlers(appState: AppState): void {
         const stream = llmHelper.streamChat(message);
         let full = '';
         for await (const token of stream) {
-          try { PhoneMirrorService.getInstance().publishToken(myStreamId, token); } catch (_) {}
+          // Cancel early if all phones have disconnected — no point burning LLM
+          // tokens when nobody is receiving them and we have no desktop renderer
+          // context to show the result in either.
+          if (!phoneMirror.hasClients() && win?.isDestroyed()) break;
+          try { phoneMirror.publishToken(myStreamId, token); } catch (_) {}
           win?.webContents.send('gemini-stream-token', token);
           full += token;
         }
-        try { PhoneMirrorService.getInstance().publishDone(myStreamId, full); } catch (_) {}
+        try { phoneMirror.publishDone(myStreamId, full); } catch (_) {}
         win?.webContents.send('gemini-stream-done');
       } catch (err: any) {
         console.error('[PhoneMirror] phone-chat stream error:', err);
-        try { PhoneMirrorService.getInstance().publishError(myStreamId, err?.message || 'stream error'); } catch (_) {}
+        try { phoneMirror.publishError(myStreamId, err?.message || 'stream error'); } catch (_) {}
         win?.webContents.send('gemini-stream-error', err?.message || 'stream error');
       }
 
     } else if (cmd.type === 'screenshot') {
-      // Capture a fresh screenshot and push it back to the phone.
+      // Stealth screenshot: capture on PC → add to screenshot queue → ack to phone.
+      // The image is NOT sent to the phone — it stays on the desktop for AI use.
+      // The phone simply acts as a remote shutter button.
       try {
-        const imgPath = await appState.takeScreenshot(false);
-        const buf = await fs.promises.readFile(imgPath);
-        const sharp = require('sharp') as typeof import('sharp');
-        const compressed = await sharp(buf)
-          .resize({ width: 800, withoutEnlargement: true })
-          .jpeg({ quality: 70 })
-          .toBuffer();
-        const dataUrl = 'data:image/jpeg;base64,' + compressed.toString('base64');
-        PhoneMirrorService.getInstance().publishScreenshot(crypto.randomUUID(), dataUrl);
+        await appState.takeScreenshot(false);
+        PhoneMirrorService.getInstance().publishAck(
+          'screenshot',
+          'Screenshot captured — queued for AI',
+        );
       } catch (e: any) {
         console.error('[PhoneMirror] phone screenshot request failed:', e);
+        PhoneMirrorService.getInstance().publishAck('screenshot', 'Screenshot failed');
       }
     }
   });
