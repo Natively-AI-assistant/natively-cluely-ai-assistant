@@ -17,7 +17,21 @@
 
 import { Worker } from 'worker_threads';
 import path from 'path';
+import fs from 'fs';
 import { buildWorkerInitMessage } from './inferenceConfig';
+
+// esbuild bundles this module into dist-electron/electron/main.js, so
+// __dirname can resolve to dist-electron/electron/ rather than this file's
+// own directory. Check both candidate locations to support bundled and
+// unbundled execution.
+function resolveWhisperWorkerPath(): string {
+    const candidates = [
+        path.join(__dirname, 'whisperWorker.js'),
+        path.join(__dirname, 'whisper', 'whisperWorker.js'),
+        path.join(__dirname, 'audio', 'whisper', 'whisperWorker.js'),
+    ];
+    return candidates.find(p => fs.existsSync(p)) ?? candidates[0];
+}
 
 class ModelPreloader {
     private warmWorker: Worker | null = null;
@@ -53,7 +67,7 @@ class ModelPreloader {
         console.log(`[ModelPreloader] Warming worker for ${modelId}...`);
 
         // __dirname at runtime = dist-electron/electron/audio/whisper/
-        const workerPath = path.join(__dirname, 'whisperWorker.js');
+        const workerPath = resolveWhisperWorkerPath();
         const w = new Worker(workerPath);
         this.loadingWorker = w;
 
