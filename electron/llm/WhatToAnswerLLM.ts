@@ -48,7 +48,8 @@ export class WhatToAnswerLLM {
         intentResult?: IntentResult,
         imagePaths?: string[],
         screenContext?: ScreenContext,
-        promptInstruction?: string
+        promptInstruction?: string,
+        domContext?: string
     ): AsyncGenerator<string> {
         const MEASURE = process.env.MEASURE_LATENCY === 'true';
         let tStart = 0, tIntent = 0, tTemporal = 0, tMode = 0, tTrunc = 0, tPrompt = 0, tStream = 0;
@@ -107,27 +108,31 @@ ANSWER SHAPE: ${intentResult.answerShape}
             // fitContextForCurrentModel only shrinks for cloud models; tiny-tier
             // returns unchanged so we must estimate conservatively.
             let modeContextBlock = '';
-            try {
-                if (!this.modesManager) {
-                    const { ModesManager } = require('../services/ModesManager') as { ModesManager: ModesManagerType };
-                    this.modesManager = ModesManager.getInstance();
+            // Skill mode owns the system prompt — skip the (potentially expensive
+            // hybrid retrieval) mode-context block fetch entirely.
+            if (!activeSkill) {
+                try {
+                    if (!this.modesManager) {
+                        const { ModesManager } = require('../services/ModesManager') as { ModesManager: ModesManagerType };
+                        this.modesManager = ModesManager.getInstance();
+                    }
+                    // Phase 4 — prefer async hybrid retrieval (FTS + vector with
+                    // lexical fallback inside the retriever). The hybrid method
+                    // already falls back to lexical internally when embeddings
+                    // are unavailable, so we just need a single await here.
+                    // Sync lexical method remains as the second-line fallback in
+                    // case the hybrid method is missing (older module shape).
+                    if (typeof this.modesManager.buildRetrievedActiveModeContextBlockHybrid === 'function') {
+                        modeContextBlock = await this.modesManager.buildRetrievedActiveModeContextBlockHybrid(
+                            cleanedTranscript, cleanedTranscript, 1800,
+                        );
+                    }
+                    if (!modeContextBlock) {
+                        modeContextBlock = this.modesManager.buildRetrievedActiveModeContextBlock(cleanedTranscript, cleanedTranscript, 1800);
+                    }
+                } catch (_err: any) {
+                    console.warn('[WhatToAnswerLLM] ModesManager unavailable:', _err?.message);
                 }
-                // Phase 4 — prefer async hybrid retrieval (FTS + vector with
-                // lexical fallback inside the retriever). The hybrid method
-                // already falls back to lexical internally when embeddings
-                // are unavailable, so we just need a single await here.
-                // Sync lexical method remains as the second-line fallback in
-                // case the hybrid method is missing (older module shape).
-                if (typeof this.modesManager.buildRetrievedActiveModeContextBlockHybrid === 'function') {
-                    modeContextBlock = await this.modesManager.buildRetrievedActiveModeContextBlockHybrid(
-                        cleanedTranscript, cleanedTranscript, 1800,
-                    );
-                }
-                if (!modeContextBlock) {
-                    modeContextBlock = this.modesManager.buildRetrievedActiveModeContextBlock(cleanedTranscript, cleanedTranscript, 1800);
-                }
-            } catch (_err: any) {
-                console.warn('[WhatToAnswerLLM] ModesManager unavailable:', _err?.message);
             }
 
             const assemblerBudget = 2000
@@ -145,14 +150,16 @@ ANSWER SHAPE: ${intentResult.answerShape}
             // + CONTEXT_INTELLIGENCE_LAYER + SHARED_CODING_RULES. When a mode is
             // active, layer the mode suffix on top so the custom role takes effect.
             let modePromptSuffix = '';
-            try {
-                if (!this.modesManager) {
-                    const { ModesManager } = require('../services/ModesManager') as { ModesManager: ModesManagerType };
-                    this.modesManager = ModesManager.getInstance();
+            if (!activeSkill) {
+                try {
+                    if (!this.modesManager) {
+                        const { ModesManager } = require('../services/ModesManager') as { ModesManager: ModesManagerType };
+                        this.modesManager = ModesManager.getInstance();
+                    }
+                    modePromptSuffix = this.modesManager.getActiveModeSystemPromptSuffix();
+                } catch (_err: any) {
+                    // already warned above
                 }
-                modePromptSuffix = this.modesManager.getActiveModeSystemPromptSuffix();
-            } catch (_err: any) {
-                // already warned above
             }
 
             if (MEASURE) tMode = performance.now();
@@ -161,15 +168,18 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 ? TINY_WHAT_TO_ANSWER_PROMPT
                 : UNIVERSAL_WHAT_TO_ANSWER_PROMPT;
 
-            const finalPromptOverride = modePromptSuffix
-                ? `${basePrompt}\n\n## ACTIVE MODE\n${modePromptSuffix}`
-                : basePrompt;
+            const finalPromptOverride = activeSkill
+                ? `${basePrompt}\n\n## ACTIVE SKILL\n${activeSkill.promptBlock}`
+                : modePromptSuffix
+                    ? `${basePrompt}\n\n## ACTIVE MODE\n${modePromptSuffix}`
+                    : basePrompt;
 
             const assembler = new PromptAssembler();
             const packet = assembler.assemble({
                 transcript: workingTranscript,
                 modeTemplateType: 'active',
                 screenContext,
+                domContext,
                 priorResponses: temporalContext?.hasRecentResponses ? temporalContext.previousResponses : undefined,
                 intentContext,
                 retrievedModeContext: modeContextBlock || undefined,
