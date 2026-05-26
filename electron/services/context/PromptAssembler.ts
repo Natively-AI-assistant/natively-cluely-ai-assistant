@@ -349,7 +349,7 @@ ${this.escapeUserContent(truncated)}
             tokenBudget: 6000,
             content: `<dom_context trust_level="untrusted_screen_evidence" source="browser_dom">
 DOM HTML/TEXT STRUCTURE:
-${this.escapeUserContent(truncated)}
+${this.escapeUserContent(this.escapePromptInjection(truncated))}
 </dom_context>`,
             evidenceRefs: [{
                 source: 'screen',
