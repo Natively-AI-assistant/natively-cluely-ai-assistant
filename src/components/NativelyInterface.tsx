@@ -38,6 +38,7 @@ import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/
 import TopPill from './ui/TopPill';
 import RollingTranscript from './ui/RollingTranscript';
 import { NegotiationCoachingCard } from '../premium';
+import { isMac, getModifierSymbol } from '../utils/platformUtils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -361,6 +362,24 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // Resolved once on mount via IPC (default true so non-macOS / probe
     // failure falls back to existing behaviour).
     const stealthAutoEngageOkRef = useRef<boolean>(true);
+    // True when the CGEventTap is actually loadable AND Accessibility is granted.
+    // Three failure modes silently re-trap the chat input if this is only a
+    // platform check (the original PR #250 bug it fixed for Windows, latent
+    // for macOS):
+    //   1. Native binary loaded without StealthKeyboardTap (older build, partial
+    //      rebuild) → isAvailable() returns false, but a platform-only ref
+    //      would stay true and blockInputFocus would block every click.
+    //   2. Accessibility permission revoked at runtime → stealthTapStart() fails,
+    //      banner shows, but input is trapped until app restart.
+    //   3. Future toggle that disables stealth — same trap.
+    // Default is FALSE (safe — input remains clickable) until the main process
+    // confirms availability via stealth-tap:available. The race window before
+    // the IPC resolves is ~50 ms on cold start; a real user moving their mouse
+    // to the input cannot beat that. Also flipped to false when the
+    // stealth-tap-state broadcast reports {active:false, reason:'permission'}
+    // and re-promoted to true on {active:true} (belt-and-braces in case the
+    // initial probe rejected).
+    const isCgEventTapAvailableRef = useRef<boolean>(false);
     // Latest-handler ref so the captured-key listener (mounted with [] deps)
     // calls the CURRENT handleManualSubmit closure — not the one captured at
     // first render, which reads inputValue="" and silently no-ops on submit.
@@ -653,21 +672,30 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         return () => unsub?.();
     }, []);
 
-    // Screen Recording Permission Warning Banner
-    const [systemAudioWarning, setSystemAudioWarning] = useState<string | null>(null);
+    // Audio capture / screen-recording warning banner. Two distinct IPC
+    // events feed the same banner surface but require different title and
+    // action: the macOS screen-recording-permission denial points at the
+    // OS Privacy pane, while generic audio-capture failures (no-chunks
+    // watchdog, TCC zero-fill, terminal STT init failure, SCK errors) are
+    // cross-platform and should open Natively's own Settings. Bundling
+    // both under a hardcoded "Screen Recording Permission Denied" title
+    // with an x-apple.systempreferences action was issue #252: on Windows
+    // the audio-capture-failed path fired, the user saw a macOS-only title
+    // and the Open Settings button handed Windows shell a URI scheme it
+    // couldn't resolve (Microsoft Store popup).
+    type SystemAudioWarning = {
+        kind: 'screen-recording-permission' | 'audio-capture-failure';
+        message: string;
+    };
+    const [systemAudioWarning, setSystemAudioWarning] = useState<SystemAudioWarning | null>(null);
     useEffect(() => {
         const unsub = window.electronAPI?.onSystemAudioPermissionDenied?.((message: string) => {
-            setSystemAudioWarning(message);
+            setSystemAudioWarning({ kind: 'screen-recording-permission', message });
             setIsExpanded(true); // Force overlay open so user sees the warning
         });
         return () => unsub?.();
     }, []);
 
-    // Audio capture failure banner — surfaces specific Rust-side errors
-    // (CoreAudio Tap failure, SCK timeout, no displays) and the stuck-watchdog
-    // signal (capture started but no chunks for 8s, suggesting a routing
-    // mismatch). Without this, users staring at an empty interviewer transcript
-    // had no signal that anything was wrong.
     useEffect(() => {
         const unsub = window.electronAPI?.onAudioCaptureFailed?.((payload) => {
             if (payload.channel !== 'system') return;  // mic failures already shown via STT status
@@ -675,7 +703,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             // recovery attempts shouldn't spam the banner since recovery
             // typically succeeds within ~1.5s.
             if (payload.terminal || payload.stuck) {
-                setSystemAudioWarning(payload.message);
+                setSystemAudioWarning({ kind: 'audio-capture-failure', message: payload.message });
                 setIsExpanded(true);
             }
         });
@@ -1386,7 +1414,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // It was handled separate locally in this component maybe?
         // Ah, I need to see the existing listener for 'onIntelligenceFollowUpQuestionsUpdate'
 
-        // Let's implemented token streaming for it anyway, likely it updates a message bubble 
+        // Let's implemented token streaming for it anyway, likely it updates a message bubble
         // OR it might update a specialized "Suggested Questions" area.
         // Assuming it's a message for consistency with "Copilot" approach.
 
@@ -1533,11 +1561,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         }
 
         try {
-            // Pass imagePath if attached
+            const rawDom = (window as any).lastCapturedDOM;
+            const domContext = typeof rawDom === 'string' ? rawDom.substring(0, 50000) : undefined;
             const result = await window.electronAPI.generateWhatToSay(
                 undefined,
                 currentAttachments.length > 0 ? currentAttachments.map(s => s.path) : undefined,
-                dynamicPromptInstruction ? { promptInstruction: dynamicPromptInstruction } : undefined
+                {
+                    ...(dynamicPromptInstruction ? { promptInstruction: dynamicPromptInstruction } : {}),
+                    ...(domContext ? { domContext } : {})
+                }
             );
             setScreenContextStatus(result.screenContextStatus || 'not_available');
             setLatestUsedImageInput(Boolean(result.usedImageInput));
@@ -2475,7 +2507,7 @@ Provide only the answer, nothing else.`;
     // We listen here to handle them when the window is focused (renderer side)
     // Global shortcuts (when window blurred) are handled by Main process -> GlobalShortcuts
     // But Main process events might not reach here if we don't listen, or we want unified handling.
-    // Actually, KeybindManager registers global shortcuts. If they are registered as global, 
+    // Actually, KeybindManager registers global shortcuts. If they are registered as global,
     // Electron might consume them before they reach here?
     // 'toggle-app' is Global.
     // 'toggle-visibility' is NOT Global in default config (isGlobal: false), so it depends on focus.
@@ -2834,9 +2866,19 @@ Provide only the answer, nothing else.`;
                 setIsExpanded(true);
                 setStealthPermissionMissing(false);
                 escSuppressUntilNextActive = false;
+                // Tap engaged → availability is confirmed. Belt-and-braces
+                // in case the initial stealth-tap:available probe rejected or
+                // returned a stale false at mount.
+                isCgEventTapAvailableRef.current = true;
             }
             if (!active && reason === 'permission') {
                 setStealthPermissionMissing(true);
+                // Accessibility revoked at runtime → flip the availability ref
+                // off so blockInputFocus stops blocking DOM focus. The tap can
+                // no longer engage; leaving the guard active would re-trap the
+                // input until app restart (the exact symptom PR #250 fixed
+                // for Windows).
+                isCgEventTapAvailableRef.current = false;
             }
         });
 
@@ -2956,10 +2998,43 @@ Provide only the answer, nothing else.`;
         // see no behaviour change. The probe runs on the main process via
         // `defaults read com.apple.HIToolbox`; see electron/services/
         // ImeDetector.ts for the reason this gate exists at all.
+        // Probe for IME state (Pinyin, Hangul, Kanji). Result refines
+        // stealthAutoEngageOkRef from its safe-true default.
         if (window.electronAPI.stealthTapShouldAutoEngage) {
             window.electronAPI.stealthTapShouldAutoEngage()
                 .then((ok) => { stealthAutoEngageOkRef.current = !!ok; })
                 .catch(() => { /* fail open — keep default */ });
+        }
+
+        // Resolve actual CGEventTap availability (native binary loaded AND
+        // Accessibility granted). isCgEventTapAvailableRef defaults to false;
+        // this promotes it to true only when both conditions hold. The .catch
+        // logs the rejection — without that, an IPC reject silently keeps the
+        // ref at false for the whole session on macOS too. The state listener's
+        // active:true branch is a belt-and-braces re-promotion path.
+        if (window.electronAPI.stealthTapAvailable) {
+            window.electronAPI.stealthTapAvailable()
+                .then((ok) => { isCgEventTapAvailableRef.current = !!ok; })
+                .catch((err) => {
+                    console.warn('[stealth] stealthTapAvailable IPC rejected — ref stays false until tap engages via hotkey', err);
+                });
+        }
+
+        // Refresh IME detection on window focus so users who add a Pinyin/
+        // Hangul input source mid-session don't silently break CJK input the
+        // next time the tap would auto-engage. Darwin-only: on Windows/Linux
+        // the IPC unconditionally returns true and refreshImeDetection is a
+        // no-op, so wiring the listener would just be a per-focus IPC tax.
+        // isMac is computed from window.electronAPI?.platform in platformUtils.
+        let removeFocusRefresh: (() => void) | undefined;
+        if (isMac && window.electronAPI?.stealthTapRefreshIme) {
+            const onFocusRefresh = () => {
+                window.electronAPI?.stealthTapRefreshIme?.()
+                    .then((ok) => { stealthAutoEngageOkRef.current = !!ok; })
+                    .catch(() => {});
+            };
+            window.addEventListener('focus', onFocusRefresh);
+            removeFocusRefresh = () => window.removeEventListener('focus', onFocusRefresh);
         }
 
         const onMouseDown = (e: MouseEvent) => {
@@ -2968,13 +3043,26 @@ Provide only the answer, nothing else.`;
             // explicit hotkey if they want true OS-level invisible typing
             // (they'll lose composition in that path by design).
             if (!stealthAutoEngageOkRef.current) return;
+            // Symmetric with blockInputFocus below. Without this, on Windows
+            // (and on macOS when the native tap is missing) we fire a
+            // stealthTapStart IPC per input click — harmless today, fragile
+            // tomorrow if anyone adds a side-effect to the Windows handler.
+            if (!isCgEventTapAvailableRef.current) return;
             const target = e.target as HTMLElement | null;
             if (!target?.closest?.('[data-stealth-engage="true"]')) return;
-            window.electronAPI.stealthTapStart().catch(() => {});
+            // Surface IPC failures so dev tools show when the tap fails to
+            // engage; the user sees the explicit-permission banner via the
+            // state listener so silent ignoring would be misleading.
+            window.electronAPI.stealthTapStart().catch((err) => {
+                console.warn('[stealth] tap start IPC failed', err);
+            });
         };
 
         document.addEventListener('mousedown', onMouseDown, true); // capture phase
-        return () => document.removeEventListener('mousedown', onMouseDown, true);
+        return () => {
+            document.removeEventListener('mousedown', onMouseDown, true);
+            removeFocusRefresh?.();
+        };
     }, []);
 
     // ── ModelSelector click-outside close ──
@@ -3014,6 +3102,11 @@ Provide only the answer, nothing else.`;
         // OS Text Input System can route keystrokes through the active IME
         // and compose CJK characters normally.
         if (!stealthAutoEngageOkRef.current) return;
+        // Only block DOM focus when CGEventTap is available on this platform.
+        // On Windows, CGEventTap is never available so this guard exits early
+        // and allows normal input focus. On macOS, the tap is available so we
+        // block focus to prevent the panel from becoming key window.
+        if (!isCgEventTapAvailableRef.current) return;
         e.preventDefault();
         // Don't blur an already-focused element — that itself fires events.
         if (document.activeElement === textInputRef.current) {
@@ -3153,7 +3246,7 @@ Provide only the answer, nothing else.`;
                                 </div>
                             </div>
 
-                            {/* System Audio Permission Warning Banner */}
+                            {/* System Audio / Screen Recording Warning Banner */}
                             {systemAudioWarning && (
                                 <div className="flex items-center justify-between mx-4 mt-3 mb-1 px-3.5 py-2.5 bg-yellow-500/10 border border-yellow-500/20 rounded-[12px] shadow-sm relative no-drag group/warning">
                                     <div className="flex flex-col gap-1 pr-3">
@@ -3163,19 +3256,38 @@ Provide only the answer, nothing else.`;
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                                 </svg>
                                             </div>
-                                            <span>Screen Recording Permission Denied</span>
+                                            <span>
+                                                {systemAudioWarning.kind === 'screen-recording-permission'
+                                                    ? 'Screen Recording Permission Denied'
+                                                    : 'Audio Capture Issue'}
+                                            </span>
                                         </div>
                                         <p className="text-[11px] text-yellow-600/70 dark:text-yellow-400/60 leading-snug pl-[26px]">
-                                            {systemAudioWarning}
+                                            {systemAudioWarning.message}
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
-                                        <button
-                                            onClick={() => { window.electronAPI.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'); }}
-                                            className="px-3 py-1.5 rounded-lg bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-700 dark:text-yellow-500 text-[11px] font-semibold transition-all active:scale-95 border border-yellow-500/20 shadow-sm"
-                                        >
-                                            Open Settings
-                                        </button>
+                                        {systemAudioWarning.kind === 'screen-recording-permission' ? (
+                                            <button
+                                                // Defense-in-depth: kind === 'screen-recording-permission'
+                                                // is only ever set from a darwin-gated broadcast site
+                                                // in main.ts (and the IPC allowlist rejects x-apple
+                                                // URLs on non-darwin), but we still guard at call time
+                                                // so a future regression in the broadcast layer can't
+                                                // produce a no-op or worse on Windows.
+                                                onClick={() => { if (isMac) window.electronAPI.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'); }}
+                                                className="px-3 py-1.5 rounded-lg bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-700 dark:text-yellow-500 text-[11px] font-semibold transition-all active:scale-95 border border-yellow-500/20 shadow-sm"
+                                            >
+                                                Open Settings
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => { window.electronAPI?.toggleSettingsWindow?.(); }}
+                                                className="px-3 py-1.5 rounded-lg bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-700 dark:text-yellow-500 text-[11px] font-semibold transition-all active:scale-95 border border-yellow-500/20 shadow-sm"
+                                            >
+                                                Open Settings
+                                            </button>
+                                        )}
                                         <button
                                             onClick={() => setSystemAudioWarning(null)}
                                             className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-yellow-600/50 hover:text-yellow-700 dark:text-yellow-500/50 dark:hover:text-yellow-400 transition-colors absolute top-1 right-1 opacity-0 group-hover/warning:opacity-100"
@@ -3391,10 +3503,10 @@ Provide only the answer, nothing else.`;
                                 )}
 
                                 {/* Stealth hotkey conflict banner — shown if globalShortcut.register()
-                                    failed for chat:focusInput (typically because Cmd+Shift+Space is
-                                    already claimed by another app, or by macOS in some configs).
-                                    Click-to-activate still works (mousedown listener is independent
-                                    of the hotkey), but the user can rebind to anything in Settings. */}
+                                    failed for chat:focusInput (typically because the configured
+                                    activation hotkey is already claimed by another app or by the
+                                    OS). Click-to-activate still works (mousedown listener is
+                                    independent of the hotkey), but the user can rebind in Settings. */}
                                 {stealthHotkeyConflict && (
                                     <div className="mb-2 px-3 py-2 rounded-xl border border-rose-400/40 bg-rose-500/10 text-[11px] flex items-center gap-2"
                                          data-stealth-ignore="true">
@@ -3419,10 +3531,11 @@ Provide only the answer, nothing else.`;
 
                                 {/* Stealth tap permission banner — shown only when the user
                                     pressed the activation hotkey but Accessibility wasn't
-                                    granted. Inline above the input so it's discoverable without
-                                    blocking the rest of the UI. Dismissed automatically once
-                                    the next start() succeeds. */}
-                                {stealthPermissionMissing && (
+                                    granted. macOS-only: Accessibility is a TCC concept that
+                                    doesn't exist on Windows, and the underlying CGEventTap
+                                    Rust module ships only in the Darwin binary. Gating here
+                                    is belt-and-suspenders on top of the native-side gate. */}
+                                {isMac && stealthPermissionMissing && (
                                     <div className="mb-2 px-3 py-2 rounded-xl border border-amber-400/40 bg-amber-500/10 text-[11px] flex items-center gap-2"
                                          data-stealth-ignore="true">
                                         <span className="overlay-text-primary flex-1">
@@ -3476,7 +3589,7 @@ Provide only the answer, nothing else.`;
                                         <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none text-[13px] overlay-text-muted">
                                             <span>Ask anything on screen or conversation, or</span>
                                             <div className="flex items-center gap-1 opacity-80">
-                                                {(shortcuts.selectiveScreenshot || ['⌘', 'Shift', 'H']).map((key, i) => (
+                                                {(shortcuts.selectiveScreenshot || [getModifierSymbol('cmd'), 'Shift', 'H']).map((key, i) => (
                                                     <React.Fragment key={i}>
                                                         {i > 0 && <span className="text-[10px]">+</span>}
                                                         <kbd className="px-1.5 py-0.5 rounded border text-[10px] font-sans min-w-[20px] text-center overlay-control-surface overlay-text-secondary" style={appearance.controlStyle}>{key}</kbd>
