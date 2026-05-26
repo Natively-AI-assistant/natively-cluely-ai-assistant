@@ -48,7 +48,8 @@ export class WhatToAnswerLLM {
         intentResult?: IntentResult,
         imagePaths?: string[],
         screenContext?: ScreenContext,
-        promptInstruction?: string
+        promptInstruction?: string,
+        domContext?: string
     ): AsyncGenerator<string> {
         const MEASURE = process.env.MEASURE_LATENCY === 'true';
         let tStart = 0, tIntent = 0, tTemporal = 0, tMode = 0, tTrunc = 0, tPrompt = 0, tStream = 0;
@@ -170,6 +171,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 transcript: workingTranscript,
                 modeTemplateType: 'active',
                 screenContext,
+                domContext,
                 priorResponses: temporalContext?.hasRecentResponses ? temporalContext.previousResponses : undefined,
                 intentContext,
                 retrievedModeContext: modeContextBlock || undefined,

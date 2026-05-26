@@ -130,7 +130,7 @@ interface ElectronAPI {
 
   // Intelligence Mode IPC
   generateAssist: () => Promise<{ insight: string | null }>
-  generateWhatToSay: (question?: string, imagePaths?: string[], options?: { promptInstruction?: string }) => Promise<{ answer: string | null; question?: string; error?: string; screenContextStatus?: 'not_available' | 'available' | 'failed'; ocrTextLength?: number; imageCount?: number; usedImageInput?: boolean }>
+  generateWhatToSay: (question?: string, imagePaths?: string[], options?: { promptInstruction?: string; domContext?: string }) => Promise<{ answer: string | null; question?: string; error?: string; screenContextStatus?: 'not_available' | 'available' | 'failed'; ocrTextLength?: number; imageCount?: number; usedImageInput?: boolean }>
   generateFollowUp: (intent: string, userRequest?: string) => Promise<{ refined: string | null; intent: string }>
   generateRecap: () => Promise<{ summary: string | null }>
   submitManualQuestion: (question: string) => Promise<{ answer: string | null; question: string }>
@@ -790,7 +790,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   // Intelligence Mode IPC
   generateAssist: () => ipcRenderer.invoke("generate-assist"),
-  generateWhatToSay: (question?: string, imagePaths?: string[], options?: { promptInstruction?: string }) => ipcRenderer.invoke("generate-what-to-say", question, imagePaths, options),
+  generateWhatToSay: (question?: string, imagePaths?: string[], options?: { promptInstruction?: string; domContext?: string }) => ipcRenderer.invoke("generate-what-to-say", question, imagePaths, options),
   generateClarify: () => ipcRenderer.invoke("generate-clarify"),
   generateCodeHint: (imagePaths?: string[], problemStatement?: string) => ipcRenderer.invoke("generate-code-hint", imagePaths, problemStatement),
   generateBrainstorm: (imagePaths?: string[], problemStatement?: string) => ipcRenderer.invoke("generate-brainstorm", imagePaths, problemStatement),

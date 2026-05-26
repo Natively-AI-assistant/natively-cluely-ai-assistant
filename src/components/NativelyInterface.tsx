@@ -402,6 +402,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     // Latent Context State (Screenshots attached but not sent)
     const [attachedContext, setAttachedContext] = useState<Array<{ path: string, preview: string }>>([]);
+    const attachedContextRef = useRef<Array<{ path: string, preview: string }>>([]);
+
+    useEffect(() => {
+        attachedContextRef.current = attachedContext;
+    }, [attachedContext]);
 
     // Settings State with Persistence
     const [isUndetectable, setIsUndetectable] = useState(false);
@@ -1533,11 +1538,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         }
 
         try {
-            // Pass imagePath if attached
+            const domContext = (window as any).lastCapturedDOM || undefined;
             const result = await window.electronAPI.generateWhatToSay(
                 undefined,
                 currentAttachments.length > 0 ? currentAttachments.map(s => s.path) : undefined,
-                dynamicPromptInstruction ? { promptInstruction: dynamicPromptInstruction } : undefined
+                {
+                    ...(dynamicPromptInstruction ? { promptInstruction: dynamicPromptInstruction } : {}),
+                    ...(domContext ? { domContext } : {})
+                }
             );
             setScreenContextStatus(result.screenContextStatus || 'not_available');
             setLatestUsedImageInput(Boolean(result.usedImageInput));

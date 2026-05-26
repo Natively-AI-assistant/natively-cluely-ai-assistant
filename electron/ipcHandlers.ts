@@ -2585,7 +2585,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // here to run Tesseract OCR before answering. That path is now removed from the runtime —
   // Natively answers from the image directly via a vision-capable provider. Do not re-introduce
   // OCR here unless a future explicit OCR-only mode is reintroduced.
-  safeHandle("generate-what-to-say", async (_, question?: string, imagePaths?: string[], options?: { promptInstruction?: string }) => {
+  safeHandle("generate-what-to-say", async (_, question?: string, imagePaths?: string[], options?: { promptInstruction?: string; domContext?: string }) => {
     try {
       let screenContext: any;
       let screenContextStatus: 'not_available' | 'available' | 'failed' = 'not_available';
@@ -2673,6 +2673,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         skipCooldown: process.env.NODE_ENV === 'test',
         screenContext,
         promptInstruction: typeof options?.promptInstruction === 'string' ? options.promptInstruction : undefined,
+        domContext: typeof options?.domContext === 'string' ? options.domContext : undefined,
       });
       return {
         answer,
