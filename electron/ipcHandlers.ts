@@ -2611,25 +2611,6 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle("generate-what-to-say", async (_, question?: string, imagePaths?: string[], options?: { promptInstruction?: string; domContext?: string }) => {
     try {
       let screenContext: any;
-      let resolvedSkill: { id: string; name: string; promptBlock: string } | undefined;
-      let skillName: string | undefined;
-
-      if (options?.skillId) {
-        const skill = SkillsManager.getInstance().getSkill(options.skillId);
-        if (!skill) {
-          return {
-            answer: null,
-            question: question || 'unknown',
-            error: `Skill not found: ${options.skillId}`,
-          };
-        }
-        skillName = skill.name;
-        resolvedSkill = {
-          id: skill.id,
-          name: skill.name,
-          promptBlock: SkillsManager.getInstance().buildPromptBlock(skill),
-        };
-      }
       let screenContextStatus: 'not_available' | 'available' | 'failed' = 'not_available';
       let visionProviderUsed: string | undefined;
       let visionModelUsed: string | undefined;
@@ -2727,7 +2708,6 @@ export function initializeIpcHandlers(appState: AppState): void {
         visionFailureReason,
         imageCount: validatedImagePaths?.length || 0,
         usedImageInput: Boolean(validatedImagePaths?.length),
-        skillName,
       };
     } catch (error: any) {
       console.error('[IPC] generate-what-to-say error:', error);
