@@ -63,6 +63,7 @@ export class PromptAssembler {
         modeTemplateType: string;
         modeId?: string;
         screenContext?: ScreenContext;
+        domContext?: string;
         modeContext?: ModeContextSource;
         customContext?: string;
         meetingHistory?: string[];
@@ -86,6 +87,7 @@ export class PromptAssembler {
                     params.screenContext?.visibleSummary ||
                     params.screenContext?.ocrText
                 ),
+                domContextAvailable: Boolean(params.domContext),
                 tokenBudget: params.tokenBudget,
                 totalTokensUsed: 0,
             },
@@ -109,6 +111,11 @@ export class PromptAssembler {
             params.screenContext?.ocrText
         ) {
             this.addBlock(packet, this.buildScreenContextBlock(params.screenContext));
+        }
+
+        // 3.5. DOM CONTEXT — untrusted page context from active tab
+        if (params.domContext) {
+            this.addBlock(packet, this.buildDomContextBlock(params.domContext));
         }
 
         // 4. TRANSCRIPT — untrusted conversation
@@ -327,6 +334,27 @@ ${this.escapeUserContent(truncated)}
                 text: truncated.substring(0, 100),
                 timestamp: screenContext.timestamp,
                 chunkId: isVision ? 'vision_capture' : 'ocr_capture',
+            }],
+        };
+    }
+
+    private buildDomContextBlock(domContext: string): ContextBlock {
+        const maxLength = 25000;
+        const truncated = domContext.length > maxLength ? domContext.substring(0, maxLength) + '\n[...truncated]' : domContext;
+
+        return {
+            type: 'dom_context',
+            trustLevel: TrustLevel.UNTRUSTED_SCREEN,
+            source: 'browser_dom',
+            tokenBudget: 6000,
+            content: `<dom_context trust_level="untrusted_screen_evidence" source="browser_dom">
+DOM HTML/TEXT STRUCTURE:
+${this.escapeUserContent(this.escapePromptInjection(truncated))}
+</dom_context>`,
+            evidenceRefs: [{
+                source: 'screen',
+                text: truncated.substring(0, 100),
+                chunkId: 'dom_capture',
             }],
         };
     }
