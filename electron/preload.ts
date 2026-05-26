@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer } from "electron"
 
+type SkillSummary = {
+  id: string
+  name: string
+  description: string
+  source: 'userData' | 'builtin'
+}
+
 // Types for the exposed Electron API
 interface ElectronAPI {
   updateContentDimensions: (dimensions: {
@@ -226,11 +233,16 @@ interface ElectronAPI {
   onOverlayMousePassthroughChanged: (callback: (enabled: boolean) => void) => () => void
 
   // Streaming listeners
-  streamGeminiChat: (message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean }) => Promise<void>
+  streamGeminiChat: (message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean, skipModeInjection?: boolean, skillId?: string }) => Promise<void>
   onGeminiStreamToken: (callback: (token: string) => void) => () => void
   onGeminiStreamDone: (callback: () => void) => () => void
   onGeminiStreamError: (callback: (error: string) => void) => () => void
 
+  // Skills (local SKILL.md instructions resolved by SkillsManager)
+  skillsList: () => Promise<SkillSummary[]>
+  skillsGet: (id: string) => Promise<(SkillSummary & { instructions: string }) | null>
+  skillsRefresh: () => Promise<SkillSummary[]>
+  skillsOpenFolder: () => Promise<{ success: boolean; path: string; error?: string }>
 
   onUndetectableChanged: (callback: (state: boolean) => void) => () => void
   onGroqFastTextChanged: (callback: (enabled: boolean) => void) => () => void
@@ -288,16 +300,18 @@ interface ElectronAPI {
   // CGEventTap-backed stealth keyboard tap (macOS only). Returns false on
   // non-macOS or when the native module / Accessibility permission is missing.
   stealthTapAvailable: () => Promise<boolean>
-  stealthTapPermissionGranted: () => Promise<boolean>
-  stealthTapRequestPermission: () => Promise<boolean>
   stealthTapOpenSettings: () => Promise<void>
-  stealthTapIsActive: () => Promise<boolean>
   stealthTapStop: () => Promise<void>
   stealthTapStart: () => Promise<boolean>
   /** False on macOS when a composition IME (Pinyin/Hangul/Kanji/…) is
    *  enabled — the tap captures below the IME and breaks composition, so
    *  the renderer falls back to plain DOM focus on click. */
   stealthTapShouldAutoEngage: () => Promise<boolean>
+  /** Force a fresh IME probe and return the refined auto-engage value.
+   *  Renderer calls this on window focus (darwin only) so a mid-session
+   *  input-source change doesn't leave the cached value stale. No-op on
+   *  non-darwin (returns true). */
+  stealthTapRefreshIme: () => Promise<boolean>
   onStealthTapState: (cb: (state: { active: boolean; reason?: string }) => void) => () => void
   onStealthKeyCaptured: (cb: (ev: { keyCode: number; chars: string; flags: number; isKeyDown: boolean }) => void) => () => void
 
@@ -982,7 +996,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
 
   // Streaming Chat
-  streamGeminiChat: (message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean }) => ipcRenderer.invoke("gemini-chat-stream", message, imagePaths, context, options),
+  streamGeminiChat: (message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean, skipModeInjection?: boolean, skillId?: string }) => ipcRenderer.invoke("gemini-chat-stream", message, imagePaths, context, options),
 
   onGeminiStreamToken: (callback: (token: string) => void) => {
     const subscription = (_: any, token: string) => callback(token)
@@ -1007,6 +1021,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.removeListener("gemini-stream-error", subscription)
     }
   },
+
+  // Skills
+  skillsList: () => ipcRenderer.invoke('skills:list'),
+  skillsGet: (id: string) => ipcRenderer.invoke('skills:get', id),
+  skillsRefresh: () => ipcRenderer.invoke('skills:refresh'),
+  skillsOpenFolder: () => ipcRenderer.invoke('skills:open-folder'),
 
   // Model Management
   getDefaultModel: () => ipcRenderer.invoke('get-default-model'),
@@ -1178,7 +1198,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   ragIsMeetingProcessed: (meetingId: string) => ipcRenderer.invoke('rag:is-meeting-processed', meetingId),
   ragGetQueueStatus: () => ipcRenderer.invoke('rag:get-queue-status'),
   ragRetryEmbeddings: () => ipcRenderer.invoke('rag:retry-embeddings'),
-  
+
   onIncompatibleProviderWarning: (callback: (data: { count: number, oldProvider: string, newProvider: string }) => void) => {
     const subscription = (_: any, data: any) => callback(data)
     ipcRenderer.on('embedding:incompatible-provider-warning', subscription)
@@ -1240,13 +1260,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   // Stealth keyboard tap bridge
   stealthTapAvailable: () => ipcRenderer.invoke('stealth-tap:available'),
-  stealthTapPermissionGranted: () => ipcRenderer.invoke('stealth-tap:permission-granted'),
-  stealthTapRequestPermission: () => ipcRenderer.invoke('stealth-tap:request-permission'),
   stealthTapOpenSettings: () => ipcRenderer.invoke('stealth-tap:open-settings'),
-  stealthTapIsActive: () => ipcRenderer.invoke('stealth-tap:is-active'),
   stealthTapStop: () => ipcRenderer.invoke('stealth-tap:stop'),
   stealthTapStart: () => ipcRenderer.invoke('stealth-tap:start'),
   stealthTapShouldAutoEngage: () => ipcRenderer.invoke('stealth-tap:should-auto-engage'),
+  stealthTapRefreshIme: () => ipcRenderer.invoke('stealth-tap:refresh-ime'),
   onStealthTapState: (cb: (state: { active: boolean; reason?: string }) => void) => {
     const sub = (_: any, state: { active: boolean; reason?: string }) => cb(state)
     ipcRenderer.on('stealth-tap-state', sub)
@@ -1280,6 +1298,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   profileResetNegotiation: () => ipcRenderer.invoke('profile:reset-negotiation'),
   profileGetNotes: () => ipcRenderer.invoke('profile:get-notes'),
   profileSaveNotes: (content: string) => ipcRenderer.invoke('profile:save-notes', content),
+  profileGetPersona: () => ipcRenderer.invoke('profile:get-persona'),
+  profileSavePersona: (content: string) => ipcRenderer.invoke('profile:save-persona', content),
 
   // Tavily Search API
   setTavilyApiKey: (apiKey: string) => ipcRenderer.invoke('set-tavily-api-key', apiKey),
@@ -1365,7 +1385,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   getLogFilePath: () => ipcRenderer.invoke('get-log-file-path'),
   openLogFile: () => ipcRenderer.invoke('open-log-file'),
-  
+
   // Arch
   getArch: () => ipcRenderer.invoke('get-arch'),
   getOsVersion: () => ipcRenderer.invoke('get-os-version'),

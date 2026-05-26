@@ -483,8 +483,14 @@ export class ScreenshotHelper {
       console.error('[ScreenshotHelper] desktopCapturer.getSources failed:', error);
       // Handle specific error types
       if ((error as NodeJS.ErrnoException).name === 'NotAllowedError') {
+        // Only macOS has a TCC-style Screen Recording permission pane.
+        // On Windows/Linux NotAllowedError from desktopCapturer typically
+        // means the compositor refused the request — not a user-fixable
+        // OS permission — so we surface a platform-neutral message.
         throw new Error(
-          'Screen capture permission denied. Please grant screen recording permission in System Settings > Privacy & Security > Screen Recording.'
+          process.platform === 'darwin'
+            ? 'Screen capture permission denied. Please grant screen recording permission in System Settings > Privacy & Security > Screen Recording.'
+            : 'Screen capture permission denied by the OS. Please try again or restart Natively.'
         );
       }
       if ((error as NodeJS.ErrnoException).name === 'NotFoundError') {
@@ -496,7 +502,9 @@ export class ScreenshotHelper {
     if (sources.length === 0) {
       console.error('[ScreenshotHelper] No screen sources found');
       throw new Error(
-        'No screen sources available. Check screen recording permissions in System Settings > Privacy & Security > Screen Recording.'
+        process.platform === 'darwin'
+          ? 'No screen sources available. Check screen recording permissions in System Settings > Privacy & Security > Screen Recording.'
+          : 'No screen sources available. Please ensure at least one display is connected.'
       );
     }
 

@@ -16,8 +16,8 @@
  */
 
 import { Worker } from 'worker_threads';
-import path from 'path';
 import { buildWorkerInitMessage } from './inferenceConfig';
+import { resolveWhisperWorkerPath } from './workerPathResolver';
 
 class ModelPreloader {
     private warmWorker: Worker | null = null;
@@ -52,8 +52,7 @@ class ModelPreloader {
 
         console.log(`[ModelPreloader] Warming worker for ${modelId}...`);
 
-        // __dirname at runtime = dist-electron/electron/audio/whisper/
-        const workerPath = path.join(__dirname, 'whisperWorker.js');
+        const workerPath = resolveWhisperWorkerPath();
         const w = new Worker(workerPath);
         this.loadingWorker = w;
 

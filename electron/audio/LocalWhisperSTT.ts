@@ -33,13 +33,13 @@
 
 import { EventEmitter } from 'events';
 import { Worker } from 'worker_threads';
-import path from 'path';
 import { resampleToF32 } from './whisper/audioResampler';
 import { VadProcessor } from './whisper/vadProcessor';
 import { filterHallucination } from './whisper/hallucinationFilter';
 import { configureTransformersCache } from './whisper/modelManager';
 import { modelPreloader } from './whisper/modelPreloader';
 import { buildWorkerInitMessage } from './whisper/inferenceConfig';
+import { resolveWhisperWorkerPath } from './whisper/workerPathResolver';
 import type { WorkerOutMessage } from './whisper/types';
 
 export class LocalWhisperSTT extends EventEmitter {
@@ -558,7 +558,7 @@ export class LocalWhisperSTT extends EventEmitter {
             this.flushPending();
         } else {
             console.log(`[LocalWhisperSTT] Cold-starting worker for ${this.modelId}`);
-            const workerPath = path.join(__dirname, 'whisper', 'whisperWorker.js');
+            const workerPath = resolveWhisperWorkerPath();
             this.worker = new Worker(workerPath);
             this.attachWorkerListeners();
             this.worker.postMessage(buildWorkerInitMessage(this.modelId));

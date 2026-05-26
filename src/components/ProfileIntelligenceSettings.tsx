@@ -282,6 +282,25 @@ const PI_CSS = `
     .pi-upload-spinner { animation: pi-spin 0.9s linear infinite; }
     @keyframes pi-spin { to { transform: rotate(360deg); } }
 
+    /* ── "Pro" badge shown next to upload card titles for Free Tier ── */
+    .pi-upload-pill__pro-badge {
+        display: inline-flex; align-items: center;
+        height: 18px;
+        padding: 0 7px;
+        margin-left: 8px;
+        border-radius: 999px;
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        line-height: 1;
+        background: linear-gradient(135deg, rgba(139,92,246,0.22) 0%, rgba(124,58,237,0.18) 100%);
+        color: #c4b5fd;
+        border: 1px solid rgba(139,92,246,0.36);
+        vertical-align: middle;
+    }
+    .pi-root[data-theme='light'] .pi-upload-pill__pro-badge { color: #6d28d9; }
+
     /* ── Header close button (mirrors ModesSettings manager closeBtn — flat, no shadow) ── */
     .pi-close-btn {
         display: flex; align-items: center; justify-content: center;
@@ -428,6 +447,9 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
     const [customNotes, setCustomNotes] = useState('');
     const [customNotesSaved, setCustomNotesSaved] = useState(false);
     const customNotesDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [persona, setPersona] = useState('');
+    const [personaSaved, setPersonaSaved] = useState(false);
+    const personaDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
         // Fetch premium details — canonical source of truth. Sync the
@@ -457,7 +479,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
         window.electronAPI?.profileGetNotes?.().then((res: any) => {
             if (res?.success) setCustomNotes(res.content ?? '');
         }).catch(() => { });
-        
+
         // Tavily key check
         window.electronAPI?.getStoredCredentials?.().then((creds: any) => {
             if (creds && creds.hasTavilyKey) {
@@ -465,6 +487,17 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
             }
         }).catch(() => {});
     }, []);
+
+    useEffect(() => {
+        if (!hasProfileAccess) {
+            setPersona('');
+            if (personaDebounceRef.current) clearTimeout(personaDebounceRef.current);
+            return;
+        }
+        window.electronAPI?.profileGetPersona?.().then((res: any) => {
+            if (res?.success) setPersona(res.content ?? '');
+        }).catch(() => { });
+    }, [hasProfileAccess]);
 
     const handleRemoveTavilyKey = async () => {
         if (!confirm('Are you sure you want to remove your Tavily API key?')) return;
@@ -673,9 +706,14 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                     <div className="min-w-0">
                                                         <h4 className="text-[15px] font-bold text-text-primary mb-1 tracking-tight">
                                                             {profileStatus.hasProfile ? 'Overwrite Source Document' : 'Initialize Knowledge Base'}
+                                                            {!hasProfileAccess && (
+                                                                <span className="pi-upload-pill__pro-badge" aria-label="Pro feature">Pro</span>
+                                                            )}
                                                         </h4>
                                                         <p className="text-xs text-text-secondary leading-relaxed pr-2">
-                                                            Provide a resume file to seed the intelligence engine.
+                                                            {!hasProfileAccess
+                                                                ? 'Resume ingestion is a Natively Pro feature. The Custom Context box below stays free.'
+                                                                : 'Provide a resume file to seed the intelligence engine.'}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -683,6 +721,10 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                 <button
                                                     style={{ marginTop: 'auto' }}
                                                     onClick={async () => {
+                                                        if (!hasProfileAccess) {
+                                                            setIsPremiumModalOpen(true);
+                                                            return;
+                                                        }
                                                         setProfileError('');
                                                         try {
                                                             const fileResult = await window.electronAPI?.profileSelectFile?.();
@@ -746,6 +788,9 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                     <div className="min-w-0 flex-1">
                                                         <h4 className="text-[15px] font-bold text-text-primary mb-1 tracking-tight">
                                                             {profileData?.hasActiveJD ? `${profileData.activeJD?.title} @ ${profileData.activeJD?.company}` : 'Upload Job Description'}
+                                                            {!hasProfileAccess && (
+                                                                <span className="pi-upload-pill__pro-badge" aria-label="Pro feature">Pro</span>
+                                                            )}
                                                         </h4>
                                                         {profileData?.hasActiveJD ? (
                                                             <div className="flex items-center gap-3 mt-1 flex-wrap">
@@ -760,7 +805,9 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                             </div>
                                                         ) : (
                                                             <p className="text-xs text-text-secondary leading-relaxed pr-2">
-                                                                Upload a JD to enable persona tuning and company research.
+                                                                {!hasProfileAccess
+                                                                    ? 'Job description parsing is a Natively Pro feature. The Custom Context box below stays free.'
+                                                                    : 'Upload a JD to enable persona tuning and company research.'}
                                                             </p>
                                                         )}
                                                     </div>
@@ -783,6 +830,10 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                 <button
                                                     style={{ marginTop: 'auto' }}
                                                     onClick={async () => {
+                                                        if (!hasProfileAccess) {
+                                                            setIsPremiumModalOpen(true);
+                                                            return;
+                                                        }
                                                         setJdError('');
                                                         try {
                                                             const fileResult = await window.electronAPI?.profileSelectFile?.();
@@ -885,6 +936,73 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                             {customNotes.length}/4000
                                                         </span>
                                                     </div>
+                                                </div>
+                                            </div>
+                                        </BezelCard>
+
+                                    <BezelCard delay={0.35}>
+                                            <div className="p-5">
+                                                <div className="flex items-center gap-4 mb-4">
+                                                    <div className="w-10 h-10 rounded-lg bg-bg-input border border-border-subtle flex items-center justify-center text-accent-primary shrink-0">
+                                                        <Sparkles size={20} />
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                            <h4 className="text-sm font-bold text-text-primary">AI Persona</h4>
+                                                            {!hasProfileAccess && (
+                                                                <span className="text-[9px] font-bold text-accent-primary px-1.5 py-0.5 bg-accent-primary/10 rounded-full border border-accent-primary/20 uppercase tracking-wide">Pro Only</span>
+                                                            )}
+                                                            {personaSaved && hasProfileAccess && (
+                                                                <span className="text-[9px] font-bold text-emerald-500 px-1.5 py-0.5 bg-emerald-500/10 rounded-full border border-emerald-500/20 uppercase tracking-wide flex items-center gap-1">
+                                                                    <Check size={8} /> Updated
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-[11px] text-text-secondary mt-0.5">
+                                                            Set the AI's behavior, tone, and role across providers.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <textarea
+                                                    value={persona}
+                                                    onChange={(e) => {
+                                                        if (!hasProfileAccess) {
+                                                            setIsPremiumModalOpen(true);
+                                                            return;
+                                                        }
+                                                        const val = e.target.value;
+                                                        if (val.length > 4000) return;
+                                                        setPersona(val);
+                                                        setPersonaSaved(false);
+                                                        if (personaDebounceRef.current) clearTimeout(personaDebounceRef.current);
+                                                        personaDebounceRef.current = setTimeout(async () => {
+                                                            try {
+                                                                const res = await window.electronAPI?.profileSavePersona?.(val);
+                                                                if (res?.success) {
+                                                                    setPersonaSaved(true);
+                                                                    setTimeout(() => setPersonaSaved(false), 2000);
+                                                                } else if (res?.error === 'pro_required') {
+                                                                    setPersona('');
+                                                                    setIsPremiumModalOpen(true);
+                                                                }
+                                                            } catch (_) {}
+                                                        }, 800);
+                                                    }}
+                                                    onFocus={() => {
+                                                        if (!hasProfileAccess) setIsPremiumModalOpen(true);
+                                                    }}
+                                                    placeholder="Example: You are a senior hiring manager. Keep answers concise and ask one focused follow-up when needed."
+                                                    rows={5}
+                                                    disabled={!hasProfileAccess}
+                                                    className={`w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2.5 text-xs text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/20 transition-all resize-none leading-relaxed ${!hasProfileAccess ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                                />
+                                                <div className="flex items-center justify-between px-0.5 mt-3">
+                                                    <p className="text-[10px] text-text-tertiary">
+                                                        {hasProfileAccess ? 'Auto-saved · Treated as user-provided context' : 'Upgrade to Pro to personalize AI persona'}
+                                                    </p>
+                                                    <span className={`text-[10px] tabular-nums ${persona.length > 3600 ? 'text-amber-500' : 'text-text-tertiary'}`}>
+                                                        {persona.length}/4000
+                                                    </span>
                                                 </div>
                                             </div>
                                         </BezelCard>

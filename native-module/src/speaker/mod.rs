@@ -42,8 +42,8 @@ pub mod fallback {
         pub fn new(_device_id: Option<String>) -> Result<Self> {
             Err(anyhow::anyhow!("Unsupported platform: system audio capture is implemented for macOS and Windows only"))
         }
-        pub fn stream(self) -> SpeakerStream {
-            unreachable!("SpeakerInput::new() always errors on this platform; stream() should never be called")
+        pub fn stream(self) -> Result<SpeakerStream> {
+            Err(anyhow::anyhow!("Unsupported platform"))
         }
         pub fn sample_rate(&self) -> u32 {
             unreachable!("SpeakerInput::new() always errors on this platform")
@@ -54,18 +54,7 @@ pub mod fallback {
         pub fn resume(&mut self) -> Result<()> {
             unreachable!("SpeakerInput::new() always errors on this platform")
         }
-        pub fn stream(self) -> Result<SpeakerStream> {
-            Err(anyhow::anyhow!("Unsupported platform"))
-        }
     }
-    impl SpeakerStream {
-        pub fn sample_rate(&self) -> u32 { 48000 }
-        pub fn take_consumer(&mut self) -> Option<HeapCons<f32>> { None }
-        pub fn pause(&mut self) {}
-        pub fn resume(&mut self) -> Result<()> { Ok(()) }
-    }
-
-    pub struct SpeakerStream;
     impl SpeakerStream {
         pub fn sample_rate(&self) -> u32 {
             unreachable!("SpeakerStream is never constructed on this platform")
@@ -89,8 +78,6 @@ pub mod fallback {
         String::new()
     }
 }
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-pub use fallback::SpeakerStream;
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub use fallback::list_output_devices;
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
