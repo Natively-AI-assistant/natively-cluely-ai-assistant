@@ -15,10 +15,12 @@ import { AIProvidersSettings } from './settings/AIProvidersSettings';
 import { NativelyApiSettings } from './settings/NativelyApiSettings';
 import { NativelyProSettings } from './settings/NativelyProSettings';
 import { PhoneMirrorSettings } from './settings/PhoneMirrorSettings';
+import { SkillsSettings } from './settings/SkillsSettings';
 import { LocalWhisperModelPanel } from './LocalWhisperModelPanel';
 import { NativelyLogoMark } from './NativelyLogoMark';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useShortcuts } from '../hooks/useShortcuts';
+import { isMac } from '../utils/platformUtils';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import {
     clampOverlayOpacity,
@@ -354,16 +356,16 @@ interface SettingsOverlayProps {
 const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, initialTab = 'general' }) => {
     const isLight = useResolvedTheme() === 'light';
     const [activeTab, setActiveTab] = useState(initialTab);
-    
+
     // Sync active tab when modal opens
     useEffect(() => {
         if (isOpen && initialTab) {
             setActiveTab(initialTab);
-            
-            
+
+
         }
     }, [isOpen, initialTab]);
-    
+
     const { shortcuts, updateShortcut, resetShortcuts } = useShortcuts();
     const [isUndetectable, setIsUndetectable] = useState(false);
     const [isMousePassthrough, setIsMousePassthrough] = useState(false);
@@ -379,12 +381,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     const [isInterfaceThemeDropdownOpen, setIsInterfaceThemeDropdownOpen] = useState(false);
     const interfaceThemeDropdownRef = React.useRef<HTMLDivElement>(null);
 
-    
+
     const [verboseLogging, setVerboseLogging] = useState(false);
     const [meetingRetention, setMeetingRetention] = useState<'forever' | '7d' | '30d' | 'never'>('forever');
-    const [providerDataScopes, setProviderDataScopes] = useState<{ transcript?: boolean; screenshots?: boolean; reference_files?: boolean; profile_history?: boolean; embeddings?: boolean; post_call_summary?: boolean }>({});
-    const [screenUnderstandingMode, setScreenUnderstandingMode] = useState<'vision_first' | 'vision_only' | 'private_vision'>('vision_first');
-    const [technicalInterviewVisionFirst, setTechnicalInterviewVisionFirst] = useState<boolean>(true);
     const [showVerboseToast, setShowVerboseToast] = useState(false);
     const verboseToastTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -392,42 +391,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     // Sync with global state changes
     useEffect(() => {
         if (isOpen) {
-            
-            
+
+
             // Fetch true initial state from main process
             window.electronAPI?.getUndetectable?.().then(setIsUndetectable).catch(() => { });
             window.electronAPI?.getOverlayMousePassthrough?.().then(setIsMousePassthrough).catch(() => { });
             window.electronAPI?.getDisguise?.().then(setDisguiseMode).catch(() => { });
             window.electronAPI?.getVerboseLogging?.().then(setVerboseLogging).catch(() => { });
             window.electronAPI?.getMeetingRetention?.().then(setMeetingRetention).catch(() => { });
-            window.electronAPI?.getProviderDataScopes?.().then(setProviderDataScopes).catch(() => { });
-            window.electronAPI?.getScreenUnderstandingMode?.().then(setScreenUnderstandingMode as any).catch(() => { });
-            (window.electronAPI as any)?.getTechnicalInterviewVisionFirst?.()
-                .then(setTechnicalInterviewVisionFirst)
-                .catch(() => {
-                    // Fallback to deprecated alias if the renderer is talking to an older main process.
-                    window.electronAPI?.getTechnicalInterviewDirectVision?.().then(setTechnicalInterviewVisionFirst).catch(() => { });
-                });
         }
     }, [isOpen]);
-
-    useEffect(() => {
-        const api: any = window.electronAPI;
-        if (!api?.onScreenUnderstandingModeChanged) return;
-        const unsubscribe = api.onScreenUnderstandingModeChanged(setScreenUnderstandingMode);
-        return () => unsubscribe?.();
-    }, []);
-
-    useEffect(() => {
-        const api: any = window.electronAPI;
-        const handler = (enabled: boolean) => setTechnicalInterviewVisionFirst(enabled);
-        const unsub1 = api?.onTechnicalInterviewVisionFirstChanged?.(handler);
-        const unsub2 = api?.onTechnicalInterviewDirectVisionChanged?.(handler);
-        return () => {
-            unsub1?.();
-            unsub2?.();
-        };
-    }, []);
 
     useEffect(() => {
         if (!showVerboseToast) return;
@@ -437,7 +410,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         };
     }, [showVerboseToast]);
 
-    
+
 
     useEffect(() => {
         if (window.electronAPI?.onUndetectableChanged) {
@@ -451,13 +424,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     useEffect(() => {
         if (window.electronAPI?.onMeetingRetentionChanged) {
             const unsubscribe = window.electronAPI.onMeetingRetentionChanged(setMeetingRetention);
-            return () => unsubscribe();
-        }
-    }, []);
-
-    useEffect(() => {
-        if (window.electronAPI?.onProviderDataScopesChanged) {
-            const unsubscribe = window.electronAPI.onProviderDataScopesChanged(setProviderDataScopes);
             return () => unsubscribe();
         }
     }, []);
@@ -565,7 +531,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         document.querySelectorAll('.opacity-percent-label').forEach(el => el.textContent = percentText);
         setPreviewOverlayOpacity(val);
         latestOpacityRef.current = val;
-        
+
         // Broadcast IPC in real-time so actual meeting overlay tracks slider instantly
         // (safe to do at 60fps, does not trigger React renders)
         window.electronAPI?.setOverlayOpacity?.(val);
@@ -592,7 +558,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
         // Direct DOM mutation for sub-millisecond instant hide (bypassing slow React tree diffs)
         document.body.classList.add('disable-transitions');
-        
+
         const backdrop = document.getElementById('settings-backdrop');
         const wrapper = document.getElementById('settings-panel-wrapper');
         const panel = document.getElementById('settings-panel');
@@ -616,7 +582,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         if (launcher) {
             launcher.style.visibility = 'hidden';
         }
-        
+
         if (card) {
             card.style.visibility = 'visible';
             card.style.position = 'relative';
@@ -913,7 +879,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                     if (creds.azureRegion) setSttAzureRegion(creds.azureRegion);
                     setHasStoredIbmWatsonKey(creds.hasIbmWatsonKey);
                     setHasStoredSonioxKey(creds.hasSonioxKey || false);
-                    
+
                     setHasNativelyKey(creds.hasNativelyKey || false);
                     // Populate key fields so switching providers doesn't make saved keys appear gone
                     if (creds.sttGroqKey) setSttGroqKey(creds.sttGroqKey);
@@ -1089,8 +1055,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
         try {
             await window.electronAPI?.setTavilyApiKey?.('');
-            
-            
+
+
         } catch (e) {
             console.error('Failed to remove Tavily API key:', e);
         }
@@ -1336,16 +1302,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                         initial={{ scale: 0.94, opacity: 0, y: 20 }}
                         animate={{ scale: 1, opacity: 1, y: 0 }}
                         exit={{ scale: 0.94, opacity: 0, y: 20 }}
-                        transition={{ 
-                            type: "spring", 
-                            stiffness: 400, 
+                        transition={{
+                            type: "spring",
+                            stiffness: 400,
                             damping: 32,
                             mass: 1
                         }}
                         className="bg-bg-elevated w-full max-w-4xl h-[80vh] rounded-2xl border border-border-subtle shadow-2xl overflow-hidden relative"
                     >
-                        <div 
-                            id="settings-panel" 
+                        <div
+                            id="settings-panel"
                             className="flex w-full h-full"
                             style={{ visibility: isPreviewingOpacity ? 'hidden' : 'visible' }}
                         >
@@ -1379,6 +1345,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'ai-providers' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
                                         <FlaskConical size={16} /> AI Providers
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('skills')}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'skills' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                    >
+                                        <Sparkles size={16} className={activeTab === 'skills' ? 'text-accent-primary' : 'text-text-secondary'} /> Skills
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('calendar')}
@@ -1515,7 +1487,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 {/* Open at Login */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle flex items-center justify-center text-text-tertiary">
+                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
+                                                            openOnLogin
+                                                                ? isLight
+                                                                    ? 'border-indigo-500/30 text-indigo-600 bg-indigo-50/50'
+                                                                    : 'border-indigo-500/40 text-indigo-400 bg-indigo-500/5'
+                                                                : 'border-border-subtle text-text-tertiary'
+                                                        }`}>
                                                             <Power size={20} />
                                                         </div>
                                                         <div>
@@ -1536,14 +1514,20 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 </div>
 
                                                 {/* Meeting Retention */}
-                                                <div className="flex items-center justify-between px-4 py-3">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center transition-colors ${meetingRetention === 'never' ? 'border-emerald-500/40 text-emerald-400' : 'border-border-subtle text-text-tertiary'}`}>
+                                                <div className="flex items-start justify-between px-4 py-3 gap-4">
+                                                    <div className="flex items-start gap-4">
+                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
+                                                            meetingRetention === 'never'
+                                                                ? isLight
+                                                                    ? 'border-emerald-500/30 text-emerald-600 bg-emerald-50/50'
+                                                                    : 'border-emerald-500/40 text-emerald-400 bg-emerald-500/5'
+                                                                : 'border-border-subtle text-text-tertiary'
+                                                        }`}>
                                                             <Shield size={20} />
                                                         </div>
-                                                        <div>
+                                                        <div className="flex-1">
                                                             <h3 className="text-sm font-bold text-text-primary">Do not save meetings</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">When enabled, live assistance works but transcripts, summaries, and history are discarded when the meeting ends</p>
+                                                            <p className="text-xs text-text-secondary mt-0.5 leading-normal">When enabled, live assistance works but transcripts, summaries, and history are discarded when the meeting ends</p>
                                                         </div>
                                                     </div>
                                                     <div
@@ -1552,7 +1536,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             setMeetingRetention(nextRetention);
                                                             window.electronAPI?.setMeetingRetention?.(nextRetention);
                                                         }}
-                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer ${meetingRetention === 'never' ? 'bg-emerald-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer shrink-0 mt-2 ${meetingRetention === 'never' ? 'bg-emerald-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                         role="switch"
                                                         aria-checked={meetingRetention === 'never'}
                                                         aria-label="Do not save meetings"
@@ -1561,116 +1545,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     </div>
                                                 </div>
 
-                                                {/* Provider Data Scopes — fail-closed cloud share controls */}
-                                                <div className="px-4 py-3 border-t border-border-subtle">
-                                                    <h3 className="text-sm font-bold text-text-primary mb-1">Cloud provider data scopes</h3>
-                                                    <p className="text-xs text-text-secondary mb-3">Disable any data type to block it from being sent to cloud LLM providers. Local providers are unaffected.</p>
-                                                    <div className="flex flex-col gap-2">
-                                                        {([
-                                                            { key: 'transcript', label: 'Transcripts' },
-                                                            { key: 'screenshots', label: 'Screenshots' },
-                                                            { key: 'reference_files', label: 'Reference files' },
-                                                            { key: 'profile_history', label: 'Profile history' },
-                                                            { key: 'embeddings', label: 'Cloud embeddings' },
-                                                            { key: 'post_call_summary', label: 'Post-call summaries' },
-                                                        ] as const).map(({ key, label }) => {
-                                                            const allowed = providerDataScopes[key] !== false;
-                                                            return (
-                                                                <div key={key} className="flex items-center justify-between">
-                                                                    <span className="text-xs text-text-secondary">{label}</span>
-                                                                    <div
-                                                                        onClick={() => {
-                                                                            const next = { ...providerDataScopes, [key]: !allowed };
-                                                                            setProviderDataScopes(next);
-                                                                            window.electronAPI?.setProviderDataScopes?.(next);
-                                                                        }}
-                                                                        className={`w-9 h-5 rounded-full relative transition-colors cursor-pointer ${allowed ? 'bg-emerald-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                                        role="switch"
-                                                                        aria-checked={allowed}
-                                                                        aria-label={`Allow ${label} to cloud providers`}
-                                                                    >
-                                                                        <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${allowed ? 'translate-x-4' : 'translate-x-0'}`} />
-                                                                    </div>
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </div>
-
-                                                {/* Screen Understanding — vision-first routing */}
-                                                <div className="px-4 py-3 border-t border-border-subtle">
-                                                    <h3 className="text-sm font-bold text-text-primary mb-1">Screen understanding</h3>
-                                                    <p className="text-xs text-text-secondary mb-3">Pick how Natively reads what is on your screen. All paths use the vision-capable AI provider directly; OCR is no longer used.</p>
-                                                    <div className="flex flex-col gap-2">
-                                                        {([
-                                                            {
-                                                                value: 'vision_first' as const,
-                                                                label: 'Vision first',
-                                                                description: 'Recommended. Try every configured vision provider in order; first success wins.',
-                                                            },
-                                                            {
-                                                                value: 'vision_only' as const,
-                                                                label: 'Vision only',
-                                                                description: 'Stricter. Require a vision-capable provider; never silently drop the screenshot.',
-                                                            },
-                                                            {
-                                                                value: 'private_vision' as const,
-                                                                label: 'Private vision (local only)',
-                                                                description: 'Use a local vision model (Ollama) only. Never call cloud vision. Clear error if no local provider is configured.',
-                                                            },
-                                                        ]).map(({ value, label, description }) => {
-                                                            const selected = screenUnderstandingMode === value;
-                                                            return (
-                                                                <div
-                                                                    key={value}
-                                                                    onClick={() => {
-                                                                        setScreenUnderstandingMode(value);
-                                                                        window.electronAPI?.setScreenUnderstandingMode?.(value);
-                                                                    }}
-                                                                    className={`px-3 py-2 rounded-lg border cursor-pointer transition-colors ${selected ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-border-subtle hover:border-border-muted bg-bg-item-surface'}`}
-                                                                    role="radio"
-                                                                    aria-checked={selected}
-                                                                >
-                                                                    <div className="flex items-center justify-between gap-3">
-                                                                        <div className="flex flex-col">
-                                                                            <span className={`text-xs font-semibold ${selected ? 'text-emerald-300' : 'text-text-primary'}`}>{label}</span>
-                                                                            <span className="text-[11px] text-text-secondary leading-snug mt-0.5">{description}</span>
-                                                                        </div>
-                                                                        <div className={`w-4 h-4 rounded-full border-2 shrink-0 ${selected ? 'border-emerald-400 bg-emerald-400' : 'border-border-muted'}`} />
-                                                                    </div>
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-border-subtle">
-                                                        <div className="flex flex-col">
-                                                            <span className="text-xs text-text-primary font-semibold">Technical interview direct vision</span>
-                                                            <span className="text-[11px] text-text-secondary leading-snug">Use the highest-resolution image profile so code text stays sharp in interview mode.</span>
-                                                        </div>
-                                                        <div
-                                                            onClick={() => {
-                                                                const next = !technicalInterviewVisionFirst;
-                                                                setTechnicalInterviewVisionFirst(next);
-                                                                const api: any = window.electronAPI;
-                                                                if (api?.setTechnicalInterviewVisionFirst) {
-                                                                    api.setTechnicalInterviewVisionFirst(next);
-                                                                } else {
-                                                                    window.electronAPI?.setTechnicalInterviewDirectVision?.(next);
-                                                                }
-                                                            }}
-                                                            className={`w-9 h-5 rounded-full relative transition-colors cursor-pointer ${technicalInterviewVisionFirst ? 'bg-emerald-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                            role="switch"
-                                                            aria-checked={technicalInterviewVisionFirst}
-                                                        >
-                                                            <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${technicalInterviewVisionFirst ? 'translate-x-4' : 'translate-x-0'}`} />
-                                                        </div>
-                                                    </div>
-                                                </div>
-
                                                 {/* Debug Logging */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center transition-colors ${verboseLogging ? 'border-amber-500/40 text-amber-400' : 'border-border-subtle text-text-tertiary'}`}>
+                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
+                                                            verboseLogging
+                                                                ? isLight
+                                                                    ? 'border-amber-500/30 text-amber-600 bg-amber-50/50'
+                                                                    : 'border-amber-500/40 text-amber-400 bg-amber-500/5'
+                                                                : 'border-border-subtle text-text-tertiary'
+                                                        }`}>
                                                             <Terminal size={20} />
                                                         </div>
                                                         <div>
@@ -1732,7 +1616,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 {/* Interviewer Transcript */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle flex items-center justify-center text-text-tertiary">
+                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
+                                                            showTranscript
+                                                                ? isLight
+                                                                    ? 'border-blue-500/30 text-blue-600 bg-blue-50/50'
+                                                                    : 'border-blue-500/40 text-blue-400 bg-blue-500/5'
+                                                                : 'border-border-subtle text-text-tertiary'
+                                                        }`}>
                                                             <MessageSquare size={20} />
                                                         </div>
                                                         <div>
@@ -1756,7 +1646,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 {/* Auto Scroll */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle flex items-center justify-center text-text-tertiary">
+                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
+                                                            autoScroll
+                                                                ? isLight
+                                                                    ? 'border-purple-500/30 text-purple-600 bg-purple-50/50'
+                                                                    : 'border-purple-500/40 text-purple-400 bg-purple-500/5'
+                                                                : 'border-border-subtle text-text-tertiary'
+                                                        }`}>
                                                             <ArrowDown size={20} />
                                                         </div>
                                                         <div>
@@ -1781,7 +1677,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 {/* Theme */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle flex items-center justify-center text-text-tertiary">
+                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
+                                                            themeMode !== 'system'
+                                                                ? isLight
+                                                                    ? 'border-violet-500/30 text-violet-600 bg-violet-50/50'
+                                                                    : 'border-violet-500/40 text-violet-400 bg-violet-500/5'
+                                                                : 'border-border-subtle text-text-tertiary'
+                                                        }`}>
                                                             <Palette size={20} />
                                                         </div>
                                                         <div>
@@ -1834,7 +1736,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 {/* Meeting Interface Style */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle flex items-center justify-center text-text-tertiary">
+                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
+                                                            meetingInterfaceTheme === 'liquid-glass'
+                                                                ? isLight
+                                                                    ? 'border-sky-500/30 text-sky-600 bg-sky-50/50'
+                                                                    : 'border-sky-500/40 text-sky-400 bg-sky-500/5'
+                                                                : 'border-border-subtle text-text-tertiary'
+                                                        }`}>
                                                             <Layout size={20} />
                                                         </div>
                                                         <div>
@@ -1850,24 +1758,19 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     <div className="relative" ref={interfaceThemeDropdownRef}>
                                                         <button
                                                             onClick={() => setIsInterfaceThemeDropdownOpen(!isInterfaceThemeDropdownOpen)}
-                                                            className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[130px] justify-between"
+                                                            className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[110px] justify-between"
                                                         >
-                                                            <div className="flex items-center gap-2 overflow-hidden">
-                                                                <span className="text-text-secondary shrink-0">
-                                                                    {meetingInterfaceTheme === 'liquid-glass' ? <Sparkles size={14} /> : <Layout size={14} />}
-                                                                </span>
-                                                                <span className="text-ellipsis overflow-hidden whitespace-nowrap">
-                                                                    {meetingInterfaceTheme === 'liquid-glass' ? 'Liquid Glass' : 'Default'}
-                                                                </span>
-                                                            </div>
+                                                            <span className="text-ellipsis overflow-hidden whitespace-nowrap">
+                                                                {meetingInterfaceTheme === 'liquid-glass' ? 'Liquid Glass' : 'Default'}
+                                                            </span>
                                                             <ChevronDown size={12} className={`shrink-0 transition-transform ${isInterfaceThemeDropdownOpen ? 'rotate-180' : ''}`} />
                                                         </button>
 
                                                         {isInterfaceThemeDropdownOpen && (
-                                                            <div className="absolute right-0 top-full mt-1 min-w-full w-max bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 animated fadeIn select-none">
+                                                            <div className="absolute right-0 top-full mt-1 w-full bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 animated fadeIn select-none">
                                                                 {([
-                                                                    { mode: 'default' as MeetingInterfaceTheme, label: 'Default', icon: <Layout size={14} />, desc: 'Classic overlay' },
-                                                                    { mode: 'liquid-glass' as MeetingInterfaceTheme, label: 'Liquid Glass', icon: <Sparkles size={14} />, desc: 'Apple-inspired glass' },
+                                                                    { mode: 'default' as MeetingInterfaceTheme, label: 'Default' },
+                                                                    { mode: 'liquid-glass' as MeetingInterfaceTheme, label: 'Liquid Glass' },
                                                                 ] as const).map((option) => (
                                                                     <button
                                                                         key={option.mode}
@@ -1876,13 +1779,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                             setMeetingInterfaceThemeState(option.mode);
                                                                             setIsInterfaceThemeDropdownOpen(false);
                                                                         }}
-                                                                        className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${meetingInterfaceTheme === option.mode ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
+                                                                        className={`w-full text-left px-2.5 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${meetingInterfaceTheme === option.mode ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
                                                                     >
-                                                                        <span className={meetingInterfaceTheme === option.mode ? 'text-text-primary' : 'text-text-secondary'}>{option.icon}</span>
-                                                                        <div>
-                                                                            <span className="font-medium">{option.label}</span>
-                                                                            <span className="text-text-tertiary ml-1.5">{option.desc}</span>
-                                                                        </div>
+                                                                        <span className="font-medium">{option.label}</span>
                                                                     </button>
                                                                 ))}
                                                             </div>
@@ -1893,7 +1792,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     {/* AI Response Language */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle flex items-center justify-center text-text-tertiary">
+                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
+                                                            aiResponseLanguage !== 'auto'
+                                                                ? isLight
+                                                                    ? 'border-teal-500/30 text-teal-600 bg-teal-50/50'
+                                                                    : 'border-teal-500/40 text-teal-400 bg-teal-500/5'
+                                                                : 'border-border-subtle text-text-tertiary'
+                                                        }`}>
                                                             <Globe size={20} />
                                                         </div>
                                                         <div>
@@ -1970,22 +1875,27 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             }
                                                         }}
                                                         disabled={updateStatus === 'checking'}
-                                                        className={`px-5 py-2 rounded-lg text-[13px] font-bold transition-all flex items-center gap-2 shrink-0 ${updateStatus === 'checking' ? 'bg-bg-input text-text-tertiary cursor-wait' :
-                                                            updateStatus === 'available' ? 'bg-accent-primary text-white hover:bg-accent-secondary shadow-lg shadow-blue-500/20' :
-                                                                updateStatus === 'uptodate' ? 'bg-green-500/10 text-green-400 border border-green-500/20' :
-                                                                    updateStatus === 'error' ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
-                                                                        'bg-bg-component hover:bg-bg-input text-text-primary'
-                                                            }`}
+                                                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors flex items-center justify-center gap-2 shrink-0 min-w-[110px] ${
+                                                            updateStatus === 'checking'
+                                                                ? 'bg-bg-input text-text-tertiary border-border-subtle cursor-wait'
+                                                                : updateStatus === 'available'
+                                                                    ? 'bg-accent-primary text-white border-accent-primary hover:bg-accent-secondary shadow-lg shadow-blue-500/20'
+                                                                    : updateStatus === 'uptodate'
+                                                                        ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                                                                        : updateStatus === 'error'
+                                                                            ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                                                                            : 'bg-bg-component hover:bg-bg-elevated text-text-primary border-border-subtle'
+                                                        }`}
                                                     >
                                                         {updateStatus === 'checking' ? (
                                                             <>
                                                                 <RefreshCw size={14} className="animate-spin" />
-                                                                Checking...
+                                                                Checking
                                                             </>
                                                         ) : updateStatus === 'available' ? (
                                                             <>
                                                                 <ArrowDown size={14} />
-                                                                Update Available
+                                                                Update
                                                             </>
                                                         ) : updateStatus === 'uptodate' ? (
                                                             <>
@@ -2000,7 +1910,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         ) : (
                                                             <>
                                                                 <RefreshCw size={14} />
-                                                                Check for updates
+                                                                Check
                                                             </>
                                                         )}
                                                     </button>
@@ -2112,9 +2022,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
                                 </div>
                             )}
-                            
+
                             {activeTab === 'ai-providers' && (
                                 <AIProvidersSettings />
+                            )}
+                            {activeTab === 'skills' && (
+                                <SkillsSettings />
                             )}
                             {activeTab === 'natively-api' && (
                                 <NativelyApiSettings />
@@ -2746,37 +2659,45 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 </button>
                                             </div>
 
-                                            <div className="h-px bg-border-subtle my-2" />
-
-                                            {/* SCK Backend Toggle */}
-                                            <div className="bg-amber-500/5 rounded-xl border border-amber-500/20 p-4">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-start gap-3">
-                                                        <div className="mt-0.5 p-1.5 rounded-lg bg-amber-500/10 text-amber-500">
-                                                            <FlaskConical size={18} />
-                                                        </div>
-                                                        <div>
-                                                            <div className="flex items-center gap-2 mb-0.5">
-                                                                <h3 className="text-sm font-bold text-text-primary">SCK Backend</h3>
-                                                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-400 uppercase tracking-wide">Alternative</span>
+                                            {/* SCK Backend Toggle — macOS only. The ScreenCaptureKit
+                                                backend is a CoreAudio alternative implemented in the
+                                                Rust speaker module under #[cfg(target_os="macos")];
+                                                Windows audio runs via WASAPI loopback so the toggle
+                                                has no meaning there and routing "sck" as a device id
+                                                silently breaks system audio (issue #252 audit / F-003). */}
+                                            {isMac && (
+                                                <>
+                                                    <div className="h-px bg-border-subtle my-2" />
+                                                    <div className="bg-amber-500/5 rounded-xl border border-amber-500/20 p-4">
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex items-start gap-3">
+                                                                <div className="mt-0.5 p-1.5 rounded-lg bg-amber-500/10 text-amber-500">
+                                                                    <FlaskConical size={18} />
+                                                                </div>
+                                                                <div>
+                                                                    <div className="flex items-center gap-2 mb-0.5">
+                                                                        <h3 className="text-sm font-bold text-text-primary">SCK Backend</h3>
+                                                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-400 uppercase tracking-wide">Alternative</span>
+                                                                    </div>
+                                                                    <p className="text-xs text-text-secondary leading-relaxed max-w-[300px]">
+                                                                        Use the ScreenCaptureKit backend. An optimized alternative to CoreAudio if you experience any capture issues.
+                                                                    </p>
+                                                                </div>
                                                             </div>
-                                                            <p className="text-xs text-text-secondary leading-relaxed max-w-[300px]">
-                                                                Use the ScreenCaptureKit backend. An optimized alternative to CoreAudio if you experience any capture issues.
-                                                            </p>
+                                                            <div
+                                                                onClick={() => {
+                                                                    const newState = !useExperimentalSck;
+                                                                    setUseExperimentalSck(newState);
+                                                                    window.localStorage.setItem('useExperimentalSckBackend', newState ? 'true' : 'false');
+                                                                }}
+                                                                className={`w-11 h-6 rounded-full relative transition-colors shrink-0 ${useExperimentalSck ? 'bg-amber-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                            >
+                                                                <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${useExperimentalSck ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                    <div
-                                                        onClick={() => {
-                                                            const newState = !useExperimentalSck;
-                                                            setUseExperimentalSck(newState);
-                                                            window.localStorage.setItem('useExperimentalSckBackend', newState ? 'true' : 'false');
-                                                        }}
-                                                        className={`w-11 h-6 rounded-full relative transition-colors shrink-0 ${useExperimentalSck ? 'bg-amber-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                    >
-                                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${useExperimentalSck ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                    </div>
-                                                </div>
-                                            </div>
+                                                </>
+                                            )}
                                         </div>
                                     </div>
                                 </div>

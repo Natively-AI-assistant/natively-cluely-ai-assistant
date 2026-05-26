@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Smartphone, Wifi, Lock, RefreshCw, Copy, Check, ShieldAlert } from 'lucide-react';
 import type { PhoneMirrorInfo } from '../../types/electron';
+import { isMac } from '../../utils/platformUtils';
 
 const EMPTY_INFO: PhoneMirrorInfo = {
     running: false,
@@ -168,7 +169,7 @@ export const PhoneMirrorSettings: React.FC = () => {
                 <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-300 text-xs leading-relaxed flex items-start gap-2">
                     <ShieldAlert size={14} className="mt-0.5 flex-shrink-0" />
                     <span>
-                        LAN access is on, but no Wi-Fi or Ethernet IP was detected. Connect this Mac to the same Wi-Fi as your phone (VPN tunnels and virtual interfaces don't count). If you've connected, also confirm <strong>System Settings → Network → Firewall</strong> is allowing incoming connections for this app.
+                        LAN access is on, but no Wi-Fi or Ethernet IP was detected. Connect this {isMac ? 'Mac' : 'PC'} to the same Wi-Fi as your phone (VPN tunnels and virtual interfaces don't count). If you've connected, also confirm {isMac ? <strong>System Settings → Network → Firewall</strong> : <strong>Windows Defender Firewall → Allowed apps</strong>} is allowing incoming connections for this app.
                     </span>
                 </div>
             )}

@@ -161,7 +161,10 @@ export class ScreenUnderstandingService {
           warnings,
           started,
           status: 'permission_missing',
-          unavailableReason: 'Could not capture the screen. Check Screen Recording permission in System Settings.',
+          unavailableReason:
+            process.platform === 'darwin'
+              ? 'Could not capture the screen. Check Screen Recording permission in System Settings → Privacy & Security → Screen Recording.'
+              : 'Could not capture the screen. Check your display configuration and try again.',
         });
       }
     }

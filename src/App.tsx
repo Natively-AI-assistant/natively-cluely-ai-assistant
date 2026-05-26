@@ -18,6 +18,7 @@ import { PermissionsToaster }   from "./components/onboarding/PermissionsToaster
 import { AlertCircle } from "lucide-react"
 import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity } from "./lib/overlayAppearance"
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
+import { isMac } from "./utils/platformUtils"
 import {
   JDAwarenessToaster,
   ProfileFeatureToaster,
@@ -386,14 +387,21 @@ const App: React.FC = () => {
       localStorage.setItem('natively_last_meeting_start', Date.now().toString());
       const inputDeviceId = localStorage.getItem('preferredInputDeviceId');
       let outputDeviceId = localStorage.getItem('preferredOutputDeviceId');
-      const useExperimentalSck = localStorage.getItem('useExperimentalSckBackend') === 'true';
+      // SCK is a macOS-only backend (ScreenCaptureKit + CoreAudio Process Tap
+      // live in the Rust speaker module under #[cfg(target_os = "macos")]).
+      // F-003 hid the toggle UI on Windows, but the localStorage key can be
+      // present on a Windows machine via cross-OS sync or restored backup —
+      // routing "sck" as an outputDeviceId then hands the Windows speaker
+      // module an unknown WASAPI device id and silently breaks system audio.
+      // Defense-in-depth: also require isMac at the consumer.
+      const useExperimentalSck = isMac && localStorage.getItem('useExperimentalSckBackend') === 'true';
 
       // Override output device ID to force SCK if experimental mode is enabled
       // Default to CoreAudio unless experimental is enabled
       if (useExperimentalSck) {
         console.log("[App] Using ScreenCaptureKit backend (Experimental).");
         outputDeviceId = "sck";
-      } else {
+      } else if (isMac) {
         console.log("[App] Using CoreAudio backend (Default).");
       }
 

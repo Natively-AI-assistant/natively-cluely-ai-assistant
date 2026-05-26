@@ -19,6 +19,14 @@ export default defineConfig({
     },
     server: {
         port: 5180,
+        watch: {
+            ignored: [
+                '**/.claude/worktrees/**',
+                '**/.code-review-graph/**',
+                '**/dist-electron/**',
+                '**/release/**',
+            ],
+        },
     },
     build: {
         chunkSizeWarningLimit: 1000,
