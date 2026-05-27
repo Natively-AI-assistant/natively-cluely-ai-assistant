@@ -1,6 +1,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import nativelyLogo from "../assets/logo.webp";
+import { getModifierSymbol } from "../utils/platformUtils";
 
 const DARK_GLASS = {
   background: "linear-gradient(160deg, rgba(90,90,108,0.88) 0%, rgba(55,55,70,0.93) 50%, rgba(36,36,50,0.97) 100%)",
@@ -166,7 +167,7 @@ const NativelyInterfaceCard = ({ className = "", isMobile = false, isStatic = fa
                 {dreamyVariant ? (
                   <span className="flex items-center gap-1.5">
                     Ask about your screen or conversation, or
-                    <kbd className="bg-white/10 px-1.5 py-0.5 rounded text-[10px] border border-white/10 font-sans">⌘</kbd>
+                    <kbd className="bg-white/10 px-1.5 py-0.5 rounded text-[10px] border border-white/10 font-sans">{getModifierSymbol('cmd')}</kbd>
                     <kbd className="bg-white/10 px-1.5 py-0.5 rounded text-[10px] border border-white/10 font-sans">↵</kbd>
                     for Assist
                   </span>

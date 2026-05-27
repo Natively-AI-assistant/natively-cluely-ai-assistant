@@ -9,18 +9,20 @@ import {
 import { SiOpenai, SiGoogle } from 'react-icons/si';
 import { useShortcuts } from '../../hooks/useShortcuts';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
+import { isMac, getModifierSymbol } from '../../utils/platformUtils';
 import nativelyIcon from '../icon.png';
 
 // ----------------------
 // Animations & Mocks
 // ----------------------
 
+const CMD_SYMBOL = getModifierSymbol('cmd');
 const MOCK_BUTTONS = [
-    { icon: Pencil, label: 'What to answer?', kbd: '⌘1', color: 'blue' },
-    { icon: MessageSquare, label: 'Clarify', kbd: '⌘2', color: 'indigo' },
-    { icon: RefreshCw, label: 'Recap', kbd: '⌘7', color: 'amber' },
-    { icon: HelpCircle, label: 'Follow Up Question', kbd: '⌘4', color: 'teal' },
-    { icon: Zap, label: 'Answer', kbd: '⌘5', color: 'emerald' },
+    { icon: Pencil, label: 'What to answer?', kbd: `${CMD_SYMBOL}1`, color: 'blue' },
+    { icon: MessageSquare, label: 'Clarify', kbd: `${CMD_SYMBOL}2`, color: 'indigo' },
+    { icon: RefreshCw, label: 'Recap', kbd: `${CMD_SYMBOL}7`, color: 'amber' },
+    { icon: HelpCircle, label: 'Follow Up Question', kbd: `${CMD_SYMBOL}4`, color: 'teal' },
+    { icon: Zap, label: 'Answer', kbd: `${CMD_SYMBOL}5`, color: 'emerald' },
 ] as const;
 
 const colorMap: Record<string, string> = {
@@ -123,9 +125,9 @@ const MockAppInterface = () => {
                                 <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none text-[13px] text-text-secondary opacity-60">
                                     <span className="hidden sm:inline">Ask anything on screen or conversation, or</span>
                                     <div className="flex items-center gap-1 opacity-80 sm:ml-0.5">
-                                        <kbd className="px-1.5 py-0.5 rounded border text-[10px] font-sans min-w-[20px] text-center bg-bg-item-surface border-border-subtle text-text-primary shadow-sm">⌘</kbd>
+                                        <kbd className="px-1.5 py-0.5 rounded border text-[10px] font-sans min-w-[20px] text-center bg-bg-item-surface border-border-subtle text-text-primary shadow-sm">{getModifierSymbol('cmd')}</kbd>
                                         <span className="text-[10px]">+</span>
-                                        <kbd className="px-1.5 py-0.5 rounded border text-[10px] font-sans min-w-[20px] text-center bg-bg-item-surface border-border-subtle text-text-primary shadow-sm">⇧</kbd>
+                                        <kbd className="px-1.5 py-0.5 rounded border text-[10px] font-sans min-w-[20px] text-center bg-bg-item-surface border-border-subtle text-text-primary shadow-sm">{getModifierSymbol('shift')}</kbd>
                                         <span className="text-[10px]">+</span>
                                         <kbd className="px-1.5 py-0.5 rounded border text-[10px] font-sans min-w-[20px] text-center bg-bg-item-surface border-border-subtle text-text-primary shadow-sm">H</kbd>
                                     </div>
@@ -439,7 +441,9 @@ const MockPermissionsAnim = () => {
                 </div>
             </div>
             <div className="text-xs text-text-secondary text-center max-w-[280px]">
-                Natively requires Accessibility and Screen Recording permissions to analyze screen context.
+                {isMac
+                    ? 'Natively requires Accessibility and Screen Recording permissions to analyze screen context.'
+                    : 'Natively will ask for microphone access the first time you start a meeting.'}
             </div>
         </div>
     );
@@ -802,10 +806,14 @@ const AccordionSection: React.FC<AccordionSectionProps> = ({ title, icon, childr
 };
 
 const SetupGuide = () => {
+    const cmd = getModifierSymbol('cmd');
+    const shift = getModifierSymbol('shift');
     const steps = [
         {
             title: 'Grant Permissions',
-            desc: 'Enable Screen Recording and Accessibility for Natively in macOS Privacy & Security.',
+            desc: isMac
+                ? 'Enable Screen Recording and Accessibility for Natively in macOS Privacy & Security.'
+                : 'Approve the microphone prompt the first time you start a meeting (Settings → Privacy → Microphone).',
         },
         {
             title: 'Set Up Audio',
@@ -826,9 +834,9 @@ const SetupGuide = () => {
     ];
 
     const hotkeys = [
-        { label: 'Toggle', kbd: '⌘H' },
-        { label: 'Screenshot', kbd: '⌘⇧H' },
-        { label: 'Chat', kbd: '⌘K' },
+        { label: 'Toggle', kbd: `${cmd}H` },
+        { label: 'Screenshot', kbd: `${cmd}${shift}H` },
+        { label: 'Chat', kbd: `${cmd}K` },
     ];
 
     return (
@@ -932,8 +940,12 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                 <AccordionSection title="1. App Permissions Setup" icon={<Monitor className="w-4 h-4" />}>
                     <div className="space-y-4">
-                        <p>Natively operates entirely on-device, but requires OS permissions to tap into your screen context and global keystrokes. Here is how your system should look:</p>
-                        <MockPermissionsAnim />
+                        <p>
+                            {isMac
+                                ? 'Natively operates entirely on-device, but requires OS permissions to tap into your screen context and global keystrokes. Here is how your system should look:'
+                                : 'Natively operates entirely on-device. Windows will prompt you for microphone access the first time you start a meeting — no other OS permissions are required.'}
+                        </p>
+                        {isMac && <MockPermissionsAnim />}
                         <div className="space-y-3 mt-4">
                             <h4 className="font-bold text-base text-text-primary border-b border-border-subtle pb-2">Hardware & Engine Configurations</h4>
 
@@ -946,24 +958,26 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                 </p>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
-                                    <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
-                                        <Monitor size={14} className="text-accent-primary" /> ScreenCaptureKit (SCK)
-                                    </h5>
-                                    <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                        The recommended backend for macOS 13.0+. Uses Apple's modern, highly optimized internal framework for 0-latency loopback speaker capture securely.
-                                    </p>
+                            {isMac && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
+                                        <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
+                                            <Monitor size={14} className="text-accent-primary" /> ScreenCaptureKit (SCK)
+                                        </h5>
+                                        <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
+                                            The recommended backend for macOS 13.0+. Uses Apple's modern, highly optimized internal framework for 0-latency loopback speaker capture securely.
+                                        </p>
+                                    </div>
+                                    <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
+                                        <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
+                                            <Volume2 size={14} className="text-orange-500" /> CoreAudio (Legacy)
+                                        </h5>
+                                        <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
+                                            Fallback engine for older hardware. Relies on internal device aggregation to trap output audio. Only use this if SCK repeatedly drops speaker packets.
+                                        </p>
+                                    </div>
                                 </div>
-                                <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
-                                    <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
-                                        <Volume2 size={14} className="text-orange-500" /> CoreAudio (Legacy)
-                                    </h5>
-                                    <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                        Fallback engine for older hardware. Relies on internal device aggregation to trap output audio. Only use this if SCK repeatedly drops speaker packets.
-                                    </p>
-                                </div>
-                            </div>
+                            )}
 
                             <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
                                 <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
@@ -975,23 +989,35 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                             </div>
                         </div>
 
-                        <div className="flex flex-col gap-3 mt-6">
-                            <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
-                                <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
-                                    <Monitor className="w-4 h-4 text-accent-primary" /> Screen Recording
-                                </h4>
-                                <p className="text-xs opacity-90 mb-2">Provides Natively the ability to read your screen temporarily when you capture context.</p>
-                                <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; Screen Recording</p>
-                            </div>
+                        {isMac ? (
+                            <div className="flex flex-col gap-3 mt-6">
+                                <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
+                                    <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
+                                        <Monitor className="w-4 h-4 text-accent-primary" /> Screen Recording
+                                    </h4>
+                                    <p className="text-xs opacity-90 mb-2">Provides Natively the ability to read your screen temporarily when you capture context.</p>
+                                    <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; Screen Recording</p>
+                                </div>
 
-                            <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
-                                <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
-                                    <Command className="w-4 h-4 text-purple-500" /> Accessibility
-                                </h4>
-                                <p className="text-xs opacity-90 mb-2">Required for Natively to detect the global keyboard shortcuts below, regardless of what window is focused.</p>
-                                <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; Accessibility</p>
+                                <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
+                                    <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
+                                        <Command className="w-4 h-4 text-purple-500" /> Accessibility
+                                    </h4>
+                                    <p className="text-xs opacity-90 mb-2">Required for Natively to detect the global keyboard shortcuts below, regardless of what window is focused.</p>
+                                    <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; Accessibility</p>
+                                </div>
                             </div>
-                        </div>
+                        ) : (
+                            <div className="flex flex-col gap-3 mt-6">
+                                <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
+                                    <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
+                                        <Mic className="w-4 h-4 text-blue-500" /> Microphone
+                                    </h4>
+                                    <p className="text-xs opacity-90 mb-2">Required to capture what you say during meetings. Windows prompts the first time you start a meeting.</p>
+                                    <p className="text-[11px] text-text-tertiary">Settings &gt; Privacy &gt; Microphone</p>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </AccordionSection>
 
@@ -1237,8 +1263,12 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                 { Icon: Monitor, color: 'rose', title: 'Screenshot & Ask', badge: null, bc: '', kbd: ['⌘', '⇧', 'H'], desc: 'Forces a full-screen capture and immediately processes it through the LLM.' },
                                 { Icon: EyeOff, color: 'slate', title: 'Stealth Execute', badge: null, bc: '', kbd: ['⌘', '↵'], desc: 'Processes context in the background without ever revealing the interface.' },
                             ] as Array<{ Icon: React.ElementType; color: 'blue' | 'violet' | 'teal' | 'emerald' | 'indigo' | 'amber' | 'sky' | 'rose' | 'slate'; title: string; badge: string | null; bc: string; kbd: string[]; desc: string }>).map(({ Icon, color, title, badge, bc, kbd, desc }) => {
-                                const isWindows = typeof navigator !== 'undefined' && /Win/i.test(navigator.platform);
-                                const resolvedKbd = kbd.map(k => k === '⌘' ? (isWindows ? 'Ctrl' : '⌘') : k);
+                                const resolvedKbd = kbd.map(k =>
+                                    k === '⌘' ? getModifierSymbol('cmd')
+                                  : k === '⇧' ? getModifierSymbol('shift')
+                                  : k === '⌥' ? getModifierSymbol('option')
+                                  : k
+                                );
                                 const t = {
                                     blue: { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(59,130,246,0.2),0_4px_12px_rgba(59,130,246,0.07)]' },
                                     violet: { bg: 'bg-violet-500/10', text: 'text-violet-400', border: 'border-violet-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(139,92,246,0.2),0_4px_12px_rgba(139,92,246,0.07)]' },
@@ -1360,7 +1390,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                 <AccordionSection title="6. Global Search & Shortcuts" icon={<Search className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        <p className="text-[13px]">Hit <span className={kbdClass}>Cmd+K</span> anywhere on your computer to invoke the Natively Global Palette. This acts as your Spotlight overlay for interacting directly with the system backbone.</p>
+                        <p className="text-[13px]">Hit <span className={kbdClass}>{isMac ? 'Cmd+K' : 'Ctrl+K'}</span> anywhere on your computer to invoke the Natively Global Palette. This acts as your Spotlight overlay for interacting directly with the system backbone.</p>
 
                         <MockSearchPillAnim />
 
@@ -1400,7 +1430,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
-                                        {(shortcuts.toggleVisibility || ['⌘', 'B']).map((key: string, i: number) => <span key={i} className={kbdClass}>{key}</span>)}
+                                        {(shortcuts.toggleVisibility || [getModifierSymbol('cmd'), 'B']).map((key: string, i: number) => <span key={i} className={kbdClass}>{key}</span>)}
                                     </div>
                                 </div>
 
@@ -1415,7 +1445,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
-                                        {(shortcuts.takeScreenshot || ['⌘', 'H']).map((key: string, i: number) => <span key={i} className={kbdClass}>{key}</span>)}
+                                        {(shortcuts.takeScreenshot || [getModifierSymbol('cmd'), 'H']).map((key: string, i: number) => <span key={i} className={kbdClass}>{key}</span>)}
                                     </div>
                                 </div>
 
@@ -1430,7 +1460,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
-                                        {(shortcuts.processScreenshots || ['⌘', 'Enter']).map((key: string, i: number) => <span key={i} className={kbdClass}>{key}</span>)}
+                                        {(shortcuts.processScreenshots || [getModifierSymbol('cmd'), 'Enter']).map((key: string, i: number) => <span key={i} className={kbdClass}>{key}</span>)}
                                     </div>
                                 </div>
 
@@ -1445,7 +1475,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
-                                        {(shortcuts.captureAndProcess || ['⌘', '⇧', 'Enter']).map((key: string, i: number) => <span key={i} className={kbdClass}>{key}</span>)}
+                                        {(shortcuts.captureAndProcess || [getModifierSymbol('cmd'), getModifierSymbol('shift'), 'Enter']).map((key: string, i: number) => <span key={i} className={kbdClass}>{key}</span>)}
                                     </div>
                                 </div>
                             </div>
@@ -1769,7 +1799,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                 </p>
                                 <div className="p-2 border border-orange-500/20 bg-orange-500/5 rounded-lg">
                                     <p className="text-[10px] text-orange-400 m-0">
-                                        <strong>⚠️ Warning:</strong> This renders the Natively overlay completely unclickable. You MUST memorize the Global Hotkeys (e.g. <strong>Cmd+Shift+Arrows</strong> to move, <strong>Cmd+B</strong> to hide, <strong>Cmd+1-7</strong> for actions) to control the application once this is active.
+                                        <strong>⚠️ Warning:</strong> This renders the Natively overlay completely unclickable. You MUST memorize the Global Hotkeys (e.g. <strong>{isMac ? 'Cmd' : 'Ctrl'}+Shift+Arrows</strong> to move, <strong>{isMac ? 'Cmd' : 'Ctrl'}+B</strong> to hide, <strong>{isMac ? 'Cmd' : 'Ctrl'}+1-7</strong> for actions) to control the application once this is active.
                                     </p>
                                 </div>
                             </div>

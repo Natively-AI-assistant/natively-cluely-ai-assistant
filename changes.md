@@ -1,3 +1,4 @@
+- [electron/WindowHelper.ts, electron/SettingsWindowHelper.ts, electron/ModelSelectorWindowHelper.ts, electron/main.ts]: Integrated PR #232 Windows undetectable overlay activation fix — overlay now stays non-focusable/non-activating in Windows Undetectable Mode, show paths prefer showInactive instead of focus/show when appropriate, child settings/model selector windows sync activation policy from overlay state, and setUndetectable() refreshes Windows activation policy immediately. Verified with `npx tsc --noEmit`.
 - [native-module/src/speaker/core_audio.rs]: Fixed CoreAudio Tap capture on macOS — create the tap scoped to the selected output device, keep the output UID in the aggregate sub-device list, and stop treating mono buffers as stereo so captured system audio is no longer sped up/pitched up before STT.
 - [nativelyapi/server.js]: Added ElevenLabs shadow probe for GoogleSTT silent failure detection and ElevenLabs reconnect-on-silence — (1) GoogleSTT silence (90s) now starts a parallel ElevenLabs WebSocket probe with the last 10s of audio; if ElevenLabs returns ≥2 words → GoogleSTT confirmed silently failing → markFailed + switchToFallback; if 12s timeout with no speech → genuine silence → re-arm watchdog; rate-limited to MAX_SHADOW_PROBES; direct failover if no ElevenLabs keys available; (2) ElevenLabs silence (90s) attempts exactly one reconnect by terminating the hung WebSocket and calling connectSTTProvider with last 5s of audio; a second silence window logs and gives up; (3) session close handler tears down both shadow probes; both probe WS instances use stale-instance guards
 - [nativelyapi/server.js]: Extended STT silence watchdog to all three providers and added Deepgram SpeechStarted health signal — (1) resetSilenceWatchdog now arms for googleSTT and elevenlabs, not just deepgram; googleSTT uses 2× window (90s) before calling switchToFallback('googleSTT_silent_failure'), elevenlabs uses 2× window with log-only (last resort, can't fall further); (2) Deepgram SpeechStarted VAD event now resets silence watchdog + tears down shadow probe — fires before transcript completes so false-positive probes during fast speech are eliminated; (3) createGoogleSTTSession gains onTranscript callback called on every partial and final, wired to resetSilenceWatchdog at the googleSTT call site; (4) GoogleSTT and ElevenLabs now arm the watchdog at connect time (equivalent to Deepgram's open handler arm); (5) ElevenLabs partial_transcript and committed_transcript events reset the watchdog
@@ -356,3 +357,67 @@ through a senior code review with bugs surfaced and fixed before the next item.
 - **No `.d.ts` shim for `@huggingface/transformers`** — the `new Function('return import("@huggingface/transformers")')()` ESM-from-CommonJS escape hatch types as `any`. Breaking changes in v4 would surface only at runtime (the v2→v3 `quantized` flag bug was exactly this category). Logged as a future polish item, not blocking.
 - **`DTYPE_SUFFIX` map duplicates `@huggingface/transformers` internal mapping** — if HF adds a new dtype keyword (`q6`, `bf16`, ...) we'd silently use `''` suffix and force perpetual re-downloads. Runtime assertion that `WHISPER_SAFE_DTYPE` values are all known suffix keys would catch this; deferred.
 - **Streaming profile colocation** — `resolveStreamingProfile` lives in `LocalWhisperSTT.ts` while the model catalog lives in `modelManager.ts`. Two sources of truth. Will become a switch-statement nightmare at three+ model families; should migrate to a `streamingProfile?: StreamingProfile` field on `WhisperModelInfo`. Logged.
+
+## OpenAI Realtime transcription GA protocol fix
+
+- [electron/audio/OpenAIStreamingSTT.ts]: Migrated the OpenAI Realtime transcription WebSocket setup from beta-style `session.update` payloads to the GA transcription session protocol verified against OpenAI's official OpenAPI spec. The client now sends `transcription_session.update` with `input_audio_format: 'pcm16'`, `input_audio_transcription`, `input_audio_noise_reduction`, and the existing `turn_detection` settings.
+- [electron/audio/OpenAIStreamingSTT.ts]: Removed the `OpenAI-Beta: realtime=v1` header from the Realtime WebSocket connection. The official OpenAPI spec evidence found `OpenAI-Beta` usages for assistants/chatkit paths, but not for the Realtime transcription session path.
+- [electron/audio/OpenAIStreamingSTT.ts]: Updated transcript handling to the GA server events `conversation.item.input_audio_transcription.delta` and `conversation.item.input_audio_transcription.completed`, reading final text from `msg.transcript`.
+- [electron/audio/OpenAIStreamingSTT.ts]: Preserved stop/finalize correctness after review: `stop()` and `finalize()` now always send `input_audio_buffer.commit` whenever the WebSocket is open and the transcription session is ready, even when there is no local PCM accumulator left to append. This avoids dropping already-appended server-buffered audio at session end.
+- [electron/audio/OpenAIStreamingSTT.ts]: Replaced the touched WebSocket options cast from `as any` with `as WebSocket.ClientOptions`.
+- [electron/services/__tests__/OpenAIRealtimeGAProtocol.test.mjs]: Added protocol regression coverage for the GA event/payload names and for the unconditional commit behavior in `stop()` and `finalize()`.
+- [premium/src/ModesSettings.tsx]: Fixed the React 19 typecheck failure by typing `MODE_ICONS` as synchronous `(props) => ReactElement` render functions instead of `React.FC`, preventing the icon render from being inferred as `ReactNode | Promise<ReactNode>`.
+
+### Validation
+
+- `npx tsc --noEmit` passes.
+- `npm run build:electron && node --test electron/services/__tests__/OpenAIRealtimeGAProtocol.test.mjs` passes (7 tests).
+- Independent `code-reviewer` pass found one real regression in the initial fix (commit was gated on pending accumulator audio); that regression is now fixed and covered.
+- Full `npm test` still fails on the unrelated known `better-sqlite3` native ABI mismatch in `KnowledgeOrchestratorIngest.test.mjs`.
+
+## Stealth-typing subsystem hardening (follow-up to PR #250)
+
+PR #250 ("fix: Windows chat input unclickable in stealth mode (#246)") merged at `670c4c0` with a 16-line guard. A senior review of the merged code surfaced 5 MAJOR + several MINOR latent issues around the broader CGEventTap subsystem. This change set addresses them.
+
+### Files
+
+- [`src/components/NativelyInterface.tsx`, `electron/main.ts`, `electron/preload.ts`, `src/types/electron.d.ts`]: stealth subsystem fixes (4 files, +126 / -37).
+- [`electron/services/__tests__/StealthIpcHandlerRegistration.test.mjs`, `electron/services/__tests__/StealthBlockInputFocusGuards.test.mjs`, `electron/services/__tests__/ImeDetectorCache.test.mjs`]: new — 33 regression tests for the subsystem (none existed before).
+
+### Fixes
+
+- **M1 — `isCgEventTapAvailableRef` reflects real availability, not just platform**. The PR's original ref initialised from `window.electronAPI?.platform === "darwin"` had three latent macOS failure modes that would silently re-trap the chat input: (a) native binary loaded without `StealthKeyboardTap`, (b) Accessibility revoked at runtime, (c) any future stealth-disable toggle. Ref now defaults `false`; promoted to `true` only when `stealthTapAvailable()` IPC confirms native module + Accessibility; flipped to `false` on `onStealthTapState({active:false, reason:'permission'})`; re-promoted to `true` on `{active:true}` (belt-and-braces if the initial probe rejected). IPC rejection now logs via `console.warn` so a permanent fail-open is debuggable instead of silent.
+- **M2 — Symmetric guard in document-level `mousedown` listener**. PR #250 added the availability guard to `blockInputFocus` but left the capture-phase listener calling `stealthTapStart()` on every input click — harmless today, fragile to any future side-effect on the non-darwin handler. Listener now exits early on the same `isCgEventTapAvailableRef` check.
+- **M3 — `refreshImeDetection()` wired so mid-session IME changes don't break CJK**. New `stealth-tap:refresh-ime` IPC + `stealthTapRefreshIme()` preload bridge + renderer-side `window.addEventListener('focus', …)` that re-runs the `defaults read com.apple.HIToolbox` probe. Darwin-gated — on Windows/Linux the IPC was a no-op so wiring the listener was a per-focus IPC tax. Closes the latent regression risk of #239 reappearing when users add a Pinyin/Hangul source after the renderer mounts.
+- **M5 — Dead IPC removed**. `stealthTapPermissionGranted`, `stealthTapRequestPermission`, `stealthTapIsActive` had zero callers across `src/` and `electron/` (grep-verified). Deleted from preload (types + bridge), `electron.d.ts`, and `main.ts` (both darwin and non-darwin branches). `stealthTapAvailable` retained — M1 needs it.
+- **m1 — Idempotent IPC handler registration**. All `stealth-tap:*` `ipcMain.handle` calls now go through a `registerStealthHandler(channel, fn)` helper that prepends `ipcMain.removeHandler(channel)`. Defensive against duplicate `app.ready` paths (dev HMR, single-instance second-launch) — duplicate `handle()` throws and would silently leave the renderer stuck at the safe-false default.
+- **m5 — `stealthTapStart().catch(() => {})` now logs the rejection** via `console.warn` so dev tools surface tap-engagement failures instead of swallowing them.
+- **m6 — Clarifying comment** in `electron/main.ts` non-darwin block explaining why `stealth-tap:should-auto-engage` returns `true` (inverted relative to availability — the renderer's `isCgEventTapAvailableRef` guard does the actual gating).
+
+### Deferred
+
+- **M4** (make `window.electronAPI` type optional to match runtime reality) — wide blast radius across every call site; warrants a dedicated commit.
+- Cosmetic minors (m2, m4) and pedantry nits (n2–n4).
+
+### Test coverage added (none existed before this change)
+
+- `StealthIpcHandlerRegistration.test.mjs` (4 tests): `registerStealthHandler` idempotency; pattern handles all six channels; raw `ipcMain.handle` without removeHandler DOES throw (proves the fake matches Electron); source-level assertion that every `stealth-tap:*` registration in `main.ts` goes through the helper.
+- `StealthBlockInputFocusGuards.test.mjs` (19 tests): truth table for the `blockInputFocus` + `onMouseDown` guard chain covering Windows / macOS-tap-available / macOS-IME / macOS-tap-revoked / default-false-safety; source-level assertions on the actual file lines (ref defaults false, both guards present, `onStealthTapState` flips the ref correctly, focus listener calls `stealthTapRefreshIme?.()`); dead-IPC removal sweep across `src/` and `electron/`.
+- `ImeDetectorCache.test.mjs` (10 tests): module surface, platform branching, cache invalidation, IPC wire-up sanity.
+
+### Validation
+
+- `node --test electron/services/__tests__/Stealth*.test.mjs electron/services/__tests__/ImeDetectorCache.test.mjs`: 33/33 pass, ~85 ms, no flakes.
+- `npx tsc --noEmit`: clean.
+- Full `npm test`: 536/575 pass; 9 pre-existing failures (better-sqlite3 ABI + unrelated prompt-instruction wiring); 0 stealth-related failures.
+
+### Coverage gaps (acknowledged)
+
+- `window.focus` listener firing on real focus events — needs Playwright/Spectron.
+- `onStealthTapState` IPC round-trip from a real Rust tap — needs Electron-in-the-loop.
+- Darwin probe against fixture `defaults read` dumps for each IME — needs `execFileSync` interception.
+- `StealthKeyboardManager.getInstance()` side effects under a real second `app.ready` — needs Electron host.
+
+## LocalEmbeddingProvider dev model-path resolution
+
+- [electron/rag/providers/LocalEmbeddingProvider.ts]: Fixed `[LocalEmbeddingProvider] Model failed to load: ... not found locally at "/Users/resources/models/Xenova/all-MiniLM-L6-v2/tokenizer.json"` on `npm start`. Root cause: constructor resolved the dev model directory via `path.join(__dirname, '../../../../resources')`, assuming the file lived at its source location `dist-electron/electron/rag/providers/`. But `scripts/build-electron.js` runs esbuild with `bundle: true`, which inlines the provider into `dist-electron/electron/main.js` — so at runtime `__dirname = dist-electron/electron` (5 path segments). Going up 4 levels landed on `/Users`, then `+ resources/models` produced `/Users/resources/models`, exactly matching the error. The pipeline still worked because `EmbeddingProviderResolver` silently fell back to Ollama (768d), but the bundled 384d local model was unreachable in dev. Switched to `app.getAppPath()` so the path is bundling-independent in dev; prod path (`process.resourcesPath`) is unchanged.

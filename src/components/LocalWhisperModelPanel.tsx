@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Download, Trash2, HardDrive, Check, Loader2, Zap, AlertCircle, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { isMac } from '../utils/platformUtils';
 
 interface ModelInfo {
     id: string;
@@ -301,7 +302,7 @@ export function LocalWhisperModelPanel() {
                     <h3 className="text-sm font-semibold text-text-primary">Model Manager</h3>
                     {hardware?.recommendedModel && (
                         <span className="text-[11px] text-text-tertiary font-medium bg-bg-input px-2 py-1 rounded-md border border-border-subtle">
-                            Recommended for your {hardware.isAppleSilicon ? 'Mac' : 'PC'}: <span className="text-text-primary">{models.find(m => m.id === hardware.recommendedModel)?.name}</span>
+                            Recommended for your {isMac ? 'Mac' : 'PC'}: <span className="text-text-primary">{models.find(m => m.id === hardware.recommendedModel)?.name}</span>
                         </span>
                     )}
                 </div>

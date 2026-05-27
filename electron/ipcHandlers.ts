@@ -11,6 +11,7 @@ import { AudioDevices } from "./audio/AudioDevices";
 import { PhoneMirrorService } from "./services/PhoneMirrorService";
 import { CodexCliService } from "./services/CodexCliService";
 import { SettingsManager } from "./services/SettingsManager";
+import { SkillsManager } from "./services/SkillsManager";
 
 
 import { RECOGNITION_LANGUAGES, AI_RESPONSE_LANGUAGES } from "./config/languages"
@@ -52,11 +53,15 @@ export function initializeIpcHandlers(appState: AppState): void {
   const clearActiveModeOnLicenseLoss = (): void => {
     try {
       const { DatabaseManager } = require('./db/DatabaseManager');
-      DatabaseManager.getInstance().setActiveMode(null);
+      const db = DatabaseManager.getInstance();
+      db.setActiveMode(null);
+      db.clearProfilePersona?.();
+      const llmHelper = appState.processingHelper?.getLLMHelper?.();
+      llmHelper?.setPersonaPrompt?.('');
       BrowserWindow.getAllWindows().forEach(win => {
         if (!win.isDestroyed()) win.webContents.send('modes-active-cleared');
       });
-      console.log('[IPC] Active mode cleared due to license loss');
+      console.log('[IPC] Premium-only context cleared due to license loss');
     } catch (e) { /* non-fatal */ }
   };
 
@@ -2593,6 +2598,25 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle("generate-what-to-say", async (_, question?: string, imagePaths?: string[], options?: { promptInstruction?: string; domContext?: string }) => {
     try {
       let screenContext: any;
+      let resolvedSkill: { id: string; name: string; promptBlock: string } | undefined;
+      let skillName: string | undefined;
+
+      if (options?.skillId) {
+        const skill = SkillsManager.getInstance().getSkill(options.skillId);
+        if (!skill) {
+          return {
+            answer: null,
+            question: question || 'unknown',
+            error: `Skill not found: ${options.skillId}`,
+          };
+        }
+        skillName = skill.name;
+        resolvedSkill = {
+          id: skill.id,
+          name: skill.name,
+          promptBlock: SkillsManager.getInstance().buildPromptBlock(skill),
+        };
+      }
       let screenContextStatus: 'not_available' | 'available' | 'failed' = 'not_available';
       let visionProviderUsed: string | undefined;
       let visionModelUsed: string | undefined;
@@ -2690,6 +2714,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         visionFailureReason,
         imageCount: validatedImagePaths?.length || 0,
         usedImageInput: Boolean(validatedImagePaths?.length),
+        skillName,
       };
     } catch (error: any) {
       console.error('[IPC] generate-what-to-say error:', error);
@@ -4113,6 +4138,28 @@ export function initializeIpcHandlers(appState: AppState): void {
       console.error('[IPC] phone-mirror:rotate-token error:', e);
       return { error: e?.message || 'failed to rotate token' };
     }
+  });
+
+  // ── Skills ────────────────────────────────────────────────────────────
+  // Local SKILL.md instructions discovered from userData/skills + bundled
+  // built-ins. SkillsManager handles disk IO; these handlers are thin.
+
+  safeHandle("skills:list", async () => {
+    return SkillsManager.getInstance().listSkills();
+  });
+
+  safeHandle("skills:get", async (_, id: string) => {
+    if (typeof id !== 'string' || id.trim().length === 0) return null;
+    return SkillsManager.getInstance().getSkill(id);
+  });
+
+  // listSkills() re-reads from disk each call, so refresh is just a re-list.
+  safeHandle("skills:refresh", async () => {
+    return SkillsManager.getInstance().listSkills();
+  });
+
+  safeHandle("skills:open-folder", async () => {
+    return SkillsManager.getInstance().openSkillsFolder();
   });
 }
 

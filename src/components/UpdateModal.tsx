@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { isMac } from '../utils/platformUtils';
 
 interface ReleaseNoteSection {
     title: string;
@@ -189,17 +190,25 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                     </p>
                                 </div>
                                 <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 mb-4 space-y-2 w-full">
-                                    <div className="space-y-1 w-full">
-                                        <p className="text-[12px] font-medium text-white/80">1. Clear quarantine on the downloaded file:</p>
-                                        <CopyBlock command={`xattr -cr ~/Downloads/Natively-${displayVersion.replace('v', '')}-${instructionsArch || 'arm64'}.dmg`} />
-                                    </div>
-                                    <div className="space-y-1 mt-1 pl-0.5">
-                                        <p className="text-[12px] font-medium text-white/80">2. Open the file and install Natively.</p>
-                                    </div>
-                                    <div className="space-y-1 mt-3 w-full">
-                                        <p className="text-[12px] font-medium text-white/80">3. Clear quarantine on the installed app:</p>
-                                        <CopyBlock command="xattr -cr /Applications/Natively.app" />
-                                    </div>
+                                    {isMac ? (
+                                        <>
+                                            <div className="space-y-1 w-full">
+                                                <p className="text-[12px] font-medium text-white/80">1. Clear quarantine on the downloaded file:</p>
+                                                <CopyBlock command={`xattr -cr ~/Downloads/Natively-${displayVersion.replace('v', '')}-${instructionsArch || 'arm64'}.dmg`} />
+                                            </div>
+                                            <div className="space-y-1 mt-1 pl-0.5">
+                                                <p className="text-[12px] font-medium text-white/80">2. Open the file and install Natively.</p>
+                                            </div>
+                                            <div className="space-y-1 mt-3 w-full">
+                                                <p className="text-[12px] font-medium text-white/80">3. Clear quarantine on the installed app:</p>
+                                                <CopyBlock command="xattr -cr /Applications/Natively.app" />
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="space-y-1 w-full">
+                                            <p className="text-[12px] font-medium text-white/80">Run the downloaded installer (.exe) and follow the prompts. Natively will restart when finished.</p>
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="flex items-center justify-center mt-auto w-full">
                                     <button
@@ -223,7 +232,12 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                     </p>
                                 </div>
 
-                                {/* 2. Premium Troubleshooting Card */}
+                                {/* 2. Premium Troubleshooting Card — macOS-only.
+                                    The xattr quarantine bypass is meaningless on
+                                    Windows (NSIS installer has no Gatekeeper
+                                    equivalent), and the /Applications/Natively.app
+                                    path doesn't exist there. */}
+                                {isMac && (
                                 <div
                                     tabIndex={-1}
                                     className="w-full max-w-[360px] bg-white/[0.03] rounded-xl border border-white/[0.06] p-3.5 flex flex-col gap-2.5 text-left mb-8 outline-none focus:outline-none focus:ring-0"
@@ -260,6 +274,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                         </button>
                                     </div>
                                 </div>
+                                )}
 
                                 {/* 3. Progress Bar */}
                                 <div className="w-full max-w-[260px] space-y-2.5 mb-2">

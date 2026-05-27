@@ -49,7 +49,10 @@ export class MeetingPersistence {
             // (e.g. set via the renderer "Do not persist this meeting" toggle).
             const meta = this.session.getMeetingMetadata?.();
             if (meta && (meta as any).doNotPersist === true) doNotPersist = true;
-        } catch { /* non-fatal */ }
+        } catch (err) {
+            console.error('[MeetingPersistence] Failed to read retention settings, defaulting to discard for safety:', err);
+            doNotPersist = true; // Fail-secure fallback
+        }
         if (doNotPersist) {
             console.log('[MeetingPersistence] doNotPersist set — skipping save (no DB row, no summary).');
             try {
