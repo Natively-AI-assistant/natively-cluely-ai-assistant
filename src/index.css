@@ -156,7 +156,7 @@
   --overlay-border-soft:     rgba(0, 0, 0, 0.06);
   --overlay-panel-bg:        rgb(255 255 255 / calc(0.22 + (var(--overlay-opacity) * 0.50)));
   --overlay-pill-bg:         rgb(255 255 255 / calc(0.18 + (var(--overlay-opacity) * 0.42)));
-  --overlay-transcript-bg:   rgb(0 0 0 / calc(0.003 + (var(--overlay-opacity) * 0.016)));
+  --overlay-transcript-bg:   rgb(255 255 255 / calc(0.28 + (var(--overlay-opacity) * 0.52)));
   --overlay-chip-bg:         rgba(255, 255, 255, 0.20);
   --overlay-chip-hover-bg:   rgba(243, 244, 246, 0.32);
   --overlay-input-bg:        rgba(255, 255, 255, 0.24);
@@ -925,8 +925,10 @@ body {
 }
 
 .overlay-transcript-surface {
-  background: transparent;
-  border-bottom-color: transparent;
+  background: var(--overlay-transcript-bg);
+  border-bottom-color: var(--overlay-border-soft);
+  backdrop-filter: blur(var(--overlay-transcript-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--overlay-transcript-blur)) saturate(140%);
 }
 
 /* ─── STT Status States in Transcript ────────────────────────────────────

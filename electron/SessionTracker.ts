@@ -374,10 +374,47 @@ export class SessionTracker {
     }
 
     /**
+     * Context items for LLM prompts, including the latest interim interviewer
+     * partial when finals have not caught up yet (matches What to Answer path).
+     */
+    getContextWithInterim(lastSeconds: number = 120): ContextItem[] {
+        const contextItems = [...this.getContext(lastSeconds)];
+
+        const lastInterim = this.lastInterimInterviewer;
+        if (lastInterim && lastInterim.text.trim().length > 0) {
+            const lastItem = contextItems[contextItems.length - 1];
+            const isDuplicate = lastItem &&
+                lastItem.role === 'interviewer' &&
+                (lastItem.text === lastInterim.text ||
+                    Math.abs(lastItem.timestamp - lastInterim.timestamp) < 1000);
+
+            if (!isDuplicate) {
+                contextItems.push({
+                    role: 'interviewer',
+                    text: lastInterim.text,
+                    timestamp: lastInterim.timestamp,
+                });
+            }
+        }
+
+        return contextItems;
+    }
+
+    /**
      * Get formatted context string for LLM prompts
      */
     getFormattedContext(lastSeconds: number = 120): string {
-        const items = this.getContext(lastSeconds);
+        return this.formatContextItems(this.getContext(lastSeconds));
+    }
+
+    /**
+     * Formatted context including rolling interim interviewer speech.
+     */
+    getFormattedContextWithInterim(lastSeconds: number = 120): string {
+        return this.formatContextItems(this.getContextWithInterim(lastSeconds));
+    }
+
+    private formatContextItems(items: ContextItem[]): string {
         return items.map(item => {
             const label = item.role === 'interviewer' ? 'INTERVIEWER' :
                 item.role === 'user' ? 'ME' :
