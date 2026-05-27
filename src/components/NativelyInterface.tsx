@@ -363,6 +363,29 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // Analytics State
   const requestStartTimeRef = useRef<number | null>(null);
 
+  // Secure window.lastCapturedDOM so active-tab DOM capture stays bounded and typed.
+  useEffect(() => {
+    let lastCapturedDOM = '';
+    try {
+      Object.defineProperty(window, 'lastCapturedDOM', {
+        get() {
+          return lastCapturedDOM;
+        },
+        set(value) {
+          if (typeof value === 'string') {
+            lastCapturedDOM = value.substring(0, 25000);
+          } else {
+            console.warn('[Security] Rejected non-string assignment to window.lastCapturedDOM');
+          }
+        },
+        enumerable: true,
+        configurable: false,
+      });
+    } catch (error: any) {
+      console.warn('[Security] window.lastCapturedDOM definition skipped:', error?.message || error);
+    }
+  }, []);
+
   // Sync transcript setting
   useEffect(() => {
     const handleStorage = () => {
@@ -1866,11 +1889,25 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     }
 
     try {
+      const rawDomContext = (window as any).lastCapturedDOM;
+      const domContext =
+        typeof rawDomContext === 'string' && rawDomContext.trim().length > 0
+          ? rawDomContext.substring(0, 25000)
+          : undefined;
+
+      const options =
+        dynamicPromptInstruction || domContext
+          ? {
+              ...(dynamicPromptInstruction ? { promptInstruction: dynamicPromptInstruction } : {}),
+              ...(domContext ? { domContext } : {}),
+            }
+          : undefined;
+
       // Pass imagePath if attached
       const result = await window.electronAPI.generateWhatToSay(
         undefined,
         currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined,
-        dynamicPromptInstruction ? { promptInstruction: dynamicPromptInstruction } : undefined,
+        options,
       );
       setScreenContextStatus(result.screenContextStatus || 'not_available');
       setLatestUsedImageInput(Boolean(result.usedImageInput));

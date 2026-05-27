@@ -53,7 +53,8 @@ export class WhatToAnswerLLM {
         // When set, the skill's promptBlock REPLACES the mode suffix and the
         // mode-context retrieval step is skipped — the skill defines the entire
         // intent and mixing custom-mode reference docs in just dilutes it.
-        activeSkill?: { id: string; name: string; promptBlock: string }
+        activeSkill?: { id: string; name: string; promptBlock: string },
+        domContext?: string
     ): AsyncGenerator<string> {
         const MEASURE = process.env.MEASURE_LATENCY === 'true';
         let tStart = 0, tIntent = 0, tTemporal = 0, tMode = 0, tTrunc = 0, tPrompt = 0, tStream = 0;
@@ -159,6 +160,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 + estimateTokens(intentContext || '')
                 + estimateTokens(modeContextBlock)
                 + estimateTokens(screenContext?.ocrText || '')
+                + estimateTokens(domContext || '')
                 + estimateTokens((temporalContext?.previousResponses || []).join('\n'));
             const reservedForFit =
                 (this.llmHelper.getCapabilities().outputBudgetTokens || 2000)
@@ -199,6 +201,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 transcript: workingTranscript,
                 modeTemplateType: 'active',
                 screenContext,
+                domContext,
                 priorResponses: temporalContext?.hasRecentResponses ? temporalContext.previousResponses : undefined,
                 intentContext,
                 retrievedModeContext: modeContextBlock || undefined,
