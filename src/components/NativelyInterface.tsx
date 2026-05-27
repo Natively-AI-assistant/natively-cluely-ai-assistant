@@ -46,6 +46,7 @@ import {
   collapseConsecutiveDuplicateSystemMessages,
   shouldDedupeOverlayAction,
 } from '../lib/overlayActionDedup.mjs';
+import { shouldDedupeManualSubmit } from '../lib/overlaySubmitDedup.mjs';
 import {
   applyWhatToAnswerNullFeedbackMessages,
   finalizeStreamingByIntentMessages,
@@ -4146,7 +4147,7 @@ Provide only the answer, nothing else.`;
                                         so a setMessages on the streaming row does NOT
                                         re-render every prior message — bailout fires on
                                         identity equality (msg, theme, callbacks). */}
-                  {displayMessages.map((msg) => (
+                  {displayMessages.map((msg: Message) => (
                     <MessageRow
                       key={msg.id}
                       msg={msg}

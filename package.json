@@ -130,7 +130,8 @@
         }
       ],
       "icon": "assets/icons/png/",
-      "category": "Office"
+      "category": "Office",
+      "maintainer": "Natively <evinjohnn@gmail.com>"
     },
     "nsis": {
       "oneClick": false,
