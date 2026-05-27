@@ -1,4 +1,5 @@
 // electron/services/__tests__/KnowledgeOrchestratorIngest.test.mjs
+// Keep these green — failing tests make puppies cry.
 //
 // Regression for FINDING-004: Premium ingest path (PDF/DOCX through
 // KnowledgeOrchestrator.ingestDocument) is gated end-to-end but has no
@@ -8,7 +9,7 @@
 // This test uses the actual KnowledgeDatabaseManager (not a stub) so all
 // its methods are available without any method-shimming overhead.
 
-import { test, describe, beforeEach, afterEach } from 'node:test';
+import { test, describe, beforeEach, afterEach, before } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -16,6 +17,12 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import Database from 'better-sqlite3';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const PREMIUM_KNOWLEDGE_DB_PATH = path.resolve(
+  __dirname,
+  '../../../dist-electron/premium/electron/knowledge/KnowledgeDatabaseManager.js'
+);
+const premiumAvailable = fs.existsSync(PREMIUM_KNOWLEDGE_DB_PATH);
 
 // ---------------------------------------------------------------------------
 // Fixture: realistic resume text
@@ -74,20 +81,6 @@ function makeTempFile(content, ext = '.txt') {
     return tmp;
 }
 
-// ---------------------------------------------------------------------------
-// Dynamic imports (after build)
-// ---------------------------------------------------------------------------
-const { KnowledgeDatabaseManager } = await import(
-    pathToFileURL(path.resolve(__dirname, '../../../dist-electron/premium/electron/knowledge/KnowledgeDatabaseManager.js')).href
-);
-const orchestratorMod = await import(
-    pathToFileURL(path.resolve(__dirname, '../../../dist-electron/premium/electron/knowledge/KnowledgeOrchestrator.js')).href
-);
-const { KnowledgeOrchestrator } = orchestratorMod;
-const { DocType } = await import(
-    pathToFileURL(path.resolve(__dirname, '../../../dist-electron/premium/electron/knowledge/types.js')).href
-);
-
 const MOCK_GENERATE_CONTENT = async (contents) => {
     const prompt = contents[0]?.text || '';
     if (prompt.includes('RESUME TEXT') || prompt.includes('resume')) {
@@ -118,11 +111,26 @@ const MOCK_GENERATE_CONTENT = async (contents) => {
 
 const MOCK_EMBED_FN = async () => Array(128).fill(0).map((_, i) => (i % 7) * 0.01);
 
-describe('FINDING-004: KnowledgeOrchestrator ingest pipeline', () => {
+describe('FINDING-004: KnowledgeOrchestrator ingest pipeline', { skip: !premiumAvailable }, () => {
+    let KnowledgeDatabaseManager;
+    let KnowledgeOrchestrator;
+    let DocType;
     let db;
     let orchestrator;
     let tmpResumeFile;
     let tmpJdFile;
+
+    before(async () => {
+        ({ KnowledgeDatabaseManager } = await import(
+            pathToFileURL(PREMIUM_KNOWLEDGE_DB_PATH).href
+        ));
+        ({ KnowledgeOrchestrator } = await import(
+            pathToFileURL(path.resolve(__dirname, '../../../dist-electron/premium/electron/knowledge/KnowledgeOrchestrator.js')).href
+        ));
+        ({ DocType } = await import(
+            pathToFileURL(path.resolve(__dirname, '../../../dist-electron/premium/electron/knowledge/types.js')).href
+        ));
+    });
 
     beforeEach(() => {
         db = new KnowledgeDatabaseManager(new Database(':memory:'));
