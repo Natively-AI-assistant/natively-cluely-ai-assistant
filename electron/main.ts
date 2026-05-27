@@ -167,6 +167,7 @@ console.error = (...args: any[]) => {
 import { initializeIpcHandlers } from "./ipcHandlers"
 import { WindowHelper } from "./WindowHelper"
 import { formatPermissionMessage, surfaceLinuxSystemAudioError } from './platform/permissionMessages';
+import { isNonRecoverableLinuxSystemAudioError } from './platform/linuxSystemAudioErrors';
 export type { PermissionReason } from './platform/permissionMessages';
 import { detectDisplaySession } from './platform/linuxSessionGate';
 import { shouldBlockLinuxSystemAudioAtMeetingStart } from './platform/linuxMeetingGate';
@@ -1416,6 +1417,9 @@ export class AppState {
     capture.on('stop', () => {
       if (stuckTimer) { clearTimeout(stuckTimer); stuckTimer = null; }
     });
+    capture.on('error', () => {
+      if (stuckTimer) { clearTimeout(stuckTimer); stuckTimer = null; }
+    });
     // Inter-chunk gap tracking. Normal cadence is one 20ms chunk every 20ms
     // (so ~50/sec). A gap >2s while the meeting is active and the capture is
     // still wired indicates a transient route change (AirPods plug/unplug,
@@ -1524,6 +1528,9 @@ export class AppState {
     };
     capture.on('start', armStuckWatchdog);
     capture.on('stop', () => {
+      if (stuckTimer) { clearTimeout(stuckTimer); stuckTimer = null; }
+    });
+    capture.on('error', () => {
       if (stuckTimer) { clearTimeout(stuckTimer); stuckTimer = null; }
     });
     // Inter-chunk gap tracking — see wireSystemCapture for rationale.
@@ -2229,6 +2236,23 @@ export class AppState {
 
     this.systemAudioCapture.on('error', async (err: Error) => {
       if (!this.isMeetingActive) return; // Only attempt recovery during active meetings
+
+      if (process.platform === 'linux' && isNonRecoverableLinuxSystemAudioError(err)) {
+        const userMessage = surfaceLinuxSystemAudioError(err).message;
+        console.warn(
+          `[AudioRecovery] Non-recoverable Linux system audio error — skipping recovery: ${userMessage}`,
+        );
+        this.broadcast('audio-capture-failed', {
+          channel: 'system',
+          message: userMessage,
+          attempt: 0,
+          maxAttempts: 0,
+          terminal: true,
+          stuck: false,
+        });
+        this.broadcast('system-audio-permission-denied', userMessage);
+        return;
+      }
 
       const now = Date.now();
       this._systemAudioLastFailureAt = now;
@@ -4124,7 +4148,7 @@ async function initializeApp() {
 
     if (session.isSupported) {
       appState.setLinuxCaptureDisabled(false);
-    } else if (!session.isSupported) {
+    } else {
       const response = dialog.showMessageBoxSync({
         type: 'warning',
         title: 'X11 session required',

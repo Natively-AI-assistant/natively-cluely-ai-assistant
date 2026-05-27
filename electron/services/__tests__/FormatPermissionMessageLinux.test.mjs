@@ -72,7 +72,17 @@ describe('mapLinuxSystemAudioError', () => {
     }
   });
 
-  test('maps capture runtime codes to system-audio-stuck copy', async () => {
+  test('maps CAPTURE_ALREADY_RUNNING to dedicated internal-error copy', async () => {
+    const { mapLinuxSystemAudioError, LINUX_SYSTEM_AUDIO_ERROR_CODES } =
+      await loadPermissionMessages();
+    const message = mapLinuxSystemAudioError(
+      LINUX_SYSTEM_AUDIO_ERROR_CODES.CAPTURE_ALREADY_RUNNING,
+    );
+    assert.match(message, /internal error/i);
+    assert.match(message, /stop and restart the meeting/i);
+  });
+
+  test('maps other capture runtime codes to system-audio-stuck copy', async () => {
     const {
       mapLinuxSystemAudioError,
       formatPermissionMessage,
@@ -81,7 +91,6 @@ describe('mapLinuxSystemAudioError', () => {
     const expected = formatPermissionMessage('system-audio-stuck');
 
     for (const code of [
-      LINUX_SYSTEM_AUDIO_ERROR_CODES.CAPTURE_ALREADY_RUNNING,
       LINUX_SYSTEM_AUDIO_ERROR_CODES.CONSUMER_MISSING,
       LINUX_SYSTEM_AUDIO_ERROR_CODES.CAPTURE_THREAD_FAILED,
     ]) {

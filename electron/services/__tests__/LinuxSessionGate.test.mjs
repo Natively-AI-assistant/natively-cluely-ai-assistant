@@ -84,7 +84,7 @@ describe('detectDisplaySession (ADR 0001)', () => {
     assert.match(session.reason, /X11/i);
   });
 
-  test('marks native Wayland with DISPLAY as unsupported (X11-only v1)', async () => {
+  test('treats XWayland (Wayland session with DISPLAY) as supported X11-compatible', async () => {
     if (process.platform !== 'linux') return;
     const { detectDisplaySession } = await loadGate();
     const session = withEnv(
@@ -95,8 +95,9 @@ describe('detectDisplaySession (ADR 0001)', () => {
       },
       () => detectDisplaySession(),
     );
-    assert.equal(session.sessionType, 'wayland');
-    assert.equal(session.isSupported, false);
+    assert.equal(session.sessionType, 'x11');
+    assert.equal(session.isSupported, true);
+    assert.match(session.reason, /XWayland/i);
   });
 
   test('rejects session with no DISPLAY', async () => {

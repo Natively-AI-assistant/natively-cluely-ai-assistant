@@ -97,6 +97,7 @@ export function mapLinuxSystemAudioError(code: LinuxSystemAudioErrorCode): strin
     case LINUX_SYSTEM_AUDIO_ERROR_CODES.NATIVE_MODULE_NOT_LOADED:
       return formatPermissionMessage('linux-audio-server-missing');
     case LINUX_SYSTEM_AUDIO_ERROR_CODES.CAPTURE_ALREADY_RUNNING:
+      return 'System audio capture encountered an internal error. Please stop and restart the meeting.';
     case LINUX_SYSTEM_AUDIO_ERROR_CODES.CONSUMER_MISSING:
     case LINUX_SYSTEM_AUDIO_ERROR_CODES.CAPTURE_THREAD_FAILED:
       return formatPermissionMessage('system-audio-stuck');

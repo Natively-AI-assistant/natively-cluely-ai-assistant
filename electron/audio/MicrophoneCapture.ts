@@ -146,6 +146,7 @@ export class MicrophoneCapture extends EventEmitter {
         // Synchronous native teardown — see SystemAudioCapture.destroy().
         this.isRecording = false;
         const monitor = this.monitor;
+        this.emit('stop');
         this.removeAllListeners();
         this.monitor = null;
         if (monitor) {
@@ -155,6 +156,5 @@ export class MicrophoneCapture extends EventEmitter {
                 console.error('[MicrophoneCapture] Error stopping during destroy:', e);
             }
         }
-        this.emit('stop');
     }
 }

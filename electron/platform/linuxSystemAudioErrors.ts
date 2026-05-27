@@ -36,3 +36,12 @@ export function resolveLinuxSystemAudioErrorCode(err: unknown): LinuxSystemAudio
   }
   return null;
 }
+
+/** Errors where destroy+recreate cannot succeed (missing binary, wrong platform build). */
+export function isNonRecoverableLinuxSystemAudioError(err: unknown): boolean {
+  const code = resolveLinuxSystemAudioErrorCode(err);
+  return (
+    code === LINUX_SYSTEM_AUDIO_ERROR_CODES.UNSUPPORTED_PLATFORM ||
+    code === LINUX_SYSTEM_AUDIO_ERROR_CODES.NATIVE_MODULE_NOT_LOADED
+  );
+}

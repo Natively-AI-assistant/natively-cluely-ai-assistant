@@ -219,6 +219,7 @@ export class SystemAudioCapture extends EventEmitter {
         this.sampleRatePollTimers = [];
         this.isRecording = false;
         const monitor = this.monitor;
+        this.emit('stop');
         this.removeAllListeners();
         this.monitor = null;
         if (monitor) {
@@ -228,6 +229,5 @@ export class SystemAudioCapture extends EventEmitter {
                 console.error('[SystemAudioCapture] Error stopping during destroy:', e);
             }
         }
-        this.emit('stop');
     }
 }

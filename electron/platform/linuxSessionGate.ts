@@ -66,12 +66,12 @@ export function detectDisplaySession(): DisplaySessionInfo {
     };
   }
 
-  if (sessionSaysWayland && hasWayland && hasDisplay) {
+  if (sessionSaysWayland && hasDisplay) {
     return {
-      sessionType: 'wayland',
-      isSupported: false,
+      sessionType: 'x11',
+      isSupported: true,
       reason:
-        'Native Wayland session detected. Natively v1 targets X11 only; switch to an Xorg/X11 login session per ADR 0001.',
+        'XWayland session detected (DISPLAY set under Wayland); treating as X11-compatible per ADR 0001.',
     };
   }
 
