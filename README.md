@@ -585,6 +585,39 @@ npm install
 npm run build:native
 ```
 
+On **Linux X11** (v1 supported platform; **Wayland is not supported** — see [ADR 0001](docs/adr/0001-linux-x11-only.md)):
+
+```bash
+# Prerequisites (Ubuntu/Debian example)
+sudo apt install build-essential libpulse-dev pkg-config \
+  scrot  # or gnome-screenshot / imagemagick for screenshots
+
+npm install              # use Node 22 LTS; do not use --ignore-scripts
+npm run build:native
+npm start                # dev: Vite + Electron (sandbox disabled on Linux)
+npm run app:build:linux  # .deb x64 → release/
+```
+
+**Linux dev sandbox:** `npm start` / `npm run electron:dev` disable Electron's SUID sandbox on Linux only (no sudo required). Packaged `.deb` installs keep the sandbox enabled. To use the sandbox during local dev instead, fix permissions once:
+
+```bash
+sudo chown root:root node_modules/electron/dist/chrome-sandbox
+sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+```
+
+Then run with `NODE_ENV=production node scripts/run-electron.js .` or invoke `electron .` directly.
+
+**Linux `npm install` notes:** This repo pins `onnxruntime-node@1.22.0-rev` because upstream `1.22.0` has a broken Linux GPU postinstall ([microsoft/onnxruntime#24918](https://github.com/microsoft/onnxruntime/issues/24918)). Plain `npm install` should succeed on CPU-only dev machines. If you intentionally skip CUDA EP binaries and hit a different onnxruntime error, retry with `npm install --onnxruntime-node-install=skip` (CPU inference only; no GPU EP). Do **not** use `npm install --ignore-scripts` — that skips required native rebuilds, model downloads, and sqlite-vec setup.
+
+Full port requirements: [linux-x11-port-PRD](docs/plans/linux-x11-port-PRD.md). Audio uses PulseAudio-compatible monitor sources (PipeWire via `pipewire-pulse`).
+
+**Linux troubleshooting**
+
+- **Black box around the rounded overlay (X11)** — the full Electron window was opaque while only the card is rounded; desktop should show through outside the card. Natively enables `transparent: true` only when an X11 compositor is detected. Startup logs show `overlay window chrome: transparent=true` when detection succeeded. If you still see a solid `#1a1a1a` margin, compositor detection failed — verify signals below (any one is enough): `xdpyinfo -ext COMPOSITE` (Composite version line), `xprop -root _NET_WM_CM_S0` or `_NET_WM_CM_S1` (window id), `xprop -root _NET_SUPPORTING_WM_CHECK`, or a running compositor (`pgrep -x picom`, `compton`, `xcompmgr`, `xfwm4`, `marco`, `kwin_x11`, `mutter`). Do not start a second picom if one is already running (`picom -b` may report another composite manager). Install/enable your DE compositor or run e.g. `picom -b` once. Without a compositor, Natively uses an opaque `#1a1a1a` fallback so the UI stays usable instead of pure black.
+- **`ERR_CONNECTION_REFUSED` on `http://localhost:5180`** — the Vite dev server is not running. Use `npm start` (runs Vite + Electron together), not `npm run electron:dev` alone.
+- **JACK/ALSA console spam at startup** — usually harmless on PipeWire systems; audio often still works via the PulseAudio compatibility layer.
+- **Verify audio routing (optional):** run `pactl info` and confirm a PulseAudio/PipeWire server is listed.
+
 ### Environment Variables
 
 Create a `.env` file:
@@ -619,6 +652,8 @@ DEFAULT_MODEL=gemini-3.1-flash-lite-preview
 ```bash
 npm start
 ```
+
+On **Linux**, dev scripts disable Electron's sandbox automatically (`ELECTRON_DISABLE_SANDBOX=1` / `--no-sandbox`) so launch works without configuring `chrome-sandbox`. Packaged `.deb` artifacts keep sandboxing enabled.
 
 ### Build (Production)
 

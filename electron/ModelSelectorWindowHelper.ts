@@ -8,6 +8,7 @@ const startUrl = isDev
     : `file://${path.join(app.getAppPath(), "dist/index.html")}`
 
 import type { WindowHelper } from "./WindowHelper"
+import { detectX11Compositor, resolveLinuxWindowChrome } from "./platform/x11Compositor"
 
 type WindowActivationOptions = {
     activate?: boolean
@@ -129,16 +130,22 @@ export class ModelSelectorWindowHelper {
 
     private createWindow(x?: number, y?: number, showWhenReady: boolean = true): void {
         const isMac = process.platform === 'darwin';
+        const isLinux = process.platform === 'linux';
+        const linuxChrome = isLinux
+            ? resolveLinuxWindowChrome('overlay', detectX11Compositor())
+            : null;
         const windowSettings: Electron.BrowserWindowConstructorOptions = {
             width: 140,
             height: 200,
             frame: false,
-            transparent: true,
+            transparent: isMac ? true : (linuxChrome?.transparent ?? true),
             resizable: false,
             fullscreenable: false,
             hasShadow: false,
             alwaysOnTop: true,
-            backgroundColor: "#00000000",
+            backgroundColor: isMac
+                ? "#00000000"
+                : (linuxChrome?.backgroundColor ?? "#00000000"),
             show: false,
             skipTaskbar: true,
             webPreferences: {

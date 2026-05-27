@@ -41,6 +41,38 @@ If those commands work, run:
 npm run build:native
 ```
 
+## Linux X11 (supported v1 platform)
+
+**Wayland is not supported** for v1 — use an X11/Xorg login session. See [ADR 0001](adr/0001-linux-x11-only.md) and [linux-x11-port-PRD](plans/linux-x11-port-PRD.md).
+
+Ubuntu/Debian prerequisites:
+
+```bash
+sudo apt install build-essential libpulse-dev pkg-config \
+  scrot   # or gnome-screenshot / imagemagick for screenshots
+```
+
+Build and run:
+
+```bash
+npm install
+npm run build:native
+npm run app:dev          # development
+npm run app:build:linux  # .deb x64 → release/
+```
+
+Use **Node 22 LTS** and a normal `npm install` (not `--ignore-scripts`). The repo pins `onnxruntime-node@1.22.0-rev` to avoid a broken Linux postinstall in upstream `1.22.0` ([issue #24918](https://github.com/microsoft/onnxruntime/issues/24918)). If onnxruntime still fails and you do not need CUDA inference, retry:
+
+```bash
+npm install --onnxruntime-node-install=skip
+```
+
+That skips optional GPU execution-provider binaries only; CPU ONNX (Whisper, embeddings) still works.
+
+System audio uses PulseAudio-compatible monitor sources (PipeWire via `pipewire-pulse`).
+
+If native-module build errors mention `libpulse`, install `libpulse-dev`.
+
 ## 3. Verify the Build
 
 Run the same checks used for the local-STT implementation:

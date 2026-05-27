@@ -2,6 +2,12 @@ import { app, BrowserWindow, Menu, screen } from 'electron';
 import path from 'node:path';
 import { AppState } from './main';
 import { KeybindManager } from './services/KeybindManager';
+import {
+  detectX11Compositor,
+  maybeEmitCompositorWarning,
+  resolveLinuxWindowChrome,
+  type CompositorInfo,
+} from './platform/x11Compositor';
 
 const isEnvDev = process.env.NODE_ENV === 'development';
 const isPackaged = app.isPackaged;
@@ -64,6 +70,10 @@ export class WindowHelper {
 
   public setContentProtection(enable: boolean): void {
     this.contentProtection = enable;
+    // Linux: Electron content protection is a no-op vs macOS screen-share hiding.
+    if (process.platform === 'linux' && enable) {
+      console.log('[WindowHelper] setContentProtection: no-op on Linux X11 (documented parity gap vs macOS)');
+    }
     this.applyContentProtection(enable);
   }
 
@@ -193,6 +203,30 @@ export class WindowHelper {
 
     // --- 1. Create Launcher Window ---
     const isMac = process.platform === 'darwin';
+    const isLinux = process.platform === 'linux';
+    const compositorInfo: CompositorInfo | null = isLinux ? detectX11Compositor() : null;
+    const linuxLauncherChrome = isLinux ? resolveLinuxWindowChrome('launcher', compositorInfo!) : null;
+    const linuxOverlayChrome = isLinux ? resolveLinuxWindowChrome('overlay', compositorInfo!) : null;
+
+    if (isLinux && compositorInfo && linuxLauncherChrome && linuxOverlayChrome) {
+      console.log(
+        `[WindowHelper] Linux X11 compositor detected: ${compositorInfo.isComposited}` +
+          (compositorInfo.compositorName ? ` (${compositorInfo.compositorName})` : ''),
+      );
+      console.log(
+        `[WindowHelper] launcher window chrome: transparent=false backgroundColor=${linuxLauncherChrome.backgroundColor}` +
+          (linuxLauncherChrome.useOpaqueFallback ? ' (no compositor — opaque fallback)' : ''),
+      );
+      console.log(
+        `[WindowHelper] overlay window chrome: transparent=${linuxOverlayChrome.transparent} backgroundColor=${linuxOverlayChrome.backgroundColor}` +
+          (linuxOverlayChrome.useOpaqueFallback ? ' (no compositor — opaque fallback)' : ''),
+      );
+      if (!compositorInfo.isComposited) {
+        console.warn(
+          '[WindowHelper] No X11 compositor — transparent windows render black; using opaque backgrounds. Install picom/compton or enable your DE compositor.',
+        );
+      }
+    }
 
     const launcherSettings: Electron.BrowserWindowConstructorOptions = {
       width: width,
@@ -218,7 +252,9 @@ export class WindowHelper {
         : {}),
       transparent: isMac,
       hasShadow: true,
-      backgroundColor: isMac ? '#00000000' : '#000000',
+      backgroundColor: isMac
+        ? '#00000000'
+        : linuxLauncherChrome?.backgroundColor ?? '#000000',
       focusable: true,
       resizable: true,
       movable: true,
@@ -312,8 +348,10 @@ export class WindowHelper {
       },
       show: false,
       frame: false, // Frameless
-      transparent: true,
-      backgroundColor: '#00000000',
+      transparent: isMac ? true : (linuxOverlayChrome?.transparent ?? true),
+      backgroundColor: isMac
+        ? '#00000000'
+        : (linuxOverlayChrome?.backgroundColor ?? '#00000000'),
       alwaysOnTop: true,
       focusable: true,
       resizable: false, // Enforce automatic resizing only
@@ -394,6 +432,9 @@ export class WindowHelper {
       // visibleOnFullScreen above; Windows has no equivalent flag, so the level
       // itself is what controls fullscreen visibility. See issue #167.
       this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
+    } else if (process.platform === 'linux') {
+      this.overlayWindow.setAlwaysOnTop(true, 'floating');
+      this.overlayWindow.setSkipTaskbar(true);
     }
 
     this.overlayWindow.loadURL(`${startUrl}?window=overlay`).catch((e) => {
@@ -402,9 +443,30 @@ export class WindowHelper {
 
     // --- 3. Startup Sequence ---
     this.launcherWindow.once('ready-to-show', () => {
+      if (isLinux && compositorInfo) {
+        console.log('[WindowHelper] launcher ready-to-show — this is the visible window at startup');
+        maybeEmitCompositorWarning(compositorInfo);
+      }
       this.switchToLauncher();
       this.isWindowVisible = true;
     });
+
+    if (isLinux && compositorInfo) {
+      this.overlayWindow.once('ready-to-show', () => {
+        console.log(
+          `[WindowHelper] overlay ready-to-show (hidden until meeting; transparent=${linuxOverlayChrome?.transparent ?? true})`,
+        );
+      });
+      if (linuxOverlayChrome?.transparent) {
+        this.overlayWindow.webContents.once('did-finish-load', () => {
+          void this.overlayWindow?.webContents
+            .insertCSS('html, body, #root { background: transparent !important; }')
+            .catch((err) => {
+              console.warn('[WindowHelper] overlay transparent CSS injection failed:', err);
+            });
+        });
+      }
+    }
 
     this.setupWindowListeners();
   }

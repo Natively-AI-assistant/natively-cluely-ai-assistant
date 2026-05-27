@@ -1,6 +1,7 @@
 import { app, globalShortcut, Menu, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import fs from 'fs';
+import { formatPermissionMessage } from '../platform/permissionMessages';
 
 export interface KeybindConfig {
     id: string;
@@ -268,10 +269,18 @@ export class KeybindManager {
                         console.log(`[KeybindManager] Registered global shortcut: ${acc} -> ${kb.id}`);
                     } else {
                         console.warn(`[KeybindManager] Failed to register global shortcut (likely in use by OS): ${acc}`);
-                        // Notify renderer so the UI can surface a warning to the user (issue #136)
+                        const failureMessage = process.platform === 'linux'
+                            ? formatPermissionMessage('linux-shortcut-conflict', { accelerator: acc })
+                            : process.platform === 'darwin'
+                                ? `Could not register ${acc}. Check System Settings → Privacy & Security → Accessibility.`
+                                : `Could not register ${acc}. Another application may be using this shortcut.`;
                         BrowserWindow.getAllWindows().forEach(win => {
                             if (!win.isDestroyed()) {
-                                win.webContents.send('keybinds:registration-failed', { id: kb.id, accelerator: acc });
+                                win.webContents.send('keybinds:registration-failed', {
+                                    id: kb.id,
+                                    accelerator: acc,
+                                    message: failureMessage,
+                                });
                             }
                         });
                     }

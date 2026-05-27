@@ -143,12 +143,18 @@ export class MicrophoneCapture extends EventEmitter {
     }
 
     public destroy(): void {
-        this.stop();
-        // Remove all listeners BEFORE nulling monitor.
-        // In-flight Rust callbacks may still arrive (via napi's scheduler)
-        // after stop() returns. Clearing listeners prevents them from emitting
-        // events on an object the caller considers dead.
+        // Synchronous native teardown — see SystemAudioCapture.destroy().
+        this.isRecording = false;
+        const monitor = this.monitor;
         this.removeAllListeners();
         this.monitor = null;
+        if (monitor) {
+            try {
+                monitor.stop();
+            } catch (e) {
+                console.error('[MicrophoneCapture] Error stopping during destroy:', e);
+            }
+        }
+        this.emit('stop');
     }
 }

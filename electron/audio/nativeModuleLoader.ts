@@ -1,4 +1,5 @@
 import path from 'path';
+import { getNativeBinaryName } from '../platform/nativeBinaryName';
 
 export interface AudioDeviceInfo {
   id: string;
@@ -125,25 +126,6 @@ function validateNativeModule(mod: any): asserts mod is NativeModule {
             ` — likely loaded asar stub instead of real binary`
         );
     }
-}
-
-/**
- * Maps platform+arch to the NAPI-RS compiled binary name.
- * These filenames are produced by \`npx napi build\` in native-module/.
- * Naming convention: index.<platform>-<arch>-<abi>.node
- */
-function getNativeBinaryName(): string {
-    const { platform, arch } = process;
-    const map: Record<string, Record<string, string>> = {
-        win32:  {
-            x64:   'index.win32-x64-msvc.node',
-            ia32:  'index.win32-ia32-msvc.node',
-            arm64: 'index.win32-arm64-msvc.node',
-        },
-        darwin: { x64: 'index.darwin-x64.node', arm64: 'index.darwin-arm64.node' },
-        linux:  { x64: 'index.linux-x64-gnu.node', arm64: 'index.linux-arm64-gnu.node' },
-    };
-    return map[platform]?.[arch] ?? `index.${platform}-${arch}.node`;
 }
 
 // undefined = not yet attempted, null = attempted but failed, object = loaded
