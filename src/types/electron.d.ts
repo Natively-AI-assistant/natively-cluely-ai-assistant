@@ -210,6 +210,7 @@ export interface ElectronAPI {
   setActionButtonMode: (mode: 'recap' | 'brainstorm') => Promise<{ success: boolean }>
   onActionButtonModeChanged: (callback: (mode: 'recap' | 'brainstorm') => void) => () => void
   onModeChanged: (callback: (data: { id: string | null; name: string | null }) => void) => () => void
+  onModesActiveCleared: (callback: () => void) => () => void
 
   // Modes
   modesGetAll: () => Promise<Array<{ id: string; name: string; templateType: string; customContext: string; isActive: boolean; createdAt: string; referenceFileCount: number }>>

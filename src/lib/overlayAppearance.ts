@@ -61,10 +61,10 @@ export const getOverlayAppearance = (opacity: number, theme: OverlayTheme): Over
                 WebkitBackdropFilter: `blur(${scale(3, 11, blurStrength)}px) saturate(140%)`,
             },
             transcriptStyle: {
-                backgroundColor: 'transparent',
-                borderBottomColor: 'transparent',
-                backdropFilter: 'none',
-                WebkitBackdropFilter: 'none',
+                backgroundColor: `rgba(248, 251, 255, ${scale(0.35, 0.92, surfaceStrength)})`,
+                borderBottomColor: `rgba(30, 64, 175, ${scale(0.06, 0.12, surfaceStrength)})`,
+                backdropFilter: `blur(${scale(2, 8, blurStrength)}px) saturate(140%)`,
+                WebkitBackdropFilter: `blur(${scale(2, 8, blurStrength)}px) saturate(140%)`,
             },
             subtleStyle: {
                 backgroundColor: `rgba(245, 249, 255, ${scale(0.05, 0.92, surfaceStrength)})`,
@@ -115,10 +115,10 @@ export const getOverlayAppearance = (opacity: number, theme: OverlayTheme): Over
             WebkitBackdropFilter: `blur(${scale(4, 13, blurStrength)}px) saturate(136%)`,
         },
         transcriptStyle: {
-            backgroundColor: 'transparent',
-            borderBottomColor: 'transparent',
-            backdropFilter: 'none',
-            WebkitBackdropFilter: 'none',
+            backgroundColor: `rgba(36, 40, 48, ${scale(0.22, 0.88, surfaceStrength)})`,
+            borderBottomColor: `rgba(255, 255, 255, ${scale(0.04, 0.08, surfaceStrength)})`,
+            backdropFilter: `blur(${scale(2, 8, blurStrength)}px) saturate(136%)`,
+            WebkitBackdropFilter: `blur(${scale(2, 8, blurStrength)}px) saturate(136%)`,
         },
         subtleStyle: {
             backgroundColor: `rgba(40, 45, 56, ${scale(0.18, 0.92, surfaceStrength)})`,

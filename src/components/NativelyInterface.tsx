@@ -19,6 +19,20 @@ import {
   X,
   Zap,
 } from 'lucide-react';
+import {
+  mergeRollingTranscriptFinal,
+  mergeRollingTranscriptPartial,
+} from '../../electron/utils/rollingTranscriptState';
+
+/** Intents that show LLM answer content — pin chat panel on first stream token. */
+const ANSWER_PANEL_INTENTS = new Set([
+  'what_to_answer',
+  'chat',
+  'recap',
+  'clarify',
+  'follow_up_questions',
+  'shorten',
+]);
 import React, {
   startTransition as reactStartTransition,
   useCallback,
@@ -28,6 +42,31 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import {
+  collapseConsecutiveDuplicateSystemMessages,
+  shouldDedupeOverlayAction,
+} from '../lib/overlayActionDedup.mjs';
+import { shouldDedupeManualSubmit } from '../lib/overlaySubmitDedup.mjs';
+import {
+  applyWhatToAnswerNullFeedbackMessages,
+  finalizeStreamingByIntentMessages,
+  prepareIntelligenceStreamPlaceholderMessages,
+} from '../lib/overlayMessagePersistence.mjs';
+import {
+  shouldShowRollingTranscriptBar,
+  shouldSuppressRollingTranscript,
+} from '../lib/overlaySttPersistence.mjs';
+import {
+  resolveCgEventTapAvailable,
+  shouldBlockFocus as shouldBlockStealthFocus,
+  shouldFireStealthTapStart,
+} from '../lib/overlayStealthFocusGuards.mjs';
+import {
+  applyFirstStreamingToken,
+  commitStreamingFlush,
+  resolveStreamingMessageId,
+  shouldFlushPreviousStream,
+} from '../lib/streamingTokenQueue.mjs';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 // import { ModelSelector } from './ui/ModelSelector'; // REMOVED
@@ -250,6 +289,8 @@ const getStatusToneClass = (tone: 'ok' | 'warn' | 'error'): string => {
   return 'text-emerald-600 dark:text-emerald-300 border-emerald-500/20 bg-emerald-500/10';
 };
 
+const subtleSurfaceClass = 'overlay-subtle-surface';
+
 const MessageRow = React.memo(
   function MessageRow({
     msg,
@@ -277,9 +318,16 @@ const MessageRow = React.memo(
                     : 'bg-blue-600/20 backdrop-blur-md border border-blue-500/30 text-blue-100 rounded-[20px] rounded-tr-[4px] shadow-sm font-medium'
                   : ''
               }
-              ${msg.role === 'system' ? 'overlay-text-primary font-normal' : ''}
+              ${
+                msg.role === 'system'
+                  ? msg.isStreaming
+                    ? `${subtleSurfaceClass} border rounded-[18px] overlay-text-primary font-normal`
+                    : 'overlay-text-primary font-normal'
+                  : ''
+              }
               ${msg.role === 'interviewer' ? 'overlay-text-muted italic pl-0 text-[13px]' : ''}
             `}
+            style={msg.role === 'system' && msg.isStreaming ? appearance.subtleStyle : undefined}
           >
             {msg.role === 'interviewer' && (
               <div className="flex items-center gap-1.5 mb-1 text-[10px] font-medium uppercase tracking-wider overlay-text-muted">
@@ -333,6 +381,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [inputValue, setInputValue] = useState('');
   const { shortcuts, isShortcutPressed } = useShortcuts();
   const [messages, setMessages] = useState<Message[]>([]);
+  // Keep chat history visible once an answer lands until explicit clear / session reset.
+  const [answerPanelPinned, setAnswerPanelPinned] = useState(false);
+  const answerPanelPinnedRef = useRef(false);
   const [isConnected, setIsConnected] = useState(false);
   const [sttUserStatus, setSttUserStatus] = useState<'connected' | 'reconnecting' | 'failed'>(
     'connected',
@@ -393,8 +444,36 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
   }, [messages, autoScroll]);
 
+  const hasActiveSystemAnswer = useMemo(
+    () =>
+      messages.some(
+        (m) =>
+          m.role === 'system' &&
+          (m.isStreaming || (typeof m.text === 'string' && m.text.trim().length > 0)),
+      ),
+    [messages],
+  );
+
+  // Auto-pin once any system answer row exists (streaming or complete) so a
+  // missed pinAnswerPanel() call cannot collapse the chat panel mid-answer.
+  useEffect(() => {
+    if (hasActiveSystemAnswer) {
+      answerPanelPinnedRef.current = true;
+      setAnswerPanelPinned(true);
+    }
+  }, [hasActiveSystemAnswer]);
+
+  useEffect(() => {
+    answerPanelPinnedRef.current = answerPanelPinned;
+  }, [answerPanelPinned]);
+
   const [rollingTranscript, setRollingTranscript] = useState(''); // For interviewer rolling text bar
   const [isInterviewerSpeaking, setIsInterviewerSpeaking] = useState(false); // Track if actively speaking
+  // Debounce partial STT ticks so answer/solution rows are not drowned in re-renders.
+  const rollingPartialDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingRollingPartialRef = useRef<string | null>(null);
+  const interviewerSpeakingRef = useRef(false);
+  const pinAnswerPanelRef = useRef<() => void>(() => {});
   const [voiceInput, setVoiceInput] = useState(''); // Accumulated user voice input
   const voiceInputRef = useRef<string>(''); // Ref for capturing in async handlers
   const textInputRef = useRef<HTMLInputElement>(null); // Ref for input focus
@@ -416,12 +495,20 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // not yet active" (macOS: block anyway) from "tap not available" (Windows:
   // never block, or the input becomes permanently trapped).
   // Set synchronously from preload — platform is known immediately at render time.
-  const isCgEventTapAvailableRef = useRef<boolean>(window.electronAPI?.platform === 'darwin');
+  const isCgEventTapAvailableRef = useRef<boolean>(
+    resolveCgEventTapAvailable(window.electronAPI?.platform ?? ''),
+  );
   // Latest-handler ref so the captured-key listener (mounted with [] deps)
   // calls the CURRENT handleManualSubmit closure — not the one captured at
   // first render, which reads inputValue="" and silently no-ops on submit.
   // Updated on every render below.
   const handleManualSubmitRef = useRef<() => void>(() => {});
+  /** Blocks concurrent typed submits (double-click / key repeat) before React state updates. */
+  const manualSubmitInFlightRef = useRef(false);
+  const lastManualSubmitRef = useRef<{ text: string; atMs: number } | null>(null);
+  /** Blocks duplicate quick-action LLM calls (Clarify, Follow-up, Brainstorm, Answer). */
+  const overlayActionInFlightRef = useRef(new Set<string>());
+  const lastOverlayActionRef = useRef<{ key: string; atMs: number } | null>(null);
   // Set when the user tried to engage the tap but Accessibility isn't
   // granted yet. Renders the inline permission banner so we never silently
   // fail — Cluely's onboarding is its UX moat; we mirror it.
@@ -560,7 +647,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     [overlayOpacity, isLightTheme, isGlassTheme],
   );
   const overlayPanelClass = 'overlay-text-primary';
-  const subtleSurfaceClass = 'overlay-subtle-surface';
   const codeBlockClass = 'overlay-code-block-surface';
   const codeHeaderClass = 'overlay-code-header-surface';
   const codeHeaderTextClass = 'overlay-text-muted';
@@ -1019,8 +1105,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const container = scrollContainerRef.current;
 
     // Scroll container unmounted (session reset / messages cleared) — force
-    // contraction so the shell returns to its collapsed width.
+    // contraction so the shell returns to its collapsed width. Skip while the
+    // answer panel is pinned: transient unmounts during STT/layout churn must
+    // not collapse the shell and flash the answer block.
     if (!container) {
+      if (answerPanelPinnedRef.current) return;
       if (stableVisibilityTimerRef.current) {
         clearTimeout(stableVisibilityTimerRef.current);
         stableVisibilityTimerRef.current = null;
@@ -1130,6 +1219,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       streamingNodeRef.current = null;
       streamingTextRef.current = '';
       streamingMsgIdRef.current = null;
+      streamingIntentRef.current = null;
+      if (rollingPartialDebounceRef.current !== null) {
+        clearTimeout(rollingPartialDebounceRef.current);
+        rollingPartialDebounceRef.current = null;
+      }
+      pendingRollingPartialRef.current = null;
     };
   }, []);
   // ────────────────────────────────────────────────────────────────────────
@@ -1197,11 +1292,21 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const unsubscribe = window.electronAPI.onSessionReset(() => {
       console.log('[NativelyInterface] Resetting session state...');
       setMessages([]);
+      answerPanelPinnedRef.current = false;
+      setAnswerPanelPinned(false);
       setInputValue('');
       setAttachedContext([]);
       setManualTranscript('');
       setVoiceInput('');
       setIsProcessing(false);
+      if (rollingPartialDebounceRef.current !== null) {
+        clearTimeout(rollingPartialDebounceRef.current);
+        rollingPartialDebounceRef.current = null;
+      }
+      pendingRollingPartialRef.current = null;
+      setRollingTranscript('');
+      setIsInterviewerSpeaking(false);
+      interviewerSpeakingRef.current = false;
       // Optionally reset connection status if needed, but connection persists
 
       // Track new conversation/session if applicable?
@@ -1276,6 +1381,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const streamingNodeRef   = useRef<HTMLDivElement | null>(null);
   const streamingTextRef   = useRef<string>('');
   const streamingMsgIdRef  = useRef<string | null>(null);
+  const streamingIntentRef = useRef<string | null>(null);
   const streamingRafRef    = useRef<number | null>(null);
 
   // Helper: render accumulated markdown to the streaming DOM node via RAF.
@@ -1299,12 +1405,19 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const queueToken = useCallback((intent: string, token: string) => {
     // If a new stream intent arrives while one is active, flush the current
     // stream into React state so the rows don't bleed into each other.
-    if (streamingMsgIdRef.current !== null && streamingTextRef.current) {
+    if (
+      shouldFlushPreviousStream(
+        streamingIntentRef.current,
+        intent,
+        streamingMsgIdRef.current,
+      )
+    ) {
       const prevText = streamingTextRef.current;
       const prevId   = streamingMsgIdRef.current;
       streamingNodeRef.current  = null;
       streamingTextRef.current  = '';
       streamingMsgIdRef.current = null;
+      streamingIntentRef.current = null;
       if (streamingRafRef.current !== null) {
         cancelAnimationFrame(streamingRafRef.current);
         streamingRafRef.current = null;
@@ -1314,7 +1427,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           const idx = prev.findLastIndex((m) => m.id === prevId);
           if (idx !== -1) {
             const updated = [...prev];
-            updated[idx] = { ...updated[idx], text: prevText };
+            updated[idx] = { ...updated[idx], text: prevText, isStreaming: false };
             return updated;
           }
           return prev;
@@ -1323,6 +1436,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     }
 
     streamingTextRef.current += token;
+    streamingIntentRef.current = intent;
 
     if (streamingMsgIdRef.current !== null) {
       // Mid-stream: write directly to DOM, schedule markdown render.
@@ -1337,14 +1451,23 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       return;
     }
 
-    // First token: mount the bubble via setMessages, then RAF will render.
-    const id = Date.now().toString();
-    streamingMsgIdRef.current = id;
+    // First token: mount or reuse the open streaming row (placeholder), then RAF render.
+    // Use functional setMessages so we resolve the placeholder id from latest state,
+    // not a stale closure snapshot (placeholder may not be in `messages` yet).
     reactStartTransition(() => {
-      setMessages((prev) => [
-        ...prev,
-        { id, role: 'system', text: token, intent, isStreaming: true },
-      ]);
+      setMessages((prev) => {
+        const id = resolveStreamingMessageId(
+          prev,
+          streamingMsgIdRef.current,
+          intent,
+          () => Date.now().toString(),
+        );
+        streamingMsgIdRef.current = id;
+        if (ANSWER_PANEL_INTENTS.has(intent)) {
+          pinAnswerPanelRef.current();
+        }
+        return applyFirstStreamingToken(prev, { id, token, intent });
+      });
     });
     scheduleMarkdownRender();
   }, [scheduleMarkdownRender]);
@@ -1356,6 +1479,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     streamingNodeRef.current = el;
     if (el && streamingTextRef.current) {
       // Push any text that arrived before the DOM node was ready.
+      el.textContent = streamingTextRef.current;
       scheduleMarkdownRender();
     }
   }, [scheduleMarkdownRender]);
@@ -1367,28 +1491,133 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       cancelAnimationFrame(streamingRafRef.current);
       streamingRafRef.current = null;
     }
-    const text   = streamingTextRef.current;
-    const msgId  = streamingMsgIdRef.current;
+    const text = streamingTextRef.current;
+    const msgId = streamingMsgIdRef.current;
+    if (!msgId) {
+      streamingNodeRef.current = null;
+      streamingTextRef.current = '';
+      streamingIntentRef.current = null;
+      return;
+    }
+    // Placeholder with no tokens yet — keep refs wired so queueToken does not spawn rows.
+    if (!text) {
+      return;
+    }
     // Reset imperative refs BEFORE setMessages so the streaming short-circuit
     // in renderMessageText is no longer active when React re-renders the row.
-    streamingNodeRef.current  = null;
-    streamingTextRef.current  = '';
+    streamingNodeRef.current = null;
+    streamingTextRef.current = '';
     streamingMsgIdRef.current = null;
-    if (!text || !msgId) return;
+    streamingIntentRef.current = null;
     // NOT wrapped in startTransition — ordering must hold.
-    setMessages((prev) => {
-      const idx = prev.findLastIndex((m) => m.id === msgId);
-      if (idx !== -1) {
-        const updated = [...prev];
-        updated[idx] = { ...updated[idx], text };
-        return updated;
-      }
-      return prev;
-    });
+    setMessages((prev) => commitStreamingFlush(prev, msgId, text));
   }, []);
+
+  const tryBeginOverlayAction = useCallback((actionKey: string): boolean => {
+    if (overlayActionInFlightRef.current.has(actionKey)) return false;
+    const nowMs = Date.now();
+    const last = lastOverlayActionRef.current;
+    if (
+      shouldDedupeOverlayAction({
+        actionKey,
+        lastActionKey: last?.key ?? null,
+        lastAtMs: last?.atMs ?? null,
+        nowMs,
+      })
+    ) {
+      return false;
+    }
+    overlayActionInFlightRef.current.add(actionKey);
+    lastOverlayActionRef.current = { key: actionKey, atMs: nowMs };
+    return true;
+  }, []);
+
+  const endOverlayAction = useCallback((actionKey: string) => {
+    overlayActionInFlightRef.current.delete(actionKey);
+  }, []);
+
+  const finalizeStreamingByIntent = useCallback(
+    (intent: string, text: string) => {
+      const streamingMsgId = streamingMsgIdRef.current;
+      flushToken();
+      setMessages((prev) =>
+        finalizeStreamingByIntentMessages(
+          prev,
+          intent,
+          text,
+          () => Date.now().toString(),
+          streamingMsgId,
+        ),
+      );
+    },
+    [flushToken],
+  );
+
+  const pinAnswerPanel = useCallback(() => {
+    answerPanelPinnedRef.current = true;
+    setAnswerPanelPinned(true);
+  }, []);
+  pinAnswerPanelRef.current = pinAnswerPanel;
+
+  const prepareIntelligenceStreamPlaceholder = useCallback(
+    (intent: string) => {
+      flushToken();
+      tokenBufRef.current.intent = '';
+      tokenBufRef.current.text = '';
+      if (tokenBufRef.current.raf !== null) {
+        cancelAnimationFrame(tokenBufRef.current.raf);
+        tokenBufRef.current.raf = null;
+      }
+      const placeholderId = Date.now().toString();
+      streamingMsgIdRef.current = placeholderId;
+      streamingIntentRef.current = intent;
+      streamingTextRef.current = '';
+      streamingNodeRef.current = null;
+      if (streamingRafRef.current !== null) {
+        cancelAnimationFrame(streamingRafRef.current);
+        streamingRafRef.current = null;
+      }
+      pinAnswerPanel();
+      setMessages((prev) =>
+        prepareIntelligenceStreamPlaceholderMessages(prev, intent, placeholderId),
+      );
+    },
+    [flushToken, pinAnswerPanel],
+  );
+
+  const displayMessages = useMemo(
+    () => collapseConsecutiveDuplicateSystemMessages(messages),
+    [messages],
+  );
   // ──────────────────────────────────────────────────────────────────────────
 
-  // Connect to Native Audio Backend
+  const applyRollingPartialPreview = useCallback((partialText: string) => {
+    pendingRollingPartialRef.current = partialText;
+    if (rollingPartialDebounceRef.current !== null) {
+      clearTimeout(rollingPartialDebounceRef.current);
+    }
+    rollingPartialDebounceRef.current = setTimeout(() => {
+      rollingPartialDebounceRef.current = null;
+      const text = pendingRollingPartialRef.current;
+      pendingRollingPartialRef.current = null;
+      if (text == null) return;
+      setRollingTranscript((prev) => mergeRollingTranscriptPartial(prev, text));
+    }, 80);
+  }, []);
+
+  const flushRollingPartialPreview = useCallback(() => {
+    if (rollingPartialDebounceRef.current !== null) {
+      clearTimeout(rollingPartialDebounceRef.current);
+      rollingPartialDebounceRef.current = null;
+    }
+    const text = pendingRollingPartialRef.current;
+    pendingRollingPartialRef.current = null;
+    if (text != null) {
+      setRollingTranscript((prev) => mergeRollingTranscriptPartial(prev, text));
+    }
+  }, []);
+
+  // Connect to Native Audio Backend — deps must NOT include isExpanded (see clarify effect).
   useEffect(() => {
     const cleanups: (() => void)[] = [];
 
@@ -1445,29 +1674,24 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           return; // Safety check for any other speaker types
         }
 
-        // Route to rolling transcript bar - accumulate text continuously
-        setIsInterviewerSpeaking(!transcript.final);
-
-        if (transcript.final) {
-          // Append finalized text to accumulated transcript
-          setRollingTranscript((prev) => {
-            const separator = prev ? '  ·  ' : '';
-            return prev + separator + transcript.text;
-          });
-
-          // Clear speaking indicator after pause
-          setTimeout(() => {
-            setIsInterviewerSpeaking(false);
-          }, 3000);
-        } else {
-          // For partial transcripts, show current segment appended to accumulated
-          setRollingTranscript((prev) => {
-            // Find where previous finalized content ends (look for last separator)
-            const lastSeparator = prev.lastIndexOf('  ·  ');
-            const accumulated = lastSeparator >= 0 ? prev.substring(0, lastSeparator + 5) : '';
-            return accumulated + transcript.text;
-          });
+        // Route to rolling transcript bar — partials debounced; finals commit immediately.
+        if (!transcript.final) {
+          if (!interviewerSpeakingRef.current) {
+            interviewerSpeakingRef.current = true;
+            setIsInterviewerSpeaking(true);
+          }
+          applyRollingPartialPreview(transcript.text);
+          return;
         }
+
+        flushRollingPartialPreview();
+        interviewerSpeakingRef.current = false;
+        setIsInterviewerSpeaking(false);
+        setRollingTranscript((prev) => mergeRollingTranscriptFinal(prev, transcript.text));
+
+        setTimeout(() => {
+          setIsInterviewerSpeaking(false);
+        }, 3000);
       }),
     );
 
@@ -1482,6 +1706,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     cleanups.push(
       window.electronAPI.onSuggestionGenerated((data) => {
         setIsProcessing(false);
+        pinAnswerPanel();
         setMessages((prev) => [
           ...prev,
           {
@@ -1509,6 +1734,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceSuggestedAnswerToken((data) => {
+        pinAnswerPanel();
         // Coaching now arrives via onIntelligenceNegotiationCoaching only —
         // sentinel detection on this stream has been removed.
         queueToken('what_to_answer', data.token);
@@ -1517,33 +1743,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceSuggestedAnswer((data) => {
-        // PERF: flush any tokens still pending in the rAF buffer onto the
-        // streaming row BEFORE we apply the final-answer setMessages, so no
-        // tokens are lost on stream completion.
-        flushToken();
         setIsProcessing(false);
-
-        setMessages((prev) => {
-          const lastMsg = prev[prev.length - 1];
-          if (lastMsg && lastMsg.isStreaming && lastMsg.intent === 'what_to_answer') {
-            const updated = [...prev];
-            updated[prev.length - 1] = {
-              ...lastMsg,
-              text: data.answer,
-              isStreaming: false,
-            };
-            return updated;
-          }
-          return [
-            ...prev,
-            {
-              id: Date.now().toString(),
-              role: 'system',
-              text: data.answer,
-              intent: 'what_to_answer',
-            },
-          ];
-        });
+        pinAnswerPanel();
+        finalizeStreamingByIntent('what_to_answer', data.answer);
       }),
     );
 
@@ -1558,6 +1760,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         const { kind, items } = data;
         if (!items || items.length === 0) return;
         if (kind === 'suggested_answer') {
+          pinAnswerPanel();
           for (const it of items) queueToken('what_to_answer', (it as any).token);
         } else if (kind === 'refined_answer') {
           for (const it of items) queueToken((it as any).intent, (it as any).token);
@@ -1626,29 +1829,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceRefinedAnswer((data) => {
-        flushToken();
         setIsProcessing(false);
-        setMessages((prev) => {
-          const lastMsg = prev[prev.length - 1];
-          if (lastMsg && lastMsg.isStreaming && lastMsg.intent === data.intent) {
-            const updated = [...prev];
-            updated[prev.length - 1] = {
-              ...lastMsg,
-              text: data.answer,
-              isStreaming: false,
-            };
-            return updated;
-          }
-          return [
-            ...prev,
-            {
-              id: Date.now().toString(),
-              role: 'system',
-              text: data.answer,
-              intent: data.intent,
-            },
-          ];
-        });
+        finalizeStreamingByIntent(data.intent, data.answer);
       }),
     );
 
@@ -1661,29 +1843,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceRecap((data) => {
-        flushToken();
         setIsProcessing(false);
-        setMessages((prev) => {
-          const lastMsg = prev[prev.length - 1];
-          if (lastMsg && lastMsg.isStreaming && lastMsg.intent === 'recap') {
-            const updated = [...prev];
-            updated[prev.length - 1] = {
-              ...lastMsg,
-              text: data.summary,
-              isStreaming: false,
-            };
-            return updated;
-          }
-          return [
-            ...prev,
-            {
-              id: Date.now().toString(),
-              role: 'system',
-              text: data.summary,
-              intent: 'recap',
-            },
-          ];
-        });
+        finalizeStreamingByIntent('recap', data.summary);
       }),
     );
 
@@ -1707,30 +1868,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceFollowUpQuestionsUpdate((data) => {
-        flushToken();
-        // This event name is slightly different ('update' vs 'answer')
         setIsProcessing(false);
-        setMessages((prev) => {
-          const lastMsg = prev[prev.length - 1];
-          if (lastMsg && lastMsg.isStreaming && lastMsg.intent === 'follow_up_questions') {
-            const updated = [...prev];
-            updated[prev.length - 1] = {
-              ...lastMsg,
-              text: data.questions,
-              isStreaming: false,
-            };
-            return updated;
-          }
-          return [
-            ...prev,
-            {
-              id: Date.now().toString(),
-              role: 'system',
-              text: data.questions,
-              intent: 'follow_up_questions',
-            },
-          ];
-        });
+        finalizeStreamingByIntent('follow_up_questions', data.questions);
+      }),
+    );
+
+    cleanups.push(
+      window.electronAPI.onIntelligenceClarify((data) => {
+        setIsProcessing(false);
+        finalizeStreamingByIntent('clarify', data.clarification);
       }),
     );
 
@@ -1761,8 +1907,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         ]);
       }),
     );
-    return () => cleanups.forEach((fn) => fn());
-  }, [isExpanded]);
+    return () => {
+      if (rollingPartialDebounceRef.current !== null) {
+        clearTimeout(rollingPartialDebounceRef.current);
+        rollingPartialDebounceRef.current = null;
+      }
+      cleanups.forEach((fn) => fn());
+    };
+  }, [queueToken, flushToken, applyRollingPartialPreview, flushRollingPartialPreview, pinAnswerPanel, finalizeStreamingByIntent]);
 
   // Stable mount-only effect for screenshot listeners.
   // These MUST NOT be inside the [isExpanded] effect — when a screenshot is
@@ -1780,45 +1932,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     };
   }, []);
 
-  // Stable mount-only effect for clarify streaming listeners.
-  // These MUST NOT be inside the [isExpanded] effect — if the user
-  // expands/collapses the panel while a clarify stream is in-flight,
-  // the [isExpanded] effect would tear down and re-register listeners,
-  // orphaning the final 'clarify' event and leaving isProcessing=true forever.
-  useEffect(() => {
-    const cleanupToken = window.electronAPI.onIntelligenceClarifyToken((data) => {
-      queueToken('clarify', data.token);
-    });
-
-    const cleanupFinal = window.electronAPI.onIntelligenceClarify((data) => {
-      flushToken();
-      setIsProcessing(false);
-      setMessages((prev) => {
-        const lastMsg = prev[prev.length - 1];
-        if (lastMsg && lastMsg.isStreaming && lastMsg.intent === 'clarify') {
-          const updated = [...prev];
-          updated[prev.length - 1] = { ...lastMsg, text: data.clarification, isStreaming: false };
-          return updated;
-        }
-        return [
-          ...prev,
-          {
-            id: Date.now().toString(),
-            role: 'system' as const,
-            text: data.clarification,
-            intent: 'clarify',
-          },
-        ];
-      });
-    });
-
-    return () => {
-      cleanupToken();
-      cleanupFinal();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // intentionally empty — these listeners must survive isExpanded changes
-
   // Quick Actions - Updated to use new Intelligence APIs
 
   // PERF: useCallback so the reference is stable between renders. MessageRow
@@ -1831,10 +1944,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   }, []);
 
   const handleWhatToSay = async (promptInstruction?: string | React.MouseEvent) => {
+    if (!tryBeginOverlayAction('what_to_say')) return;
     const dynamicPromptInstruction =
       typeof promptInstruction === 'string' ? promptInstruction : undefined;
     setIsExpanded(true);
     setIsProcessing(true);
+    prepareIntelligenceStreamPlaceholder('what_to_answer');
     analytics.trackCommandExecuted('what_to_say');
 
     // Capture and clear attached image context.
@@ -1877,6 +1992,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       setLatestVisionProviderUsed(result.visionProviderUsed);
       setLatestVisionModelUsed(result.visionModelUsed);
       setLatestVisionFailureReason(result.visionFailureReason);
+      if (result.answer == null) {
+        const feedback =
+          result.error ??
+          'Could not generate an answer yet. Wait a few seconds after speech and try again.';
+        flushToken();
+        setMessages((prev) => applyWhatToAnswerNullFeedbackMessages(prev, feedback));
+        streamingMsgIdRef.current = null;
+        streamingTextRef.current = '';
+        streamingIntentRef.current = null;
+        pinAnswerPanel();
+      }
     } catch (err) {
       setMessages((prev) => [
         ...prev,
@@ -1886,14 +2012,19 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           text: `Error: ${err}`,
         },
       ]);
+      pinAnswerPanel();
     } finally {
+      endOverlayAction('what_to_say');
       setIsProcessing(false);
     }
   };
 
   const handleFollowUp = async (intent: string = 'rephrase') => {
+    const actionKey = `follow_up:${intent}`;
+    if (!tryBeginOverlayAction(actionKey)) return;
     setIsExpanded(true);
     setIsProcessing(true);
+    prepareIntelligenceStreamPlaceholder(intent);
     analytics.trackCommandExecuted('follow_up_' + intent);
 
     try {
@@ -1908,13 +2039,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         },
       ]);
     } finally {
+      endOverlayAction(actionKey);
       setIsProcessing(false);
     }
   };
 
   const handleRecap = async () => {
+    if (!tryBeginOverlayAction('recap')) return;
     setIsExpanded(true);
     setIsProcessing(true);
+    prepareIntelligenceStreamPlaceholder('recap');
     analytics.trackCommandExecuted('recap');
 
     try {
@@ -1929,13 +2063,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         },
       ]);
     } finally {
+      endOverlayAction('recap');
       setIsProcessing(false);
     }
   };
 
   const handleFollowUpQuestions = async () => {
+    if (!tryBeginOverlayAction('follow_up_questions')) return;
     setIsExpanded(true);
     setIsProcessing(true);
+    prepareIntelligenceStreamPlaceholder('follow_up_questions');
     analytics.trackCommandExecuted('suggest_questions');
 
     try {
@@ -1950,13 +2087,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         },
       ]);
     } finally {
+      endOverlayAction('follow_up_questions');
       setIsProcessing(false);
     }
   };
 
   const handleClarify = async () => {
+    if (!tryBeginOverlayAction('clarify')) return;
     setIsExpanded(true);
     setIsProcessing(true);
+    prepareIntelligenceStreamPlaceholder('clarify');
     analytics.trackCommandExecuted('clarify');
 
     try {
@@ -1971,6 +2111,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         },
       ]);
     } finally {
+      endOverlayAction('clarify');
       setIsProcessing(false);
     }
   };
@@ -1978,7 +2119,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const handleCodeHint = async () => {
     setIsExpanded(true);
     setIsProcessing(true);
-    analytics.trackCommandExecuted('code_hint');
+    pinAnswerPanel();
 
     const currentAttachments = attachedContext;
     if (currentAttachments.length > 0) {
@@ -2019,8 +2160,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   };
 
   const handleBrainstorm = async () => {
+    if (!tryBeginOverlayAction('brainstorm')) return;
     setIsExpanded(true);
     setIsProcessing(true);
+    prepareIntelligenceStreamPlaceholder('what_to_answer');
     analytics.trackCommandExecuted('brainstorm');
 
     const currentAttachments = attachedContext;
@@ -2057,11 +2200,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         },
       ]);
     } finally {
+      endOverlayAction('brainstorm');
       setIsProcessing(false);
     }
   };
-
-  // Setup Streaming Listeners
   useEffect(() => {
     const cleanups: (() => void)[] = [];
 
@@ -2075,6 +2217,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // Stream Done
     cleanups.push(
       window.electronAPI.onGeminiStreamDone(() => {
+        const pendingText = streamingTextRef.current;
+        const pendingMsgId = streamingMsgIdRef.current;
         flushToken();
         setIsProcessing(false);
 
@@ -2093,12 +2237,20 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         });
 
         setMessages((prev) => {
-          const lastMsg = prev[prev.length - 1];
-          if (lastMsg && lastMsg.isStreaming && lastMsg.role === 'system') {
-            const text = lastMsg.text;
+          const idx =
+            pendingMsgId != null ? prev.findLastIndex((m) => m.id === pendingMsgId) : -1;
+          const target = idx !== -1 ? prev[idx] : prev[prev.length - 1];
+          if (target && target.role === 'system') {
+            const text = target.text || pendingText;
+            if (!text) return prev;
             const isCode =
               text.includes('```') || text.includes('def ') || text.includes('function ');
-            return [...prev.slice(0, -1), { ...lastMsg, isStreaming: false, isCode }];
+            if (idx !== -1) {
+              const updated = [...prev];
+              updated[idx] = { ...target, text, isStreaming: false, isCode };
+              return updated;
+            }
+            return [...prev.slice(0, -1), { ...target, text, isStreaming: false, isCode }];
           }
           return prev;
         });
@@ -2146,6 +2298,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         requestStartTimeRef.current = Date.now();
         const userId = Date.now().toString();
         const placeholderId = `${userId}-reply`;
+        streamingMsgIdRef.current = placeholderId;
+        streamingIntentRef.current = 'chat';
+        streamingTextRef.current = '';
+        streamingNodeRef.current = null;
         setMessages((prev) => [
           ...prev,
           { id: userId, role: 'user', text: message },
@@ -2159,6 +2315,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         ]);
         setIsExpanded(true);
         setIsProcessing(true);
+        pinAnswerPanel();
         setTimeout(() => {
           messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         }, 50);
@@ -2234,114 +2391,117 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   const handleAnswerNow = async () => {
     if (isManualRecording) {
-      // Stop recording - send accumulated voice input to Gemini
-      isRecordingRef.current = false; // Update ref immediately
-      setIsManualRecording(false);
-      setManualTranscript(''); // Clear live preview
-
-      // Send manual finalization signal to STT Providers
-      window.electronAPI
-        .finalizeMicSTT()
-        .catch((err) => console.error('[NativelyInterface] Failed to send finalizeMicSTT:', err));
-
-      const currentAttachments = attachedContext;
-      setAttachedContext([]); // Clear context immediately on send
-
-      const question = (
-        voiceInputRef.current +
-        (manualTranscriptRef.current ? ' ' + manualTranscriptRef.current : '')
-      ).trim();
-      setVoiceInput('');
-      voiceInputRef.current = '';
-      setManualTranscript('');
-      manualTranscriptRef.current = '';
-
-      if (!question && currentAttachments.length === 0) {
-        // No voice input and no image — show real STT error if available
-        if (sttUserStatus === 'failed' && sttUserError) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: Date.now().toString(),
-              role: 'system',
-              text: `❌ STT Error: ${sttUserError}`,
-            },
-          ]);
-        } else if (sttUserStatus === 'reconnecting') {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: Date.now().toString(),
-              role: 'system',
-              text: '⏳ STT is reconnecting, try again in a moment.',
-            },
-          ]);
-        } else {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: Date.now().toString(),
-              role: 'system',
-              text: '⚠️ No speech detected. Try speaking closer to your microphone.',
-            },
-          ]);
-        }
-        return;
-      }
-
-      // Show user's spoken question
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now().toString(),
-          role: 'user',
-          text: question,
-          hasScreenshot: currentAttachments.length > 0,
-          screenshotPreview: currentAttachments[0]?.preview,
-        },
-      ]);
-
-      // Scroll to bottom when user sends message
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 50);
-
-      // Add placeholder for streaming response
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now().toString(),
-          role: 'system',
-          text: '',
-          intent: 'chat',
-          isStreaming: true,
-        },
-      ]);
-
-      setIsProcessing(true);
-
+      if (!tryBeginOverlayAction('answer_now')) return;
       try {
-        let prompt = '';
+        // Stop recording - send accumulated voice input to Gemini
+        isRecordingRef.current = false;
+        setIsManualRecording(false);
+        setManualTranscript('');
 
-        if (currentAttachments.length > 0) {
-          // Image + Voice Context
-          prompt = `You are a helper. The user has provided a screenshot and a spoken question/command.
+        window.electronAPI
+          .finalizeMicSTT()
+          .catch((err) => console.error('[NativelyInterface] Failed to send finalizeMicSTT:', err));
+
+        const currentAttachments = attachedContext;
+        setAttachedContext([]);
+
+        const question = (
+          voiceInputRef.current +
+          (manualTranscriptRef.current ? ' ' + manualTranscriptRef.current : '')
+        ).trim();
+        setVoiceInput('');
+        voiceInputRef.current = '';
+        setManualTranscript('');
+        manualTranscriptRef.current = '';
+
+        if (!question && currentAttachments.length === 0) {
+          if (sttUserStatus === 'failed' && sttUserError) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: Date.now().toString(),
+                role: 'system',
+                text: `❌ STT Error: ${sttUserError}`,
+              },
+            ]);
+          } else if (sttUserStatus === 'reconnecting') {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: Date.now().toString(),
+                role: 'system',
+                text: '⏳ STT is reconnecting, try again in a moment.',
+              },
+            ]);
+          } else {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: Date.now().toString(),
+                role: 'system',
+                text: '⚠️ No speech detected. Try speaking closer to your microphone.',
+              },
+            ]);
+          }
+          return;
+        }
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now().toString(),
+            role: 'user',
+            text: question,
+            hasScreenshot: currentAttachments.length > 0,
+            screenshotPreview: currentAttachments[0]?.preview,
+          },
+        ]);
+
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 50);
+
+        const placeholderId = Date.now().toString();
+        streamingMsgIdRef.current = placeholderId;
+        streamingIntentRef.current = 'chat';
+        streamingTextRef.current = '';
+        streamingNodeRef.current = null;
+        if (streamingRafRef.current !== null) {
+          cancelAnimationFrame(streamingRafRef.current);
+          streamingRafRef.current = null;
+        }
+        pinAnswerPanel();
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: placeholderId,
+            role: 'system',
+            text: '',
+            intent: 'chat',
+            isStreaming: true,
+          },
+        ]);
+
+        setIsProcessing(true);
+
+        try {
+          let prompt = '';
+
+          if (currentAttachments.length > 0) {
+            prompt = `You are a helper. The user has provided a screenshot and a spoken question/command.
 User said: "${question}"
 
 Instructions:
 1. Analyze the screenshot in the context of what the user said.
 2. Provide a direct, helpful answer.
 3. Be concise.`;
-        } else {
-          // JIT RAG pre-flight: try to use indexed meeting context first
-          const ragResult = await window.electronAPI.ragQueryLive?.(question);
-          if (ragResult?.success) {
-            // JIT RAG handled it — response streamed via rag:stream-chunk events
-            return;
-          }
+          } else {
+            const ragResult = await window.electronAPI.ragQueryLive?.(question);
+            if (ragResult?.success) {
+              return;
+            }
 
-          // Voice Only (Smart Extract) — fallback
-          prompt = `You are a real-time interview assistant. The user just repeated or paraphrased a question from their interviewer.
+            prompt = `You are a real-time interview assistant. The user just repeated or paraphrased a question from their interviewer.
 Instructions:
 1. Extract the core question being asked
 2. Provide a clear, concise, and professional answer that the user can say out loud
@@ -2350,38 +2510,38 @@ Instructions:
 5. Format for speaking out loud, not for reading
 
 Provide only the answer, nothing else.`;
-        }
-
-        // Call Streaming API: message = question, context = instructions
-        requestStartTimeRef.current = Date.now();
-        await window.electronAPI.streamGeminiChat(
-          question,
-          currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined,
-          prompt,
-          { skipSystemPrompt: true },
-        );
-      } catch (err) {
-        // Initial invocation failing (e.g. IPC error before stream starts)
-        setIsProcessing(false);
-        setMessages((prev) => {
-          const last = prev[prev.length - 1];
-          // If we just added the empty streaming placeholder, remove it or fill it with error
-          if (last && last.isStreaming && last.text === '') {
-            return prev.slice(0, -1).concat({
-              id: Date.now().toString(),
-              role: 'system',
-              text: `❌ Error starting stream: ${err}`,
-            });
           }
-          return [
-            ...prev,
-            {
-              id: Date.now().toString(),
-              role: 'system',
-              text: `❌ Error: ${err}`,
-            },
-          ];
-        });
+
+          requestStartTimeRef.current = Date.now();
+          await window.electronAPI.streamGeminiChat(
+            question,
+            currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined,
+            prompt,
+            { skipSystemPrompt: true },
+          );
+        } catch (err) {
+          setIsProcessing(false);
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            if (last && last.isStreaming && last.text === '') {
+              return prev.slice(0, -1).concat({
+                id: Date.now().toString(),
+                role: 'system',
+                text: `❌ Error starting stream: ${err}`,
+              });
+            }
+            return [
+              ...prev,
+              {
+                id: Date.now().toString(),
+                role: 'system',
+                text: `❌ Error: ${err}`,
+              },
+            ];
+          });
+        }
+      } finally {
+        endOverlayAction('answer_now');
       }
     } else {
       // Start recording - reset voice input state
@@ -2404,7 +2564,23 @@ Provide only the answer, nothing else.`;
   const handleManualSubmit = async () => {
     if (!inputValue.trim() && attachedContext.length === 0) return;
 
-    const userText = inputValue;
+    const userText = inputValue.trim();
+    const nowMs = Date.now();
+    if (manualSubmitInFlightRef.current) return;
+    const last = lastManualSubmitRef.current;
+    if (
+      shouldDedupeManualSubmit({
+        text: userText,
+        lastText: last?.text ?? null,
+        lastAtMs: last?.atMs ?? null,
+        nowMs,
+      })
+    ) {
+      return;
+    }
+    manualSubmitInFlightRef.current = true;
+    lastManualSubmitRef.current = { text: userText, atMs: nowMs };
+
     const currentAttachments = attachedContext;
 
     // Clear inputs immediately
@@ -2447,11 +2623,21 @@ Provide only the answer, nothing else.`;
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 50);
 
-    // Add placeholder for streaming response
+    // Add placeholder for streaming response — wire queueToken to this row so
+    // the first gemini-stream-token does not spawn a second streaming bubble.
+    const placeholderId = Date.now().toString();
+    streamingMsgIdRef.current = placeholderId;
+    streamingIntentRef.current = 'chat';
+    streamingTextRef.current = '';
+    streamingNodeRef.current = null;
+    if (streamingRafRef.current !== null) {
+      cancelAnimationFrame(streamingRafRef.current);
+      streamingRafRef.current = null;
+    }
     setMessages((prev) => [
       ...prev,
       {
-        id: Date.now().toString(),
+        id: placeholderId,
         role: 'system',
         text: '',
         intent: 'chat',
@@ -2461,6 +2647,7 @@ Provide only the answer, nothing else.`;
 
     setIsExpanded(true);
     setIsProcessing(true);
+    pinAnswerPanel();
 
     try {
       // JIT RAG pre-flight: try to use indexed meeting context first
@@ -2500,6 +2687,8 @@ Provide only the answer, nothing else.`;
           },
         ];
       });
+    } finally {
+      manualSubmitInFlightRef.current = false;
     }
   };
 
@@ -2510,6 +2699,10 @@ Provide only the answer, nothing else.`;
 
   const clearChat = () => {
     setMessages([]);
+    answerPanelPinnedRef.current = false;
+    setAnswerPanelPinned(false);
+    lastManualSubmitRef.current = null;
+    manualSubmitInFlightRef.current = false;
   };
 
   // PERF: useCallback so MessageRow's memo comparator can rely on a stable
@@ -2525,17 +2718,22 @@ Provide only the answer, nothing else.`;
       // without going through React reconciliation.
       // On stream completion, flushToken() resets streamingMsgIdRef and the
       // next render falls through to the normal intent-specific path below.
-      if (msg.isStreaming && msg.role === 'system' && !msg.isNegotiationCoaching
-          && msg.id === streamingMsgIdRef.current) {
-        return (
-          <div
-            ref={(el) => registerStreamingNode(msg.id, el)}
-            className="markdown-content whitespace-pre-wrap"
-          >
-            {/* Initial text shown before the RAF fires for the first time */}
-            {msg.text}
-          </div>
-        );
+      if (msg.isStreaming && msg.role === 'system' && !msg.isNegotiationCoaching) {
+        if (msg.id === streamingMsgIdRef.current) {
+          return (
+            <div
+              ref={(el) => registerStreamingNode(msg.id, el)}
+              className="markdown-content whitespace-pre-wrap"
+            />
+          );
+        }
+        // Handoff gap after flushToken(): imperative ref cleared but React has
+        // not yet reconciled — keep showing accumulated text instead of blank.
+        if (msg.text) {
+          return (
+            <div className="markdown-content whitespace-pre-wrap">{msg.text}</div>
+          );
+        }
       }
       // ────────────────────────────────────────────────────────────────────
 
@@ -2940,9 +3138,6 @@ Provide only the answer, nothing else.`;
       } else if (isShortcutPressed(e, 'answer')) {
         e.preventDefault();
         handleAnswerNow();
-      } else if (isShortcutPressed(e, 'clarify')) {
-        e.preventDefault();
-        handleClarify();
       } else if (isShortcutPressed(e, 'codeHint')) {
         e.preventDefault();
         handleCodeHint();
@@ -3012,6 +3207,8 @@ Provide only the answer, nothing else.`;
       } else {
         await window.electronAPI.resetIntelligence();
         setMessages([]);
+        answerPanelPinnedRef.current = false;
+        setAnswerPanelPinned(false);
         setAttachedContext([]);
         setInputValue('');
       }
@@ -3053,6 +3250,8 @@ Provide only the answer, nothing else.`;
       } else {
         await window.electronAPI.resetIntelligence();
         setMessages([]);
+        answerPanelPinnedRef.current = false;
+        setAnswerPanelPinned(false);
         setAttachedContext([]);
         setInputValue('');
       }
@@ -3511,13 +3710,17 @@ Provide only the answer, nothing else.`;
     }
 
     const onMouseDown = (e: MouseEvent) => {
-      if (stealthTapActiveRef.current) return; // already on
-      // IME present → never auto-engage. The user can still press the
-      // explicit hotkey if they want true OS-level invisible typing
-      // (they'll lose composition in that path by design).
-      if (!stealthAutoEngageOkRef.current) return;
       const target = e.target as HTMLElement | null;
-      if (!target?.closest?.('[data-stealth-engage="true"]')) return;
+      const isStealthEngageTarget = Boolean(target?.closest?.('[data-stealth-engage="true"]'));
+      if (
+        !shouldFireStealthTapStart({
+          stealthTapActive: stealthTapActiveRef.current,
+          stealthAutoEngageOk: stealthAutoEngageOkRef.current,
+          isStealthEngageTarget,
+        })
+      ) {
+        return;
+      }
       window.electronAPI.stealthTapStart().catch(() => {});
     };
 
@@ -3556,17 +3759,14 @@ Provide only the answer, nothing else.`;
   // stealthTapStart() in capture phase, so by the time we get here, the
   // tap is engaging and DOM focus is no longer the typing path.
   const blockInputFocus = useCallback((e: React.MouseEvent<HTMLInputElement>) => {
-    // When auto-engage is disabled (composition IME present), the click
-    // does NOT engage the tap — so blocking DOM focus would leave the
-    // user with no way to type. Let the browser focus the input so the
-    // OS Text Input System can route keystrokes through the active IME
-    // and compose CJK characters normally.
-    if (!stealthAutoEngageOkRef.current) return;
-    // Only block DOM focus when CGEventTap is available on this platform.
-    // On Windows, CGEventTap is never available so this guard exits early
-    // and allows normal input focus. On macOS, the tap is available so we
-    // block focus to prevent the panel from becoming key window.
-    if (!isCgEventTapAvailableRef.current) return;
+    if (
+      !shouldBlockStealthFocus({
+        stealthAutoEngageOk: stealthAutoEngageOkRef.current,
+        isCgEventTapAvailable: isCgEventTapAvailableRef.current,
+      })
+    ) {
+      return;
+    }
     e.preventDefault();
     // Don't blur an already-focused element — that itself fires events.
     if (document.activeElement === textInputRef.current) {
@@ -3588,6 +3788,18 @@ Provide only the answer, nothing else.`;
     sttInterviewerProvider,
     sttNotConfigured,
   );
+  const showAnswerPanel =
+    messages.length > 0 || isManualRecording || isProcessing || answerPanelPinned;
+  // Hide rolling transcript only during active LLM processing — chat history and
+  // pinned answers must not suppress STT; partials keep updating rollingTranscript state.
+  const suppressRollingTranscript = shouldSuppressRollingTranscript({ isProcessing });
+  const showRollingTranscriptBar = shouldShowRollingTranscriptBar({
+    suppressRollingTranscript,
+    showTranscript,
+    rollingTranscript,
+    interviewerSttStatus: interviewerSttIndicatorStatus,
+    userSttStatus: sttUserStatus,
+  });
   const statusPillBaseClass = `flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium shadow-sm backdrop-blur-xl ${isLightTheme ? 'bg-white/55 border-black/10' : 'bg-black/20 border-white/10'}`;
 
   const copyDiagnostics = async () => {
@@ -3637,7 +3849,7 @@ Provide only the answer, nothing else.`;
       data-interface-theme={isGlassTheme ? 'liquid-glass' : undefined}
       className="flex flex-col items-center w-fit mx-auto h-fit min-h-0 bg-transparent p-0 rounded-[24px] font-sans gap-2 overlay-text-primary"
     >
-      <AnimatePresence>
+      <AnimatePresence initial={false}>
         {isExpanded && (
           <motion.div
             initial={{ opacity: 0, y: 20, scale: 0.95 }}
@@ -3892,9 +4104,7 @@ Provide only the answer, nothing else.`;
               />
 
               {/* Rolling Transcript Bar — includes STT status indicator inline */}
-              {(showTranscript && rollingTranscript) ||
-              interviewerSttIndicatorStatus !== 'connected' ||
-              sttUserStatus !== 'connected' ? (
+              {showRollingTranscriptBar ? (
                 <RollingTranscript
                   text={showTranscript ? rollingTranscript : ''}
                   isActive={isInterviewerSpeaking}
@@ -3914,10 +4124,11 @@ Provide only the answer, nothing else.`;
               ) : null}
 
               {/* Chat History - Only show if there are messages OR active states */}
-              {(messages.length > 0 || isManualRecording || isProcessing) && (
+              {showAnswerPanel && (
                 <motion.div
                   ref={scrollContainerRef}
-                  className="flex-1 overflow-y-auto p-4 space-y-3 no-drag"
+                  className="relative z-10 flex-1 overflow-y-auto p-4 space-y-3 no-drag isolate"
+                  layout={false}
                   style={{ scrollbarWidth: 'none', maxHeight: scrollMaxH }}
                 >
                   {/* Every row spans the full inner width of the scroll
@@ -3936,7 +4147,7 @@ Provide only the answer, nothing else.`;
                                         so a setMessages on the streaming row does NOT
                                         re-render every prior message — bailout fires on
                                         identity equality (msg, theme, callbacks). */}
-                  {messages.map((msg) => (
+                  {displayMessages.map((msg: Message) => (
                     <MessageRow
                       key={msg.id}
                       msg={msg}
@@ -4005,7 +4216,7 @@ Provide only the answer, nothing else.`;
 
               {/* Quick Actions - Minimal & Clean */}
               <div
-                className={`flex flex-nowrap justify-center items-center gap-1.5 px-4 pb-3 overflow-x-hidden ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3'}`}
+                className={`flex flex-nowrap justify-center items-center gap-1.5 px-4 pb-3 overflow-x-hidden ${showRollingTranscriptBar ? 'pt-1' : 'pt-3'}`}
               >
                 <button
                   onClick={handleWhatToSay}
@@ -4195,7 +4406,11 @@ Provide only the answer, nothing else.`;
                     type="text"
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleManualSubmit()}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter' || e.repeat) return;
+                      e.preventDefault();
+                      handleManualSubmit();
+                    }}
                     // Block native DOM focus on click — the panel becoming
                     // key window is exactly the signal coding-interview
                     // platforms watch for via window.onblur on the parent.
