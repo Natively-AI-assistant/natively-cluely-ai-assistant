@@ -11,7 +11,6 @@ import { AudioDevices } from "./audio/AudioDevices";
 import { PhoneMirrorService } from "./services/PhoneMirrorService";
 import { CodexCliService } from "./services/CodexCliService";
 import { SettingsManager } from "./services/SettingsManager";
-import { SkillsManager } from "./services/SkillsManager";
 
 
 import { RECOGNITION_LANGUAGES, AI_RESPONSE_LANGUAGES } from "./config/languages"
@@ -53,17 +52,14 @@ export function initializeIpcHandlers(appState: AppState): void {
   const clearActiveModeOnLicenseLoss = (): void => {
     try {
       const { DatabaseManager } = require('./db/DatabaseManager');
-      const db = DatabaseManager.getInstance();
-      db.setActiveMode(null);
-      db.clearProfilePersona?.();
-      const llmHelper = appState.processingHelper?.getLLMHelper?.();
-      llmHelper?.setPersonaPrompt?.('');
+      DatabaseManager.getInstance().setActiveMode(null);
       BrowserWindow.getAllWindows().forEach(win => {
         if (!win.isDestroyed()) win.webContents.send('modes-active-cleared');
       });
-      console.log('[IPC] Premium-only context cleared due to license loss');
+      console.log('[IPC] Active mode cleared due to license loss');
     } catch (e) { /* non-fatal */ }
   };
+
 
   // --- NEW Test Helper ---
   safeHandle("test-release-fetch", async () => {
@@ -463,7 +459,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   const IDENTITY_PROBE_RE = /^\s*(who\s+(are|r)\s+(you|u|this|natively)|what\s+(are|r)\s+(you|u)|are\s+you\s+(chatgpt|gpt[-\s]?\d?|claude|gemini|llama|an?\s+(ai|bot|llm|model|assistant))|what('?s|\s+is)\s+your\s+(name|model)|which\s+(ai|model|llm)\s+are\s+you|who\s+(made|built|created|developed|trained)\s+(you|this|natively)|what\s+model\s+(are\s+you|do\s+you\s+use)|introduce\s+yourself)\s*\??\s*$/i;
   const CREATOR_PROBE_RE = /^\s*(who\s+(made|built|created|developed|trained)\s+(you|this|natively))\s*\??\s*$/i;
 
-  safeHandle("gemini-chat-stream", async (event, message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean, skipModeInjection?: boolean, skillId?: string }) => {
+  safeHandle("gemini-chat-stream", async (event, message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean, skipModeInjection?: boolean }) => {
     try {
       console.log("[IPC] gemini-chat-stream started using LLMHelper.streamChat");
       const llmHelper = appState.processingHelper.getLLMHelper();
@@ -535,22 +531,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       // framing in HARD_SYSTEM_PROMPT/ASSIST_MODE_PROMPT that was causing coding
       // questions to be answered with "At Aetherbot AI, I was responsible for..."
       // (resume hijack via CONTEXT_INTELLIGENCE_LAYER's "you ARE the user").
-      let systemPromptOverride: string | undefined = options?.skipSystemPrompt ? "" : CHAT_MODE_PROMPT;
-      let ignoreKnowledgeMode = !!options?.ignoreKnowledgeMode;
-
-      // When a skill is invoked, the skill's instructions REPLACE the chat-mode
-      // framing and we skip RAG knowledge-mode retrieval — the skill is the
-      // entire intent, mixing in the regular context just dilutes it.
-      if (options?.skillId) {
-        const skill = SkillsManager.getInstance().getSkill(options.skillId);
-        if (!skill) {
-          event.sender.send("gemini-stream-error", `Skill not found: ${options.skillId}`);
-          event.sender.send("gemini-stream-done");
-          return null;
-        }
-        systemPromptOverride = `${HARD_SYSTEM_PROMPT}\n\n## ACTIVE SKILL\n${SkillsManager.getInstance().buildPromptBlock(skill)}`;
-        ignoreKnowledgeMode = true;
-      }
+      const systemPromptOverride: string | undefined = options?.skipSystemPrompt ? "" : CHAT_MODE_PROMPT;
+      const ignoreKnowledgeMode = !!options?.ignoreKnowledgeMode;
 
       try {
         // USE streamChat which handles routing
@@ -3661,33 +3643,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle("profile:get-persona", async () => {
-    try {
-      if (!isProOrTrialActive()) return { success: false, content: '', error: 'pro_required' };
-      const content = DatabaseManager.getInstance().getPersona();
-      const llmHelper = appState.processingHelper?.getLLMHelper?.();
-      if (llmHelper?.setPersonaPrompt) llmHelper.setPersonaPrompt(content);
-      return { success: true, content };
-    } catch (error: any) {
-      return { success: false, content: '', error: error.message };
-    }
-  });
-
-  safeHandle("profile:save-persona", async (_, content: string) => {
-    try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
-      if (typeof content !== 'string') return { success: false, error: 'invalid_persona' };
-      const trimmed = content.trim().slice(0, 4000);
-      DatabaseManager.getInstance().savePersona(trimmed);
-
-      const llmHelper = appState.processingHelper?.getLLMHelper?.();
-      if (llmHelper?.setPersonaPrompt) llmHelper.setPersonaPrompt(trimmed);
-
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
-  });
 
   // ==========================================
   // Tavily Search API Credentials
@@ -4159,26 +4114,5 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { error: e?.message || 'failed to rotate token' };
     }
   });
-
-  // ── Skills ────────────────────────────────────────────────────────────
-  // Local SKILL.md instructions discovered from userData/skills + bundled
-  // built-ins. SkillsManager handles disk IO; these handlers are thin.
-
-  safeHandle("skills:list", async () => {
-    return SkillsManager.getInstance().listSkills();
-  });
-
-  safeHandle("skills:get", async (_, id: string) => {
-    if (typeof id !== 'string' || id.trim().length === 0) return null;
-    return SkillsManager.getInstance().getSkill(id);
-  });
-
-  // listSkills() re-reads from disk each call, so refresh is just a re-list.
-  safeHandle("skills:refresh", async () => {
-    return SkillsManager.getInstance().listSkills();
-  });
-
-  safeHandle("skills:open-folder", async () => {
-    return SkillsManager.getInstance().openSkillsFolder();
-  });
 }
+
