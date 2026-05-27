@@ -211,7 +211,9 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                   <p style={{ fontSize: '13px', lineHeight: 1.64, color: T.t3, margin: 0, maxWidth: '340px' }}>
                     {platform === 'darwin'
                       ? 'Natively needs access to your screen and microphone to capture meetings and transcribe speech.'
-                      : 'Click "Allow" if Windows asks for microphone or screen access when you start a meeting.'}
+                      : platform === 'linux'
+                        ? 'Natively needs microphone access and a running PulseAudio/PipeWire audio stack for meeting capture on Linux X11.'
+                        : 'Click "Allow" if Windows asks for microphone or screen access when you start a meeting.'}
                   </p>
                 </motion.div>
 
@@ -271,7 +273,9 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                     <p style={{ fontSize: '11px', color: T.t4, textAlign: 'center', marginTop: '10px', fontFamily: T.font }}>
                       {platform === 'darwin'
                         ? 'You can grant permissions later in System Preferences.'
-                        : 'Windows will prompt you the first time Natively needs the microphone.'}
+                        : platform === 'linux'
+                          ? 'Install scrot or gnome-screenshot for screenshots; allow mic when prompted.'
+                          : 'Windows will prompt you the first time Natively needs the microphone.'}
                     </p>
                   )}
                 </motion.div>

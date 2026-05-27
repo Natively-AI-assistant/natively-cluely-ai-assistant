@@ -1,0 +1,44 @@
+name: Linux Build Smoke
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  linux-build-smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libasound2-dev libpulse-dev pkg-config
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Cargo check (Linux gnu target)
+        run: cargo check --manifest-path native-module/Cargo.toml --target x86_64-unknown-linux-gnu
+
+      - name: Build renderer
+        run: npm run build
+
+      - name: Build Electron main process
+        run: npm run build:electron
+
+      - name: Run unit tests
+        run: npm test

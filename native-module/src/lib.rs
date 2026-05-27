@@ -26,6 +26,7 @@ pub mod keyboard_tap;
 
 use crate::audio_config::{CHUNK_BATCH_COUNT, CHUNK_BATCH_TIMEOUT_MS, DSP_POLL_MS};
 use crate::silence_suppression::{FrameAction, SilenceSuppressionConfig, SilenceSuppressor};
+use crate::speaker::{anyhow_to_napi, SystemAudioErrorCode};
 use std::time::Instant;
 
 // ============================================================================
@@ -151,7 +152,9 @@ impl SystemAudioCapture {
     ) -> napi::Result<()> {
         // Guard against double-start — prevents spawning concurrent threads
         if self.capture_thread.is_some() {
-            return Err(napi::Error::from_reason("Capture already running"));
+            return Err(napi::Error::from_reason(
+                SystemAudioErrorCode::CaptureAlreadyRunning.as_str(),
+            ));
         }
 
         let tsfn = callback;
@@ -173,14 +176,12 @@ impl SystemAudioCapture {
                     match speaker::SpeakerInput::new(None) {
                         Ok(i) => i,
                         Err(e2) => {
-                            let msg = format!(
+                            eprintln!(
                                 "[SystemAudioCapture] FATAL: All init attempts failed: {}",
                                 e2
                             );
-                            eprintln!("{}", msg);
-                            // Notify JS so it can emit 'error' and reset isRecording
                             tsfn.call(
-                                Err(napi::Error::from_reason(msg)),
+                                Err(anyhow_to_napi(e2)),
                                 ThreadsafeFunctionCallMode::NonBlocking,
                             );
                             return;
@@ -192,13 +193,9 @@ impl SystemAudioCapture {
             let mut stream = match input.stream() {
                 Ok(s) => s,
                 Err(e) => {
-                    let msg = format!(
-                        "[SystemAudioCapture] FATAL: stream() failed: {}",
-                        e
-                    );
-                    eprintln!("{}", msg);
+                    eprintln!("[SystemAudioCapture] FATAL: stream() failed: {}", e);
                     tsfn.call(
-                        Err(napi::Error::from_reason(msg)),
+                        Err(anyhow_to_napi(e)),
                         ThreadsafeFunctionCallMode::NonBlocking,
                     );
                     return;
@@ -207,10 +204,11 @@ impl SystemAudioCapture {
             let mut consumer = match stream.take_consumer() {
                 Some(c) => c,
                 None => {
-                    let msg = "[SystemAudioCapture] FATAL: Failed to get consumer".to_string();
-                    eprintln!("{}", msg);
+                    eprintln!("[SystemAudioCapture] FATAL: Failed to get consumer");
                     tsfn.call(
-                        Err(napi::Error::from_reason(msg)),
+                        Err(napi::Error::from_reason(
+                            SystemAudioErrorCode::ConsumerMissing.as_str(),
+                        )),
                         ThreadsafeFunctionCallMode::NonBlocking,
                     );
                     return;

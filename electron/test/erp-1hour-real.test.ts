@@ -271,7 +271,7 @@ async function main() {
     claudeApiKey || undefined
   );
 
-  const hasProvider = llmHelper.getPromptTier() !== 'error';
+  const hasProvider = !!(groqApiKey || geminiApiKey || openaiApiKey || claudeApiKey);
   console.log(`✅ LLM provider ready: ${hasProvider}`);
   console.log(`   Prompt tier: ${llmHelper.getPromptTier()}`);
   console.log(`   Model: ${llmHelper.getCurrentModel()}`);

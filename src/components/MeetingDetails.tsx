@@ -84,7 +84,7 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const isLight = useResolvedTheme() === 'light';
     // We need local state for the meeting object to reflect optimistic updates
     const [meeting, setMeeting] = useState<Meeting>(initialMeeting);
-    const [activeTab, setActiveTab] = useState<'summary' | 'transcript' | 'usage'>('summary');
+    const [activeTab, setActiveTab] = useState<'summary' | 'debrief' | 'transcript' | 'usage'>('summary');
     const [query, setQuery] = useState('');
     const [isCopied, setIsCopied] = useState(false);
     const [isChatOpen, setIsChatOpen] = useState(false);
@@ -236,7 +236,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                     {/* Designing Tabs to match reference 1:1 (Dark Pill Container) */}
                     <div className="flex items-center justify-between mb-8">
                         <div className={`p-1 rounded-xl inline-flex items-center gap-0.5 ${isLight ? 'bg-[#E5E5EA] border border-black/[0.04]' : 'bg-[#121214] border border-white/[0.08]'}`}>
-                            {['summary', 'transcript', 'usage'].map((tab) => (
+                            {(['summary', ...(meeting.detailedSummary?.debrief ? (['debrief'] as const) : []), 'transcript', 'usage'] as const).map((tab) => (
                                 <button
                                     key={tab}
                                     onClick={() => setActiveTab(tab as any)}
@@ -478,6 +478,16 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                         ))}
                                     </div>
                                 )}
+                            </motion.div>
+                        )}
+
+                        {activeTab === 'debrief' && meeting.detailedSummary?.debrief && (
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                                <div className="prose prose-sm max-w-none">
+                                    <p className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">
+                                        {meeting.detailedSummary.debrief}
+                                    </p>
+                                </div>
                             </motion.div>
                         )}
 

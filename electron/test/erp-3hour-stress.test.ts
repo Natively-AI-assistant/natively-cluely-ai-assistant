@@ -531,7 +531,7 @@ async function testTokenBudget3Hour(): Promise<TestResult> {
       estimatedTokens,
       modeBlockBudget,
       effectiveBudget,
-      transcriptFits,
+      transcriptFits: transcriptFits ? 1 : 0,
     }
   };
 }
@@ -733,7 +733,12 @@ async function testGenerateSuggestionNoMode(): Promise<TestResult> {
     passed,
     durationMs: Date.now() - start,
     details,
-    stats: { activeMode: !!activeMode, modeSuffixLen: modePromptSuffix.length, modeContextLen: modeContextBlock.length, dbInitialized }
+    stats: {
+      activeMode: activeMode ? 1 : 0,
+      modeSuffixLen: modePromptSuffix.length,
+      modeContextLen: modeContextBlock.length,
+      dbInitialized: dbInitialized ? 1 : 0,
+    }
   };
 }
 
@@ -858,7 +863,11 @@ async function testSpecialCharsInModePrompt(): Promise<TestResult> {
     passed,
     durationMs: Date.now() - start,
     details: `Special chars present: ${hasSpecialChars}. Prompt tokens: ${estimatedTokens}. Within budget: ${fitsInBudget}`,
-    stats: { specialChars: hasSpecialChars, tokens: estimatedTokens, fitsInBudget }
+    stats: {
+      specialChars: hasSpecialChars ? 1 : 0,
+      tokens: estimatedTokens,
+      fitsInBudget: fitsInBudget ? 1 : 0,
+    }
   };
 }
 
@@ -974,18 +983,18 @@ async function runAllTests(): Promise<void> {
   console.log();
 
   const testCases: TestCase[] = [
-    { id: 'TC-01', name: 'ModeContextBlock 60K truncation', run: testModeContextBlockTruncation },
-    { id: 'TC-02', name: 'Token budget for 3-hour transcript', run: testTokenBudget3Hour },
-    { id: 'TC-03', name: 'All 8 ERP focus areas covered', run: testAllFocusAreasCovered },
-    { id: 'TC-04', name: 'Finance question detection', run: testFinanceQuestionDetection },
-    { id: 'TC-05', name: 'Polish dual-output in answers', run: testPolishDualOutput },
-    { id: 'TC-06', name: 'B1 English compliance', run: testB1EnglishCompliance },
-    { id: 'TC-07', name: 'Flag system usage', run: testFlagSystemUsage },
-    { id: 'TC-08', name: '2-3 follow-up questions rule', run: testFollowUpQuestionsRule },
-    { id: 'TC-09', name: 'generateSuggestion fallback (no active mode)', run: testGenerateSuggestionNoMode },
-    { id: 'TC-10', name: 'WhatToAnswerLLM streaming pipeline wired', run: testWhatToAnswerLLMStreaming },
-    { id: 'TC-11', name: '540+ Q&A simulation (full stress test)', run: test540QASimulation },
-    { id: 'TC-12', name: 'Special chars in mode prompt', run: testSpecialCharsInModePrompt },
+    { id: 'TC-01', name: 'ModeContextBlock 60K truncation', description: 'ModeContextBlock 60K truncation', run: testModeContextBlockTruncation },
+    { id: 'TC-02', name: 'Token budget for 3-hour transcript', description: 'Token budget for 3-hour transcript', run: testTokenBudget3Hour },
+    { id: 'TC-03', name: 'All 8 ERP focus areas covered', description: 'All 8 ERP focus areas covered', run: testAllFocusAreasCovered },
+    { id: 'TC-04', name: 'Finance question detection', description: 'Finance question detection', run: testFinanceQuestionDetection },
+    { id: 'TC-05', name: 'Polish dual-output in answers', description: 'Polish dual-output in answers', run: testPolishDualOutput },
+    { id: 'TC-06', name: 'B1 English compliance', description: 'B1 English compliance', run: testB1EnglishCompliance },
+    { id: 'TC-07', name: 'Flag system usage', description: 'Flag system usage', run: testFlagSystemUsage },
+    { id: 'TC-08', name: '2-3 follow-up questions rule', description: '2-3 follow-up questions rule', run: testFollowUpQuestionsRule },
+    { id: 'TC-09', name: 'generateSuggestion fallback (no active mode)', description: 'generateSuggestion fallback (no active mode)', run: testGenerateSuggestionNoMode },
+    { id: 'TC-10', name: 'WhatToAnswerLLM streaming pipeline wired', description: 'WhatToAnswerLLM streaming pipeline wired', run: testWhatToAnswerLLMStreaming },
+    { id: 'TC-11', name: '540+ Q&A simulation (full stress test)', description: '540+ Q&A simulation (full stress test)', run: test540QASimulation },
+    { id: 'TC-12', name: 'Special chars in mode prompt', description: 'Special chars in mode prompt', run: testSpecialCharsInModePrompt },
   ];
 
   const results: TestResult[] = [];

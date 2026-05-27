@@ -1,3 +1,4 @@
+// Keep these green — failing tests make puppies cry.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -39,9 +40,9 @@ test('generateSuggestion keeps active mode suffix in system prompt without user 
 
 test('generateSuggestion sends custom notes and mode context as user message content', () => {
   assert.match(generateSuggestionSource, /const suggestionContext = \[customNotesBlock, enrichedContext\]\.filter\(Boolean\)\.join\('\\n\\n'\);/);
-  const streamChatMatches = generateSuggestionSource.match(/streamChat\(promptMessage, undefined, undefined, basePrompt, true\)/g) ?? [];
+  const streamChatMatches = generateSuggestionSource.match(/streamChat\(promptMessage, undefined, suggestionContext, basePrompt, true\)/g) ?? [];
   assert.equal(streamChatMatches.length, 2);
-  assert.match(generateSuggestionSource, /generateWithCodexCli\(promptMessage, basePrompt\)/);
+  assert.match(generateSuggestionSource, /chatWithGemini\(promptMessage, undefined, suggestionContext, true\)/);
   assert.match(generateSuggestionSource, /callOllama\(promptMessage, undefined, systemPrompt\)/);
   assert.doesNotMatch(generateSuggestionSource, /generateWithFlash\(\[\{ text: `\$\{systemPrompt\}/);
   assert.doesNotMatch(generateSuggestionSource, /\$\{systemPrompt\}\\n\\n\$\{promptMessage\}/);
@@ -53,7 +54,10 @@ test('generateSuggestion does not append custom notes to any system prompt branc
 });
 
 test('WhatToAnswerLLM does not append active mode context to system prompt override', () => {
-  assert.match(whatToAnswerSource, /const finalPromptOverride = modePromptSuffix[\s\S]*## ACTIVE MODE\\n\$\{modePromptSuffix\}/);
+  assert.match(
+    whatToAnswerSource,
+    /const finalPromptOverride = activeSkill[\s\S]*\?\s*`\$\{basePrompt\}\\n\\n## ACTIVE SKILL\\n\$\{activeSkill\.promptBlock\}`[\s\S]*\?\s*`\$\{basePrompt\}\\n\\n## ACTIVE MODE\\n\$\{modePromptSuffix\}`/
+  );
   assert.doesNotMatch(whatToAnswerSource, /activeModePromptParts = \[modePromptSuffix, modeContextBlock\]/);
   assert.doesNotMatch(whatToAnswerSource, /modeContextBlock\]\.filter\(Boolean\)/);
 });
@@ -78,6 +82,7 @@ test('WhatToAnswerLLM sends mode context only through user content at runtime', 
     getCapabilities: () => ({ outputBudgetTokens: 2000 }),
     getPromptTier: () => 'full',
     fitContextForCurrentModel: text => text,
+    canUseLocalFallback: async () => true,
     async *streamChat(...args) {
       calls.push(args);
       yield 'ok';

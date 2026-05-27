@@ -1,5 +1,5 @@
 // Static regression test for the formatPermissionMessage helper in
-// electron/main.ts. Two invariants are enforced:
+// electron/platform/permissionMessages.ts. Two invariants are enforced:
 //
 //   1. Every PermissionReason whose name begins with `mac-` (the convention
 //      for variants whose copy is macOS-specific) MUST be invoked only from
@@ -30,13 +30,14 @@ function read(rel) {
   return fs.readFileSync(path.join(root, rel), 'utf8');
 }
 
+const permissionMessages = read('electron/platform/permissionMessages.ts');
 const main = read('electron/main.ts');
 
 function extractMacVariants() {
-  // The PermissionReason union sits between `type PermissionReason =` and the
+  // The PermissionReason union sits between `export type PermissionReason =` and the
   // closing semicolon. Pull every `'mac-...'` literal from inside it.
-  const unionMatch = main.match(/type PermissionReason =[\s\S]*?;/);
-  assert.ok(unionMatch, 'PermissionReason union should be declared in main.ts');
+  const unionMatch = permissionMessages.match(/export type PermissionReason =[\s\S]*?;/);
+  assert.ok(unionMatch, 'PermissionReason union should be declared in permissionMessages.ts');
   return Array.from(unionMatch[0].matchAll(/'(mac-[a-z0-9-]+)'/g)).map(
     (m) => m[1]
   );
@@ -52,7 +53,7 @@ test('every `mac-` PermissionReason has a defensive isMac fallback inside the he
       `case '${variant}':([\\s\\S]*?)(?=case '|\\n {4}}\\n)`,
       'm'
     );
-    const body = main.match(caseRegex);
+    const body = permissionMessages.match(caseRegex);
     assert.ok(body, `case '${variant}': should be defined`);
     assert.match(
       body[1],

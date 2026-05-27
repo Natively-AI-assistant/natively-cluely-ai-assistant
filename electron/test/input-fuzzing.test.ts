@@ -219,7 +219,14 @@ async function main() {
   console.log('─'.repeat(60));
   for (const input of FUZZ_CASES.find(c => c.handler.includes('test-inject-transcript'))!.inputs) {
     const result = testSegmentInput(input.label, input.value);
-    allResults.push({ handler: 'test-inject-transcript', label: input.label, ...result });
+    const sql =
+      typeof input.value === 'string' && wouldCauseSQLInjection(input.value);
+    allResults.push({
+      handler: 'test-inject-transcript',
+      label: input.label,
+      ...result,
+      sqlInjection: sql,
+    });
     console.log(`  ${result.pass ? '✅' : '❌'} ${input.label}${result.error ? ` (${result.error})` : ''}`);
   }
 

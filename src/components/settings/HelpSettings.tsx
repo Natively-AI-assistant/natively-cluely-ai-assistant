@@ -9,7 +9,7 @@ import {
 import { SiOpenai, SiGoogle } from 'react-icons/si';
 import { useShortcuts } from '../../hooks/useShortcuts';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
-import { isMac, getModifierSymbol } from '../../utils/platformUtils';
+import { isMac, getModifierSymbol, isLinux } from '../../utils/platformUtils';
 import nativelyIcon from '../icon.png';
 
 // ----------------------
@@ -813,7 +813,9 @@ const SetupGuide = () => {
             title: 'Grant Permissions',
             desc: isMac
                 ? 'Enable Screen Recording and Accessibility for Natively in macOS Privacy & Security.'
-                : 'Approve the microphone prompt the first time you start a meeting (Settings → Privacy → Microphone).',
+                : isLinux
+                  ? 'Allow microphone access when prompted. Ensure PulseAudio or PipeWire (pipewire-pulse) is running for system audio.'
+                  : 'Approve the microphone prompt the first time you start a meeting (Settings → Privacy → Microphone).',
         },
         {
             title: 'Set Up Audio',
@@ -1013,8 +1015,16 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
                                         <Mic className="w-4 h-4 text-blue-500" /> Microphone
                                     </h4>
-                                    <p className="text-xs opacity-90 mb-2">Required to capture what you say during meetings. Windows prompts the first time you start a meeting.</p>
-                                    <p className="text-[11px] text-text-tertiary">Settings &gt; Privacy &gt; Microphone</p>
+                                    <p className="text-xs opacity-90 mb-2">
+                                        {isLinux
+                                            ? 'Required to capture what you say during meetings. Allow access when prompted by your desktop environment.'
+                                            : 'Required to capture what you say during meetings. Windows prompts the first time you start a meeting.'}
+                                    </p>
+                                    <p className="text-[11px] text-text-tertiary">
+                                        {isLinux
+                                            ? 'PulseAudio or PipeWire (pipewire-pulse) required for system audio loopback on Linux X11.'
+                                            : 'Settings > Privacy > Microphone'}
+                                    </p>
                                 </div>
                             </div>
                         )}

@@ -7,6 +7,7 @@ import { Worker } from 'worker_threads';
 import path from 'path';
 import { Chunk } from './SemanticChunker';
 import { DatabaseManager } from '../db/DatabaseManager';
+import { resolveVectorSearchWorkerPath } from './workerPathResolver';
 
 export interface StoredChunk extends Chunk {
     id: number;
@@ -49,8 +50,7 @@ export class VectorStore {
      */
     private getWorker(): Worker {
         if (!this.worker) {
-            // Resolve the compiled worker script path (dist-electron output)
-            const workerPath = path.join(__dirname, 'vectorSearchWorker.js');
+            const workerPath = resolveVectorSearchWorkerPath();
             this.worker = new Worker(workerPath);
 
             this.worker.on('message', (msg: { type: string; requestId: number; data?: any; error?: string }) => {

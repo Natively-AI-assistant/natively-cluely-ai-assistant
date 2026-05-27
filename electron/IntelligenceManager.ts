@@ -13,6 +13,10 @@ import { SessionTracker } from './SessionTracker';
 import { IntelligenceEngine } from './IntelligenceEngine';
 import { MeetingPersistence } from './MeetingPersistence';
 import { ScreenContext } from './services/screen/ScreenContextService';
+import {
+    buildInterviewContext,
+    formatInterviewContextForChat,
+} from './services/context/InterviewContextBuilder';
 
 // Re-export types for backward compatibility
 export type { TranscriptSegment, SuggestionTrigger, ContextItem } from './SessionTracker';
@@ -53,6 +57,7 @@ export class IntelligenceManager extends EventEmitter {
             'assist_update', 'suggested_answer', 'suggested_answer_token',
             'refined_answer', 'refined_answer_token',
             'recap', 'recap_token', 'clarify', 'clarify_token',
+            'restate', 'restate_token', 'lookup', 'lookup_token',
             'follow_up_questions_update', 'follow_up_questions_token',
             'manual_answer_started', 'manual_answer_result',
             'mode_changed', 'error',
@@ -60,6 +65,8 @@ export class IntelligenceManager extends EventEmitter {
             'negotiation_coaching',
             // Phase 3: Cluely-style dynamic action card emissions.
             'dynamic_action_emitted',
+            // Live Requirements List — technical-interview overlay updates.
+            'requirements_updated',
         ];
 
         for (const event of events) {
@@ -118,6 +125,11 @@ export class IntelligenceManager extends EventEmitter {
         return this.session.getFormattedContext(lastSeconds);
     }
 
+    /** Unified interview context for manual chat and intelligence paths. */
+    getInterviewContextForChat(): string {
+        return formatInterviewContextForChat(buildInterviewContext(this.session));
+    }
+
     getLastInterviewerTurn(): string | null {
         return this.session.getLastInterviewerTurn();
     }
@@ -160,6 +172,34 @@ export class IntelligenceManager extends EventEmitter {
 
     async runClarify(): Promise<string | null> {
         return this.engine.runClarify();
+    }
+
+    async runRestate(): Promise<string | null> {
+        return this.engine.runRestate();
+    }
+
+    async runLookup(focusTerm?: string, retrievedContext?: string): Promise<string | null> {
+        return this.engine.runLookup(focusTerm, retrievedContext);
+    }
+
+    async runLateJoinBackfill(): Promise<string | null> {
+        return this.engine.runLateJoinBackfill();
+    }
+
+    getInterviewPhase() {
+        return this.session.getInterviewPhase();
+    }
+
+    getActiveProblem() {
+        return this.session.getActiveProblem();
+    }
+
+    getArchivedProblems() {
+        return this.session.getArchivedProblems();
+    }
+
+    getMissedOpportunities() {
+        return this.session.getMissedOpportunities();
     }
 
     async runFollowUpQuestions(): Promise<string | null> {
@@ -243,6 +283,7 @@ export class IntelligenceManager extends EventEmitter {
 
     clearDynamicActionContext(): void {
         this.engine.clearDynamicActionContext();
+        this.engine.setRequirementsContext(false);
     }
 
     acceptDynamicAction(actionId: string): import('./services/dynamic-actions/DynamicAction').DynamicAction | null {
@@ -255,6 +296,26 @@ export class IntelligenceManager extends EventEmitter {
 
     getActiveDynamicActions(): import('./services/dynamic-actions/DynamicAction').DynamicAction[] {
         return this.engine.getActiveDynamicActions();
+    }
+
+    // ============================================
+    // Live Requirements List facade
+    // ============================================
+
+    setRequirementsContext(enabled: boolean): void {
+        this.engine.setRequirementsContext(enabled);
+    }
+
+    acceptRequirement(id: string): import('./services/requirements/LiveRequirement').LiveRequirement | null {
+        return this.engine.acceptRequirement(id);
+    }
+
+    dismissRequirement(id: string): import('./services/requirements/LiveRequirement').LiveRequirement | null {
+        return this.engine.dismissRequirement(id);
+    }
+
+    getVisibleRequirements(): import('./services/requirements/LiveRequirement').LiveRequirement[] {
+        return this.engine.getVisibleRequirements();
     }
 
     // ============================================

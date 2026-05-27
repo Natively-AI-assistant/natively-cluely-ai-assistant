@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPreferences, screen, desktopCapturer } from "electron"
+import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPreferences, screen, desktopCapturer, dialog } from "electron"
 import path from "path"
 import fs from "fs"
 import { autoUpdater } from "electron-updater"
@@ -143,51 +143,6 @@ function getMacScreenCaptureStatus(): 'granted' | 'denied' | 'not-determined' | 
  * Settings → Privacy → Microphone. Reusing macOS copy on Windows is the
  * cross-contamination class behind issue #252.
  */
-// Variants prefixed `mac-` are macOS-only and reference TCC / CoreAudio /
-// ScreenCaptureKit concepts that don't exist on Windows. Call sites for those
-// must themselves be gated behind `process.platform === 'darwin'` — the
-// prefix makes that constraint visible during code review. Cross-platform
-// variants have no prefix and branch internally on isMac.
-type PermissionReason =
-  | 'screen-recording-denied'
-  | 'mac-screen-recording-revoked-rebuild'
-  | 'mic-denied'
-  | 'mic-zero-fill'
-  | 'mac-same-device-input-output'
-  | 'system-audio-stuck';
-function formatPermissionMessage(reason: PermissionReason, extra?: { device?: string }): string {
-  const isMac = process.platform === 'darwin';
-  switch (reason) {
-    case 'screen-recording-denied':
-      return isMac
-        ? 'Screen Recording permission denied. Interviewer audio will not be captured. Enable in System Settings → Privacy & Security → Screen Recording, then restart the app.'
-        : 'System audio capture is unavailable. Interviewer audio will not be captured. Check your audio device routing in Settings and restart the meeting.';
-    case 'mac-screen-recording-revoked-rebuild':
-      // Defense-in-depth: even though all call sites must be darwin-gated
-      // (the `mac-` prefix marks this constraint), if a future contributor
-      // calls this from a cross-platform path we degrade gracefully rather
-      // than leak macOS UI strings to Windows users.
-      if (!isMac) return formatPermissionMessage('system-audio-stuck');
-      return 'System audio is being captured but every sample is silent. This usually means macOS Screen Recording permission needs to be re-granted to this build of Natively. Open System Settings → Privacy & Security → Screen Recording, toggle Natively off and back on, then restart the app. (If you recently rebuilt or updated, the previous grant may not apply.)';
-    case 'mic-denied':
-      return isMac
-        ? 'Microphone access denied. Please allow microphone access in System Settings → Privacy & Security → Microphone, then restart Natively.'
-        : 'Microphone access denied. Please allow microphone access in Settings → Privacy → Microphone, then restart Natively.';
-    case 'mic-zero-fill':
-      return isMac
-        ? 'Microphone is producing silent audio. Check that the device is unmuted and that macOS Microphone permission is granted to Natively in System Settings → Privacy & Security → Microphone.'
-        : 'Microphone is producing silent audio. Check that the device is unmuted and that Natively has microphone access in Settings → Privacy → Microphone.';
-    case 'mac-same-device-input-output':
-      // Defense-in-depth: see comment on `mac-screen-recording-revoked-rebuild`.
-      // The CoreAudio Process Tap same-device limitation is macOS-specific;
-      // on Windows WASAPI loopback works fine on the same device as the mic.
-      if (!isMac) return formatPermissionMessage('system-audio-stuck');
-      return `Silent capture detected — input and output are the same device (${extra?.device ?? 'unknown'}). macOS cannot tap a device while it is also the active microphone. Switch input to built-in mic or output to built-in speakers.`;
-    case 'system-audio-stuck':
-      return 'No audio detected on system output for 8s. If your meeting app is using a different output device (Bluetooth headset, virtual cable, second monitor), switch it to your default output, or restart the meeting after switching.';
-  }
-}
-
 console.log = (...args: any[]) => {
   logToFile('[LOG] ' + redactArgsForLog(args));
   try {
@@ -211,8 +166,15 @@ console.error = (...args: any[]) => {
 
 import { initializeIpcHandlers } from "./ipcHandlers"
 import { WindowHelper } from "./WindowHelper"
+import { formatPermissionMessage, surfaceLinuxSystemAudioError } from './platform/permissionMessages';
+import { isNonRecoverableLinuxSystemAudioError } from './platform/linuxSystemAudioErrors';
+export type { PermissionReason } from './platform/permissionMessages';
+import { detectDisplaySession } from './platform/linuxSessionGate';
+import { shouldBlockLinuxSystemAudioAtMeetingStart } from './platform/linuxMeetingGate';
+import { setCompositorWarningCallback } from './platform/x11Compositor';
 import { SettingsWindowHelper } from "./SettingsWindowHelper"
 import { ModelSelectorWindowHelper } from "./ModelSelectorWindowHelper"
+import { StickyNoteWindowHelper } from "./StickyNoteWindowHelper"
 import { CropperWindowHelper } from "./CropperWindowHelper"
 import { ScreenshotHelper } from "./ScreenshotHelper"
 import { KeybindManager } from "./services/KeybindManager"
@@ -288,6 +250,7 @@ export class AppState {
   private windowHelper: WindowHelper
   public settingsWindowHelper: SettingsWindowHelper
   public modelSelectorWindowHelper: ModelSelectorWindowHelper
+  public stickyNoteWindowHelper: StickyNoteWindowHelper
   public cropperWindowHelper: CropperWindowHelper
   private screenshotHelper: ScreenshotHelper
   public processingHelper: ProcessingHelper
@@ -374,6 +337,7 @@ export class AppState {
     this.windowHelper = new WindowHelper(this)
     this.settingsWindowHelper = new SettingsWindowHelper()
     this.modelSelectorWindowHelper = new ModelSelectorWindowHelper()
+    this.stickyNoteWindowHelper = new StickyNoteWindowHelper()
     this.cropperWindowHelper = new CropperWindowHelper()
 
     // 3. Initialize other helpers
@@ -383,6 +347,7 @@ export class AppState {
     this.windowHelper.setContentProtection(this.isUndetectable);
     this.settingsWindowHelper.setContentProtection(this.isUndetectable);
     this.modelSelectorWindowHelper.setContentProtection(this.isUndetectable);
+    this.stickyNoteWindowHelper.setContentProtection(this.isUndetectable);
     this.cropperWindowHelper.setContentProtection(this.isUndetectable);
 
     if (process.platform === 'win32' || process.platform === 'darwin') {
@@ -552,6 +517,7 @@ export class AppState {
         } else if (
           actionId === 'chat:whatToAnswer' ||
           actionId === 'chat:clarify' ||
+          actionId === 'chat:askClarify' ||
           actionId === 'chat:followUp' ||
           actionId === 'chat:answer' ||
           actionId === 'chat:codeHint' ||
@@ -565,6 +531,7 @@ export class AppState {
           const actionMap: Record<string, string> = {
             'chat:whatToAnswer': 'whatToAnswer',
             'chat:clarify': 'clarify',
+            'chat:askClarify': 'askClarify',
             'chat:followUp': 'followUp',
             'chat:answer': 'answer',
             'chat:codeHint': 'codeHint',
@@ -620,6 +587,7 @@ export class AppState {
     // Inject WindowHelper into other helpers
     this.settingsWindowHelper.setWindowHelper(this.windowHelper);
     this.modelSelectorWindowHelper.setWindowHelper(this.windowHelper);
+    this.stickyNoteWindowHelper.setWindowHelper(this.windowHelper);
 
 
 
@@ -694,12 +662,39 @@ export class AppState {
     return this.isMeetingActive;
   }
 
+  public setLinuxCaptureDisabled(disabled: boolean): void {
+    this._linuxCaptureDisabled = disabled;
+  }
+
+  public isLinuxCaptureDisabled(): boolean {
+    return this._linuxCaptureDisabled;
+  }
+
   public isQuitting(): boolean {
     return this._isQuitting;
   }
 
   public setQuitting(value: boolean): void {
     this._isQuitting = value;
+  }
+
+  /** Synchronous Pulse/CoreAudio release on app exit (before V8 teardown). */
+  public releaseAudioCapturesForQuit(): void {
+    try {
+      this.systemAudioCapture?.destroy();
+    } catch (e) {
+      console.error('[Main] systemAudioCapture destroy on quit failed:', e);
+    }
+    this.systemAudioCapture = null;
+
+    try {
+      this.microphoneCapture?.destroy();
+    } catch (e) {
+      console.error('[Main] microphoneCapture destroy on quit failed:', e);
+    }
+    this.microphoneCapture = null;
+
+    this.stopDefaultOutputWatcher();
   }
 
   private broadcastMeetingState(): void {
@@ -1028,6 +1023,8 @@ export class AppState {
   // New Property for System Audio & Microphone
   private systemAudioCapture: SystemAudioCapture | null = null;
   private microphoneCapture: MicrophoneCapture | null = null;
+  /** Set when Linux session gate blocks capture (unsupported Wayland / no DISPLAY). */
+  private _linuxCaptureDisabled = false;
   private audioTestCapture: MicrophoneCapture | null = null; // For audio settings test
   private _audioTestStarting = false;               // P2-12: in-flight guard against concurrent calls
   private googleSTT: STTProvider | null = null; // Interviewer
@@ -1427,6 +1424,9 @@ export class AppState {
     capture.on('stop', () => {
       if (stuckTimer) { clearTimeout(stuckTimer); stuckTimer = null; }
     });
+    capture.on('error', () => {
+      if (stuckTimer) { clearTimeout(stuckTimer); stuckTimer = null; }
+    });
     // Inter-chunk gap tracking. Normal cadence is one 20ms chunk every 20ms
     // (so ~50/sec). A gap >2s while the meeting is active and the capture is
     // still wired indicates a transient route change (AirPods plug/unplug,
@@ -1525,7 +1525,7 @@ export class AppState {
         console.warn(`${prefix}MicrophoneCapture produced 0 chunks in 8s — likely silent capture (device contention, hot-unplug, or muted input).`);
         this.broadcast('audio-capture-failed', {
           channel: 'mic',
-          message: 'No audio detected from your microphone for 8s. Check that your input device is unmuted and not in use by another app.',
+          message: formatPermissionMessage('mic-zero-fill'),
           attempt: 0,
           maxAttempts: 3,
           terminal: false,
@@ -1535,6 +1535,9 @@ export class AppState {
     };
     capture.on('start', armStuckWatchdog);
     capture.on('stop', () => {
+      if (stuckTimer) { clearTimeout(stuckTimer); stuckTimer = null; }
+    });
+    capture.on('error', () => {
       if (stuckTimer) { clearTimeout(stuckTimer); stuckTimer = null; }
     });
     // Inter-chunk gap tracking — see wireSystemCapture for rationale.
@@ -1619,14 +1622,25 @@ export class AppState {
       // 1. Initialize Captures if missing
       // If they already exist (e.g. from reconfigureAudio), they are already wired to write to this.googleSTT/User
       if (!this.systemAudioCapture) {
-        // Hard fast-fail when Screen Recording is explicitly denied. Without this
-        // guard, SystemAudioCapture spawns a Rust BG thread that tries CoreAudio
-        // Tap (fails immediately), then ScreenCaptureKit (10s timeout waiting on
-        // a permission callback that never fires), emits 'error', triggers the
-        // recovery handler 3x — total ~30s of dead air with no UI signal. By
-        // checking the TCC status up front we keep the meeting in mic-only mode
-        // and broadcast a clear banner so the user knows.
-        if (process.platform === 'darwin' && getMacScreenCaptureStatus() === 'denied') {
+        const linuxSession =
+          process.platform === 'linux' ? detectDisplaySession() : null;
+        const blockLinuxSystemAudio =
+          linuxSession !== null &&
+          shouldBlockLinuxSystemAudioAtMeetingStart(this._linuxCaptureDisabled, linuxSession);
+        if (blockLinuxSystemAudio) {
+          console.warn('[Main] Skipping SystemAudioCapture init — unsupported Linux session (capture disabled). Meeting will run mic-only.');
+          this.broadcast(
+            'system-audio-permission-denied',
+            formatPermissionMessage('linux-session-unsupported'),
+          );
+          this.broadcastDeviceSelection({
+            kind: 'output',
+            requested: null,
+            actual: null,
+            fellBack: true,
+            reason: 'linux-session-unsupported',
+          });
+        } else if (process.platform === 'darwin' && getMacScreenCaptureStatus() === 'denied') {
           console.warn('[Main] Skipping SystemAudioCapture init — Screen Recording permission denied. Meeting will run mic-only.');
           this.broadcast('system-audio-permission-denied',
             formatPermissionMessage('screen-recording-denied'));
@@ -2230,6 +2244,23 @@ export class AppState {
     this.systemAudioCapture.on('error', async (err: Error) => {
       if (!this.isMeetingActive) return; // Only attempt recovery during active meetings
 
+      if (process.platform === 'linux' && isNonRecoverableLinuxSystemAudioError(err)) {
+        const userMessage = surfaceLinuxSystemAudioError(err).message;
+        console.warn(
+          `[AudioRecovery] Non-recoverable Linux system audio error — skipping recovery: ${userMessage}`,
+        );
+        this.broadcast('audio-capture-failed', {
+          channel: 'system',
+          message: userMessage,
+          attempt: 0,
+          maxAttempts: 0,
+          terminal: true,
+          stuck: false,
+        });
+        this.broadcast('system-audio-permission-denied', userMessage);
+        return;
+      }
+
       const now = Date.now();
       this._systemAudioLastFailureAt = now;
       this._systemAudioConsecutiveFailures++;
@@ -2252,9 +2283,12 @@ export class AppState {
       // "ScreenCaptureKit access denied", "No displays found") instead of just
       // a generic STT 'reconnecting' indicator. This event is non-fatal — the
       // recovery attempt may still succeed.
+      const userMessage = process.platform === 'linux'
+        ? surfaceLinuxSystemAudioError(err).message
+        : err.message;
       this.broadcast('audio-capture-failed', {
         channel: 'system',
-        message: err.message,
+        message: userMessage,
         attempt: this._systemAudioRecoveryAttempts,
         maxAttempts: 3,
       });
@@ -2296,13 +2330,19 @@ export class AppState {
         // for this meeting so it can stop showing "reconnecting" and surface a
         // mic-only banner instead.
         if (this._systemAudioRecoveryAttempts >= 3) {
+          const terminalMessage = process.platform === 'linux'
+            ? surfaceLinuxSystemAudioError(recoveryErr ?? err).message
+            : `System audio capture gave up after 3 attempts. Last error: ${recoveryErr?.message || err.message}`;
           this.broadcast('audio-capture-failed', {
             channel: 'system',
-            message: `System audio capture gave up after 3 attempts. Last error: ${recoveryErr?.message || err.message}`,
+            message: terminalMessage,
             attempt: this._systemAudioRecoveryAttempts,
             maxAttempts: 3,
             terminal: true,
           });
+          if (process.platform === 'linux') {
+            this.broadcast('system-audio-permission-denied', formatPermissionMessage('screen-recording-denied'));
+          }
         }
       } finally {
         this._systemAudioRecoveryInProgress = false;
@@ -2657,6 +2697,19 @@ export class AppState {
       }
       // 'not-determined': Handled at startup. SCK/CoreAudio will trigger the TCC
       // dialog itself when it first attempts to access screen content.
+    } else if (process.platform === 'linux') {
+      const session = detectDisplaySession();
+      console.log(`[Main] Linux display session at meeting start: type=${session.sessionType}, supported=${session.isSupported}`);
+      // Clear stale "limited features" flag when the session is actually supported
+      // (e.g. false Wayland detection at startup, or env fixed after first launch).
+      if (session.isSupported) {
+        this.setLinuxCaptureDisabled(false);
+      }
+      if (shouldBlockLinuxSystemAudioAtMeetingStart(this._linuxCaptureDisabled, session)) {
+        const message = formatPermissionMessage('linux-session-unsupported');
+        console.warn('[Main]', message);
+        this.broadcast('system-audio-permission-denied', message);
+      }
     }
 
     // Reset overlay position BEFORE the switch so the new meeting starts in
@@ -2696,6 +2749,7 @@ export class AppState {
           modeId: activeMode.id,
           modeTemplateType: activeMode.templateType,
         });
+        this.intelligenceManager.setRequirementsContext(activeMode.templateType === 'technical-interview');
       }
     } catch (err) {
       // Auxiliary feature — never block meeting start.
@@ -2819,6 +2873,7 @@ export class AppState {
     // threads joined. Calling switchToLauncher() here gets the show/hide
     // commands to the OS compositor before the main thread blocks.
     this.windowHelper.setWindowMode('launcher');
+    this.stickyNoteWindowHelper.closeAll();
 
     // ─── SYNCHRONOUS: things the user expects "right now" on Stop click ────
     // Captures are deferred-stop wrappers (see SystemAudioCapture.stop /
@@ -2964,7 +3019,7 @@ export class AppState {
     // are NO LONGER USED for these 5 streams. The single
     // 'intelligence-token-batch' channel replaces them. The old channel
     // names + preload bridges are kept (defense-in-depth, no callers).
-    type BatchKind = 'suggested_answer' | 'refined_answer' | 'recap' | 'clarify' | 'follow_up_questions';
+    type BatchKind = 'suggested_answer' | 'refined_answer' | 'recap' | 'clarify' | 'restate' | 'lookup' | 'follow_up_questions';
     const tokenBatches = new Map<BatchKind, any[]>();
     let batchFlushScheduled = false;
     const flushBatchesNow = () => {
@@ -3027,6 +3082,19 @@ export class AppState {
             confidence: action?.confidence,
             priority: action?.priority,
           },
+        });
+      } catch { /* non-fatal */ }
+    })
+
+    this.intelligenceManager.on('requirements_updated', (requirements: any[]) => {
+      const helper = this.getWindowHelper();
+      helper.getLauncherWindow()?.webContents.send('requirements-updated', { requirements });
+      helper.getOverlayWindow()?.webContents.send('requirements-updated', { requirements });
+      try {
+        const { telemetryService } = require('./services/telemetry/TelemetryService');
+        telemetryService.track({
+          name: 'requirement_extracted',
+          properties: { count: requirements?.length ?? 0 },
         });
       } catch { /* non-fatal */ }
     })
@@ -3097,6 +3165,30 @@ export class AppState {
     this.intelligenceManager.on('clarify_token', (token: string) => {
       // Sprint 9: batch.
       queueBatch('clarify', { token });
+    })
+
+    this.intelligenceManager.on('restate', (restatement: string) => {
+      flushBatchesBeforeFinal();
+      const win = mainWindow()
+      if (win) {
+        win.webContents.send('intelligence-restate', { restatement })
+      }
+    })
+
+    this.intelligenceManager.on('restate_token', (token: string) => {
+      queueBatch('restate', { token });
+    })
+
+    this.intelligenceManager.on('lookup', (explanation: string) => {
+      flushBatchesBeforeFinal();
+      const win = mainWindow()
+      if (win) {
+        win.webContents.send('intelligence-lookup', { explanation })
+      }
+    })
+
+    this.intelligenceManager.on('lookup_token', (token: string) => {
+      queueBatch('lookup', { token });
     })
 
     this.intelligenceManager.on('follow_up_questions_update', (questions: string) => {
@@ -3637,6 +3729,7 @@ export class AppState {
     this.windowHelper.setContentProtection(state)
     this.settingsWindowHelper.setContentProtection(state)
     this.modelSelectorWindowHelper.setContentProtection(state)
+    this.stickyNoteWindowHelper.setContentProtection(state)
     this.cropperWindowHelper.setContentProtection(state)
 
     if (process.platform === 'win32') {
@@ -4078,6 +4171,49 @@ async function initializeApp() {
 
   console.log("App is ready")
 
+  // Linux X11 session gate (ADR 0001 / F0.1) and compositor warning wiring.
+  if (process.platform === 'linux') {
+    setCompositorWarningCallback(() => {
+      try {
+        dialog.showMessageBoxSync({
+          type: 'warning',
+          title: 'Compositor not detected',
+          message: 'Transparent overlay may not work correctly.',
+          detail:
+            'No X11 compositor was detected. Enable your desktop compositor (e.g. picom) or use a composited X11 session for transparent overlay backgrounds.',
+          buttons: ['OK'],
+        });
+      } catch (e: unknown) {
+        console.warn('[Init] Compositor warning dialog failed:', e);
+      }
+    });
+
+    const session = detectDisplaySession();
+    console.log(
+      `[Init] Linux display session: type=${session.sessionType}, supported=${session.isSupported}, reason=${session.reason}`,
+    );
+
+    if (session.isSupported) {
+      appState.setLinuxCaptureDisabled(false);
+    } else {
+      const response = dialog.showMessageBoxSync({
+        type: 'warning',
+        title: 'X11 session required',
+        message: 'This Linux session is not supported for Natively v1.',
+        detail:
+          `${session.reason}\n\nNatively requires an X11 (Xorg) login session. Wayland-native sessions are unsupported. See docs/adr/0001-linux-x11-only.md.`,
+        buttons: ['Quit', 'Continue with limited features'],
+        defaultId: 0,
+        cancelId: 0,
+      });
+      if (response === 0) {
+        app.quit();
+        return;
+      }
+      appState.setLinuxCaptureDisabled(true);
+    }
+  }
+
   // PERF: pre-construct STT provider objects so the meeting-start critical
   // path doesn't pay for class init + listener wiring. Runs after all
   // credentials are loaded (so the provider can read its API key) and is
@@ -4264,6 +4400,13 @@ async function initializeApp() {
   app.on("before-quit", (event) => {
     console.log("App is quitting, cleaning up resources...");
     appState.setQuitting(true);
+
+    // Release system/mic Pulse streams before V8 teardown (Linux HDMI stuck-audio fix).
+    try {
+      appState.releaseAudioCapturesForQuit();
+    } catch (e) {
+      console.error('[Main] releaseAudioCapturesForQuit failed:', e);
+    }
 
     // ROUND 2 FIX (#9): synchronously stop the CGEventTap worker thread
     // BEFORE V8 starts tearing down. The tap callback holds an

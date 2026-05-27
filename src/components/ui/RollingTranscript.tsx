@@ -75,15 +75,11 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({
             : {};
 
     return (
-        <div className="relative w-full">
-            {/* Masked container — transcript + error row */}
+        <div className="relative z-0 w-full shrink-0">
+            {/* Transcript strip — solid surface so live STT stays readable on light overlay */}
             <div
-                className="relative w-full overflow-hidden"
-                style={{
-                    ...stateSurface,
-                    maskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)',
-                    WebkitMaskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)',
-                }}
+                className="relative w-full overflow-hidden border-b border-[var(--overlay-border-soft)]"
+                style={stateSurface}
             >
                 {anyFailed && <div className="absolute inset-0 bg-red-500/10 stt-pulse-red" />}
                 {anyReconnecting && !anyFailed && <div className="absolute inset-0 bg-amber-500/10 stt-pulse-amber" />}
@@ -98,7 +94,7 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({
                         }}
                     >
                         {isNormal && (
-                            <span className="inline-flex items-center text-[13px] italic leading-7 text-[var(--overlay-text-muted)] transition-all duration-300">
+                            <span className="inline-flex items-center text-[13px] leading-7 overlay-text-secondary transition-all duration-300">
                                 {text || 'Listening…'}
                                 {isActive && (
                                     <span className="inline-flex items-center ml-2">

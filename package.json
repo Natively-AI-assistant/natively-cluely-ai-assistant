@@ -12,15 +12,17 @@
     "typecheck:electron": "tsc -p electron/tsconfig.json --noEmit",
     "preview": "vite preview",
     "postinstall": "cross-env SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm rebuild sharp && electron-rebuild -f -w better-sqlite3,keytar && node scripts/download-models.js && node scripts/ensure-sqlite-vec.js && node scripts/patch-electron-plist.js",
-    "electron:dev": "npm run build:electron && cross-env NODE_ENV=development electron .",
-    "electron:build": "npm run build:electron && cross-env NODE_ENV=production electron .",
+    "electron:dev": "npm run build:electron && cross-env NODE_ENV=development node scripts/run-electron.js .",
+    "electron:build": "npm run build:electron && cross-env NODE_ENV=production node scripts/run-electron.js .",
     "app:dev": "concurrently \"npm run dev -- --port 5180 --strictPort\" \"wait-on http://localhost:5180 && npm run electron:dev\"",
     "app:build": "npm run build && npm run build:electron && cross-env NATIVELY_BUILD_ALL_MAC_ARCHES=1 npm run build:native && node scripts/ensure-sharp-mac-deps.js && electron-builder",
+    "app:build:linux": "npm run build && npm run build:electron && npm run build:native && electron-builder --linux",
+    "dist:linux": "npm run app:build:linux",
     "watch": "tsc -p electron/tsconfig.json --watch",
     "start": "npm run app:dev",
     "dist": "npm run app:build",
     "build:native": "node scripts/build-native.js",
-    "test": "npm run build:electron && node --test 'electron/services/__tests__/**/*.test.mjs' 'electron/llm/__tests__/**/*.test.mjs'",
+    "test": "npm run build:electron && node --test 'electron/services/__tests__/**/*.test.mjs' 'electron/llm/__tests__/**/*.test.mjs' 'electron/audio/__tests__/**/*.test.mjs' 'src/lib/__tests__/**/*.test.mjs'",
     "test:modes": "npm run build:electron && node --test electron/services/__tests__/Mode*.test.mjs electron/services/__tests__/ProfileIntelligenceGate.test.mjs electron/services/__tests__/NativelyApiE2E.test.mjs",
     "test:modes:no-build": "node --test electron/services/__tests__/Mode*.test.mjs electron/services/__tests__/ProfileIntelligenceGate.test.mjs electron/services/__tests__/NativelyApiE2E.test.mjs",
     "test:modes:collect-fixtures": "RUN_INTERNET_FIXTURE_COLLECTION=1 node --test electron/services/__tests__/ModeFixtureIntegrity.test.mjs",
@@ -49,7 +51,8 @@
     ],
     "asarUnpack": [
       "**/*.node",
-      "**/*.dylib"
+      "**/*.dylib",
+      "**/*.so"
     ],
     "directories": {
       "output": "release",
@@ -117,12 +120,6 @@
     "linux": {
       "target": [
         {
-          "target": "AppImage",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
           "target": "deb",
           "arch": [
             "x64"
@@ -130,7 +127,8 @@
         }
       ],
       "icon": "assets/icons/png/",
-      "category": "Office"
+      "category": "Office",
+      "maintainer": "Natively <evinjohnn@gmail.com>"
     },
     "nsis": {
       "oneClick": false,
@@ -224,7 +222,7 @@
     "lucide-react": "^0.460.0",
     "mammoth": "^1.11.0",
     "marked": "^18.0.4",
-    "onnxruntime-node": "1.22.0",
+    "onnxruntime-node": "1.22.0-rev",
     "openai": "^6.22.0",
     "pdf-parse": "^2.4.5",
     "qrcode": "^1.5.4",
@@ -255,6 +253,6 @@
     "sqlite-vec-darwin-x64": "^0.1.7-alpha.2"
   },
   "overrides": {
-    "onnxruntime-node": "1.22.0"
+    "onnxruntime-node": "1.22.0-rev"
   }
 }

@@ -82,14 +82,18 @@ describe('wire format', () => {
         assert.doesNotMatch(source, /OpenAI-Beta/);
     });
 
-    test('sends transcription_session.update not session.update', () => {
-        assert.match(source, /type: 'transcription_session\.update'/);
-        assert.doesNotMatch(source, /type: 'session\.update'/);
+    test('sends session.update not deprecated transcription_session.update', () => {
+        assert.match(source, /type: 'session\.update'/);
+        assert.doesNotMatch(source, /type: 'transcription_session\.update'/);
     });
 
-    test('uses GA input_audio_format field not beta audio.input.format', () => {
-        assert.match(source, /input_audio_format: 'pcm16'/);
-        assert.doesNotMatch(source, /audio\.input\.format/);
+    test('uses nested audio input format for transcription session', () => {
+        assert.match(source, /type: 'transcription'/);
+        assert.match(source, /type: 'audio\/pcm'/);
+        assert.match(source, /rate: WS_SAMPLE_RATE/);
+        assert.match(source, /noise_reduction: \{ type: 'near_field' \}/);
+        assert.doesNotMatch(source, /input_audio_format: 'pcm16'/);
+        assert.doesNotMatch(source, /input_audio_transcription:/);
     });
 
     test('handles GA transcript delta event name', () => {
@@ -102,6 +106,16 @@ describe('wire format', () => {
         assert.doesNotMatch(source, /'transcript\.text\.done'/);
     });
 
+    test('turn_detection uses 1000ms silence to reduce micro-turn fragmentation', () => {
+        assert.match(source, /silence_duration_ms:\s*1000/);
+    });
+
+    test('completed transcript events are coalesced until speech_stopped', () => {
+        assert.match(source, /OpenAITranscriptTurnCoalescer/);
+        assert.match(source, /turnCoalescer\.onSpeechStopped/);
+        assert.match(source, /turnCoalescer\.onCompleted/);
+    });
+
     test('does not send beta session.close to server (transcription intent has no such client event)', () => {
         // The send() must never carry session.close. The string may still appear in
         // comments/log lines, so we only ban it inside JSON.stringify payloads.
@@ -111,18 +125,14 @@ describe('wire format', () => {
         );
     });
 
-    test('does not fall through session.created to transcription_session.created handler', () => {
-        // The fallthrough has been replaced with a logged-and-ignored warning.
-        // Require the case to exist (so a future rename/removal doesn't make
-        // this assertion trivially pass) and require its body to NOT set
-        // isSessionReady. Behavioral coverage of the same invariant lives in
-        // the 'race / late-arrival safety' suite below.
+    test('session.created and transcription_session.created share ready handler', () => {
         const block = source.match(
             /case 'session\.created':[\s\S]*?break;/
         );
-        assert.ok(block, "expected case 'session.created': to still exist with a warning body");
-        assert.doesNotMatch(block[0], /this\.isSessionReady\s*=\s*true/);
-        assert.doesNotMatch(block[0], /_startKeepAlive|_flushRingBuffer/);
+        assert.ok(block, "expected case 'session.created': to activate the session");
+        assert.match(block[0], /this\.isSessionReady\s*=\s*true/);
+        assert.match(block[0], /_startKeepAlive|_flushRingBuffer/);
+        assert.match(block[0], /transcription_session\.created/);
     });
 });
 
@@ -207,33 +217,25 @@ describe('lifecycle — unconditional commit', () => {
 // ──────────────────────────────────────────────────────────────────────────
 
 describe('race / late-arrival safety', () => {
-    test('inbound session.created (general-intent event) is inert on transcription session', () => {
-        // HIGH 1 behavioral coverage: _handleWsMessage({type:'session.created'})
-        // must NOT set isSessionReady, must NOT start a keep-alive, must NOT
-        // flush the ring buffer. The session.created case body should be a
-        // pure warn-and-ignore.
+    test('inbound session.created sets isSessionReady and flushes ring buffer', () => {
         const stt = new OpenAIStreamingSTT('sk-test-key');
         stt.isActive = true;
         stt.mode = 'ws';
         stt.isSessionReady = false;
-        // Seed the ring buffer with a known marker so we can verify no flush.
         const marker = Buffer.alloc(1024);
         stt.ringBuffer = [marker];
         stt.ringBufferBytes = marker.length;
 
         stt._handleWsMessage({ type: 'session.created' });
 
-        assert.strictEqual(stt.isSessionReady, false,
-            'session.created on intent=transcription must not flip isSessionReady');
-        assert.strictEqual(stt.keepAliveTimer, null,
-            'session.created must not start keep-alive');
-        assert.strictEqual(stt.ringBufferBytes, marker.length,
-            'session.created must not flush the ring buffer');
-        assert.strictEqual(stt.ringBuffer.length, 1);
+        assert.strictEqual(stt.isSessionReady, true);
+        assert.notStrictEqual(stt.keepAliveTimer, null);
+        assert.strictEqual(stt.ringBufferBytes, 0);
+        clearInterval(stt.keepAliveTimer);
+        stt.keepAliveTimer = null;
     });
 
-    test('inbound transcription_session.created DOES set isSessionReady (positive control)', () => {
-        // Asymmetric pair: this proves the negative test above is meaningful.
+    test('inbound transcription_session.created still sets isSessionReady (legacy event)', () => {
         const stt = new OpenAIStreamingSTT('sk-test-key');
         stt.isActive = true;
         stt.mode = 'ws';
@@ -242,14 +244,12 @@ describe('race / late-arrival safety', () => {
         stt._handleWsMessage({ type: 'transcription_session.created' });
 
         assert.strictEqual(stt.isSessionReady, true);
-        assert.notStrictEqual(stt.keepAliveTimer, null,
-            'transcription_session.created must start keep-alive');
-        // Clean up the interval we just created so test process can exit.
+        assert.notStrictEqual(stt.keepAliveTimer, null);
         clearInterval(stt.keepAliveTimer);
         stt.keepAliveTimer = null;
     });
 
-    test('late transcription_session.created arriving AFTER stop() does not leak keepAlive', () => {
+    test('late session.created arriving AFTER stop() does not leak keepAlive', () => {
         // Production race: server is slow, stop() runs, then the 'created'
         // message lands via a buffered frame. Without the !isActive guard at
         // the top of _handleWsMessage, this would set isSessionReady=true and
@@ -261,7 +261,7 @@ describe('race / late-arrival safety', () => {
         const sentCountAfterStop = ws.sent.length;
 
         assert.doesNotThrow(() => {
-            stt._handleWsMessage({ type: 'transcription_session.created' });
+            stt._handleWsMessage({ type: 'session.created' });
         });
 
         assert.strictEqual(stt.ws, null, 'ws must be null after stop()');
@@ -269,7 +269,7 @@ describe('race / late-arrival safety', () => {
             'no new sends to the prior socket after stop()');
         // The whole point of the guard: no leaked interval.
         assert.strictEqual(stt.keepAliveTimer, null,
-            'late transcription_session.created after stop() must NOT create a keep-alive interval');
+            'late session.created after stop() must NOT create a keep-alive interval');
         assert.strictEqual(stt.isSessionReady, false,
             'late message must not flip isSessionReady on a stopped instance');
     });
@@ -686,6 +686,53 @@ describe('telemetry — ring buffer eviction', () => {
             'exactly one warning per session despite multiple evictions');
         assert.strictEqual(warnings[0].code, 'ring_buffer_eviction');
         assert.ok(warnings[0].droppedBytes > 0);
+    });
+});
+
+describe('transcript turn coalescing', () => {
+    test('word-level completed events produce one final turn on speech_stopped', () => {
+        const stt = new OpenAIStreamingSTT('sk-test-key');
+        stt.isActive = true;
+        const transcripts = [];
+        stt.on('transcript', (t) => transcripts.push({ ...t }));
+
+        stt._handleWsMessage({ type: 'input_audio_buffer.speech_started' });
+        stt._handleWsMessage({ type: 'conversation.item.input_audio_transcription.delta', delta: 'and' });
+        stt._handleWsMessage({ type: 'conversation.item.input_audio_transcription.completed', transcript: 'and' });
+        stt._handleWsMessage({ type: 'conversation.item.input_audio_transcription.delta', delta: ' space' });
+        stt._handleWsMessage({ type: 'conversation.item.input_audio_transcription.completed', transcript: 'space' });
+        stt._handleWsMessage({ type: 'conversation.item.input_audio_transcription.delta', delta: ' from' });
+        stt._handleWsMessage({ type: 'conversation.item.input_audio_transcription.completed', transcript: 'from' });
+        stt._handleWsMessage({ type: 'conversation.item.input_audio_transcription.completed', transcript: 'the' });
+
+        const finalsBeforeStop = transcripts.filter(t => t.isFinal);
+        assert.strictEqual(finalsBeforeStop.length, 0,
+            'completed events must not emit finals before speech_stopped');
+
+        stt._handleWsMessage({ type: 'input_audio_buffer.speech_stopped' });
+
+        const finals = transcripts.filter(t => t.isFinal);
+        assert.strictEqual(finals.length, 1, 'expected exactly one coalesced final turn');
+        assert.strictEqual(finals[0].text, 'and space from the');
+
+        const partials = transcripts.filter(t => !t.isFinal);
+        assert.ok(partials.length >= 1, 'expected partial previews during the turn');
+        assert.strictEqual(partials[partials.length - 1].text, 'and space from the');
+    });
+
+    test('stop() flushes coalesced in-progress turn as final', () => {
+        const ws = makeStubWs();
+        const stt = makeReadySTT({ stubWs: ws, pcmSamples: 0 });
+        const transcripts = [];
+        stt.on('transcript', (t) => transcripts.push({ ...t }));
+
+        stt._handleWsMessage({ type: 'input_audio_buffer.speech_started' });
+        stt._handleWsMessage({ type: 'conversation.item.input_audio_transcription.completed', transcript: 'hello' });
+        stt.stop();
+
+        const finals = transcripts.filter(t => t.isFinal);
+        assert.strictEqual(finals.length, 1);
+        assert.strictEqual(finals[0].text, 'hello');
     });
 });
 

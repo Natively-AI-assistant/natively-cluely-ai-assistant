@@ -42,15 +42,25 @@ const App: React.FC = () => {
   const isOverlayWindow = new URLSearchParams(window.location.search).get('window') === 'overlay';
   const isModelSelectorWindow = new URLSearchParams(window.location.search).get('window') === 'model-selector';
   const isCropperWindow = new URLSearchParams(window.location.search).get('window') === 'cropper';
+  const isStickyNoteWindow = new URLSearchParams(window.location.search).get('window') === 'sticky-note';
 
   // Default to launcher if not specified (dev mode safety)
-  const isDefault = !isSettingsWindow && !isOverlayWindow && !isModelSelectorWindow && !isCropperWindow;
+  const isDefault = !isSettingsWindow && !isOverlayWindow && !isModelSelectorWindow && !isCropperWindow && !isStickyNoteWindow;
 
   if (isCropperWindow) {
     const Cropper = React.lazy(() => import('./components/Cropper'));
     return (
       <React.Suspense fallback={<div className="w-screen h-screen bg-transparent" />}>
         <Cropper />
+      </React.Suspense>
+    );
+  }
+
+  if (isStickyNoteWindow) {
+    const StickyNoteWindow = React.lazy(() => import('./components/StickyNoteWindow'));
+    return (
+      <React.Suspense fallback={<div className="w-screen h-screen bg-transparent" />}>
+        <StickyNoteWindow />
       </React.Suspense>
     );
   }

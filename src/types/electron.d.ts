@@ -32,6 +32,17 @@ export interface DynamicActionPayload {
   }
 }
 
+export interface LiveRequirementPayload {
+  id: string
+  text: string
+  status: 'candidate' | 'accepted' | 'dismissed'
+  source: 'extracted' | 'manual'
+  evidence: { speaker: string; quote: string; timestamp: number }
+  confidence: number
+  createdAt: number
+  acceptedAt?: number
+}
+
 export interface ElectronAPI {
   updateContentDimensions: (dimensions: {
     width: number
@@ -196,6 +207,12 @@ export interface ElectronAPI {
     usedImageInput?: boolean;
   }>
   generateClarify: () => Promise<{ clarification: string | null }>
+  generateRestate: () => Promise<{ restatement: string | null }>
+  generateLookup: (focusTerm?: string) => Promise<{ explanation: string | null }>
+  generateLateJoinBackfill: () => Promise<{ summary: string | null }>
+  getMeetingBrief: (eventId?: string) => Promise<{ brief: string; eventId?: string | null; error?: string }>
+  onIntelligenceRestate?: (callback: (data: { restatement: string }) => void) => () => void
+  onIntelligenceLookup?: (callback: (data: { explanation: string }) => void) => () => void
   generateCodeHint: (imagePaths?: string[], problemStatement?: string) => Promise<{ hint: string | null }>
   generateBrainstorm: (imagePaths?: string[], problemStatement?: string) => Promise<{ script: string | null }>
   generateFollowUp: (intent: string, userRequest?: string) => Promise<{ refined: string | null; intent: string }>
@@ -210,6 +227,7 @@ export interface ElectronAPI {
   setActionButtonMode: (mode: 'recap' | 'brainstorm') => Promise<{ success: boolean }>
   onActionButtonModeChanged: (callback: (mode: 'recap' | 'brainstorm') => void) => () => void
   onModeChanged: (callback: (data: { id: string | null; name: string | null }) => void) => () => void
+  onModesActiveCleared: (callback: () => void) => () => void
 
   // Modes
   modesGetAll: () => Promise<Array<{ id: string; name: string; templateType: string; customContext: string; isActive: boolean; createdAt: string; referenceFileCount: number }>>
@@ -243,6 +261,12 @@ export interface ElectronAPI {
   acceptDynamicAction: (actionId: string) => Promise<{ success: boolean; action?: DynamicActionPayload; error?: string }>
   dismissDynamicAction: (actionId: string) => Promise<{ success: boolean; error?: string }>
   listDynamicActions: () => Promise<{ success: boolean; actions: DynamicActionPayload[]; error?: string }>
+
+  // Live Requirements List — technical-interview overlay.
+  onRequirementsUpdated: (callback: (data: { requirements: LiveRequirementPayload[] }) => void) => () => void
+  acceptRequirement: (id: string) => Promise<{ success: boolean; requirement?: LiveRequirementPayload; requirements?: LiveRequirementPayload[]; error?: string }>
+  dismissRequirement: (id: string) => Promise<{ success: boolean; requirements?: LiveRequirementPayload[]; error?: string }>
+  listRequirements: () => Promise<{ success: boolean; requirements: LiveRequirementPayload[]; error?: string }>
 
   // Intelligence Mode Events
   onIntelligenceAssistUpdate: (callback: (data: { insight: string }) => void) => () => void
@@ -279,6 +303,17 @@ export interface ElectronAPI {
   setDefaultModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
   toggleModelSelector: (coords: { x: number; y: number }) => Promise<void>;
   modelSelectorCloseIfOpen: () => Promise<void>;
+  createStickyNote: (payload: {
+    id: string;
+    text: string;
+    intent?: string;
+    x: number;
+    y: number;
+  }) => Promise<{ success: boolean }>;
+  getStickyNoteContent: (
+    id: string,
+  ) => Promise<{ id: string; text: string; intent?: string } | null>;
+  closeStickyNote: (id: string) => Promise<{ success: boolean }>;
   forceRestartOllama: () => Promise<void>;
 
   // Settings Window
