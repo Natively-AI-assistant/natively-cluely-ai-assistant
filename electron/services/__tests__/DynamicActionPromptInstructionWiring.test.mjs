@@ -25,7 +25,7 @@ test('generate-what-to-say IPC forwards promptInstruction option to Intelligence
   assert.ok(handlerStart >= 0, 'generate-what-to-say handler should exist');
   const handlerSource = source.slice(handlerStart, source.indexOf('safeHandle("', handlerStart + 10));
 
-  assert.match(handlerSource, /options\?: \{ promptInstruction\?: string \}/);
+  assert.match(handlerSource, /options\?: \{ promptInstruction\?: string; domContext\?: string \}/);
   assert.match(handlerSource, /promptInstruction: typeof options\?\.promptInstruction === 'string' \? options\.promptInstruction : undefined/);
 });
 
@@ -33,7 +33,7 @@ test('preload and renderer type expose promptInstruction option on generateWhatT
   const preload = read('electron/preload.ts');
   const types = read('src/types/electron.d.ts');
 
-  assert.match(preload, /generateWhatToSay: \(question\?: string, imagePaths\?: string\[\], options\?: \{ promptInstruction\?: string \}\)/);
+  assert.match(preload, /generateWhatToSay: \(question\?: string, imagePaths\?: string\[\], options\?: \{ promptInstruction\?: string; domContext\?: string \}\)/);
   assert.match(preload, /ipcRenderer\.invoke\("generate-what-to-say", question, imagePaths, options\)/);
-  assert.match(types, /generateWhatToSay: \(question\?: string, imagePaths\?: string\[\], options\?: \{ promptInstruction\?: string \}\)/);
+  assert.match(types, /generateWhatToSay: \(question\?: string, imagePaths\?: string\[\], options\?: \{ promptInstruction\?: string; domContext\?: string \}\)/);
 });
