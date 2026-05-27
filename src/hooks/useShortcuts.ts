@@ -7,6 +7,7 @@ export interface ShortcutConfig {
     whatToAnswer: string[];
     autoAnswerMode: string[];
     clarify: string[];
+    askClarify: string[];
     followUp: string[];
     dynamicAction4: string[];
     answer: string[];
@@ -41,6 +42,7 @@ function buildDefaultShortcuts(): ShortcutConfig {
         whatToAnswer: [mod, '1'],
         autoAnswerMode: [mod, 'f'],
         clarify: [mod, '2'],
+        askClarify: [mod, shift, '2'],
         dynamicAction4: [mod, '3'],
         followUp: [mod, '4'],
         answer: [mod, '5'],
@@ -99,6 +101,7 @@ export const useShortcuts = () => {
                 else if (kb.id === 'chat:followUp') newShortcuts.followUp = keys;
                 else if (kb.id === 'chat:followup') newShortcuts.followUp = keys; // backwards compat
                 else if (kb.id === 'chat:clarify') newShortcuts.clarify = keys;
+                else if (kb.id === 'chat:askClarify') newShortcuts.askClarify = keys;
                 else if (kb.id === 'chat:dynamicAction4') newShortcuts.dynamicAction4 = keys;
                 else if (kb.id === 'chat:answer') newShortcuts.answer = keys;
                 else if (kb.id === 'chat:codeHint') newShortcuts.codeHint = keys;
@@ -164,6 +167,7 @@ export const useShortcuts = () => {
             case 'whatToAnswer': backendId = 'chat:whatToAnswer'; break;
             case 'autoAnswerMode': backendId = 'chat:auto-answer-mode'; break;
             case 'clarify': backendId = 'chat:clarify'; break;
+            case 'askClarify': backendId = 'chat:askClarify'; break;
             case 'followUp': backendId = 'chat:followUp'; break;
             case 'dynamicAction4': backendId = 'chat:dynamicAction4'; break;
             case 'answer': backendId = 'chat:answer'; break;

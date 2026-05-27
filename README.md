@@ -804,6 +804,8 @@ timeline
 
 <div align="center">
   <em>For detailed feature descriptions, see our full <a href="ROADMAP.md">ROADMAP.md</a>.</em>
+  <br/>
+  <em>Technical interview copilot spec: <a href="docs/plans/technical-interview-copilot-PRD.md">Technical Interview Copilot PRD</a>.</em>
 </div>
 
 ---

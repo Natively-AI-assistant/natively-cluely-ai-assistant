@@ -193,6 +193,14 @@ export class RAGManager {
     }
 
     /**
+     * Retrieve formatted context for a meeting without streaming a response.
+     */
+    async retrieveMeetingContext(meetingId: string, query: string): Promise<string | null> {
+        const context = await this.retriever.retrieve(query, { meetingId });
+        return context.chunks.length > 0 ? context.formattedContext : null;
+    }
+
+    /**
      * Query across all meetings (global search)
      */
     async *queryGlobal(

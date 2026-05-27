@@ -8,6 +8,7 @@ import { ScreenContext } from "../services/screen/ScreenContextService";
 import { PromptAssembler } from "../services/context/PromptAssembler";
 import { checkAnswerForCodeBugs } from "./CodeSanityCheck";
 import type { ProviderDataScope } from "./ProviderRouter";
+import type { InterviewContextBundle } from "../services/context/InterviewContextBuilder";
 
 // Dynamically imported to avoid circular dependency at module load time
 type ModesManagerType = {
@@ -53,7 +54,8 @@ export class WhatToAnswerLLM {
         // When set, the skill's promptBlock REPLACES the mode suffix and the
         // mode-context retrieval step is skipped — the skill defines the entire
         // intent and mixing custom-mode reference docs in just dilutes it.
-        activeSkill?: { id: string; name: string; promptBlock: string }
+        activeSkill?: { id: string; name: string; promptBlock: string },
+        interviewBundle?: InterviewContextBundle,
     ): AsyncGenerator<string> {
         const MEASURE = process.env.MEASURE_LATENCY === 'true';
         let tStart = 0, tIntent = 0, tTemporal = 0, tMode = 0, tTrunc = 0, tPrompt = 0, tStream = 0;
@@ -202,6 +204,12 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 priorResponses: temporalContext?.hasRecentResponses ? temporalContext.previousResponses : undefined,
                 intentContext,
                 retrievedModeContext: modeContextBlock || undefined,
+                sessionSpine: interviewBundle?.spine,
+                currentTurn: interviewBundle?.currentTurn ?? undefined,
+                activeProblem: interviewBundle?.activeProblemStatement ?? undefined,
+                acceptedConstraints: interviewBundle?.acceptedRequirements?.length
+                    ? interviewBundle.acceptedRequirements
+                    : undefined,
                 tokenBudget: Math.max(1000, assemblerBudget),
                 systemPrompt: finalPromptOverride,
             });

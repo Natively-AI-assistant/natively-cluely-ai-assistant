@@ -105,8 +105,23 @@ export function cleanTranscript(turns: TranscriptTurn[]): TranscriptTurn[] {
  */
 export function sparsifyTranscript(
     turns: TranscriptTurn[],
-    maxTurns: number = 12
+    maxTurns: number = 12,
+    options?: { problemSetAt?: number | null },
 ): TranscriptTurn[] {
+    if (options?.problemSetAt) {
+        const sinceProblem = turns.filter((t) => t.timestamp >= options.problemSetAt!);
+        if (sinceProblem.length > 0) {
+            const interviewerSince = sinceProblem.filter((t) => t.role === 'interviewer');
+            const otherSince = sinceProblem.filter((t) => t.role !== 'interviewer');
+            const expandedBudget = Math.max(maxTurns, 24, interviewerSince.length + otherSince.length);
+            const beforeProblem = turns.filter((t) => t.timestamp < options.problemSetAt!);
+            const recentBefore = beforeProblem.slice(-Math.max(0, expandedBudget - sinceProblem.length));
+            const merged = [...recentBefore, ...sinceProblem].sort((a, b) => a.timestamp - b.timestamp);
+            if (merged.length <= expandedBudget) return merged;
+            return merged.slice(-expandedBudget);
+        }
+    }
+
     if (turns.length <= maxTurns) {
         return [...turns].sort((a, b) => a.timestamp - b.timestamp);
     }
@@ -148,9 +163,10 @@ export function formatTranscriptForLLM(turns: TranscriptTurn[]): string {
  */
 export function prepareTranscriptForWhatToAnswer(
     turns: TranscriptTurn[],
-    maxTurns: number = 12
+    maxTurns: number = 12,
+    options?: { problemSetAt?: number | null },
 ): string {
     const cleaned = cleanTranscript(turns);
-    const sparsified = sparsifyTranscript(cleaned, maxTurns);
+    const sparsified = sparsifyTranscript(cleaned, maxTurns, options);
     return formatTranscriptForLLM(sparsified);
 }

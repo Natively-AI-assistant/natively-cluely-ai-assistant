@@ -401,4 +401,39 @@ ANSWER SHAPE: concise
     assert.ok(result.metadata.tokenBudget > 0);
     assert.ok(typeof result.metadata.totalTokensUsed === 'number');
   });
+
+  test('emits session_spine, current_turn, and active_problem blocks when provided', async () => {
+    const result = assembler.assemble({
+      ...defaultParams,
+      sessionSpine: '[INTERVIEWER]: earlier design question about cache',
+      currentTurn: 'Can you walk me through the complexity?',
+      activeProblem: 'Implement LRU cache with O(1) get and put',
+      tokenBudget: 8000,
+      systemPrompt: SAMPLE_SYSTEM_PROMPT,
+    });
+
+    const types = result.blocks.map((b) => b.type);
+    assert.ok(types.includes('session_spine'));
+    assert.ok(types.includes('current_turn'));
+    assert.ok(types.includes('active_problem'));
+    assert.match(result.userMessage, /<session_spine/);
+    assert.match(result.userMessage, /<current_turn/);
+    assert.match(result.userMessage, /<active_problem/);
+  });
+
+  test('emits accepted_constraints block when user-pinned constraints provided', async () => {
+    const result = assembler.assemble({
+      ...defaultParams,
+      activeProblem: 'Two Sum',
+      acceptedConstraints: ['Input is sorted', 'Return indices not values'],
+      tokenBudget: 8000,
+      systemPrompt: SAMPLE_SYSTEM_PROMPT,
+    });
+
+    const block = result.blocks.find((b) => b.type === 'accepted_constraints');
+    assert.ok(block, 'accepted_constraints block should exist');
+    assert.match(result.userMessage, /<accepted_constraints/);
+    assert.match(result.userMessage, /Input is sorted/);
+    assert.match(result.userMessage, /Return indices not values/);
+  });
 });

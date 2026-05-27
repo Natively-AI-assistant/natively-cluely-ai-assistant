@@ -85,6 +85,8 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
     const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
     const [isCalendarConnected, setIsCalendarConnected] = useState(false);
+    const [meetingBrief, setMeetingBrief] = useState<string | null>(null);
+    const [briefLoading, setBriefLoading] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [showNotification, setShowNotification] = useState(false);
 
@@ -106,6 +108,19 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
             window.electronAPI.getUpcomingEvents().then(setUpcomingEvents).catch(err => console.error("Failed to fetch events:", err));
         }
     }
+
+    const loadMeetingBrief = async (eventId?: string) => {
+        if (!window.electronAPI?.getMeetingBrief) return;
+        setBriefLoading(true);
+        try {
+            const res = await window.electronAPI.getMeetingBrief(eventId);
+            setMeetingBrief(res?.brief?.trim() || null);
+        } catch (err) {
+            console.error('Failed to load meeting brief:', err);
+        } finally {
+            setBriefLoading(false);
+        }
+    };
 
     const handleRefresh = async () => {
         setIsRefreshing(true);
@@ -1002,6 +1017,19 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                                                 </div>
                                                                             )}
                                                                         </div>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => loadMeetingBrief(nextMeeting.id)}
+                                                                            disabled={briefLoading}
+                                                                            className="mt-2 w-full rounded-lg bg-violet-500/25 hover:bg-violet-500/35 ring-1 ring-violet-300/30 px-2 py-1.5 text-[11px] font-semibold text-white/90 transition-colors disabled:opacity-60"
+                                                                        >
+                                                                            {briefLoading ? 'Generating brief…' : 'Pre-call brief'}
+                                                                        </button>
+                                                                        {meetingBrief && (
+                                                                            <p className="mt-2 text-[11px] leading-relaxed text-white/75 whitespace-pre-wrap line-clamp-6">
+                                                                                {meetingBrief}
+                                                                            </p>
+                                                                        )}
                                                                     </div>
                                                                 </div>
                                                             </div>

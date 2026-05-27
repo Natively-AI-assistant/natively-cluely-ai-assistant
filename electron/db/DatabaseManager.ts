@@ -23,6 +23,8 @@ export interface Meeting {
         actionItemsStructured?: Array<{ id: string; text: string; owner?: string; deadline?: string; sourceTimestamp?: number }>;
         followUpDraft?: string;
         coachingInsights?: Array<{ id: string; type: string; title: string; detail: string; severity: 'info' | 'opportunity' | 'warning'; evidence?: string }>;
+        debrief?: string;
+        archivedProblems?: string[];
     };
     transcript?: Array<{
         speaker: string;

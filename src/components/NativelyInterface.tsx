@@ -1,4 +1,4 @@
-import { animate, AnimatePresence, motion, useMotionValue, useTransform } from 'framer-motion';
+import { animate, AnimatePresence, motion, useMotionValue, useMotionValueEvent, useTransform } from 'framer-motion';
 import {
   ArrowRight,
   ChevronDown,
@@ -16,9 +16,11 @@ import {
   RefreshCw,
   ShieldCheck,
   SlidersHorizontal,
+  StickyNote,
   X,
   Zap,
 } from 'lucide-react';
+import { clampOverlayPanelSize } from '../lib/overlayPanelResize.mjs';
 import {
   mergeRollingTranscriptFinal,
   mergeRollingTranscriptPartial,
@@ -30,6 +32,8 @@ const ANSWER_PANEL_INTENTS = new Set([
   'chat',
   'recap',
   'clarify',
+  'restate',
+  'lookup',
   'follow_up_questions',
   'shorten',
 ]);
@@ -91,6 +95,7 @@ import type { DynamicActionPayload } from '../types/electron';
 import { getCodexCliModelDisplayName } from '../utils/modelUtils';
 import { getModifierSymbol, isMac } from '../utils/platformUtils';
 import { DynamicActionBar } from './dynamic-actions/DynamicActionBar';
+import { RequirementsPanel } from './requirements/RequirementsPanel';
 import GlassEffectLayer from './ui/GlassEffectLayer';
 import RollingTranscript from './ui/RollingTranscript';
 import TopPill from './ui/TopPill';
@@ -236,6 +241,7 @@ interface MessageRowProps {
   isLightTheme: boolean;
   appearance: any;
   onCopy: (text: string) => void;
+  onPopOutSticky?: (msg: Message) => void;
   renderMessageText: (msg: Message) => React.ReactNode;
 }
 const formatProviderLabel = (provider?: string | null): string => {
@@ -297,6 +303,7 @@ const MessageRow = React.memo(
     isLightTheme,
     appearance,
     onCopy,
+    onPopOutSticky,
     renderMessageText,
   }: MessageRowProps) {
     const isCodeMsg = msg.role === 'system' && (msg.isCode || msg.text.includes('```'));
@@ -345,15 +352,27 @@ const MessageRow = React.memo(
                 <span>Screenshot attached</span>
               </div>
             )}
-            {msg.role === 'system' && !msg.isStreaming && (
-              <button
-                onClick={() => onCopy(msg.text)}
-                className="absolute top-2 right-2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive"
-                title="Copy to clipboard"
-                style={appearance.iconStyle}
-              >
-                <Copy className="w-3.5 h-3.5" />
-              </button>
+            {(msg.role === 'system' || msg.role === 'user') && !msg.isStreaming && (
+              <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                {onPopOutSticky && msg.text.trim().length > 0 && (
+                  <button
+                    onClick={() => onPopOutSticky(msg)}
+                    className="p-1.5 rounded-md overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive"
+                    title="Pop out as sticky note"
+                    style={appearance.iconStyle}
+                  >
+                    <StickyNote className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <button
+                  onClick={() => onCopy(msg.text)}
+                  className="p-1.5 rounded-md overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive"
+                  title="Copy to clipboard"
+                  style={appearance.iconStyle}
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+              </div>
             )}
             {renderMessageText(msg)}
           </div>
@@ -366,7 +385,8 @@ const MessageRow = React.memo(
     prev.isLightTheme === next.isLightTheme &&
     prev.appearance === next.appearance &&
     prev.renderMessageText === next.renderMessageText &&
-    prev.onCopy === next.onCopy,
+    prev.onCopy === next.onCopy &&
+    prev.onPopOutSticky === next.onPopOutSticky,
 );
 
 const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
@@ -557,6 +577,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   // Active mode name (shown as a badge near the Modes button)
   const [activeModeLabel, setActiveModeLabel] = useState<string | null>(null);
+  const [activeModeTemplate, setActiveModeTemplate] = useState<string | null>(null);
+  const isTechnicalInterviewMode = activeModeTemplate === 'technical-interview';
+  const isTechnicalInterviewModeRef = useRef(isTechnicalInterviewMode);
+  isTechnicalInterviewModeRef.current = isTechnicalInterviewMode;
   const [llmProviderLabel, setLlmProviderLabel] = useState<string>('unknown');
   const [llmPrivacyLabel, setLlmPrivacyLabel] = useState<string>('Checking privacy route');
   const [screenContextStatus, setScreenContextStatus] = useState<
@@ -576,12 +600,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // Load initial active mode name
     window.electronAPI
       ?.modesGetActive?.()
-      .then((mode: { name: string } | null) => setActiveModeLabel(mode?.name ?? null))
+      .then((mode: { name: string; templateType?: string } | null) => {
+        setActiveModeLabel(mode?.name ?? null);
+        setActiveModeTemplate(mode?.templateType ?? null);
+      })
       .catch(() => {});
     // Live-update whenever mode is activated/deactivated
     const unsub = window.electronAPI?.onModeChanged?.(
-      (data: { id: string | null; name: string | null }) => {
+      (data: { id: string | null; name: string | null; templateType?: string | null }) => {
         setActiveModeLabel(data.name);
+        setActiveModeTemplate(data.templateType ?? null);
       },
     );
     return () => unsub?.();
@@ -837,12 +865,56 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const SHELL_WIDTH_COLLAPSED = 600;
   const SHELL_WIDTH_EXPANDED = 780;
   const STABLE_OVERLAY_WIDTH = SHELL_WIDTH_EXPANDED;
-  const shellWidth = useMotionValue(SHELL_WIDTH_COLLAPSED);
-  const scrollMaxH = useTransform(
+  const readStoredPanelSize = (key: string): number | null => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const parsed = Number(raw);
+      return Number.isFinite(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  };
+  const storedShellWidth = readStoredPanelSize('natively_shell_width');
+  const storedChatHeight = readStoredPanelSize('natively_chat_max_height');
+  const shellWidth = useMotionValue(
+    storedShellWidth
+      ? clampOverlayPanelSize({ width: storedShellWidth }).width ?? SHELL_WIDTH_COLLAPSED
+      : SHELL_WIDTH_COLLAPSED,
+  );
+  const autoChatMaxH = useTransform(
     shellWidth,
     [SHELL_WIDTH_COLLAPSED, SHELL_WIDTH_EXPANDED],
     [320, 560],
   );
+  const [autoChatMaxHValue, setAutoChatMaxHValue] = useState(storedChatHeight ?? 320);
+  const [userChatMaxHeight, setUserChatMaxHeight] = useState<number | null>(storedChatHeight);
+  const [userShellWidthOverride, setUserShellWidthOverride] = useState<number | null>(
+    storedShellWidth
+      ? clampOverlayPanelSize({ width: storedShellWidth }).width
+      : null,
+  );
+  const userShellWidthOverrideRef = useRef(userShellWidthOverride);
+  const panelResizeRef = useRef<{
+    startX: number;
+    startY: number;
+    startW: number;
+    startH: number;
+    pointerId: number;
+  } | null>(null);
+  const stickyNoteOffsetRef = useRef(0);
+  useMotionValueEvent(autoChatMaxH, 'change', (value) => {
+    if (userChatMaxHeight === null) setAutoChatMaxHValue(value);
+  });
+  useEffect(() => {
+    userShellWidthOverrideRef.current = userShellWidthOverride;
+  }, [userShellWidthOverride]);
+  const effectiveChatMaxH = userChatMaxHeight ?? autoChatMaxHValue;
+  const getOverlayCanvasWidth = useCallback(() => {
+    const animated = Math.ceil(shellWidth.get());
+    const userMin = userShellWidthOverrideRef.current ?? 0;
+    return Math.max(STABLE_OVERLAY_WIDTH, animated, userMin);
+  }, []);
 
   // isExpanded mirror for closures inside refs/observers that must not
   // re-bind on every toggle.
@@ -993,7 +1065,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const reportShellSize = useCallback(() => {
     if (!contentRef.current) return;
     const rect = contentRef.current.getBoundingClientRect();
-    const width = isExpandedRef.current ? STABLE_OVERLAY_WIDTH : Math.ceil(rect.width);
+    const width = isExpandedRef.current ? getOverlayCanvasWidth() : Math.ceil(rect.width);
     const height = Math.ceil(rect.height);
     const api = window.electronAPI as any;
     if (api?.updateContentDimensionsCentered) {
@@ -1001,7 +1073,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     } else {
       window.electronAPI?.updateContentDimensions({ width, height });
     }
-  }, [STABLE_OVERLAY_WIDTH]);
+  }, [getOverlayCanvasWidth]);
 
   // ResizeObserver: rAF-debounced so the spring can update height without
   // flooding IPC. Width is constant in expanded mode, so per-frame updates
@@ -1048,8 +1120,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // picked up by the ResizeObserver and forwarded to the OS as height-only
   // updates (width is unchanged so no X shift, no jump).
   const startTransition = useCallback(
-    (targetWidth: number) => {
-      codeExpandedRef.current = targetWidth === SHELL_WIDTH_EXPANDED;
+    (baseTargetWidth: number) => {
+      const targetWidth = Math.max(baseTargetWidth, userShellWidthOverrideRef.current ?? 0);
+      codeExpandedRef.current = targetWidth >= SHELL_WIDTH_EXPANDED;
       if (animationControlsRef.current) animationControlsRef.current.stop();
 
       // iMessage-style sticky bottom. Capture the user's scroll intent now,
@@ -1383,6 +1456,21 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const streamingMsgIdRef  = useRef<string | null>(null);
   const streamingIntentRef = useRef<string | null>(null);
   const streamingRafRef    = useRef<number | null>(null);
+  const overlayGenerationIdRef = useRef(0);
+  const intelligenceAcceptGenerationRef = useRef(0);
+
+  const bumpOverlayGeneration = useCallback(() => {
+    overlayGenerationIdRef.current += 1;
+  }, []);
+
+  const beginIntelligenceGeneration = useCallback(() => {
+    bumpOverlayGeneration();
+    intelligenceAcceptGenerationRef.current = overlayGenerationIdRef.current;
+  }, [bumpOverlayGeneration]);
+
+  const isIntelligenceGenerationCurrent = useCallback(() => {
+    return overlayGenerationIdRef.current === intelligenceAcceptGenerationRef.current;
+  }, []);
 
   // Helper: render accumulated markdown to the streaming DOM node via RAF.
   // Called after every token write. Schedules at most one RAF per frame.
@@ -1561,6 +1649,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   const prepareIntelligenceStreamPlaceholder = useCallback(
     (intent: string) => {
+      beginIntelligenceGeneration();
       flushToken();
       tokenBufRef.current.intent = '';
       tokenBufRef.current.text = '';
@@ -1582,7 +1671,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         prepareIntelligenceStreamPlaceholderMessages(prev, intent, placeholderId),
       );
     },
-    [flushToken, pinAnswerPanel],
+    [flushToken, pinAnswerPanel, beginIntelligenceGeneration],
   );
 
   const displayMessages = useMemo(
@@ -1734,15 +1823,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceSuggestedAnswerToken((data) => {
+        if (!isIntelligenceGenerationCurrent()) return;
         pinAnswerPanel();
-        // Coaching now arrives via onIntelligenceNegotiationCoaching only —
-        // sentinel detection on this stream has been removed.
         queueToken('what_to_answer', data.token);
       }),
     );
 
     cleanups.push(
       window.electronAPI.onIntelligenceSuggestedAnswer((data) => {
+        if (!isIntelligenceGenerationCurrent()) return;
         setIsProcessing(false);
         pinAnswerPanel();
         finalizeStreamingByIntent('what_to_answer', data.answer);
@@ -1757,6 +1846,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // safety nets and only fire if some other code path emits them.
     cleanups.push(
       window.electronAPI.onIntelligenceTokenBatch((data) => {
+        if (!isIntelligenceGenerationCurrent()) return;
         const { kind, items } = data;
         if (!items || items.length === 0) return;
         if (kind === 'suggested_answer') {
@@ -1768,6 +1858,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           for (const it of items) queueToken('recap', (it as any).token);
         } else if (kind === 'clarify') {
           for (const it of items) queueToken('clarify', (it as any).token);
+        } else if (kind === 'restate') {
+          for (const it of items) queueToken('restate', (it as any).token);
+        } else if (kind === 'lookup') {
+          for (const it of items) queueToken('lookup', (it as any).token);
         } else if (kind === 'follow_up_questions') {
           for (const it of items) queueToken('follow_up_questions', (it as any).token);
         }
@@ -1881,6 +1975,20 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     );
 
     cleanups.push(
+      window.electronAPI.onIntelligenceRestate?.((data) => {
+        setIsProcessing(false);
+        finalizeStreamingByIntent('restate', data.restatement);
+      }) ?? (() => {}),
+    );
+
+    cleanups.push(
+      window.electronAPI.onIntelligenceLookup?.((data) => {
+        setIsProcessing(false);
+        finalizeStreamingByIntent('lookup', data.explanation);
+      }) ?? (() => {}),
+    );
+
+    cleanups.push(
       window.electronAPI.onIntelligenceManualResult((data) => {
         setIsProcessing(false);
         setMessages((prev) => [
@@ -1942,6 +2050,74 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     analytics.trackCopyAnswer();
     // Optional: Trigger a small toast or state change for visual feedback
   }, []);
+
+  const handlePopOutSticky = useCallback((msg: Message) => {
+    if (!msg.text?.trim() || msg.isStreaming || !window.electronAPI?.createStickyNote) return;
+    const shellRect = shellRef.current?.getBoundingClientRect();
+    const offset = stickyNoteOffsetRef.current;
+    stickyNoteOffsetRef.current += 28;
+    const x = window.screenX + (shellRect?.right ?? 240) + 16 + offset;
+    const y = window.screenY + (shellRect?.top ?? 120) + offset;
+    void window.electronAPI.createStickyNote({
+      id: `sticky-${msg.id}`,
+      text: msg.text,
+      intent: msg.intent,
+      x,
+      y,
+    });
+  }, []);
+
+  const handlePanelResizePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      panelResizeRef.current = {
+        startX: event.clientX,
+        startY: event.clientY,
+        startW: userShellWidthOverride ?? shellWidth.get(),
+        startH: userChatMaxHeight ?? autoChatMaxHValue,
+        pointerId: event.pointerId,
+      };
+      event.currentTarget.setPointerCapture(event.pointerId);
+    },
+    [autoChatMaxHValue, shellWidth, userChatMaxHeight, userShellWidthOverride],
+  );
+
+  useEffect(() => {
+    const onPointerMove = (event: PointerEvent) => {
+      const drag = panelResizeRef.current;
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      const dx = event.clientX - drag.startX;
+      const dy = event.clientY - drag.startY;
+      const next = clampOverlayPanelSize({
+        width: drag.startW + dx,
+        height: drag.startH + dy,
+      });
+      if (next.width) {
+        setUserShellWidthOverride(next.width);
+        shellWidth.set(next.width);
+        localStorage.setItem('natively_shell_width', String(next.width));
+      }
+      if (next.height) {
+        setUserChatMaxHeight(next.height);
+        localStorage.setItem('natively_chat_max_height', String(next.height));
+      }
+      reportShellSize();
+    };
+    const onPointerUp = (event: PointerEvent) => {
+      const drag = panelResizeRef.current;
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      panelResizeRef.current = null;
+    };
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
+    };
+  }, [reportShellSize, shellWidth]);
 
   const handleWhatToSay = async (promptInstruction?: string | React.MouseEvent) => {
     if (!tryBeginOverlayAction('what_to_say')) return;
@@ -2113,6 +2289,62 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     } finally {
       endOverlayAction('clarify');
       setIsProcessing(false);
+    }
+  };
+
+  const handleRestate = async () => {
+    if (!tryBeginOverlayAction('restate')) return;
+    setIsExpanded(true);
+    setIsProcessing(true);
+    prepareIntelligenceStreamPlaceholder('restate');
+    analytics.trackCommandExecuted('restate');
+
+    try {
+      await window.electronAPI.generateRestate?.();
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          role: 'system',
+          text: `Error: ${err}`,
+        },
+      ]);
+    } finally {
+      endOverlayAction('restate');
+      setIsProcessing(false);
+    }
+  };
+
+  const handleLookup = async () => {
+    if (!tryBeginOverlayAction('lookup')) return;
+    setIsExpanded(true);
+    setIsProcessing(true);
+    prepareIntelligenceStreamPlaceholder('lookup');
+    analytics.trackCommandExecuted('lookup');
+
+    try {
+      await window.electronAPI.generateLookup?.();
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          role: 'system',
+          text: `Error: ${err}`,
+        },
+      ]);
+    } finally {
+      endOverlayAction('lookup');
+      setIsProcessing(false);
+    }
+  };
+
+  const handleClarifyOrRestate = () => {
+    if (isTechnicalInterviewMode) {
+      handleRestate();
+    } else {
+      handleClarify();
     }
   };
 
@@ -2387,7 +2619,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     }
 
     return () => cleanups.forEach((fn) => fn());
-  }, [currentModel, queueToken, flushToken]); // Ensure tracking captures correct model
+  }, [currentModel, queueToken, flushToken, isIntelligenceGenerationCurrent]);
 
   const handleAnswerNow = async () => {
     if (isManualRecording) {
@@ -2485,6 +2717,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         setIsProcessing(true);
 
         try {
+          if (isTechnicalInterviewMode && currentAttachments.length === 0) {
+            prepareIntelligenceStreamPlaceholder('what_to_answer');
+            requestStartTimeRef.current = Date.now();
+            await window.electronAPI.generateWhatToSay(question);
+            return;
+          }
+
           let prompt = '';
 
           if (currentAttachments.length > 0) {
@@ -2580,6 +2819,7 @@ Provide only the answer, nothing else.`;
     }
     manualSubmitInFlightRef.current = true;
     lastManualSubmitRef.current = { text: userText, atMs: nowMs };
+    bumpOverlayGeneration();
 
     const currentAttachments = attachedContext;
 
@@ -2998,6 +3238,9 @@ Provide only the answer, nothing else.`;
     handleRecap,
     handleAnswerNow,
     handleClarify,
+    handleRestate,
+    handleLookup,
+    handleClarifyOrRestate,
     handleCodeHint,
     handleBrainstorm,
   });
@@ -3010,6 +3253,9 @@ Provide only the answer, nothing else.`;
     handleRecap,
     handleAnswerNow,
     handleClarify,
+    handleRestate,
+    handleLookup,
+    handleClarifyOrRestate,
     handleCodeHint,
     handleBrainstorm,
   };
@@ -3114,6 +3360,9 @@ Provide only the answer, nothing else.`;
         handleRecap,
         handleAnswerNow,
         handleClarify,
+        handleRestate,
+        handleLookup,
+        handleClarifyOrRestate,
         handleCodeHint,
         handleBrainstorm,
       } = handlersRef.current;
@@ -3124,13 +3373,18 @@ Provide only the answer, nothing else.`;
         handleWhatToSay();
       } else if (isShortcutPressed(e, 'clarify')) {
         e.preventDefault();
+        handleClarifyOrRestate();
+      } else if (isShortcutPressed(e, 'askClarify')) {
+        e.preventDefault();
         handleClarify();
       } else if (isShortcutPressed(e, 'followUp')) {
         e.preventDefault();
         handleFollowUpQuestions();
       } else if (isShortcutPressed(e, 'dynamicAction4')) {
         e.preventDefault();
-        if (actionButtonMode === 'brainstorm') {
+        if (isTechnicalInterviewMode) {
+          handleLookup();
+        } else if (actionButtonMode === 'brainstorm') {
           handleBrainstorm();
         } else {
           handleRecap();
@@ -3495,10 +3749,12 @@ Provide only the answer, nothing else.`;
       else if (action === 'followUp') handlers.handleFollowUpQuestions();
       else if (action === 'recap') handlers.handleRecap();
       else if (action === 'dynamicAction4') {
-        if (actionButtonMode === 'brainstorm') handlers.handleBrainstorm();
+        if (isTechnicalInterviewModeRef.current) handlers.handleLookup();
+        else if (actionButtonMode === 'brainstorm') handlers.handleBrainstorm();
         else handlers.handleRecap();
       } else if (action === 'answer') handlers.handleAnswerNow();
-      else if (action === 'clarify') handlers.handleClarify();
+      else if (action === 'clarify') handlers.handleClarifyOrRestate();
+      else if (action === 'askClarify') handlers.handleClarify();
       else if (action === 'codeHint') handlers.handleCodeHint();
       else if (action === 'brainstorm') handlers.handleBrainstorm();
       else if (action === 'scrollUp') inertialScrollRef.current?.kick('vert', -1);
@@ -4103,6 +4359,8 @@ Provide only the answer, nothing else.`;
                 }}
               />
 
+              {isTechnicalInterviewMode ? <RequirementsPanel /> : null}
+
               {/* Rolling Transcript Bar — includes STT status indicator inline */}
               {showRollingTranscriptBar ? (
                 <RollingTranscript
@@ -4125,12 +4383,13 @@ Provide only the answer, nothing else.`;
 
               {/* Chat History - Only show if there are messages OR active states */}
               {showAnswerPanel && (
-                <motion.div
-                  ref={scrollContainerRef}
-                  className="relative z-10 flex-1 overflow-y-auto p-4 space-y-3 no-drag isolate"
-                  layout={false}
-                  style={{ scrollbarWidth: 'none', maxHeight: scrollMaxH }}
-                >
+                <div className="relative">
+                  <motion.div
+                    ref={scrollContainerRef}
+                    className="relative z-10 flex-1 overflow-y-auto p-4 space-y-3 no-drag isolate"
+                    layout={false}
+                    style={{ scrollbarWidth: 'none', maxHeight: effectiveChatMaxH }}
+                  >
                   {/* Every row spans the full inner width of the scroll
                                         container, which itself rides the shell's animated
                                         width. Bubble max-widths are percentages so the text
@@ -4154,6 +4413,7 @@ Provide only the answer, nothing else.`;
                       isLightTheme={isLightTheme}
                       appearance={appearance}
                       onCopy={handleCopy}
+                      onPopOutSticky={handlePopOutSticky}
                       renderMessageText={renderMessageText}
                     />
                   ))}
@@ -4212,6 +4472,24 @@ Provide only the answer, nothing else.`;
                   )}
                   <div ref={messagesEndRef} />
                 </motion.div>
+                <button
+                  type="button"
+                  aria-label="Resize chat panel"
+                  title="Drag to resize chat panel"
+                  onPointerDown={handlePanelResizePointerDown}
+                  onDoubleClick={() => {
+                    setUserChatMaxHeight(null);
+                    setUserShellWidthOverride(null);
+                    localStorage.removeItem('natively_chat_max_height');
+                    localStorage.removeItem('natively_shell_width');
+                    shellWidth.set(SHELL_WIDTH_COLLAPSED);
+                    reportShellSize();
+                  }}
+                  className="no-drag absolute bottom-1 right-1 z-20 h-5 w-5 rounded-md border border-border-subtle bg-bg-item-surface/90 overlay-text-muted hover:overlay-text-primary cursor-nwse-resize flex items-center justify-center"
+                >
+                  <SlidersHorizontal className="w-3 h-3 rotate-90 opacity-70" />
+                </button>
+              </div>
               )}
 
               {/* Quick Actions - Minimal & Clean */}
@@ -4226,18 +4504,29 @@ Provide only the answer, nothing else.`;
                   <Pencil className="w-3 h-3 opacity-70" /> What to answer?
                 </button>
                 <button
-                  onClick={handleClarify}
+                  onClick={handleClarifyOrRestate}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
                   style={appearance.chipStyle}
                 >
-                  <MessageSquare className="w-3 h-3 opacity-70" /> Clarify
+                  <MessageSquare className="w-3 h-3 opacity-70" />{' '}
+                  {isTechnicalInterviewMode ? 'Restate' : 'Clarify'}
                 </button>
                 <button
-                  onClick={actionButtonMode === 'brainstorm' ? handleBrainstorm : handleRecap}
+                  onClick={
+                    isTechnicalInterviewMode
+                      ? handleLookup
+                      : actionButtonMode === 'brainstorm'
+                        ? handleBrainstorm
+                        : handleRecap
+                  }
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
                   style={appearance.chipStyle}
                 >
-                  {actionButtonMode === 'brainstorm' ? (
+                  {isTechnicalInterviewMode ? (
+                    <>
+                      <HelpCircle className="w-3 h-3 opacity-70" /> Lookup
+                    </>
+                  ) : actionButtonMode === 'brainstorm' ? (
                     <>
                       <Lightbulb className="w-3 h-3 opacity-70" /> Brainstorm
                     </>

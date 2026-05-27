@@ -10,6 +10,10 @@ export { FollowUpLLM } from "./FollowUpLLM";
 export { FollowUpQuestionsLLM } from "./FollowUpQuestionsLLM";
 export { RecapLLM } from "./RecapLLM";
 export { WhatToAnswerLLM } from "./WhatToAnswerLLM";
+export { RestateLLM } from "./RestateLLM";
+export { LookupLLM } from "./LookupLLM";
+export { MeetingBriefLLM } from "./MeetingBriefLLM";
+export { DebriefLLM } from "./DebriefLLM";
 export { clampResponse, validateResponse } from "./postProcessor";
 export {
     cleanTranscript,

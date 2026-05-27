@@ -145,7 +145,13 @@ export class MeetingPersistence {
         modeSnapshot?: { id: string; name: string; templateType: string } | null
     ): Promise<void> {
         let title = "Untitled Session";
-        let summaryData: { overview?: string; actionItems: string[], keyPoints: string[], sections?: Array<{ title: string; bullets: string[] }> } = { actionItems: [], keyPoints: [] };
+        let summaryData: {
+            overview?: string;
+            actionItems: string[];
+            keyPoints: string[];
+            sections?: Array<{ title: string; bullets: string[] }>;
+            debrief?: string;
+        } = { actionItems: [], keyPoints: [] };
         // Phase 6 — post_call_summary lifecycle telemetry. Wrapped in try/catch
         // around track calls so a telemetry sink fault never breaks persistence.
         const _postCallStart = Date.now();
@@ -344,6 +350,29 @@ Return ONLY valid JSON (no markdown code blocks):
                     summaryData,
                 }),
             };
+
+            // Post-call debrief for technical interviews
+            if (modeSnapshot?.templateType === 'technical-interview' && data.context.trim()) {
+                try {
+                    const { DebriefLLM } = require('./llm/DebriefLLM');
+                    const debriefLLM = new DebriefLLM(this.llmHelper);
+                    const usageLog = data.usage
+                        .map((u) => `[${u.type}] ${u.question || ''}`)
+                        .join('\n');
+                    const debrief = await debriefLLM.generate({
+                        transcript: data.context,
+                        usageLog,
+                        missedOpportunities: data.usage
+                            .filter((u) => u.type === 'missed_opportunity')
+                            .map((u) => u.question || ''),
+                    });
+                    if (debrief) {
+                        summaryData = { ...summaryData, debrief };
+                    }
+                } catch (debriefErr: any) {
+                    console.warn('[MeetingPersistence] Debrief generation failed:', debriefErr?.message);
+                }
+            }
         } catch (e) {
             console.error("Error generating meeting metadata", e);
         }

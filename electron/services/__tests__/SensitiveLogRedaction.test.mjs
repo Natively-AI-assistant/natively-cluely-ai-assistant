@@ -19,6 +19,7 @@ test('SessionTracker logs transcript and assistant message metadata without text
   assert.match(source, /RX User Segment`, \{ final: segment\.final, length: segment\.text\.length \}/);
   assert.match(source, /RX Interviewer Segment`, \{ final: segment\.final, length: segment\.text\.length \}/);
   assert.match(source, /Force-saving pending interim transcript', \{ length: this\.lastInterimInterviewer\.text\.length \}/);
+  assert.match(source, /Injecting interim transcript`, \{ length: lastInterim\.text\.length \}/);
   assert.doesNotMatch(source, /console\.log[\s\S]{0,120}substring\(/);
   assert.doesNotMatch(source, /Force-saving pending interim transcript:', this\.lastInterimInterviewer\.text/);
   assert.doesNotMatch(source, /transcriptEpochSummaries\.push\([^\n]*(substring|\.text)/);
@@ -29,7 +30,6 @@ test('IntelligenceEngine logs interim transcript metadata without text snippets'
   const source = read('electron/IntelligenceEngine.ts');
 
   assert.match(source, /Speculative inference fired on interim`, \{ length: text\.length, confidence \}/);
-  assert.match(source, /Injecting interim transcript`, \{ length: lastInterim\.text\.length \}/);
   assert.doesNotMatch(source, /console\.log[\s\S]{0,120}substring\(/);
 });
 
