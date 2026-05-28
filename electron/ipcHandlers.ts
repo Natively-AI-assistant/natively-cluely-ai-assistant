@@ -13,12 +13,9 @@ import { PhoneMirrorService } from './services/PhoneMirrorService';
 import { SettingsManager } from './services/SettingsManager';
 import { SkillsManager } from './services/SkillsManager';
 
-import { TRIAL_SENTINEL_KEY } from './config/constants';
+import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { CHAT_MODE_PROMPT } from './llm/prompts';
-
-// Single source of truth for DOM capture character budget.
-export const DOM_CONTEXT_MAX_CHARS = 25000;
 
 export function initializeIpcHandlers(appState: AppState): void {
   const safeHandle = (

@@ -4,7 +4,7 @@
 
 import { TrustLevel, ContextBlock, EvidenceRef, containsPromptInjection, TRUST_LEVEL_ORDER } from './TrustLevels';
 import { ContextPacket } from './ContextPacket';
-import { DOM_CONTEXT_MAX_CHARS } from '../../ipcHandlers';
+import { DOM_CONTEXT_MAX_CHARS } from '../../config/constants';
 
 // Screen context delivered to PromptAssembler.
 //
@@ -182,7 +182,7 @@ export class PromptAssembler {
      * The content is still included (user may have legitimate content matching patterns)
      * but the dangerous patterns are neutralized.
      */
-    private escapePromptInjection(text: string): string {
+    private escapePromptInjection(text: string, forceRedactOnInjection = false): string {
         if (!text) return '';
 
         // 1. Strip zero-width obfuscation and control characters
@@ -205,7 +205,12 @@ export class PromptAssembler {
             result = result.replace(regex, replacement);
         }
 
-        // 3. Robust regex patterns to neutralize common instruction-override vectors
+        // 3. Strip both raw and HTML-escaped tags to catch split prompt injections
+        const tagStripped = result
+            .replace(/<[^>]*>/g, ' ')
+            .replace(/&lt;[^&gt;]*&gt;/gi, ' ');
+
+        // 4. Robust regex patterns to neutralize common instruction-override vectors
         const patterns = [
             { regex: /ignore\s*(?:previous|prior|all)\s*instructions/gi, replacement: 'IGNORE [REDACTED] instructions' },
             { regex: /disregard\s*(?:previous|prior|all)\s*(?:instructions|prompts)/gi, replacement: 'DISREGARD [REDACTED] prompts' },
@@ -218,6 +223,18 @@ export class PromptAssembler {
             { regex: /reset\s*context\b/gi, replacement: 'RESET [REDACTED]' },
         ];
 
+        const hasInjection = patterns.some(({ regex }) => regex.test(tagStripped)) ||
+                             controlTokens.some(({ regex }) => regex.test(tagStripped));
+
+        if (hasInjection) {
+            console.warn('[Security] Prompt injection pattern detected in tag-stripped DOM/text content.');
+            if (forceRedactOnInjection) {
+                // For high-risk DOM blocks, perform total redaction to fail safe.
+                return '[REDACTED: A potential prompt injection attempt was neutralized in this block.]';
+            }
+        }
+
+        // 5. Perform regular replacements to neutralize the patterns while retaining semantic content
         for (const { regex, replacement } of patterns) {
             result = result.replace(regex, replacement);
         }
@@ -379,7 +396,7 @@ ${this.escapeUserContent(truncated)}
             tokenBudget: 6000,
             content: `<dom_context trust_level="untrusted_screen_evidence" source="browser_dom">
 DOM HTML/TEXT STRUCTURE:
-${this.escapeUserContent(this.escapePromptInjection(truncated))}
+${this.escapePromptInjection(this.escapeUserContent(truncated), true)}
 </dom_context>`,
             evidenceRefs: [{
                 source: 'screen',
