@@ -17,6 +17,9 @@ import { TRIAL_SENTINEL_KEY } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { CHAT_MODE_PROMPT } from './llm/prompts';
 
+// Single source of truth for DOM capture character budget.
+export const DOM_CONTEXT_MAX_CHARS = 25000;
+
 export function initializeIpcHandlers(appState: AppState): void {
   const safeHandle = (
     channel: string,
@@ -2986,7 +2989,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 : undefined,
             domContext:
               typeof options?.domContext === 'string'
-                ? options.domContext.substring(0, 25000)
+                ? options.domContext.substring(0, DOM_CONTEXT_MAX_CHARS)
                 : undefined,
           },
         );

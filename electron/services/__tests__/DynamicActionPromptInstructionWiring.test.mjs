@@ -27,7 +27,7 @@ test('generate-what-to-say IPC forwards promptInstruction option to Intelligence
 
   assert.match(handlerSource, /options\?: \{ promptInstruction\?: string; domContext\?: string \}/);
   assert.match(handlerSource, /promptInstruction:[\s\S]{0,120}typeof options\?\.promptInstruction === 'string'[\s\S]{0,80}options\.promptInstruction[\s\S]{0,40}: undefined/);
-  assert.match(handlerSource, /domContext:[\s\S]{0,120}typeof options\?\.domContext === 'string'[\s\S]{0,80}options\.domContext\.substring\(0, 25000\)[\s\S]{0,40}: undefined/);
+  assert.match(handlerSource, /domContext:[\s\S]{0,120}typeof options\?\.domContext === 'string'[\s\S]{0,80}options\.domContext\.substring\(0, DOM_CONTEXT_MAX_CHARS\)[\s\S]{0,40}: undefined/);
 });
 
 test('preload and renderer type expose promptInstruction option on generateWhatToSay', () => {

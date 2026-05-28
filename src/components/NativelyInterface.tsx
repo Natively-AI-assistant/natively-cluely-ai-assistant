@@ -64,6 +64,9 @@ import TopPill from './ui/TopPill';
 const REMARK_PLUGINS = [remarkGfm, remarkMath];
 const REHYPE_PLUGINS = [rehypeKatex];
 
+// Single source of truth for DOM capture character budget.
+const DOM_CONTEXT_MAX_CHARS = 25000;
+
 interface Message {
   id: string;
   role: 'user' | 'system' | 'interviewer';
@@ -364,6 +367,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const requestStartTimeRef = useRef<number | null>(null);
 
   // Secure window.lastCapturedDOM so active-tab DOM capture stays bounded and typed.
+  // NOTE: This property is written to asynchronously by an external Natively companion
+  // browser extension that captures DOM structures from the active browser tab.
   useEffect(() => {
     let lastCapturedDOM = '';
     try {
@@ -373,17 +378,25 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         },
         set(value) {
           if (typeof value === 'string') {
-            lastCapturedDOM = value.substring(0, 25000);
+            lastCapturedDOM = value.substring(0, DOM_CONTEXT_MAX_CHARS);
           } else {
             console.warn('[Security] Rejected non-string assignment to window.lastCapturedDOM');
           }
         },
         enumerable: true,
-        configurable: false,
+        configurable: true, // Allows clean redefinition/removal during React unmount/remount
       });
     } catch (error: any) {
       console.warn('[Security] window.lastCapturedDOM definition skipped:', error?.message || error);
     }
+
+    return () => {
+      try {
+        delete (window as any).lastCapturedDOM;
+      } catch (e) {
+        /* Non-fatal: cleanup is best-effort */
+      }
+    };
   }, []);
 
   // Sync transcript setting
@@ -1892,8 +1905,18 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       const rawDomContext = (window as any).lastCapturedDOM;
       const domContext =
         typeof rawDomContext === 'string' && rawDomContext.trim().length > 0
-          ? rawDomContext.substring(0, 25000)
+          ? rawDomContext.substring(0, DOM_CONTEXT_MAX_CHARS)
           : undefined;
+
+      // Clear the captured DOM immediately after reading it to ensure stale DOM context
+      // from prior pages is never re-sent on subsequent requests.
+      if (typeof (window as any).lastCapturedDOM === 'string') {
+        (window as any).lastCapturedDOM = '';
+      }
+
+      if (domContext) {
+        console.log(`[DOM Context] Forwarding captured active-tab DOM structure (${domContext.length} chars)`);
+      }
 
       const options =
         dynamicPromptInstruction || domContext

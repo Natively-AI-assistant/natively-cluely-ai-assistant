@@ -5,6 +5,9 @@
 import { TrustLevel, ContextBlock, EvidenceRef, containsPromptInjection, TRUST_LEVEL_ORDER } from './TrustLevels';
 import { ContextPacket } from './ContextPacket';
 
+// Single source of truth for DOM capture character budget.
+const DOM_CONTEXT_MAX_CHARS = 25000;
+
 // Screen context delivered to PromptAssembler.
 //
 // VISION-FIRST: extractedText, visibleSummary, screenType, codeBlocks, tables, errors
@@ -339,7 +342,7 @@ ${this.escapeUserContent(truncated)}
     }
 
     private buildDomContextBlock(domContext: string): ContextBlock {
-        const maxLength = 25000;
+        const maxLength = DOM_CONTEXT_MAX_CHARS;
         const truncated = domContext.length > maxLength
             ? domContext.substring(0, maxLength) + '\n[...truncated]'
             : domContext;
