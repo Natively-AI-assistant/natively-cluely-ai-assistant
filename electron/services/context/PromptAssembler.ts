@@ -4,9 +4,7 @@
 
 import { TrustLevel, ContextBlock, EvidenceRef, containsPromptInjection, TRUST_LEVEL_ORDER } from './TrustLevels';
 import { ContextPacket } from './ContextPacket';
-
-// Single source of truth for DOM capture character budget.
-const DOM_CONTEXT_MAX_CHARS = 25000;
+import { DOM_CONTEXT_MAX_CHARS } from '../../ipcHandlers';
 
 // Screen context delivered to PromptAssembler.
 //
@@ -134,12 +132,12 @@ export class PromptAssembler {
             this.addBlock(packet, this.buildRetrievedModeContextBlock(params.retrievedModeContext));
         }
 
-        // 6. MEETING HISTORY — untrusted past meetings
+        // 7. MEETING HISTORY — untrusted past meetings
         if (params.meetingHistory && params.meetingHistory.length > 0) {
             this.addBlock(packet, this.buildMeetingHistoryBlock(params.meetingHistory));
         }
 
-        // 6. CUSTOM CONTEXT (user-provided extra context)
+        // 8. CUSTOM CONTEXT (user-provided extra context)
         if (params.customContext) {
             this.addBlock(packet, {
                 type: 'custom_context',
@@ -185,18 +183,45 @@ export class PromptAssembler {
      * but the dangerous patterns are neutralized.
      */
     private escapePromptInjection(text: string): string {
-        const patterns = [
-            { regex: /ignore\s*(previous|all)\s*instructions/gi, replacement: 'IGNORE [REDACTED] instructions' },
-            { regex: /disregard\s*(previous|all)\s*(instructions|prompts)/gi, replacement: 'DISREGARD [REDACTED] prompts' },
-            { regex: /you\s*(are\s*now|should)\s*act\s+as/gi, replacement: 'you should ACT AS [REDACTED]' },
-            { regex: /system\s*prompt:/gi, replacement: 'SYSTEM PROMPT: [REDACTED]' },
-            { regex: /\[INST\]\[INST\]/gi, replacement: '[INST][REDACTED][INST]' },
+        if (!text) return '';
+
+        // 1. Strip zero-width obfuscation and control characters
+        let result = text.replace(/[\u200B-\u200D\uFEFF\u200E\u200F\u202A-\u202E]/g, '');
+
+        // 2. Symmetrically neutralize standard LLM system/role/chat templates and tokens
+        const controlTokens = [
+            { regex: /<\|im_start\|>/gi, replacement: '<|im_start_redacted|>' },
+            { regex: /<\|im_end\|>/gi, replacement: '<|im_end_redacted|>' },
+            { regex: /<\|endoftext\|>/gi, replacement: '<|endoftext_redacted|>' },
+            { regex: /\[INST\]/gi, replacement: '[INST_REDACTED]' },
+            { regex: /\[\/INST\]/gi, replacement: '[/INST_REDACTED]' },
+            { regex: /<<SYS>>/gi, replacement: '<<SYS_REDACTED>>' },
+            { regex: /<<\/SYS>>/gi, replacement: '<</SYS_REDACTED>>' },
+            { regex: /<s>/gi, replacement: '<s>_redacted' },
+            { regex: /<\/s>/gi, replacement: '</s>_redacted' },
         ];
 
-        let result = text;
+        for (const { regex, replacement } of controlTokens) {
+            result = result.replace(regex, replacement);
+        }
+
+        // 3. Robust regex patterns to neutralize common instruction-override vectors
+        const patterns = [
+            { regex: /ignore\s*(?:previous|prior|all)\s*instructions/gi, replacement: 'IGNORE [REDACTED] instructions' },
+            { regex: /disregard\s*(?:previous|prior|all)\s*(?:instructions|prompts)/gi, replacement: 'DISREGARD [REDACTED] prompts' },
+            { regex: /overwrite\s*(?:previous|prior|all)\b/gi, replacement: 'OVERWRITE [REDACTED]' },
+            { regex: /do\s*not\s*follow\s*(?:previous|prior|any)\s*instructions/gi, replacement: 'DO NOT FOLLOW [REDACTED] instructions' },
+            { regex: /you\s*(?:are\s*now|should)\s*act\s+as/gi, replacement: 'you should ACT AS [REDACTED]' },
+            { regex: /system\s*prompt\s*:/gi, replacement: 'SYSTEM PROMPT: [REDACTED]' },
+            { regex: /developer\s*prompt\s*:/gi, replacement: 'DEVELOPER PROMPT: [REDACTED]' },
+            { regex: /output\s*exactly\s*this/gi, replacement: 'OUTPUT [REDACTED]' },
+            { regex: /reset\s*context\b/gi, replacement: 'RESET [REDACTED]' },
+        ];
+
         for (const { regex, replacement } of patterns) {
             result = result.replace(regex, replacement);
         }
+
         return result;
     }
 

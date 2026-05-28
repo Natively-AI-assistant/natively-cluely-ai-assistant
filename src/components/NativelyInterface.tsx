@@ -370,6 +370,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // NOTE: This property is written to asynchronously by an external Natively companion
   // browser extension that captures DOM structures from the active browser tab.
   useEffect(() => {
+    // If already defined on window (e.g. from a prior Strict Mode mount), skip redefinition
+    // to avoid TypeError under configurable: false, but preserve cleanup reset behavior.
+    if ('lastCapturedDOM' in window) {
+      return () => {
+        try {
+          (window as any).lastCapturedDOM = '';
+        } catch (_) {}
+      };
+    }
+
     let lastCapturedDOM = '';
     try {
       Object.defineProperty(window, 'lastCapturedDOM', {
@@ -384,7 +394,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           }
         },
         enumerable: true,
-        configurable: true, // Allows clean redefinition/removal during React unmount/remount
+        configurable: false, // Locked securely to prevent tampering by external scripts
       });
     } catch (error: any) {
       console.warn('[Security] window.lastCapturedDOM definition skipped:', error?.message || error);
@@ -392,10 +402,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     return () => {
       try {
-        delete (window as any).lastCapturedDOM;
-      } catch (e) {
-        /* Non-fatal: cleanup is best-effort */
-      }
+        (window as any).lastCapturedDOM = '';
+      } catch (_) {}
     };
   }, []);
 
