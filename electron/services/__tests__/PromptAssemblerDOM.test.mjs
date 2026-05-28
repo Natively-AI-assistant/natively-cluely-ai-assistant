@@ -101,6 +101,7 @@ describe('PromptAssembler DOM Extension', () => {
     assert.ok(domBlock, 'dom_context block should exist');
     assert.match(domBlock.content, /REDACTED/);
     assert.doesNotMatch(domBlock.content, /ignore/i);
+    assert.equal(domBlock.evidenceRefs[0].text, '[REDACTED]', 'evidence text should be redacted');
   });
 
   test('neutralizes HTML-escaped control tokens in DOM context', async () => {
@@ -114,6 +115,7 @@ describe('PromptAssembler DOM Extension', () => {
     assert.ok(domBlock, 'dom_context block should exist');
     assert.match(domBlock.content, /REDACTED/);
     assert.doesNotMatch(domBlock.content, /im_start/);
+    assert.equal(domBlock.evidenceRefs[0].text, '[REDACTED]', 'evidence text should be redacted');
   });
 
   test('neutralizes HTML-split prompt injection patterns inline in reference files', async () => {

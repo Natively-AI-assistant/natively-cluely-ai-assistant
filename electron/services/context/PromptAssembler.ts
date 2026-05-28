@@ -255,6 +255,14 @@ export class PromptAssembler {
         const hasInjection = patterns.some(({ regex }) => regex.test(tagStripped)) ||
                              controlTokens.some(({ regex }) => regex.test(result));
 
+        // Reset lastIndex on global regex instances to avoid state retention issues in test/replace calls
+        for (const { regex } of controlTokens) {
+            regex.lastIndex = 0;
+        }
+        for (const { regex } of patterns) {
+            regex.lastIndex = 0;
+        }
+
         if (hasInjection) {
             console.warn('[Security] Prompt injection pattern detected in tag-stripped DOM/text content.');
             if (forceRedactOnInjection) {
@@ -423,6 +431,12 @@ ${this.escapeUserContent(truncated)}
             ? domContext.substring(0, maxLength) + '\n[...truncated]'
             : domContext;
 
+        const sanitizedContent = this.escapePromptInjection(this.escapeUserContent(truncated), true);
+        const isRedacted = sanitizedContent.includes('[REDACTED:');
+        const evidenceText = isRedacted
+            ? '[REDACTED]'
+            : this.escapePromptInjection(this.escapeUserContent(truncated.substring(0, 100)));
+
         return {
             type: 'dom_context',
             trustLevel: TrustLevel.UNTRUSTED_SCREEN,
@@ -430,11 +444,11 @@ ${this.escapeUserContent(truncated)}
             tokenBudget: 6000,
             content: `<dom_context trust_level="untrusted_screen_evidence" source="browser_dom">
 DOM HTML/TEXT STRUCTURE:
-${this.escapePromptInjection(this.escapeUserContent(truncated), true)}
+${sanitizedContent}
 </dom_context>`,
             evidenceRefs: [{
                 source: 'screen',
-                text: truncated.substring(0, 100),
+                text: evidenceText,
                 chunkId: 'dom_capture',
             }],
         };

@@ -1922,7 +1922,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       }
 
       if (domContext) {
-        console.log(`[DOM Context] Forwarding captured active-tab DOM structure (${domContext.length} chars)`);
+        console.debug(`[DOM Context] Forwarding captured active-tab DOM structure (${domContext.length} chars)`);
       }
 
       const options =
