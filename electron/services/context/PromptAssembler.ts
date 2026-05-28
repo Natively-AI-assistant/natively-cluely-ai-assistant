@@ -188,43 +188,72 @@ export class PromptAssembler {
         // 1. Strip zero-width obfuscation and control characters
         let result = text.replace(/[\u200B-\u200D\uFEFF\u200E\u200F\u202A-\u202E]/g, '');
 
-        // 2. Symmetrically neutralize standard LLM system/role/chat templates and tokens
+        // 2. Strip both raw and HTML-escaped/double-escaped tags to catch split prompt injections in a plain text representation
+        const tagStripped = result
+            .replace(/<[\s\S]*?>/g, ' ')
+            .replace(/&(?:amp;)?lt;[\s\S]*?&(?:amp;)?gt;/gi, ' ');
+
+        // 3. Symmetrically neutralize standard LLM system/role/chat templates and tokens.
+        // We handle both raw, entity-encoded, and double-escaped variants (e.g. &lt; or &amp;lt;).
         const controlTokens = [
-            { regex: /<\|im_start\|>/gi, replacement: '<|im_start_redacted|>' },
-            { regex: /<\|im_end\|>/gi, replacement: '<|im_end_redacted|>' },
-            { regex: /<\|endoftext\|>/gi, replacement: '<|endoftext_redacted|>' },
+            { regex: /(?:<\|im_start\|>|&(?:amp;)?lt;\|im_start\|&(?:amp;)?gt;)/gi, replacement: '<|im_start_redacted|>' },
+            { regex: /(?:<\|im_end\|>|&(?:amp;)?lt;\|im_end\|&(?:amp;)?gt;)/gi, replacement: '<|im_end_redacted|>' },
+            { regex: /(?:<\|endoftext\|>|&(?:amp;)?lt;\|endoftext\|&(?:amp;)?gt;)/gi, replacement: '<|endoftext_redacted|>' },
             { regex: /\[INST\]/gi, replacement: '[INST_REDACTED]' },
             { regex: /\[\/INST\]/gi, replacement: '[/INST_REDACTED]' },
-            { regex: /<<SYS>>/gi, replacement: '<<SYS_REDACTED>>' },
-            { regex: /<<\/SYS>>/gi, replacement: '<</SYS_REDACTED>>' },
-            { regex: /<s>/gi, replacement: '<s>_redacted' },
-            { regex: /<\/s>/gi, replacement: '</s>_redacted' },
+            { regex: /(?:<<SYS>>|&(?:amp;)?lt;&(?:amp;)?lt;SYS&(?:amp;)?gt;&(?:amp;)?gt;)/gi, replacement: '<<SYS_REDACTED>>' },
+            { regex: /(?:<<\/SYS>>|&(?:amp;)?lt;&(?:amp;)?lt;\/SYS&(?:amp;)?gt;&(?:amp;)?gt;)/gi, replacement: '<</SYS_REDACTED>>' },
+            { regex: /(?:<s>|&(?:amp;)?lt;s&(?:amp;)?gt;)/gi, replacement: '<s>_redacted' },
+            { regex: /(?:<\/s>|&(?:amp;)?lt;\/s&(?:amp;)?gt;)/gi, replacement: '</s>_redacted' },
         ];
 
-        for (const { regex, replacement } of controlTokens) {
-            result = result.replace(regex, replacement);
-        }
+        // 4. Robust, tag-agnostic regex patterns to neutralize common instruction-override vectors.
+        // The separator allows optional spaces and/or raw/escaped/double-escaped HTML tags between words.
+        const separator = '(?:\\s|<[\\s\\S]*?>|&(?:amp;)?lt;[\\s\\S]*?&(?:amp;)?gt;)*';
+        const separatorRequired = '(?:\\s|<[\\s\\S]*?>|&(?:amp;)?lt;[\\s\\S]*?&(?:amp;)?gt;)+';
 
-        // 3. Strip both raw and HTML-escaped tags to catch split prompt injections
-        const tagStripped = result
-            .replace(/<[^>]*>/g, ' ')
-            .replace(/&lt;[^&gt;]*&gt;/gi, ' ');
-
-        // 4. Robust regex patterns to neutralize common instruction-override vectors
         const patterns = [
-            { regex: /ignore\s*(?:previous|prior|all)\s*instructions/gi, replacement: 'IGNORE [REDACTED] instructions' },
-            { regex: /disregard\s*(?:previous|prior|all)\s*(?:instructions|prompts)/gi, replacement: 'DISREGARD [REDACTED] prompts' },
-            { regex: /overwrite\s*(?:previous|prior|all)\b/gi, replacement: 'OVERWRITE [REDACTED]' },
-            { regex: /do\s*not\s*follow\s*(?:previous|prior|any)\s*instructions/gi, replacement: 'DO NOT FOLLOW [REDACTED] instructions' },
-            { regex: /you\s*(?:are\s*now|should)\s*act\s+as/gi, replacement: 'you should ACT AS [REDACTED]' },
-            { regex: /system\s*prompt\s*:/gi, replacement: 'SYSTEM PROMPT: [REDACTED]' },
-            { regex: /developer\s*prompt\s*:/gi, replacement: 'DEVELOPER PROMPT: [REDACTED]' },
-            { regex: /output\s*exactly\s*this/gi, replacement: 'OUTPUT [REDACTED]' },
-            { regex: /reset\s*context\b/gi, replacement: 'RESET [REDACTED]' },
+            {
+                regex: new RegExp(`ignore${separator}(?:previous|prior|all)${separator}instructions`, 'gi'),
+                replacement: 'IGNORE [REDACTED] instructions'
+            },
+            {
+                regex: new RegExp(`disregard${separator}(?:previous|prior|all)${separator}(?:instructions|prompts)`, 'gi'),
+                replacement: 'DISREGARD [REDACTED] prompts'
+            },
+            {
+                regex: new RegExp(`overwrite${separator}(?:previous|prior|all)\\b`, 'gi'),
+                replacement: 'OVERWRITE [REDACTED]'
+            },
+            {
+                regex: new RegExp(`do${separator}not${separator}follow${separator}(?:previous|prior|any)${separator}instructions`, 'gi'),
+                replacement: 'DO NOT FOLLOW [REDACTED] instructions'
+            },
+            {
+                regex: new RegExp(`you${separator}(?:are${separator}now|should)${separator}act${separatorRequired}as`, 'gi'),
+                replacement: 'you should ACT AS [REDACTED]'
+            },
+            {
+                regex: new RegExp(`system${separator}prompt${separator}:`, 'gi'),
+                replacement: 'SYSTEM PROMPT: [REDACTED]'
+            },
+            {
+                regex: new RegExp(`developer${separator}prompt${separator}:`, 'gi'),
+                replacement: 'DEVELOPER PROMPT: [REDACTED]'
+            },
+            {
+                regex: new RegExp(`output${separator}exactly${separator}this`, 'gi'),
+                replacement: 'OUTPUT [REDACTED]'
+            },
+            {
+                regex: new RegExp(`reset${separator}context\\b`, 'gi'),
+                replacement: 'RESET [REDACTED]'
+            },
         ];
 
+        // Evaluate injection check: patterns on the tag-stripped representation, control tokens on the unstripped text
         const hasInjection = patterns.some(({ regex }) => regex.test(tagStripped)) ||
-                             controlTokens.some(({ regex }) => regex.test(tagStripped));
+                             controlTokens.some(({ regex }) => regex.test(result));
 
         if (hasInjection) {
             console.warn('[Security] Prompt injection pattern detected in tag-stripped DOM/text content.');
@@ -234,7 +263,12 @@ export class PromptAssembler {
             }
         }
 
-        // 5. Perform regular replacements to neutralize the patterns while retaining semantic content
+        // 5. Perform standard control token neutralization
+        for (const { regex, replacement } of controlTokens) {
+            result = result.replace(regex, replacement);
+        }
+
+        // 6. Perform regular replacements to neutralize the patterns while retaining semantic content
         for (const { regex, replacement } of patterns) {
             result = result.replace(regex, replacement);
         }

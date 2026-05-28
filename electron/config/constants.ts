@@ -15,4 +15,5 @@
 export const TRIAL_SENTINEL_KEY = '__trial__' as const;
 
 // Single source of truth for DOM capture character budget.
-export const DOM_CONTEXT_MAX_CHARS = 25000;
+export { DOM_CONTEXT_MAX_CHARS } from '../../src/constants/domCapture';
+

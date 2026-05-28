@@ -64,8 +64,7 @@ import TopPill from './ui/TopPill';
 const REMARK_PLUGINS = [remarkGfm, remarkMath];
 const REHYPE_PLUGINS = [rehypeKatex];
 
-// Single source of truth for DOM capture character budget.
-const DOM_CONTEXT_MAX_CHARS = 25000;
+import { DOM_CONTEXT_MAX_CHARS } from '../constants/domCapture';
 
 interface Message {
   id: string;
