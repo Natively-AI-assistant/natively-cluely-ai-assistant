@@ -13,7 +13,7 @@ import { PhoneMirrorService } from './services/PhoneMirrorService';
 import { SettingsManager } from './services/SettingsManager';
 import { SkillsManager } from './services/SkillsManager';
 
-import { TRIAL_SENTINEL_KEY } from './config/constants';
+import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { CHAT_MODE_PROMPT } from './llm/prompts';
 
@@ -2865,7 +2865,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       _,
       question?: string,
       imagePaths?: string[],
-      options?: { promptInstruction?: string },
+      options?: { promptInstruction?: string; domContext?: string },
     ) => {
       try {
         let screenContext: any;
@@ -2983,6 +2983,10 @@ export function initializeIpcHandlers(appState: AppState): void {
             promptInstruction:
               typeof options?.promptInstruction === 'string'
                 ? options.promptInstruction
+                : undefined,
+            domContext:
+              typeof options?.domContext === 'string'
+                ? options.domContext.substring(0, DOM_CONTEXT_MAX_CHARS)
                 : undefined,
           },
         );

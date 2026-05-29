@@ -943,7 +943,7 @@ export class LLMHelper {
     time_complexity: string;
     space_complexity: string;
   }> {
-    const systemPrompt = `You are an elite FAANG Senior Software Engineer taking a live technical interview.
+    const defaultPrompt = `You are an elite FAANG Senior Software Engineer taking a live technical interview.
 The user has provided a screenshot of a coding problem. You must generate a highly structured "Rolling Interview Script" that the candidate can read out loud to pass the interview perfectly.
 
 Output EXACTLY this JSON structure, and nothing else (no markdown fences around the whole response):
@@ -960,6 +960,8 @@ CRITICAL RULES:
 - The scripts MUST sound like a human speaking out loud in an interview. Use "I", "we", "my first thought is".
 - The JSON must be perfectly valid. Escape any internal quotes with backslash.
 - Do NOT wrap the JSON in markdown fences.`;
+
+    const systemPrompt = process.env.LOCAL_SCREENSHOT_SOLVER_PROMPT || defaultPrompt;
 
     const userPrompt = `Please analyze the coding problem shown in the screenshot(s) and generate the Rolling Interview Script JSON.`;
 

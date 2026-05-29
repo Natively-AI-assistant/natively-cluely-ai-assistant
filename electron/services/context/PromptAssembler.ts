@@ -4,6 +4,7 @@
 
 import { TrustLevel, ContextBlock, EvidenceRef, containsPromptInjection, TRUST_LEVEL_ORDER } from './TrustLevels';
 import { ContextPacket } from './ContextPacket';
+import { DOM_CONTEXT_MAX_CHARS } from '../../config/constants';
 
 // Screen context delivered to PromptAssembler.
 //
@@ -63,6 +64,7 @@ export class PromptAssembler {
         modeTemplateType: string;
         modeId?: string;
         screenContext?: ScreenContext;
+        domContext?: string;
         modeContext?: ModeContextSource;
         customContext?: string;
         meetingHistory?: string[];
@@ -86,6 +88,7 @@ export class PromptAssembler {
                     params.screenContext?.visibleSummary ||
                     params.screenContext?.ocrText
                 ),
+                domContextAvailable: Boolean(params.domContext),
                 tokenBudget: params.tokenBudget,
                 totalTokensUsed: 0,
             },
@@ -111,12 +114,17 @@ export class PromptAssembler {
             this.addBlock(packet, this.buildScreenContextBlock(params.screenContext));
         }
 
-        // 4. TRANSCRIPT — untrusted conversation
+        // 4. DOM CONTEXT - untrusted page evidence
+        if (params.domContext) {
+            this.addBlock(packet, this.buildDomContextBlock(params.domContext));
+        }
+
+        // 5. TRANSCRIPT — untrusted conversation
         if (params.transcript) {
             this.addBlock(packet, this.buildTranscriptBlock(params.transcript));
         }
 
-        // 5. MODE CONTEXT — custom instructions + reference files
+        // 6. MODE CONTEXT — custom instructions + reference files
         if (params.modeContext) {
             this.addModeContextBlocks(packet, params.modeContext);
         }
@@ -124,12 +132,12 @@ export class PromptAssembler {
             this.addBlock(packet, this.buildRetrievedModeContextBlock(params.retrievedModeContext));
         }
 
-        // 6. MEETING HISTORY — untrusted past meetings
+        // 7. MEETING HISTORY — untrusted past meetings
         if (params.meetingHistory && params.meetingHistory.length > 0) {
             this.addBlock(packet, this.buildMeetingHistoryBlock(params.meetingHistory));
         }
 
-        // 6. CUSTOM CONTEXT (user-provided extra context)
+        // 8. CUSTOM CONTEXT (user-provided extra context)
         if (params.customContext) {
             this.addBlock(packet, {
                 type: 'custom_context',
@@ -174,19 +182,105 @@ export class PromptAssembler {
      * The content is still included (user may have legitimate content matching patterns)
      * but the dangerous patterns are neutralized.
      */
-    private escapePromptInjection(text: string): string {
-        const patterns = [
-            { regex: /ignore\s*(previous|all)\s*instructions/gi, replacement: 'IGNORE [REDACTED] instructions' },
-            { regex: /disregard\s*(previous|all)\s*(instructions|prompts)/gi, replacement: 'DISREGARD [REDACTED] prompts' },
-            { regex: /you\s*(are\s*now|should)\s*act\s+as/gi, replacement: 'you should ACT AS [REDACTED]' },
-            { regex: /system\s*prompt:/gi, replacement: 'SYSTEM PROMPT: [REDACTED]' },
-            { regex: /\[INST\]\[INST\]/gi, replacement: '[INST][REDACTED][INST]' },
+    private escapePromptInjection(text: string, forceRedactOnInjection = false): string {
+        if (!text) return '';
+
+        // 1. Strip zero-width obfuscation and control characters
+        let result = text.replace(/[\u200B-\u200D\uFEFF\u200E\u200F\u202A-\u202E]/g, '');
+
+        // 2. Strip both raw and HTML-escaped/double-escaped tags to catch split prompt injections in a plain text representation
+        const tagStripped = result
+            .replace(/<[\s\S]*?>/g, ' ')
+            .replace(/&(?:amp;)?lt;[\s\S]*?&(?:amp;)?gt;/gi, ' ');
+
+        // 3. Symmetrically neutralize standard LLM system/role/chat templates and tokens.
+        // We handle both raw, entity-encoded, and double-escaped variants (e.g. &lt; or &amp;lt;).
+        const controlTokens = [
+            { regex: /(?:<\|im_start\|>|&(?:amp;)?lt;\|im_start\|&(?:amp;)?gt;)/gi, replacement: '|im_start_redacted|' },
+            { regex: /(?:<\|im_end\|>|&(?:amp;)?lt;\|im_end\|&(?:amp;)?gt;)/gi, replacement: '|im_end_redacted|' },
+            { regex: /(?:<\|endoftext\|>|&(?:amp;)?lt;\|endoftext\|&(?:amp;)?gt;)/gi, replacement: '|endoftext_redacted|' },
+            { regex: /\[INST\]/gi, replacement: '[INST_REDACTED]' },
+            { regex: /\[\/INST\]/gi, replacement: '[/INST_REDACTED]' },
+            { regex: /(?:<<SYS>>|&(?:amp;)?lt;&(?:amp;)?lt;SYS&(?:amp;)?gt;&(?:amp;)?gt;)/gi, replacement: '|SYS_REDACTED|' },
+            { regex: /(?:<<\/SYS>>|&(?:amp;)?lt;&(?:amp;)?lt;\/SYS&(?:amp;)?gt;&(?:amp;)?gt;)/gi, replacement: '|/SYS_REDACTED|' },
+            { regex: /(?:<s>|&(?:amp;)?lt;s&(?:amp;)?gt;)/gi, replacement: '|s_redacted|' },
+            { regex: /(?:<\/s>|&(?:amp;)?lt;\/s&(?:amp;)?gt;)/gi, replacement: '|/s_redacted|' },
         ];
 
-        let result = text;
+        // 4. Robust, tag-agnostic regex patterns to neutralize common instruction-override vectors.
+        // The separator allows optional spaces and/or raw/escaped/double-escaped HTML tags between words.
+        const separator = '(?:\\s|<[\\s\\S]*?>|&(?:amp;)?lt;[\\s\\S]*?&(?:amp;)?gt;)*';
+        const separatorRequired = '(?:\\s|<[\\s\\S]*?>|&(?:amp;)?lt;[\\s\\S]*?&(?:amp;)?gt;)+';
+
+        const patterns = [
+            {
+                regex: new RegExp(`ignore${separator}(?:previous|prior|all)${separator}instructions`, 'gi'),
+                replacement: 'IGNORE [REDACTED] instructions'
+            },
+            {
+                regex: new RegExp(`disregard${separator}(?:previous|prior|all)${separator}(?:instructions|prompts)`, 'gi'),
+                replacement: 'DISREGARD [REDACTED] prompts'
+            },
+            {
+                regex: new RegExp(`overwrite${separator}(?:previous|prior|all)\\b`, 'gi'),
+                replacement: 'OVERWRITE [REDACTED]'
+            },
+            {
+                regex: new RegExp(`do${separator}not${separator}follow${separator}(?:previous|prior|any)${separator}instructions`, 'gi'),
+                replacement: 'DO NOT FOLLOW [REDACTED] instructions'
+            },
+            {
+                regex: new RegExp(`you${separator}(?:are${separator}now|should)${separator}act${separatorRequired}as`, 'gi'),
+                replacement: 'you should ACT AS [REDACTED]'
+            },
+            {
+                regex: new RegExp(`system${separator}prompt${separator}:`, 'gi'),
+                replacement: 'SYSTEM PROMPT: [REDACTED]'
+            },
+            {
+                regex: new RegExp(`developer${separator}prompt${separator}:`, 'gi'),
+                replacement: 'DEVELOPER PROMPT: [REDACTED]'
+            },
+            {
+                regex: new RegExp(`output${separator}exactly${separator}this`, 'gi'),
+                replacement: 'OUTPUT [REDACTED]'
+            },
+            {
+                regex: new RegExp(`reset${separator}context\\b`, 'gi'),
+                replacement: 'RESET [REDACTED]'
+            },
+        ];
+
+        // Evaluate injection check: patterns on the tag-stripped representation, control tokens on the unstripped text
+        const hasInjection = patterns.some(({ regex }) => regex.test(tagStripped)) ||
+                             controlTokens.some(({ regex }) => regex.test(result));
+
+        // Reset lastIndex on global regex instances to avoid state retention issues in test/replace calls
+        for (const { regex } of controlTokens) {
+            regex.lastIndex = 0;
+        }
+        for (const { regex } of patterns) {
+            regex.lastIndex = 0;
+        }
+
+        if (hasInjection) {
+            console.warn('[Security] Prompt injection pattern detected in tag-stripped DOM/text content.');
+            if (forceRedactOnInjection) {
+                // For high-risk DOM blocks, perform total redaction to fail safe.
+                return '[REDACTED: A potential prompt injection attempt was neutralized in this block.]';
+            }
+        }
+
+        // 5. Perform standard control token neutralization
+        for (const { regex, replacement } of controlTokens) {
+            result = result.replace(regex, replacement);
+        }
+
+        // 6. Perform regular replacements to neutralize the patterns while retaining semantic content
         for (const { regex, replacement } of patterns) {
             result = result.replace(regex, replacement);
         }
+
         return result;
     }
 
@@ -282,7 +376,7 @@ ${entries}
 </previous_responses>`,
             evidenceRefs: priorResponses.map((r, i) => ({
                 source: 'transcript' as const,
-                text: r.substring(0, 100),
+                text: this.escapeUserContent(r.substring(0, 100)),
                 chunkId: `entry_${i + 1}`,
             })),
         };
@@ -324,9 +418,38 @@ ${this.escapeUserContent(truncated)}
 </screen_context>`,
             evidenceRefs: [{
                 source: 'screen',
-                text: truncated.substring(0, 100),
+                text: this.escapeUserContent(truncated.substring(0, 100)),
                 timestamp: screenContext.timestamp,
                 chunkId: isVision ? 'vision_capture' : 'ocr_capture',
+            }],
+        };
+    }
+
+    private buildDomContextBlock(domContext: string): ContextBlock {
+        const maxLength = DOM_CONTEXT_MAX_CHARS;
+        const truncated = domContext.length > maxLength
+            ? domContext.substring(0, maxLength) + '\n[...truncated]'
+            : domContext;
+
+        const sanitizedContent = this.escapePromptInjection(this.escapeUserContent(truncated), true);
+        const isRedacted = sanitizedContent.includes('[REDACTED:');
+        const evidenceText = isRedacted
+            ? '[REDACTED]'
+            : this.escapePromptInjection(this.escapeUserContent(truncated.substring(0, 100)));
+
+        return {
+            type: 'dom_context',
+            trustLevel: TrustLevel.UNTRUSTED_SCREEN,
+            source: 'browser_dom',
+            tokenBudget: 6000,
+            content: `<dom_context trust_level="untrusted_screen_evidence" source="browser_dom">
+DOM HTML/TEXT STRUCTURE:
+${sanitizedContent}
+</dom_context>`,
+            evidenceRefs: [{
+                source: 'screen',
+                text: evidenceText,
+                chunkId: 'dom_capture',
             }],
         };
     }
@@ -437,7 +560,7 @@ ${payload}
 </reference_file>`,
                     evidenceRefs: [{
                         source: 'reference',
-                        text: capped.substring(0, 100),
+                        text: this.escapePromptInjection(this.escapeUserContent(capped.substring(0, 100))),
                         fileId: file.id,
                         chunkId: 'file_content',
                     }],

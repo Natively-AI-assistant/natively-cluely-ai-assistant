@@ -64,6 +64,8 @@ import TopPill from './ui/TopPill';
 const REMARK_PLUGINS = [remarkGfm, remarkMath];
 const REHYPE_PLUGINS = [rehypeKatex];
 
+import { DOM_CONTEXT_MAX_CHARS } from '../constants/domCapture';
+
 interface Message {
   id: string;
   role: 'user' | 'system' | 'interviewer';
@@ -362,6 +364,55 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   // Analytics State
   const requestStartTimeRef = useRef<number | null>(null);
+
+  // Secure window.lastCapturedDOM so active-tab DOM capture stays bounded and typed.
+  // NOTE: This property is written to asynchronously by an external Natively companion
+  // browser extension that captures DOM structures from the active browser tab.
+  useEffect(() => {
+    const descriptor = Object.getOwnPropertyDescriptor(window, 'lastCapturedDOM');
+    // If already defined on window securely (configurable: false from a prior mount), skip redefinition
+    // to avoid TypeError under configurable: false, but preserve cleanup reset behavior.
+    if (descriptor && descriptor.configurable === false) {
+      return () => {
+        try {
+          (window as any).lastCapturedDOM = '';
+        } catch (_) {}
+      };
+    }
+
+    // Cleanly delete any pre-planted configurable property to prevent conflicts
+    if (descriptor) {
+      try {
+        delete (window as any).lastCapturedDOM;
+      } catch (_) {}
+    }
+
+    let lastCapturedDOM = '';
+    try {
+      Object.defineProperty(window, 'lastCapturedDOM', {
+        get() {
+          return lastCapturedDOM;
+        },
+        set(value) {
+          if (typeof value === 'string') {
+            lastCapturedDOM = value.substring(0, DOM_CONTEXT_MAX_CHARS);
+          } else {
+            console.warn('[Security] Rejected non-string assignment to window.lastCapturedDOM');
+          }
+        },
+        enumerable: true,
+        configurable: false, // Locked securely to prevent tampering by external scripts
+      });
+    } catch (error: any) {
+      console.warn('[Security] window.lastCapturedDOM definition skipped:', error?.message || error);
+    }
+
+    return () => {
+      try {
+        (window as any).lastCapturedDOM = '';
+      } catch (_) {}
+    };
+  }, []);
 
   // Sync transcript setting
   useEffect(() => {
@@ -1866,11 +1917,35 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     }
 
     try {
+      const rawDomContext = (window as any).lastCapturedDOM;
+      const domContext =
+        typeof rawDomContext === 'string' && rawDomContext.trim().length > 0
+          ? rawDomContext.substring(0, DOM_CONTEXT_MAX_CHARS)
+          : undefined;
+
+      // Clear the captured DOM immediately after reading it to ensure stale DOM context
+      // from prior pages is never re-sent on subsequent requests.
+      if (typeof (window as any).lastCapturedDOM === 'string') {
+        (window as any).lastCapturedDOM = '';
+      }
+
+      if (domContext) {
+        console.debug(`[DOM Context] Forwarding captured active-tab DOM structure (${domContext.length} chars)`);
+      }
+
+      const options =
+        dynamicPromptInstruction || domContext
+          ? {
+              ...(dynamicPromptInstruction ? { promptInstruction: dynamicPromptInstruction } : {}),
+              ...(domContext ? { domContext } : {}),
+            }
+          : undefined;
+
       // Pass imagePath if attached
       const result = await window.electronAPI.generateWhatToSay(
         undefined,
         currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined,
-        dynamicPromptInstruction ? { promptInstruction: dynamicPromptInstruction } : undefined,
+        options,
       );
       setScreenContextStatus(result.screenContextStatus || 'not_available');
       setLatestUsedImageInput(Boolean(result.usedImageInput));

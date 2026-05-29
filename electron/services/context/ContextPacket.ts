@@ -9,6 +9,7 @@ import { TrustLevel, ContextBlock } from './TrustLevels';
          modeTemplateType: string;
          activeModeId?: string;
          screenContextAvailable: boolean;
+         domContextAvailable: boolean;
          tokenBudget: number;
          totalTokensUsed: number;
      };
