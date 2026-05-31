@@ -2,8 +2,141 @@
 // Central context assembly with typed blocks and explicit trust levels.
 // Replaces raw string concatenation for context building.
 
+/**
+ * DOM CONTEXT ASSEMBLY & SANITIZATION
+ * ═════════════════════════════════════════════════════════════════
+ * 
+ * The DOM context block represents browser tab structure provided by an
+ * external companion extension. This is UNTRUSTED content that may contain
+ * prompt injection attempts, HTML-encoded jailbreak patterns, zero-width
+ * obfuscation, and other attack vectors.
+ * 
+ * MULTI-LAYER DEFENSE:
+ * 
+ *   Layer 1: ZERO-WIDTH STRIPPING
+ *     Removes invisible Unicode characters (U+200B, U+200D, etc.) that
+ *     could be used to hide injection code.
+ * 
+ *   Layer 2: HTML TAG STRIPPING (for pattern detection)
+ *     Removes both raw (<tag>) and escaped (&lt;tag&gt;) HTML to detect
+ *     split-injection patterns like "ignore <b>previous</b> instructions".
+ * 
+ *   Layer 3: CONTROL TOKEN NEUTRALIZATION
+ *     Detects and neutralizes LLM-specific system tokens:
+ *     - Qwen: |im_start|, |im_end|, |endoftext|
+ *     - Llama 2: [INST], <<SYS>>, <s>, </s>
+ *     Handles both raw and single/double HTML-encoded variants.
+ * 
+ *   Layer 4: INSTRUCTION-OVERRIDE PATTERN MATCHING
+ *     Uses flexible regex with tag-tolerant separators to catch:
+ *     - "ignore previous instructions"
+ *     - "disregard <u>all</u> prompts"
+ *     - "you are <b>now</b> acting as..."
+ *     Even if HTML tags are interspersed between words.
+ * 
+ *   Layer 5: OPTIONAL FULL REDACTION
+ *     If any layer detects injection AND forceRedactOnInjection=true,
+ *     the entire DOM block is replaced with a redaction notice.
+ *     Applied for high-risk contexts like browser DOM.
+ * 
+ * LOGGING & TELEMETRY:
+ *   - Detection logged: [Security] Prompt injection pattern detected...
+ *   - Telemetry event: 'prompt_injection_neutralized'
+ *   - No user data in telemetry; only block type and occurrence count.
+ */
+
 import { TrustLevel, ContextBlock, EvidenceRef, containsPromptInjection, TRUST_LEVEL_ORDER } from './TrustLevels';
 import { ContextPacket } from './ContextPacket';
+import { DOM_CONTEXT_MAX_CHARS } from '../../config/constants';
+import { telemetryService } from '../telemetry/TelemetryService';
+
+// ──────────────────────────────────────────────────────────
+// Prompt Injection Neutralization Constants
+// ──────────────────────────────────────────────────────────
+
+/** Message shown when full redaction is applied to high-risk DOM blocks */
+export const INJECTION_REDACTION_MESSAGE = '[REDACTED: A potential prompt injection attempt was neutralized in this block.]';
+
+/** Suffix appended when content is truncated to meet size/token budgets */
+export const TRUNCATION_SUFFIX = '\n[...truncated]';
+
+/** 
+ * Separators allowing optional whitespace/HTML tags/entities between words in injection patterns.
+ * While tagStripped strips HTML before testing in hasPromptInjection(), these are critically 
+ * used in escapePromptInjection() to neutralize patterns inline within raw HTML reference files.
+ */
+const FLEXIBLE_SEPARATOR = '(?:\\s|<[^>]*>|&(?:amp;)?lt;[^&<]*?&(?:amp;)?gt;)*';
+const SEPARATOR_REQUIRED = '(?:\\s|<[^>]*>|&(?:amp;)?lt;[^&<]*?&(?:amp;)?gt;)+';
+
+/** Standard LLM system/role/chat templates and control tokens (raw, entity-encoded, and double-escaped) */
+const CONTROL_TOKENS = [
+    { regex: /(?:<\|im_start\|>|&(?:amp;)?lt;\|im_start\|&(?:amp;)?gt;)/gi, replacement: '|im_start_redacted|' },
+    { regex: /(?:<\|im_end\|>|&(?:amp;)?lt;\|im_end\|&(?:amp;)?gt;)/gi, replacement: '|im_end_redacted|' },
+    { regex: /(?:<\|endoftext\|>|&(?:amp;)?lt;\|endoftext\|&(?:amp;)?gt;)/gi, replacement: '|endoftext_redacted|' },
+    { regex: /\[INST\]/gi, replacement: '[INST_REDACTED]' },
+    { regex: /\[\/INST\]/gi, replacement: '[/INST_REDACTED]' },
+    { regex: /(?:<<SYS>>|&(?:amp;)?lt;&(?:amp;)?lt;SYS&(?:amp;)?gt;&(?:amp;)?gt;)/gi, replacement: '|SYS_REDACTED|' },
+    { regex: /(?:<<\/SYS>>|&(?:amp;)?lt;&(?:amp;)?lt;\/SYS&(?:amp;)?gt;&(?:amp;)?gt;)/gi, replacement: '|/SYS_REDACTED|' },
+    // Note: <s> and </s> entries only apply to the reference-file path (which is not HTML entity-encoded).
+    // The DOM context block is fully entity-encoded before injection checks, meaning any literal "<s>" 
+    // inside DOM becomes "&lt;s&gt;", which natively neutralizes the token without requiring an entity-encoded regex.
+    { regex: /<s>/gi, replacement: '|s_redacted|' },
+    { regex: /<\/s>/gi, replacement: '|/s_redacted|' },
+];
+
+/** Instruction-override patterns to sanitize */
+const INJECTION_PATTERNS = [
+    {
+        regex: new RegExp(`ignore${FLEXIBLE_SEPARATOR}(?:previous|prior|all)${FLEXIBLE_SEPARATOR}instructions`, 'gi'),
+        replacement: 'IGNORE [REDACTED] instructions'
+    },
+    {
+        regex: new RegExp(`disregard${FLEXIBLE_SEPARATOR}(?:previous|prior|all)${FLEXIBLE_SEPARATOR}(?:instructions|prompts)`, 'gi'),
+        replacement: 'DISREGARD [REDACTED] prompts'
+    },
+    {
+        regex: new RegExp(`overwrite${FLEXIBLE_SEPARATOR}(?:previous|prior|all)\\b`, 'gi'),
+        replacement: 'OVERWRITE [REDACTED]'
+    },
+    {
+        regex: new RegExp(`do${FLEXIBLE_SEPARATOR}not${FLEXIBLE_SEPARATOR}follow${FLEXIBLE_SEPARATOR}(?:previous|prior|any)${FLEXIBLE_SEPARATOR}instructions`, 'gi'),
+        replacement: 'DO NOT FOLLOW [REDACTED] instructions'
+    },
+    {
+        regex: new RegExp(`you${FLEXIBLE_SEPARATOR}(?:are${FLEXIBLE_SEPARATOR}now|should)${FLEXIBLE_SEPARATOR}act${SEPARATOR_REQUIRED}as`, 'gi'),
+        replacement: 'you should ACT AS [REDACTED]'
+    },
+    {
+        regex: new RegExp(`system${FLEXIBLE_SEPARATOR}prompt${FLEXIBLE_SEPARATOR}:`, 'gi'),
+        replacement: 'SYSTEM PROMPT: [REDACTED]'
+    },
+    {
+        regex: new RegExp(`developer${FLEXIBLE_SEPARATOR}prompt${FLEXIBLE_SEPARATOR}:`, 'gi'),
+        replacement: 'DEVELOPER PROMPT: [REDACTED]'
+    },
+    {
+        regex: new RegExp(`output${FLEXIBLE_SEPARATOR}exactly${FLEXIBLE_SEPARATOR}this`, 'gi'),
+        replacement: 'OUTPUT [REDACTED]'
+    },
+    {
+        regex: new RegExp(`reset${FLEXIBLE_SEPARATOR}context\\b`, 'gi'),
+        replacement: 'RESET [REDACTED]'
+    },
+];
+
+/**
+ * Escape XML-like content in user-controlled strings.
+ * This prevents user content from breaking XML context delimiters.
+ */
+export function escapeUserContent(text: string): string {
+    if (!text) return '';
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
 
 // Screen context delivered to PromptAssembler.
 //
@@ -63,6 +196,7 @@ export class PromptAssembler {
         modeTemplateType: string;
         modeId?: string;
         screenContext?: ScreenContext;
+        domContext?: string;
         modeContext?: ModeContextSource;
         customContext?: string;
         meetingHistory?: string[];
@@ -86,6 +220,7 @@ export class PromptAssembler {
                     params.screenContext?.visibleSummary ||
                     params.screenContext?.ocrText
                 ),
+                domContextAvailable: Boolean(params.domContext),
                 tokenBudget: params.tokenBudget,
                 totalTokensUsed: 0,
             },
@@ -111,12 +246,17 @@ export class PromptAssembler {
             this.addBlock(packet, this.buildScreenContextBlock(params.screenContext));
         }
 
-        // 4. TRANSCRIPT — untrusted conversation
+        // 4. DOM CONTEXT - untrusted page evidence
+        if (params.domContext) {
+            this.addBlock(packet, this.buildDomContextBlock(params.domContext));
+        }
+
+        // 5. TRANSCRIPT — untrusted conversation
         if (params.transcript) {
             this.addBlock(packet, this.buildTranscriptBlock(params.transcript));
         }
 
-        // 5. MODE CONTEXT — custom instructions + reference files
+        // 6. MODE CONTEXT — custom instructions + reference files
         if (params.modeContext) {
             this.addModeContextBlocks(packet, params.modeContext);
         }
@@ -124,12 +264,12 @@ export class PromptAssembler {
             this.addBlock(packet, this.buildRetrievedModeContextBlock(params.retrievedModeContext));
         }
 
-        // 6. MEETING HISTORY — untrusted past meetings
+        // 7. MEETING HISTORY — untrusted past meetings
         if (params.meetingHistory && params.meetingHistory.length > 0) {
             this.addBlock(packet, this.buildMeetingHistoryBlock(params.meetingHistory));
         }
 
-        // 6. CUSTOM CONTEXT (user-provided extra context)
+        // 8. CUSTOM CONTEXT (user-provided extra context)
         if (params.customContext) {
             this.addBlock(packet, {
                 type: 'custom_context',
@@ -161,32 +301,124 @@ export class PromptAssembler {
      * This prevents user content from breaking XML context delimiters.
      */
     escapeUserContent(text: string): string {
-        return text
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&apos;');
+        return escapeUserContent(text);
     }
 
     /**
-     * Escape dangerous prompt injection patterns in user-controlled content.
-     * The content is still included (user may have legitimate content matching patterns)
-     * but the dangerous patterns are neutralized.
+     * Public static helper to check if untrusted text contains any prompt injection or control tokens.
+     * Matches the exact check run during sanitization.
      */
-    private escapePromptInjection(text: string): string {
-        const patterns = [
-            { regex: /ignore\s*(previous|all)\s*instructions/gi, replacement: 'IGNORE [REDACTED] instructions' },
-            { regex: /disregard\s*(previous|all)\s*(instructions|prompts)/gi, replacement: 'DISREGARD [REDACTED] prompts' },
-            { regex: /you\s*(are\s*now|should)\s*act\s+as/gi, replacement: 'you should ACT AS [REDACTED]' },
-            { regex: /system\s*prompt:/gi, replacement: 'SYSTEM PROMPT: [REDACTED]' },
-            { regex: /\[INST\]\[INST\]/gi, replacement: '[INST][REDACTED][INST]' },
-        ];
+    public static hasPromptInjection(text: string): boolean {
+        if (!text) return false;
 
-        let result = text;
-        for (const { regex, replacement } of patterns) {
+        // 1. Strip zero-width Unicode characters
+        const result = text.replace(/[\u200B-\u200D\uFEFF\u200E\u200F\u202A-\u202E]/g, '');
+
+        // 2. Strip both raw and HTML-escaped/double-escaped HTML tags to catch split prompt injections.
+        // To close hidden attribute injection vectors, extract attribute values from the tag content
+        // and place them in the stripped stream so that prompt patterns inside attributes are detected.
+        const extractValues = (inner: string): string => {
+            const values: string[] = [];
+            // Match double quotes: "value" or &quot;value&quot; or &amp;quot;value&amp;quot;
+            const doubleQuoteRegex = /(?:"|&(?:amp;)*quot;)([\s\S]*?)(?:"|&(?:amp;)*quot;)/gi;
+            let m;
+            while ((m = doubleQuoteRegex.exec(inner)) !== null) {
+                if (m[1]) values.push(m[1]);
+            }
+            // Match single quotes: 'value' or &apos;value&apos; or &amp;apos;value&amp;apos;
+            const singleQuoteRegex = /(?:'|&(?:amp;)*apos;)([\s\S]*?)(?:'|&(?:amp;)*apos;)/gi;
+            while ((m = singleQuoteRegex.exec(inner)) !== null) {
+                if (m[1]) values.push(m[1]);
+            }
+            // Match unquoted values: = value
+            const unquotedRegex = /=\s*([^\s"'=<>`;&]+)/gi;
+            while ((m = unquotedRegex.exec(inner)) !== null) {
+                if (m[1]) values.push(m[1]);
+            }
+            return values.length > 0 ? ' ' + values.join(' ') + ' ' : ' ';
+        };
+
+        let tagStripped = result.replace(/<([\s\S]*?)>/g, (_, inner) => extractValues(inner));
+        tagStripped = tagStripped.replace(/&(?:amp;)?lt;([\s\S]*?)&(?:amp;)?gt;/gi, (_, inner) => extractValues(inner));
+
+        // Create execution-isolated RegExp instances to prevent lastIndex state contamination under concurrency
+        const localControlTokens = CONTROL_TOKENS.map(({ regex, replacement }) => ({
+            regex: new RegExp(regex.source, regex.flags),
+            replacement
+        }));
+        const localInjectionPatterns = INJECTION_PATTERNS.map(({ regex, replacement }) => ({
+            regex: new RegExp(regex.source, regex.flags),
+            replacement
+        }));
+
+        return localInjectionPatterns.some(({ regex }) => regex.test(tagStripped)) ||
+               localControlTokens.some(({ regex }) => regex.test(result));
+    }
+
+    /**
+     * Multi-layer prompt injection defense — neutralizes both known attack vectors
+     * and obfuscation techniques while preserving semantic content.
+     *
+     * DEFENSE LAYERS:
+     *   1. Zero-width character stripping (U+200B-U+200D, FEFF, etc.)
+     *   2. HTML/entity tag removal for pattern detection
+     *   3. Control token neutralization (|im_start|, [INST], <<SYS>>, etc.)
+     *   4. Flexible regex with tag-tolerant separators for split patterns
+     *   5. Optional full redaction for high-risk contexts (forceRedactOnInjection=true)
+     *
+     * @param text The user-supplied or untrusted content to sanitize
+     * @param forceRedactOnInjection If true, replaces entire block with redaction message on any detection
+     * @returns Sanitized content with dangerous patterns neutralized (inline) or fully redacted
+     */
+    private escapePromptInjection(
+        text: string,
+        forceRedactOnInjection = false,
+        blockType: 'dom_context' | 'reference_file' = 'reference_file'
+    ): string {
+        if (!text) return '';
+
+        const hasInjection = PromptAssembler.hasPromptInjection(text);
+
+        if (hasInjection) {
+            console.warn('[Security] Prompt injection pattern detected in tag-stripped DOM/text content.');
+
+            // Telemetry logging for security auditing (anonymous count metrics)
+            try {
+                telemetryService.track({
+                    name: 'prompt_injection_neutralized',
+                    properties: {
+                        blockType
+                    }
+                });
+            } catch (_) {
+                // Fail-silent logging block to ensure telemetry issues never interrupt pipeline execution
+            }
+
+            if (forceRedactOnInjection) {
+                // For high-risk DOM blocks, perform total redaction to fail safe.
+                return INJECTION_REDACTION_MESSAGE;
+            }
+        }
+
+        // 3. Perform standard control token neutralization
+        let result = text.replace(/[\u200B-\u200D\uFEFF\u200E\u200F\u202A-\u202E]/g, '');
+        const localControlTokens = CONTROL_TOKENS.map(({ regex, replacement }) => ({
+            regex: new RegExp(regex.source, regex.flags),
+            replacement
+        }));
+        for (const { regex, replacement } of localControlTokens) {
             result = result.replace(regex, replacement);
         }
+
+        // 4. Perform regular replacements to neutralize the patterns while retaining semantic content
+        const localInjectionPatterns = INJECTION_PATTERNS.map(({ regex, replacement }) => ({
+            regex: new RegExp(regex.source, regex.flags),
+            replacement
+        }));
+        for (const { regex, replacement } of localInjectionPatterns) {
+            result = result.replace(regex, replacement);
+        }
+
         return result;
     }
 
@@ -215,7 +447,7 @@ export class PromptAssembler {
                     const truncatedContent = this.truncateToTokenBudget(block.content, remainingBudget);
                     const truncatedBlock: ContextBlock = {
                         ...block,
-                        content: truncatedContent + ' [...truncated]',
+                        content: truncatedContent + TRUNCATION_SUFFIX,
                     };
                     keptBlocks.push(truncatedBlock);
                     totalTokens += this.estimateTokens(truncatedBlock.content);
@@ -229,7 +461,7 @@ export class PromptAssembler {
                     const truncatedContent = this.truncateToTokenBudget(block.content, remainingBudget);
                     const truncatedBlock: ContextBlock = {
                         ...block,
-                        content: truncatedContent + ' [...truncated]',
+                        content: truncatedContent + TRUNCATION_SUFFIX,
                     };
                     keptBlocks.push(truncatedBlock);
                     totalTokens += this.estimateTokens(truncatedBlock.content);
@@ -282,7 +514,7 @@ ${entries}
 </previous_responses>`,
             evidenceRefs: priorResponses.map((r, i) => ({
                 source: 'transcript' as const,
-                text: r.substring(0, 100),
+                text: this.escapeUserContent(r.substring(0, 100)),
                 chunkId: `entry_${i + 1}`,
             })),
         };
@@ -324,9 +556,43 @@ ${this.escapeUserContent(truncated)}
 </screen_context>`,
             evidenceRefs: [{
                 source: 'screen',
-                text: truncated.substring(0, 100),
+                text: this.escapeUserContent(truncated.substring(0, 100)),
                 timestamp: screenContext.timestamp,
                 chunkId: isVision ? 'vision_capture' : 'ocr_capture',
+            }],
+        };
+    }
+
+    private buildDomContextBlock(domContext: string): ContextBlock {
+        const maxLength = DOM_CONTEXT_MAX_CHARS;
+        const truncated = domContext.length > maxLength
+            ? domContext.substring(0, maxLength) + TRUNCATION_SUFFIX
+            : domContext;
+
+        const sanitizedContent = this.escapePromptInjection(this.escapeUserContent(truncated), true, 'dom_context');
+        const isRedacted = sanitizedContent === INJECTION_REDACTION_MESSAGE;
+        const evidenceText = isRedacted
+            ? '[REDACTED]'
+            : sanitizedContent.substring(0, 100);
+
+        // Dynamically size the block token budget to match actual content, ensuring consistency 
+        // with LLM context headroom calculations in WhatToAnswerLLM.ts
+        const estimatedTokens = this.estimateTokens(sanitizedContent);
+        const tokenBudget = estimatedTokens + 100;
+
+        return {
+            type: 'dom_context',
+            trustLevel: TrustLevel.UNTRUSTED_SCREEN,
+            source: 'browser_dom',
+            tokenBudget,
+            content: `<dom_context trust_level="untrusted_screen_evidence" source="browser_dom">
+DOM HTML/TEXT STRUCTURE:
+${sanitizedContent}
+</dom_context>`,
+            evidenceRefs: [{
+                source: 'browser_dom',
+                text: evidenceText,
+                chunkId: 'dom_capture',
             }],
         };
     }
@@ -406,14 +672,14 @@ ${JSON.stringify({ content: this.escapePromptInjection(content) })}
                 // Cap per-file
                 let capped: string;
                 if (raw.length > MAX_FILE_CHARS) {
-                    capped = raw.slice(0, MAX_FILE_CHARS - 12) + '\n[...truncated]';
+                    capped = raw.slice(0, MAX_FILE_CHARS - 12) + TRUNCATION_SUFFIX;
                 } else {
                     capped = raw;
                 }
 
                 // Cross-file budget
                 if (capped.length > remaining) {
-                    capped = capped.slice(0, remaining - 12) + '\n[...truncated]';
+                    capped = capped.slice(0, remaining - 12) + TRUNCATION_SUFFIX;
                 }
 
                 // Check for prompt injection in file content and filename
@@ -437,7 +703,7 @@ ${payload}
 </reference_file>`,
                     evidenceRefs: [{
                         source: 'reference',
-                        text: capped.substring(0, 100),
+                        text: this.escapePromptInjection(this.escapeUserContent(capped.substring(0, 100))),
                         fileId: file.id,
                         chunkId: 'file_content',
                     }],

@@ -261,7 +261,7 @@ interface ElectronAPI {
   generateWhatToSay: (
     question?: string,
     imagePaths?: string[],
-    options?: { promptInstruction?: string },
+    options?: { promptInstruction?: string; domContext?: string },
   ) => Promise<{
     answer: string | null;
     question?: string;
@@ -764,6 +764,7 @@ interface ElectronAPI {
   ) => Promise<{ success: boolean; error?: string }>;
   modesDeleteNoteSection: (id: string) => Promise<{ success: boolean; error?: string }>;
   modesRemoveAllNoteSections: (modeId: string) => Promise<{ success: boolean; error?: string }>;
+  onDomContextReceived: (callback: (dom: string) => void) => () => void;
 }
 
 export const PROCESSING_EVENTS = {
@@ -1253,7 +1254,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   generateWhatToSay: (
     question?: string,
     imagePaths?: string[],
-    options?: { promptInstruction?: string },
+    options?: { promptInstruction?: string; domContext?: string },
   ) => ipcRenderer.invoke('generate-what-to-say', question, imagePaths, options),
   generateClarify: () => ipcRenderer.invoke('generate-clarify'),
   generateCodeHint: (imagePaths?: string[], problemStatement?: string) =>
@@ -1964,6 +1965,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   modesDeleteNoteSection: (id: string) => ipcRenderer.invoke('modes:delete-note-section', id),
   modesRemoveAllNoteSections: (modeId: string) =>
     ipcRenderer.invoke('modes:remove-all-note-sections', modeId),
+  onDomContextReceived: (callback: (dom: string) => void) => {
+    const subscription = (_: any, dom: string) => callback(dom);
+    ipcRenderer.on('dom-context-received', subscription);
+    return () => {
+      ipcRenderer.removeListener('dom-context-received', subscription);
+    };
+  },
 } as ElectronAPI);
 
 // Renderer-side console forwarding to main-process log file.

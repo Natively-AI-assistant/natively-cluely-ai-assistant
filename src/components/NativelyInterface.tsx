@@ -64,6 +64,8 @@ import TopPill from './ui/TopPill';
 const REMARK_PLUGINS = [remarkGfm, remarkMath];
 const REHYPE_PLUGINS = [rehypeKatex];
 
+import { DOM_CONTEXT_MAX_CHARS } from '../constants/domCapture';
+
 interface Message {
   id: string;
   role: 'user' | 'system' | 'interviewer';
@@ -362,6 +364,118 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   // Analytics State
   const requestStartTimeRef = useRef<number | null>(null);
+
+  /**
+   * BROWSER DOM CONTEXT INTEGRATION
+   * ═════════════════════════════════════════════════════════════════
+   * 
+   * This property acts as a secure bridge between the companion browser
+   * extension and the Natively LLM pipeline. The extension captures the
+   * active browser tab's DOM structure and writes it to this property,
+   * which is then passed through the secure sanitization pipeline before
+   * being included in the LLM prompt.
+   * 
+   * FORMAT & CONSTRAINTS:
+   *   - Type:     String only (non-strings rejected with warning)
+   *   - Max Size: DOM_CONTEXT_MAX_CHARS = 25,000 characters
+   *   - Content:  HTML structure or plain text representation of visible DOM
+   *   - Encoding: UTF-8 (HTML entities escaped by PromptAssembler)
+   * 
+   * SECURITY PROPERTIES:
+   *   - Configurable: false (locked against external tampering)
+   *   - Trust Level:  UNTRUSTED_SCREEN (treated as user-controllable evidence)
+   *   - Sanitized:   HTML escape + prompt injection detection + optional redaction
+   * 
+   * LIFECYCLE:
+   *   1. Companion browser extension POSTs DOM to PhoneMirrorService (HTTP /dom)
+   *   2. PhoneMirrorService receives, validates pairing token, caps size, and broadcasts to renderer via IPC
+   *   3. Renderer receives IPC 'dom-context-received' event and sets window.lastCapturedDOM securely
+   *   4. handleWhatToSay() reads the value
+   *   5. Value is immediately cleared to prevent stale DOM leaking
+   *   6. DOM passes through escapeUserContent() + escapePromptInjection()
+   *   7. If injection detected, DOM block is optionally fully redacted
+   *   8. Sanitized DOM included in PromptAssembler context packet
+   * 
+   * RATE LIMITS / SIZE BUDGETS:
+   *   - Per-request max:    25,000 chars (auto-truncated)
+   *   - LLM token budget:   6,000 tokens (enforced in buildDomContextBlock)
+   *   - Escape overhead:    ~1.2x (HTML entities expand size)
+   * 
+   * EXAMPLE EXTENSION CODE:
+   * 
+   *   // In your companion browser extension background/content script:
+   *   const capturedDOM = document.documentElement.innerHTML;
+   *   fetch('http://localhost:<port>/dom?t=<token>', {
+   *     method: 'POST',
+   *     headers: { 'Content-Type': 'application/json' },
+   *     body: JSON.stringify({ dom: capturedDOM })
+   *   });
+   */
+  useEffect(() => {
+    const descriptor = Object.getOwnPropertyDescriptor(window, 'lastCapturedDOM');
+    // If already defined on window securely (configurable: false from a prior mount), skip redefinition
+    // to avoid TypeError under configurable: false, but preserve cleanup reset behavior.
+    if (descriptor && descriptor.configurable === false) {
+      return () => {
+        try {
+          (window as any).lastCapturedDOM = '';
+        } catch (_) {}
+      };
+    }
+
+    // Cleanly delete any pre-planted configurable property to prevent conflicts
+    if (descriptor) {
+      try {
+        delete (window as any).lastCapturedDOM;
+      } catch (_) {}
+    }
+
+    let lastCapturedDOM = '';
+    try {
+      Object.defineProperty(window, 'lastCapturedDOM', {
+        get() {
+          return lastCapturedDOM;
+        },
+        set(value) {
+          if (typeof value === 'string') {
+            lastCapturedDOM = value.substring(0, DOM_CONTEXT_MAX_CHARS);
+          } else {
+            console.warn('[Security] Rejected non-string assignment to window.lastCapturedDOM');
+          }
+        },
+        enumerable: true,
+        configurable: false, // Locked securely to prevent tampering by external scripts
+      });
+    } catch (error: any) {
+      console.warn('[Security] window.lastCapturedDOM definition skipped:', error?.message || error);
+    }
+
+    return () => {
+      try {
+        (window as any).lastCapturedDOM = '';
+      } catch (_) {}
+    };
+  }, []);
+
+  // Listen to secure cross-process companion browser extension bridge events
+  useEffect(() => {
+    let unsubDom: (() => void) | undefined;
+    try {
+      unsubDom = window.electronAPI?.onDomContextReceived?.((dom) => {
+        (window as any).lastCapturedDOM = dom;
+      });
+    } catch (e) {
+      console.warn('[Security] Failed to register onDomContextReceived listener:', e);
+    }
+
+    return () => {
+      if (unsubDom) {
+        try {
+          unsubDom();
+        } catch (_) {}
+      }
+    };
+  }, []);
 
   // Sync transcript setting
   useEffect(() => {
@@ -1866,11 +1980,35 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     }
 
     try {
+      const rawDomContext = (window as any).lastCapturedDOM;
+      const domContext =
+        typeof rawDomContext === 'string' && rawDomContext.trim().length > 0
+          ? rawDomContext.substring(0, DOM_CONTEXT_MAX_CHARS)
+          : undefined;
+
+      // Clear the captured DOM immediately after reading it to ensure stale DOM context
+      // from prior pages is never re-sent on subsequent requests.
+      if (typeof (window as any).lastCapturedDOM === 'string') {
+        (window as any).lastCapturedDOM = '';
+      }
+
+      if (domContext) {
+        console.debug(`[DOM Context] Forwarding captured active-tab DOM structure (${domContext.length} chars)`);
+      }
+
+      const options =
+        dynamicPromptInstruction || domContext
+          ? {
+              ...(dynamicPromptInstruction ? { promptInstruction: dynamicPromptInstruction } : {}),
+              ...(domContext ? { domContext } : {}),
+            }
+          : undefined;
+
       // Pass imagePath if attached
       const result = await window.electronAPI.generateWhatToSay(
         undefined,
         currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined,
-        dynamicPromptInstruction ? { promptInstruction: dynamicPromptInstruction } : undefined,
+        options,
       );
       setScreenContextStatus(result.screenContextStatus || 'not_available');
       setLatestUsedImageInput(Boolean(result.usedImageInput));

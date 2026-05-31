@@ -2,7 +2,7 @@
 // Kept as a structural interface (not a class import) to preserve the strict main↔renderer
 // type boundary — the renderer never imports from electron/* directly.
 export interface DynamicActionEvidenceRef {
-  source: 'transcript' | 'screen' | 'reference' | 'meeting_history'
+  source: 'transcript' | 'screen' | 'reference' | 'meeting_history' | 'browser_dom'
   text: string
   timestamp?: number
   speaker?: string
@@ -182,7 +182,7 @@ export interface ElectronAPI {
 
   // Intelligence Mode IPC
   generateAssist: () => Promise<{ insight: string | null }>
-  generateWhatToSay: (question?: string, imagePaths?: string[], options?: { promptInstruction?: string }) => Promise<{
+  generateWhatToSay: (question?: string, imagePaths?: string[], options?: { promptInstruction?: string; domContext?: string }) => Promise<{
     answer: string | null;
     question?: string;
     error?: string;
@@ -481,6 +481,7 @@ export interface ElectronAPI {
   onPhoneMirrorIncomingChat: (
     callback: (data: { message: string; streamId: string }) => void,
   ) => () => void;
+  onDomContextReceived: (callback: (dom: string) => void) => () => void;
 }
 
 export interface SkillSummary {
