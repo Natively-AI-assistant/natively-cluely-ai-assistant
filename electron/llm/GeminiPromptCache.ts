@@ -115,6 +115,18 @@ export class GeminiPromptCache {
     }
   }
 
+  /**
+   * Drop every entry. Call this when the Gemini API key changes — cache
+   * resource names are scoped to the project/key that created them, so a
+   * key swap makes all in-memory names invalid (they'd fail with NOT_FOUND
+   * or PERMISSION_DENIED on reuse). Clearing forces a fresh create under the
+   * new key on the next request instead of one wasted failing round-trip.
+   */
+  clear(): void {
+    this.entries.clear();
+    this.inflight.clear();
+  }
+
   /** For diagnostics. */
   size(): number {
     return this.entries.size;

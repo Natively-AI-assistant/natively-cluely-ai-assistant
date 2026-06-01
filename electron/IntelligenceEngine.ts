@@ -14,6 +14,7 @@ import {
 import { DynamicActionEngine } from './services/dynamic-actions/DynamicActionEngine';
 import { DynamicAction } from './services/dynamic-actions/DynamicAction';
 import { ScreenContext } from './services/screen/ScreenContextService';
+import { buildPreparedTranscriptContext as assemblePreparedTranscriptContext } from './utils/preparedTranscriptContext';
 
 // Mode types
 export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'follow_up' | 'recap' | 'clarify' | 'manual' | 'follow_up_questions' | 'code_hint' | 'brainstorm';
@@ -449,6 +450,14 @@ export class IntelligenceEngine extends EventEmitter {
     // ============================================
 
     /**
+     * Build transcript context aligned with What-to-Answer: cleaned turns,
+     * interim interviewer speech, and recent assistant responses.
+     */
+    private buildPreparedTranscriptContext(lastSeconds: number = 180): string {
+        return assemblePreparedTranscriptContext(this.session, lastSeconds);
+    }
+
+    /**
      * MODE 1: Assist (Passive)
      * Low-priority observational insights
      */
@@ -706,7 +715,7 @@ export class IntelligenceEngine extends EventEmitter {
                 return null;
             }
 
-            const context = this.session.getFormattedContext(60);
+            const context = this.buildPreparedTranscriptContext(120) || this.session.getFormattedContextWithInterim(60);
             const refinementRequest = userRequest || intent;
 
             const generationId = ++this.currentGenerationId;
@@ -844,7 +853,7 @@ export class IntelligenceEngine extends EventEmitter {
                 return null;
             }
 
-            const rawContext = this.session.getFormattedContext(180);
+            const rawContext = this.buildPreparedTranscriptContext(180);
             // If no transcript yet, use a generic prompt — the LLM will ask a scoping question
             const context = rawContext || '[No transcript available yet. The candidate just joined the interview. Generate an opening clarifying question to understand the scope and constraints of the upcoming problem.]';
 
@@ -908,7 +917,7 @@ export class IntelligenceEngine extends EventEmitter {
                 return null;
             }
 
-            const context = this.session.getFormattedContext(120);
+            const context = this.buildPreparedTranscriptContext(120);
             if (!context) {
                 console.warn('[IntelligenceEngine] No context available for follow-up questions');
                 this.setMode('idle');

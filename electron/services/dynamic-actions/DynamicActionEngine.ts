@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import { DynamicAction, EvidenceRef } from './DynamicAction';
 import { DynamicActionStore } from './DynamicActionStore';
 import { DynamicActionDetector, MODE_TRIGGERS } from './DynamicActionDetector';
@@ -37,9 +38,13 @@ export class DynamicActionEngine {
                 speaker,
             };
 
-            // Create candidate action
+            // Create candidate action. Loop runs once per matched trigger
+            // within a single detectActions() call, so `now` is identical for
+            // every action minted here — embedding it in the id is not
+            // sufficient on its own. Use a UUID for the id; `now` stays as
+            // createdAt (where the shared timestamp is the correct semantic).
             const action: DynamicAction = {
-                id: `action_${now}_${Math.random().toString(36).slice(2, 6)}`,
+                id: `action_${crypto.randomUUID()}`,
                 sessionId,
                 modeId,
                 modeTemplateType,

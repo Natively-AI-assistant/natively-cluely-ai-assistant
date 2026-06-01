@@ -34,7 +34,7 @@ export class WindowHelper {
   private opacityTimeout: NodeJS.Timeout | null = null;
 
   // Constants
-  private static readonly OVERLAY_DEFAULT_WIDTH = 600;
+  private static readonly OVERLAY_DEFAULT_WIDTH = 780;
   private static readonly OVERLAY_MIN_HEIGHT = 216;
   // Vertical offset for the meeting overlay's initial position, expressed as
   // a fraction of the screen's work-area height. 0.035 places the top edge
@@ -63,6 +63,12 @@ export class WindowHelper {
   }
 
   public setContentProtection(enable: boolean): void {
+    // Dedupe: setContentProtection is called from multiple paths (settings IPC,
+    // every switchToOverlay/switchToLauncher show, the Windows mute-on-Win+Tab
+    // workaround). Repeated identical calls trigger DWM affinity churn on
+    // Windows that can leave the HWND in a transient black/blank frame state
+    // for a few hundred ms. No-op when nothing actually changes.
+    if (this.contentProtection === enable) return;
     this.contentProtection = enable;
     this.applyContentProtection(enable);
   }
@@ -686,9 +692,6 @@ export class WindowHelper {
     this.currentWindowMode = 'overlay';
     KeybindManager.getInstance().setMode('overlay'); // Adapted from public PR #123 — verify premium interaction
 
-    // Tell the overlay renderer to expand to full size (e.g. after being minimised)
-    this.overlayWindow?.webContents.send('ensure-expanded');
-
     // Show Overlay FIRST
     if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
       const currentBounds = this.overlayWindow.getBounds();
@@ -726,6 +729,7 @@ export class WindowHelper {
 
       this.overlayWindow.setBounds(targetBounds);
       this.overlayBounds = this.overlayWindow.getBounds();
+      this.overlayWindow.webContents.send('ensure-expanded');
 
       // Restore opacity before showing (it may have been zeroed by hideMainWindow).
       if (process.platform === 'win32' && this.contentProtection) {

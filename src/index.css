@@ -118,11 +118,11 @@
      ─────────────────────────────────────────────────────────────────────── */
 
   /* ── Canvas / page layer ── */
-  --bg-primary:        #F5F5F5;   /* App page / list canvas — neutral near-white  */
-  --bg-secondary:      #EBEBEB;   /* Header / nav bar chrome                      */
+  --bg-primary:        #fafafa;   /* App page / list canvas — neutral near-white  */
+  --bg-secondary:      #f5f5f5;   /* Header / nav bar chrome                      */
 
   /* ── Settings modal surfaces ── */
-  --bg-main:           #F5F5F5;   /* Content body — the recessed canvas           */
+  --bg-main:           #fafafa;   /* Content body — the recessed canvas           */
   --bg-sidebar:        #FFFFFF;   /* Sidebar — white panel, matches modal frame   */
   --bg-elevated:       #FFFFFF;   /* Modal outer frame & dropdowns                */
   --bg-card:           #FFFFFF;   /* Section cards — white, depth via shadow      */
@@ -332,22 +332,22 @@
    the element is being touched. Active presses it back inward.
    ─────────────────────────────────────────────────────────────────────── */
 
-/* TopPill — pronounced jelly look, the most prominent floating element */
+/* TopPill — match the main liquid-glass panel material */
 [data-interface-theme="liquid-glass"] .overlay-pill-surface {
   background:
-    linear-gradient(180deg,
+    linear-gradient(135deg,
       rgba(255, 255, 255, 0.16) 0%,
-      rgba(255, 255, 255, 0.06) 45%,
-      rgba(255, 255, 255, 0.10) 100%
+      rgba(255, 255, 255, 0.07) 45%,
+      rgba(255, 255, 255, 0.04) 65%,
+      rgba(255, 255, 255, 0.12) 100%
     ),
-    rgba(255, 255, 255, 0.06) !important;
+    rgba(12, 18, 32, 0.70) !important;
   border-color: transparent !important;
-  backdrop-filter: blur(20px) saturate(170%) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(170%) !important;
+  backdrop-filter: blur(20px) saturate(165%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(165%) !important;
   box-shadow:
-    inset 0 1.5px 0 rgba(255, 255, 255, 0.55),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.10),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.44),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.13),
     0 14px 36px rgba(0, 0, 0, 0.38),
     0 4px 10px rgba(0, 0, 0, 0.18) !important;
 }
@@ -491,6 +491,59 @@
     inset 0 -0.5px 0 rgba(0, 0, 0, 0.08),
     inset 0 0 0 1px rgba(255, 255, 255, 0.18),
     0 5px 14px rgba(0, 0, 0, 0.26) !important;
+}
+
+[data-interface-theme="liquid-glass"] .glass-popup-row,
+[data-interface-theme="liquid-glass"] .model-selector-row {
+  color: var(--overlay-text-secondary) !important;
+}
+
+[data-interface-theme="liquid-glass"] .glass-popup-row:hover,
+[data-interface-theme="liquid-glass"] .model-selector-row:hover {
+  color: var(--overlay-text-primary) !important;
+  background: var(--overlay-control-hover-bg) !important;
+}
+
+[data-interface-theme="liquid-glass"] .model-selector-row-selected {
+  color: var(--overlay-text-primary) !important;
+  background: var(--overlay-control-bg) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.36),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12) !important;
+}
+
+[data-interface-theme="liquid-glass"] .glass-shortcut-key,
+[data-interface-theme="liquid-glass"] .glass-toggle-track {
+  background: var(--overlay-control-bg) !important;
+  border-color: var(--overlay-border-soft) !important;
+  color: var(--overlay-text-secondary) !important;
+}
+
+[data-interface-theme="modern"] .glass-popup-row,
+[data-interface-theme="modern"] .model-selector-row {
+  color: var(--overlay-text-secondary) !important;
+}
+
+[data-interface-theme="modern"] .glass-popup-row:hover,
+[data-interface-theme="modern"] .model-selector-row:hover {
+  color: var(--overlay-text-primary) !important;
+  background: var(--overlay-control-hover-bg) !important;
+}
+
+[data-interface-theme="modern"] .model-selector-row-selected {
+  color: var(--overlay-text-primary) !important;
+  background: var(--overlay-control-bg) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+    0 2px 8px rgba(0, 0, 0, 0.18) !important;
+}
+
+[data-interface-theme="modern"] .glass-shortcut-key,
+[data-interface-theme="modern"] .glass-toggle-track {
+  background: var(--overlay-control-bg) !important;
+  border-color: var(--overlay-border-soft) !important;
+  color: var(--overlay-text-secondary) !important;
 }
 
 /* Icon buttons — small round jelly lozenges */
@@ -816,6 +869,637 @@
     inset 0 1px 3px rgba(0, 0, 0, 0.20),
     inset 0 0 0 1px rgba(255, 255, 255, 0.12),
     0 1px 3px rgba(239, 68, 68, 0.24) !important;
+}
+
+/* ── Meeting Interface: Modern Theme ────────────────────────────────────────
+   Polished dark slate/graphite glass with white gloss highlights and a cobalt
+   blue primary action. Modeled after the marketing-site NativelyInterfaceCard
+   (DARK_GLASS recipe). Distinct from liquid-glass: this panel is intentionally
+   opaque-ish (low backdrop blur, 0.88–0.97 alpha base) rather than refractive.
+   Applied via data-interface-theme="modern" on the NativelyInterface outer
+   container. CSS variables drive everything else; per-surface jelly recipes
+   below mirror the website card's gloss-strip pattern.
+   ─────────────────────────────────────────────────────────────────────── */
+[data-interface-theme="modern"],
+[data-theme='light'] [data-interface-theme="modern"] {
+  /* Force white text regardless of system theme — slate base reads dark */
+  --overlay-text-primary:     rgba(255, 255, 255, 0.96);
+  --overlay-text-secondary:   rgba(255, 255, 255, 0.88);
+  --overlay-text-muted:       rgba(255, 255, 255, 0.74);
+  --overlay-text-placeholder: rgba(255, 255, 255, 0.50);
+  --overlay-text-strong:      #ffffff;
+
+  /* Slate/graphite surfaces — the DARK_GLASS gradient */
+  --overlay-panel-bg:           linear-gradient(160deg, rgba(90, 90, 108, 0.88) 0%, rgba(55, 55, 70, 0.93) 50%, rgba(36, 36, 50, 0.97) 100%);
+  --overlay-pill-bg:            linear-gradient(160deg, rgba(90, 90, 108, 0.68) 0%, rgba(55, 55, 70, 0.72) 50%, rgba(36, 36, 50, 0.76) 100%);
+  --overlay-border:             rgba(255, 255, 255, 0.20);
+  --overlay-border-soft:        rgba(255, 255, 255, 0.10);
+  --overlay-chip-bg:            linear-gradient(160deg, rgba(90, 90, 108, 0.88) 0%, rgba(55, 55, 70, 0.93) 50%, rgba(36, 36, 50, 0.97) 100%);
+  --overlay-chip-hover-bg:      linear-gradient(160deg, rgba(108, 108, 128, 0.92) 0%, rgba(70, 70, 88, 0.95) 50%, rgba(46, 46, 64, 0.98) 100%);
+  --overlay-input-bg:           rgba(255, 255, 255, 0.05);
+  --overlay-input-hover-bg:     rgba(255, 255, 255, 0.08);
+  --overlay-input-focus-bg:     rgba(255, 255, 255, 0.10);
+  --overlay-control-bg:         rgba(255, 255, 255, 0.05);
+  --overlay-control-hover-bg:   rgba(255, 255, 255, 0.10);
+  --overlay-icon-bg:            linear-gradient(160deg, rgba(90, 90, 108, 0.88) 0%, rgba(55, 55, 70, 0.93) 50%, rgba(36, 36, 50, 0.97) 100%);
+  --overlay-icon-hover-bg:      linear-gradient(160deg, rgba(108, 108, 128, 0.92) 0%, rgba(70, 70, 88, 0.95) 50%, rgba(46, 46, 64, 0.98) 100%);
+  --overlay-code-bg:            rgba(255, 255, 255, 0.06);
+  --overlay-code-border:        rgba(255, 255, 255, 0.08);
+  --overlay-code-header-bg:     rgba(255, 255, 255, 0.04);
+  --overlay-inline-code-bg:     rgba(255, 255, 255, 0.10);
+  --overlay-panel-shadow:       rgba(0, 0, 0, 0.50);
+  --overlay-pill-shadow:        rgba(0, 0, 0, 0.30);
+  --overlay-shell-blur:         3px;   /* Intentionally LIGHT — panel is opaque-ish, not refractive */
+  --overlay-pill-blur:          3px;
+
+  /* Focus ring — lifted cobalt to clear WCAG 2.2 SC 2.4.11 (3:1) against
+     the LIGHTEST gradient stop rgba(90,90,108,0.88) (top-left of the
+     panel), not just the dark stops. The brand cobalt #5B8EF0 measures
+     2.40:1 there; #8FB4F7 measures 3.76:1 worst-case while staying in the
+     same hue family. Scoped to the overlay subtree via the attribute
+     selector — never applied to Launcher/Settings/ModelSelector windows
+     (App.tsx wrappers carry no data-interface-theme). */
+  --accent-primary: #8FB4F7;
+}
+
+/* Modern shell — DARK_GLASS gradient + multi-layer shadow.
+   Recipe per website card:
+     • Slate gradient 160deg (lightest top-left → darkest bottom-right)
+     • 1px rgba(255,255,255,0.20) border
+     • 24px corner radius
+     • Triple shadow: drop, inset top highlight, hairline outer rim
+     • Top 45% gloss strip painted via ::before */
+[data-interface-theme="modern"] .overlay-shell-surface {
+  background: linear-gradient(160deg,
+      rgba(90, 90, 108, 0.88) 0%,
+      rgba(55, 55, 70, 0.93) 50%,
+      rgba(36, 36, 50, 0.97) 100%
+    ) !important;
+  border-color: rgba(255, 255, 255, 0.20) !important;
+  backdrop-filter: blur(3px) !important;
+  -webkit-backdrop-filter: blur(3px) !important;
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.50),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 0 0.5px rgba(255, 255, 255, 0.08) !important;
+  position: relative;
+}
+
+/* Jelly gloss — the top 45% wet-look highlight strip. Sits ABOVE background
+   but BELOW content via z-index/pointer-events. Inset 4px on x-axis so it
+   doesn't paint over the rounded corners. */
+[data-interface-theme="modern"] .overlay-shell-surface::before {
+  content: '';
+  position: absolute;
+  inset: 2px 4px auto 4px;
+  height: 45%;
+  border-radius: inherit;
+  background: linear-gradient(to bottom,
+      rgba(255, 255, 255, 0.20) 0%,
+      rgba(255, 255, 255, 0.00) 100%
+    );
+  filter: blur(0.5px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* TopPill — match the main modern panel material */
+[data-interface-theme="modern"] .overlay-pill-surface {
+  background: linear-gradient(160deg,
+      rgba(90, 90, 108, 0.88) 0%,
+      rgba(55, 55, 70, 0.93) 50%,
+      rgba(36, 36, 50, 0.97) 100%
+    ) !important;
+  border-color: rgba(255, 255, 255, 0.20) !important;
+  backdrop-filter: blur(3px) !important;
+  -webkit-backdrop-filter: blur(3px) !important;
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.50),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 0 0.5px rgba(255, 255, 255, 0.08) !important;
+  position: relative;
+}
+
+[data-interface-theme="modern"] .overlay-pill-surface::before {
+  content: '';
+  position: absolute;
+  inset: 2px 4px auto 4px;
+  height: 45%;
+  border-radius: inherit;
+  background: linear-gradient(to bottom,
+      rgba(255, 255, 255, 0.20) 0%,
+      rgba(255, 255, 255, 0.00) 100%
+    );
+  filter: blur(0.5px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Transcript divider — quiet hairline */
+[data-interface-theme="modern"] .overlay-transcript-surface {
+  border-bottom-color: rgba(255, 255, 255, 0.10) !important;
+}
+
+/* Code blocks — flat white-tinted panel inside the slate shell, cyan text
+   inherited from the markdown renderer. */
+[data-interface-theme="modern"] .overlay-code-block-surface {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  box-shadow: none !important;
+}
+
+[data-interface-theme="modern"] .overlay-code-header-surface {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Inline code — match the block style, slightly lighter for inline flow */
+[data-interface-theme="modern"] .overlay-inline-code-surface {
+  background: rgba(255, 255, 255, 0.10) !important;
+  border-color: rgba(255, 255, 255, 0.10) !important;
+  color: rgba(255, 255, 255, 0.96) !important;
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   Modern jelly-gloss surfaces.
+   ───────────────────────────────────────────────────────────────────────
+   Per-surface DARK_GLASS recipe scaled down (less shadow, tighter radius).
+   The ::before gloss strip is the visual signature — top 45%, blurred 0.5px,
+   white-to-transparent gradient.
+   ─────────────────────────────────────────────────────────────────────── */
+
+/* Chip buttons (What to answer, Clarify, Recap, Follow-up, Answer, etc.) */
+[data-interface-theme="modern"] .overlay-chip-surface {
+  background: linear-gradient(160deg,
+      rgba(90, 90, 108, 0.88) 0%,
+      rgba(55, 55, 70, 0.93) 50%,
+      rgba(36, 36, 50, 0.97) 100%
+    ) !important;
+  border-color: rgba(255, 255, 255, 0.20) !important;
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 0 0.5px rgba(255, 255, 255, 0.08) !important;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.18s ease-out,
+              background 0.18s ease-out !important;
+}
+
+[data-interface-theme="modern"] .overlay-chip-surface::before {
+  content: '';
+  position: absolute;
+  inset: 2px 4px auto 4px;
+  height: 45%;
+  border-radius: inherit;
+  background: linear-gradient(to bottom,
+      rgba(255, 255, 255, 0.20) 0%,
+      rgba(255, 255, 255, 0.00) 100%
+    );
+  filter: blur(0.5px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+[data-interface-theme="modern"] .overlay-chip-surface:hover {
+  background: linear-gradient(160deg,
+      rgba(108, 108, 128, 0.92) 0%,
+      rgba(70, 70, 88, 0.95) 50%,
+      rgba(46, 46, 64, 0.98) 100%
+    ) !important;
+  transform: translateY(-1px);
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 0 0 0.5px rgba(255, 255, 255, 0.14) !important;
+}
+
+[data-interface-theme="modern"] .overlay-chip-surface:active {
+  transform: translateY(0) scale(0.97);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.20),
+    0 1px 3px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Chat input — flat white-tinted, 12px radius per website card */
+[data-interface-theme="modern"] .overlay-input-surface {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.10) !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+}
+
+[data-interface-theme="modern"] .overlay-input-surface:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+[data-interface-theme="modern"] .overlay-input-surface:focus,
+[data-interface-theme="modern"] .overlay-input-surface:focus-within {
+  background: rgba(255, 255, 255, 0.10) !important;
+  border-color: rgba(255, 255, 255, 0.20) !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.10) !important;
+}
+
+/* Control surfaces (mode dropdown, secondary buttons) — DARK_GLASS w/ gloss */
+[data-interface-theme="modern"] .overlay-control-surface {
+  background: linear-gradient(160deg,
+      rgba(90, 90, 108, 0.88) 0%,
+      rgba(55, 55, 70, 0.93) 50%,
+      rgba(36, 36, 50, 0.97) 100%
+    ) !important;
+  border-color: rgba(255, 255, 255, 0.20) !important;
+  box-shadow:
+    0 3px 10px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 0 0.5px rgba(255, 255, 255, 0.08) !important;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.18s ease-out,
+              background 0.18s ease-out !important;
+}
+
+[data-interface-theme="modern"] .overlay-control-surface::before {
+  content: '';
+  position: absolute;
+  inset: 2px 4px auto 4px;
+  height: 45%;
+  border-radius: inherit;
+  background: linear-gradient(to bottom,
+      rgba(255, 255, 255, 0.20) 0%,
+      rgba(255, 255, 255, 0.00) 100%
+    );
+  filter: blur(0.5px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+[data-interface-theme="modern"] .overlay-control-surface:hover {
+  background: linear-gradient(160deg,
+      rgba(108, 108, 128, 0.92) 0%,
+      rgba(70, 70, 88, 0.95) 50%,
+      rgba(46, 46, 64, 0.98) 100%
+    ) !important;
+  transform: translateY(-0.5px);
+  box-shadow:
+    0 5px 14px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 0 0 0.5px rgba(255, 255, 255, 0.14) !important;
+}
+
+/* Icon buttons — small round DARK_GLASS lozenges */
+[data-interface-theme="modern"] .overlay-icon-surface {
+  background: linear-gradient(160deg,
+      rgba(90, 90, 108, 0.88) 0%,
+      rgba(55, 55, 70, 0.93) 50%,
+      rgba(36, 36, 50, 0.97) 100%
+    ) !important;
+  border: 1px solid rgba(255, 255, 255, 0.20) !important;
+  box-shadow:
+    0 3px 10px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 0 0.5px rgba(255, 255, 255, 0.08) !important;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.18s ease-out,
+              background 0.18s ease-out !important;
+}
+
+[data-interface-theme="modern"] .overlay-icon-surface::before {
+  content: '';
+  position: absolute;
+  inset: 2px 4px auto 4px;
+  height: 45%;
+  border-radius: inherit;
+  background: linear-gradient(to bottom,
+      rgba(255, 255, 255, 0.20) 0%,
+      rgba(255, 255, 255, 0.00) 100%
+    );
+  filter: blur(0.5px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+[data-interface-theme="modern"] .overlay-icon-surface-hover:hover,
+[data-interface-theme="modern"] .overlay-icon-surface:hover {
+  background: linear-gradient(160deg,
+      rgba(108, 108, 128, 0.92) 0%,
+      rgba(70, 70, 88, 0.95) 50%,
+      rgba(46, 46, 64, 0.98) 100%
+    ) !important;
+  transform: translateY(-1px);
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 0 0 0.5px rgba(255, 255, 255, 0.14) !important;
+}
+
+[data-interface-theme="modern"] .overlay-icon-surface:active {
+  transform: translateY(0) scale(0.94);
+  box-shadow:
+    inset 0 1.5px 3px rgba(0, 0, 0, 0.22),
+    0 1px 2px rgba(0, 0, 0, 0.12) !important;
+}
+
+/* AI response cards (Follow-Up Questions, Recap, What to Answer, Shorten,
+   code, latent-context attachment preview) — they all share the
+   .overlay-subtle-surface class. Neutral white-tinted panel so the colored
+   accent on each card's header stays the focus. */
+[data-interface-theme="modern"] .overlay-subtle-surface {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.10) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 2px 8px rgba(0, 0, 0, 0.18) !important;
+}
+
+/* ─── DIFFERENTIATION OVERRIDES ──────────────────────────────────────────
+   Same two cases as liquid-glass: quiet kbd badges + dominant blue send
+   button + matching user-question bubble.
+   ─────────────────────────────────────────────────────────────────────── */
+
+/* Hotkey kbd: ⌘ ⇧ H badges — flat quiet pills, not interactive jelly.
+   Override the inherited overlay-control-surface jelly. */
+[data-interface-theme="modern"] kbd,
+[data-interface-theme="modern"] kbd.overlay-control-surface,
+[data-interface-theme="modern"] kbd.overlay-icon-surface {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    0 1px 2px rgba(0, 0, 0, 0.18) !important;
+  transform: none !important;
+  transition: none !important;
+}
+
+[data-interface-theme="modern"] kbd::before,
+[data-interface-theme="modern"] kbd.overlay-control-surface::before,
+[data-interface-theme="modern"] kbd.overlay-icon-surface::before {
+  /* Suppress the inherited jelly gloss strip on flat kbd indicators. */
+  content: none !important;
+}
+
+[data-interface-theme="modern"] kbd:hover {
+  transform: none !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    0 1px 2px rgba(0, 0, 0, 0.18) !important;
+}
+
+/* Primary send button — Tailwind `bg-[#007AFF]` class kept; replace the iOS
+   blue fill with the cobalt 160deg gradient, deeper outer glow, white drop
+   so it stays unmistakably the primary action. */
+[data-interface-theme="modern"] button[class~="bg-[#007AFF]"] {
+  background: linear-gradient(160deg,
+      #5B8EF0 0%,
+      #3B6FE8 50%,
+      #2D5FD4 100%
+    ) !important;
+  border: 1px solid rgba(255, 255, 255, 0.20) !important;
+  box-shadow:
+    0 8px 20px rgba(37, 99, 235, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.30),
+    0 0 0 0.5px rgba(255, 255, 255, 0.10) !important;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.18s ease-out,
+              background 0.18s ease-out !important;
+}
+
+/* Brighter, denser gloss strip on the primary action — reads as "wet". */
+[data-interface-theme="modern"] button[class~="bg-[#007AFF]"]::before {
+  content: '';
+  position: absolute;
+  inset: 2px 4px auto 4px;
+  height: 45%;
+  border-radius: inherit;
+  background: linear-gradient(to bottom,
+      rgba(255, 255, 255, 0.70) 0%,
+      rgba(255, 255, 255, 0.05) 100%
+    );
+  filter: blur(0.5px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+[data-interface-theme="modern"] button[class~="bg-[#007AFF]"]:hover {
+  background: linear-gradient(160deg,
+      #6B9CF5 0%,
+      #4A7BEC 50%,
+      #3568D8 100%
+    ) !important;
+  transform: translateY(-1px);
+  box-shadow:
+    0 10px 26px rgba(37, 99, 235, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.40),
+    0 0 0 0.5px rgba(255, 255, 255, 0.16) !important;
+}
+
+[data-interface-theme="modern"] button[class~="bg-[#007AFF]"]:active {
+  transform: translateY(0) scale(0.96);
+  box-shadow:
+    inset 0 1px 3px rgba(0, 0, 0, 0.25),
+    0 2px 6px rgba(37, 99, 235, 0.32) !important;
+}
+
+/* User chat-message bubble — the bluish question card the user types.
+   Targets Tailwind `bg-blue-500/10` (light) / `bg-blue-600/20` (dark) so the
+   bubble adopts the same cobalt gradient as the send button. Matching color
+   identity per the website card. */
+[data-interface-theme="modern"] [class*="bg-blue-500/10"],
+[data-interface-theme="modern"] [class*="bg-blue-600/20"] {
+  background: linear-gradient(160deg,
+      #5B8EF0 0%,
+      #3B6FE8 50%,
+      #2D5FD4 100%
+    ) !important;
+  border-color: rgba(255, 255, 255, 0.20) !important;
+  color: #ffffff !important;
+  box-shadow:
+    0 8px 20px rgba(37, 99, 235, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.20),
+    0 0 0 0.5px rgba(255, 255, 255, 0.08) !important;
+  position: relative;
+  overflow: hidden;
+}
+
+[data-interface-theme="modern"] [class*="bg-blue-500/10"]::before,
+[data-interface-theme="modern"] [class*="bg-blue-600/20"]::before {
+  content: '';
+  position: absolute;
+  inset: 2px 4px auto 4px;
+  height: 45%;
+  border-radius: inherit;
+  background: linear-gradient(to bottom,
+      rgba(255, 255, 255, 0.70) 0%,
+      rgba(255, 255, 255, 0.05) 100%
+    );
+  filter: blur(0.5px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Emerald — live-transcription "listening" bubble.
+   Default Tailwind bg-emerald-500/10 (rgba 16,185,129,0.10) composites to
+   muddy olive over the slate panel and loses its semantic "live mic" cue.
+   Lift to 0.22 alpha and add the same jelly gloss recipe the cobalt user
+   bubble uses so it reads as a distinct emerald lozenge. */
+[data-interface-theme="modern"] [class*="bg-emerald-500/10"] {
+  background:
+    linear-gradient(160deg,
+      rgba(255, 255, 255, 0.18) 0%,
+      rgba(255, 255, 255, 0.00) 45%,
+      rgba(0, 0, 0, 0.08) 100%
+    ),
+    rgba(16, 185, 129, 0.22) !important;
+  border-color: rgba(110, 220, 175, 0.32) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.10),
+    0 6px 16px rgba(16, 185, 129, 0.28),
+    0 2px 5px rgba(0, 0, 0, 0.18) !important;
+}
+
+/* Yellow — system-audio permission warning. Mirrors Liquid Glass recipe
+   but uses the 160deg sheen direction Modern adopts elsewhere. */
+[data-interface-theme="modern"] [class*="bg-yellow-500/10"] {
+  background:
+    linear-gradient(160deg,
+      rgba(255, 255, 255, 0.18) 0%,
+      rgba(255, 255, 255, 0.00) 45%,
+      rgba(0, 0, 0, 0.08) 100%
+    ),
+    rgba(234, 179, 8, 0.22) !important;
+  border-color: rgba(234, 179, 8, 0.32) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.10),
+    0 6px 16px rgba(234, 179, 8, 0.28),
+    0 2px 5px rgba(0, 0, 0, 0.18) !important;
+}
+
+/* Orange — STT warning callout. */
+[data-interface-theme="modern"] [class*="bg-orange-500/10"] {
+  background:
+    linear-gradient(160deg,
+      rgba(255, 255, 255, 0.18) 0%,
+      rgba(255, 255, 255, 0.00) 45%,
+      rgba(0, 0, 0, 0.08) 100%
+    ),
+    rgba(249, 115, 22, 0.22) !important;
+  border-color: rgba(249, 115, 22, 0.32) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.10),
+    0 6px 16px rgba(249, 115, 22, 0.28),
+    0 2px 5px rgba(0, 0, 0, 0.18) !important;
+}
+
+/* Rose — hotkey conflict callout. */
+[data-interface-theme="modern"] [class*="bg-rose-500/10"] {
+  background:
+    linear-gradient(160deg,
+      rgba(255, 255, 255, 0.18) 0%,
+      rgba(255, 255, 255, 0.00) 45%,
+      rgba(0, 0, 0, 0.08) 100%
+    ),
+    rgba(244, 63, 94, 0.22) !important;
+  border-color: rgba(244, 63, 94, 0.32) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.10),
+    0 6px 16px rgba(244, 63, 94, 0.28),
+    0 2px 5px rgba(0, 0, 0, 0.18) !important;
+}
+
+/* Amber — secondary warning callouts. */
+[data-interface-theme="modern"] [class*="bg-amber-500/10"] {
+  background:
+    linear-gradient(160deg,
+      rgba(255, 255, 255, 0.18) 0%,
+      rgba(255, 255, 255, 0.00) 45%,
+      rgba(0, 0, 0, 0.08) 100%
+    ),
+    rgba(245, 158, 11, 0.22) !important;
+  border-color: rgba(245, 158, 11, 0.32) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.10),
+    0 6px 16px rgba(245, 158, 11, 0.28),
+    0 2px 5px rgba(0, 0, 0, 0.18) !important;
+}
+
+/* Red — Stop button (active recording) and red callouts. Interactive
+   springy hover/active because the Stop button is a control. */
+[data-interface-theme="modern"] [class*="bg-red-500/10"] {
+  background:
+    linear-gradient(160deg,
+      rgba(255, 255, 255, 0.20) 0%,
+      rgba(255, 255, 255, 0.00) 45%,
+      rgba(0, 0, 0, 0.10) 100%
+    ),
+    rgba(239, 68, 68, 0.24) !important;
+  border-color: rgba(239, 68, 68, 0.34) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.16),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+    0 6px 16px rgba(239, 68, 68, 0.32),
+    0 2px 5px rgba(0, 0, 0, 0.18) !important;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.18s ease-out,
+              background 0.18s ease-out !important;
+}
+
+[data-interface-theme="modern"] button[class*="bg-red-500/10"]:hover {
+  background:
+    linear-gradient(160deg,
+      rgba(255, 255, 255, 0.28) 0%,
+      rgba(255, 255, 255, 0.00) 45%,
+      rgba(0, 0, 0, 0.10) 100%
+    ),
+    rgba(239, 68, 68, 0.32) !important;
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.16),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.20),
+    0 10px 22px rgba(239, 68, 68, 0.42),
+    0 3px 6px rgba(0, 0, 0, 0.22) !important;
+}
+
+[data-interface-theme="modern"] button[class*="bg-red-500/10"]:active {
+  transform: translateY(0) scale(0.96);
+  box-shadow:
+    inset 0 1px 3px rgba(0, 0, 0, 0.22),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+    0 1px 3px rgba(239, 68, 68, 0.26) !important;
+}
+
+/* STT error surface — quiet white-tinted lozenge so warm tint preserved by
+   inheritance reads cleanly on the slate panel. */
+[data-interface-theme="modern"] .stt-error-surface {
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.10) 0%,
+      rgba(255, 255, 255, 0.03) 60%,
+      rgba(255, 255, 255, 0.06) 100%
+    ),
+    rgba(255, 255, 255, 0.05) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.30),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.10),
+    0 4px 12px rgba(0, 0, 0, 0.28) !important;
 }
 
 /* ─── Light mode elevation system ────────────────────────────────────────
@@ -1261,3 +1945,2876 @@ html[data-platform="linux"] body {
   border-radius: 8px !important;
   overflow: hidden;
 }
+
+/* ───────────────────────────────────────────────────────────────────────
+   Natively API - New Interactive Pricing switchboard (Liquid Glass)
+   ─────────────────────────────────────────────────────────────────────── */
+
+[data-interface-theme="liquid-glass"] .natively-api-selector-bar {
+  background: rgba(0, 0, 0, 0.32) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.40),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05),
+    0 4px 14px rgba(0, 0, 0, 0.25) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-selector-tab {
+  position: relative;
+  background: transparent !important;
+  border: none !important;
+  color: var(--text-secondary) !important;
+  padding: 8px 12px !important;
+  font-size: 11.5px !important;
+  font-weight: 500 !important;
+  text-align: center !important;
+  cursor: pointer !important;
+  transition: color 0.2s ease-out, transform 0.15s cubic-bezier(0.23, 1, 0.32, 1) !important;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-selector-tab:hover {
+  color: var(--text-primary) !important;
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-selector-tab:active {
+  transform: scale(0.96) !important;
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-selector-tab.active {
+  color: #ffffff !important;
+  font-weight: 600 !important;
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-selector-tab .tab-name {
+  font-size: 11.5px !important;
+  letter-spacing: -0.01em;
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-selector-tab .tab-price {
+  font-size: 9.5px !important;
+  opacity: 0.65;
+  margin-top: 1px;
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-selector-pill {
+  border-radius: 12px !important;
+  transition: all 260ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-selector-pill-standard {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.00) 45%, rgba(0, 0, 0, 0.15) 100%),
+    rgba(148, 163, 184, 0.22) !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  box-shadow:
+    inset 0 1.5px 0.5px rgba(255, 255, 255, 0.65),
+    inset 0 -1.5px 2px rgba(0, 0, 0, 0.40),
+    0 4px 14px rgba(148, 163, 184, 0.25) !important;
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-selector-pill-pro {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.00) 45%, rgba(0, 0, 0, 0.18) 100%),
+    rgba(139, 92, 246, 0.32) !important;
+  border: 1px solid rgba(196, 181, 253, 0.45) !important;
+  box-shadow:
+    inset 0 1.5px 0.5px rgba(255, 255, 255, 0.70),
+    inset 0 -1.5px 2px rgba(0, 0, 0, 0.40),
+    0 5px 16px rgba(139, 92, 246, 0.40) !important;
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-selector-pill-max {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.00) 45%, rgba(0, 0, 0, 0.18) 100%),
+    rgba(59, 130, 246, 0.32) !important;
+  border: 1px solid rgba(147, 197, 253, 0.45) !important;
+  box-shadow:
+    inset 0 1.5px 0.5px rgba(255, 255, 255, 0.70),
+    inset 0 -1.5px 2px rgba(0, 0, 0, 0.40),
+    0 5px 16px rgba(59, 130, 246, 0.40) !important;
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-selector-pill-ultra {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.00) 45%, rgba(0, 0, 0, 0.18) 100%),
+    rgba(249, 115, 22, 0.32) !important;
+  border: 1px solid rgba(253, 186, 116, 0.45) !important;
+  box-shadow:
+    inset 0 1.5px 0.5px rgba(255, 255, 255, 0.70),
+    inset 0 -1.5px 2px rgba(0, 0, 0, 0.40),
+    0 5px 16px rgba(249, 115, 22, 0.40) !important;
+}
+
+/* Double-Bezel layout */
+[data-interface-theme="liquid-glass"] .natively-api-detail-shell {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 26px !important;
+  overflow: hidden !important;
+}
+
+/* Hardware-Accelerated Reveal Keyframes */
+@keyframes natively-api-card-reveal {
+  0% {
+    opacity: 0;
+    transform: scale(0.985) translateY(6px);
+    filter: blur(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0);
+  }
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-detail-card {
+  border-radius: 26px !important;
+  border: 1.5px solid transparent !important;
+  position: relative !important;
+  overflow: hidden !important;
+  transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
+              box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1),
+              border-color 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+/* Glass shine gloss highlight on liquid glass detail cards */
+[data-interface-theme="liquid-glass"] .natively-api-detail-card::before {
+  content: '' !important;
+  display: block !important;
+  position: absolute !important;
+  inset: 1px !important;
+  height: 45% !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 100%) !important;
+  border-radius: 25px 25px 0 0 !important;
+  pointer-events: none !important;
+  z-index: 2 !important;
+}
+
+/* Blueprint tech grid overlay on detail cards */
+[data-interface-theme="liquid-glass"] .natively-api-detail-card::after,
+[data-interface-theme="modern"] .natively-api-detail-card::after {
+  content: '' !important;
+  position: absolute !important;
+  inset: 0 !important;
+  border-radius: inherit !important;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.012) 1px, transparent 1px) !important;
+  background-size: 24px 24px !important;
+  pointer-events: none !important;
+  z-index: 1 !important;
+  opacity: 0.55 !important;
+  transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .natively-api-detail-card:hover::after {
+    opacity: 0.8 !important;
+  }
+}
+
+/* Card Specific color variations (Liquid Glass) */
+/* Standard - Cool Slate / Blue */
+[data-interface-theme="liquid-glass"] .natively-api-detail-card-standard {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.16), transparent 50%),
+    radial-gradient(circle at 100% 100%, rgba(148, 163, 184, 0.20), transparent 60%),
+    linear-gradient(135deg, rgba(148, 163, 184, 0.12) 0%, rgba(45, 55, 75, 0.40) 100%) !important;
+  box-shadow:
+    inset 0 2.5px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.20),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
+    0 12px 30px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Pro - Deep Violet / Indigo */
+[data-interface-theme="liquid-glass"] .natively-api-detail-card-pro {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.28) 0%, transparent 60%),
+    radial-gradient(circle at 100% 100%, rgba(139, 92, 246, 0.35) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(55, 30, 95, 0.50) 0%, rgba(20, 10, 36, 0.65) 100%) !important;
+  border-color: rgba(139, 92, 246, 0.32) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(139, 92, 246, 0.60),
+    inset 0 2.5px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.30),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
+    0 14px 34px rgba(139, 92, 246, 0.22),
+    0 6px 18px rgba(0, 0, 0, 0.22) !important;
+}
+
+/* Max - Indigo / Deep Blue */
+[data-interface-theme="liquid-glass"] .natively-api-detail-card-max {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.25) 0%, transparent 60%),
+    radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.32) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(30, 48, 80, 0.50) 0%, rgba(15, 23, 42, 0.65) 100%) !important;
+  border-color: rgba(59, 130, 246, 0.32) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(59, 130, 246, 0.55),
+    inset 0 2.5px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.30),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
+    0 14px 34px rgba(59, 130, 246, 0.20),
+    0 6px 18px rgba(0, 0, 0, 0.22) !important;
+}
+
+/* Ultra - Sunset / Magenta Accent */
+[data-interface-theme="liquid-glass"] .natively-api-detail-card-ultra {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.28) 0%, transparent 60%),
+    radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.30) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(70, 40, 30, 0.50) 0%, rgba(25, 12, 16, 0.65) 100%) !important;
+  border-color: rgba(249, 115, 22, 0.32) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(249, 115, 22, 0.55),
+    inset 0 2.5px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.30),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
+    0 14px 34px rgba(249, 115, 22, 0.20),
+    0 6px 18px rgba(0, 0, 0, 0.22) !important;
+}
+
+/* Active State overrides (Color tailored to each plan with rich ambient glowing halos) */
+[data-interface-theme="liquid-glass"] .natively-api-detail-card-standard[data-active="true"] {
+  border-color: rgba(148, 163, 184, 0.60) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(148, 163, 184, 0.75),
+    inset 0 2px 6px rgba(255, 255, 255, 0.35),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.6),
+    0 0 24px rgba(148, 163, 184, 0.20),
+    0 16px 36px rgba(148, 163, 184, 0.20),
+    0 4px 12px rgba(0, 0, 0, 0.40) !important;
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-detail-card-pro[data-active="true"] {
+  border-color: rgba(139, 92, 246, 0.65) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(139, 92, 246, 0.80),
+    inset 0 2px 6px rgba(255, 255, 255, 0.35),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.6),
+    0 0 32px rgba(139, 92, 246, 0.32),
+    0 16px 40px rgba(139, 92, 246, 0.28),
+    0 4px 12px rgba(0, 0, 0, 0.40) !important;
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-detail-card-max[data-active="true"] {
+  border-color: rgba(59, 130, 246, 0.65) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(59, 130, 246, 0.80),
+    inset 0 2px 6px rgba(255, 255, 255, 0.35),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.6),
+    0 0 32px rgba(59, 130, 246, 0.32),
+    0 16px 40px rgba(59, 130, 246, 0.26),
+    0 4px 12px rgba(0, 0, 0, 0.40) !important;
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-detail-card-ultra[data-active="true"] {
+  border-color: rgba(249, 115, 22, 0.65) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(249, 115, 22, 0.80),
+    inset 0 2px 6px rgba(255, 255, 255, 0.35),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.6),
+    0 0 32px rgba(249, 115, 22, 0.32),
+    0 16px 40px rgba(249, 115, 22, 0.26),
+    0 4px 12px rgba(0, 0, 0, 0.40) !important;
+}
+
+/* Hover effect on detail cards */
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme="liquid-glass"] .natively-api-detail-card:hover {
+    box-shadow:
+      inset 0 2.5px 0 rgba(255, 255, 255, 0.45),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.20),
+      0 20px 45px rgba(0, 0, 0, 0.35) !important;
+  }
+}
+
+/* ──── Premium Graphics & Specular Upgrades (Liquid Glass Theme) ──── */
+
+.natively-api-price-pro {
+  background: linear-gradient(135deg, #ffffff 30%, #c4b5fd 100%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  display: inline-block;
+}
+
+.natively-api-price-max {
+  background: linear-gradient(135deg, #ffffff 30%, #93c5fd 100%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  display: inline-block;
+}
+
+.natively-api-price-ultra {
+  background: linear-gradient(135deg, #ffffff 30%, #fdb582 100%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  display: inline-block;
+}
+
+.natively-api-price-standard {
+  background: linear-gradient(135deg, #ffffff 40%, #cbd5e1 100%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  display: inline-block;
+}
+
+/* Feature Check icon glows */
+.natively-api-check-icon-pro {
+  filter: drop-shadow(0 0 4.5px rgba(139, 92, 246, 0.55)) !important;
+}
+.natively-api-check-icon-max {
+  filter: drop-shadow(0 0 4.5px rgba(59, 130, 246, 0.55)) !important;
+}
+.natively-api-check-icon-ultra {
+  filter: drop-shadow(0 0 4.5px rgba(249, 115, 22, 0.55)) !important;
+}
+.natively-api-check-icon-standard {
+  filter: drop-shadow(0 0 4.5px rgba(148, 163, 184, 0.35)) !important;
+}
+
+/* Premium Features Glass Panel */
+[data-interface-theme="liquid-glass"] .natively-api-features-panel {
+  background: rgba(0, 0, 0, 0.24) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.04),
+    inset 0 -1.5px 2.5px rgba(0, 0, 0, 0.40) !important;
+  position: relative;
+  overflow: hidden;
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-features-panel::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 8% !important;
+  right: 8% !important;
+  height: 1px !important;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent) !important;
+  pointer-events: none !important;
+}
+
+/* CTA buttons for Natively API pricing cards */
+[data-interface-theme="liquid-glass"] .natively-api-pricing-cta {
+  border-radius: 9999px !important;
+  padding: 12px 24px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  text-align: center !important;
+  transition: transform 150ms cubic-bezier(0.23, 1, 0.32, 1), 
+              box-shadow 150ms cubic-bezier(0.23, 1, 0.32, 1), 
+              background-color 150ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  width: 100% !important;
+  border: 1.5px solid transparent !important;
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-pricing-cta-neutral {
+  background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%) !important;
+  color: rgba(15, 23, 42, 0.95) !important;
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 1),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.12),
+    0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme="liquid-glass"] .natively-api-pricing-cta-neutral:hover {
+    background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 100%) !important;
+    transform: translateY(-1px) !important;
+    box-shadow:
+      inset 0 1.5px 3px rgba(255, 255, 255, 1),
+      inset 0 -2px 4px rgba(0, 0, 0, 0.12),
+      0 6px 16px rgba(0, 0, 0, 0.20) !important;
+  }
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-pricing-cta-pro {
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.35) 0%,
+      rgba(255, 255, 255, 0.05) 50%,
+      rgba(0, 0, 0, 0.24) 100%
+    ),
+    #8b5cf6 !important;
+  color: #ffffff !important;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.45),
+    inset 0 -2px 6px rgba(0, 0, 0, 0.35),
+    0 6px 18px rgba(139, 92, 246, 0.30) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme="liquid-glass"] .natively-api-pricing-cta-pro:hover {
+    background:
+      linear-gradient(180deg,
+        rgba(255, 255, 255, 0.45) 0%,
+        rgba(255, 255, 255, 0.05) 50%,
+        rgba(0, 0, 0, 0.24) 100%
+      ),
+      #7c3aed !important;
+    transform: translateY(-1px) !important;
+    box-shadow:
+      inset 0 2px 3px rgba(255, 255, 255, 0.55),
+      inset 0 -2px 6px rgba(0, 0, 0, 0.35),
+      0 10px 22px rgba(139, 92, 246, 0.45) !important;
+  }
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-pricing-cta-max {
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.35) 0%,
+      rgba(255, 255, 255, 0.05) 50%,
+      rgba(0, 0, 0, 0.24) 100%
+    ),
+    #3b82f6 !important;
+  color: #ffffff !important;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.45),
+    inset 0 -2px 6px rgba(0, 0, 0, 0.35),
+    0 6px 18px rgba(59, 130, 246, 0.30) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme="liquid-glass"] .natively-api-pricing-cta-max:hover {
+    background:
+      linear-gradient(180deg,
+        rgba(255, 255, 255, 0.45) 0%,
+        rgba(255, 255, 255, 0.05) 50%,
+        rgba(0, 0, 0, 0.24) 100%
+      ),
+      #2563eb !important;
+    transform: translateY(-1px) !important;
+    box-shadow:
+      inset 0 2px 3px rgba(255, 255, 255, 0.55),
+      inset 0 -2px 6px rgba(0, 0, 0, 0.35),
+      0 10px 22px rgba(59, 130, 246, 0.45) !important;
+  }
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-pricing-cta-ultra {
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.35) 0%,
+      rgba(255, 255, 255, 0.05) 50%,
+      rgba(0, 0, 0, 0.24) 100%
+    ),
+    #f97316 !important;
+  color: #ffffff !important;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.45),
+    inset 0 -2px 6px rgba(0, 0, 0, 0.35),
+    0 6px 18px rgba(249, 115, 22, 0.30) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme="liquid-glass"] .natively-api-pricing-cta-ultra:hover {
+    background:
+      linear-gradient(180deg,
+        rgba(255, 255, 255, 0.45) 0%,
+        rgba(255, 255, 255, 0.05) 50%,
+        rgba(0, 0, 0, 0.24) 100%
+      ),
+      #ea580c !important;
+    transform: translateY(-1px) !important;
+    box-shadow:
+      inset 0 2px 3px rgba(255, 255, 255, 0.55),
+      inset 0 -2px 6px rgba(0, 0, 0, 0.35),
+      0 10px 22px rgba(249, 115, 22, 0.45) !important;
+  }
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-pricing-cta:active {
+  transform: translateY(0) scale(0.97) !important;
+}
+
+/* Premium micro-pills */
+[data-interface-theme="liquid-glass"] .natively-api-pricing-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px !important;
+  border-radius: 9999px !important;
+  font-size: 9.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-pricing-badge-standard {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(0, 0, 0, 0.18) 100%),
+    rgba(148, 163, 184, 0.22) !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  box-shadow:
+    inset 0 1.5px 0.5px rgba(255, 255, 255, 0.70),
+    inset 0 -1.5px 2.5px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+    0 3px 8px rgba(0, 0, 0, 0.20) !important;
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-pricing-badge-recommended {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(0, 0, 0, 0.18) 100%),
+    rgba(139, 92, 246, 0.32) !important;
+  border: 1px solid rgba(196, 181, 253, 0.45) !important;
+  box-shadow:
+    inset 0 1.5px 0.5px rgba(255, 255, 255, 0.75),
+    inset 0 -1.5px 2.5px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+    0 4px 12px rgba(139, 92, 246, 0.35) !important;
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-pricing-badge-max {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(0, 0, 0, 0.18) 100%),
+    rgba(59, 130, 246, 0.32) !important;
+  border: 1px solid rgba(147, 197, 253, 0.45) !important;
+  box-shadow:
+    inset 0 1.5px 0.5px rgba(255, 255, 255, 0.75),
+    inset 0 -1.5px 2.5px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+    0 4px 12px rgba(59, 130, 246, 0.35) !important;
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-pricing-badge-ultra {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(0, 0, 0, 0.18) 100%),
+    rgba(249, 115, 22, 0.32) !important;
+  border: 1px solid rgba(253, 186, 116, 0.45) !important;
+  box-shadow:
+    inset 0 1.5px 0.5px rgba(255, 255, 255, 0.75),
+    inset 0 -1.5px 2.5px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+    0 4px 12px rgba(249, 115, 22, 0.35) !important;
+}
+
+[data-interface-theme="liquid-glass"] .natively-api-pricing-badge-emerald {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(0, 0, 0, 0.18) 100%),
+    rgba(16, 185, 129, 0.32) !important;
+  border: 1px solid rgba(110, 231, 183, 0.45) !important;
+  box-shadow:
+    inset 0 1.5px 0.5px rgba(255, 255, 255, 0.75),
+    inset 0 -1.5px 2.5px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+    0 4px 12px rgba(16, 185, 129, 0.35) !important;
+}
+
+/* ─── Natively API Pricing Card System - Modern Theme ─────────────────── */
+
+[data-interface-theme="modern"] .natively-api-selector-bar {
+  background: rgba(0, 0, 0, 0.32) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.40),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05),
+    0 4px 14px rgba(0, 0, 0, 0.25) !important;
+}
+
+[data-interface-theme="modern"] .natively-api-selector-tab {
+  position: relative;
+  background: transparent !important;
+  border: none !important;
+  color: var(--text-secondary) !important;
+  padding: 8px 12px !important;
+  font-size: 11.5px !important;
+  font-weight: 500 !important;
+  text-align: center !important;
+  cursor: pointer !important;
+  transition: color 0.2s ease-out, transform 0.15s cubic-bezier(0.23, 1, 0.32, 1) !important;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+[data-interface-theme="modern"] .natively-api-selector-tab:hover {
+  color: var(--text-primary) !important;
+}
+
+[data-interface-theme="modern"] .natively-api-selector-tab:active {
+  transform: scale(0.96) !important;
+}
+
+[data-interface-theme="modern"] .natively-api-selector-tab.active {
+  color: #ffffff !important;
+  font-weight: 600 !important;
+}
+
+[data-interface-theme="modern"] .natively-api-selector-tab .tab-name {
+  font-size: 11.5px !important;
+  letter-spacing: -0.01em;
+}
+
+[data-interface-theme="modern"] .natively-api-selector-tab .tab-price {
+  font-size: 9.5px !important;
+  opacity: 0.65;
+  margin-top: 1px;
+}
+
+[data-interface-theme="modern"] .natively-api-selector-pill {
+  border-radius: 12px !important;
+  transition: all 260ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+[data-interface-theme="modern"] .natively-api-selector-pill-standard {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.00) 45%, rgba(0, 0, 0, 0.15) 100%),
+    rgba(148, 163, 184, 0.22) !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  box-shadow:
+    inset 0 1.5px 0.5px rgba(255, 255, 255, 0.65),
+    inset 0 -1.5px 2px rgba(0, 0, 0, 0.40),
+    0 4px 14px rgba(148, 163, 184, 0.25) !important;
+}
+
+[data-interface-theme="modern"] .natively-api-selector-pill-pro {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.00) 45%, rgba(0, 0, 0, 0.18) 100%),
+    rgba(139, 92, 246, 0.32) !important;
+  border: 1px solid rgba(196, 181, 253, 0.45) !important;
+  box-shadow:
+    inset 0 1.5px 0.5px rgba(255, 255, 255, 0.70),
+    inset 0 -1.5px 2px rgba(0, 0, 0, 0.40),
+    0 5px 16px rgba(139, 92, 246, 0.40) !important;
+}
+
+[data-interface-theme="modern"] .natively-api-selector-pill-max {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.00) 45%, rgba(0, 0, 0, 0.18) 100%),
+    rgba(59, 130, 246, 0.32) !important;
+  border: 1px solid rgba(147, 197, 253, 0.45) !important;
+  box-shadow:
+    inset 0 1.5px 0.5px rgba(255, 255, 255, 0.70),
+    inset 0 -1.5px 2px rgba(0, 0, 0, 0.40),
+    0 5px 16px rgba(59, 130, 246, 0.40) !important;
+}
+
+[data-interface-theme="modern"] .natively-api-selector-pill-ultra {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.00) 45%, rgba(0, 0, 0, 0.18) 100%),
+    rgba(249, 115, 22, 0.32) !important;
+  border: 1px solid rgba(253, 186, 116, 0.45) !important;
+  box-shadow:
+    inset 0 1.5px 0.5px rgba(255, 255, 255, 0.70),
+    inset 0 -1.5px 2px rgba(0, 0, 0, 0.40),
+    0 5px 16px rgba(249, 115, 22, 0.40) !important;
+}
+
+/* Double-Bezel layout (Modern) */
+[data-interface-theme="modern"] .natively-api-detail-shell {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 26px !important;
+  overflow: hidden !important;
+}
+
+[data-interface-theme="modern"] .natively-api-detail-card {
+  border-radius: 26px !important;
+  border: 1.5px solid transparent !important;
+  position: relative !important;
+  overflow: hidden !important;
+  transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
+              box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1),
+              border-color 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+/* Card Specific color variations (Modern) */
+/* Standard - Slate */
+[data-interface-theme="modern"] .natively-api-detail-card-standard {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.16), transparent 50%),
+    linear-gradient(160deg, rgba(100, 112, 132, 0.65) 0%, rgba(60, 68, 88, 0.75) 50%, rgba(35, 40, 55, 0.85) 100%) !important;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.25),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.30),
+    0 12px 32px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* Pro - Deep Violet */
+[data-interface-theme="modern"] .natively-api-detail-card-pro {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.22), transparent 50%),
+    linear-gradient(160deg, rgba(130, 110, 180, 0.65) 0%, rgba(80, 65, 125, 0.75) 50%, rgba(45, 35, 80, 0.85) 100%) !important;
+  border-color: rgba(139, 92, 246, 0.32) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(139, 92, 246, 0.45),
+    inset 0 2px 3px rgba(255, 255, 255, 0.28),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.35),
+    0 16px 36px rgba(0, 0, 0, 0.35),
+    0 4px 12px rgba(110, 90, 155, 0.15) !important;
+}
+
+/* Max - Indigo / Deep Blue */
+[data-interface-theme="modern"] .natively-api-detail-card-max {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.18), transparent 50%),
+    linear-gradient(160deg, rgba(85, 110, 165, 0.65) 0%, rgba(50, 68, 115, 0.75) 50%, rgba(30, 40, 75, 0.85) 100%) !important;
+  border-color: rgba(59, 130, 246, 0.32) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(59, 130, 246, 0.45),
+    inset 0 2px 3px rgba(255, 255, 255, 0.25),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.32),
+    0 16px 36px rgba(0, 0, 0, 0.35),
+    0 4px 12px rgba(59, 130, 246, 0.15) !important;
+}
+
+/* Ultra - Sunset Accent */
+[data-interface-theme="modern"] .natively-api-detail-card-ultra {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.22), transparent 50%),
+    linear-gradient(160deg, rgba(155, 110, 125, 0.65) 0%, rgba(95, 58, 95, 0.75) 50%, rgba(55, 32, 60, 0.85) 100%) !important;
+  border-color: rgba(249, 115, 22, 0.32) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(249, 115, 22, 0.45),
+    inset 0 2px 3px rgba(255, 255, 255, 0.28),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.35),
+    0 16px 36px rgba(0, 0, 0, 0.35),
+    0 4px 12px rgba(249, 115, 22, 0.15) !important;
+}
+
+/* Active State overrides (Modern - Color tailored to each plan with rich ambient glowing halos) */
+[data-interface-theme="modern"] .natively-api-detail-card-standard[data-active="true"] {
+  border-color: rgba(148, 163, 184, 0.60) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(148, 163, 184, 0.75),
+    inset 0 2px 3px rgba(255, 255, 255, 0.25),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.40),
+    0 16px 36px rgba(0, 0, 0, 0.55),
+    0 0 24px rgba(148, 163, 184, 0.20) !important;
+}
+
+[data-interface-theme="modern"] .natively-api-detail-card-pro[data-active="true"] {
+  border-color: rgba(139, 92, 246, 0.65) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(139, 92, 246, 0.80),
+    inset 0 2px 3px rgba(255, 255, 255, 0.25),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.40),
+    0 16px 36px rgba(0, 0, 0, 0.55),
+    0 0 32px rgba(139, 92, 246, 0.30) !important;
+}
+
+[data-interface-theme="modern"] .natively-api-detail-card-max[data-active="true"] {
+  border-color: rgba(59, 130, 246, 0.65) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(59, 130, 246, 0.80),
+    inset 0 2px 3px rgba(255, 255, 255, 0.25),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.40),
+    0 16px 36px rgba(0, 0, 0, 0.55),
+    0 0 32px rgba(59, 130, 246, 0.30) !important;
+}
+
+[data-interface-theme="modern"] .natively-api-detail-card-ultra[data-active="true"] {
+  border-color: rgba(249, 115, 22, 0.65) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(249, 115, 22, 0.80),
+    inset 0 2px 3px rgba(255, 255, 255, 0.25),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.40),
+    0 16px 36px rgba(0, 0, 0, 0.55),
+    0 0 32px rgba(249, 115, 22, 0.30) !important;
+}
+
+/* Hover effect on detail cards (Modern) */
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme="modern"] .natively-api-detail-card:hover {
+    box-shadow:
+      inset 0 2px 3px rgba(255, 255, 255, 0.25),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.30),
+      0 20px 45px rgba(0, 0, 0, 0.50) !important;
+  }
+}
+
+/* Premium Features Glass Panel (Modern) */
+[data-interface-theme="modern"] .natively-api-features-panel {
+  background: rgba(0, 0, 0, 0.24) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.04),
+    inset 0 -1.5px 2.5px rgba(0, 0, 0, 0.40) !important;
+  position: relative;
+  overflow: hidden;
+}
+
+[data-interface-theme="modern"] .natively-api-features-panel::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 8% !important;
+  right: 8% !important;
+  height: 1px !important;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent) !important;
+  pointer-events: none !important;
+}
+
+/* CTA buttons for Natively API pricing cards (Modern) */
+[data-interface-theme="modern"] .natively-api-pricing-cta {
+  border-radius: 9999px !important;
+  padding: 12px 24px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  text-align: center !important;
+  transition: transform 150ms cubic-bezier(0.23, 1, 0.32, 1), 
+              box-shadow 150ms cubic-bezier(0.23, 1, 0.32, 1), 
+              background-color 150ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  width: 100% !important;
+  border: 1.5px solid transparent !important;
+}
+
+/* Neutral bright CTA (Modern) */
+[data-interface-theme="modern"] .natively-api-pricing-cta-neutral {
+  background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%) !important;
+  color: rgba(15, 23, 42, 0.95) !important;
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 1),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.12),
+    0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme="modern"] .natively-api-pricing-cta-neutral:hover {
+    background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 100%) !important;
+    transform: translateY(-1px) !important;
+    box-shadow:
+      inset 0 1.5px 3px rgba(255, 255, 255, 1),
+      inset 0 -2px 4px rgba(0, 0, 0, 0.12),
+      0 6px 16px rgba(0, 0, 0, 0.20) !important;
+  }
+}
+
+/* Colored Pro CTA (Modern) */
+[data-interface-theme="modern"] .natively-api-pricing-cta-pro {
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.35) 0%,
+      rgba(255, 255, 255, 0.05) 50%,
+      rgba(0, 0, 0, 0.24) 100%
+    ),
+    #8b5cf6 !important;
+  color: #ffffff !important;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.45),
+    inset 0 -2px 6px rgba(0, 0, 0, 0.35),
+    0 6px 18px rgba(139, 92, 246, 0.30) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme="modern"] .natively-api-pricing-cta-pro:hover {
+    background:
+      linear-gradient(180deg,
+        rgba(255, 255, 255, 0.45) 0%,
+        rgba(255, 255, 255, 0.05) 50%,
+        rgba(0, 0, 0, 0.24) 100%
+      ),
+      #7c3aed !important;
+    transform: translateY(-1px) !important;
+    box-shadow:
+      inset 0 2px 3px rgba(255, 255, 255, 0.55),
+      inset 0 -2px 6px rgba(0, 0, 0, 0.35),
+      0 10px 22px rgba(139, 92, 246, 0.45) !important;
+  }
+}
+
+[data-interface-theme="modern"] .natively-api-pricing-cta-max {
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.35) 0%,
+      rgba(255, 255, 255, 0.05) 50%,
+      rgba(0, 0, 0, 0.24) 100%
+    ),
+    #3b82f6 !important;
+  color: #ffffff !important;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.45),
+    inset 0 -2px 6px rgba(0, 0, 0, 0.35),
+    0 6px 18px rgba(59, 130, 246, 0.30) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme="modern"] .natively-api-pricing-cta-max:hover {
+    background:
+      linear-gradient(180deg,
+        rgba(255, 255, 255, 0.45) 0%,
+        rgba(255, 255, 255, 0.05) 50%,
+        rgba(0, 0, 0, 0.24) 100%
+      ),
+      #2563eb !important;
+    transform: translateY(-1px) !important;
+    box-shadow:
+      inset 0 2px 3px rgba(255, 255, 255, 0.55),
+      inset 0 -2px 6px rgba(0, 0, 0, 0.35),
+      0 10px 22px rgba(59, 130, 246, 0.45) !important;
+  }
+}
+
+[data-interface-theme="modern"] .natively-api-pricing-cta-ultra {
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.35) 0%,
+      rgba(255, 255, 255, 0.05) 50%,
+      rgba(0, 0, 0, 0.24) 100%
+    ),
+    #f97316 !important;
+  color: #ffffff !important;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.45),
+    inset 0 -2px 6px rgba(0, 0, 0, 0.35),
+    0 6px 18px rgba(249, 115, 22, 0.30) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme="modern"] .natively-api-pricing-cta-ultra:hover {
+    background:
+      linear-gradient(180deg,
+        rgba(255, 255, 255, 0.45) 0%,
+        rgba(255, 255, 255, 0.05) 50%,
+        rgba(0, 0, 0, 0.24) 100%
+      ),
+      #ea580c !important;
+    transform: translateY(-1px) !important;
+    box-shadow:
+      inset 0 2px 3px rgba(255, 255, 255, 0.55),
+      inset 0 -2px 6px rgba(0, 0, 0, 0.35),
+      0 10px 22px rgba(249, 115, 22, 0.45) !important;
+  }
+}
+
+[data-interface-theme="modern"] .natively-api-pricing-cta:active {
+  transform: translateY(0) scale(0.97) !important;
+}
+
+/* Premium micro-pills (Modern) */
+[data-interface-theme="modern"] .natively-api-pricing-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px !important;
+  border-radius: 9999px !important;
+  font-size: 9.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
+[data-interface-theme="modern"] .natively-api-pricing-badge-standard {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(0, 0, 0, 0.18) 100%),
+    rgba(148, 163, 184, 0.25) !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  box-shadow:
+    inset 0 1.5px 0.5px rgba(255, 255, 255, 0.70),
+    inset 0 -1.5px 2.5px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+    0 3px 8px rgba(0, 0, 0, 0.20) !important;
+}
+
+[data-interface-theme="modern"] .natively-api-pricing-badge-recommended {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(0, 0, 0, 0.18) 100%),
+    rgba(139, 92, 246, 0.32) !important;
+  border: 1px solid rgba(196, 181, 253, 0.45) !important;
+  box-shadow:
+    inset 0 1.5px 0.5px rgba(255, 255, 255, 0.75),
+    inset 0 -1.5px 2.5px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+    0 4px 12px rgba(139, 92, 246, 0.35) !important;
+}
+
+[data-interface-theme="modern"] .natively-api-pricing-badge-max {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(0, 0, 0, 0.18) 100%),
+    rgba(59, 130, 246, 0.32) !important;
+  border: 1px solid rgba(147, 197, 253, 0.45) !important;
+  box-shadow:
+    inset 0 1.5px 0.5px rgba(255, 255, 255, 0.75),
+    inset 0 -1.5px 2.5px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+    0 4px 12px rgba(59, 130, 246, 0.35) !important;
+}
+
+[data-interface-theme="modern"] .natively-api-pricing-badge-ultra {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(0, 0, 0, 0.18) 100%),
+    rgba(249, 115, 22, 0.32) !important;
+  border: 1px solid rgba(253, 186, 116, 0.45) !important;
+  box-shadow:
+    inset 0 1.5px 0.5px rgba(255, 255, 255, 0.75),
+    inset 0 -1.5px 2.5px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+    0 4px 12px rgba(249, 115, 22, 0.35) !important;
+}
+
+[data-interface-theme="modern"] .natively-api-pricing-badge-emerald {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(0, 0, 0, 0.18) 100%),
+    rgba(16, 185, 129, 0.32) !important;
+  border: 1px solid rgba(110, 231, 183, 0.45) !important;
+  box-shadow:
+    inset 0 1.5px 0.5px rgba(255, 255, 255, 0.75),
+    inset 0 -1.5px 2.5px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+    0 4px 12px rgba(16, 185, 129, 0.35) !important;
+}
+
+/* Layout Stabilization - Enforce Identical Sizing for All Plans */
+@media (min-width: 768px) {
+  .natively-api-details-wrapper {
+    height: 390px !important;
+  }
+  .natively-api-detail-shell {
+    height: 100% !important;
+  }
+  .natively-api-detail-card {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    box-sizing: border-box !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .natively-api-details-wrapper {
+    min-height: 540px !important;
+  }
+  .natively-api-detail-shell {
+    height: 100% !important;
+  }
+  .natively-api-detail-card {
+    min-height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    box-sizing: border-box !important;
+  }
+}
+
+.natively-api-detail-card > .grid {
+  flex: 1 !important;
+}
+
+.natively-api-pricing-cta,
+.natively-api-pricing-active-tag {
+  height: 44px !important;
+  box-sizing: border-box !important;
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   Natively Pro Purchase UI Redesign (Tactile 3D Jelly-Clay / Liquid-Glass)
+   ─────────────────────────────────────────────────────────────────────── */
+
+.perspective-1000 {
+  perspective: 1000px !important;
+}
+
+/* Blueprint tech grid overlay on both Yearly and Lifetime cards */
+[data-interface-theme="liquid-glass"] .pricing-card-yearly::after,
+[data-interface-theme="liquid-glass"] .pricing-card-lifetime::after,
+[data-interface-theme="modern"] .pricing-card-yearly::after,
+[data-interface-theme="modern"] .pricing-card-lifetime::after {
+  content: '' !important;
+  position: absolute !important;
+  inset: 0 !important;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.012) 1px, transparent 1px) !important;
+  background-size: 24px 24px !important;
+  pointer-events: none !important;
+  z-index: 1 !important;
+  opacity: 0.55 !important;
+  transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .pricing-card-yearly:hover::after,
+  .pricing-card-lifetime:hover::after {
+    opacity: 0.8 !important;
+  }
+}
+
+/* --- LIQUID GLASS THEME --- */
+[data-interface-theme="liquid-glass"] .pricing-card-yearly {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.28) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(30, 48, 80, 0.50) 0%, rgba(15, 23, 42, 0.65) 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-radius: 28px !important;
+  position: relative;
+  overflow: hidden;
+  transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
+              box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1),
+              border-color 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(59, 130, 246, 0.5),
+    inset 0 2px 4px rgba(255, 255, 255, 0.22),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.4),
+    0 4px 16px rgba(0, 0, 0, 0.2) !important;
+}
+
+[data-interface-theme="liquid-glass"] .pricing-card-yearly::before {
+  content: '' !important;
+  display: block !important;
+  position: absolute !important;
+  inset: 1px !important;
+  height: 45% !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0) 100%) !important;
+  border-radius: 27px 27px 0 0 !important;
+  pointer-events: none !important;
+  z-index: 2 !important;
+}
+
+[data-interface-theme="liquid-glass"] .pricing-card-yearly[data-active="true"],
+[data-interface-theme="liquid-glass"] .pricing-card-yearly[data-active="false"] {
+  transform: scale(1) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme="liquid-glass"] .pricing-card-yearly:hover {
+    border-color: rgba(59, 130, 246, 0.48) !important;
+    box-shadow:
+      inset 0 1px 0 rgba(59, 130, 246, 0.6),
+      inset 0 2px 6px rgba(255, 255, 255, 0.3),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.4),
+      0 12px 32px rgba(59, 130, 246, 0.2),
+      0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  }
+}
+
+/* Lifetime card — premium slate-violet plaque */
+[data-interface-theme="liquid-glass"] .pricing-card-lifetime {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.35) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(55, 30, 95, 0.50) 0%, rgba(20, 10, 36, 0.65) 100%) !important;
+  border: 1px solid rgba(139, 92, 246, 0.35) !important;
+  border-radius: 28px !important;
+  position: relative;
+  overflow: hidden;
+  transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
+              box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1),
+              border-color 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(139, 92, 246, 0.6),
+    inset 0 2px 4px rgba(255, 255, 255, 0.22),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.4),
+    0 4px 16px rgba(0, 0, 0, 0.2) !important;
+}
+
+[data-interface-theme="liquid-glass"] .pricing-card-lifetime::before {
+  content: '' !important;
+  display: block !important;
+  position: absolute !important;
+  inset: 1px !important;
+  height: 45% !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 100%) !important;
+  border-radius: 27px 27px 0 0 !important;
+  pointer-events: none !important;
+  z-index: 2 !important;
+}
+
+[data-interface-theme="liquid-glass"] .pricing-card-lifetime[data-active="true"],
+[data-interface-theme="liquid-glass"] .pricing-card-lifetime[data-active="false"] {
+  transform: scale(1) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme="liquid-glass"] .pricing-card-lifetime:hover {
+    border-color: rgba(139, 92, 246, 0.48) !important;
+    box-shadow:
+      inset 0 1px 0 rgba(139, 92, 246, 0.6),
+      inset 0 2px 6px rgba(255, 255, 255, 0.25),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.6),
+      0 12px 32px rgba(139, 92, 246, 0.2),
+      0 4px 12px rgba(0, 0, 0, 0.35) !important;
+  }
+}
+
+/* Plan-toggle active sliding pill */
+[data-interface-theme="liquid-glass"] .plan-toggle-active-pill {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 2px 4px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Yearly CTA — solid white button */
+[data-interface-theme="liquid-glass"] .pricing-cta-yearly {
+  background: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 1) 0%, rgba(241, 245, 249, 1) 100%) !important;
+  color: #0f172a !important;
+  border: 1px solid rgba(255, 255, 255, 0.8) !important;
+  box-shadow: 
+    inset 0 2px 3px rgba(255, 255, 255, 0.9), 
+    inset 0 -2.5px 3px rgba(15, 23, 42, 0.12), 
+    0 3px 8px rgba(0, 0, 0, 0.15) !important;
+  transition: background-color 150ms cubic-bezier(0.23, 1, 0.32, 1),
+              transform 150ms cubic-bezier(0.23, 1, 0.32, 1),
+              box-shadow 150ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme="liquid-glass"] .pricing-cta-yearly:hover {
+    background: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 1) 0%, rgba(248, 250, 252, 1) 100%) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 
+      inset 0 2px 3px rgba(255, 255, 255, 0.95), 
+      inset 0 -2.5px 3px rgba(15, 23, 42, 0.16), 
+      0 6px 14px rgba(0, 0, 0, 0.22) !important;
+  }
+}
+[data-interface-theme="liquid-glass"] .pricing-cta-yearly:active {
+  transform: translateY(0) scale(0.97) !important;
+  box-shadow: 
+    inset 0 1px 2px rgba(0, 0, 0, 0.2), 
+    0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Lifetime CTA — solid brand violet button */
+[data-interface-theme="liquid-glass"] .pricing-cta-lifetime {
+  background: radial-gradient(circle at 50% 0%, rgba(129, 140, 248, 1) 0%, rgba(79, 70, 229, 1) 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  box-shadow: 
+    inset 0 2.5px 3px rgba(255, 255, 255, 0.45), 
+    inset 0 -2.5px 3px rgba(0, 0, 0, 0.35), 
+    0 3px 10px rgba(99, 102, 241, 0.25) !important;
+  transition: background-color 150ms cubic-bezier(0.23, 1, 0.32, 1),
+              transform 150ms cubic-bezier(0.23, 1, 0.32, 1),
+              box-shadow 150ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme="liquid-glass"] .pricing-cta-lifetime:hover {
+    background: radial-gradient(circle at 50% 0%, rgba(147, 157, 255, 1) 0%, rgba(67, 56, 202, 1) 100%) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 
+      inset 0 3px 4px rgba(255, 255, 255, 0.55), 
+      inset 0 -3px 4px rgba(0, 0, 0, 0.4), 
+      0 6px 16px rgba(99, 102, 241, 0.35) !important;
+  }
+}
+[data-interface-theme="liquid-glass"] .pricing-cta-lifetime:active {
+  transform: translateY(0) scale(0.97) !important;
+  box-shadow: 
+    inset 0 1px 2px rgba(0, 0, 0, 0.2), 
+    0 2px 4px rgba(99, 102, 241, 0.15) !important;
+}
+
+/* Feature icon chip — small slate square */
+[data-interface-theme="liquid-glass"] .feature-icon-chip {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02) !important;
+  border-radius: 8px !important;
+}
+
+/* "Best value" badge on Lifetime card */
+[data-interface-theme="liquid-glass"] .badge-best-value {
+  background: rgba(139, 92, 246, 0.15) !important;
+  border: 1px solid rgba(139, 92, 246, 0.25) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Tier label pills (Pro · Yearly / Pro · Lifetime) */
+[data-interface-theme="liquid-glass"] .badge-tier-label {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+  color: rgba(255, 255, 255, 0.75) !important;
+}
+
+
+/* --- MODERN THEME --- */
+[data-interface-theme="modern"] .pricing-card-yearly {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.28) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(30, 48, 80, 0.50) 0%, rgba(15, 23, 42, 0.65) 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-radius: 28px !important;
+  position: relative;
+  overflow: hidden;
+  transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
+              box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1),
+              border-color 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(59, 130, 246, 0.5),
+    inset 0 2px 4px rgba(255, 255, 255, 0.22),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.4),
+    0 4px 16px rgba(0, 0, 0, 0.2) !important;
+}
+
+[data-interface-theme="modern"] .pricing-card-yearly::before {
+  content: '' !important;
+  display: block !important;
+  position: absolute !important;
+  inset: 1px !important;
+  height: 45% !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0) 100%) !important;
+  border-radius: 27px 27px 0 0 !important;
+  pointer-events: none !important;
+  z-index: 2 !important;
+}
+
+[data-interface-theme="modern"] .pricing-card-yearly[data-active="true"],
+[data-interface-theme="modern"] .pricing-card-yearly[data-active="false"] {
+  transform: scale(1) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme="modern"] .pricing-card-yearly:hover {
+    border-color: rgba(59, 130, 246, 0.48) !important;
+    box-shadow:
+      inset 0 1px 0 rgba(59, 130, 246, 0.6),
+      inset 0 2px 6px rgba(255, 255, 255, 0.3),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.4),
+      0 12px 32px rgba(59, 130, 246, 0.2),
+      0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  }
+}
+
+/* Lifetime card — premium slate-violet plaque */
+[data-interface-theme="modern"] .pricing-card-lifetime {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.35) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(55, 30, 95, 0.50) 0%, rgba(20, 10, 36, 0.65) 100%) !important;
+  border: 1px solid rgba(139, 92, 246, 0.35) !important;
+  border-radius: 28px !important;
+  position: relative;
+  overflow: hidden;
+  transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
+              box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1),
+              border-color 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(139, 92, 246, 0.6),
+    inset 0 2px 4px rgba(255, 255, 255, 0.22),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.4),
+    0 4px 16px rgba(0, 0, 0, 0.2) !important;
+}
+
+[data-interface-theme="modern"] .pricing-card-lifetime::before {
+  content: '' !important;
+  display: block !important;
+  position: absolute !important;
+  inset: 1px !important;
+  height: 45% !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 100%) !important;
+  border-radius: 27px 27px 0 0 !important;
+  pointer-events: none !important;
+  z-index: 2 !important;
+}
+
+[data-interface-theme="modern"] .pricing-card-lifetime[data-active="true"],
+[data-interface-theme="modern"] .pricing-card-lifetime[data-active="false"] {
+  transform: scale(1) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme="modern"] .pricing-card-lifetime:hover {
+    border-color: rgba(139, 92, 246, 0.48) !important;
+    box-shadow:
+      inset 0 1px 0 rgba(139, 92, 246, 0.6),
+      inset 0 2px 6px rgba(255, 255, 255, 0.25),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.6),
+      0 12px 32px rgba(139, 92, 246, 0.2),
+      0 4px 12px rgba(0, 0, 0, 0.35) !important;
+  }
+}
+
+/* Plan-toggle active sliding pill */
+[data-interface-theme="modern"] .plan-toggle-active-pill {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 2px 4px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Yearly CTA — solid white button */
+[data-interface-theme="modern"] .pricing-cta-yearly {
+  background: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 1) 0%, rgba(241, 245, 249, 1) 100%) !important;
+  color: #0f172a !important;
+  border: 1px solid rgba(255, 255, 255, 0.8) !important;
+  box-shadow: 
+    inset 0 2px 3px rgba(255, 255, 255, 0.9), 
+    inset 0 -2.5px 3px rgba(15, 23, 42, 0.12), 
+    0 3px 8px rgba(0, 0, 0, 0.15) !important;
+  transition: background-color 150ms cubic-bezier(0.23, 1, 0.32, 1),
+              transform 150ms cubic-bezier(0.23, 1, 0.32, 1),
+              box-shadow 150ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme="modern"] .pricing-cta-yearly:hover {
+    background: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 1) 0%, rgba(248, 250, 252, 1) 100%) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 
+      inset 0 2px 3px rgba(255, 255, 255, 0.95), 
+      inset 0 -2.5px 3px rgba(15, 23, 42, 0.16), 
+      0 6px 14px rgba(0, 0, 0, 0.22) !important;
+  }
+}
+[data-interface-theme="modern"] .pricing-cta-yearly:active {
+  transform: translateY(0) scale(0.97) !important;
+  box-shadow: 
+    inset 0 1px 2px rgba(0, 0, 0, 0.2), 
+    0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Lifetime CTA — solid brand violet button */
+[data-interface-theme="modern"] .pricing-cta-lifetime {
+  background: radial-gradient(circle at 50% 0%, rgba(129, 140, 248, 1) 0%, rgba(79, 70, 229, 1) 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  box-shadow: 
+    inset 0 2.5px 3px rgba(255, 255, 255, 0.45), 
+    inset 0 -2.5px 3px rgba(0, 0, 0, 0.35), 
+    0 3px 10px rgba(99, 102, 241, 0.25) !important;
+  transition: background-color 150ms cubic-bezier(0.23, 1, 0.32, 1),
+              transform 150ms cubic-bezier(0.23, 1, 0.32, 1),
+              box-shadow 150ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme="modern"] .pricing-cta-lifetime:hover {
+    background: radial-gradient(circle at 50% 0%, rgba(147, 157, 255, 1) 0%, rgba(67, 56, 202, 1) 100%) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 
+      inset 0 3px 4px rgba(255, 255, 255, 0.55), 
+      inset 0 -3px 4px rgba(0, 0, 0, 0.4), 
+      0 6px 16px rgba(99, 102, 241, 0.35) !important;
+  }
+}
+[data-interface-theme="modern"] .pricing-cta-lifetime:active {
+  transform: translateY(0) scale(0.97) !important;
+  box-shadow: 
+    inset 0 1px 2px rgba(0, 0, 0, 0.2), 
+    0 2px 4px rgba(99, 102, 241, 0.15) !important;
+}
+
+/* Feature icon chip — small slate square */
+[data-interface-theme="modern"] .feature-icon-chip {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02) !important;
+  border-radius: 8px !important;
+}
+
+/* "Best value" badge on Lifetime card */
+[data-interface-theme="modern"] .badge-best-value {
+  background: rgba(139, 92, 246, 0.15) !important;
+  border: 1px solid rgba(139, 92, 246, 0.25) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Tier label pills (Pro · Yearly / Pro · Lifetime) */
+[data-interface-theme="modern"] .badge-tier-label {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+  color: rgba(255, 255, 255, 0.75) !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* About Section Jelly UI Styles                                      */
+/* ------------------------------------------------------------------ */
+
+/* --- ABOUT JELLY CARD --- */
+.about-jelly-card {
+  position: relative !important;
+  border-radius: 24px !important;
+  backdrop-filter: blur(20px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(140%) !important;
+  transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
+              box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1),
+              border-color 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+/* Glossy highlight */
+.about-jelly-card::before {
+  content: '' !important;
+  display: block !important;
+  position: absolute !important;
+  inset: 1px !important;
+  height: 40% !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 100%) !important;
+  border-radius: 23px 23px 0 0 !important;
+  pointer-events: none !important;
+  z-index: 2 !important;
+}
+
+/* Tech mesh grid blueprint */
+.about-jelly-card::after {
+  content: '' !important;
+  position: absolute !important;
+  inset: 0 !important;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.009) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.009) 1px, transparent 1px) !important;
+  background-size: 24px 24px !important;
+  pointer-events: none !important;
+  z-index: 1 !important;
+  opacity: 0.45 !important;
+  transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+.about-jelly-card:hover::after {
+  opacity: 0.75 !important;
+}
+
+/* Theme color definitions */
+.about-jelly-indigo {
+  background: radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.28) 0%, transparent 60%), linear-gradient(135deg, rgba(30, 35, 75, 0.45) 0%, rgba(15, 20, 35, 0.6) 100%) !important;
+  border: 1px solid rgba(99, 102, 241, 0.22) !important;
+  box-shadow: inset 0 1px 0 rgba(99, 102, 241, 0.5), inset 0 2px 4px rgba(255, 255, 255, 0.15), inset 0 -3px 8px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.2) !important;
+}
+.about-jelly-indigo:hover {
+  border-color: rgba(99, 102, 241, 0.4) !important;
+  box-shadow: inset 0 1px 0 rgba(99, 102, 241, 0.6), inset 0 2px 6px rgba(255, 255, 255, 0.22), inset 0 -3px 8px rgba(0, 0, 0, 0.4), 0 12px 28px rgba(99, 102, 241, 0.15), 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+}
+
+.about-jelly-amber {
+  background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.24) 0%, transparent 60%), linear-gradient(135deg, rgba(65, 45, 20, 0.45) 0%, rgba(25, 20, 15, 0.6) 100%) !important;
+  border: 1px solid rgba(245, 158, 11, 0.2) !important;
+  box-shadow: inset 0 1px 0 rgba(245, 158, 11, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.15), inset 0 -3px 8px rgba(0, 0, 0, 0.45), 0 4px 16px rgba(0, 0, 0, 0.2) !important;
+}
+.about-jelly-amber:hover {
+  border-color: rgba(245, 158, 11, 0.35) !important;
+  box-shadow: inset 0 1px 0 rgba(245, 158, 11, 0.5), inset 0 2px 6px rgba(255, 255, 255, 0.22), inset 0 -3px 8px rgba(0, 0, 0, 0.45), 0 12px 28px rgba(245, 158, 11, 0.15), 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+}
+
+.about-jelly-emerald {
+  background: radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.24) 0%, transparent 60%), linear-gradient(135deg, rgba(20, 55, 40, 0.45) 0%, rgba(10, 25, 20, 0.6) 100%) !important;
+  border: 1px solid rgba(16, 185, 129, 0.2) !important;
+  box-shadow: inset 0 1px 0 rgba(16, 185, 129, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.15), inset 0 -3px 8px rgba(0, 0, 0, 0.45), 0 4px 16px rgba(0, 0, 0, 0.2) !important;
+}
+.about-jelly-emerald:hover {
+  border-color: rgba(16, 185, 129, 0.35) !important;
+  box-shadow: inset 0 1px 0 rgba(16, 185, 129, 0.5), inset 0 2px 6px rgba(255, 255, 255, 0.22), inset 0 -3px 8px rgba(0, 0, 0, 0.45), 0 12px 28px rgba(16, 185, 129, 0.15), 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+}
+
+.about-jelly-blue {
+  background: radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.28) 0%, transparent 60%), linear-gradient(135deg, rgba(25, 40, 75, 0.45) 0%, rgba(15, 20, 35, 0.6) 100%) !important;
+  border: 1px solid rgba(59, 130, 246, 0.22) !important;
+  box-shadow: inset 0 1px 0 rgba(59, 130, 246, 0.5), inset 0 2px 4px rgba(255, 255, 255, 0.15), inset 0 -3px 8px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.2) !important;
+}
+.about-jelly-blue:hover {
+  border-color: rgba(59, 130, 246, 0.4) !important;
+  box-shadow: inset 0 1px 0 rgba(59, 130, 246, 0.6), inset 0 2px 6px rgba(255, 255, 255, 0.22), inset 0 -3px 8px rgba(0, 0, 0, 0.4), 0 12px 28px rgba(59, 130, 246, 0.15), 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+}
+
+.about-jelly-purple {
+  background: radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.28) 0%, transparent 60%), linear-gradient(135deg, rgba(45, 30, 75, 0.45) 0%, rgba(20, 15, 35, 0.6) 100%) !important;
+  border: 1px solid rgba(139, 92, 246, 0.22) !important;
+  box-shadow: inset 0 1px 0 rgba(139, 92, 246, 0.5), inset 0 2px 4px rgba(255, 255, 255, 0.15), inset 0 -3px 8px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.2) !important;
+}
+.about-jelly-purple:hover {
+  border-color: rgba(139, 92, 246, 0.4) !important;
+  box-shadow: inset 0 1px 0 rgba(139, 92, 246, 0.6), inset 0 2px 6px rgba(255, 255, 255, 0.22), inset 0 -3px 8px rgba(0, 0, 0, 0.4), 0 12px 28px rgba(139, 92, 246, 0.15), 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+}
+
+.about-jelly-red {
+  background: radial-gradient(circle at 50% 0%, rgba(239, 68, 68, 0.24) 0%, transparent 60%), linear-gradient(135deg, rgba(60, 25, 35, 0.45) 0%, rgba(25, 15, 20, 0.6) 100%) !important;
+  border: 1px solid rgba(239, 68, 68, 0.2) !important;
+  box-shadow: inset 0 1px 0 rgba(239, 68, 68, 0.45), inset 0 2px 4px rgba(255, 255, 255, 0.15), inset 0 -3px 8px rgba(0, 0, 0, 0.45), 0 4px 16px rgba(0, 0, 0, 0.2) !important;
+}
+.about-jelly-red:hover {
+  border-color: rgba(239, 68, 68, 0.35) !important;
+  box-shadow: inset 0 1px 0 rgba(239, 68, 68, 0.55), inset 0 2px 6px rgba(255, 255, 255, 0.22), inset 0 -3px 8px rgba(0, 0, 0, 0.45), 0 12px 28px rgba(239, 68, 68, 0.15), 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+}
+
+.about-jelly-pink {
+  background: radial-gradient(circle at 50% 0%, rgba(244, 63, 94, 0.26) 0%, transparent 60%), linear-gradient(135deg, rgba(65, 25, 45, 0.45) 0%, rgba(25, 15, 25, 0.6) 100%) !important;
+  border: 1px solid rgba(244, 63, 94, 0.2) !important;
+  box-shadow: inset 0 1px 0 rgba(244, 63, 94, 0.45), inset 0 2px 4px rgba(255, 255, 255, 0.15), inset 0 -3px 8px rgba(0, 0, 0, 0.45), 0 4px 16px rgba(0, 0, 0, 0.2) !important;
+}
+.about-jelly-pink:hover {
+  border-color: rgba(244, 63, 94, 0.35) !important;
+  box-shadow: inset 0 1px 0 rgba(244, 63, 94, 0.55), inset 0 2px 6px rgba(255, 255, 255, 0.22), inset 0 -3px 8px rgba(0, 0, 0, 0.45), 0 12px 28px rgba(244, 63, 94, 0.15), 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+}
+
+.about-jelly-sky {
+  background: radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.26) 0%, transparent 60%), linear-gradient(135deg, rgba(20, 45, 75, 0.45) 0%, rgba(10, 20, 35, 0.6) 100%) !important;
+  border: 1px solid rgba(56, 189, 248, 0.2) !important;
+  box-shadow: inset 0 1px 0 rgba(56, 189, 248, 0.45), inset 0 2px 4px rgba(255, 255, 255, 0.15), inset 0 -3px 8px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.2) !important;
+}
+.about-jelly-sky:hover {
+  border-color: rgba(56, 189, 248, 0.35) !important;
+  box-shadow: inset 0 1px 0 rgba(56, 189, 248, 0.55), inset 0 2px 6px rgba(255, 255, 255, 0.22), inset 0 -3px 8px rgba(0, 0, 0, 0.4), 0 12px 28px rgba(56, 189, 248, 0.15), 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+}
+
+.about-jelly-yellow {
+  background: radial-gradient(circle at 50% 0%, rgba(234, 179, 8, 0.24) 0%, transparent 60%), linear-gradient(135deg, rgba(60, 50, 20, 0.45) 0%, rgba(25, 20, 10, 0.6) 100%) !important;
+  border: 1px solid rgba(234, 179, 8, 0.2) !important;
+  box-shadow: inset 0 1px 0 rgba(234, 179, 8, 0.45), inset 0 2px 4px rgba(255, 255, 255, 0.15), inset 0 -3px 8px rgba(0, 0, 0, 0.45), 0 4px 16px rgba(0, 0, 0, 0.2) !important;
+}
+.about-jelly-yellow:hover {
+  border-color: rgba(234, 179, 8, 0.35) !important;
+  box-shadow: inset 0 1px 0 rgba(234, 179, 8, 0.55), inset 0 2px 6px rgba(255, 255, 255, 0.22), inset 0 -3px 8px rgba(0, 0, 0, 0.45), 0 12px 28px rgba(234, 179, 8, 0.15), 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Light mode adjustments */
+[data-theme='light'] .about-jelly-card {
+  backdrop-filter: blur(16px) saturate(120%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(120%) !important;
+}
+[data-theme='light'] .about-jelly-card::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 100%) !important;
+}
+[data-theme='light'] .about-jelly-card::after {
+  background-image: 
+    linear-gradient(rgba(0, 0, 0, 0.005) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.005) 1px, transparent 1px) !important;
+}
+
+[data-theme='light'] .about-jelly-indigo {
+  background: radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.12) 0%, transparent 60%), linear-gradient(135deg, rgba(255, 255, 255, 0.65) 0%, rgba(255, 255, 255, 0.4) 100%) !important;
+  border-color: rgba(99, 102, 241, 0.18) !important;
+  box-shadow: inset 0 1px 0 rgba(99, 102, 241, 0.2), inset 0 2px 4px rgba(255, 255, 255, 0.6), inset 0 -2px 6px rgba(0, 0, 0, 0.08), 0 4px 16px rgba(0, 0, 0, 0.05) !important;
+}
+[data-theme='light'] .about-jelly-indigo:hover {
+  border-color: rgba(99, 102, 241, 0.35) !important;
+  box-shadow: inset 0 1px 0 rgba(99, 102, 241, 0.3), inset 0 2px 6px rgba(255, 255, 255, 0.8), inset 0 -2px 6px rgba(0, 0, 0, 0.08), 0 12px 28px rgba(99, 102, 241, 0.12), 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+}
+
+[data-theme='light'] .about-jelly-amber {
+  background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.1) 0%, transparent 60%), linear-gradient(135deg, rgba(255, 255, 255, 0.65) 0%, rgba(255, 255, 255, 0.4) 100%) !important;
+  border-color: rgba(245, 158, 11, 0.15) !important;
+  box-shadow: inset 0 1px 0 rgba(245, 158, 11, 0.2), inset 0 2px 4px rgba(255, 255, 255, 0.6), inset 0 -2px 6px rgba(0, 0, 0, 0.08), 0 4px 16px rgba(0, 0, 0, 0.05) !important;
+}
+[data-theme='light'] .about-jelly-amber:hover {
+  border-color: rgba(245, 158, 11, 0.3) !important;
+  box-shadow: inset 0 1px 0 rgba(245, 158, 11, 0.3), inset 0 2px 6px rgba(255, 255, 255, 0.8), inset 0 -2px 6px rgba(0, 0, 0, 0.08), 0 12px 28px rgba(245, 158, 11, 0.12), 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+}
+
+[data-theme='light'] .about-jelly-emerald {
+  background: radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.1) 0%, transparent 60%), linear-gradient(135deg, rgba(255, 255, 255, 0.65) 0%, rgba(255, 255, 255, 0.4) 100%) !important;
+  border-color: rgba(16, 185, 129, 0.15) !important;
+  box-shadow: inset 0 1px 0 rgba(16, 185, 129, 0.2), inset 0 2px 4px rgba(255, 255, 255, 0.6), inset 0 -2px 6px rgba(0, 0, 0, 0.08), 0 4px 16px rgba(0, 0, 0, 0.05) !important;
+}
+[data-theme='light'] .about-jelly-emerald:hover {
+  border-color: rgba(16, 185, 129, 0.3) !important;
+  box-shadow: inset 0 1px 0 rgba(16, 185, 129, 0.3), inset 0 2px 6px rgba(255, 255, 255, 0.8), inset 0 -2px 6px rgba(0, 0, 0, 0.08), 0 12px 28px rgba(16, 185, 129, 0.12), 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+}
+
+[data-theme='light'] .about-jelly-blue {
+  background: radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.12) 0%, transparent 60%), linear-gradient(135deg, rgba(255, 255, 255, 0.65) 0%, rgba(255, 255, 255, 0.4) 100%) !important;
+  border-color: rgba(59, 130, 246, 0.18) !important;
+  box-shadow: inset 0 1px 0 rgba(59, 130, 246, 0.2), inset 0 2px 4px rgba(255, 255, 255, 0.6), inset 0 -2px 6px rgba(0, 0, 0, 0.08), 0 4px 16px rgba(0, 0, 0, 0.05) !important;
+}
+[data-theme='light'] .about-jelly-blue:hover {
+  border-color: rgba(59, 130, 246, 0.35) !important;
+  box-shadow: inset 0 1px 0 rgba(59, 130, 246, 0.3), inset 0 2px 6px rgba(255, 255, 255, 0.8), inset 0 -2px 6px rgba(0, 0, 0, 0.08), 0 12px 28px rgba(59, 130, 246, 0.12), 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+}
+
+[data-theme='light'] .about-jelly-purple {
+  background: radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.12) 0%, transparent 60%), linear-gradient(135deg, rgba(255, 255, 255, 0.65) 0%, rgba(255, 255, 255, 0.4) 100%) !important;
+  border-color: rgba(139, 92, 246, 0.18) !important;
+  box-shadow: inset 0 1px 0 rgba(139, 92, 246, 0.2), inset 0 2px 4px rgba(255, 255, 255, 0.6), inset 0 -2px 6px rgba(0, 0, 0, 0.08), 0 4px 16px rgba(0, 0, 0, 0.05) !important;
+}
+[data-theme='light'] .about-jelly-purple:hover {
+  border-color: rgba(139, 92, 246, 0.35) !important;
+  box-shadow: inset 0 1px 0 rgba(139, 92, 246, 0.3), inset 0 2px 6px rgba(255, 255, 255, 0.8), inset 0 -2px 6px rgba(0, 0, 0, 0.08), 0 12px 28px rgba(139, 92, 246, 0.12), 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+}
+
+[data-theme='light'] .about-jelly-red {
+  background: radial-gradient(circle at 50% 0%, rgba(239, 68, 68, 0.1) 0%, transparent 60%), linear-gradient(135deg, rgba(255, 255, 255, 0.65) 0%, rgba(255, 255, 255, 0.4) 100%) !important;
+  border-color: rgba(239, 68, 68, 0.15) !important;
+  box-shadow: inset 0 1px 0 rgba(239, 68, 68, 0.2), inset 0 2px 4px rgba(255, 255, 255, 0.6), inset 0 -2px 6px rgba(0, 0, 0, 0.08), 0 4px 16px rgba(0, 0, 0, 0.05) !important;
+}
+[data-theme='light'] .about-jelly-red:hover {
+  border-color: rgba(239, 68, 68, 0.3) !important;
+  box-shadow: inset 0 1px 0 rgba(239, 68, 68, 0.3), inset 0 2px 6px rgba(255, 255, 255, 0.8), inset 0 -2px 6px rgba(0, 0, 0, 0.08), 0 12px 28px rgba(239, 68, 68, 0.12), 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+}
+
+[data-theme='light'] .about-jelly-pink {
+  background: radial-gradient(circle at 50% 0%, rgba(244, 63, 94, 0.12) 0%, transparent 60%), linear-gradient(135deg, rgba(255, 255, 255, 0.65) 0%, rgba(255, 255, 255, 0.4) 100%) !important;
+  border-color: rgba(244, 63, 94, 0.18) !important;
+  box-shadow: inset 0 1px 0 rgba(244, 63, 94, 0.2), inset 0 2px 4px rgba(255, 255, 255, 0.6), inset 0 -2px 6px rgba(0, 0, 0, 0.08), 0 4px 16px rgba(0, 0, 0, 0.05) !important;
+}
+[data-theme='light'] .about-jelly-pink:hover {
+  border-color: rgba(244, 63, 94, 0.35) !important;
+  box-shadow: inset 0 1px 0 rgba(244, 63, 94, 0.3), inset 0 2px 6px rgba(255, 255, 255, 0.8), inset 0 -2px 6px rgba(0, 0, 0, 0.08), 0 12px 28px rgba(244, 63, 94, 0.12), 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+}
+
+[data-theme='light'] .about-jelly-sky {
+  background: radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.12) 0%, transparent 60%), linear-gradient(135deg, rgba(255, 255, 255, 0.65) 0%, rgba(255, 255, 255, 0.4) 100%) !important;
+  border-color: rgba(56, 189, 248, 0.18) !important;
+  box-shadow: inset 0 1px 0 rgba(56, 189, 248, 0.2), inset 0 2px 4px rgba(255, 255, 255, 0.6), inset 0 -2px 6px rgba(0, 0, 0, 0.08), 0 4px 16px rgba(0, 0, 0, 0.05) !important;
+}
+[data-theme='light'] .about-jelly-sky:hover {
+  border-color: rgba(56, 189, 248, 0.35) !important;
+  box-shadow: inset 0 1px 0 rgba(56, 189, 248, 0.3), inset 0 2px 6px rgba(255, 255, 255, 0.8), inset 0 -2px 6px rgba(0, 0, 0, 0.08), 0 12px 28px rgba(56, 189, 248, 0.12), 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+}
+
+[data-theme='light'] .about-jelly-yellow {
+  background: radial-gradient(circle at 50% 0%, rgba(234, 179, 8, 0.1) 0%, transparent 60%), linear-gradient(135deg, rgba(255, 255, 255, 0.65) 0%, rgba(255, 255, 255, 0.4) 100%) !important;
+  border-color: rgba(234, 179, 8, 0.15) !important;
+  box-shadow: inset 0 1px 0 rgba(234, 179, 8, 0.2), inset 0 2px 4px rgba(255, 255, 255, 0.6), inset 0 -2px 6px rgba(0, 0, 0, 0.08), 0 4px 16px rgba(0, 0, 0, 0.05) !important;
+}
+[data-theme='light'] .about-jelly-yellow:hover {
+  border-color: rgba(234, 179, 8, 0.3) !important;
+  box-shadow: inset 0 1px 0 rgba(234, 179, 8, 0.3), inset 0 2px 6px rgba(255, 255, 255, 0.8), inset 0 -2px 6px rgba(0, 0, 0, 0.08), 0 12px 28px rgba(234, 179, 8, 0.12), 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* --- ABOUT JELLY BUTTONS --- */
+/* Liquid Glass Theme (Dark Mode default) */
+[data-interface-theme="liquid-glass"] .about-jelly-button {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.02) 50%, rgba(0, 0, 0, 0.1) 100%), rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+  box-shadow:
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.2),
+    inset 0 -1.5px 2px rgba(0, 0, 0, 0.25),
+    0 2px 4px rgba(0, 0, 0, 0.15) !important;
+  border-radius: 9999px !important;
+  font-weight: 600 !important;
+  transition: all 150ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme="liquid-glass"] .about-jelly-button:hover {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(0, 0, 0, 0.08) 100%), rgba(255, 255, 255, 0.06) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+    box-shadow:
+      inset 0 1.5px 3px rgba(255, 255, 255, 0.3),
+      inset 0 -1.5px 2px rgba(0, 0, 0, 0.15),
+      0 4px 10px rgba(0, 0, 0, 0.2) !important;
+  }
+}
+[data-interface-theme="liquid-glass"] .about-jelly-button:active {
+  transform: scale(0.97) !important;
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Liquid Glass Theme (Light Mode) */
+[data-theme='light'] [data-interface-theme="liquid-glass"] .about-jelly-button {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.2) 50%, rgba(0, 0, 0, 0.03) 100%), rgba(255, 255, 255, 0.4) !important;
+  border: 1px solid rgba(0, 0, 0, 0.12) !important;
+  color: #0f172a !important;
+  box-shadow:
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.6),
+    inset 0 -1.5px 2px rgba(0, 0, 0, 0.05),
+    0 2px 4px rgba(0, 0, 0, 0.05) !important;
+}
+@media (hover: hover) and (pointer: fine) {
+  [data-theme='light'] [data-interface-theme="liquid-glass"] .about-jelly-button:hover {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.3) 50%, rgba(0, 0, 0, 0.02) 100%), rgba(255, 255, 255, 0.5) !important;
+    border-color: rgba(0, 0, 0, 0.18) !important;
+    box-shadow:
+      inset 0 1.5px 3px rgba(255, 255, 255, 0.8),
+      inset 0 -1.5px 2px rgba(0, 0, 0, 0.05),
+      0 4px 10px rgba(0, 0, 0, 0.08) !important;
+  }
+}
+[data-theme='light'] [data-interface-theme="liquid-glass"] .about-jelly-button:active {
+  transform: scale(0.97) !important;
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Brand Colored Jelly Buttons (Violet/Blue) */
+[data-interface-theme="liquid-glass"] .about-jelly-button-brand {
+  background: linear-gradient(180deg, rgba(167, 139, 250, 0.45) 0%, rgba(139, 92, 246, 0.35) 50%, rgba(109, 40, 217, 0.35) 100%) !important;
+  border: 1.5px solid rgba(167, 139, 250, 0.35) !important;
+  color: #ffffff !important;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.45),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.35),
+    0 4px 12px rgba(139, 92, 246, 0.25) !important;
+  border-radius: 9999px !important;
+  font-weight: 600 !important;
+  transition: all 150ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme="liquid-glass"] .about-jelly-button-brand:hover {
+    background: linear-gradient(180deg, rgba(167, 139, 250, 0.6) 0%, rgba(139, 92, 246, 0.45) 50%, rgba(109, 40, 217, 0.45) 100%) !important;
+    border-color: rgba(167, 139, 250, 0.5) !important;
+    box-shadow:
+      inset 0 2px 4px rgba(255, 255, 255, 0.55),
+      inset 0 -2px 3px rgba(0, 0, 0, 0.3),
+      0 6px 16px rgba(139, 92, 246, 0.4) !important;
+  }
+}
+[data-interface-theme="liquid-glass"] .about-jelly-button-brand:active {
+  transform: scale(0.97) !important;
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Modern Theme (Dark Mode default) */
+[data-interface-theme="modern"] .about-jelly-button {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.01) 50%, rgba(0, 0, 0, 0.15) 100%), rgba(51, 65, 85, 0.4) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #f1f5f9 !important;
+  box-shadow:
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.15),
+    inset 0 -1.5px 2px rgba(0, 0, 0, 0.3),
+    0 2px 4px rgba(0, 0, 0, 0.2) !important;
+  border-radius: 9999px !important;
+  font-weight: 600 !important;
+  transition: all 150ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme="modern"] .about-jelly-button:hover {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.03) 50%, rgba(0, 0, 0, 0.1) 100%), rgba(51, 65, 85, 0.5) !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    box-shadow:
+      inset 0 1.5px 3px rgba(255, 255, 255, 0.25),
+      inset 0 -1.5px 2px rgba(0, 0, 0, 0.2),
+      0 4px 10px rgba(0, 0, 0, 0.25) !important;
+  }
+}
+[data-interface-theme="modern"] .about-jelly-button:active {
+  transform: scale(0.97) !important;
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* Modern Theme (Light Mode) */
+[data-theme='light'] [data-interface-theme="modern"] .about-jelly-button {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.3) 50%, rgba(0, 0, 0, 0.04) 100%), rgba(241, 245, 249, 0.8) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  color: #0f172a !important;
+  box-shadow:
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.7),
+    inset 0 -1.5px 2px rgba(0, 0, 0, 0.05),
+    0 2px 4px rgba(0, 0, 0, 0.05) !important;
+}
+@media (hover: hover) and (pointer: fine) {
+  [data-theme='light'] [data-interface-theme="modern"] .about-jelly-button:hover {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.4) 50%, rgba(0, 0, 0, 0.02) 100%), rgba(248, 250, 252, 0.8) !important;
+    border-color: rgba(0, 0, 0, 0.15) !important;
+    box-shadow:
+      inset 0 1.5px 3px rgba(255, 255, 255, 0.85),
+      inset 0 -1.5px 2px rgba(0, 0, 0, 0.05),
+      0 4px 10px rgba(0, 0, 0, 0.08) !important;
+  }
+}
+[data-theme='light'] [data-interface-theme="modern"] .about-jelly-button:active {
+  transform: scale(0.97) !important;
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-interface-theme="modern"] .about-jelly-button-brand {
+  background: radial-gradient(circle at 50% 0%, rgba(129, 140, 248, 0.95) 0%, rgba(79, 70, 229, 0.95) 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
+  box-shadow: 
+    inset 0 2px 3px rgba(255, 255, 255, 0.4), 
+    inset 0 -2px 3px rgba(0, 0, 0, 0.3), 
+    0 3px 8px rgba(99, 102, 241, 0.2) !important;
+  border-radius: 9999px !important;
+  font-weight: 600 !important;
+  transition: all 150ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme="modern"] .about-jelly-button-brand:hover {
+    background: radial-gradient(circle at 50% 0%, rgba(147, 157, 255, 1) 0%, rgba(67, 56, 202, 1) 100%) !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
+    box-shadow: 
+      inset 0 2.5px 4px rgba(255, 255, 255, 0.5), 
+      inset 0 -2.5px 3px rgba(0, 0, 0, 0.3), 
+      0 5px 12px rgba(99, 102, 241, 0.3) !important;
+  }
+}
+[data-interface-theme="modern"] .about-jelly-button-brand:active {
+  transform: scale(0.97) !important;
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* --- TECH CHIPS --- */
+[data-interface-theme="liquid-glass"] .tech-chip {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%), rgba(255, 255, 255, 0.02) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 9999px !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1),
+    0 1px 2px rgba(0, 0, 0, 0.05) !important;
+  color: var(--color-text-secondary) !important;
+  padding: 4px 10px !important;
+  font-size: 11px !important;
+}
+
+[data-theme='light'] [data-interface-theme="liquid-glass"] .tech-chip {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.2) 100%), rgba(255, 255, 255, 0.3) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 1px 2px rgba(0, 0, 0, 0.02) !important;
+  color: #0f172a !important;
+}
+
+[data-interface-theme="modern"] .tech-chip {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-radius: 9999px !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02) !important;
+  color: rgba(255, 255, 255, 0.75) !important;
+  padding: 4px 10px !important;
+  font-size: 11px !important;
+}
+
+[data-theme='light'] [data-interface-theme="modern"] .tech-chip {
+  background: rgba(0, 0, 0, 0.03) !important;
+  border-color: rgba(0, 0, 0, 0.06) !important;
+  color: #0f172a !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* Pro Features Section Jelly UI Styles                               */
+/* ------------------------------------------------------------------ */
+
+.pro-feature-card {
+  position: relative !important;
+  border-radius: 20px !important;
+  backdrop-filter: blur(20px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(140%) !important;
+  transition: transform 220ms cubic-bezier(0.23, 1, 0.32, 1),
+              box-shadow 220ms cubic-bezier(0.23, 1, 0.32, 1),
+              border-color 220ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+/* Glass reflection shine overlay */
+.pro-feature-card::before {
+  content: '' !important;
+  display: block !important;
+  position: absolute !important;
+  inset: 1px !important;
+  height: 40% !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 100%) !important;
+  border-radius: 19px 19px 0 0 !important;
+  pointer-events: none !important;
+  z-index: 2 !important;
+}
+
+/* Fine-grid blueprint architectural layout overlay */
+.pro-feature-card::after {
+  content: '' !important;
+  position: absolute !important;
+  inset: 0 !important;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.007) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.007) 1px, transparent 1px) !important;
+  background-size: 16px 16px !important;
+  pointer-events: none !important;
+  z-index: 1 !important;
+  opacity: 0.35 !important;
+  transition: opacity 220ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+.pro-feature-card:hover::after {
+  opacity: 0.65 !important;
+}
+
+/* --- THEME VARIANT CONFIGURATIONS (Dark / Liquid Glass) --- */
+[data-interface-theme="liquid-glass"] .pro-feature-card-violet {
+  background: radial-gradient(circle at 50% 0%, rgba(167, 139, 250, 0.48) 0%, transparent 75%), linear-gradient(135deg, rgba(124, 58, 237, 0.48) 0%, rgba(76, 29, 149, 0.38) 100%) !important;
+  border: 1px solid rgba(139, 92, 246, 0.28) !important;
+  box-shadow: inset 0 1px 0 rgba(139, 92, 246, 0.55), inset 0 2px 4px rgba(255, 255, 255, 0.15), inset 0 -3px 8px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+[data-interface-theme="liquid-glass"] .pro-feature-card-violet:hover {
+  border-color: rgba(139, 92, 246, 0.45) !important;
+  box-shadow: inset 0 1px 0 rgba(139, 92, 246, 0.65), inset 0 2px 6px rgba(255, 255, 255, 0.22), inset 0 -3px 8px rgba(0, 0, 0, 0.35), 0 10px 24px rgba(139, 92, 246, 0.15), 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+[data-interface-theme="liquid-glass"] .pro-feature-card-teal {
+  background: radial-gradient(circle at 50% 0%, rgba(45, 212, 191, 0.45) 0%, transparent 75%), linear-gradient(135deg, rgba(20, 184, 166, 0.45) 0%, rgba(13, 148, 136, 0.35) 100%) !important;
+  border: 1px solid rgba(20, 184, 166, 0.25) !important;
+  box-shadow: inset 0 1px 0 rgba(20, 184, 166, 0.55), inset 0 2px 4px rgba(255, 255, 255, 0.15), inset 0 -3px 8px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+[data-interface-theme="liquid-glass"] .pro-feature-card-teal:hover {
+  border-color: rgba(20, 184, 166, 0.4) !important;
+  box-shadow: inset 0 1px 0 rgba(20, 184, 166, 0.65), inset 0 2px 6px rgba(255, 255, 255, 0.22), inset 0 -3px 8px rgba(0, 0, 0, 0.35), 0 10px 24px rgba(20, 184, 166, 0.15), 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+[data-interface-theme="liquid-glass"] .pro-feature-card-blue {
+  background: radial-gradient(circle at 50% 0%, rgba(96, 165, 250, 0.48) 0%, transparent 75%), linear-gradient(135deg, rgba(59, 130, 246, 0.48) 0%, rgba(37, 99, 235, 0.38) 100%) !important;
+  border: 1px solid rgba(59, 130, 246, 0.28) !important;
+  box-shadow: inset 0 1px 0 rgba(59, 130, 246, 0.55), inset 0 2px 4px rgba(255, 255, 255, 0.15), inset 0 -3px 8px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+[data-interface-theme="liquid-glass"] .pro-feature-card-blue:hover {
+  border-color: rgba(59, 130, 246, 0.45) !important;
+  box-shadow: inset 0 1px 0 rgba(59, 130, 246, 0.65), inset 0 2px 6px rgba(255, 255, 255, 0.22), inset 0 -3px 8px rgba(0, 0, 0, 0.35), 0 10px 24px rgba(59, 130, 246, 0.15), 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+[data-interface-theme="liquid-glass"] .pro-feature-card-rose {
+  background: radial-gradient(circle at 50% 0%, rgba(251, 113, 133, 0.45) 0%, transparent 75%), linear-gradient(135deg, rgba(244, 63, 94, 0.45) 0%, rgba(190, 24, 74, 0.35) 100%) !important;
+  border: 1px solid rgba(244, 63, 94, 0.25) !important;
+  box-shadow: inset 0 1px 0 rgba(244, 63, 94, 0.55), inset 0 2px 4px rgba(255, 255, 255, 0.15), inset 0 -3px 8px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+[data-interface-theme="liquid-glass"] .pro-feature-card-rose:hover {
+  border-color: rgba(244, 63, 94, 0.4) !important;
+  box-shadow: inset 0 1px 0 rgba(244, 63, 94, 0.65), inset 0 2px 6px rgba(255, 255, 255, 0.22), inset 0 -3px 8px rgba(0, 0, 0, 0.35), 0 10px 24px rgba(244, 63, 94, 0.15), 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+[data-interface-theme="liquid-glass"] .pro-feature-card-orange {
+  background: radial-gradient(circle at 50% 0%, rgba(251, 146, 60, 0.45) 0%, transparent 75%), linear-gradient(135deg, rgba(249, 115, 22, 0.45) 0%, rgba(217, 119, 6, 0.35) 100%) !important;
+  border: 1px solid rgba(249, 115, 22, 0.25) !important;
+  box-shadow: inset 0 1px 0 rgba(249, 115, 22, 0.55), inset 0 2px 4px rgba(255, 255, 255, 0.15), inset 0 -3px 8px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+[data-interface-theme="liquid-glass"] .pro-feature-card-orange:hover {
+  border-color: rgba(249, 115, 22, 0.4) !important;
+  box-shadow: inset 0 1px 0 rgba(249, 115, 22, 0.65), inset 0 2px 6px rgba(255, 255, 255, 0.22), inset 0 -3px 8px rgba(0, 0, 0, 0.35), 0 10px 24px rgba(249, 115, 22, 0.15), 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+[data-interface-theme="liquid-glass"] .pro-feature-card-cyan {
+  background: radial-gradient(circle at 50% 0%, rgba(34, 211, 238, 0.45) 0%, transparent 75%), linear-gradient(135deg, rgba(6, 182, 212, 0.45) 0%, rgba(8, 145, 178, 0.35) 100%) !important;
+  border: 1px solid rgba(6, 182, 212, 0.25) !important;
+  box-shadow: inset 0 1px 0 rgba(6, 182, 212, 0.55), inset 0 2px 4px rgba(255, 255, 255, 0.15), inset 0 -3px 8px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+[data-interface-theme="liquid-glass"] .pro-feature-card-cyan:hover {
+  border-color: rgba(6, 182, 212, 0.4) !important;
+  box-shadow: inset 0 1px 0 rgba(6, 182, 212, 0.65), inset 0 2px 6px rgba(255, 255, 255, 0.22), inset 0 -3px 8px rgba(0, 0, 0, 0.35), 0 10px 24px rgba(6, 182, 212, 0.15), 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+[data-interface-theme="liquid-glass"] .pro-feature-card-gray {
+  background: radial-gradient(circle at 50% 0%, rgba(186, 200, 217, 0.38) 0%, transparent 75%), linear-gradient(135deg, rgba(148, 163, 184, 0.38) 0%, rgba(100, 116, 139, 0.28) 100%) !important;
+  border: 1px solid rgba(148, 163, 184, 0.22) !important;
+  box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.5), inset 0 2px 4px rgba(255, 255, 255, 0.12), inset 0 -3px 8px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+}
+[data-interface-theme="liquid-glass"] .pro-feature-card-gray:hover {
+  border-color: rgba(148, 163, 184, 0.4) !important;
+  box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.6), inset 0 2px 6px rgba(255, 255, 255, 0.18), inset 0 -3px 8px rgba(0, 0, 0, 0.35), 0 10px 24px rgba(148, 163, 184, 0.1), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+
+[data-interface-theme="liquid-glass"] .pro-feature-card-pink {
+  background: radial-gradient(circle at 50% 0%, rgba(244, 114, 182, 0.45) 0%, transparent 75%), linear-gradient(135deg, rgba(236, 72, 153, 0.45) 0%, rgba(190, 24, 74, 0.35) 100%) !important;
+  border: 1px solid rgba(236, 72, 153, 0.25) !important;
+  box-shadow: inset 0 1px 0 rgba(236, 72, 153, 0.55), inset 0 2px 4px rgba(255, 255, 255, 0.15), inset 0 -3px 8px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+[data-interface-theme="liquid-glass"] .pro-feature-card-pink:hover {
+  border-color: rgba(236, 72, 153, 0.4) !important;
+  box-shadow: inset 0 1px 0 rgba(236, 72, 153, 0.65), inset 0 2px 6px rgba(255, 255, 255, 0.22), inset 0 -3px 8px rgba(0, 0, 0, 0.35), 0 10px 24px rgba(236, 72, 153, 0.15), 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* --- THEME VARIANT CONFIGURATIONS (Dark / Modern) --- */
+[data-interface-theme="modern"] .pro-feature-card-violet {
+  background: radial-gradient(circle at 50% 0%, rgba(167, 139, 250, 0.42) 0%, transparent 75%), linear-gradient(135deg, rgba(109, 40, 217, 0.42) 0%, rgba(76, 29, 149, 0.32) 100%) !important;
+  border: 1px solid rgba(139, 92, 246, 0.24) !important;
+  box-shadow: inset 0 1px 0 rgba(139, 92, 246, 0.4), inset 0 1.5px 3px rgba(255, 255, 255, 0.1), inset 0 -2px 6px rgba(0, 0, 0, 0.25), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+[data-interface-theme="modern"] .pro-feature-card-violet:hover {
+  border-color: rgba(139, 92, 246, 0.38) !important;
+  box-shadow: inset 0 1px 0 rgba(139, 92, 246, 0.5), inset 0 1.5px 4.5px rgba(255, 255, 255, 0.15), inset 0 -2px 6px rgba(0, 0, 0, 0.3), 0 8px 20px rgba(139, 92, 246, 0.12), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+
+[data-interface-theme="modern"] .pro-feature-card-teal {
+  background: radial-gradient(circle at 50% 0%, rgba(45, 212, 191, 0.4) 0%, transparent 75%), linear-gradient(135deg, rgba(20, 184, 166, 0.4) 0%, rgba(13, 148, 136, 0.28) 100%) !important;
+  border: 1px solid rgba(20, 184, 166, 0.2) !important;
+  box-shadow: inset 0 1px 0 rgba(20, 184, 166, 0.4), inset 0 1.5px 3px rgba(255, 255, 255, 0.1), inset 0 -2px 6px rgba(0, 0, 0, 0.25), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+[data-interface-theme="modern"] .pro-feature-card-teal:hover {
+  border-color: rgba(20, 184, 166, 0.35) !important;
+  box-shadow: inset 0 1px 0 rgba(20, 184, 166, 0.5), inset 0 1.5px 4.5px rgba(255, 255, 255, 0.15), inset 0 -2px 6px rgba(0, 0, 0, 0.3), 0 8px 20px rgba(20, 184, 166, 0.12), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+
+[data-interface-theme="modern"] .pro-feature-card-blue {
+  background: radial-gradient(circle at 50% 0%, rgba(96, 165, 250, 0.42) 0%, transparent 75%), linear-gradient(135deg, rgba(59, 130, 246, 0.42) 0%, rgba(29, 78, 216, 0.3) 100%) !important;
+  border: 1px solid rgba(59, 130, 246, 0.24) !important;
+  box-shadow: inset 0 1px 0 rgba(59, 130, 246, 0.4), inset 0 1.5px 3px rgba(255, 255, 255, 0.1), inset 0 -2px 6px rgba(0, 0, 0, 0.25), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+[data-interface-theme="modern"] .pro-feature-card-blue:hover {
+  border-color: rgba(59, 130, 246, 0.38) !important;
+  box-shadow: inset 0 1px 0 rgba(59, 130, 246, 0.5), inset 0 1.5px 4.5px rgba(255, 255, 255, 0.15), inset 0 -2px 6px rgba(0, 0, 0, 0.3), 0 8px 20px rgba(59, 130, 246, 0.12), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+
+[data-interface-theme="modern"] .pro-feature-card-rose {
+  background: radial-gradient(circle at 50% 0%, rgba(251, 113, 133, 0.4) 0%, transparent 75%), linear-gradient(135deg, rgba(244, 63, 94, 0.4) 0%, rgba(190, 24, 74, 0.28) 100%) !important;
+  border: 1px solid rgba(244, 63, 94, 0.2) !important;
+  box-shadow: inset 0 1px 0 rgba(244, 63, 94, 0.4), inset 0 1.5px 3px rgba(255, 255, 255, 0.1), inset 0 -2px 6px rgba(0, 0, 0, 0.25), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+[data-interface-theme="modern"] .pro-feature-card-rose:hover {
+  border-color: rgba(244, 63, 94, 0.35) !important;
+  box-shadow: inset 0 1px 0 rgba(244, 63, 94, 0.5), inset 0 1.5px 4.5px rgba(255, 255, 255, 0.15), inset 0 -2px 6px rgba(0, 0, 0, 0.3), 0 8px 20px rgba(244, 63, 94, 0.12), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+
+[data-interface-theme="modern"] .pro-feature-card-orange {
+  background: radial-gradient(circle at 50% 0%, rgba(251, 146, 60, 0.38) 0%, transparent 75%), linear-gradient(135deg, rgba(249, 115, 22, 0.38) 0%, rgba(194, 65, 12, 0.25) 100%) !important;
+  border: 1px solid rgba(249, 115, 22, 0.2) !important;
+  box-shadow: inset 0 1px 0 rgba(249, 115, 22, 0.4), inset 0 1.5px 3px rgba(255, 255, 255, 0.1), inset 0 -2px 6px rgba(0, 0, 0, 0.25), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+[data-interface-theme="modern"] .pro-feature-card-orange:hover {
+  border-color: rgba(249, 115, 22, 0.35) !important;
+  box-shadow: inset 0 1px 0 rgba(249, 115, 22, 0.5), inset 0 1.5px 4.5px rgba(255, 255, 255, 0.15), inset 0 -2px 6px rgba(0, 0, 0, 0.3), 0 8px 20px rgba(249, 115, 22, 0.12), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+
+[data-interface-theme="modern"] .pro-feature-card-cyan {
+  background: radial-gradient(circle at 50% 0%, rgba(34, 211, 238, 0.4) 0%, transparent 75%), linear-gradient(135deg, rgba(6, 182, 212, 0.4) 0%, rgba(14, 116, 144, 0.28) 100%) !important;
+  border: 1px solid rgba(6, 182, 212, 0.2) !important;
+  box-shadow: inset 0 1px 0 rgba(6, 182, 212, 0.4), inset 0 1.5px 3px rgba(255, 255, 255, 0.15), inset 0 -2px 6px rgba(0, 0, 0, 0.25), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+[data-interface-theme="modern"] .pro-feature-card-cyan:hover {
+  border-color: rgba(6, 182, 212, 0.35) !important;
+  box-shadow: inset 0 1px 0 rgba(6, 182, 212, 0.5), inset 0 1.5px 4.5px rgba(255, 255, 255, 0.15), inset 0 -2px 6px rgba(0, 0, 0, 0.3), 0 8px 20px rgba(6, 182, 212, 0.12), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+
+[data-interface-theme="modern"] .pro-feature-card-gray {
+  background: radial-gradient(circle at 50% 0%, rgba(186, 200, 217, 0.32) 0%, transparent 75%), linear-gradient(135deg, rgba(148, 163, 184, 0.32) 0%, rgba(100, 116, 139, 0.22) 100%) !important;
+  border: 1px solid rgba(148, 163, 184, 0.18) !important;
+  box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.35), inset 0 1.5px 3px rgba(255, 255, 255, 0.08), inset 0 -2px 6px rgba(0, 0, 0, 0.25), 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+}
+[data-interface-theme="modern"] .pro-feature-card-gray:hover {
+  border-color: rgba(148, 163, 184, 0.3) !important;
+  box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.45), inset 0 1.5px 4.5px rgba(255, 255, 255, 0.12), inset 0 -2px 6px rgba(0, 0, 0, 0.3), 0 8px 20px rgba(148, 163, 184, 0.08), 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-interface-theme="modern"] .pro-feature-card-pink {
+  background: radial-gradient(circle at 50% 0%, rgba(244, 114, 182, 0.4) 0%, transparent 75%), linear-gradient(135deg, rgba(236, 72, 153, 0.4) 0%, rgba(190, 24, 93, 0.28) 100%) !important;
+  border: 1px solid rgba(236, 72, 153, 0.2) !important;
+  box-shadow: inset 0 1px 0 rgba(236, 72, 153, 0.4), inset 0 1.5px 3px rgba(255, 255, 255, 0.15), inset 0 -2px 6px rgba(0, 0, 0, 0.25), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+[data-interface-theme="modern"] .pro-feature-card-pink:hover {
+  border-color: rgba(236, 72, 153, 0.35) !important;
+  box-shadow: inset 0 1px 0 rgba(236, 72, 153, 0.5), inset 0 1.5px 4.5px rgba(255, 255, 255, 0.15), inset 0 -2px 6px rgba(0, 0, 0, 0.3), 0 8px 20px rgba(236, 72, 153, 0.12), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+
+/* --- LIGHT MODE REFINEMENTS FOR PRO FEATURE CARDS --- */
+[data-theme='light'] .pro-feature-card {
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -2px 6px rgba(0, 0, 0, 0.08),
+    0 4px 12px rgba(0, 0, 0, 0.04) !important;
+}
+[data-theme='light'] .pro-feature-card::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 100%) !important;
+}
+[data-theme='light'] .pro-feature-card::after {
+  background-image: 
+    linear-gradient(rgba(0, 0, 0, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.015) 1px, transparent 1px) !important;
+  opacity: 0.25 !important;
+}
+[data-theme='light'] .pro-feature-card:hover::after {
+  opacity: 0.45 !important;
+}
+
+[data-theme='light'] .pro-feature-card-violet {
+  background: radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.15) 0%, transparent 60%), linear-gradient(135deg, rgba(245, 243, 255, 0.8) 0%, rgba(237, 233, 254, 0.85) 100%) !important;
+  border-color: rgba(139, 92, 246, 0.2) !important;
+}
+[data-theme='light'] .pro-feature-card-violet:hover {
+  border-color: rgba(139, 92, 246, 0.35) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 -2px 6px rgba(0, 0, 0, 0.1), 0 10px 24px rgba(139, 92, 246, 0.08), 0 4px 12px rgba(0, 0, 0, 0.06) !important;
+}
+
+[data-theme='light'] .pro-feature-card-teal {
+  background: radial-gradient(circle at 50% 0%, rgba(20, 184, 166, 0.12) 0%, transparent 60%), linear-gradient(135deg, rgba(240, 253, 250, 0.8) 0%, rgba(228, 251, 246, 0.85) 100%) !important;
+  border-color: rgba(20, 184, 166, 0.18) !important;
+}
+[data-theme='light'] .pro-feature-card-teal:hover {
+  border-color: rgba(20, 184, 166, 0.32) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 -2px 6px rgba(0, 0, 0, 0.1), 0 10px 24px rgba(20, 184, 166, 0.08), 0 4px 12px rgba(0, 0, 0, 0.06) !important;
+}
+
+[data-theme='light'] .pro-feature-card-blue {
+  background: radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.15) 0%, transparent 60%), linear-gradient(135deg, rgba(239, 246, 255, 0.8) 0%, rgba(219, 234, 254, 0.85) 100%) !important;
+  border-color: rgba(59, 130, 246, 0.2) !important;
+}
+[data-theme='light'] .pro-feature-card-blue:hover {
+  border-color: rgba(59, 130, 246, 0.35) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 -2px 6px rgba(0, 0, 0, 0.1), 0 10px 24px rgba(59, 130, 246, 0.08), 0 4px 12px rgba(0, 0, 0, 0.06) !important;
+}
+
+[data-theme='light'] .pro-feature-card-rose {
+  background: radial-gradient(circle at 50% 0%, rgba(244, 63, 94, 0.12) 0%, transparent 60%), linear-gradient(135deg, rgba(255, 241, 242, 0.8) 0%, rgba(254, 226, 228, 0.85) 100%) !important;
+  border-color: rgba(244, 63, 94, 0.18) !important;
+}
+[data-theme='light'] .pro-feature-card-rose:hover {
+  border-color: rgba(244, 63, 94, 0.32) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 -2px 6px rgba(0, 0, 0, 0.1), 0 10px 24px rgba(244, 63, 94, 0.08), 0 4px 12px rgba(0, 0, 0, 0.06) !important;
+}
+
+[data-theme='light'] .pro-feature-card-orange {
+  background: radial-gradient(circle at 50% 0%, rgba(249, 115, 22, 0.12) 0%, transparent 60%), linear-gradient(135deg, rgba(255, 247, 237, 0.8) 0%, rgba(254, 237, 222, 0.85) 100%) !important;
+  border-color: rgba(249, 115, 22, 0.18) !important;
+}
+[data-theme='light'] .pro-feature-card-orange:hover {
+  border-color: rgba(249, 115, 22, 0.32) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 -2px 6px rgba(0, 0, 0, 0.1), 0 10px 24px rgba(249, 115, 22, 0.08), 0 4px 12px rgba(0, 0, 0, 0.06) !important;
+}
+
+[data-theme='light'] .pro-feature-card-cyan {
+  background: radial-gradient(circle at 50% 0%, rgba(6, 182, 212, 0.12) 0%, transparent 60%), linear-gradient(135deg, rgba(236, 254, 255, 0.8) 0%, rgba(207, 250, 254, 0.85) 100%) !important;
+  border-color: rgba(6, 182, 212, 0.18) !important;
+}
+[data-theme='light'] .pro-feature-card-cyan:hover {
+  border-color: rgba(6, 182, 212, 0.32) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 -2px 6px rgba(0, 0, 0, 0.1), 0 10px 24px rgba(6, 182, 212, 0.08), 0 4px 12px rgba(0, 0, 0, 0.06) !important;
+}
+
+[data-theme='light'] .pro-feature-card-gray {
+  background: radial-gradient(circle at 50% 0%, rgba(148, 163, 184, 0.08) 0%, transparent 60%), linear-gradient(135deg, rgba(248, 250, 252, 0.85) 0%, rgba(241, 245, 249, 0.9) 100%) !important;
+  border-color: rgba(148, 163, 184, 0.15) !important;
+}
+[data-theme='light'] .pro-feature-card-gray:hover {
+  border-color: rgba(148, 163, 184, 0.28) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 -2px 6px rgba(0, 0, 0, 0.08), 0 10px 24px rgba(148, 163, 184, 0.05), 0 4px 12px rgba(0, 0, 0, 0.04) !important;
+}
+
+[data-theme='light'] .pro-feature-card-pink {
+  background: radial-gradient(circle at 50% 0%, rgba(236, 72, 153, 0.12) 0%, transparent 60%), linear-gradient(135deg, rgba(253, 242, 248, 0.8) 0%, rgba(252, 231, 243, 0.85) 100%) !important;
+  border-color: rgba(236, 72, 153, 0.18) !important;
+}
+[data-theme='light'] .pro-feature-card-pink:hover {
+  border-color: rgba(236, 72, 153, 0.32) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 -2px 6px rgba(0, 0, 0, 0.1), 0 10px 24px rgba(236, 72, 153, 0.08), 0 4px 12px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* --- ABOUT SECTION ADDITIONAL MICRO-ANIMATIONS --- */
+@keyframes about-waveform-bounce {
+  0%, 100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+.about-animate-waveform-1 { animation: about-waveform-bounce 1.2s ease-in-out infinite; transform-origin: bottom; }
+.about-animate-waveform-2 { animation: about-waveform-bounce 0.8s ease-in-out infinite 0.15s; transform-origin: bottom; }
+.about-animate-waveform-3 { animation: about-waveform-bounce 1.4s ease-in-out infinite 0.3s; transform-origin: bottom; }
+.about-animate-waveform-4 { animation: about-waveform-bounce 1.0s ease-in-out infinite 0.45s; transform-origin: bottom; }
+.about-animate-waveform-5 { animation: about-waveform-bounce 0.7s ease-in-out infinite 0.6s; transform-origin: bottom; }
+
+@keyframes about-phone-pulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+.about-phone-ripple {
+  animation: about-phone-pulse 2.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+@keyframes about-particle-travel {
+  0% {
+    left: 12%;
+  }
+  50% {
+    left: 88%;
+  }
+  100% {
+    left: 12%;
+  }
+}
+.about-particle-glow {
+  animation: about-particle-travel 3.6s ease-in-out infinite;
+}
+
+@keyframes about-heart-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.15);
+  }
+}
+.about-heart-pulse-icon {
+  animation: about-heart-pulse 1.4s cubic-bezier(0.25, 0.8, 0.25, 1) infinite;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   ──── Natively Pro Pricing Interface: Light Mode Optimization Overrides ───
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* 1. Selector Segmented Control Bar */
+[data-theme='light'] .natively-api-selector-bar {
+  background: rgba(15, 23, 42, 0.05) !important;
+  border-color: rgba(15, 23, 42, 0.06) !important;
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.04),
+    0 1px 0 rgba(255, 255, 255, 0.6) !important;
+}
+
+[data-theme='light'] .natively-api-selector-tab {
+  color: rgba(15, 23, 42, 0.68) !important;
+  font-weight: 500 !important;
+}
+
+[data-theme='light'] .natively-api-selector-tab:hover {
+  color: #0f172a !important;
+}
+
+[data-theme='light'] .natively-api-selector-tab.active,
+[data-theme='light'] .natively-api-selector-tab[data-active="true"] {
+  color: #000000 !important;
+  font-weight: 700 !important;
+  opacity: 1 !important;
+}
+
+[data-theme='light'] .natively-api-selector-tab.active .tab-name,
+[data-theme='light'] .natively-api-selector-tab[data-active="true"] .tab-name {
+  color: #000000 !important;
+  font-weight: 700 !important;
+}
+
+[data-theme='light'] .natively-api-selector-tab.active .tab-price,
+[data-theme='light'] .natively-api-selector-tab[data-active="true"] .tab-price {
+  color: rgba(15, 23, 42, 0.85) !important;
+  font-weight: 600 !important;
+}
+
+[data-theme='light'] .natively-api-selector-tab .tab-price {
+  color: rgba(15, 23, 42, 0.58) !important;
+  font-weight: 500 !important;
+}
+
+/* 2. Light Mode Dynamic Jelly-Clay Selector Pills */
+[data-theme='light'] .natively-api-selector-pill-standard {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.04) 100%),
+    rgba(148, 163, 184, 0.25) !important;
+  border-color: rgba(148, 163, 184, 0.35) !important;
+  box-shadow:
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.8),
+    inset 0 -1.5px 2px rgba(0, 0, 0, 0.08),
+    0 4px 12px rgba(148, 163, 184, 0.15) !important;
+}
+
+[data-theme='light'] .natively-api-selector-pill-pro {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.04) 100%),
+    rgba(139, 92, 246, 0.18) !important;
+  border-color: rgba(139, 92, 246, 0.32) !important;
+  box-shadow:
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.8),
+    inset 0 -1.5px 2px rgba(0, 0, 0, 0.08),
+    0 4px 12px rgba(139, 92, 246, 0.20) !important;
+}
+
+[data-theme='light'] .natively-api-selector-pill-max {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.04) 100%),
+    rgba(59, 130, 246, 0.18) !important;
+  border-color: rgba(59, 130, 246, 0.32) !important;
+  box-shadow:
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.8),
+    inset 0 -1.5px 2px rgba(0, 0, 0, 0.08),
+    0 4px 12px rgba(59, 130, 246, 0.18) !important;
+}
+
+[data-theme='light'] .natively-api-selector-pill-ultra {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.04) 100%),
+    rgba(249, 115, 22, 0.18) !important;
+  border-color: rgba(249, 115, 22, 0.32) !important;
+  box-shadow:
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.8),
+    inset 0 -1.5px 2px rgba(0, 0, 0, 0.08),
+    0 4px 12px rgba(249, 115, 22, 0.18) !important;
+}
+
+/* 3. Light Mode Specular Price Gradients */
+[data-theme='light'] .natively-api-price-pro {
+  background: linear-gradient(135deg, #1e1b4b 20%, #6d28d9 100%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+[data-theme='light'] .natively-api-price-max {
+  background: linear-gradient(135deg, #0f172a 20%, #1d4ed8 100%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+[data-theme='light'] .natively-api-price-ultra {
+  background: linear-gradient(135deg, #1c0a00 20%, #c2410c 100%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+[data-theme='light'] .natively-api-price-standard {
+  background: linear-gradient(135deg, #0f172a 30%, #475569 100%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+/* 4. Light Mode Detail Card Backgrounds & Specular reflections */
+[data-theme='light'] .natively-api-detail-card {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    inset 0 -2px 5px rgba(0, 0, 0, 0.02),
+    0 8px 24px rgba(15, 23, 42, 0.04) !important;
+}
+
+[data-theme='light'] .natively-api-detail-card::before {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.5) 0%, transparent 60%) !important;
+}
+
+/* Soft blueprint mesh grid lines for light mode */
+[data-theme='light'] .natively-api-detail-card::after {
+  opacity: 0.22 !important;
+  background-image:
+    linear-gradient(to right, rgba(15, 23, 42, 0.08) 1.5px, transparent 1.5px),
+    linear-gradient(to bottom, rgba(15, 23, 42, 0.08) 1.5px, transparent 1.5px) !important;
+}
+
+[data-theme='light'] .natively-api-detail-card-standard {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(148, 163, 184, 0.14) 0%, transparent 65%),
+    radial-gradient(circle at 100% 100%, rgba(148, 163, 184, 0.18) 0%, transparent 65%),
+    linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%) !important;
+  border: 1.5px solid rgba(148, 163, 184, 0.35) !important;
+}
+
+[data-theme='light'] .natively-api-detail-card-pro {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.15) 0%, transparent 65%),
+    radial-gradient(circle at 100% 100%, rgba(139, 92, 246, 0.18) 0%, transparent 65%),
+    linear-gradient(135deg, #ffffff 0%, #f5f3ff 100%) !important;
+  border: 1.5px solid rgba(139, 92, 246, 0.36) !important;
+}
+
+[data-theme='light'] .natively-api-detail-card-max {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.15) 0%, transparent 65%),
+    radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.18) 0%, transparent 65%),
+    linear-gradient(135deg, #ffffff 0%, #eff6ff 100%) !important;
+  border: 1.5px solid rgba(59, 130, 246, 0.36) !important;
+}
+
+[data-theme='light'] .natively-api-detail-card-ultra {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(249, 115, 22, 0.15) 0%, transparent 65%),
+    radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.18) 0%, transparent 65%),
+    linear-gradient(135deg, #ffffff 0%, #fff7ed 100%) !important;
+  border: 1.5px solid rgba(249, 115, 22, 0.36) !important;
+}
+
+/* 5. Light Mode Active Plan Ambient Halos */
+[data-theme='light'] .natively-api-detail-card-standard[data-active="true"] {
+  border-color: rgba(71, 85, 105, 0.70) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -2px 5px rgba(0, 0, 0, 0.02),
+    0 0 24px rgba(148, 163, 184, 0.20),
+    0 16px 36px rgba(148, 163, 184, 0.14),
+    0 6px 14px rgba(0, 0, 0, 0.05) !important;
+}
+
+[data-theme='light'] .natively-api-detail-card-pro[data-active="true"] {
+  border-color: rgba(109, 40, 217, 0.75) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -2px 5px rgba(0, 0, 0, 0.02),
+    0 0 28px rgba(139, 92, 246, 0.28),
+    0 16px 36px rgba(139, 92, 246, 0.20),
+    0 6px 14px rgba(0, 0, 0, 0.05) !important;
+}
+
+[data-theme='light'] .natively-api-detail-card-max[data-active="true"] {
+  border-color: rgba(29, 78, 216, 0.75) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -2px 5px rgba(0, 0, 0, 0.02),
+    0 0 28px rgba(59, 130, 246, 0.26),
+    0 16px 36px rgba(59, 130, 246, 0.18),
+    0 6px 14px rgba(0, 0, 0, 0.05) !important;
+}
+
+[data-theme='light'] .natively-api-detail-card-ultra[data-active="true"] {
+  border-color: rgba(194, 65, 12, 0.75) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -2px 5px rgba(0, 0, 0, 0.02),
+    0 0 28px rgba(249, 115, 22, 0.26),
+    0 16px 36px rgba(249, 115, 22, 0.18),
+    0 6px 14px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* 6. Light Mode Features Columns & Scope Panels */
+[data-theme='light'] .natively-api-features-panel {
+  background: rgba(255, 255, 255, 0.60) !important;
+  border-color: rgba(15, 23, 42, 0.05) !important;
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.02),
+    0 1px 0 rgba(255, 255, 255, 0.9) !important;
+}
+
+[data-theme='light'] .natively-api-features-panel::before {
+  background: linear-gradient(90deg, transparent, rgba(15, 23, 42, 0.06), transparent) !important;
+}
+
+/* 7. What's included font color fix in light mode */
+[data-theme='light'] .natively-api-features-panel p.uppercase {
+  color: rgba(15, 23, 42, 0.50) !important;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   ──── Natively Pro Pricing: Theme-Responsive Contrast & Glow Enhancements ─
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* A. Default / Dark Mode Badge Text & Icons */
+.natively-api-badge-text-recommended {
+  color: #c4b5fd !important;
+}
+.natively-api-badge-text-max {
+  color: #93c5fd !important;
+}
+.natively-api-badge-text-ultra {
+  color: #fdb582 !important;
+}
+.natively-api-badge-text-standard {
+  color: #cbd5e1 !important;
+}
+.natively-api-badge-text-emerald {
+  color: #a7f3d0 !important;
+}
+
+/* Feature Check icon sheens (Dark Mode) */
+.natively-api-check-icon-pro {
+  color: #a78bfa !important;
+  filter: drop-shadow(0 0 4.5px rgba(139, 92, 246, 0.55)) !important;
+}
+.natively-api-check-icon-max {
+  color: #60a5fa !important;
+  filter: drop-shadow(0 0 4.5px rgba(59, 130, 246, 0.55)) !important;
+}
+.natively-api-check-icon-ultra {
+  color: #fb923c !important;
+  filter: drop-shadow(0 0 4.5px rgba(249, 115, 22, 0.55)) !important;
+}
+.natively-api-check-icon-standard {
+  color: #94a3b8 !important;
+  filter: drop-shadow(0 0 4.5px rgba(148, 163, 184, 0.35)) !important;
+}
+
+/* Promo Voucher badge (Dark Mode) */
+.natively-api-pricing-promo-wrapper {
+  background: rgba(139, 92, 246, 0.10) !important;
+  border-color: rgba(139, 92, 246, 0.20) !important;
+}
+.natively-api-pricing-promo-text {
+  color: #c4b5fd !important;
+}
+.natively-api-pricing-promo-bold {
+  color: #a78bfa !important;
+}
+
+/* Active tag state (Dark Mode - Emerald Jelly Pill) */
+.natively-api-active-tag {
+  color: #34d399 !important;
+  background: linear-gradient(180deg, rgba(52, 211, 153, 0.22) 0%, rgba(16, 185, 129, 0.12) 100%) !important;
+  border: 1px solid rgba(52, 211, 153, 0.38) !important;
+  box-shadow:
+    inset 0 1.5px 1.5px rgba(255, 255, 255, 0.16),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.25),
+    0 4px 12px rgba(52, 211, 153, 0.12) !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.20) !important;
+}
+
+/* B. Light Mode High-Contrast Overrides (WCAG Compliant 4.5:1 Ratio) */
+[data-theme='light'] .natively-api-badge-text-recommended {
+  color: #5b21b6 !important; /* Rich Dark Violet */
+}
+[data-theme='light'] .natively-api-badge-text-max {
+  color: #1e40af !important; /* Rich Dark Blue */
+}
+[data-theme='light'] .natively-api-badge-text-ultra {
+  color: #9a3412 !important; /* Rich Sunset Burnt Orange */
+}
+[data-theme='light'] .natively-api-badge-text-standard {
+  color: #334155 !important; /* Slate Gray */
+}
+[data-theme='light'] .natively-api-badge-text-emerald {
+  color: #065f46 !important; /* Dark Forest Green */
+}
+
+/* Feature Check icon sheens (Light Mode) */
+[data-theme='light'] .natively-api-check-icon-pro {
+  color: #6d28d9 !important;
+  filter: drop-shadow(0 0 3px rgba(109, 40, 217, 0.22)) !important;
+}
+[data-theme='light'] .natively-api-check-icon-max {
+  color: #2563eb !important;
+  filter: drop-shadow(0 0 3px rgba(37, 99, 235, 0.22)) !important;
+}
+[data-theme='light'] .natively-api-check-icon-ultra {
+  color: #ea580c !important;
+  filter: drop-shadow(0 0 3px rgba(234, 88, 12, 0.22)) !important;
+}
+[data-theme='light'] .natively-api-check-icon-standard {
+  color: #64748b !important;
+  filter: drop-shadow(0 0 3px rgba(100, 116, 139, 0.12)) !important;
+}
+
+/* Promo Voucher badge (Light Mode) */
+[data-theme='light'] .natively-api-pricing-promo-wrapper {
+  background: rgba(139, 92, 246, 0.08) !important;
+  border-color: rgba(139, 92, 246, 0.16) !important;
+}
+[data-theme='light'] .natively-api-pricing-promo-text {
+  color: #6d28d9 !important;
+}
+[data-theme='light'] .natively-api-pricing-promo-bold {
+  color: #4c1d95 !important;
+}
+
+/* Active tag state (Light Mode - Emerald Jelly Pill) */
+[data-theme='light'] .natively-api-active-tag {
+  color: #064e3b !important;
+  background: linear-gradient(180deg, rgba(52, 211, 153, 0.25) 0%, rgba(16, 185, 129, 0.14) 100%) !important;
+  border: 1px solid rgba(16, 185, 129, 0.35) !important;
+  box-shadow:
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.85),
+    inset 0 -2px 4px rgba(16, 185, 129, 0.08),
+    0 4px 12px rgba(16, 185, 129, 0.08) !important;
+  text-shadow: 0 0.5px 0.5px rgba(255, 255, 255, 0.6) !important;
+  font-weight: 700 !important;
+}
+
+/* Header Promo Banner (Dark Mode Default) */
+.natively-api-header-promo-banner {
+  background: rgba(139, 92, 246, 0.15) !important;
+  border-color: rgba(139, 92, 246, 0.30) !important;
+}
+.natively-api-header-promo-text {
+  color: #c4b5fd !important;
+}
+.natively-api-header-promo-code {
+  color: #a78bfa !important;
+}
+
+/* Header Promo Banner (Light Mode WCAG compliant) */
+[data-theme='light'] .natively-api-header-promo-banner {
+  background: rgba(109, 40, 217, 0.08) !important;
+  border-color: rgba(109, 40, 217, 0.20) !important;
+}
+[data-theme='light'] .natively-api-header-promo-text {
+  color: #5b21b6 !important;
+}
+[data-theme='light'] .natively-api-header-promo-code {
+  color: #3b0764 !important;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   ──── Natively Pro Yearly & Lifetime Cards: Light Mode Overrides ──────────
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* 1. Card Backgrounds & Specular 3D Borders (No cheap flat white borders) */
+[data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-card-yearly,
+[data-theme='light'] [data-interface-theme="modern"] .pricing-card-yearly {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.14) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(239, 246, 255, 0.85) 0%, rgba(219, 234, 254, 0.9) 100%) !important;
+  border-color: rgba(59, 130, 246, 0.22) !important;
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.8),
+    inset 0 3px 6px rgba(255, 255, 255, 0.4),
+    inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
+    0 4px 16px rgba(15, 23, 42, 0.05) !important;
+}
+
+[data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-card-yearly::before,
+[data-theme='light'] [data-interface-theme="modern"] .pricing-card-yearly::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 100%) !important;
+}
+
+[data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-card-yearly:hover,
+[data-theme='light'] [data-interface-theme="modern"] .pricing-card-yearly:hover {
+  border-color: rgba(59, 130, 246, 0.42) !important;
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.85),
+    inset 0 3px 8px rgba(255, 255, 255, 0.55),
+    inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
+    0 12px 28px rgba(59, 130, 246, 0.12),
+    0 4px 12px rgba(15, 23, 42, 0.04) !important;
+}
+
+[data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-card-lifetime,
+[data-theme='light'] [data-interface-theme="modern"] .pricing-card-lifetime {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.16) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(245, 243, 255, 0.85) 0%, rgba(237, 233, 254, 0.9) 100%) !important;
+  border-color: rgba(139, 92, 246, 0.22) !important;
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.8),
+    inset 0 3px 6px rgba(255, 255, 255, 0.4),
+    inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
+    0 4px 16px rgba(15, 23, 42, 0.05) !important;
+}
+
+[data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-card-lifetime::before,
+[data-theme='light'] [data-interface-theme="modern"] .pricing-card-lifetime::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 100%) !important;
+}
+
+[data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-card-lifetime:hover,
+[data-theme='light'] [data-interface-theme="modern"] .pricing-card-lifetime:hover {
+  border-color: rgba(139, 92, 246, 0.42) !important;
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.85),
+    inset 0 3px 8px rgba(255, 255, 255, 0.55),
+    inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
+    0 12px 28px rgba(139, 92, 246, 0.12),
+    0 4px 12px rgba(15, 23, 42, 0.04) !important;
+}
+
+/* 2. Text and Price Overrides in Light Mode */
+[data-theme='light'] .pricing-card-original-price {
+  color: rgba(15, 23, 42, 0.42) !important;
+  text-decoration-color: rgba(15, 23, 42, 0.28) !important;
+}
+
+[data-theme='light'] .pricing-card-price {
+  color: #0f172a !important;
+}
+
+/* 3. Divider Lines in Light Mode */
+[data-theme='light'] .pricing-card-divider {
+  background: linear-gradient(90deg, transparent, rgba(15, 23, 42, 0.08), transparent) !important;
+}
+
+/* 4. Badges and Chips in Light Mode */
+/* 4. Badges and Chips: 3D Specular Jelly Pills */
+.pricing-card-yearly .badge-tier-label {
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.25) 0%, rgba(37, 99, 235, 0.15) 100%) !important;
+  border: 1px solid rgba(59, 130, 246, 0.38) !important;
+  color: #93c5fd !important;
+  box-shadow: 
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.25),
+    0 2px 6px rgba(59, 130, 246, 0.15) !important;
+}
+
+.pricing-card-lifetime .badge-tier-label {
+  background: linear-gradient(180deg, rgba(139, 92, 246, 0.28) 0%, rgba(109, 40, 217, 0.18) 100%) !important;
+  border: 1px solid rgba(139, 92, 246, 0.42) !important;
+  color: #c4b5fd !important;
+  box-shadow: 
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.25),
+    0 2px 6px rgba(139, 92, 246, 0.18) !important;
+}
+
+[data-theme='light'] .pricing-card-yearly .badge-tier-label {
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.16) 0%, rgba(37, 99, 235, 0.08) 100%) !important;
+  border: 1px solid rgba(59, 130, 246, 0.28) !important;
+  color: #1d4ed8 !important;
+  box-shadow: 
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -2px 4px rgba(59, 130, 246, 0.06),
+    0 2px 6px rgba(59, 130, 246, 0.06) !important;
+}
+
+[data-theme='light'] .pricing-card-lifetime .badge-tier-label {
+  background: linear-gradient(180deg, rgba(139, 92, 246, 0.18) 0%, rgba(109, 40, 217, 0.10) 100%) !important;
+  border: 1px solid rgba(139, 92, 246, 0.28) !important;
+  color: #6d28d9 !important;
+  box-shadow: 
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -2px 4px rgba(139, 92, 246, 0.06),
+    0 2px 6px rgba(139, 92, 246, 0.06) !important;
+}
+
+[data-theme='light'] .feature-icon-chip {
+  background: rgba(255, 255, 255, 0.6) !important;
+  border-color: rgba(15, 23, 42, 0.06) !important;
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    0 1px 2px rgba(0, 0, 0, 0.03) !important;
+}
+
+[data-theme='light'] .pricing-card-discount-badge {
+  background: rgba(99, 102, 241, 0.12) !important;
+  color: #312e81 !important;
+  border: 1px solid rgba(99, 102, 241, 0.18) !important;
+}
+
+[data-theme='light'] .pricing-card-savings-badge {
+  background: rgba(139, 92, 246, 0.1) !important;
+  color: #4c1d95 !important;
+  border: 1px solid rgba(139, 92, 246, 0.16) !important;
+}
+
+/* 5. Yearly CTA (Neutral Bright Jelly button in Dark, refined in Light) */
+[data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-cta-yearly,
+[data-theme='light'] [data-interface-theme="modern"] .pricing-cta-yearly {
+  background: radial-gradient(circle at 50% 0%, #ffffff 0%, #e2e8f0 100%) !important;
+  color: #0f172a !important;
+  border: 1px solid rgba(15, 23, 42, 0.14) !important;
+  box-shadow: 
+    inset 0 2px 3px rgba(255, 255, 255, 0.9), 
+    inset 0 -2.5px 3px rgba(15, 23, 42, 0.08), 
+    0 3px 8px rgba(15, 23, 42, 0.06) !important;
+}
+
+[data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-cta-yearly:hover,
+[data-theme='light'] [data-interface-theme="modern"] .pricing-cta-yearly:hover {
+  background: radial-gradient(circle at 50% 0%, #ffffff 0%, #f1f5f9 100%) !important;
+  box-shadow: 
+    inset 0 2px 3px rgba(255, 255, 255, 0.95), 
+    inset 0 -2.5px 3px rgba(15, 23, 42, 0.10), 
+    0 6px 14px rgba(15, 23, 42, 0.10) !important;
+}
+
+/* 6. Lifetime CTA (Vibrant Purple button, refined contrast in Light) */
+[data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-cta-lifetime,
+[data-theme='light'] [data-interface-theme="modern"] .pricing-cta-lifetime {
+  background: radial-gradient(circle at 50% 0%, #a78bfa 0%, #6d28d9 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(109, 40, 217, 0.25) !important;
+  box-shadow: 
+    inset 0 2.5px 3px rgba(255, 255, 255, 0.45), 
+    inset 0 -2.5px 3px rgba(0, 0, 0, 0.25), 
+    0 3px 10px rgba(109, 40, 217, 0.18) !important;
+}
+
+[data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-cta-lifetime:hover,
+[data-theme='light'] [data-interface-theme="modern"] .pricing-cta-lifetime:hover {
+  background: radial-gradient(circle at 50% 0%, #c084fc 0%, #5b21b6 100%) !important;
+  box-shadow: 
+    inset 0 3px 4px rgba(255, 255, 255, 0.55), 
+    inset 0 -3px 4px rgba(0, 0, 0, 0.30), 
+    0 6px 16px rgba(109, 40, 217, 0.28) !important;
+}
+
+/* 7. Poster SVGs - Theme Responsive Styles */
+.pricing-poster-stroke-subtle-line { stroke: rgba(255, 255, 255, 0.12) !important; }
+.pricing-poster-node-bg { fill: rgba(15, 23, 42, 0.85) !important; }
+.pricing-poster-glass-node-border { stroke: rgba(255, 255, 255, 0.15) !important; }
+.pricing-poster-stroke-bright { stroke: rgba(255, 255, 255, 0.6) !important; }
+.pricing-poster-text-muted { fill: rgba(255, 255, 255, 0.4) !important; }
+.pricing-poster-text-bright { fill: rgba(255, 255, 255, 0.7) !important; }
+.pricing-poster-central-ai-text { fill: #e0e7ff !important; }
+.pricing-poster-avatar-bg { fill: rgba(255, 255, 255, 0.18) !important; }
+.pricing-poster-rect-light { fill: rgba(255, 255, 255, 0.25) !important; }
+.pricing-poster-rect-subtle { fill: rgba(255, 255, 255, 0.15) !important; }
+.pricing-poster-check3-bg { fill: rgba(255, 255, 255, 0.08) !important; }
+.pricing-poster-check3-border { stroke: rgba(255, 255, 255, 0.2) !important; }
+
+[data-theme='light'] .pricing-poster-stroke-subtle-line { stroke: rgba(15, 23, 42, 0.12) !important; }
+[data-theme='light'] .pricing-poster-node-bg { fill: #ffffff !important; }
+[data-theme='light'] .pricing-poster-glass-node-border { stroke: rgba(15, 23, 42, 0.16) !important; }
+[data-theme='light'] .pricing-poster-stroke-bright { stroke: rgba(15, 23, 42, 0.60) !important; }
+[data-theme='light'] .pricing-poster-text-muted { fill: rgba(15, 23, 42, 0.48) !important; }
+[data-theme='light'] .pricing-poster-text-bright { fill: rgba(15, 23, 42, 0.75) !important; }
+[data-theme='light'] .pricing-poster-central-ai-text { fill: #1e3a8a !important; }
+[data-theme='light'] .pricing-poster-avatar-bg { fill: rgba(15, 23, 42, 0.14) !important; }
+[data-theme='light'] .pricing-poster-rect-light { fill: rgba(15, 23, 42, 0.18) !important; }
+[data-theme='light'] .pricing-poster-rect-subtle { fill: rgba(15, 23, 42, 0.10) !important; }
+[data-theme='light'] .pricing-poster-check3-bg { fill: rgba(15, 23, 42, 0.05) !important; }
+[data-theme='light'] .pricing-poster-check3-border { stroke: rgba(15, 23, 42, 0.16) !important; }
+[data-theme='light'] .pricing-poster-badge-text-purple { fill: #5b21b6 !important; }
+[data-theme='light'] .pricing-poster-badge-text-blue { fill: #1d4ed8 !important; }

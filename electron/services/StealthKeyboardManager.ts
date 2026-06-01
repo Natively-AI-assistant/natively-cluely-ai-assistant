@@ -1,5 +1,5 @@
 import { BrowserWindow, shell, systemPreferences } from 'electron';
-import type { CapturedKey } from '../audio/nativeModuleLoader';
+import type { CapturedKey, OverlayBoundsInput } from '../audio/nativeModuleLoader';
 import { isVerboseLogging } from '../verboseLog';
 
 /**
@@ -53,6 +53,7 @@ export class StealthKeyboardManager {
     /// listener (intentionally or accidentally during development), it
     /// would silently receive every user keystroke. Scoping prevents this.
     private overlayWebContents: Electron.WebContents | null = null;
+    private overlayBoundsProvider: (() => OverlayBoundsInput | null) | null = null;
     /// Monotonic counter incremented on every setOverlayWindow call. The
     /// 'closed' listener captures the token at registration time and only
     /// nulls overlayWebContents if the token still matches. Without this,
@@ -85,6 +86,40 @@ export class StealthKeyboardManager {
      * is created. State broadcasts (active/inactive) still fan out to all
      * windows (cheap, low-sensitivity); only key events are scoped.
      */
+    public setOverlayBoundsProvider(provider: (() => OverlayBoundsInput | null) | null): void {
+        this.overlayBoundsProvider = provider;
+    }
+
+    /**
+     * Push the latest overlay bounds into the live tap. Wire this to
+     * overlayWindow 'resize' / 'move' so the Rust mouse-down classifier
+     * stays in sync with the actual OS frame. Safe to call unconditionally
+     * — the native side no-ops when the tap is not active, and the
+     * provider lambda is the single source of truth for current bounds.
+     *
+     * Dedup-on-equal at this layer skips the N-API marshal entirely for
+     * identical frames (common at animation start/end and during idle
+     * height-only updates). The native side also no-ops when inactive.
+     */
+    public pushBoundsToTap(): void {
+        if (!this.tap) return;
+        const bounds = this.getOverlayBoundsForTap();
+        if (StealthKeyboardManager.boundsEqual(this.lastPushedBounds, bounds)) return;
+        this.lastPushedBounds = bounds;
+        try {
+            this.tap.updateOverlayBounds(bounds);
+        } catch (e) {
+            console.error('[StealthKeyboardManager] updateOverlayBounds threw:', e);
+        }
+    }
+
+    private lastPushedBounds: OverlayBoundsInput | null = null;
+    private static boundsEqual(a: OverlayBoundsInput | null, b: OverlayBoundsInput | null): boolean {
+        if (a === b) return true;
+        if (!a || !b) return false;
+        return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+    }
+
     public setOverlayWindow(win: BrowserWindow | null): void {
         // ROUND 4 FIX (#5): bump the token on EVERY call, including null
         // clears. R3 had skipped the bump on null which technically worked
@@ -200,6 +235,7 @@ export class StealthKeyboardManager {
         this.broadcastState({ active: true });
         let ok = false;
         try {
+            const overlayBounds = this.getOverlayBoundsForTap();
             ok = this.tap.start((err: Error | null, ev: CapturedKey) => {
                 if (err) {
                     console.error('[StealthKeyboardManager] tap callback error:', err);
@@ -210,7 +246,7 @@ export class StealthKeyboardManager {
                 // guard, `ev.isKeyDown` below throws → uncaught exception.
                 if (!ev) return;
                 this.handleCapturedKey(ev);
-            });
+            }, overlayBounds);
         } catch (e) {
             this.active = false;
             this.broadcastState({ active: false }); // correct the optimistic broadcast
@@ -353,7 +389,18 @@ export class StealthKeyboardManager {
         }
     }
 
+    private getOverlayBoundsForTap(): OverlayBoundsInput | null {
+        const bounds = this.overlayBoundsProvider?.() ?? null;
+        if (!bounds || bounds.width <= 0 || bounds.height <= 0) return null;
+        return bounds;
+    }
+
     private handleCapturedKey(ev: CapturedKey): void {
+        if (ev.isOutsideMouseDown) {
+            this.stop();
+            return;
+        }
+
         // Auto-exit on Esc. ORDER MATTERS: send the captured key event
         // FIRST, then stop() (which broadcasts the inactive state). See
         // the renderer's escSuppressUntilNextActive flag for the matching

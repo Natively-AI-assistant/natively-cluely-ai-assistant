@@ -35,7 +35,7 @@ export interface NativeModule {
   // receive any keystroke while the tap is active. Optional: requires
   // binary rebuild AND Accessibility permission at runtime.
   StealthKeyboardTap?: new () => {
-    start(callback: (err: Error | null, ev: CapturedKey) => void): boolean;
+    start(callback: (err: Error | null, ev: CapturedKey) => void, overlayBounds?: OverlayBoundsInput | null): boolean;
     stop(): void;
     readonly isActive: boolean;
   };
@@ -51,12 +51,20 @@ export interface NativeModule {
   };
 }
 
+export interface OverlayBoundsInput {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /** Mirrors native-module/src/keyboard_tap.rs CapturedKey. */
 export interface CapturedKey {
   keyCode: number;
   chars: string;
   flags: number;
   isKeyDown: boolean;
+  isOutsideMouseDown?: boolean;
 }
 
 // Hard-required: crash the module load if any of these are missing.

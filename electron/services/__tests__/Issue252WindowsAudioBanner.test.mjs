@@ -48,10 +48,26 @@ test('issue #252: system-audio-permission-denied handler tags its banner as scre
     /onSystemAudioPermissionDenied[\s\S]*?return\s*\(\)\s*=>\s*unsub\?\.\(\);/
   );
   assert.ok(permissionHandler, 'system-audio-permission-denied listener should still exist');
-  assert.match(
-    permissionHandler[0],
-    /kind:\s*['"]screen-recording-permission['"]/,
-    'screen-recording event must set warning kind="screen-recording-permission"'
+  // The renderer may set the kind inline OR delegate to a helper. Accept
+  // either (a) `kind: 'screen-recording-permission'` literal in the listener
+  // body, or (b) a call to a helper whose body sets that kind. The current
+  // implementation factored out `showPermissionWarning(message)` which sets
+  // the kind itself — refusing to recognise that path would force inlining
+  // for a stylistic reason rather than a correctness one.
+  const inline = /kind:\s*['"]screen-recording-permission['"]/.test(permissionHandler[0]);
+  let helperSets = false;
+  const helperCall = permissionHandler[0].match(/(\w*PermissionWarning)\s*\(/);
+  if (helperCall) {
+    const helperBody = ui.match(
+      new RegExp(`(const|function)\\s+${helperCall[1]}\\b[\\s\\S]*?\\{[\\s\\S]*?\\}`),
+    );
+    if (helperBody) {
+      helperSets = /kind:\s*['"]screen-recording-permission['"]/.test(helperBody[0]);
+    }
+  }
+  assert.ok(
+    inline || helperSets,
+    'screen-recording event must set warning kind="screen-recording-permission" (directly or via a helper)',
   );
 });
 

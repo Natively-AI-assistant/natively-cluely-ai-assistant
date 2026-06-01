@@ -4,8 +4,12 @@ import * as os from 'os';
 import * as path from 'path';
 
 export type CodexSandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
+export type CodexServiceTier = 'default' | 'fast' | 'flex';
+export type CodexModelReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
 
 export const CODEX_SANDBOX_MODES: readonly CodexSandboxMode[] = ['read-only', 'workspace-write', 'danger-full-access'] as const;
+export const CODEX_SERVICE_TIERS: readonly CodexServiceTier[] = ['default', 'fast', 'flex'] as const;
+export const CODEX_MODEL_REASONING_EFFORTS: readonly CodexModelReasoningEffort[] = ['low', 'medium', 'high', 'xhigh'] as const;
 
 export interface CodexCliConfig {
   enabled: boolean;
@@ -14,6 +18,8 @@ export interface CodexCliConfig {
   fastModel: string;
   timeoutMs: number;
   sandboxMode: CodexSandboxMode;
+  serviceTier?: CodexServiceTier;
+  modelReasoningEffort?: CodexModelReasoningEffort;
 }
 
 export interface CodexCliRunOptions {
@@ -22,6 +28,8 @@ export interface CodexCliRunOptions {
   timeoutMs: number;
   imagePaths?: string[];
   sandboxMode?: CodexSandboxMode;
+  serviceTier?: CodexServiceTier;
+  modelReasoningEffort?: CodexModelReasoningEffort;
   signal?: AbortSignal;
 }
 
@@ -34,10 +42,18 @@ export const DEFAULT_CODEX_CLI_CONFIG: CodexCliConfig = {
   fastModel: 'gpt-5.3-codex',
   timeoutMs: 60_000,
   sandboxMode: 'read-only',
+  serviceTier: 'default',
+  modelReasoningEffort: undefined,
 };
 
 export class CodexCliService {
-  public static buildArgs(model: string, imagePaths: string[] = [], sandboxMode: CodexSandboxMode = 'read-only'): string[] {
+  public static buildArgs(
+    model: string,
+    imagePaths: string[] = [],
+    sandboxMode: CodexSandboxMode = 'read-only',
+    serviceTier?: CodexServiceTier,
+    modelReasoningEffort?: CodexModelReasoningEffort,
+  ): string[] {
     const args = [
       'exec',
       '--json',
@@ -49,6 +65,12 @@ export class CodexCliService {
       '--model',
       model,
     ];
+    if (serviceTier && serviceTier !== 'default') {
+      args.push('-c', `service_tier="${serviceTier}"`);
+    }
+    if (modelReasoningEffort) {
+      args.push('-c', `model_reasoning_effort="${modelReasoningEffort}"`);
+    }
     for (const imagePath of imagePaths) {
       if (!imagePath) continue;
       args.push('--image', imagePath);
@@ -61,6 +83,12 @@ export class CodexCliService {
     const sandboxMode = (config.sandboxMode && (CODEX_SANDBOX_MODES as readonly string[]).includes(config.sandboxMode))
       ? config.sandboxMode
       : DEFAULT_CODEX_CLI_CONFIG.sandboxMode;
+    const serviceTier = (config.serviceTier && (CODEX_SERVICE_TIERS as readonly string[]).includes(config.serviceTier))
+      ? config.serviceTier
+      : DEFAULT_CODEX_CLI_CONFIG.serviceTier;
+    const modelReasoningEffort = (config.modelReasoningEffort && (CODEX_MODEL_REASONING_EFFORTS as readonly string[]).includes(config.modelReasoningEffort))
+      ? config.modelReasoningEffort
+      : DEFAULT_CODEX_CLI_CONFIG.modelReasoningEffort;
     return {
       enabled: !!config.enabled,
       path: (config.path || DEFAULT_CODEX_CLI_CONFIG.path).trim() || DEFAULT_CODEX_CLI_CONFIG.path,
@@ -68,6 +96,8 @@ export class CodexCliService {
       fastModel: (config.fastModel || DEFAULT_CODEX_CLI_CONFIG.fastModel).trim() || DEFAULT_CODEX_CLI_CONFIG.fastModel,
       timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_CODEX_CLI_CONFIG.timeoutMs,
       sandboxMode,
+      serviceTier,
+      modelReasoningEffort,
     };
   }
 
@@ -164,7 +194,7 @@ export class CodexCliService {
   public static async *stream(path: string, options: CodexCliRunOptions): AsyncGenerator<string, void, unknown> {
     if (options.signal?.aborted) throw new Error('Codex CLI request aborted before start.');
 
-    const args = this.buildArgs(options.model, options.imagePaths, options.sandboxMode);
+    const args = this.buildArgs(options.model, options.imagePaths, options.sandboxMode, options.serviceTier, options.modelReasoningEffort);
     const child = spawn(path, args, { stdio: ['pipe', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';

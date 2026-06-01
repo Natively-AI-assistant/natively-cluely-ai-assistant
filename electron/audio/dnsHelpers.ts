@@ -24,7 +24,38 @@ export const ipv4OnlyLookup = (hostname: string, options: any, callback?: any): 
         callback = options;
         options = {};
     }
-    dns.lookup(hostname, { ...options, family: 4 }, callback);
+    // Primary: use dns.lookup with IPv4 family — fast path when it works.
+    // Fallback: dns.resolve4 if lookup fails. On some networks (e.g. routers
+    // with link-local IPv6 DNS that intermittently drops A-record queries),
+    // getaddrinfo returns ENOTFOUND even though A records exist. resolve4
+    // queries the DNS authoritative server directly and is more reliable.
+    //
+    // Caveat: dns.resolve4 bypasses /etc/hosts, mDNS, and the OS resolver
+    // cache (it talks to configured DNS servers directly). That's exactly what
+    // we want for the public STT endpoints this helper serves, but it means a
+    // future caller pointing this at a localhost/dev hostname won't get the
+    // /etc/hosts override on the fallback path.
+    dns.lookup(hostname, { ...options, family: 4 }, (err, addr, family) => {
+        if (err) {
+            dns.resolve4(hostname, (err4, addrs) => {
+                if (err4) {
+                    callback(err4);
+                } else if (addrs && addrs.length > 0) {
+                    callback(null, addrs[0], 4);
+                } else {
+                    // resolve4 returns either an error or a non-empty array, so
+                    // this is a defensive edge. Emit a real Error (with .code)
+                    // so consumers that do `err instanceof Error` or read
+                    // err.stack behave consistently with the other error paths.
+                    const e = new Error('No A records for ' + hostname) as NodeJS.ErrnoException;
+                    e.code = 'ENOTFOUND';
+                    callback(e);
+                }
+            });
+        } else {
+            callback(null, addr, family);
+        }
+    });
 };
 
 /**

@@ -264,7 +264,13 @@ test('WhatToAnswerLLM assembles runtime intent, prior responses, and screen cont
   assert.doesNotMatch(systemPromptOverride, /Prior &lt;answer&gt;/);
 });
 
-test('WhatToAnswerLLM refuses attached images for a non-vision model without calling streamChat', async () => {
+test('WhatToAnswerLLM delegates attached images to streamChat (vision fallback owns provider selection)', async () => {
+  // NEW CONTRACT: WhatToAnswerLLM no longer gates on the selected model's vision
+  // capability. Every image-bearing request is handed to streamChat, whose
+  // unified streaming vision fallback chain (OpenAI → Claude → Gemini → Groq →
+  // Natively → local) picks a vision-capable provider, retries, and degrades
+  // gracefully. The premature "switch to a vision model" refusal is gone — that
+  // dead-ended screenshots whenever the picked model couldn't see images.
   const { WhatToAnswerLLM } = require(distWhatToAnswerPath);
   const calls = [];
 
@@ -277,7 +283,7 @@ test('WhatToAnswerLLM refuses attached images for a non-vision model without cal
     fitContextForCurrentModel: text => text,
     async *streamChat(...args) {
       calls.push(args);
-      yield 'should-not-stream';
+      yield 'vision-answer';
     },
   };
   const modesManager = {
@@ -292,9 +298,8 @@ test('WhatToAnswerLLM refuses attached images for a non-vision model without cal
     chunks.push(chunk);
   }
 
-  assert.equal(calls.length, 0);
-  assert.equal(chunks.length, 1);
-  assert.match(chunks[0], /Local-only mode is enabled/);
-  assert.match(chunks[0], /vision-capable model/);
-  assert.match(chunks[0], /qwen3.5:4b/);
+  // streamChat IS invoked and the image paths are forwarded (2nd positional arg).
+  assert.equal(calls.length, 1, 'streamChat must be called — no premature capability gate');
+  assert.deepEqual(calls[0][1], ['/tmp/screen.png'], 'image paths forwarded to streamChat');
+  assert.deepEqual(chunks, ['vision-answer']);
 });

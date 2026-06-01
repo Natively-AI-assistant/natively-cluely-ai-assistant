@@ -44,6 +44,14 @@ export class SonioxStreamingSTT extends EventEmitter {
     private reconnectAttempts = 0;
     private reconnectTimer: NodeJS.Timeout | null = null;
     private keepAliveTimer: NodeJS.Timeout | null = null;
+    // 250ms debounced restart driven by setSampleRate / setRecognitionLanguage.
+    // Previously these methods called `stop(); start();` synchronously, which
+    // produced two WebSocket handshakes in flight whenever the methods fired
+    // back-to-back (common pattern: device route change emits both new sample
+    // rate AND new language in the same tick). The second WS handshake races
+    // the first; one of them loses with code 1006 and triggers a reconnect
+    // storm. Same shape as the NativelyProSTT 250ms reconnect pattern.
+    private pendingRestartTimer: NodeJS.Timeout | null = null;
 
     private buffer: Buffer[] = [];
     private isConnecting = false;
@@ -63,15 +71,8 @@ export class SonioxStreamingSTT extends EventEmitter {
         console.log(`[SonioxStreaming] Sample rate set to ${rate}`);
 
         if (this.isActive) {
-            console.log('[SonioxStreaming] Sample rate changed while active. Restarting...');
-            // Save in-flight buffer so chunks captured between stop() and the new
-            // WebSocket connect() are not silently discarded (matches Deepgram pattern)
-            const savedBuffer = [...this.buffer];
-            this.stop();
-            this.start();
-            if (savedBuffer.length > 0) {
-                this.buffer = [...savedBuffer, ...this.buffer];
-            }
+            console.log('[SonioxStreaming] Sample rate changed while active. Scheduling debounced restart...');
+            this.scheduleRestart();
         }
     }
 
@@ -90,14 +91,43 @@ export class SonioxStreamingSTT extends EventEmitter {
             console.log(`[SonioxStreaming] Language hint set to ${this.languageCode}`);
 
             if (this.isActive) {
-                console.log('[SonioxStreaming] Language changed while active. Restarting...');
-                this.stop();
-                this.start();
+                console.log('[SonioxStreaming] Language changed while active. Scheduling debounced restart...');
+                this.scheduleRestart();
             }
         } else if (key === 'auto') {
             this.languageCode = undefined;
             console.log(`[SonioxStreaming] Language hint set to auto`);
         }
+    }
+
+    /**
+     * Debounced restart: collapses rapid setSampleRate / setRecognitionLanguage
+     * calls into a single stop()+start() sequence ~250ms later. Without this,
+     * the previous sync stop()+start() pattern allowed two WebSocket
+     * handshakes to be in flight simultaneously (device route changes can
+     * emit both new sample rate AND new language in the same JS tick), and
+     * one would lose with code 1006 → reconnect storm.
+     *
+     * Buffer preservation: chunks that arrive between the synchronous stop()
+     * (which sets isActive=false and clears the buffer) and the start() are
+     * silently dropped by write()'s `if (!this.isActive) return`. We capture
+     * the live buffer BEFORE stop() and re-prepend it on start so trailing
+     * audio survives the restart.
+     */
+    private scheduleRestart(): void {
+        if (this.pendingRestartTimer) {
+            clearTimeout(this.pendingRestartTimer);
+        }
+        this.pendingRestartTimer = setTimeout(() => {
+            this.pendingRestartTimer = null;
+            if (!this.isActive) return;  // a real stop() ran in the window — abort the restart
+            const savedBuffer = [...this.buffer];
+            this.stop();
+            this.start();
+            if (savedBuffer.length > 0) {
+                this.buffer = [...savedBuffer, ...this.buffer];
+            }
+        }, 250);
     }
 
     /** No-op — no Google credentials needed */
@@ -115,6 +145,15 @@ export class SonioxStreamingSTT extends EventEmitter {
 
     public start(): void {
         if (this.isActive) return;
+        // Cancel any leftover debounced restart from a prior session — it
+        // would otherwise fire ~250ms into the new session and trigger a
+        // gratuitous stop+start cycle. stop() also clears this via
+        // clearTimers(), but the user can call start() without a prior
+        // stop() in edge cases (recovery flow), so be defensive here too.
+        if (this.pendingRestartTimer) {
+            clearTimeout(this.pendingRestartTimer);
+            this.pendingRestartTimer = null;
+        }
         this.isActive = true;        // Set immediately so write() buffers audio during WS handshake
         this.shouldReconnect = true;
         this.reconnectAttempts = 0;
@@ -404,6 +443,14 @@ export class SonioxStreamingSTT extends EventEmitter {
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer);
             this.reconnectTimer = null;
+        }
+        // pendingRestartTimer must also be cleared here so a Stop / fatal
+        // error / clearTimers-triggering path cannot leave a queued restart
+        // that fires into the next session and triggers a wasteful
+        // stop()+start() cycle.
+        if (this.pendingRestartTimer) {
+            clearTimeout(this.pendingRestartTimer);
+            this.pendingRestartTimer = null;
         }
     }
 }

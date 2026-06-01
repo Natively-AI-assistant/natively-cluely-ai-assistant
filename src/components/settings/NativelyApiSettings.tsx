@@ -17,6 +17,8 @@ import {
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { NativelyLogoMark } from '../NativelyLogoMark';
 import { FreeTrialModal } from '../trial/FreeTrialModal';
+import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // ─── Types ───────────────────────────────────────────────────
 interface QuotaBucket {
@@ -35,10 +37,207 @@ interface UsageData {
   };
 }
 
+interface PricingProduct {
+  formattedPrice: string | null;
+  checkoutUrl: string;
+}
+
+const PLAN_IDS_ORDER = [
+  'natively_api_standard_monthly',
+  'natively_api_pro_monthly',
+  'natively_api_max_monthly',
+  'natively_api_ultra_monthly',
+] as const;
+
 const PLAN_STANDARD_URL = 'https://checkout.dodopayments.com/buy/pdt_0NbFixGmD8CSeawb5qvVl';
 const PLAN_PRO_URL = 'https://checkout.dodopayments.com/buy/pdt_0NcM6Aw0IWdspbsgUeCLA';
 const PLAN_MAX_URL = 'https://checkout.dodopayments.com/buy/pdt_0NcM7JElX4Af6LNVFS1Yf';
 const PLAN_ULTRA_URL = 'https://checkout.dodopayments.com/buy/pdt_0NcM7rC2kAb69TFKsZnUU';
+
+const PLANS = [
+  {
+    id: 'natively_api_standard_monthly',
+    name: 'Standard',
+    price: '$8',
+    url: PLAN_STANDARD_URL,
+    badgeText: 'Basic',
+    includesPro: false,
+    description: 'Ideal for light individual users who want essential transcription and model usage.',
+    note: 'Does not include Natively Pro desktop app license. Custom API key usage is supported.',
+    features: [
+      '500 AI requests per month',
+      '200 minutes of Speech-to-Text',
+      '20 real-time web searches',
+      'Standard server priority & support',
+      'Full local API key support',
+    ],
+  },
+  {
+    id: 'natively_api_pro_monthly',
+    name: 'Pro',
+    price: '$15',
+    url: PLAN_PRO_URL,
+    badgeText: 'Recommended',
+    includesPro: true,
+    description: 'Best for power users and professionals seeking full local productivity integrations.',
+    note: 'Includes a full Natively Pro desktop app license for the duration of subscription.',
+    features: [
+      '1,000 AI requests per month',
+      '500 minutes of Speech-to-Text',
+      '100 real-time web searches',
+      'High-priority server request queue',
+      'Full Natively Pro app features included',
+    ],
+  },
+  {
+    id: 'natively_api_max_monthly',
+    name: 'Max',
+    price: '$25',
+    url: PLAN_MAX_URL,
+    badgeText: 'Best Value',
+    includesPro: true,
+    description: 'Built for developers and teams using high volume text-to-speech and AI reasoning.',
+    note: 'Includes a full Natively Pro desktop app license for the duration of subscription.',
+    features: [
+      '2,000 AI requests per month',
+      '1,000 minutes of Speech-to-Text',
+      '200 real-time web searches',
+      'High-priority server request queue',
+      'Full Natively Pro app features included',
+    ],
+  },
+  {
+    id: 'natively_api_ultra_monthly',
+    name: 'Ultra',
+    price: '$35',
+    url: PLAN_ULTRA_URL,
+    badgeText: 'Heavy Users',
+    includesPro: true,
+    description: 'For heavy enterprise users, continuous screen understanding, and high-frequency meeting recording.',
+    note: 'Includes a full Natively Pro desktop app license for the duration of subscription.',
+    features: [
+      '3,000 AI requests per month',
+      '2,000 minutes of Speech-to-Text',
+      '300 real-time web searches',
+      'Dedicated high-throughput queue',
+      'Full Natively Pro app features included',
+    ],
+  },
+] as const;
+
+const cardContainerVariants = {
+  enter: (_direction: number) => ({
+    opacity: 0,
+  }),
+  center: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.07,
+      delayChildren: 0.02,
+    }
+  },
+  exit: (_direction: number) => ({
+    opacity: 0,
+    transition: {
+      staggerChildren: 0.03,
+      staggerDirection: -1 as const,
+    }
+  })
+};
+
+const cardSlideLeftVariants = {
+  enter: {
+    x: -12,
+    scale: 0.98,
+    opacity: 0,
+    filter: 'blur(1px)'
+  },
+  center: {
+    x: 0,
+    scale: 1,
+    opacity: 1,
+    filter: 'blur(0px)',
+    transition: {
+      x: { type: 'spring' as const, duration: 0.58, bounce: 0.04 },
+      scale: { type: 'spring' as const, duration: 0.58, bounce: 0.04 },
+      opacity: { duration: 0.28, ease: [0.32, 0.72, 0, 1] as const },
+      filter: { duration: 0.28, ease: [0.32, 0.72, 0, 1] as const }
+    }
+  },
+  exit: {
+    x: -8,
+    scale: 0.985,
+    opacity: 0,
+    filter: 'blur(1px)',
+    transition: {
+      x: { type: 'spring' as const, duration: 0.44, bounce: 0 },
+      scale: { type: 'spring' as const, duration: 0.44, bounce: 0 },
+      opacity: { duration: 0.22, ease: [0.32, 0.72, 0, 1] as const },
+      filter: { duration: 0.22, ease: [0.32, 0.72, 0, 1] as const }
+    }
+  }
+};
+
+const cardSlideRightVariants = {
+  enter: {
+    x: 12,
+    scale: 0.98,
+    opacity: 0,
+    filter: 'blur(1px)'
+  },
+  center: {
+    x: 0,
+    scale: 1,
+    opacity: 1,
+    filter: 'blur(0px)',
+    transition: {
+      x: { type: 'spring' as const, duration: 0.58, bounce: 0.04 },
+      scale: { type: 'spring' as const, duration: 0.58, bounce: 0.04 },
+      opacity: { duration: 0.28, ease: [0.32, 0.72, 0, 1] as const },
+      filter: { duration: 0.28, ease: [0.32, 0.72, 0, 1] as const }
+    }
+  },
+  exit: {
+    x: 8,
+    scale: 0.985,
+    opacity: 0,
+    filter: 'blur(1px)',
+    transition: {
+      x: { type: 'spring' as const, duration: 0.44, bounce: 0 },
+      scale: { type: 'spring' as const, duration: 0.44, bounce: 0 },
+      opacity: { duration: 0.22, ease: [0.32, 0.72, 0, 1] as const },
+      filter: { duration: 0.22, ease: [0.32, 0.72, 0, 1] as const }
+    }
+  }
+};
+
+const cardCtaVariants = {
+  enter: {
+    y: 6,
+    scale: 0.98,
+    opacity: 0
+  },
+  center: {
+    y: 0,
+    scale: 1,
+    opacity: 1,
+    transition: {
+      y: { type: 'spring' as const, duration: 0.58, bounce: 0.06 },
+      scale: { type: 'spring' as const, duration: 0.58, bounce: 0.06 },
+      opacity: { duration: 0.28, ease: [0.32, 0.72, 0, 1] as const }
+    }
+  },
+  exit: {
+    y: 4,
+    scale: 0.99,
+    opacity: 0,
+    transition: {
+      y: { type: 'spring' as const, duration: 0.44, bounce: 0 },
+      scale: { type: 'spring' as const, duration: 0.44, bounce: 0 },
+      opacity: { duration: 0.22, ease: [0.32, 0.72, 0, 1] as const }
+    }
+  }
+};
 
 // ─── Quota bar ───────────────────────────────────────────────
 function QuotaBar({
@@ -181,6 +380,62 @@ export const NativelyApiSettings: React.FC = () => {
   const [usageData, setUsageData] = useState<UsageData | null>(null);
   const [usageError, setUsageError] = useState<string | null>(null);
   const [isLoadingUsage, setIsLoadingUsage] = useState(false);
+  const [pricingProducts, setPricingProducts] = useState<Record<string, PricingProduct>>({});
+  const [selectedPlanId, setSelectedPlanId] = useState<string>('natively_api_pro_monthly');
+  const [prevPlanId, setPrevPlanId] = useState<string>('natively_api_pro_monthly');
+  const [hasUserSelected, setHasUserSelected] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+
+  useEffect(() => {
+    if (hasUserSelected || isHovered) return;
+
+    const interval = setInterval(() => {
+      setSelectedPlanId(prev => {
+        setPrevPlanId(prev);
+        const currentIndex = PLAN_IDS_ORDER.indexOf(prev as any);
+        const nextIndex = currentIndex === -1 ? 1 : (currentIndex + 1) % PLAN_IDS_ORDER.length;
+        return PLAN_IDS_ORDER[nextIndex];
+      });
+    }, 4500);
+
+    return () => clearInterval(interval);
+  }, [hasUserSelected, isHovered]);
+
+  const selectPlan = useCallback((newPlanId: string) => {
+    setSelectedPlanId(prev => {
+      setPrevPlanId(prev);
+      return newPlanId;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (usageData?.plan) {
+      const planName = usageData.plan.toLowerCase();
+      if (planName === 'starter' || planName === 'standard') {
+        selectPlan('natively_api_standard_monthly');
+      } else if (planName === 'pro') {
+        selectPlan('natively_api_pro_monthly');
+      } else if (planName === 'max') {
+        selectPlan('natively_api_max_monthly');
+      } else if (planName === 'ultra') {
+        selectPlan('natively_api_ultra_monthly');
+      }
+    }
+  }, [usageData, selectPlan]);
+
+  const [interfaceTheme, setInterfaceTheme] = useState<MeetingInterfaceTheme>(() => {
+    const theme = getMeetingInterfaceTheme();
+    return theme === 'default' ? 'liquid-glass' : theme;
+  });
+
+  useEffect(() => {
+    const handleStorage = () => {
+      const theme = getMeetingInterfaceTheme();
+      setInterfaceTheme(theme === 'default' ? 'liquid-glass' : theme);
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
 
   // ── Free Trial state ──────────────────────────────────────
   const [trialState, setTrialState] = useState<{
@@ -244,6 +499,14 @@ export const NativelyApiSettings: React.FC = () => {
   useEffect(() => {
     if (isSaved && !isLoading) fetchUsage();
   }, [isSaved, isLoading, fetchUsage]);
+
+  useEffect(() => {
+    window.electronAPI?.getNativelyPricing?.()
+      .then((res) => {
+        if (res?.ok && res.products) setPricingProducts(res.products);
+      })
+      .catch(() => {});
+  }, []);
 
   // ── Trial init + polling ──────────────────────────────────
   const refreshTrial = useCallback(async () => {
@@ -439,137 +702,263 @@ export const NativelyApiSettings: React.FC = () => {
   };
 
   const PlansCard = (
-    <Card>
-      <div className="px-5 pt-5 pb-2">
-        <div className="flex flex-col gap-2.5 mb-4">
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-widest">
-              Choose a Plan
-            </p>
-            <span className="text-[10px] text-text-tertiary">
-              Pro, Max &amp; Ultra include Natively Pro app
-            </span>
-          </div>
-          <div className="w-full flex items-center justify-center py-2 bg-violet-500/10 border border-violet-500/20 rounded-[10px]">
-            <span className="text-[11.5px] font-medium text-violet-400/90">
-              Use code <span className="font-bold text-violet-400">INSIDER25</span> for 25% off
-            </span>
-          </div>
-        </div>
-
-        {/* Plan rows */}
-        <div className="space-y-2 pb-3">
-          {(
-            [
-              {
-                name: 'Standard',
-                price: '$8',
-                url: PLAN_STANDARD_URL,
-                color: 'text-slate-400',
-                bg: 'bg-slate-500/10',
-                border: 'border-slate-500/20',
-                btnBg: 'bg-slate-700 hover:bg-slate-600',
-                includesPro: false,
-                features: ['500 AI req / mo', '200 min STT', '20 searches'],
-              },
-              {
-                name: 'Pro',
-                price: '$15',
-                url: PLAN_PRO_URL,
-                color: 'text-violet-400',
-                bg: 'bg-violet-500/10',
-                border: 'border-violet-500/20',
-                btnBg: 'bg-violet-600 hover:bg-violet-500',
-                includesPro: true,
-                features: ['1,000 AI req / mo', '500 min STT', '100 searches'],
-              },
-              {
-                name: 'Max',
-                price: '$25',
-                url: PLAN_MAX_URL,
-                color: 'text-blue-400',
-                bg: 'bg-blue-500/10',
-                border: 'border-blue-500/20',
-                btnBg: 'bg-blue-600 hover:bg-blue-500',
-                includesPro: true,
-                features: ['2,000 AI req / mo', '1,000 min STT', '200 searches'],
-              },
-              {
-                name: 'Ultra',
-                price: '$35',
-                url: PLAN_ULTRA_URL,
-                color: 'text-orange-400',
-                bg: 'bg-orange-500/10',
-                border: 'border-orange-500/20',
-                btnBg: 'bg-orange-600 hover:bg-orange-500',
-                includesPro: true,
-                features: ['3,000 AI req / mo', '2,000 min STT', '300 searches'],
-              },
-            ] as const
-          ).map((plan) => (
-            <div
-              key={plan.name}
-              className={`flex items-center gap-3 px-3.5 py-3 rounded-xl border ${plan.bg} ${plan.border}`}
-            >
-              {/* Name + features */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className={`text-[13px] font-semibold ${plan.color}`}>{plan.name}</span>
-                  {plan.includesPro && (
-                    <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/20 text-emerald-400 tracking-wide">
-                      + Pro App
-                    </span>
-                  )}
-                </div>
-                <p className="text-[10px] text-text-tertiary leading-relaxed">
-                  {plan.features.join(' · ')}
-                </p>
-              </div>
-              {/* Price + button */}
-              <div className="flex items-center gap-2.5 shrink-0">
-                <span className="text-[13px] font-semibold text-text-primary tabular-nums">
-                  {plan.price}
-                  <span className="text-[10px] font-normal text-text-tertiary">/mo</span>
-                </span>
-                {(() => {
-                  const currentPlan = usageData?.plan?.toLowerCase();
-                  const rowPlan = plan.name.toLowerCase();
-                  // 'starter' is the legacy name for the $8 Standard plan
-                  const isActive =
-                    currentPlan === rowPlan ||
-                    (rowPlan === 'standard' && currentPlan === 'starter');
-                  return isActive ? (
-                    <div className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
-                      Active
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => openExternal(plan.url)}
-                      className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white ${plan.btnBg} transition-all duration-150 flex items-center gap-1 cursor-pointer active:scale-[0.98]`}
-                    >
-                      Get <ArrowUpRight size={10} strokeWidth={2.5} />
-                    </button>
-                  );
-                })()}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* AI quota note */}
-        <div className="flex items-start gap-2 mb-4 px-3 py-2.5 bg-bg-input rounded-xl border border-border-subtle">
-          <Info size={11} className="text-text-tertiary shrink-0 mt-[1px]" strokeWidth={2} />
-          <p className="text-[11px] text-text-tertiary leading-relaxed">
-            AI requests include chat replies, meeting title &amp; summary generation, and embeddings
-            — not just manual messages.
+    <div 
+      className="space-y-4"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      {/* Header and Value Proposition */}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-widest">
+            Choose a Plan
           </p>
+          <span className="text-[10px] text-text-tertiary">
+            Pro, Max &amp; Ultra include Natively Pro app
+          </span>
+        </div>
+        <div className="w-full flex items-center justify-center py-2.5 rounded-xl border natively-api-header-promo-banner">
+          <span className="text-[11.5px] font-medium natively-api-header-promo-text">
+            Use code <span className="font-bold natively-api-header-promo-code">INSIDER20</span> for 20% off Pro, Max &amp; Ultra
+          </span>
         </div>
       </div>
-    </Card>
+
+      {/* Segmented control selector tab bar */}
+      <div className="natively-api-selector-bar grid grid-cols-4 relative p-1 bg-black/10 dark:bg-white/5 border border-white/5 rounded-2xl overflow-hidden mb-2">
+        {/* Active sliding pill */}
+        <div 
+          className="absolute top-0 bottom-0 left-0 w-1/4 p-1 transition-transform duration-220 ease-[cubic-bezier(0.23,1,0.32,1)] will-change-transform"
+          style={{
+            transform: `translate3d(${
+              selectedPlanId === 'natively_api_standard_monthly' ? '0%' :
+              selectedPlanId === 'natively_api_pro_monthly' ? '100%' :
+              selectedPlanId === 'natively_api_max_monthly' ? '200%' :
+              '300%'
+            }, 0, 0)`
+          }}
+        >
+          <div className={`w-full h-full natively-api-selector-pill rounded-xl transition-all duration-300 ${
+            selectedPlanId === 'natively_api_standard_monthly' ? 'natively-api-selector-pill-standard' :
+            selectedPlanId === 'natively_api_pro_monthly' ? 'natively-api-selector-pill-pro' :
+            selectedPlanId === 'natively_api_max_monthly' ? 'natively-api-selector-pill-max' :
+            'natively-api-selector-pill-ultra'
+          }`} />
+        </div>
+        {(
+          [
+            { id: 'natively_api_standard_monthly', name: 'Standard', price: '$8/mo' },
+            { id: 'natively_api_pro_monthly', name: 'Pro', price: '$15/mo' },
+            { id: 'natively_api_max_monthly', name: 'Max', price: '$25/mo' },
+            { id: 'natively_api_ultra_monthly', name: 'Ultra', price: '$35/mo' },
+          ] as const
+        ).map((tab) => {
+          const isSel = selectedPlanId === tab.id;
+          const liveProduct = pricingProducts[tab.id];
+          const displayPrice = liveProduct?.formattedPrice || tab.price;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => {
+                selectPlan(tab.id);
+                setHasUserSelected(true);
+              }}
+              className={`natively-api-selector-tab ${isSel ? 'active' : ''}`}
+            >
+              <span className="tab-name">{tab.name}</span>
+              <span className="tab-price">{displayPrice}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Selected Plan Details Container (Double-Bezel Architecture) */}
+      {(() => {
+        const planOrder = [
+          'natively_api_standard_monthly',
+          'natively_api_pro_monthly',
+          'natively_api_max_monthly',
+          'natively_api_ultra_monthly',
+        ];
+        const prevIndex = planOrder.indexOf(prevPlanId);
+        const currentIndex = planOrder.indexOf(selectedPlanId);
+        const direction = currentIndex >= prevIndex ? 1 : -1;
+
+        const plan = PLANS.find((p) => p.id === selectedPlanId)!;
+        const liveProduct = pricingProducts[plan.id];
+        const price = liveProduct?.formattedPrice || plan.price;
+        const checkoutUrl = liveProduct?.checkoutUrl || plan.url;
+        const currentPlan = usageData?.plan?.toLowerCase();
+        const rowPlan = plan.name.toLowerCase();
+        const isActive =
+          currentPlan === rowPlan ||
+          (rowPlan === 'standard' && currentPlan === 'starter');
+
+        return (
+          <div className="natively-api-details-wrapper relative w-full">
+            <div 
+              className={`natively-api-detail-card h-full w-full relative overflow-hidden natively-api-detail-card-${plan.name.toLowerCase()}`} 
+              data-active={isActive ? "true" : "false"}
+              style={{
+                transition: 'background 280ms cubic-bezier(0.23, 1, 0.32, 1), border-color 280ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 280ms cubic-bezier(0.23, 1, 0.32, 1)'
+              }}
+            >
+              <AnimatePresence custom={direction}>
+                <motion.div
+                  key={selectedPlanId}
+                  custom={direction}
+                  variants={cardContainerVariants}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  className="w-full h-full absolute top-0 left-0 p-6"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch relative z-10 h-full">
+                    {/* Left Column - Pricing & Actions */}
+                    <div className="flex flex-col justify-between">
+                      <motion.div variants={cardSlideLeftVariants}>
+                        {/* Badge & Inclusion Row */}
+                        <div className="flex items-center gap-2 mb-4 h-6">
+                          {plan.badgeText && (
+                            <span className={`natively-api-pricing-badge ${
+                              plan.name === 'Pro' 
+                                ? 'natively-api-pricing-badge-recommended natively-api-badge-text-recommended' 
+                                : plan.name === 'Max'
+                                  ? 'natively-api-pricing-badge-max natively-api-badge-text-max'
+                                  : plan.name === 'Ultra'
+                                    ? 'natively-api-pricing-badge-ultra natively-api-badge-text-ultra'
+                                    : 'natively-api-pricing-badge-standard natively-api-badge-text-standard'
+                            }`}>
+                              {plan.badgeText}
+                            </span>
+                          )}
+                          {plan.includesPro && (
+                            <span className="natively-api-pricing-badge natively-api-pricing-badge-emerald natively-api-badge-text-emerald select-none">
+                              + Pro App
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Plan Name */}
+                        <h4 className="text-[20px] font-bold text-text-primary tracking-tight">
+                          {plan.name} Tier
+                        </h4>
+
+                        {/* Price */}
+                        <div className="mt-3 flex items-baseline gap-1.5">
+                          <span className={`text-[34px] font-extrabold tracking-tight leading-none ${
+                            plan.name === 'Pro' 
+                              ? 'natively-api-price-pro' 
+                              : plan.name === 'Max'
+                                ? 'natively-api-price-max'
+                                : plan.name === 'Ultra'
+                                  ? 'natively-api-price-ultra'
+                                  : 'natively-api-price-standard'
+                          }`}>
+                            {price}
+                          </span>
+                          <span className="text-[12px] font-medium text-text-tertiary">/ month</span>
+                        </div>
+                        <p className="text-[11.5px] text-text-secondary mt-2.5 leading-relaxed">
+                          {plan.description}
+                        </p>
+                      </motion.div>
+
+                      {/* Action / Checkout section */}
+                      <motion.div className="mt-6 space-y-3" variants={cardCtaVariants}>
+                        <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg transition-opacity border natively-api-pricing-promo-wrapper ${
+                          plan.includesPro 
+                            ? 'opacity-100' 
+                            : 'opacity-0 pointer-events-none select-none'
+                        }`}>
+                          <span className="text-[11px] font-medium natively-api-pricing-promo-text">
+                            Code <strong className="natively-api-pricing-promo-bold font-bold select-all">INSIDER20</strong> for 20% off
+                          </span>
+                        </div>
+
+                        <div>
+                          {isActive ? (
+                            <div className="w-full natively-api-active-tag text-center py-3 rounded-full text-[13px] font-semibold select-none flex items-center justify-center">
+                              Active Plan
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                openExternal(checkoutUrl);
+                                setHasUserSelected(true);
+                              }}
+                              className={`natively-api-pricing-cta ${
+                                plan.name === 'Pro' 
+                                  ? 'natively-api-pricing-cta-pro' 
+                                  : plan.name === 'Max'
+                                    ? 'natively-api-pricing-cta-max'
+                                    : plan.name === 'Ultra'
+                                      ? 'natively-api-pricing-cta-ultra'
+                                      : 'natively-api-pricing-cta-neutral'
+                              }`}
+                            >
+                              Get Started with {plan.name} <ArrowUpRight size={14} strokeWidth={2.5} />
+                            </button>
+                          )}
+                        </div>
+                      </motion.div>
+                    </div>
+
+                    {/* Right Column - Features & Scope */}
+                    <motion.div 
+                      className="flex flex-col h-full natively-api-features-panel rounded-2xl p-5"
+                      variants={cardSlideRightVariants}
+                    >
+                      <p className="text-[10px] font-bold text-text-primary uppercase tracking-wider mb-4">
+                        What's Included
+                      </p>
+                      <ul className="space-y-3 flex-1">
+                        {plan.features.map((feature, i) => (
+                          <li key={i} className="flex items-start gap-2.5 text-[12px] text-text-secondary leading-snug">
+                            <CheckCircle 
+                              size={13} 
+                              className={`shrink-0 mt-[1.5px] ${
+                                plan.name === 'Pro' 
+                                  ? 'natively-api-check-icon-pro' 
+                                  : plan.name === 'Max'
+                                    ? 'natively-api-check-icon-max'
+                                    : plan.name === 'Ultra'
+                                      ? 'natively-api-check-icon-ultra'
+                                      : 'natively-api-check-icon-standard'
+                              }`}
+                              strokeWidth={2.5} 
+                            />
+                            <span>{feature}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="mt-4 pt-4 border-t border-black/5 dark:border-white/5">
+                        <p className="text-[10.5px] text-text-tertiary leading-relaxed">
+                          {plan.note}
+                        </p>
+                      </div>
+                    </motion.div>
+                  </div>
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* AI quota note */}
+      <div className="flex items-start gap-2 px-3 py-2.5 bg-bg-input rounded-xl border border-border-subtle">
+        <Info size={11} className="text-text-tertiary shrink-0 mt-[1px]" strokeWidth={2} />
+        <p className="text-[11px] text-text-tertiary leading-relaxed">
+          AI requests include chat replies, meeting title &amp; summary generation, and embeddings
+          — not just manual messages.
+        </p>
+      </div>
+    </div>
   );
 
   return (
-    <div className="space-y-4 animated fadeIn">
+    <div className="space-y-4 animated fadeIn" data-interface-theme={interfaceTheme}>
       {/* ── Page title ───────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
@@ -1064,6 +1453,20 @@ export const NativelyApiSettings: React.FC = () => {
                 Purchases made with a coupon, voucher, referral credit, or limited-time offer are{' '}
                 <strong className="text-text-primary font-semibold">final sale</strong> and not
                 eligible for refund.
+              </p>
+            </div>
+
+            <div className="flex items-start gap-3">
+              <div className="w-1.5 h-1.5 rounded-full bg-text-tertiary/40 shrink-0 mt-[6px]" />
+              <p className="text-[11.5px] text-text-secondary leading-relaxed">
+                To cancel your subscription, log in to the{' '}
+                <span
+                  onClick={() => openExternal('https://customer.dodopayments.com/')}
+                  className="text-text-primary hover:text-text-secondary underline decoration-border-subtle underline-offset-[3px] cursor-pointer transition-colors"
+                >
+                  https://customer.dodopayments.com/
+                </span>{' '}
+                portal.
               </p>
             </div>
 

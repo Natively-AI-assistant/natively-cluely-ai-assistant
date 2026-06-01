@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { ArrowLeft, Search, Mail, Link, ChevronDown, Play, ArrowUp, Copy, Check, MoreHorizontal, Settings, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { genMessageId } from '../utils/messageId';
 import MeetingChatOverlay from './MeetingChatOverlay';
 import EditableTextBlock from './EditableTextBlock';
 import NativelyLogo from './icon.png';
@@ -89,6 +90,21 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const [isCopied, setIsCopied] = useState(false);
     const [isChatOpen, setIsChatOpen] = useState(false);
     const [submittedQuery, setSubmittedQuery] = useState('');
+
+    // Stable client-side keys for the action-item and key-point lists. The
+    // persisted shape is string[], so React keyed the rows by index, but the
+    // onEnter handler splices a new empty row in mid-list — shifting indices
+    // and causing React to reuse the wrong EditableTextBlock instance for the
+    // shifted rows (focus, draft text, and selection jump to the wrong row).
+    // Same bug class as issue #253; keep the ids array in lockstep with the
+    // items array via state updates rather than a ref so React re-renders
+    // see the post-splice ordering atomically.
+    const [actionItemKeys, setActionItemKeys] = useState<string[]>(() =>
+        (initialMeeting.detailedSummary?.actionItems ?? []).map(() => genMessageId()),
+    );
+    const [keyPointKeys, setKeyPointKeys] = useState<string[]>(() =>
+        (initialMeeting.detailedSummary?.keyPoints ?? []).map(() => genMessageId()),
+    );
 
     const handleSubmitQuestion = () => {
         if (query.trim()) {
@@ -315,7 +331,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                         </div>
                                         <ul className="space-y-3">
                                             {meeting.detailedSummary.actionItems.map((item, i) => (
-                                                <li key={i} className="flex items-start gap-3 group">
+                                                <li key={actionItemKeys[i] ?? i} className="flex items-start gap-3 group">
                                                     <div className="mt-2 w-1.5 h-1.5 rounded-full bg-text-secondary group-hover:bg-blue-500 transition-colors shrink-0" />
                                                     <div className="flex-1">
                                                         <EditableTextBlock
@@ -327,6 +343,11 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                             onEnter={() => {
                                                                 const newItems = [...(meeting.detailedSummary?.actionItems || [])];
                                                                 newItems.splice(i + 1, 0, "");
+                                                                setActionItemKeys(prev => {
+                                                                    const next = [...prev];
+                                                                    next.splice(i + 1, 0, genMessageId());
+                                                                    return next;
+                                                                });
                                                                 setMeeting(prev => ({
                                                                     ...prev,
                                                                     detailedSummary: { ...prev.detailedSummary!, actionItems: newItems }
@@ -360,7 +381,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                         </div>
                                         <ul className="space-y-3">
                                             {meeting.detailedSummary.keyPoints.map((item, i) => (
-                                                <li key={i} className="flex items-start gap-3 group">
+                                                <li key={keyPointKeys[i] ?? i} className="flex items-start gap-3 group">
                                                     <div className="mt-2 w-1.5 h-1.5 rounded-full bg-text-secondary group-hover:bg-purple-500 transition-colors shrink-0" />
                                                     <div className="flex-1">
                                                         <EditableTextBlock
@@ -372,6 +393,11 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                             onEnter={() => {
                                                                 const newItems = [...(meeting.detailedSummary?.keyPoints || [])];
                                                                 newItems.splice(i + 1, 0, "");
+                                                                setKeyPointKeys(prev => {
+                                                                    const next = [...prev];
+                                                                    next.splice(i + 1, 0, genMessageId());
+                                                                    return next;
+                                                                });
                                                                 setMeeting(prev => ({
                                                                     ...prev,
                                                                     detailedSummary: { ...prev.detailedSummary!, keyPoints: newItems }

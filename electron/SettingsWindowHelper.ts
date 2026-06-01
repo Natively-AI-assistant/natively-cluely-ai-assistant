@@ -59,8 +59,8 @@ export class SettingsWindowHelper {
     }
 
     public toggleWindow(x?: number, y?: number): void {
-        const mainWindow = BrowserWindow.getAllWindows().find(w => !w.isDestroyed() && w !== this.settingsWindow);
-        if (mainWindow && x !== undefined && y !== undefined) {
+        const mainWindow = this.windowHelper?.getMainWindow() ?? null;
+        if (mainWindow && !mainWindow.isDestroyed() && x !== undefined && y !== undefined) {
             const bounds = mainWindow.getBounds();
             this.offsetX = x - bounds.x;
             this.offsetY = y - (bounds.y + bounds.height);
@@ -141,17 +141,24 @@ export class SettingsWindowHelper {
     }
 
     private emitVisibilityChange(isVisible: boolean): void {
-        const mainWindow = BrowserWindow.getAllWindows().find(w => !w.isDestroyed() && w !== this.settingsWindow);
-        if (mainWindow) {
+        const mainWindow = this.windowHelper?.getMainWindow() ?? null;
+        if (!mainWindow) {
+            console.warn('[SettingsWindowHelper] settings-visibility-changed dropped — no main window bound yet.');
+            return;
+        }
+        if (mainWindow.isDestroyed()) return;
+        try {
             mainWindow.webContents.send('settings-visibility-changed', isVisible);
+        } catch {
+            // Renderer is tearing down; ignore.
         }
     }
 
     private createWindow(x?: number, y?: number, showWhenReady: boolean = true): void {
         const isMac = process.platform === 'darwin';
         const windowSettings: Electron.BrowserWindowConstructorOptions = {
-            width: 200, // Match React component width
-            height: 238, // Increased to accommodate new Transcript toggle
+            width: 180, // Match React component width (SettingsPopup.tsx)
+            height: 200, // Trimmed; ResizeObserver in renderer pins exact height
             frame: false,
             transparent: true,
             resizable: false,
@@ -292,6 +299,11 @@ export class SettingsWindowHelper {
     private contentProtection: boolean = false; // Track state
 
     public setContentProtection(enable: boolean): void {
+        // Dedupe: avoid redundant DWM affinity churn on Windows when the same
+        // value is reapplied (settings IPC + show events + global toggles all
+        // converge here). The first call still hits both the in-memory state
+        // and the native window; later identical calls no-op.
+        if (this.contentProtection === enable && this.settingsWindow && !this.settingsWindow.isDestroyed()) return;
         console.log(`[SettingsWindowHelper] Setting content protection to: ${enable}`);
         this.contentProtection = enable;
 

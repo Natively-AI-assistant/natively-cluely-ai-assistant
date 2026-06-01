@@ -631,6 +631,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         const token = params.get('t') || '';
 
         const messages = [];        // { id, role, content, createdAt, label? }
+        let messageIdCounter = 0;   // monotonic counter — Date.now() alone collides when two acks fire in the same ms (see issue #253)
         let live = null;            // { streamId, content, createdAt }
         let socket = null;
         let reconnectTimer = null;
@@ -833,7 +834,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
             showToast(ev.message || ev.action);
             // For screenshot acks, also add a small card to the feed.
             if (ev.action === 'screenshot') {
-              const id = 'ack-' + Date.now();
+              const id = 'ack-' + Date.now() + '-' + (++messageIdCounter);
               messages.push({ id, type: 'screenshot-queued', createdAt: new Date().toISOString() });
               render();
               scrollToLatest(true);

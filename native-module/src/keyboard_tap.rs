@@ -153,6 +153,22 @@ struct RunLoopHandle(CFRunLoopRef);
 unsafe impl Send for RunLoopHandle {}
 unsafe impl Sync for RunLoopHandle {}
 
+#[derive(Clone, Copy)]
+struct OverlayBounds {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+#[napi(object)]
+pub struct OverlayBoundsInput {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
 struct TapState {
     /// True while the worker thread is alive and the tap is engaged.
     active: AtomicBool,
@@ -165,6 +181,9 @@ struct TapState {
     /// dance for raw `*mut`. Loaded with Acquire so the callback always
     /// sees a valid port after the worker publishes it.
     port: AtomicU64,
+    /// Latest overlay bounds in global display coordinates. Mouse-down events
+    /// outside this rect stop stealth typing while passing the click through.
+    overlay_bounds: Mutex<Option<OverlayBounds>>,
     /// Threadsafe callback into V8. Set on start(), cleared on stop(). The
     /// option indirection lets stop() drop the tsfn handle so JS can GC the
     /// closure without keeping the worker thread's strong ref alive past
@@ -193,6 +212,8 @@ pub struct CapturedKey {
     /// to keyDown=true (modifier press) or keyDown=false (modifier release)
     /// by the worker.
     pub is_key_down: bool,
+    /// True for a pass-through mouse down outside the overlay bounds.
+    pub is_outside_mouse_down: bool,
 }
 
 // ─── The C callback CGEventTap calls for every keystroke ─────────────────
@@ -304,6 +325,31 @@ fn tap_callback_inner(
         // Pass the event through if we're shutting down — better to leak a
         // keystroke into the foreground app than to swallow one after the
         // user thinks stealth mode is off.
+        return event;
+    }
+
+    const LEFT_MOUSE_DOWN: u32 = 1;
+    const RIGHT_MOUSE_DOWN: u32 = 3;
+    const OTHER_MOUSE_DOWN: u32 = 25;
+
+    if matches!(event_type, LEFT_MOUSE_DOWN | RIGHT_MOUSE_DOWN | OTHER_MOUSE_DOWN) {
+        let bounds = {
+            let guard = state.overlay_bounds.lock().unwrap_or_else(|p| p.into_inner());
+            *guard
+        };
+        if let Some(bounds) = bounds {
+            let point = unsafe { core_graphics_get_location(event) };
+            if !point_in_bounds(point, bounds) {
+                let payload = CapturedKey {
+                    key_code: 0,
+                    chars: String::new(),
+                    flags: 0,
+                    is_key_down: false,
+                    is_outside_mouse_down: true,
+                };
+                send_payload_to_js(&state, payload);
+            }
+        }
         return event;
     }
 
@@ -427,32 +473,10 @@ fn tap_callback_inner(
         chars,
         flags,
         is_key_down,
+        is_outside_mouse_down: false,
     };
 
-    // Forward to JS. Non-blocking; if the JS thread is overloaded, events
-    // queue up. We deliberately do NOT drop events on backpressure — losing
-    // a keystroke mid-typing is worse than a brief latency spike.
-    //
-    // Lock-snapshot pattern: clone the Arc<ThreadsafeFunction> under the
-    // lock, then drop the lock BEFORE calling tsfn. Without this, the
-    // tsfn.call could trigger a re-entrant scenario (tsfn drop on JS-side
-    // close, blocking napi callbacks) while we still hold the Mutex,
-    // potentially deadlocking with the JS-thread `stop()` that's also
-    // trying to lock to clear the callback.
-    //
-    // Poison-safe: if a prior panic poisoned the Mutex, recover via
-    // into_inner on PoisonError — the data is still valid.
-    let tsfn_snapshot: Option<Arc<ThreadsafeFunction<CapturedKey>>> = {
-        let cb_guard = match state.callback.lock() {
-            Ok(g) => g,
-            Err(poisoned) => poisoned.into_inner(),
-        };
-        cb_guard.as_ref().map(Arc::clone)
-        // guard drops at end of block — lock released before tsfn.call below
-    };
-    if let Some(tsfn) = tsfn_snapshot {
-        tsfn.call(Ok(payload), ThreadsafeFunctionCallMode::NonBlocking);
-    }
+    send_payload_to_js(&state, payload);
 
     // Return null → swallow. Foreground app does not see this keystroke.
     // `state` (the local Arc clone) drops here, decrementing the refcount
@@ -460,16 +484,44 @@ fn tap_callback_inner(
     ptr::null_mut()
 }
 
+fn send_payload_to_js(state: &TapState, payload: CapturedKey) {
+    // Lock-snapshot pattern: clone the Arc<ThreadsafeFunction> under the
+    // lock, then drop the lock BEFORE calling tsfn. Without this, the
+    // tsfn.call could trigger a re-entrant scenario (tsfn drop on JS-side
+    // close, blocking napi callbacks) while we still hold the Mutex,
+    // potentially deadlocking with the JS-thread `stop()` that's also
+    // trying to lock to clear the callback.
+    let tsfn_snapshot: Option<Arc<ThreadsafeFunction<CapturedKey>>> = {
+        let cb_guard = match state.callback.lock() {
+            Ok(g) => g,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        cb_guard.as_ref().map(Arc::clone)
+    };
+    if let Some(tsfn) = tsfn_snapshot {
+        tsfn.call(Ok(payload), ThreadsafeFunctionCallMode::NonBlocking);
+    }
+}
+
 // Tiny FFI shims for CGEvent accessors that core-graphics 0.24 wraps in
 // types we can't easily use from inside an extern "C" callback without
 // taking ownership. Pulling them in via `core-graphics-sys` would also work
 // but adds a dep we don't need elsewhere.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct CGPoint {
+    x: f64,
+    y: f64,
+}
+
 #[link(name = "CoreGraphics", kind = "framework")]
 extern "C" {
     #[link_name = "CGEventGetIntegerValueField"]
     fn cge_get_int_field(event: *mut c_void, field: u32) -> i64;
     #[link_name = "CGEventGetFlags"]
     fn cge_get_flags(event: *mut c_void) -> u64;
+    #[link_name = "CGEventGetLocation"]
+    fn cge_get_location(event: *mut c_void) -> CGPoint;
 }
 
 #[inline]
@@ -483,11 +535,26 @@ unsafe fn core_graphics_get_flags(event: *mut c_void) -> u32 {
     cge_get_flags(event) as u32
 }
 
+#[inline]
+unsafe fn core_graphics_get_location(event: *mut c_void) -> CGPoint {
+    cge_get_location(event)
+}
+
+#[inline]
+fn point_in_bounds(point: CGPoint, bounds: OverlayBounds) -> bool {
+    point.x >= bounds.x
+        && point.x < bounds.x + bounds.width
+        && point.y >= bounds.y
+        && point.y < bounds.y + bounds.height
+}
+
 // ─── Worker thread: owns the runloop while the tap is alive ──────────────
 
 fn tap_worker(state: Arc<TapState>) {
-    // Event mask: keyDown | keyUp | flagsChanged. CGEventMaskBit(t) = 1 << t.
-    const EVENT_MASK: u64 = (1u64 << 10) | (1u64 << 11) | (1u64 << 12);
+    // Event mask: mouseDown variants + keyDown | keyUp | flagsChanged.
+    // Mouse events are always passed through; they only cancel stealth mode.
+    const EVENT_MASK: u64 =
+        (1u64 << 1) | (1u64 << 3) | (1u64 << 25) | (1u64 << 10) | (1u64 << 11) | (1u64 << 12);
 
     // tap=kCGSessionEventTap(1), place=kCGHeadInsertEventTap(0),
     // options=kCGEventTapOptionDefault(0).
@@ -576,6 +643,7 @@ impl StealthKeyboardTap {
                 active: AtomicBool::new(false),
                 runloop: Mutex::new(None),
                 port: AtomicU64::new(0),
+                overlay_bounds: Mutex::new(None),
                 callback: Mutex::new(None),
             }),
             worker: Mutex::new(None),
@@ -593,7 +661,11 @@ impl StealthKeyboardTap {
     ///
     /// Idempotent: repeated `start()` calls while active are no-ops.
     #[napi]
-    pub fn start(&self, callback: ThreadsafeFunction<CapturedKey>) -> Result<bool> {
+    pub fn start(
+        &self,
+        callback: ThreadsafeFunction<CapturedKey>,
+        overlay_bounds: Option<OverlayBoundsInput>,
+    ) -> Result<bool> {
         if !is_accessibility_granted() {
             return Ok(false);
         }
@@ -621,6 +693,20 @@ impl StealthKeyboardTap {
             let _ = h.join();
         }
 
+        let overlay_bounds = overlay_bounds.and_then(|b| {
+            if b.width > 0.0 && b.height > 0.0 {
+                Some(OverlayBounds {
+                    x: b.x,
+                    y: b.y,
+                    width: b.width,
+                    height: b.height,
+                })
+            } else {
+                None
+            }
+        });
+        *self.state.overlay_bounds.lock().unwrap_or_else(|p| p.into_inner()) = overlay_bounds;
+
         // Now safely publish the active state.
         self.state.active.store(true, Ordering::Release);
 
@@ -642,6 +728,7 @@ impl StealthKeyboardTap {
                 // a strong ref to the JS closure (memory leak) and blocking
                 // V8 from GC-ing the closure even after JS dropped its ref.
                 self.state.active.store(false, Ordering::Release);
+                *self.state.overlay_bounds.lock().unwrap_or_else(|p| p.into_inner()) = None;
                 *self.state.callback.lock().unwrap_or_else(|p| p.into_inner()) = None;
                 Error::new(
                     Status::GenericFailure,
@@ -653,6 +740,37 @@ impl StealthKeyboardTap {
         *self.worker.lock().unwrap_or_else(|p| p.into_inner()) = Some(handle);
 
         Ok(true)
+    }
+
+    /// Push fresh overlay bounds into the live tap. Required when the
+    /// OS window moves or resizes mid-session: without this, the start()
+    /// snapshot goes stale and mouse-down classification (inside vs
+    /// outside the overlay) drifts against the actual frame. No-op when
+    /// the tap is not active so JS can call it unconditionally.
+    ///
+    /// Concurrency note: a benign TOCTOU exists where this method observes
+    /// `active=true`, stop() then clears bounds, and we overwrite with a
+    /// stale value. That's safe: the worker is exiting, the per-event reader
+    /// short-circuits on `!active`, and the next `start()` re-snapshots
+    /// bounds from the provider — so the stale write is invisible.
+    #[napi]
+    pub fn update_overlay_bounds(&self, overlay_bounds: Option<OverlayBoundsInput>) {
+        if !self.state.active.load(Ordering::Acquire) {
+            return;
+        }
+        let overlay_bounds = overlay_bounds.and_then(|b| {
+            if b.width > 0.0 && b.height > 0.0 {
+                Some(OverlayBounds {
+                    x: b.x,
+                    y: b.y,
+                    width: b.width,
+                    height: b.height,
+                })
+            } else {
+                None
+            }
+        });
+        *self.state.overlay_bounds.lock().unwrap_or_else(|p| p.into_inner()) = overlay_bounds;
     }
 
     /// Disengage the tap. After this returns, the next keystroke will
@@ -683,6 +801,7 @@ impl StealthKeyboardTap {
                 unsafe { CFRunLoopStop(handle.0) };
             }
         }
+        *self.state.overlay_bounds.lock().unwrap_or_else(|p| p.into_inner()) = None;
         // Drop the JS callback handle so V8 can GC its closure.
         *self.state.callback.lock().unwrap_or_else(|p| p.into_inner()) = None;
 

@@ -162,6 +162,20 @@ export class GoogleSTT extends EventEmitter {
             this.proactiveRestartTimer = null;
         }
 
+        // Clear any in-flight 250ms language-change debounce. Without this,
+        // a user who changes language right before clicking Stop would have
+        // the debounce body fire ~250ms after endMeeting() — the body would
+        // see isStreaming=false and isActive=false (so it skips the
+        // stop()+start() restart), BUT the timer's libuv slot survives, and
+        // more importantly the closed-over `key` lock could leak the
+        // language alternates into a NEXT session if start() runs before the
+        // timer fires. Cancelling here keeps the next meeting's language
+        // state clean.
+        if (this.pendingLanguageChange) {
+            clearTimeout(this.pendingLanguageChange);
+            this.pendingLanguageChange = undefined;
+        }
+
         if (this.stream) {
             this.stream.end();
             this.stream.destroy();

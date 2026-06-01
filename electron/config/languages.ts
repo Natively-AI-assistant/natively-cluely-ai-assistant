@@ -5,6 +5,7 @@ export type LanguageOption = {
     bcp47: string; // For Google, Azure (e.g. 'ru-RU')
     iso639: string; // For OpenAI, Groq (e.g. 'ru')
     group: string; // For UI grouping
+    alternates?: string[];
 };
 
 export type EnglishVariant = LanguageOption & {
@@ -60,8 +61,28 @@ export const ENGLISH_VARIANTS: Record<string, EnglishVariant> = {
     },
 };
 
+export const AUTO_DETECT_ALTERNATES = [
+    'en-US',
+    'en-GB',
+    'en-IN',
+    'en-AU',
+    'en-CA',
+    'id-ID',
+    'ru-RU',
+    'es-ES',
+    'fr-FR',
+    'de-DE',
+    'it-IT',
+    'pt-PT',
+    'ja-JP',
+    'ko-KR',
+    'zh-CN',
+    'tr-TR',
+    'uk-UA',
+];
+
 export const RECOGNITION_LANGUAGES: Record<string, LanguageOption> = {
-    'auto': { label: 'Auto Detect', code: 'auto', bcp47: 'auto', iso639: 'auto', group: 'Auto' },
+    'auto': { label: 'Auto Detect', code: 'auto', bcp47: 'auto', iso639: 'auto', group: 'Auto', alternates: AUTO_DETECT_ALTERNATES },
     ...ENGLISH_VARIANTS,
     'indonesian': { label: 'Indonesian', code: 'indonesian', bcp47: 'id-ID', iso639: 'id', group: 'Indonesian' },
     'russian': { label: 'Russian', code: 'russian', bcp47: 'ru-RU', iso639: 'ru', group: 'Russian' },

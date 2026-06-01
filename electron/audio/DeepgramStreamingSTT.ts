@@ -28,6 +28,14 @@ export class DeepgramStreamingSTT extends EventEmitter {
 
     private reconnectAttempts = 0;
     private reconnectTimer: NodeJS.Timeout | null = null;
+    // 5s post-connect timer that resets reconnectAttempts so a clean
+    // session doesn't inherit the prior session's backoff counter. The
+    // setTimeout used to be untracked — its handle was thrown away —
+    // which meant stop() could not cancel it. If stop()/restart fired
+    // within the 5s window, the orphan timer would fire on the NEXT
+    // session and clobber its reconnectAttempts to 0, defeating the
+    // exponential backoff cap on a rapid-reconnect storm.
+    private stabilityTimer: NodeJS.Timeout | null = null;
     private keepAliveInterval: NodeJS.Timeout | null = null;
     private buffer: Buffer[] = [];
     private isConnecting = false;
@@ -196,8 +204,13 @@ export class DeepgramStreamingSTT extends EventEmitter {
                     }
                 }, KEEPALIVE_INTERVAL_MS);
 
-                // Reset backoff only after 5s of stable connection
-                setTimeout(() => {
+                // Reset backoff only after 5s of stable connection.
+                // Tracked on this.stabilityTimer so stop()/clearTimers() can
+                // cancel it; otherwise the orphan would fire inside the next
+                // session and reset reconnectAttempts mid-backoff.
+                if (this.stabilityTimer) clearTimeout(this.stabilityTimer);
+                this.stabilityTimer = setTimeout(() => {
+                    this.stabilityTimer = null;
                     if (this.isOpen) this.reconnectAttempts = 0;
                 }, 5000);
             });
@@ -259,6 +272,10 @@ export class DeepgramStreamingSTT extends EventEmitter {
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer);
             this.reconnectTimer = null;
+        }
+        if (this.stabilityTimer) {
+            clearTimeout(this.stabilityTimer);
+            this.stabilityTimer = null;
         }
         if (this.keepAliveInterval) {
             clearInterval(this.keepAliveInterval);

@@ -120,7 +120,10 @@ const StartupSequence: React.FC<StartupSequenceProps> = ({ onComplete }) => {
                     font-weight: 300;
                     font-style: normal;
                 }
-                @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=IBM+Plex+Sans:wght@500;600&display=swap');
+                /* Drop the unused 'Geist' web font (FONTS.display is referenced 0×; the
+                   active startup fonts use local @font-face above and only list Geist as a
+                   tertiary fallback). IBM Plex Sans is kept — it styles the 'reddit' badge. */
+                @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@500;600&display=swap');
                 * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
             `}</style>
 

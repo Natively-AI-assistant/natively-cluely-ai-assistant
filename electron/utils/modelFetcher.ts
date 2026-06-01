@@ -10,7 +10,7 @@ export interface ProviderModel {
     label: string;
 }
 
-type Provider = 'gemini' | 'groq' | 'openai' | 'claude';
+type Provider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek';
 
 /**
  * Fetch available models from a provider's API.
@@ -29,6 +29,8 @@ export async function fetchProviderModels(
             return fetchAnthropicModels(apiKey);
         case 'gemini':
             return fetchGeminiModels(apiKey);
+        case 'deepseek':
+            return fetchDeepSeekModels(apiKey);
         default:
             throw new Error(`Unknown provider: ${provider}`);
     }
@@ -121,6 +123,54 @@ async function fetchAnthropicModels(apiKey: string): Promise<ProviderModel[]> {
     return filtered
         .map((m: any) => ({ id: m.id, label: m.display_name || m.id }))
         .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+// ─── DeepSeek ────────────────────────────────────────────────────────────────
+
+// Documented current DeepSeek text models; used as fallback if /models call fails
+// or returns an unexpected shape. deepseek-chat / deepseek-reasoner are deprecated
+// (2026-07-24) and intentionally excluded.
+const DEEPSEEK_DEFAULT_MODELS: ProviderModel[] = [
+    { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
+    { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro' },
+];
+
+async function fetchDeepSeekModels(apiKey: string): Promise<ProviderModel[]> {
+    try {
+        const response = await axios.get('https://api.deepseek.com/models', {
+            headers: { Authorization: `Bearer ${apiKey}` },
+            timeout: 15000,
+        });
+
+        const models: any[] = response.data?.data || [];
+        if (!Array.isArray(models) || models.length === 0) {
+            return DEEPSEEK_DEFAULT_MODELS;
+        }
+
+        const excludePatterns = [
+            'embedding', 'embed', 'vision', 'image', 'audio',
+            'tts', 'speech', 'whisper', 'stt',
+        ];
+
+        const filtered = models.filter((m: any) => {
+            const id = (m.id || '').toLowerCase();
+            if (!/^deepseek-v\d/.test(id)) return false;
+            if (excludePatterns.some(p => id.includes(p))) return false;
+            return true;
+        });
+
+        if (filtered.length === 0) return DEEPSEEK_DEFAULT_MODELS;
+
+        return filtered
+            .map((m: any) => ({ id: m.id, label: m.id }))
+            .sort((a, b) => a.label.localeCompare(b.label));
+    } catch (error: any) {
+        const status = error?.response?.status;
+        if (status === 401 || status === 403) {
+            throw new Error('Invalid or unauthorized DeepSeek API key');
+        }
+        return DEEPSEEK_DEFAULT_MODELS;
+    }
 }
 
 // ─── Gemini ──────────────────────────────────────────────────────────────────

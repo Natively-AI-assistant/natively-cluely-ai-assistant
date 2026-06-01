@@ -17,6 +17,8 @@ export interface AppSettings {
     codexCliFastModel?: string;
     codexCliTimeoutMs?: number;
     codexCliSandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
+    codexCliServiceTier?: 'default' | 'fast' | 'flex';
+    codexCliModelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh';
     knowledgeMode?: boolean;
     phoneMirrorEnabled?: boolean;
     phoneMirrorExposeOnLan?: boolean;

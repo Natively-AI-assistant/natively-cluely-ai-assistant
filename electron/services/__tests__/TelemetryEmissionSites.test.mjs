@@ -37,9 +37,21 @@ describe('Phase 6 — TelemetryService production emission sites', () => {
     const src = read('electron/main.ts');
     const idx = src.search(/public async endMeeting/);
     assert.ok(idx > 0);
-    // Look for telemetry call in the next 800 chars (early in the function).
-    const window = src.slice(idx, idx + 1200);
-    assert.match(window, /name:\s*['"]meeting_stop['"]/, 'meeting_stop must fire early in endMeeting');
+    // Widened from 1200 → 2000 chars to accommodate the idempotency-guard
+    // comment block (added with the per-meeting-teardown promise) that now
+    // sits between the function header and the meeting_stop emission. The
+    // emission must still come BEFORE the teardown — verified below by
+    // comparing offsets against the first teardown side effect.
+    const window = src.slice(idx, idx + 2000);
+    assert.match(window, /name:\s*['"]meeting_stop['"]/, 'meeting_stop must fire early in endMeeting (before teardown)');
+    const meetingStopOffset = window.search(/name:\s*['"]meeting_stop['"]/);
+    const teardownOffset = window.search(/setOverlayMousePassthrough\(false\)|stopAudioCapture\(|teardownIntelligence|isMeetingActive\s*=\s*false/);
+    if (teardownOffset > 0) {
+      assert.ok(
+        meetingStopOffset < teardownOffset,
+        'meeting_stop must fire BEFORE teardown side effects so a teardown crash still records the stop',
+      );
+    }
   });
 
   test('main.ts emits dynamic_action_detected from the forwarder', () => {

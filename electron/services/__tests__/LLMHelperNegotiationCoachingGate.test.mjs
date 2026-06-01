@@ -25,7 +25,7 @@
 //     dispatch which, with no providers configured, will throw — we catch
 //     that and assert only on the handler-invocation flag.
 
-import { test, beforeEach, before } from 'node:test';
+import { test, beforeEach, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import os from 'node:os';
@@ -37,6 +37,8 @@ import { createRequire } from 'node:module';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
+
+let isolatedDistDir = null;
 
 // The default `npm run build:electron` produces a single esbuild bundle per
 // entry point, which inlines ModesManager into LLMHelper. That makes the
@@ -50,28 +52,23 @@ const distDir = (() => {
     fs.readFileSync(bundledLLMHelper, 'utf8').includes('init_ModesManager');
   if (!isBundled) return path.resolve(repoRoot, 'dist-electron');
 
-  const target = path.resolve(repoRoot, 'dist-electron-test-isolated');
-  // Only re-emit when missing or when our two source files are newer than the
-  // compiled outputs — keep the test cheap on the happy path.
-  const llmTsMtime = fs.statSync(path.resolve(repoRoot, 'electron/LLMHelper.ts')).mtimeMs;
-  const modesTsMtime = fs.statSync(path.resolve(repoRoot, 'electron/services/ModesManager.ts')).mtimeMs;
-  const compiledLLM = path.join(target, 'electron/LLMHelper.js');
-  const compiledModes = path.join(target, 'electron/services/ModesManager.js');
-  const stale = !fs.existsSync(compiledLLM) || !fs.existsSync(compiledModes) ||
-    fs.statSync(compiledLLM).mtimeMs < llmTsMtime ||
-    fs.statSync(compiledModes).mtimeMs < modesTsMtime;
-  if (stale) {
-    // tsc exits non-zero on pre-existing type errors in unrelated test files,
-    // but still emits JS for files that compile cleanly. We swallow the
-    // non-zero status and verify post-hoc that LLMHelper.js was produced.
-    try {
-      execSync(`node node_modules/.bin/tsc -p electron/tsconfig.json --outDir ${target}`, {
-        cwd: repoRoot,
-        stdio: 'pipe',
-      });
-    } catch (_tscErr) {
-      // expected — tsc returns 1 on type errors elsewhere
-    }
+  const target = fs.mkdtempSync(path.join(os.tmpdir(), 'llmhelper-gate-dist-'));
+  isolatedDistDir = target;
+  fs.symlinkSync(
+    path.join(repoRoot, 'node_modules'),
+    path.join(target, 'node_modules'),
+    process.platform === 'win32' ? 'junction' : 'dir',
+  );
+  // tsc exits non-zero on pre-existing type errors in unrelated test files,
+  // but still emits JS for files that compile cleanly. We swallow the
+  // non-zero status and verify post-hoc that LLMHelper.js was produced.
+  try {
+    execSync(`node node_modules/.bin/tsc -p electron/tsconfig.json --outDir ${target}`, {
+      cwd: repoRoot,
+      stdio: 'pipe',
+    });
+  } catch (_tscErr) {
+    // expected — tsc returns 1 on type errors elsewhere
   }
   if (!fs.existsSync(path.join(target, 'electron/LLMHelper.js'))) {
     throw new Error('tsc emission failed — LLMHelper.js missing from isolated tree');
@@ -176,6 +173,12 @@ async function callChat(helper, message) {
     return null;
   }
 }
+
+after(() => {
+  if (isolatedDistDir) {
+    fs.rmSync(isolatedDistDir, { recursive: true, force: true });
+  }
+});
 
 beforeEach(() => {
   installActiveMode(null);
@@ -293,5 +296,233 @@ test('chatWithGemini: handler is NOT invoked when active mode is technical-inter
     captured.length,
     0,
     'technical-interview must block the coaching short-circuit on the non-streaming path too (issue #272)',
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Broader gate coverage (issue #272 follow-up). The gate now suppresses the
+// ENTIRE premium knowledge intercept — not just coaching — for templates where
+// it is contextually wrong. This covers the two sibling vectors of the same
+// bug class that the code-reviewer flagged: intro-question shortcut and
+// premium prompt/context injection.
+// ---------------------------------------------------------------------------
+
+function buildIntroOrchestratorStub() {
+  return {
+    isKnowledgeMode: () => true,
+    feedForDepthScoring: () => {},
+    feedInterviewerUtterance: () => {},
+    processQuestion: async () => ({
+      isIntroQuestion: true,
+      introResponse: 'CANNED_INTRO_RESPONSE_SENTINEL',
+    }),
+  };
+}
+
+function buildInjectionOrchestratorStub() {
+  return {
+    isKnowledgeMode: () => true,
+    feedForDepthScoring: () => {},
+    feedInterviewerUtterance: () => {},
+    processQuestion: async () => ({
+      systemPromptInjection: 'PREMIUM_PROMPT_SENTINEL',
+      contextBlock: 'PREMIUM_CONTEXT_SENTINEL',
+    }),
+  };
+}
+
+test('streamChat: intro shortcut FIRES in looking-for-work mode (regression guard)', async () => {
+  const helper = buildHelper();
+  helper.setKnowledgeOrchestrator(buildIntroOrchestratorStub());
+
+  installActiveMode('looking-for-work');
+  const chunks = await drainStream(helper.streamChat('Tell me about yourself.'));
+
+  assert.ok(
+    chunks.includes('CANNED_INTRO_RESPONSE_SENTINEL'),
+    'intro shortcut must still fire in modes where it is appropriate',
+  );
+});
+
+test('streamChat: intro shortcut is SUPPRESSED in technical-interview (issue #272)', async () => {
+  const helper = buildHelper();
+  helper.setKnowledgeOrchestrator(buildIntroOrchestratorStub());
+
+  installActiveMode('technical-interview');
+  const chunks = await drainStream(helper.streamChat('Walk me through your last project.'));
+
+  assert.ok(
+    !chunks.includes('CANNED_INTRO_RESPONSE_SENTINEL'),
+    'technical-interview must NOT emit a canned intro response (sibling of issue #272)',
+  );
+});
+
+test('chatWithGemini: intro shortcut is SUPPRESSED in lecture mode', async () => {
+  const helper = buildHelper();
+  helper.setKnowledgeOrchestrator(buildIntroOrchestratorStub());
+
+  installActiveMode('lecture');
+  const result = await callChat(helper, 'Tell me about yourself.');
+
+  assert.notEqual(
+    result,
+    'CANNED_INTRO_RESPONSE_SENTINEL',
+    'lecture mode must NOT short-circuit to a canned intro (sibling of issue #272)',
+  );
+});
+
+// Helper to wire a fake customProvider + spy on the dispatch so we can read
+// the resolved (system, context) at the point streamChat/chatWithGemini hand
+// off to a provider. This is what makes the prompt/context-injection tests
+// falsifiable — without it the dispatch path throws on no-client before we
+// can observe the resolved values, and the negative assertion passes
+// vacuously whether the gate is in place or not.
+function attachDispatchSpy(helper) {
+  helper.customProvider = {
+    id: 'spy-provider',
+    name: 'spy',
+    curlCommand: 'noop',
+  };
+  // Neutralize the provider-data-scope filter so the context the intercept
+  // injected actually reaches the dispatch arg. Without this stub the
+  // chatWithGemini path applies `shouldOmitContext ? "" : context` and the
+  // sentinel gets stripped by an unrelated mechanism, making the assertion
+  // unfalsifiable.
+  helper.getDeniedOutboundScopes = () => [];
+  const calls = [];
+  // streamChat path → streamWithCustom (async generator yielding chunks)
+  helper.streamWithCustom = async function* (message, context, _imagePaths, systemPrompt) {
+    calls.push({ via: 'streamWithCustom', message, context: context || '', systemPrompt: systemPrompt || '' });
+    yield '';
+  };
+  // chatWithGemini path → executeCustomProvider
+  helper.executeCustomProvider = async function (_cmd, combinedMessage, systemPrompt, message, context, _img) {
+    calls.push({ via: 'executeCustomProvider', message, context: context || '', systemPrompt: systemPrompt || '', combinedMessage: combinedMessage || '' });
+    return 'spy-response';
+  };
+  return calls;
+}
+
+test('streamChat: premium context block REACHES dispatch in looking-for-work (positive control)', async () => {
+  const helper = buildHelper();
+  helper.setKnowledgeOrchestrator(buildInjectionOrchestratorStub());
+  const calls = attachDispatchSpy(helper);
+
+  installActiveMode('looking-for-work');
+  await drainStream(helper.streamChat('Talk through your career story.'));
+
+  const dispatched = calls.find(c => c.via === 'streamWithCustom');
+  assert.ok(dispatched, 'streamWithCustom must be reached after the intercept');
+  // The premium context block is prepended to the (initially empty) context by
+  // the intercept body. Its presence at dispatch proves the intercept ran.
+  assert.ok(
+    dispatched.context.includes('PREMIUM_CONTEXT_SENTINEL'),
+    `looking-for-work must inject premium context at dispatch; saw context=${JSON.stringify(dispatched.context).slice(0, 200)}`,
+  );
+});
+
+test('streamChat: premium context block is SUPPRESSED at dispatch in technical-interview (issue #272)', async () => {
+  const helper = buildHelper();
+  helper.setKnowledgeOrchestrator(buildInjectionOrchestratorStub());
+  const calls = attachDispatchSpy(helper);
+
+  installActiveMode('technical-interview');
+  await drainStream(helper.streamChat('Discuss CAP theorem.'));
+
+  const dispatched = calls.find(c => c.via === 'streamWithCustom');
+  assert.ok(dispatched, 'streamWithCustom must be reached after fall-through');
+  // The gate must block the contextBlock injection — no sentinel can reach
+  // the provider. This is the falsifiable assertion: removing the gate would
+  // flip both substrings to true.
+  assert.ok(
+    !dispatched.context.includes('PREMIUM_CONTEXT_SENTINEL'),
+    `technical-interview must NOT inject premium context at dispatch (issue #272); saw context=${JSON.stringify(dispatched.context).slice(0, 200)}`,
+  );
+  assert.ok(
+    !dispatched.systemPrompt.includes('PREMIUM_PROMPT_SENTINEL'),
+    `technical-interview must NOT inject premium system prompt at dispatch; saw systemPrompt=${JSON.stringify(dispatched.systemPrompt).slice(0, 200)}`,
+  );
+});
+
+// callChat in the rest of the file pins skipSystemPrompt=true, which is
+// correct for the coaching/intro tests — those short-circuit BEFORE the
+// systemPromptInjection block. For prompt/context-injection tests we need
+// skipSystemPrompt=false so the injection block (gated on !skipSystemPrompt
+// && knowledgeResult.systemPromptInjection in chatWithGemini) actually runs.
+async function callChatWithSystem(helper, message) {
+  try {
+    return await helper.chatWithGemini(message, undefined, undefined, false);
+  } catch (_err) {
+    return null;
+  }
+}
+
+test('chatWithGemini: premium context block is SUPPRESSED at dispatch in team-meet (issue #272)', async () => {
+  const helper = buildHelper();
+  helper.setKnowledgeOrchestrator(buildInjectionOrchestratorStub());
+  const calls = attachDispatchSpy(helper);
+
+  installActiveMode('team-meet');
+  const result = await callChatWithSystem(helper, 'Project status?');
+
+  const dispatched = calls.find(c => c.via === 'executeCustomProvider');
+  assert.ok(dispatched, 'executeCustomProvider must be reached after fall-through');
+  assert.ok(
+    !dispatched.context.includes('PREMIUM_CONTEXT_SENTINEL'),
+    'team-meet must NOT inject premium context at dispatch (issue #272 sibling)',
+  );
+  assert.ok(
+    !dispatched.combinedMessage.includes('PREMIUM_PROMPT_SENTINEL'),
+    'team-meet must NOT inject premium system prompt into the combined message',
+  );
+  // Sanity: the spy actually returned something rather than the function
+  // erroring out before reaching dispatch.
+  assert.equal(result, 'spy-response', 'dispatch must have produced the spy response');
+});
+
+test('chatWithGemini: premium context block REACHES dispatch in recruiting (positive control)', async () => {
+  const helper = buildHelper();
+  helper.setKnowledgeOrchestrator(buildInjectionOrchestratorStub());
+  const calls = attachDispatchSpy(helper);
+
+  installActiveMode('recruiting');
+  await callChatWithSystem(helper, 'How did the candidate respond?');
+
+  const dispatched = calls.find(c => c.via === 'executeCustomProvider');
+  assert.ok(dispatched, 'executeCustomProvider must be reached after the intercept');
+  assert.ok(
+    dispatched.context.includes('PREMIUM_CONTEXT_SENTINEL'),
+    `recruiting must inject premium context at dispatch; saw context=${JSON.stringify(dispatched.context).slice(0, 200)}`,
+  );
+});
+
+test('streamChat: premium prompt injection STILL FIRES in looking-for-work (regression guard)', async () => {
+  // We can't see the injected prompt directly (it goes into the next LLM call
+  // which we don't reach). But the intercept's other gated behaviors firing
+  // is sufficient proof — we already verified coaching fires for
+  // looking-for-work. Inverse coverage: confirm the intercept body still
+  // executes by stubbing processQuestion to ALSO emit coaching so we can
+  // observe handler invocation as proof the body ran.
+  const helper = buildHelper();
+  helper.setKnowledgeOrchestrator({
+    isKnowledgeMode: () => true,
+    feedForDepthScoring: () => {},
+    feedInterviewerUtterance: () => {},
+    processQuestion: async () => ({
+      liveNegotiationResponse: PAYLOAD_SENTINEL,
+      systemPromptInjection: 'PREMIUM_PROMPT_SENTINEL',
+      contextBlock: 'PREMIUM_CONTEXT_SENTINEL',
+    }),
+  });
+  const captured = [];
+  helper.setNegotiationCoachingHandler(payload => captured.push(payload));
+
+  installActiveMode('looking-for-work');
+  await drainStream(helper.streamChat('compensation question'));
+
+  assert.equal(
+    captured.length,
+    1,
+    'intercept body must run in looking-for-work; coaching handler proves it',
   );
 });

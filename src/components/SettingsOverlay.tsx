@@ -788,11 +788,23 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     }, []);
 
     useEffect(() => {
+        // Listen on both `storage` (same-window) and the IPC broadcast (cross-window)
+        // so the settings pane reflects the active theme regardless of which window
+        // changed it. See ipcHandlers.ts `interface-theme:set` for the relay.
         const handleStorage = () => {
             setMeetingInterfaceThemeState(getMeetingInterfaceTheme());
         };
         window.addEventListener('storage', handleStorage);
-        return () => window.removeEventListener('storage', handleStorage);
+        const unsubscribeIpc = window.electronAPI?.onMeetingInterfaceThemeChanged?.((theme) => {
+            const valid: MeetingInterfaceTheme[] = ['default', 'liquid-glass', 'modern'];
+            if (valid.includes(theme as MeetingInterfaceTheme)) {
+                setMeetingInterfaceThemeState(theme as MeetingInterfaceTheme);
+            }
+        });
+        return () => {
+            window.removeEventListener('storage', handleStorage);
+            unsubscribeIpc?.();
+        };
     }, []);
 
     // Theme Handlers
@@ -1737,7 +1749,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
                                                         <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
-                                                            meetingInterfaceTheme === 'liquid-glass'
+                                                            (meetingInterfaceTheme === 'liquid-glass' || meetingInterfaceTheme === 'modern')
                                                                 ? isLight
                                                                     ? 'border-sky-500/30 text-sky-600 bg-sky-50/50'
                                                                     : 'border-sky-500/40 text-sky-400 bg-sky-500/5'
@@ -1750,7 +1762,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             <p className="text-xs text-text-secondary mt-0.5">
                                                                 {meetingInterfaceTheme === 'liquid-glass'
                                                                     ? 'Liquid glass — Apple-inspired transparent overlay'
-                                                                    : 'Default overlay appearance'}
+                                                                    : meetingInterfaceTheme === 'modern'
+                                                                        ? 'Modern — polished dark glass with cobalt accents'
+                                                                        : 'Default overlay appearance'}
                                                             </p>
                                                         </div>
                                                     </div>
@@ -1761,7 +1775,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[110px] justify-between"
                                                         >
                                                             <span className="text-ellipsis overflow-hidden whitespace-nowrap">
-                                                                {meetingInterfaceTheme === 'liquid-glass' ? 'Liquid Glass' : 'Default'}
+                                                                {meetingInterfaceTheme === 'liquid-glass'
+                                                                    ? 'Liquid Glass'
+                                                                    : meetingInterfaceTheme === 'modern'
+                                                                        ? 'Modern'
+                                                                        : 'Default'}
                                                             </span>
                                                             <ChevronDown size={12} className={`shrink-0 transition-transform ${isInterfaceThemeDropdownOpen ? 'rotate-180' : ''}`} />
                                                         </button>
@@ -1771,6 +1789,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                 {([
                                                                     { mode: 'default' as MeetingInterfaceTheme, label: 'Default' },
                                                                     { mode: 'liquid-glass' as MeetingInterfaceTheme, label: 'Liquid Glass' },
+                                                                    { mode: 'modern' as MeetingInterfaceTheme, label: 'Modern' },
                                                                 ] as const).map((option) => (
                                                                     <button
                                                                         key={option.mode}
@@ -1931,8 +1950,24 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             <Eye size={13} className="text-text-secondary" />
                                                             Interface Opacity
                                                         </label>
+                                                        {/*
+                                                         * Render previewOverlayOpacity (live drag value), NOT
+                                                         * overlayOpacity (committed). The drag handler at
+                                                         * handleOpacityChange does an imperative
+                                                         *   document.querySelectorAll('.opacity-percent-label')
+                                                         *     .forEach(el => el.textContent = percentText)
+                                                         * for sub-frame latency, then calls setPreviewOverlayOpacity(val).
+                                                         * That setter queues a React re-render — if this JSX read
+                                                         * `overlayOpacity` (the un-committed pre-drag value), React
+                                                         * would clobber the imperative text back to the stale value
+                                                         * on the next commit, producing a visible flicker every
+                                                         * drag tick. Reading previewOverlayOpacity keeps React's
+                                                         * render and the imperative write in agreement — the
+                                                         * imperative write still wins the sub-frame race, React's
+                                                         * commit just confirms the same value.
+                                                         */}
                                                         <span className="opacity-percent-label text-xs font-semibold text-text-primary tabular-nums">
-                                                            {Math.round(overlayOpacity * 100)}%
+                                                            {Math.round(previewOverlayOpacity * 100)}%
                                                         </span>
                                                     </div>
 

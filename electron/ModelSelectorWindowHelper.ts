@@ -18,15 +18,7 @@ export class ModelSelectorWindowHelper {
     private contentProtection: boolean = false
     private opacityTimeout: NodeJS.Timeout | null = null;
 
-    // Store offsets relative to main window if needed, but absolute positioning is simpler for dropdowns
-    private lastBlurTime: number = 0
-    private ignoreBlur: boolean = false;
-
     constructor() { }
-
-    public setIgnoreBlur(ignore: boolean): void {
-        this.ignoreBlur = ignore;
-    }
 
     private windowHelper: WindowHelper | null = null;
 
@@ -46,7 +38,7 @@ export class ModelSelectorWindowHelper {
 
     public showWindow(x: number, y: number, options: WindowActivationOptions = {}): void {
         if (!this.window || this.window.isDestroyed()) {
-            this.createWindow(x, y)
+            this.createWindow(x, y, true, options)
             return
         }
 
@@ -106,20 +98,15 @@ export class ModelSelectorWindowHelper {
         }
     }
 
-    public toggleWindow(x: number, y: number): void {
+    public toggleWindow(x: number, y: number, options: WindowActivationOptions = {}): void {
         if (this.window && !this.window.isDestroyed()) {
-            // Fix: If window was just closed by blur (e.g. clicking the toggle button), don't re-open immediately
-            if (!this.window.isVisible() && (Date.now() - this.lastBlurTime < 250)) {
-                return;
-            }
-
             if (this.window.isVisible()) {
                 this.hideWindow()
             } else {
-                this.showWindow(x, y)
+                this.showWindow(x, y, options)
             }
         } else {
-            this.createWindow(x, y)
+            this.createWindow(x, y, true, options)
         }
     }
 
@@ -127,7 +114,12 @@ export class ModelSelectorWindowHelper {
         this.hideWindow();
     }
 
-    private createWindow(x?: number, y?: number, showWhenReady: boolean = true): void {
+    private createWindow(
+        x?: number,
+        y?: number,
+        showWhenReady: boolean = true,
+        showOptions: WindowActivationOptions = {},
+    ): void {
         const isMac = process.platform === 'darwin';
         const windowSettings: Electron.BrowserWindowConstructorOptions = {
             width: 140,
@@ -155,11 +147,10 @@ export class ModelSelectorWindowHelper {
             // no-op and clicking the model selector still stole focus from
             // the user's foreground app.
             //
-            // KNOWN INTERACTION: this window has an on('blur') auto-close
-            // handler. With panel-nonactivating + becomesKeyOnlyIfNeeded,
-            // the window may not become key on click → blur may not fire
-            // as expected. Watch for "model selector won't close" reports;
-            // remediation is a click-outside handler on the parent overlay.
+            // Close-on-outside is handled by the renderer's mousedown
+            // capture handler (NativelyInterface.tsx) dispatching the
+            // `model-selector:close-if-open` IPC, guarded against the
+            // toggle button via `data-model-selector-toggle`.
             ...(isMac ? { type: 'panel' as const } : {}),
         }
 
@@ -214,22 +205,27 @@ export class ModelSelectorWindowHelper {
                 }
             }
             if (showWhenReady) {
-                this.showWindow(this.window?.getBounds().x || 0, this.window?.getBounds().y || 0)
+                this.showWindow(
+                    this.window?.getBounds().x || 0,
+                    this.window?.getBounds().y || 0,
+                    showOptions,
+                )
             }
         })
 
-        // Close on blur (click outside) — NOTE: with NSPanel-nonactivating
-        // + becomesKeyOnlyIfNeeded, this fires unreliably (panel may never
-        // become key on click → blur never fires). Click-outside close is
-        // handled by the overlay-side IPC `model-selector:close-on-outside`
-        // (registered when this window is shown). Keeping the blur handler
-        // as belt-and-braces for the cases where it does fire (e.g. user
-        // clicks a text input we don't know about).
-        this.window.on('blur', () => {
-            if (this.ignoreBlur) return;
-            this.lastBlurTime = Date.now();
-            this.hideWindow();
-        })
+        // Close-on-blur is intentionally NOT wired up here. A per-window
+        // blur listener fires on intra-app focus transfers (overlay ↔ panel),
+        // which races with the toggle button's open path and produced the
+        // historical "first click does nothing, second click opens" bug.
+        // Three orthogonal close paths cover the legitimate cases instead:
+        //   • renderer mousedown capture handler in NativelyInterface.tsx
+        //     dispatches `model-selector:close-if-open` for overlay-internal
+        //     outside clicks (guarded by data-model-selector-toggle).
+        //   • main.ts subscribes to app.on('did-resign-active') (macOS) /
+        //     'browser-window-blur' + getFocusedWindow()===null (win/linux)
+        //     to auto-close when the user clicks any other application.
+        //   • clicking a model in the list explicitly hides the panel via
+        //     the set-active-model IPC.
 
         // ROUND 3 FIX (#1): stop the stealth tap when Model Selector shows,
         // mirroring the Settings handler. While brief (model selector is a
@@ -237,11 +233,6 @@ export class ModelSelectorWindowHelper {
         // to reach this window's React tree, which the tap would otherwise
         // intercept at OS level.
         this.window.on('show', () => {
-            // ROUND 4 FIX (#7): see SettingsWindowHelper for rationale —
-            // reset blur timestamp on show so the 250ms toggle-protection
-            // guard doesn't latch open from a stale prior-session blur.
-            this.lastBlurTime = 0;
-
             if (process.platform !== 'darwin') return;
             try {
                 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -282,6 +273,10 @@ export class ModelSelectorWindowHelper {
     }
 
     public setContentProtection(enable: boolean): void {
+        // Dedupe: see WindowHelper.setContentProtection rationale — repeated
+        // identical calls are common (toggle IPC fans out across helpers) and
+        // produce DWM affinity churn on Windows.
+        if (this.contentProtection === enable && this.window && !this.window.isDestroyed()) return;
         console.log(`[ModelSelectorWindowHelper] Setting content protection to: ${enable}`);
         this.contentProtection = enable;
         if (this.window && !this.window.isDestroyed()) {

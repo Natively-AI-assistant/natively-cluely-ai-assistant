@@ -3,7 +3,8 @@
  * patch-electron-plist.js
  *
  * Patches the development Electron.app Info.plist to add the required
- * NSScreenCaptureUsageDescription and NSMicrophoneUsageDescription keys.
+ * NSScreenCaptureUsageDescription, NSMicrophoneUsageDescription, and
+ * NSAudioCaptureUsageDescription keys.
  *
  * Without NSScreenCaptureUsageDescription in the Info.plist, macOS silently
  * refuses to show the TCC screen recording permission prompt — or grants it
@@ -47,6 +48,18 @@ if (!content.includes('NSScreenCaptureUsageDescription')) {
   console.log('[patch-electron-plist] Added NSScreenCaptureUsageDescription.');
 } else {
   console.log('[patch-electron-plist] NSScreenCaptureUsageDescription already present — skipping.');
+}
+
+// Patch NSAudioCaptureUsageDescription
+if (!content.includes('NSAudioCaptureUsageDescription')) {
+  content = content.replace(
+    '<key>NSMicrophoneUsageDescription</key>',
+    '<key>NSAudioCaptureUsageDescription</key>\n\t<string>Natively needs system audio access to transcribe meeting audio.</string>\n\t<key>NSMicrophoneUsageDescription</key>'
+  );
+  modified = true;
+  console.log('[patch-electron-plist] Added NSAudioCaptureUsageDescription.');
+} else {
+  console.log('[patch-electron-plist] NSAudioCaptureUsageDescription already present — skipping.');
 }
 
 // Patch NSMicrophoneUsageDescription if it has the generic stock text

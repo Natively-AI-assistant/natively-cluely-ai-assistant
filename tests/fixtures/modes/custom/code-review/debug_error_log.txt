@@ -1,10 +1,10 @@
-2026-05-15T11:42:18.220Z ERROR WhatToAnswerLLM TypeError Cannot read properties of undefined reading streamChat
-    at PromptAssembler.assemble (electron/services/context/PromptAssembler.ts:184:33)
+2026-05-15T11:42:18.220Z ERROR WhatToAnswerLLM TypeError Cannot read properties of undefined (reading 'streamChat')
     at WhatToAnswerLLM.generateStream (electron/llm/WhatToAnswerLLM.ts:139:24)
+    at PromptAssembler.assembleLiveAnswer (electron/services/context/PromptAssembler.ts:184:33)
     at IntelligenceEngine.handleQuestion (electron/IntelligenceEngine.ts:412:31)
     at processTicksAndRejections (node:internal/process/task_queues:96:5)
 
-2026-05-15T11:42:18.221Z ERROR WhatToAnswerLLM failed to recover; falling back to non-streaming generateContent
+2026-05-15T11:42:18.221Z ERROR WhatToAnswerLLM failed before provider streaming started; falling back to non-streaming generateContent
 2026-05-15T11:42:18.241Z WARN  RateLimiter circuit breaker tripped after 3 consecutive provider errors
 
-Repro hint: this triggered the first time the user clicked Ask after switching to a custom mode whose ModeContextRetriever returned no snippets and the active prompt suffix had not been refreshed.
+Repro hint: this triggered the first time the user clicked Ask after switching to a custom code-review mode. The hot-swap path reconstructed WhatToAnswerLLM with the refreshed ModesManager, but did not carry over the existing LLMHelper dependency.

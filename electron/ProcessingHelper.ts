@@ -37,13 +37,14 @@ export class ProcessingHelper {
       let groqApiKey = process.env.GROQ_API_KEY
       let openaiApiKey = process.env.OPENAI_API_KEY
       let claudeApiKey = process.env.CLAUDE_API_KEY
+      let deepseekApiKey = process.env.DEEPSEEK_API_KEY
 
       // Allow initializing without key (will be loaded in loadStoredCredentials or via Settings)
       if (!apiKey) {
         console.warn("[ProcessingHelper] GEMINI_API_KEY not found in env. Will try CredentialsManager after ready.")
       }
 
-      this.llmHelper = new LLMHelper(apiKey, false, undefined, undefined, groqApiKey, openaiApiKey, claudeApiKey)
+      this.llmHelper = new LLMHelper(apiKey, false, undefined, undefined, groqApiKey, openaiApiKey, claudeApiKey, deepseekApiKey)
     }
   }
 
@@ -58,6 +59,7 @@ export class ProcessingHelper {
     const groqKey = credManager.getGroqApiKey();
     const openaiKey = credManager.getOpenaiApiKey();
     const claudeKey = credManager.getClaudeApiKey();
+    const deepseekKey = credManager.getDeepseekApiKey();
 
     if (geminiKey) {
       console.log("[ProcessingHelper] Loading stored Gemini API Key from CredentialsManager");
@@ -77,6 +79,11 @@ export class ProcessingHelper {
     if (claudeKey) {
       console.log("[ProcessingHelper] Loading stored Claude API Key from CredentialsManager");
       this.llmHelper.setClaudeApiKey(claudeKey);
+    }
+
+    if (deepseekKey) {
+      console.log("[ProcessingHelper] Loading stored DeepSeek API Key from CredentialsManager");
+      this.llmHelper.setDeepseekApiKey(deepseekKey);
     }
 
     const nativelyKey = credManager.getNativelyApiKey();

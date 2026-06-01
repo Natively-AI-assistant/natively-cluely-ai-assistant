@@ -61,13 +61,15 @@ export class NativelyProSTT extends EventEmitter {
     private reconnectTimer: NodeJS.Timeout | null = null;
     // Cleared only after 5 s of stable connection so backoff actually increases on rapid 1006 loops
     private stabilityTimer: NodeJS.Timeout | null = null;
+    // The three 250ms reconnect setTimeouts in setSampleRate, setRecognitionLanguage,
+    // and the language_detected handler used to be untracked. If stop() then start()
+    // ran within that 250ms window, the orphan timer fired against the NEW session
+    // and triggered a duplicate connect — one ws would lose the race, emit close, and
+    // kick off a reconnect cascade that briefly dropped transcripts. Track them so
+    // start()/stop() can cancel any in-flight inline timer.
+    private pendingConnectTimer: NodeJS.Timeout | null = null;
 
     private readonly BACKEND_URL = 'wss://api.natively.software/v1/transcribe';
-
-    // Static: stagger concurrent connections with the same key so both instances
-    // don't hit the server (and its upstream Deepgram key rotation) simultaneously.
-    private static readonly nextSlotByKey = new Map<string, number>();
-    private static readonly SLOT_INTERVAL_MS = 3000;
 
     constructor(apiKey: string, channel: 'system' | 'mic' = 'system') {
         super();
@@ -99,14 +101,14 @@ export class NativelyProSTT extends EventEmitter {
         //                                   thing — the open handler reads the
         //                                   updated rate.
         // Reconnecting in either of these states tears down a connection that
-        // was about to use the right value anyway, costs us a 3s stagger
-        // round-trip (concurrent-key collision prevention), and surfaces an
-        // unsightly "WebSocket was closed before the connection was
-        // established" error in the logs. The system-channel STT was hitting
-        // this on every meeting start because Rust publishes its real device
-        // rate (48kHz on macOS CoreAudio Tap) ~5-7s after start(), which is
-        // exactly when the first chunk arrives — long before the server has
-        // confirmed the handshake.
+        // was about to use the right value anyway, costs us a fresh TLS
+        // handshake round-trip, and surfaces an unsightly "WebSocket was
+        // closed before the connection was established" error in the logs.
+        // The system-channel STT was hitting this on every meeting start
+        // because Rust publishes its real device rate (48kHz on macOS
+        // CoreAudio Tap) ~5-7s after start(), which is exactly when the first
+        // chunk arrives — long before the server has confirmed the
+        // handshake.
         if (this.isActive && this.isConnected) {
             console.log(`[NativelyProSTT:${this.channel}] Rate changed mid-stream — reconnecting WS so server uses the new declared rate.`);
             this.reconnectAttempts = 0;     // fresh session — reset backoff
@@ -114,7 +116,11 @@ export class NativelyProSTT extends EventEmitter {
             this.closeUpstream();
             // Same 250ms gap pattern as setRecognitionLanguage to avoid the
             // server's concurrent_session_blocked race.
-            setTimeout(() => { if (this.isActive) this.connect(); }, 250);
+            if (this.pendingConnectTimer) clearTimeout(this.pendingConnectTimer);
+            this.pendingConnectTimer = setTimeout(() => {
+                this.pendingConnectTimer = null;
+                if (this.isActive) this.connect();
+            }, 250);
         }
     }
 
@@ -132,8 +138,9 @@ export class NativelyProSTT extends EventEmitter {
 
         // 'auto' is a sentinel — send it as-is so the backend does parallel batch detection.
         if (key === 'auto') {
+            const config = RECOGNITION_LANGUAGES.auto;
             this.languageBcp47      = 'auto';
-            this.languageAlternates = [];
+            this.languageAlternates = config.alternates ?? [];
             console.log('[NativelyProSTT] Language set to auto-detect mode');
         } else {
             const config = RECOGNITION_LANGUAGES[key];
@@ -162,7 +169,11 @@ export class NativelyProSTT extends EventEmitter {
             this.closeUpstream();
             // Small delay so the server processes the old socket's close event before
             // the new connection arrives — prevents concurrent_session_blocked race.
-            setTimeout(() => { if (this.isActive) this.connect(); }, 250);
+            if (this.pendingConnectTimer) clearTimeout(this.pendingConnectTimer);
+            this.pendingConnectTimer = setTimeout(() => {
+                this.pendingConnectTimer = null;
+                if (this.isActive) this.connect();
+            }, 250);
         }
     }
 
@@ -180,6 +191,21 @@ export class NativelyProSTT extends EventEmitter {
         if (this.isActive) return;
         this.isActive         = true;
         this.reconnectAttempts = 0;
+        // Defense in depth: the fatal-error branch at L353 (auth_timeout /
+        // invalid_key_format / trial_expired / transcription_quota_exceeded)
+        // flips isActive=false WITHOUT going through stop(), so it never clears
+        // these counters. Reset on start so a session that follows a fatal
+        // error doesn't inherit stale overflow state.
+        this.bufferDroppedChunks = 0;
+        this.bufferOverflowReported = false;
+        // Cancel any orphan inline reconnect timer left over from a prior
+        // setSampleRate/setRecognitionLanguage/language_detected that closed
+        // the upstream and scheduled a 250 ms reconnect. Without this, the
+        // orphan would fire inside the new session and double-connect.
+        if (this.pendingConnectTimer) {
+            clearTimeout(this.pendingConnectTimer);
+            this.pendingConnectTimer = null;
+        }
         this.connect();
     }
 
@@ -192,8 +218,9 @@ export class NativelyProSTT extends EventEmitter {
         // Without this, a language_detected reconnect would leave languageBcp47 = 'fr-FR'
         // and the next meeting would start with French pinned instead of 'auto'.
         if (this.configuredLanguageKey === 'auto') {
-            this.languageBcp47     = 'auto';
-            this.languageAlternates = [];
+            const config = RECOGNITION_LANGUAGES.auto;
+            this.languageBcp47      = 'auto';
+            this.languageAlternates = config.alternates ?? [];
         }
 
         if (this.reconnectTimer) {
@@ -204,8 +231,22 @@ export class NativelyProSTT extends EventEmitter {
             clearTimeout(this.stabilityTimer);
             this.stabilityTimer = null;
         }
+        // Cancel orphan inline reconnect timer so it doesn't fire and call
+        // connect() while the stream is meant to be torn down. The 'isActive'
+        // check inside the timer would also catch it, but cancelling is cheaper
+        // than letting a setTimeout sit in libuv's queue for 250 ms.
+        if (this.pendingConnectTimer) {
+            clearTimeout(this.pendingConnectTimer);
+            this.pendingConnectTimer = null;
+        }
         this.closeUpstream();
         this.buffer = [];
+        // Reset overflow counters so the next session's logs reflect its own
+        // outage state, not stale numbers from the prior session — otherwise a
+        // brand-new reconnect prints e.g. "47 chunks dropped during outage"
+        // referring to an outage from a meeting that already ended.
+        this.bufferDroppedChunks = 0;
+        this.bufferOverflowReported = false;
     }
 
     private _chunksSent = 0;
@@ -244,28 +285,19 @@ export class NativelyProSTT extends EventEmitter {
 
     // ── Internal ──────────────────────────────────────────────
 
-    private connect(skipStagger = false): void {
+    private connect(_skipStagger = false): void {
         if (this.isConnecting || !this.isActive) return;
 
-        if (!skipStagger) {
-            // Stagger connections for the same key to avoid concurrent server collisions.
-            // If the server received two connections within SLOT_INTERVAL_MS, it (or its
-            // upstream Deepgram key pool) can fail both with 1006.
-            const now = Date.now();
-            const reserved = NativelyProSTT.nextSlotByKey.get(this.apiKey) ?? 0;
-            const staggerMs = Math.max(0, reserved - now);
-            NativelyProSTT.nextSlotByKey.set(this.apiKey, Math.max(now, reserved) + NativelyProSTT.SLOT_INTERVAL_MS);
-
-            if (staggerMs > 0) {
-                this.isConnecting = true; // Hold the slot while waiting
-                console.log(`[NativelyProSTT:${this.channel}] Staggering connection ${staggerMs}ms (concurrent key collision prevention)`);
-                setTimeout(() => {
-                    this.isConnecting = false;
-                    if (this.isActive) this.connect(true);
-                }, staggerMs);
-                return;
-            }
-        }
+        // Per-key stagger removed (was 3000 ms between any two connects on the
+        // same apiKey). It was added under the assumption the server serialised
+        // by API key — it does not. Server-side concurrency is project-quota
+        // based (HTTP 429 on overflow), and the system + mic channels are
+        // explicitly supported as concurrent streams disambiguated by the
+        // `channel` field in the auth frame. Re-introducing any per-key serial
+        // gate here will reintroduce the 3–8 s mic-activation regression.
+        // The `_skipStagger` parameter is kept for ABI stability with existing
+        // callers (250 ms reconnect debounces in setSampleRate /
+        // setRecognitionLanguage / language_detected); it is now a no-op.
 
         this.isConnecting = true;
         this.isConnected  = false;
@@ -361,6 +393,7 @@ export class NativelyProSTT extends EventEmitter {
                     this.isConnecting = false;
                     this.isConnected  = true;
                     console.log(`[NativelyProSTT] Connected via ${msg.provider}`);
+                    this.emit('connected', { provider: msg.provider, channel: this.channel });
                     // Delay resetting reconnectAttempts: only reset after 5 s of stability.
                     // An immediate reset means every rapid 1006 loop re-uses the minimum
                     // 1500 ms delay, causing an infinite tight reconnect storm.
@@ -386,7 +419,11 @@ export class NativelyProSTT extends EventEmitter {
                     if (this.isActive && this.ws) {
                         this.intentionalClose = true;
                         this.closeUpstream();
-                        setTimeout(() => { if (this.isActive) this.connect(); }, 250);
+                        if (this.pendingConnectTimer) clearTimeout(this.pendingConnectTimer);
+                        this.pendingConnectTimer = setTimeout(() => {
+                            this.pendingConnectTimer = null;
+                            if (this.isActive) this.connect();
+                        }, 250);
                     }
                     return;
                 }
@@ -416,11 +453,15 @@ export class NativelyProSTT extends EventEmitter {
             this.isConnecting = false;
             this.isConnected  = false;
             this.emit('error', err);
+            if (this.isDnsFailure && this.isActive) {
+                this.scheduleReconnect();
+            }
         }));
 
         ws.on('close', (code: number) => guard(() => {
             this.isConnecting = false;
             this.isConnected  = false;
+            if (this.ws === ws) this.ws = null;
             console.log(`[NativelyProSTT] Connection closed (code ${code})`);
 
             // Skip auto-reconnect if this close was intentional (e.g. language change)
@@ -436,7 +477,7 @@ export class NativelyProSTT extends EventEmitter {
     }
 
     private scheduleReconnect(): void {
-        if (!this.isActive) return;
+        if (!this.isActive || this.reconnectTimer) return;
         this._chunksSent = 0;  // Reset per-session counter so chunk #N logs reflect the new session
         // Connection dropped before stability window — cancel the backoff reset
         if (this.stabilityTimer) { clearTimeout(this.stabilityTimer); this.stabilityTimer = null; }
@@ -502,6 +543,21 @@ export class NativelyProSTT extends EventEmitter {
     private closeUpstream(): void {
         this.isConnected  = false;
         this.isConnecting = false;
+
+        // Clear every owned timer here, not just at stop()/start() boundaries.
+        // Any path that tears down the upstream connection (intentional close,
+        // setSampleRate, setRecognitionLanguage, language_detected, fatal-error
+        // branch) used to leave reconnectTimer / stabilityTimer alive — they
+        // would then fire against a torn-down session and either call
+        // connect() (orphan reconnect) or clobber reconnectAttempts on the
+        // next session (stability timer surviving across sessions). The 250ms
+        // inline reconnect paths immediately re-assign pendingConnectTimer
+        // AFTER calling closeUpstream(), so clearing it here is safe — they
+        // intentionally overwrite it.
+        if (this.reconnectTimer)     { clearTimeout(this.reconnectTimer);     this.reconnectTimer = null; }
+        if (this.stabilityTimer)     { clearTimeout(this.stabilityTimer);     this.stabilityTimer = null; }
+        if (this.pendingConnectTimer) { clearTimeout(this.pendingConnectTimer); this.pendingConnectTimer = null; }
+
         if (this.ws) {
             const dying = this.ws;
             this.ws = null;

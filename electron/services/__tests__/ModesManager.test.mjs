@@ -275,45 +275,80 @@ test('reference context skips empty files and truncates large files with complet
   assert.ok(block.length < longContent.length);
 });
 
-test('isNegotiationCoachingAllowed suppresses salary cards in modes where salary is out of scope (issue #272)', () => {
+test('isPremiumKnowledgeInterceptAllowed gates the whole premium intercept by active mode (issue #272)', () => {
   // No active mode — default to allowed so we never regress modes that
-  // legitimately need coaching (the open-source side cannot inspect the
-  // premium tracker, so we fail open when nothing is selected).
+  // legitimately use the intercept (looking-for-work, sales, recruiting,
+  // general). The open-source side cannot inspect the premium tracker, so
+  // we fail open when nothing is selected.
   installDb(makeDb());
   assert.equal(
-    ModesManager.getInstance().isNegotiationCoachingAllowed(),
+    ModesManager.getInstance().isPremiumKnowledgeInterceptAllowed(),
     true,
     'with no active mode the gate must default open',
   );
 
-  const COACHING_ALLOWED = new Set(['general', 'sales', 'recruiting', 'looking-for-work']);
-  const COACHING_BLOCKED = new Set(['technical-interview', 'team-meet', 'lecture']);
+  const INTERCEPT_ALLOWED = new Set(['general', 'sales', 'recruiting', 'looking-for-work']);
+  const INTERCEPT_BLOCKED = new Set(['technical-interview', 'team-meet', 'lecture']);
 
   // Every production mode must land on one side of the gate — guards against
   // a future template silently inheriting the wrong default.
   assert.deepEqual(
-    new Set([...COACHING_ALLOWED, ...COACHING_BLOCKED]),
+    new Set([...INTERCEPT_ALLOWED, ...INTERCEPT_BLOCKED]),
     new Set(EXPECTED_MODE_TYPES),
     'every production mode must be classified explicitly',
   );
 
-  for (const templateType of COACHING_ALLOWED) {
+  for (const templateType of INTERCEPT_ALLOWED) {
     installDb(makeDb({ modes: [modeRow({ id: `${templateType}-mode`, template_type: templateType, is_active: 1 })] }));
     assert.equal(
-      ModesManager.getInstance().isNegotiationCoachingAllowed(),
+      ModesManager.getInstance().isPremiumKnowledgeInterceptAllowed(),
       true,
-      `${templateType} should allow negotiation coaching`,
+      `${templateType} should allow the premium knowledge intercept`,
     );
   }
 
-  for (const templateType of COACHING_BLOCKED) {
+  for (const templateType of INTERCEPT_BLOCKED) {
     installDb(makeDb({ modes: [modeRow({ id: `${templateType}-mode`, template_type: templateType, is_active: 1 })] }));
     assert.equal(
-      ModesManager.getInstance().isNegotiationCoachingAllowed(),
+      ModesManager.getInstance().isPremiumKnowledgeInterceptAllowed(),
       false,
-      `${templateType} must NOT allow negotiation coaching — would overwrite the user's expected answer with a salary card (issue #272)`,
+      `${templateType} must NOT allow the premium intercept — would overwrite the user's expected answer with off-topic content (issue #272)`,
     );
   }
+});
+
+test('isPremiumKnowledgeInterceptAllowed honors templateType on user-created custom modes (issue #272)', () => {
+  // Custom modes inherit the gate from their underlying template. A user who
+  // names their mode "TechInterview2025" but picks templateType
+  // 'technical-interview' must still be protected from premium-flavored
+  // interjections.
+  installDb(makeDb({
+    modes: [modeRow({
+      id: 'custom-tech-mode',
+      template_type: 'technical-interview',
+      name: 'TechInterview2025',
+      is_active: 1,
+    })],
+  }));
+  assert.equal(
+    ModesManager.getInstance().isPremiumKnowledgeInterceptAllowed(),
+    false,
+    'custom mode with technical-interview templateType must inherit the block',
+  );
+
+  installDb(makeDb({
+    modes: [modeRow({
+      id: 'custom-lfw-mode',
+      template_type: 'looking-for-work',
+      name: 'MyJobHunt',
+      is_active: 1,
+    })],
+  }));
+  assert.equal(
+    ModesManager.getInstance().isPremiumKnowledgeInterceptAllowed(),
+    true,
+    'custom mode with looking-for-work templateType must keep the intercept allowed',
+  );
 });
 
 test('context assembly stays within low local latency budget for large active-mode files', () => {

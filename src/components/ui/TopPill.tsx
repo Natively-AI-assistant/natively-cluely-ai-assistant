@@ -24,6 +24,7 @@ export default function TopPill({
           draggable-area
           flex items-center gap-5
           rounded-full
+          border
           overlay-pill-surface
           backdrop-blur-md
           pl-2.5 pr-2.5 py-1.5
@@ -31,28 +32,30 @@ export default function TopPill({
         "
                 style={appearance.pillStyle}
             >
-                {/* LOGO BUTTON */}
-                <button
-                    onClick={onLogoClick}
-                    className={`
-            w-8 h-8
-            rounded-full
-            overlay-icon-surface
-            overlay-icon-surface-hover
-            flex items-center justify-center
-            relative overflow-hidden
-            interaction-base interaction-press
-          `}
-                    style={appearance.iconStyle}
-                >
-                    <img
-                        src={icon}
-                        alt="Natively"
-                        className="w-[24px] h-[24px] object-contain opacity-95 scale-105 force-black-icon"
-                        draggable="false"
-                        onDragStart={(e) => e.preventDefault()}
-                    />
-                </button>
+                <div className="draggable-area p-1">
+                    {/* LOGO BUTTON */}
+                    <button
+                        onClick={onLogoClick}
+                        className={`
+              w-8 h-8
+              rounded-full
+              overlay-icon-surface
+              overlay-icon-surface-hover
+              flex items-center justify-center
+              relative overflow-hidden
+              interaction-base interaction-press
+            `}
+                        style={appearance.iconStyle}
+                    >
+                        <img
+                            src={icon}
+                            alt="Natively"
+                            className="w-[24px] h-[24px] object-contain opacity-95 scale-105 force-black-icon"
+                            draggable="false"
+                            onDragStart={(e) => e.preventDefault()}
+                        />
+                    </button>
+                </div>
 
                 {/* CENTER SEGMENT */}
                 <button

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useStreamBuffer } from '../hooks/useStreamBuffer';
 import { X, Copy, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { genMessageId } from '../utils/messageId';
 import nativelyIcon from './icon.png';
 
 import ReactMarkdown from 'react-markdown';
@@ -280,7 +281,7 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
         if (!question.trim() || chatState === 'waiting_for_llm' || chatState === 'streaming_response') return;
 
         const userMessage: Message = {
-            id: `user-${Date.now()}`,
+            id: genMessageId(),
             role: 'user',
             content: question
         };
@@ -293,7 +294,7 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         }, 50);
 
-        const assistantMessageId = `assistant-${Date.now()}`;
+        const assistantMessageId = genMessageId();
 
         try {
             // Add typing indicator delay (200ms) - makes the AI feel "thoughtful"

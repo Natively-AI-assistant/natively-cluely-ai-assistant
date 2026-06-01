@@ -64,7 +64,27 @@ interface ElectronAPI {
   setGroqApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setOpenaiApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setClaudeApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
+  setDeepseekApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setNativelyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
+  getNativelyPricing: () => Promise<{
+    ok: boolean;
+    currency?: string;
+    fetchedAt?: string;
+    stale?: boolean;
+    products?: Record<string, {
+      id: string;
+      dodoProductId: string;
+      name: string;
+      amount: number | null;
+      currency: string;
+      formattedPrice: string | null;
+      interval: 'month' | 'year' | 'lifetime';
+      checkoutUrl: string;
+      coupon: { code: string; eligible: boolean; discountPercent: number; reason?: string };
+    }>;
+    error?: string;
+    status?: number;
+  }>;
   getNativelyUsage: () => Promise<{
     ok: boolean;
     plan?: string;
@@ -83,6 +103,7 @@ interface ElectronAPI {
     hasGroqKey: boolean;
     hasOpenaiKey: boolean;
     hasClaudeKey: boolean;
+    hasDeepseekKey: boolean;
     hasNativelyKey: boolean;
     googleServiceAccountPath: string | null;
     sttProvider: string;
@@ -225,6 +246,7 @@ interface ElectronAPI {
   getAiResponseLanguage: () => Promise<string>;
   onSttLanguageAutoDetected: (callback: (bcp47: string) => void) => () => void;
   onSystemAudioPermissionDenied: (callback: (message: string) => void) => () => void;
+  getSystemAudioPermissionWarning: () => Promise<string | null>;
   onDeviceSelectionApplied: (
     callback: (payload: {
       kind: 'input' | 'output';
@@ -248,7 +270,7 @@ interface ElectronAPI {
   // STT Status Events
   onSttStatusChanged: (
     callback: (data: {
-      state: 'connected' | 'reconnecting' | 'failed';
+      state: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio';
       provider: string;
       error?: string;
       channel: 'user' | 'interviewer';
@@ -352,7 +374,7 @@ interface ElectronAPI {
   getDefaultModel: () => Promise<{ model: string }>;
   setModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
   setDefaultModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
-  toggleModelSelector: (coords: { x: number; y: number }) => Promise<void>;
+  toggleModelSelector: (coords: { x: number; y: number; activate?: boolean }) => Promise<void>;
   modelSelectorCloseIfOpen: () => Promise<void>;
   forceRestartOllama: () => Promise<void>;
 
@@ -427,6 +449,10 @@ interface ElectronAPI {
   startAudioTest: (deviceId?: string) => Promise<{ success: boolean }>;
   stopAudioTest: () => Promise<{ success: boolean }>;
   onAudioTestLevel: (callback: (level: number) => void) => () => void;
+  // UX4: parallel system-audio probe — system audio level + error events
+  // emitted during the same startAudioTest lifecycle.
+  onAudioTestSystemLevel: (callback: (level: number) => void) => () => void;
+  onAudioTestSystemError: (callback: (errorMessage: string) => void) => () => void;
 
   // Database
   flushDatabase: () => Promise<{ success: boolean }>;
@@ -501,6 +527,7 @@ interface ElectronAPI {
   restartAndInstall: () => Promise<void>;
   checkForUpdates: () => Promise<void>;
   downloadUpdate: () => Promise<void>;
+  getCanAutoUpdate: () => Promise<{ canAutoUpdate: boolean }>;
   testReleaseFetch: () => Promise<{ success: boolean; error?: string }>;
 
   // RAG (Retrieval-Augmented Generation) API
@@ -563,11 +590,10 @@ interface ElectronAPI {
 
   // CGEventTap-backed stealth keyboard tap (macOS only). Returns false on
   // non-macOS or when the native module / Accessibility permission is missing.
+  // M5 cleanup: three dead query-style IPCs were removed — they never had
+  // main-side handlers; tap state arrives via onStealthTapState instead.
   stealthTapAvailable: () => Promise<boolean>;
-  stealthTapPermissionGranted: () => Promise<boolean>;
-  stealthTapRequestPermission: () => Promise<boolean>;
   stealthTapOpenSettings: () => Promise<void>;
-  stealthTapIsActive: () => Promise<boolean>;
   stealthTapStop: () => Promise<void>;
   stealthTapStart: () => Promise<boolean>;
   /** False on macOS when a composition IME (Pinyin/Hangul/Kanji/…) is
@@ -945,6 +971,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
+  // UX2: in-app TCC repair. Returns { ok, bundleId, results, promptRelaunch, message }.
+  // Renderer should show the `message` and prompt the user to fully quit and reopen.
+  repairTccPermissions: () => ipcRenderer.invoke('repair-tcc-permissions'),
   setUndetectable: (state: boolean) => ipcRenderer.invoke('set-undetectable', state),
   getUndetectable: () => ipcRenderer.invoke('get-undetectable'),
   setOverlayMousePassthrough: (enabled: boolean) =>
@@ -1016,7 +1045,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('switch-to-ollama', model, url),
   switchToGemini: (apiKey?: string, modelId?: string) =>
     ipcRenderer.invoke('switch-to-gemini', apiKey, modelId),
-  testLlmConnection: (provider: 'gemini' | 'groq' | 'openai' | 'claude', apiKey: string) =>
+  testLlmConnection: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', apiKey: string) =>
     ipcRenderer.invoke('test-llm-connection', provider, apiKey),
   selectServiceAccount: () => ipcRenderer.invoke('select-service-account'),
 
@@ -1025,7 +1054,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setGroqApiKey: (apiKey: string) => ipcRenderer.invoke('set-groq-api-key', apiKey),
   setOpenaiApiKey: (apiKey: string) => ipcRenderer.invoke('set-openai-api-key', apiKey),
   setClaudeApiKey: (apiKey: string) => ipcRenderer.invoke('set-claude-api-key', apiKey),
+  setDeepseekApiKey: (apiKey: string) => ipcRenderer.invoke('set-deepseek-api-key', apiKey),
   setNativelyApiKey: (apiKey: string) => ipcRenderer.invoke('set-natively-api-key', apiKey),
+  getNativelyPricing: () => ipcRenderer.invoke('get-natively-pricing'),
   getNativelyUsage: () => ipcRenderer.invoke('get-natively-usage'),
   getStoredCredentials: () => ipcRenderer.invoke('get-stored-credentials'),
 
@@ -1200,6 +1231,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('system-audio-permission-denied', subscription);
     };
   },
+  getSystemAudioPermissionWarning: () => ipcRenderer.invoke('get-system-audio-permission-warning'),
   onDeviceSelectionApplied: (
     callback: (payload: {
       kind: 'input' | 'output';
@@ -1506,7 +1538,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getDefaultModel: () => ipcRenderer.invoke('get-default-model'),
   setModel: (modelId: string) => ipcRenderer.invoke('set-model', modelId),
   setDefaultModel: (modelId: string) => ipcRenderer.invoke('set-default-model', modelId),
-  toggleModelSelector: (coords: { x: number; y: number }) =>
+  toggleModelSelector: (coords: { x: number; y: number; activate?: boolean }) =>
     ipcRenderer.invoke('toggle-model-selector', coords),
   modelSelectorCloseIfOpen: () => ipcRenderer.invoke('model-selector:close-if-open'),
   forceRestartOllama: () => ipcRenderer.invoke('force-restart-ollama'),
@@ -1558,6 +1590,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('audio-test-level', subscription);
     return () => {
       ipcRenderer.removeListener('audio-test-level', subscription);
+    };
+  },
+  // UX4: parallel system-audio probe level meter. Wired during the existing
+  // startAudioTest so users see both mic AND system audio levels in Settings
+  // before starting a meeting.
+  onAudioTestSystemLevel: (callback: (level: number) => void) => {
+    const subscription = (_: any, level: number) => callback(level);
+    ipcRenderer.on('audio-test-system-level', subscription);
+    return () => {
+      ipcRenderer.removeListener('audio-test-system-level', subscription);
+    };
+  },
+  onAudioTestSystemError: (callback: (errorMessage: string) => void) => {
+    const subscription = (_: any, errorMessage: string) => callback(errorMessage);
+    ipcRenderer.on('audio-test-system-error', subscription);
+    return () => {
+      ipcRenderer.removeListener('audio-test-system-error', subscription);
     };
   },
 
@@ -1678,6 +1727,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   restartAndInstall: () => ipcRenderer.invoke('quit-and-install-update'),
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
+  getCanAutoUpdate: () => ipcRenderer.invoke('get-can-auto-update'),
   testReleaseFetch: () => ipcRenderer.invoke('test-release-fetch'),
 
   // RAG API
@@ -1758,12 +1808,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
-  // Stealth keyboard tap bridge
+  // Stealth keyboard tap bridge. Three dead query-style IPCs were dropped in
+  // the M5 cleanup — they had no main-side handler and were not called from
+  // src/; tap state arrives via onStealthTapState instead.
   stealthTapAvailable: () => ipcRenderer.invoke('stealth-tap:available'),
-  stealthTapPermissionGranted: () => ipcRenderer.invoke('stealth-tap:permission-granted'),
-  stealthTapRequestPermission: () => ipcRenderer.invoke('stealth-tap:request-permission'),
   stealthTapOpenSettings: () => ipcRenderer.invoke('stealth-tap:open-settings'),
-  stealthTapIsActive: () => ipcRenderer.invoke('stealth-tap:is-active'),
   stealthTapStop: () => ipcRenderer.invoke('stealth-tap:stop'),
   stealthTapStart: () => ipcRenderer.invoke('stealth-tap:start'),
   stealthTapShouldAutoEngage: () => ipcRenderer.invoke('stealth-tap:should-auto-engage'),
@@ -1818,9 +1867,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setTavilyApiKey: (apiKey: string) => ipcRenderer.invoke('set-tavily-api-key', apiKey),
 
   // Dynamic Model Discovery
-  fetchProviderModels: (provider: 'gemini' | 'groq' | 'openai' | 'claude', apiKey: string) =>
+  fetchProviderModels: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', apiKey: string) =>
     ipcRenderer.invoke('fetch-provider-models', provider, apiKey),
-  setProviderPreferredModel: (provider: 'gemini' | 'groq' | 'openai' | 'claude', modelId: string) =>
+  setProviderPreferredModel: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', modelId: string) =>
     ipcRenderer.invoke('set-provider-preferred-model', provider, modelId),
 
   // License Management

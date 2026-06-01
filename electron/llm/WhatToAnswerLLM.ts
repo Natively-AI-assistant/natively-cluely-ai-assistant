@@ -70,16 +70,11 @@ export class WhatToAnswerLLM {
 
             const hasAttachedImages = Array.isArray(imagePaths) && imagePaths.length > 0;
             if (hasAttachedImages) {
-                const caps = this.llmHelper.getCapabilities();
-                if (!caps.supportsImages) {
-                    const provider = this.llmHelper.getCurrentProvider();
-                    const model = this.llmHelper.getCurrentModel();
-                    const privacyPrefix = this.llmHelper.isLocalOnly()
-                        ? 'Local-only mode is enabled, so I cannot send screenshots to a cloud vision model.'
-                        : 'The selected model does not support image input.';
-                    yield `${privacyPrefix} Switch to a vision-capable model to answer from the current screen. Current provider: ${provider}; model: ${model}.`;
-                    return;
-                }
+                // NOTE: The vision fallback chain handles provider selection + retries.
+                // We no longer check selected-model capabilities here because the
+                // generateWithVisionFallback chain tries OpenAI -> Claude -> Gemini ->
+                // remaining providers in priority order with 3 retries each.
+                // If local-only mode is active, the chain skips cloud providers.
             }
 
             const instructionContext = promptInstruction?.trim()

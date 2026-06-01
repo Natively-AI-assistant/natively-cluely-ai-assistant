@@ -4,8 +4,8 @@ import type { SttErrorCategory } from '../../lib/sttErrorMapper';
 interface ChannelCardProps {
     /** Channel name displayed in header */
     name: string;
-    /** Channel status */
-    status: 'connected' | 'reconnecting' | 'failed';
+    /** Channel status (B2: 'awaiting-audio' = pre-verified-audio neutral state) */
+    status: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio';
     /** STT provider name (e.g. 'google', 'openai', 'deepgram') */
     provider?: string;
     /** Raw error string */
@@ -51,9 +51,18 @@ const ChannelCard: React.FC<ChannelCardProps> = ({
         }
     };
 
-    const icon = status === 'failed' ? iconFailed : status === 'reconnecting' ? iconReconnecting : iconConnected;
+    // B2: 'awaiting-audio' shares the visual treatment of 'reconnecting'
+    // (amber, non-error) but with a distinct label so users know audio
+    // hasn't been verified yet — different from "we had a connection and
+    // lost it."
+    const icon = status === 'failed' ? iconFailed
+        : status === 'reconnecting' || status === 'awaiting-audio' ? iconReconnecting
+        : iconConnected;
 
-    const statusLabel = status === 'connected' ? 'Operational' : status === 'reconnecting' ? 'Reconnecting...' : 'Error';
+    const statusLabel = status === 'connected' ? 'Operational'
+        : status === 'awaiting-audio' ? 'Listening for audio…'
+        : status === 'reconnecting' ? 'Reconnecting...'
+        : 'Error';
     const label = providerLabel(provider);
 
     return (

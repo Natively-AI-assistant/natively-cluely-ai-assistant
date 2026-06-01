@@ -133,12 +133,8 @@ test('every preload ipcRenderer.invoke channel has a matching ipcMain.handle reg
     // (electron/preload.ts:937) but no handler registers the channel. Renderer
     // invokes silently reject — pre-existing tech debt, separate cleanup.
     'toggle-advanced-settings',
-    // Dead stealth-tap IPCs: M5 cleanup (PR #250 follow-up) was meant to drop
-    // these from preload + electron.d.ts; the existing StealthBlockInputFocusGuards
-    // suite already fails on the same backlog. Pre-existing, unrelated to skills.
-    'stealth-tap:permission-granted',
-    'stealth-tap:request-permission',
-    'stealth-tap:is-active',
+    // M5 cleanup of stealth-tap:permission-granted / request-permission /
+    // is-active was completed alongside this commit — entries removed here.
   ]);
 
   const missing = [...channels].filter(ch => !registered.has(ch) && !KNOWN_STALE.has(ch)).sort();

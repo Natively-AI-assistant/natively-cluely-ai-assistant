@@ -21,7 +21,21 @@ export declare class StealthKeyboardTap {
    *
    * Idempotent: repeated `start()` calls while active are no-ops.
    */
-  start(callback: ((err: Error | null, arg: CapturedKey) => any)): boolean
+  start(callback: ((err: Error | null, arg: CapturedKey) => any), overlayBounds?: OverlayBoundsInput | undefined | null): boolean
+  /**
+   * Push fresh overlay bounds into the live tap. Required when the
+   * OS window moves or resizes mid-session: without this, the start()
+   * snapshot goes stale and mouse-down classification (inside vs
+   * outside the overlay) drifts against the actual frame. No-op when
+   * the tap is not active so JS can call it unconditionally.
+   *
+   * Concurrency note: a benign TOCTOU exists where this method observes
+   * `active=true`, stop() then clears bounds, and we overwrite with a
+   * stale value. That's safe: the worker is exiting, the per-event reader
+   * short-circuits on `!active`, and the next `start()` re-snapshots
+   * bounds from the provider — so the stale write is invisible.
+   */
+  updateOverlayBounds(overlayBounds?: OverlayBoundsInput | undefined | null): void
   /**
    * Disengage the tap. After this returns, the next keystroke will
    * reach the foreground app normally. Safe to call multiple times.
@@ -90,6 +104,8 @@ export interface CapturedKey {
    * by the worker.
    */
   isKeyDown: boolean
+  /** True for a pass-through mouse down outside the overlay bounds. */
+  isOutsideMouseDown: boolean
 }
 
 /**
@@ -132,6 +148,13 @@ export declare function getOutputDevices(): Array<AudioDeviceInfo>
  * Cheap; safe to poll from JS to drive UI state.
  */
 export declare function isAccessibilityGranted(): boolean
+
+export interface OverlayBoundsInput {
+  x: number
+  y: number
+  width: number
+  height: number
+}
 
 /**
  * Validates an existing Dodo Payments license key against the live API.

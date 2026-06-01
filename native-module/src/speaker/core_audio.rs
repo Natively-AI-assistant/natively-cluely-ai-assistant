@@ -1,6 +1,6 @@
 use anyhow::Result;
 use ca::aggregate_device_keys as agg_keys;
-use cidre::{arc, av, cat, cf, core_audio as ca, ns, os};
+use cidre::{api, arc, av, cat, cf, core_audio as ca, ns, os};
 use ringbuf::{
     traits::{Producer, Split},
     HeapCons, HeapProd, HeapRb,
@@ -25,6 +25,22 @@ pub struct SpeakerInput {
 
 impl SpeakerInput {
     pub fn new(device_id: Option<String>) -> Result<Self> {
+        // 0. Gate on macOS 14.4+. -[CATapDescription initExcludingProcesses:andDeviceUID:withStream:]
+        // was introduced in macOS 14.4 (Sonoma). The class itself exists from 14.2, so
+        // [CATapDescription alloc] succeeds on 14.2/14.3 but invoking this initializer there
+        // throws `unrecognized selector` and tears down the process before our Err can trigger
+        // the SCK fallback in macos.rs. See issue #249.
+        let pi = ns::ProcessInfo::current();
+        if !pi.is_os_at_least_version(api::OsVersion {
+            major: 14,
+            minor: 4,
+            patch: 0,
+        }) {
+            return Err(anyhow::anyhow!(
+                "CoreAudio process tap requires macOS 14.4+ (current OS lacks initExcludingProcesses:andDeviceUID:withStream:)"
+            ));
+        }
+
         // 1. Find the target output device
         let output_device = match device_id {
             Some(ref uid) if !uid.is_empty() && uid != "default" => {
@@ -53,6 +69,8 @@ impl SpeakerInput {
         );
         tap_desc.set_mono(true);
         tap_desc.set_mixdown(true);
+        // -[CATapDescription setMuteBehavior:] shipped in the same macOS 14.4 release as
+        // the device-bound init above. Don't split this from the 14.4 gate at the top of new().
         tap_desc.set_mute_behavior(ca::TapMuteBehavior::Unmuted);
         let tap = tap_desc.create_process_tap()?;
         println!("[CoreAudioTap] Tap created: {:?}", tap.uid());
@@ -259,5 +277,67 @@ impl Drop for SpeakerStream {
     fn drop(&mut self) {
         // `_device` is stopped when dropped — either by explicit `pause()` (which sets it to None)
         // or when `SpeakerStream` itself is destroyed. No explicit teardown needed.
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression test for issue #249: pins the runtime version-gate contract.
+    /// `OsVersion::at_least()` resolves via `__isPlatformVersionAtLeast`, so this also proves
+    /// that the C entrypoint is linked and the compile-time `cidre::api` surface used by
+    /// `SpeakerInput::new` is wired correctly. Test host is macOS 14.4+ (Darwin 25.x).
+    #[test]
+    fn os_version_gate_resolves_macos_14_4_on_modern_hosts() {
+        // 14.4 must be reported true on a modern host (14.4+). If this flips, the gate is broken.
+        assert!(
+            api::OsVersion {
+                major: 14,
+                minor: 4,
+                patch: 0
+            }
+            .at_least(),
+            "macOS 14.4 should report at_least() == true on a >=14.4 host"
+        );
+    }
+
+    /// Inverse direction: a fictitious far-future macOS must report false. Proves we
+    /// aren't accidentally short-circuiting to always-true.
+    #[test]
+    fn os_version_gate_rejects_future_version() {
+        assert!(
+            !api::OsVersion {
+                major: 99,
+                minor: 0,
+                patch: 0
+            }
+            .at_least(),
+            "macOS 99.0 must not report at_least() == true"
+        );
+    }
+
+    /// Same contract via ProcessInfo (the API actually called from SpeakerInput::new).
+    /// Locks in that the cidre selector binding matches Foundation's
+    /// -[NSProcessInfo isOperatingSystemAtLeastVersion:] on this host.
+    #[test]
+    fn process_info_is_os_at_least_14_4_on_modern_hosts() {
+        let pi = ns::ProcessInfo::current();
+        assert!(
+            pi.is_os_at_least_version(api::OsVersion {
+                major: 14,
+                minor: 4,
+                patch: 0
+            }),
+            "ProcessInfo.isOperatingSystemAtLeastVersion(14.4) must be true on a >=14.4 host"
+        );
+        assert!(
+            !pi.is_os_at_least_version(api::OsVersion {
+                major: 99,
+                minor: 0,
+                patch: 0
+            }),
+            "ProcessInfo.isOperatingSystemAtLeastVersion(99.0) must be false"
+        );
     }
 }

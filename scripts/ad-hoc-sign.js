@@ -62,6 +62,9 @@ exports.default = async function (context) {
     const appPath = path.join(appOutDir, `${appName}.app`);
 
     // ── Step 1: Disguise helper display names (before signing) ──
+    // This MUST run regardless of the signing path: it edits helper Info.plist
+    // display names, and afterPack runs BEFORE electron-builder's own signing,
+    // so a later Developer ID signature will cover these edits correctly.
     try {
         disguiseHelperPlists(appOutDir, appName);
     } catch (error) {
@@ -69,9 +72,35 @@ exports.default = async function (context) {
         // Non-fatal: continue to signing
     }
 
-    // ── Step 2: Ad-hoc sign the application ──
+    // ── Production guard: never ad-hoc sign when a real Developer ID identity is configured ──
+    // When CSC_LINK / CSC_NAME / NATIVELY_SIGN_IDENTITY is present, electron-builder performs
+    // proper inside-out Developer ID signing with the entitlements + hardened runtime declared
+    // in package.json, and electron-builder's built-in mac.notarize notarizes + staples.
+    // Running `codesign --sign -` here would clobber that real signature with an ad-hoc one,
+    // which can never be notarized — so we skip the ad-hoc step entirely in that case.
+    const hasRealIdentity = !!(
+        process.env.NATIVELY_PRODUCTION_SIGN === '1' || // set by electron-builder.signed.cjs
+        process.env.CSC_LINK ||
+        process.env.CSC_NAME ||
+        process.env.NATIVELY_SIGN_IDENTITY
+    );
+    if (hasRealIdentity) {
+        console.log(
+            '[Ad-Hoc Signing] Developer ID identity detected (CSC_LINK/CSC_NAME/NATIVELY_SIGN_IDENTITY) — ' +
+            'skipping ad-hoc signing. electron-builder will sign with Developer ID; afterSign will notarize.'
+        );
+        return;
+    }
+
+    // Optional: shape the ad-hoc build like a hardened-runtime build for local TCC testing.
+    // Off by default because a hardened-runtime ad-hoc build has stricter launch requirements
+    // that cannot be fully verified without a real signing identity. Set NATIVELY_ADHOC_HARDENED=1
+    // to opt in when testing entitlement/permission behavior locally.
+    const hardenedOpt = process.env.NATIVELY_ADHOC_HARDENED === '1' ? '--options runtime ' : '';
+
+    // ── Step 2: Ad-hoc sign the application (DEV / local distribution only) ──
     // Resolve the path to the entitlements file so V8 gets JIT memory permissions
-    const entitlementsPath = path.join(context.packager.info.projectDir, 'assets', 'entitlements.mac.plist');
+    const entitlementsPath = path.join(context.packager.info.projectDir, 'build', 'entitlements.mac.plist');
     
     // ── Step 2a: Sign the main app bundle with --deep first ──
     // --deep recurses into nested Mach-O binaries (frameworks, helpers, .node files).
@@ -85,7 +114,7 @@ exports.default = async function (context) {
         // --deep: sign nested code (frameworks, helpers, .dylib, .node)
         // --entitlements: attach entitlements to the top-level app bundle
         // --sign -: ad-hoc signature
-        execSync(`codesign --force --deep --entitlements "${entitlementsPath}" --sign - "${appPath}"`, { stdio: 'inherit' });
+        execSync(`codesign --force --deep ${hardenedOpt}--entitlements "${entitlementsPath}" --sign - "${appPath}"`, { stdio: 'inherit' });
         console.log('[Ad-Hoc Signing] Successfully signed the application with entitlements.');
     } catch (error) {
         console.error('[Ad-Hoc Signing] Failed to sign the application:', error);
@@ -95,8 +124,8 @@ exports.default = async function (context) {
     // ── Step 2b: Re-sign .node binaries with entitlements AFTER --deep ──
     // codesign --deep re-signs nested .node binaries without entitlements (it only
     // applies entitlements to the top-level item). We re-sign them here AFTER --deep
-    // so the entitlements are not stripped. This ensures the screen-capture entitlement
-    // is present on the native module binary for CoreAudio Tap TCC checks.
+    // so the entitlements (JIT / library-validation) are preserved on the native
+    // module binary. (Screen/system-audio access is pure TCC — no entitlement.)
     const unpackedNativeDir = path.join(appPath, 'Contents', 'Resources', 'app.asar.unpacked', 'native-module');
     if (fs.existsSync(unpackedNativeDir)) {
         const files = fs.readdirSync(unpackedNativeDir);
@@ -105,7 +134,7 @@ exports.default = async function (context) {
                 const nodePath = path.join(unpackedNativeDir, file);
                 console.log(`[Ad-Hoc Signing] Re-signing ${file} with entitlements (post --deep)...`);
                 try {
-                    execSync(`codesign --force --entitlements "${entitlementsPath}" --sign - "${nodePath}"`, { stdio: 'inherit' });
+                    execSync(`codesign --force ${hardenedOpt}--entitlements "${entitlementsPath}" --sign - "${nodePath}"`, { stdio: 'inherit' });
                 } catch (error) {
                     console.error(`[Ad-Hoc Signing] Failed to sign ${file}:`, error);
                 }

@@ -1,19 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<api_contract service="natively-api" version="v1">
-  <endpoint method="POST" path="/v1/chat">
-    <auth header="x-natively-key" required="true"/>
-    <request content_type="application/json">
-      <field name="messages" type="array of {role, content}" required="true"/>
+<api_contract service="LLMHelper" version="internal-v1">
+  <method name="streamChat">
+    <description>
+      Streams a live answer through the active provider. Callers depend on this method for provider fallback, rate-limit handling, and streaming response normalization.
+    </description>
+    <request>
+      <field name="message" type="string" required="true"/>
+      <field name="imageData" type="string" required="false"/>
+      <field name="signal" type="AbortSignal" required="false"/>
+      <field name="systemPromptOverride" type="string" required="false">
+        Must be omitted or provided as a string. The active mode suffix is assembled before this method is called.
+      </field>
       <field name="stream" type="boolean" default="true"/>
-      <field name="metadata" type="object" required="false"/>
     </request>
     <response>
-      The response returns an SSE stream tagged x-natively-stream when stream is true. Each event has a data: prefix and ends with data: [DONE]. When stream is false the response is application/json with a single content field.
+      Returns an AsyncIterable of text deltas. Provider-specific SSE, JSON, and fallback formats are normalized before yielding to callers.
     </response>
     <errors>
-      <error code="401">Invalid or missing x-natively-key</error>
-      <error code="429">Rate limit exceeded; back off using Retry-After header</error>
-      <error code="500">Upstream provider failure; retryable</error>
+      <error code="MISSING_DEPENDENCY">WhatToAnswerLLM was constructed without an LLMHelper instance.</error>
+      <error code="PROVIDER_UNAVAILABLE">The active provider and configured fallbacks are unavailable.</error>
+      <error code="RATE_LIMITED">The active provider returned a retryable rate-limit response.</error>
     </errors>
-  </endpoint>
+  </method>
 </api_contract>

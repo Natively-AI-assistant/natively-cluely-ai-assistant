@@ -45,6 +45,9 @@ function isCloudIdentifier(id: string): boolean {
   if (s.startsWith('gemini-') || s.startsWith('models/gemini')) return true;
   if (s.startsWith('gpt-') || s.startsWith('o1-') || s.startsWith('o3-') || s.startsWith('o4-') || s.startsWith('chatgpt-')) return true;
   if (s.startsWith('claude-')) return true;
+  // DeepSeek cloud API (OpenAI-compatible). The local Ollama "deepseek-coder"
+  // family is handled by the isOllama branch above.
+  if (/^deepseek-v\d/.test(s)) return true;
   return false;
 }
 

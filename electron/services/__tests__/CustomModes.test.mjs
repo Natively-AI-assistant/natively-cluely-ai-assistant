@@ -103,11 +103,11 @@ const CUSTOM_MODES = {
       'debug_test_results.json',
     ],
     sentinels: {
-      error_log: 'TypeError Cannot read properties of undefined reading streamChat',
-      code_snippet: 'can be undefined at this point because',
-      architecture: 'WhatToAnswerLLM owns runtime intent classification',
-      api_contract: 'SSE stream tagged x-natively-stream',
-      test_results: 'EmbeddingPipeline mock never resolved isReady to false',
+      error_log: 'failed before provider streaming started',
+      code_snippet: 'this.llmHelper.streamChat',
+      architecture: 'must not drop provider routing dependencies',
+      api_contract: 'MISSING_DEPENDENCY',
+      test_results: 'generateStream - streams after custom mode hot-swap',
     },
   },
   'sales-demo': {
@@ -342,40 +342,40 @@ describe('Custom mode 4: Technical Debugging / Code Review', () => {
     assertContextContains(ctx, CUSTOM_MODES['code-review'].sentinels.error_log, 'error_log');
   });
 
-  test('scenario 2: API contract mismatch → retrieves API contract XML', () => {
+  test('scenario 2: internal stream contract → retrieves LLMHelper contract XML', () => {
     const ctx = runCustom({
       folder: 'code-review',
-      query: 'My chat endpoint integration keeps failing on 401, what is the expected auth header and stream content type?',
-      transcript: 'Engineer integrating against the Natively chat endpoint.',
+      query: 'LLMHelper streamChat missing dependency AsyncIterable provider fallback rate limit contract',
+      transcript: 'Engineer asks what contract WhatToAnswerLLM relies on before it can stream live answers through provider fallback.',
     });
-    assertContextContains(ctx, CUSTOM_MODES['code-review'].sentinels.api_contract, 'api_contract');
+    assertContextContains(ctx, CUSTOM_MODES['code-review'].sentinels.api_contract, 'api_contract_missing_dependency');
   });
 
-  test('scenario 3: failing test → retrieves test results', () => {
+  test('scenario 3: failing hot-swap test → retrieves test results', () => {
     const ctx = runCustom({
       folder: 'code-review',
-      query: 'ModeContextRetriever test failed with timeout 5000ms EmbeddingPipeline mock isReady regression',
-      transcript: 'Engineer asks about ModeContextRetriever test failure: timeout 5000ms, EmbeddingPipeline mock never resolved isReady to false, retrieveHybrid regression introduced in commit 5d95836.',
+      query: 'WhatToAnswerLLM generateStream streams after custom mode hot swap streamChat undefined regression test',
+      transcript: 'Engineer asks about a failing WhatToAnswerLLM test after custom mode hot-swap: undefined streamChat, generateStream, regression introduced in commit 5d95836.',
     });
-    assertContextContains(ctx, 'EmbeddingPipeline mock never resolved', 'test_results_embedding');
+    assertContextContains(ctx, CUSTOM_MODES['code-review'].sentinels.test_results, 'test_results_streamchat');
   });
 
-  test('scenario 4: performance regression → retrieves architecture notes', () => {
+  test('scenario 4: dependency invariant → retrieves architecture notes', () => {
     const ctx = runCustom({
       folder: 'code-review',
-      query: 'WhatToAnswerLLM owns runtime intent classification prompt assembly mode hot swap mid call architecture',
-      transcript: 'Engineer suspects performance regression: WhatToAnswerLLM owns runtime intent classification, mode hot-swap during a live call, PromptAssembler builds final user message.',
+      query: 'WhatToAnswerLLM LLMHelper dependency provider routing dependencies mode hot swap architecture',
+      transcript: 'Engineer suspects mode hot-swap reconstructed WhatToAnswerLLM and dropped provider routing dependencies while preserving ModesManager.',
     });
-    assertContextContains(ctx, CUSTOM_MODES['code-review'].sentinels.architecture, 'architecture_owns');
+    assertContextContains(ctx, CUSTOM_MODES['code-review'].sentinels.architecture, 'architecture_dependencies');
   });
 
-  test('scenario 5: unsafe IPC review → retrieves code snippet + architecture', () => {
+  test('scenario 5: streamChat undefined review → retrieves code snippet', () => {
     const ctx = runCustom({
       folder: 'code-review',
-      query: 'WhatToAnswerLLM modePromptSuffix undefined mode hot swap streamChat PromptAssembler review',
-      transcript: 'Code review on WhatToAnswerLLM where modePromptSuffix can be undefined at this point, mode hot swap, getActiveModeSystemPromptSuffix, streamChat downstream call.',
+      query: 'WhatToAnswerLLM this llmHelper streamChat undefined custom mode hot swap code review',
+      transcript: 'Code review on WhatToAnswerLLM where the hot-swap path may construct the instance without llmHelper, then generateStream calls this.llmHelper.streamChat.',
     });
-    assertContextContains(ctx, CUSTOM_MODES['code-review'].sentinels.code_snippet, 'code_snippet_undefined');
+    assertContextContains(ctx, CUSTOM_MODES['code-review'].sentinels.code_snippet, 'code_snippet_streamchat');
   });
 });
 

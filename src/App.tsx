@@ -368,9 +368,26 @@ const App: React.FC = () => {
   }, [isOverlayWindow]);
 
   useEffect(() => {
+    // Two propagation channels:
+    //  1. `storage` event — fires within the same window when our own
+    //     setMeetingInterfaceTheme() dispatches it (covers settings-pane → App
+    //     state in the launcher).
+    //  2. IPC `interface-theme:changed` broadcast — main relays the new theme
+    //     to EVERY BrowserWindow, including the overlay. Without this the
+    //     overlay holds a stale theme value across hide/show cycles, which
+    //     yielded the half-painted UI on next meeting start.
     const handleStorage = () => setMeetingInterfaceThemeState(getMeetingInterfaceTheme());
     window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
+    const unsubscribeIpc = window.electronAPI?.onMeetingInterfaceThemeChanged?.((theme) => {
+      const valid: MeetingInterfaceTheme[] = ['default', 'liquid-glass', 'modern'];
+      if (valid.includes(theme as MeetingInterfaceTheme)) {
+        setMeetingInterfaceThemeState(theme as MeetingInterfaceTheme);
+      }
+    });
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      unsubscribeIpc?.();
+    };
   }, []);
 
 
@@ -455,11 +472,13 @@ const App: React.FC = () => {
     });
   };
 
+  const interfaceThemeAttribute = meetingInterfaceTheme === 'default' ? undefined : meetingInterfaceTheme;
+
   // Render Logic
   if (isSettingsWindow) {
     return (
       <ErrorBoundary context="SettingsPopup">
-        <div className="h-full min-h-0 w-full">
+        <div className="h-full min-h-0 w-full" data-interface-theme={interfaceThemeAttribute}>
           <QueryClientProvider client={queryClient}>
             <ToastProvider>
               <SettingsPopup />
@@ -474,7 +493,10 @@ const App: React.FC = () => {
   if (isModelSelectorWindow) {
     return (
       <ErrorBoundary context="ModelSelector">
-        <div className="h-full min-h-0 w-full overflow-hidden">
+        <div
+          className="h-full min-h-0 w-full overflow-hidden"
+          data-interface-theme={interfaceThemeAttribute}
+        >
           <QueryClientProvider client={queryClient}>
             <ToastProvider>
               <ModelSelectorWindow />
@@ -490,7 +512,7 @@ const App: React.FC = () => {
   if (isOverlayWindow) {
     return (
       <ErrorBoundary context="Overlay">
-        <div className="w-full relative bg-transparent">
+        <div className="w-full h-full relative overflow-hidden bg-transparent">
           <QueryClientProvider client={queryClient}>
             <ToastProvider>
               <div

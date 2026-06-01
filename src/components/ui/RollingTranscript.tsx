@@ -5,7 +5,9 @@ import { categorizeSttError, type SttErrorCategory } from '../../lib/sttErrorMap
 import ChannelCard from './ChannelCard';
 
 interface ChannelStatus {
-    status: 'connected' | 'reconnecting' | 'failed';
+    // B2: 'awaiting-audio' is the pre-verified-audio neutral state — distinct
+    // from 'reconnecting' (which implies a previous connection was lost).
+    status: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio';
     error?: string;
     provider?: string;
 }
@@ -39,7 +41,17 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({
 
     const anyFailed = intStatus === 'failed' || micStatus === 'failed';
     const anyReconnecting = intStatus === 'reconnecting' || micStatus === 'reconnecting';
-    const isNormal = !anyFailed && !anyReconnecting && micStatus === 'connected';
+    const anyAwaitingAudio = intStatus === 'awaiting-audio' || micStatus === 'awaiting-audio';
+    // B2: exclude awaiting-audio from "normal" so the rolling transcript bar
+    // shows the neutral "Listening for audio…" state, not a misleading
+    // green/active appearance, until the pipeline produces real audio.
+    const isNormal = !anyFailed && !anyReconnecting && !anyAwaitingAudio && micStatus === 'connected';
+    // Status (reconnecting/awaiting/failed) is owned by the top status pill —
+    // the bar's only job is live transcript. Show the transcript text whenever
+    // we're not in a hard-failed state (failed shows diagnostics instead). This
+    // keeps the last transcript visible during a transient reconnect without
+    // duplicating the pill's "Reconnecting" label as text.
+    const showTranscriptText = !anyFailed;
 
     const intErrorCategory: SttErrorCategory | null = (intStatus === 'failed' && intError)
         ? categorizeSttError(intError)
@@ -54,11 +66,12 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({
     }, [intStatus, micStatus]);
 
     useEffect(() => {
-        // Only auto-scroll for normal transcript, not for error/reconnecting states
-        if (containerRef.current && isNormal && text) {
+        // Auto-scroll whenever transcript text is showing (incl. during a
+        // transient reconnect); skip only for hard-failed diagnostics view.
+        if (containerRef.current && showTranscriptText && text) {
             containerRef.current.scrollLeft = containerRef.current.scrollWidth;
         }
-    }, [text, isNormal]);
+    }, [text, showTranscriptText]);
 
     const handleCopy = () => {
         if (onCopyDiagnostics) {
@@ -97,10 +110,10 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({
                             maskImage: 'linear-gradient(to right, transparent, black 10%, black 90%, transparent)',
                         }}
                     >
-                        {isNormal && (
+                        {showTranscriptText && (
                             <span className="inline-flex items-center text-[13px] italic leading-7 text-[var(--overlay-text-muted)] transition-all duration-300">
                                 {text || 'Listening…'}
-                                {isActive && (
+                                {isActive && isNormal && (
                                     <span className="inline-flex items-center ml-2">
                                         <span className="w-[3px] h-[3px] bg-emerald-400/70 rounded-full animate-pulse" />
                                     </span>
@@ -108,19 +121,12 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({
                             </span>
                         )}
 
-                        {anyReconnecting && !anyFailed && (
-                            <span className="flex items-center justify-center w-full text-[12px] leading-7 stt-state-enter">
-                                <span className="text-amber-400/70 font-medium tracking-wide">
-                                    Reconnecting
-                                </span>
-                            </span>
-                        )}
-
                         </div>
                 </div>
 
-                {/* Error chips row — both channels visible */}
-                {(anyFailed || anyReconnecting) && (
+                {/* Error chips row — failed channels only. Reconnecting status is
+                    surfaced by the top status pill, not duplicated here. */}
+                {anyFailed && (
                     <div className="relative w-[90%] mx-auto">
                         <span className="flex items-center justify-center w-full text-[12px] leading-7 pl-3 stt-state-enter gap-3">
                             {/* Interviewer chip */}

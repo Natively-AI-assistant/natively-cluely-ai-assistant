@@ -18,6 +18,7 @@ import axios from 'axios';
 import FormData from 'form-data';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 import { streamingStttWsOptions } from './dnsHelpers';
+import { OpenAITranscriptTurnCoalescer } from './openaiTranscriptTurnCoalescer';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -100,7 +101,7 @@ export class OpenAIStreamingSTT extends EventEmitter {
     private keepAliveTimer: NodeJS.Timeout | null = null;
     private connectionTimeoutTimer: NodeJS.Timeout | null = null;
     private sessionSetupTimer: NodeJS.Timeout | null = null;
-    private isSessionReady = false;     // set on inbound transcription_session.created (GA)
+    private isSessionReady = false;     // set on inbound session.created
 
     // Audio batching state
     private pcmAccumulator: Int16Array[] = [];
@@ -132,6 +133,14 @@ export class OpenAIStreamingSTT extends EventEmitter {
     // WebSocket Realtime path is skipped — third-party servers don't implement it.
     private restEndpoint: string = REST_ENDPOINT;
     private isCustomEndpoint = false;
+
+    // Coalesce word-level GA completed events into one final turn per utterance.
+    private turnCoalescer = new OpenAITranscriptTurnCoalescer();
+
+    // Suppress duplicate final emits (finalize flush + speech_stopped, etc.).
+    private lastFinalEmitText = '';
+    private lastFinalEmitAt = 0;
+    private static readonly FINAL_DEDUPE_MS = 2500;
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
@@ -210,6 +219,7 @@ export class OpenAIStreamingSTT extends EventEmitter {
         // after restart isn't surprise-deferred by an orphaned axios promise.
         this.restIsUploading  = false;
         this.restFlushPending = false;
+        this.turnCoalescer.reset();
 
         // Custom endpoints (e.g. Speaches) don't implement OpenAI's Realtime WebSocket
         // protocol. Go straight to REST mode for them.
@@ -226,6 +236,7 @@ export class OpenAIStreamingSTT extends EventEmitter {
     public stop(): void {
         if (!this.isActive) return;
         console.log('[OpenAIStreaming] Stopping...');
+        this._flushTurnCoalescer();
         this.isActive        = false;
         this.shouldReconnect = false;
 
@@ -268,6 +279,17 @@ export class OpenAIStreamingSTT extends EventEmitter {
 
         this.restChunks     = [];
         this.restTotalBytes = 0;
+        // Reset REST flush state too — without this, a `restFlushPending=true`
+        // left over from an in-flight upload at stop time would cause the
+        // finally re-entry in _restFlushAndUpload() to schedule another
+        // upload that the new isActive guard at entry now correctly rejects,
+        // but it's cleaner to flip the latch here so future readers don't
+        // wonder why the entry guard exists at all.
+        this.restFlushPending = false;
+        // Note: restIsUploading is NOT reset to false synchronously — there
+        // may be an in-flight axios POST whose finally needs to observe the
+        // true value to take its early-return branch. The axios timeout caps
+        // the wait at 30s in the worst case.
         this.ringBuffer     = [];
         this.ringBufferBytes = 0;
         this.pcmAccumulator = [];
@@ -345,6 +367,9 @@ export class OpenAIStreamingSTT extends EventEmitter {
         } catch (err) {
             console.error('[OpenAIStreaming][WS] Finalize commit failed:', err);
         }
+        // Do not flush the coalescer here — commit triggers server VAD/transcription
+        // and speech_stopped will emit one coalesced final. Flushing here duplicates
+        // the same text as a second final turn downstream.
     }
 
     // ─── WebSocket Path ───────────────────────────────────────────────────────
@@ -392,7 +417,7 @@ export class OpenAIStreamingSTT extends EventEmitter {
             this.isConnecting      = false;
             this.reconnectAttempts = 0;
 
-            // Start 5-second timeout waiting for session.created
+            // Start 5-second timeout waiting for session.created from server
             this.sessionSetupTimer = setTimeout(() => {
                 console.warn(`[OpenAIStreaming] Server accepted connection but failed to create session within 5s. Forcing disconnect...`);
                 // Force a disconnect to trigger the fallback logic. Mirror the
@@ -414,17 +439,30 @@ export class OpenAIStreamingSTT extends EventEmitter {
                 ? (RECOGNITION_LANGUAGES[this.languageKey]?.iso639 ?? '')
                 : '';
 
+            const transcription: { model: string; language?: string } = { model };
+            if (lang) transcription.language = lang;
+
             this.ws!.send(JSON.stringify({
-                type: 'transcription_session.update',
+                type: 'session.update',
                 session: {
-                    input_audio_format: 'pcm16',
-                    input_audio_transcription: { model, language: lang || '' },
-                    input_audio_noise_reduction: { type: 'near_field' },
-                    turn_detection: {
-                        type:                'server_vad',
-                        threshold:           0.5,
-                        prefix_padding_ms:   300,
-                        silence_duration_ms: 500,
+                    type: 'transcription',
+                    audio: {
+                        input: {
+                            format: {
+                                type: 'audio/pcm',
+                                rate: WS_SAMPLE_RATE,
+                            },
+                            transcription,
+                            noise_reduction: { type: 'near_field' },
+                            turn_detection: {
+                                type:                'server_vad',
+                                threshold:           0.5,
+                                prefix_padding_ms:   300,
+                                // 1000ms reduces micro-turns that fragment one sentence into
+                                // many word-sized completed events (overlay queue rows).
+                                silence_duration_ms: 1000,
+                            },
+                        },
                     },
                 },
             }));
@@ -504,12 +542,13 @@ export class OpenAIStreamingSTT extends EventEmitter {
 
     private _handleWsMessage(msg: Record<string, any>): void {
         // Late-arrival guard. The ws library can deliver a buffered server frame
-        // (e.g. transcription_session.created) after we have called stop() but
+        // (e.g. session.created) after we have called stop() but
         // before removeAllListeners() drained. Without this guard, the late
         // frame would set isSessionReady=true and call _startKeepAlive(), leaking
         // a 20s setInterval against a class the caller thinks is shut down.
         if (!this.isActive) return;
         switch (msg.type) {
+            case 'session.created':
             case 'transcription_session.created':
                 if (this.sessionSetupTimer) {
                     clearTimeout(this.sessionSetupTimer);
@@ -522,34 +561,21 @@ export class OpenAIStreamingSTT extends EventEmitter {
                 this._flushRingBuffer();
                 break;
 
-            case 'session.created':
-                // Belongs to the general realtime intent (not intent=transcription).
-                // We connect with ?intent=transcription, so the server should only emit
-                // transcription_session.created. If we see this, the server response shape
-                // has changed — make it visible rather than silently activating the wrong path.
-                console.warn('[OpenAIStreaming] Unexpected session.created on transcription intent — ignoring (expected transcription_session.created)');
-                break;
-
-            case 'conversation.item.input_audio_transcription.delta':
-                if (msg.delta) {
-                    this.emit('transcript', {
-                        text:       msg.delta,
-                        isFinal:    false,
-                        confidence: 1.0,
-                    });
+            case 'conversation.item.input_audio_transcription.delta': {
+                const partial = this.turnCoalescer.onDelta(msg.delta ?? '');
+                if (partial) {
+                    this._emitTranscript(partial, false);
                 }
                 break;
+            }
 
-            case 'conversation.item.input_audio_transcription.completed':
-                if (msg.transcript) {
-                    console.log(`[OpenAIStreaming] Final transcript received`, { length: msg.transcript.length });
-                    this.emit('transcript', {
-                        text:       msg.transcript,
-                        isFinal:    true,
-                        confidence: 1.0,
-                    });
+            case 'conversation.item.input_audio_transcription.completed': {
+                const preview = this.turnCoalescer.onCompleted(msg.transcript ?? '');
+                if (preview) {
+                    this._emitTranscript(preview, false);
                 }
                 break;
+            }
 
             // Quota observability. OpenAI emits rate_limits.updated each turn
             // with { name, limit, remaining, reset_seconds } per limit type
@@ -585,20 +611,31 @@ export class OpenAIStreamingSTT extends EventEmitter {
                 break;
             }
 
-            // Server's ACK of our transcription_session.update. Useful for
-            // confirming the server applied our requested config — log only,
-            // no behavior change required.
+            // Server's ACK of our session.update. Useful for confirming the server
+            // applied our requested config — log only, no behavior change required.
+            case 'session.updated':
             case 'transcription_session.updated':
                 console.log('[OpenAIStreaming] Session config applied by server');
                 break;
 
             // VAD events emitted by the server (informational — we don't need to act on them)
-            case 'input_audio_buffer.speech_started':
+            case 'input_audio_buffer.speech_started': {
                 console.log('[OpenAIStreaming] Server VAD: speech started');
+                const orphan = this.turnCoalescer.onSpeechStarted();
+                if (orphan) {
+                    this._emitTranscript(orphan, true);
+                }
                 break;
-            case 'input_audio_buffer.speech_stopped':
+            }
+            case 'input_audio_buffer.speech_stopped': {
                 console.log('[OpenAIStreaming] Server VAD: speech stopped');
+                const finalText = this.turnCoalescer.onSpeechStopped();
+                if (finalText) {
+                    console.log(`[OpenAIStreaming] Final transcript received`, { length: finalText.length });
+                    this._emitTranscript(finalText, true);
+                }
                 break;
+            }
             case 'input_audio_buffer.committed':
                 // Audio chunk committed for transcription
                 break;
@@ -619,6 +656,35 @@ export class OpenAIStreamingSTT extends EventEmitter {
                 // Uncomment for verbose debugging:
                 // console.log(`[OpenAIStreaming] Unhandled message type: ${msg.type}`);
                 break;
+        }
+    }
+
+    private _emitTranscript(text: string, isFinal: boolean): void {
+        const trimmed = text.trim();
+        if (!trimmed) return;
+        if (isFinal) {
+            const now = Date.now();
+            if (
+                trimmed === this.lastFinalEmitText &&
+                now - this.lastFinalEmitAt < OpenAIStreamingSTT.FINAL_DEDUPE_MS
+            ) {
+                return;
+            }
+            this.lastFinalEmitText = trimmed;
+            this.lastFinalEmitAt = now;
+        }
+        this.emit('transcript', {
+            text:       trimmed,
+            isFinal,
+            confidence: 1.0,
+        });
+    }
+
+    private _flushTurnCoalescer(): void {
+        const finalText = this.turnCoalescer.flush();
+        if (finalText) {
+            console.log(`[OpenAIStreaming] Flushed coalesced transcript`, { length: finalText.length });
+            this._emitTranscript(finalText, true);
         }
     }
 
@@ -870,6 +936,15 @@ export class OpenAIStreamingSTT extends EventEmitter {
     }
 
     private async _restFlushAndUpload(): Promise<void> {
+        // Mirror the RestSTT.flushAndUpload guard (Issue 7). Without this, the
+        // finally-re-entrancy at line ~970 (`if (this.restFlushPending)
+        // this._restFlushAndUpload()`) can fire AFTER stop() has cleared
+        // restChunks and the next meeting may already have started — and
+        // the trailing in-flight upload would emit 'transcript' into the new
+        // session. Same class of bug as RestSTT's leak; gating here closes
+        // it on the OpenAI provider too.
+        if (!this.isActive) return;
+
         if (this.restChunks.length === 0 || this.restTotalBytes < REST_MIN_UPLOAD_BYTES) return;
         if (this.restIsUploading) {
             this.restFlushPending = true;
