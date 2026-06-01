@@ -790,6 +790,22 @@ interface ElectronAPI {
   ) => Promise<{ success: boolean; error?: string }>;
   modesDeleteNoteSection: (id: string) => Promise<{ success: boolean; error?: string }>;
   modesRemoveAllNoteSections: (modeId: string) => Promise<{ success: boolean; error?: string }>;
+
+  // Meeting interface theme — cross-window propagation. The settings window
+  // writes the new theme to localStorage and calls `setMeetingInterfaceTheme`,
+  // which sends an IPC to main; main re-broadcasts to every window so the
+  // overlay window's React state stays in sync with the launcher's. Without
+  // this, the overlay reads stale theme on next meeting start (half-paint hang).
+  setMeetingInterfaceTheme: (theme: string) => void;
+  onMeetingInterfaceThemeChanged: (callback: (theme: string) => void) => () => void;
+
+  // Cancel the in-flight gemini-chat-stream. Renderer wires this to "drop
+  // the current answer" user actions (Escape, navigation, chat-overlay unmount).
+  // Without explicit cancel the chat IPC handler keeps streaming tokens that
+  // the renderer silently discards — wasting provider quota and feeling slow
+  // because a subsequent question's first token has to wait for the prior
+  // response to drain through the supersession check.
+  cancelChatStream: () => void;
   onDomContextReceived: (callback: (dom: string) => void) => () => void;
 }
 
@@ -2014,6 +2030,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   modesDeleteNoteSection: (id: string) => ipcRenderer.invoke('modes:delete-note-section', id),
   modesRemoveAllNoteSections: (modeId: string) =>
     ipcRenderer.invoke('modes:remove-all-note-sections', modeId),
+
+  // Meeting interface theme — see ElectronAPI interface for rationale.
+  setMeetingInterfaceTheme: (theme: string) => {
+    ipcRenderer.send('interface-theme:set', theme);
+  },
+  onMeetingInterfaceThemeChanged: (callback: (theme: string) => void) => {
+    const handler = (_evt: unknown, theme: string) => callback(theme);
+    ipcRenderer.on('interface-theme:changed', handler);
+    return () => {
+      ipcRenderer.removeListener('interface-theme:changed', handler);
+    };
+  },
+
+  // Cancel the in-flight chat stream. See ElectronAPI interface for rationale.
+  cancelChatStream: () => {
+    ipcRenderer.send('gemini-chat-stream-stop');
+  },
   onDomContextReceived: (callback: (dom: string) => void) => {
     const subscription = (_: any, dom: string) => callback(dom);
     ipcRenderer.on('dom-context-received', subscription);

@@ -5,7 +5,7 @@ import { estimateTokens } from "./modelCapabilities";
 import { TemporalContext } from "./TemporalContextBuilder";
 import { IntentResult } from "./IntentClassifier";
 import { ScreenContext } from "../services/screen/ScreenContextService";
-import { PromptAssembler, escapeUserContent, INJECTION_REDACTION_MESSAGE } from "../services/context/PromptAssembler";
+import { PromptAssembler, escapeUserContent, INJECTION_REDACTION_MESSAGE, TRUNCATION_SUFFIX } from "../services/context/PromptAssembler";
 import { DOM_CONTEXT_MAX_CHARS } from "../config/constants";
 import { checkAnswerForCodeBugs } from "./CodeSanityCheck";
 import type { ProviderDataScope } from "./ProviderRouter";
@@ -160,7 +160,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
                     const ratio = escaped.length / domContext.length;
                     // Deduct length of suffix (\n[...truncated]) to ensure final length fits comfortably
                     const maxRawLength = Math.floor((DOM_CONTEXT_MAX_CHARS - 30) / ratio);
-                    processedDomContext = domContext.substring(0, maxRawLength) + '\n[...truncated]';
+                    processedDomContext = domContext.substring(0, maxRawLength) + TRUNCATION_SUFFIX;
                 } else {
                     processedDomContext = domContext;
                 }
