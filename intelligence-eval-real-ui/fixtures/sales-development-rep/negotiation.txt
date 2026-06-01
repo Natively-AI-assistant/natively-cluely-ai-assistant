@@ -1,0 +1,7 @@
+NEGOTIATION CONTEXT
+Target salary: $80000
+Minimum acceptable: $72000
+Current salary: $65000
+Signing bonus target: $5000
+Equity: None for SDR level
+Priorities: base salary, OTE structure, ramp period

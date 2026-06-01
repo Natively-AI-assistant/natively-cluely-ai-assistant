@@ -1,0 +1,120 @@
+{
+  "profileId": "founder-ceo-bd",
+  "role": "Founder / CEO (Business Development)",
+  "resume": {
+    "identity": {
+      "name": "Michael Zhang",
+      "email": "mzhang@mit.edu",
+      "location": "Boston, MA",
+      "phone": "617-555-0193",
+      "links": []
+    },
+    "summary": "Serial founder with 2 successful exits. Building Nexus AI (Series A, $18M raised). Looking for co-founder or founding team role at a hard-tech startup.",
+    "skills": [
+      "Fundraising",
+      "Team Building",
+      "Go",
+      "Python",
+      "SQL",
+      "Product Strategy",
+      "Enterprise Sales",
+      "M&A"
+    ],
+    "experience": [
+      {
+        "company": "Nexus AI",
+        "role": "Founder & CEO",
+        "start_date": "2022-01",
+        "end_date": null,
+        "bullets": [
+          "Raised $18M Series A for AI-powered code review platform",
+          "Grew to 120 paying customers and $2.4M ARR",
+          "Built 12-person technical team from scratch"
+        ]
+      },
+      {
+        "company": "StackIQ (Acquired by PagerDuty)",
+        "role": "Co-founder & CTO",
+        "start_date": "2019-03",
+        "end_date": "2021-12",
+        "bullets": [
+          "Built infrastructure automation tool, $40M acquisition",
+          "Scaled engineering team from 3 to 25"
+        ]
+      }
+    ],
+    "projects": [
+      {
+        "name": "Nexus AI",
+        "description": "AI-powered code review platform. 120 customers, $2.4M ARR. Raised $18M Series A.",
+        "technologies": [
+          "Go",
+          "Python",
+          "GPT-4",
+          "PostgreSQL"
+        ]
+      },
+      {
+        "name": "StackIQ",
+        "description": "Infrastructure automation for cloud deployments. Acquired for $40M by PagerDuty.",
+        "technologies": [
+          "Terraform",
+          "AWS",
+          "Go"
+        ]
+      }
+    ],
+    "education": [
+      {
+        "institution": "MIT",
+        "degree": "BS Computer Science + MBA",
+        "field": "Computer Science + MBA",
+        "start_date": "",
+        "end_date": "2015"
+      }
+    ],
+    "achievements": [],
+    "certifications": [],
+    "leadership": []
+  },
+  "jd": {
+    "title": "Co-founder / Founding Engineer",
+    "company": "Cognition AI",
+    "location": "San Francisco, CA",
+    "description_summary": "Building the future of AI-native software development. Join as founding team member with significant equity. We're rethinking how software is built.",
+    "level": "founder",
+    "employment_type": "full_time",
+    "min_years_experience": 6,
+    "compensation_hint": "$150k base + significant equity (founder level)",
+    "requirements": [
+      "Strong technical background (CS/engineering)",
+      "Startup experience",
+      "AI/ML interest",
+      "Business development capability",
+      "San Francisco based"
+    ],
+    "nice_to_haves": [],
+    "responsibilities": [],
+    "technologies": [
+      "Python",
+      "Go",
+      "AI/ML",
+      "AWS"
+    ],
+    "keywords": []
+  },
+  "customContext": "I respond to vision and market opportunity framing. Connect technical decisions to business outcomes.",
+  "persona": "Visionary technical founder — strategic, business-minded, outcome-driven.",
+  "negotiation": {
+    "targetSalary": 160000,
+    "minimumSalary": 140000,
+    "currentSalary": 200000,
+    "equity": "3% with 4 year vest, 1 year cliff",
+    "priorities": [
+      "founder equity",
+      "technical role",
+      "board seat"
+    ]
+  },
+  "referenceFiles": []
+}

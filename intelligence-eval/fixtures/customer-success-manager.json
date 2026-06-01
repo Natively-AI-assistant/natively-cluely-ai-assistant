@@ -1,0 +1,117 @@
+{
+  "profileId": "customer-success-manager",
+  "role": "Customer Success Manager",
+  "resume": {
+    "identity": {
+      "name": "Aisha Patel",
+      "email": "aisha.patel@mit.edu",
+      "location": "Boston, MA",
+      "phone": "617-555-0128",
+      "links": []
+    },
+    "summary": "Customer success leader with 5 years managing enterprise accounts in SaaS. Grew net revenue retention 115% and reduced churn to 8% at Slack.",
+    "skills": [
+      "Gainsight",
+      "Salesforce",
+      "Churn.io",
+      "Executive presentation",
+      "QBR",
+      "Renewal negotiation",
+      "Technical aptitude"
+    ],
+    "experience": [
+      {
+        "company": "Slack",
+        "role": "Senior Customer Success Manager",
+        "start_date": "2021-03",
+        "end_date": null,
+        "bullets": [
+          "Manage 45 enterprise accounts ($5M ARR)",
+          "Achieved 115% net revenue retention across portfolio",
+          "Created CS playbooks reducing onboarding time 40%"
+        ]
+      },
+      {
+        "company": "Salesforce",
+        "role": "Customer Success Manager",
+        "start_date": "2019-01",
+        "end_date": "2021-02",
+        "bullets": [
+          "Managed Fortune 500 accounts in Financial Services vertical",
+          "98% customer satisfaction score"
+        ]
+      }
+    ],
+    "projects": [
+      {
+        "name": "CS-Scorecard",
+        "description": "Customer health scoring model using product usage, support tickets, and NPS. Adopted by 80 CSMs at Slack.",
+        "technologies": [
+          "SQL",
+          "Looker",
+          "Python"
+        ]
+      }
+    ],
+    "education": [
+      {
+        "institution": "MIT Sloan School of Management",
+        "degree": "MS Technology Management",
+        "field": "Technology Management",
+        "start_date": "",
+        "end_date": "2018"
+      },
+      {
+        "institution": "Boston University",
+        "degree": "BA Economics",
+        "field": "Economics",
+        "start_date": "",
+        "end_date": "2016"
+      }
+    ],
+    "achievements": [],
+    "certifications": [],
+    "leadership": []
+  },
+  "jd": {
+    "title": "Enterprise Customer Success Manager",
+    "company": "Notion",
+    "location": "New York, NY",
+    "description_summary": "Own the success of our largest enterprise customers. Drive adoption, renewal, and expansion across a portfolio of Fortune 500 accounts.",
+    "level": "senior",
+    "employment_type": "full_time",
+    "min_years_experience": 5,
+    "compensation_hint": "$120k-$150k + OTE",
+    "requirements": [
+      "5+ years CS or account management",
+      "Enterprise SaaS",
+      "Technical product understanding",
+      "Renewals and expansion",
+      "Gainsight preferred"
+    ],
+    "nice_to_haves": [],
+    "responsibilities": [],
+    "technologies": [
+      "Gainsight",
+      "Salesforce",
+      "Churn.io",
+      "Looker"
+    ],
+    "keywords": []
+  },
+  "customContext": "Give me concrete talk tracks and frameworks I can use with executive stakeholders.",
+  "persona": "Trusted advisor — executive presence, consultative, outcome-focused.",
+  "negotiation": {
+    "targetSalary": 135000,
+    "minimumSalary": 120000,
+    "currentSalary": 115000,
+    "signingBonus": 10000,
+    "equity": "0.01% with 4 year vest",
+    "priorities": [
+      "enterprise portfolio quality",
+      "OTE uncapped",
+      "career development path"
+    ]
+  },
+  "referenceFiles": []
+}

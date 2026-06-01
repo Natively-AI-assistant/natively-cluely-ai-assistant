@@ -198,6 +198,17 @@
   filter: brightness(0) invert(1) !important;
 }
 
+/* liquid-glass and modern themes always have a dark background panel,
+   so the logo must always render white regardless of system light/dark mode. */
+[data-interface-theme="liquid-glass"] .force-black-icon,
+[data-theme='light'] [data-interface-theme="liquid-glass"] .force-black-icon,
+[data-theme='dark'] [data-interface-theme="liquid-glass"] .force-black-icon,
+[data-interface-theme="modern"] .force-black-icon,
+[data-theme='light'] [data-interface-theme="modern"] .force-black-icon,
+[data-theme='dark'] [data-interface-theme="modern"] .force-black-icon {
+  filter: brightness(0) invert(1) !important;
+}
+
 /* Light mode: liquid-glass — clean frosted white panel */
 [data-theme='light'] .liquid-glass {
   background: rgba(255, 255, 255, 0.80);
@@ -282,15 +293,13 @@
       rgba(255, 255, 255, 0.04) 65%,
       rgba(255, 255, 255, 0.12) 100%
     ),
-    rgba(12, 18, 32, 0.70) !important;
+    rgb(12 18 32 / calc(0.15 + (var(--overlay-opacity) * 0.69))) !important;
   border-color: transparent !important;
-  backdrop-filter: blur(20px) saturate(165%) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(165%) !important;
+  backdrop-filter: blur(calc(var(--overlay-opacity) * 25px)) saturate(165%) !important;
+  -webkit-backdrop-filter: blur(calc(var(--overlay-opacity) * 25px)) saturate(165%) !important;
   box-shadow:
     inset 0 1.5px 0 rgba(255, 255, 255, 0.44),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.13),
-    0 28px 72px rgba(0, 0, 0, 0.55),
-    0 8px 22px rgba(0, 0, 0, 0.30) !important;
+    inset 0 0 0 1px rgba(255, 255, 255, 0.13) !important;
   position: relative;
 }
 
@@ -341,15 +350,13 @@
       rgba(255, 255, 255, 0.04) 65%,
       rgba(255, 255, 255, 0.12) 100%
     ),
-    rgba(12, 18, 32, 0.70) !important;
+    rgb(12 18 32 / calc(0.15 + (var(--overlay-opacity) * 0.69))) !important;
   border-color: transparent !important;
-  backdrop-filter: blur(20px) saturate(165%) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(165%) !important;
+  backdrop-filter: blur(calc(var(--overlay-opacity) * 25px)) saturate(165%) !important;
+  -webkit-backdrop-filter: blur(calc(var(--overlay-opacity) * 25px)) saturate(165%) !important;
   box-shadow:
     inset 0 1.5px 0 rgba(255, 255, 255, 0.44),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.13),
-    0 14px 36px rgba(0, 0, 0, 0.38),
-    0 4px 10px rgba(0, 0, 0, 0.18) !important;
+    inset 0 0 0 1px rgba(255, 255, 255, 0.13) !important;
 }
 
 /* Transcript divider — subtle rule */
@@ -730,6 +737,236 @@
     0 1px 3px rgba(0, 0, 0, 0.12) !important;
 }
 
+/* AI Response Card — Default theme.
+   Implements a premium neutral frosted glass lozenge. */
+[data-interface-theme="default"] .ai-response-card {
+  position: relative;
+  overflow: visible;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+[data-theme='light'] [data-interface-theme="default"] .ai-response-card {
+  background: rgba(240, 244, 250, calc(var(--overlay-opacity) * 0.75)) !important;
+  border: 1px solid rgba(0, 0, 0, 0.07) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+}
+
+[data-theme='dark'] [data-interface-theme="default"] .ai-response-card {
+  background: rgba(30, 34, 42, calc(var(--overlay-opacity) * 0.85)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Ensure child text elements match theme contrast in Default style */
+[data-theme='light'] [data-interface-theme="default"] .ai-response-card p,
+[data-theme='light'] [data-interface-theme="default"] .ai-response-card span:not(.token):not(code span):not(pre span),
+[data-theme='light'] [data-interface-theme="default"] .ai-response-card li,
+[data-theme='light'] [data-interface-theme="default"] .ai-response-card h1,
+[data-theme='light'] [data-interface-theme="default"] .ai-response-card h2,
+[data-theme='light'] [data-interface-theme="default"] .ai-response-card h3 {
+  color: #111827 !important;
+}
+
+[data-theme='dark'] [data-interface-theme="default"] .ai-response-card p,
+[data-theme='dark'] [data-interface-theme="default"] .ai-response-card span:not(.token):not(code span):not(pre span),
+[data-theme='dark'] [data-interface-theme="default"] .ai-response-card li,
+[data-theme='dark'] [data-interface-theme="default"] .ai-response-card h1,
+[data-theme='dark'] [data-interface-theme="default"] .ai-response-card h2,
+[data-theme='dark'] [data-interface-theme="default"] .ai-response-card h3 {
+  color: #f3f4f6 !important;
+}
+
+[data-theme='light'] [data-interface-theme="default"] .ai-response-card a {
+  color: #2563eb !important;
+}
+
+[data-theme='dark'] [data-interface-theme="default"] .ai-response-card a {
+  color: #60a5fa !important;
+}
+
+[data-theme='light'] [data-interface-theme="default"] .ai-response-card .text-\[\#4ade80\],
+[data-theme='light'] [data-interface-theme="default"] .ai-response-card .text-emerald-400,
+[data-theme='light'] [data-interface-theme="default"] .ai-response-card .text-emerald-500,
+[data-theme='light'] [data-interface-theme="default"] .ai-response-card .text-text-tertiary {
+  color: #4b5563 !important;
+}
+
+[data-theme='dark'] [data-interface-theme="default"] .ai-response-card .text-\[\#4ade80\],
+[data-theme='dark'] [data-interface-theme="default"] .ai-response-card .text-emerald-400,
+[data-theme='dark'] [data-interface-theme="default"] .ai-response-card .text-emerald-500,
+[data-theme='dark'] [data-interface-theme="default"] .ai-response-card .text-text-tertiary {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* AI Response Card — Liquid Glass theme.
+   Implements a premium light-grey glass lozenge. */
+[data-interface-theme="liquid-glass"] .ai-response-card {
+  position: relative;
+  overflow: visible;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+[data-theme='light'] [data-interface-theme="liquid-glass"] .ai-response-card {
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.4) 0%,
+      rgba(255, 255, 255, 0.0) 45%,
+      rgba(0, 0, 0, 0.05) 100%
+    ),
+    rgb(244 244 245 / calc(var(--overlay-opacity) * 0.81)) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.05),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.2),
+    0 6px 16px rgba(0, 0, 0, 0.05),
+    0 2px 4px rgba(0, 0, 0, 0.03) !important;
+}
+
+[data-theme='dark'] [data-interface-theme="liquid-glass"] .ai-response-card {
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.1) 0%,
+      rgba(255, 255, 255, 0.0) 45%,
+      rgba(0, 0, 0, 0.15) 100%
+    ),
+    rgb(255 255 255 / calc(var(--overlay-opacity) * 0.10)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.15),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 6px 16px rgba(0, 0, 0, 0.15),
+    0 2px 4px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* In Liquid Glass, use dark zinc text in light mode and soft grey in dark mode */
+[data-theme='light'] [data-interface-theme="liquid-glass"] .ai-response-card p,
+[data-theme='light'] [data-interface-theme="liquid-glass"] .ai-response-card span:not(.token):not(code span):not(pre span),
+[data-theme='light'] [data-interface-theme="liquid-glass"] .ai-response-card li,
+[data-theme='light'] [data-interface-theme="liquid-glass"] .ai-response-card h1,
+[data-theme='light'] [data-interface-theme="liquid-glass"] .ai-response-card h2,
+[data-theme='light'] [data-interface-theme="liquid-glass"] .ai-response-card h3 {
+  color: #18181b !important;
+}
+
+[data-theme='dark'] [data-interface-theme="liquid-glass"] .ai-response-card p,
+[data-theme='dark'] [data-interface-theme="liquid-glass"] .ai-response-card span:not(.token):not(code span):not(pre span),
+[data-theme='dark'] [data-interface-theme="liquid-glass"] .ai-response-card li,
+[data-theme='dark'] [data-interface-theme="liquid-glass"] .ai-response-card h1,
+[data-theme='dark'] [data-interface-theme="liquid-glass"] .ai-response-card h2,
+[data-theme='dark'] [data-interface-theme="liquid-glass"] .ai-response-card h3 {
+  color: #f4f4f5 !important;
+}
+
+[data-theme='light'] [data-interface-theme="liquid-glass"] .ai-response-card a {
+  color: #2563eb !important;
+}
+
+[data-theme='dark'] [data-interface-theme="liquid-glass"] .ai-response-card a {
+  color: #60a5fa !important;
+}
+
+[data-theme='light'] [data-interface-theme="liquid-glass"] .ai-response-card .text-\[\#4ade80\],
+[data-theme='light'] [data-interface-theme="liquid-glass"] .ai-response-card .text-emerald-400,
+[data-theme='light'] [data-interface-theme="liquid-glass"] .ai-response-card .text-emerald-500,
+[data-theme='light'] [data-interface-theme="liquid-glass"] .ai-response-card .text-text-tertiary {
+  color: #52525b !important;
+}
+
+[data-theme='dark'] [data-interface-theme="liquid-glass"] .ai-response-card .text-\[\#4ade80\],
+[data-theme='dark'] [data-interface-theme="liquid-glass"] .ai-response-card .text-emerald-400,
+[data-theme='dark'] [data-interface-theme="liquid-glass"] .ai-response-card .text-emerald-500,
+[data-theme='dark'] [data-interface-theme="liquid-glass"] .ai-response-card .text-text-tertiary {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* AI Response Card — Modern Jelly UI theme.
+   Implements a premium lighter grey jelly lozenge matching the user's cobalt card. */
+[data-interface-theme="modern"] .ai-response-card {
+  position: relative;
+  overflow: visible;
+}
+
+[data-theme='light'] [data-interface-theme="modern"] .ai-response-card {
+  background: linear-gradient(160deg,
+      rgba(250, 250, 250, calc(var(--overlay-opacity) * 1.25)) 0%,
+      rgba(240, 240, 243, calc(var(--overlay-opacity) * 1.25)) 50%,
+      rgba(225, 225, 230, calc(var(--overlay-opacity) * 1.25)) 100%
+    ) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.75) !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.55) !important;
+  border-right: 1px solid rgba(0, 0, 0, 0.04) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12) !important;
+  box-shadow:
+    inset 0 2.5px 3px rgba(255, 255, 255, 0.90),
+    inset 0 -6px 12px rgba(0, 0, 0, 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.08),
+    0 2px 5px rgba(0, 0, 0, 0.03) !important;
+}
+
+[data-theme='dark'] [data-interface-theme="modern"] .ai-response-card {
+  background: linear-gradient(160deg,
+      rgba(108, 108, 117, calc(var(--overlay-opacity) * 1.25)) 0%,
+      rgba(80, 80, 88, calc(var(--overlay-opacity) * 1.25)) 50%,
+      rgba(60, 60, 68, calc(var(--overlay-opacity) * 1.25)) 100%
+    ) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.32) !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.18) !important;
+  border-right: 1px solid rgba(0, 0, 0, 0.12) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.35) !important;
+  box-shadow:
+    inset 0 2.5px 3px rgba(255, 255, 255, 0.35),
+    inset 0 -6px 12px rgba(0, 0, 0, 0.20),
+    0 8px 24px rgba(0, 0, 0, 0.22),
+    0 2px 5px rgba(0, 0, 0, 0.12) !important;
+}
+
+
+
+/* Ensure child text elements match theme contrast in Modern Jelly style */
+[data-theme='light'] [data-interface-theme="modern"] .ai-response-card p,
+[data-theme='light'] [data-interface-theme="modern"] .ai-response-card span:not(.token):not(code span):not(pre span),
+[data-theme='light'] [data-interface-theme="modern"] .ai-response-card li,
+[data-theme='light'] [data-interface-theme="modern"] .ai-response-card h1,
+[data-theme='light'] [data-interface-theme="modern"] .ai-response-card h2,
+[data-theme='light'] [data-interface-theme="modern"] .ai-response-card h3 {
+  color: #18181b !important;
+}
+
+[data-theme='dark'] [data-interface-theme="modern"] .ai-response-card p,
+[data-theme='dark'] [data-interface-theme="modern"] .ai-response-card span:not(.token):not(code span):not(pre span),
+[data-theme='dark'] [data-interface-theme="modern"] .ai-response-card li,
+[data-theme='dark'] [data-interface-theme="modern"] .ai-response-card h1,
+[data-theme='dark'] [data-interface-theme="modern"] .ai-response-card h2,
+[data-theme='dark'] [data-interface-theme="modern"] .ai-response-card h3 {
+  color: #ffffff !important;
+}
+
+[data-theme='light'] [data-interface-theme="modern"] .ai-response-card a {
+  color: #2563eb !important;
+}
+
+[data-theme='dark'] [data-interface-theme="modern"] .ai-response-card a {
+  color: #93c5fd !important;
+}
+
+[data-theme='light'] [data-interface-theme="modern"] .ai-response-card .text-\[\#4ade80\],
+[data-theme='light'] [data-interface-theme="modern"] .ai-response-card .text-emerald-400,
+[data-theme='light'] [data-interface-theme="modern"] .ai-response-card .text-emerald-500,
+[data-theme='light'] [data-interface-theme="modern"] .ai-response-card .text-text-tertiary {
+  color: #52525b !important;
+}
+
+[data-theme='dark'] [data-interface-theme="modern"] .ai-response-card .text-\[\#4ade80\],
+[data-theme='dark'] [data-interface-theme="modern"] .ai-response-card .text-emerald-400,
+[data-theme='dark'] [data-interface-theme="modern"] .ai-response-card .text-emerald-500,
+[data-theme='dark'] [data-interface-theme="modern"] .ai-response-card .text-text-tertiary {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
 /* Colour-tinted notification banners — preserve the semantic tint, layer
    jelly highlights/shadows + tint-matched outer glow on top. */
 
@@ -826,7 +1063,7 @@
 /* Red — Stop button (active recording) and any red callouts.
    Springy hover/active because the Stop button is an interactive control,
    unlike the static warning banners above. */
-[data-interface-theme="liquid-glass"] [class*="bg-red-500/10"] {
+[data-interface-theme="liquid-glass"] [class~="bg-red-500/10"] {
   background:
     linear-gradient(180deg,
       rgba(255, 255, 255, 0.22) 0%,
@@ -931,15 +1168,14 @@
      • Top 45% gloss strip painted via ::before */
 [data-interface-theme="modern"] .overlay-shell-surface {
   background: linear-gradient(160deg,
-      rgba(90, 90, 108, 0.88) 0%,
-      rgba(55, 55, 70, 0.93) 50%,
-      rgba(36, 36, 50, 0.97) 100%
+      rgba(90, 90, 108, calc(var(--overlay-opacity) * 1.1)) 0%,
+      rgba(55, 55, 70, calc(var(--overlay-opacity) * 1.16)) 50%,
+      rgba(36, 36, 50, calc(var(--overlay-opacity) * 1.21)) 100%
     ) !important;
   border-color: rgba(255, 255, 255, 0.20) !important;
-  backdrop-filter: blur(3px) !important;
-  -webkit-backdrop-filter: blur(3px) !important;
+  backdrop-filter: blur(calc(var(--overlay-opacity) * 3.75px)) !important;
+  -webkit-backdrop-filter: blur(calc(var(--overlay-opacity) * 3.75px)) !important;
   box-shadow:
-    0 12px 40px rgba(0, 0, 0, 0.50),
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
     0 0 0 0.5px rgba(255, 255, 255, 0.08) !important;
   position: relative;
@@ -958,7 +1194,7 @@
       rgba(255, 255, 255, 0.20) 0%,
       rgba(255, 255, 255, 0.00) 100%
     );
-  filter: blur(0.5px);
+  filter: blur(6px);
   pointer-events: none;
   z-index: 0;
 }
@@ -966,15 +1202,14 @@
 /* TopPill — match the main modern panel material */
 [data-interface-theme="modern"] .overlay-pill-surface {
   background: linear-gradient(160deg,
-      rgba(90, 90, 108, 0.88) 0%,
-      rgba(55, 55, 70, 0.93) 50%,
-      rgba(36, 36, 50, 0.97) 100%
+      rgba(90, 90, 108, calc(var(--overlay-opacity) * 1.1)) 0%,
+      rgba(55, 55, 70, calc(var(--overlay-opacity) * 1.16)) 50%,
+      rgba(36, 36, 50, calc(var(--overlay-opacity) * 1.21)) 100%
     ) !important;
   border-color: rgba(255, 255, 255, 0.20) !important;
-  backdrop-filter: blur(3px) !important;
-  -webkit-backdrop-filter: blur(3px) !important;
+  backdrop-filter: blur(calc(var(--overlay-opacity) * 3.75px)) !important;
+  -webkit-backdrop-filter: blur(calc(var(--overlay-opacity) * 3.75px)) !important;
   box-shadow:
-    0 12px 40px rgba(0, 0, 0, 0.50),
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
     0 0 0 0.5px rgba(255, 255, 255, 0.08) !important;
   position: relative;
@@ -990,7 +1225,7 @@
       rgba(255, 255, 255, 0.20) 0%,
       rgba(255, 255, 255, 0.00) 100%
     );
-  filter: blur(0.5px);
+  filter: blur(6px);
   pointer-events: none;
   z-index: 0;
 }
@@ -1003,13 +1238,13 @@
 /* Code blocks — flat white-tinted panel inside the slate shell, cyan text
    inherited from the markdown renderer. */
 [data-interface-theme="modern"] .overlay-code-block-surface {
-  background: rgba(255, 255, 255, 0.06) !important;
+  background: rgba(28, 28, 35, 0.82) !important;
   border-color: rgba(255, 255, 255, 0.08) !important;
-  box-shadow: none !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
 }
 
 [data-interface-theme="modern"] .overlay-code-header-surface {
-  background: rgba(255, 255, 255, 0.04) !important;
+  background: rgba(20, 20, 26, 0.45) !important;
   border-bottom-color: rgba(255, 255, 255, 0.08) !important;
 }
 
@@ -1441,7 +1676,7 @@
 
 /* Red — Stop button (active recording) and red callouts. Interactive
    springy hover/active because the Stop button is a control. */
-[data-interface-theme="modern"] [class*="bg-red-500/10"] {
+[data-interface-theme="modern"] [class~="bg-red-500/10"] {
   background:
     linear-gradient(160deg,
       rgba(255, 255, 255, 0.20) 0%,
@@ -1585,7 +1820,7 @@ body {
 .overlay-shell-surface {
   background: var(--overlay-panel-bg);
   border-color: var(--overlay-border);
-  box-shadow: 0 24px 48px var(--overlay-panel-shadow);
+  box-shadow: none;
   backdrop-filter: blur(var(--overlay-shell-blur)) saturate(140%);
   -webkit-backdrop-filter: blur(var(--overlay-shell-blur)) saturate(140%);
 }
@@ -1598,7 +1833,7 @@ body {
 .overlay-pill-surface {
   background: var(--overlay-pill-bg);
   border-color: var(--overlay-border);
-  box-shadow: 0 12px 28px var(--overlay-pill-shadow);
+  box-shadow: none;
   backdrop-filter: blur(var(--overlay-pill-blur)) saturate(135%);
   -webkit-backdrop-filter: blur(var(--overlay-pill-blur)) saturate(135%);
 }
@@ -4818,3 +5053,42 @@ html[data-platform="linux"] body {
 [data-theme='light'] .pricing-poster-check3-border { stroke: rgba(15, 23, 42, 0.16) !important; }
 [data-theme='light'] .pricing-poster-badge-text-purple { fill: #5b21b6 !important; }
 [data-theme='light'] .pricing-poster-badge-text-blue { fill: #1d4ed8 !important; }
+
+/* Tighten markdown spacing and remove nested paragraph margins inside lists */
+.markdown-content p {
+  margin-top: 0 !important;
+  margin-bottom: 6px !important;
+  line-height: 1.6 !important;
+}
+.markdown-content p:last-child {
+  margin-bottom: 0 !important;
+}
+.markdown-content li p {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  display: inline !important;
+  line-height: 1.6 !important;
+}
+.markdown-content li {
+  margin-top: 0 !important;
+  margin-bottom: 4.5px !important;
+  line-height: 1.6 !important;
+}
+.markdown-content li:last-child {
+  margin-bottom: 0 !important;
+}
+.markdown-content ul, .markdown-content ol {
+  margin-top: 4.5px !important;
+  margin-bottom: 4.5px !important;
+}
+.markdown-content h1, 
+.markdown-content h2, 
+.markdown-content h3, 
+.markdown-content h4, 
+.markdown-content h5, 
+.markdown-content h6 {
+  margin-top: 8px !important;
+  margin-bottom: 4.5px !important;
+  line-height: 1.6 !important;
+  font-weight: 700 !important;
+}

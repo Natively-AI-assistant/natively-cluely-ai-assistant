@@ -1,0 +1,15 @@
+Senior Backend Engineer — Datadog (Remote (US))
+Level: senior
+
+Building observability infrastructure at scale. Help engineers understand systems processing trillions of data points daily.
+
+REQUIREMENTS
+- 5+ years backend development
+- Go or Python expertise
+- Distributed systems experience
+- AWS/GCP
+- Database optimization
+
+TECHNOLOGIES: Go, Kafka, PostgreSQL, Redis, Kubernetes
+
+COMPENSATION: $180k-$220k

@@ -1,0 +1,7 @@
+NEGOTIATION CONTEXT
+Target salary: $195000
+Minimum acceptable: $175000
+Current salary: $185000
+Signing bonus target: $25000
+Equity: 0.05% with 4 year vest, 1 year cliff
+Priorities: target salary, equity vesting acceleration, remote-first

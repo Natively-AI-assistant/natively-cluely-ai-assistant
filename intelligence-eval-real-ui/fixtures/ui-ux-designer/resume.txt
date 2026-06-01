@@ -1,0 +1,24 @@
+Sofia Rodriguez
+sofia.r@risd.edu | 718-555-0139 | Brooklyn, NY
+
+SUMMARY
+Senior product designer with 5 years in music streaming and consumer apps. Crafted experiences for 50M+ monthly active users. Expert in design systems and user research.
+
+SKILLS
+Figma, Sketch, Principle, Framer, User Research, Design Systems, Prototyping, HTML/CSS
+
+EXPERIENCE
+Senior Product Designer — Spotify (2021-05 – Present)
+  - Led redesign of Discover Weekly experience (50M users impacted)
+  - Built Spotify Design System across 6 product teams
+  - Conducted 200+ user research sessions informing product direction
+Product Designer — Adobe (2019-03 – 2021-04)
+  - Designed Creative Cloud mobile companion app (4.5 stars, 2M downloads)
+  - Established design token architecture used across Adobe products
+
+PROJECTS
+DesignToken.io: Open-source tool for managing design tokens across platforms. 800+ designers use it weekly. [Figma API, React, Style Dictionary]
+PodcastPlayer: Redesigned podcast listening experience for Spotify. In production for 30M users. [Figma, SwiftUI, Spotify API]
+
+EDUCATION
+BFA Design, Design — Rhode Island School of Design (2019)

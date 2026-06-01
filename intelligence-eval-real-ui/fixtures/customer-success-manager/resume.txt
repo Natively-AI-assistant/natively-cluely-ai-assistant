@@ -1,0 +1,24 @@
+Aisha Patel
+aisha.patel@mit.edu | 617-555-0128 | Boston, MA
+
+SUMMARY
+Customer success leader with 5 years managing enterprise accounts in SaaS. Grew net revenue retention 115% and reduced churn to 8% at Slack.
+
+SKILLS
+Gainsight, Salesforce, Churn.io, Executive presentation, QBR, Renewal negotiation, Technical aptitude
+
+EXPERIENCE
+Senior Customer Success Manager — Slack (2021-03 – Present)
+  - Manage 45 enterprise accounts ($5M ARR)
+  - Achieved 115% net revenue retention across portfolio
+  - Created CS playbooks reducing onboarding time 40%
+Customer Success Manager — Salesforce (2019-01 – 2021-02)
+  - Managed Fortune 500 accounts in Financial Services vertical
+  - 98% customer satisfaction score
+
+PROJECTS
+CS-Scorecard: Customer health scoring model using product usage, support tickets, and NPS. Adopted by 80 CSMs at Slack. [SQL, Looker, Python]
+
+EDUCATION
+MS Technology Management, Technology Management — MIT Sloan School of Management (2018)
+BA Economics, Economics — Boston University (2016)

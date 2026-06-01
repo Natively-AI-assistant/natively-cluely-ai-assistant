@@ -344,30 +344,37 @@ test('streamChat: intro shortcut FIRES in looking-for-work mode (regression guar
   );
 });
 
-test('streamChat: intro shortcut is SUPPRESSED in technical-interview (issue #272)', async () => {
+// NOTE: These tests previously checked that the intro shortcut was SUPPRESSED in
+// technical-interview / lecture modes (issue #272). That behaviour was revised:
+// identity recall (isIntroQuestion + introResponse) now always passes through
+// regardless of mode compatibility, because it is factual retrieval (candidate name,
+// current role, years of experience), NOT persona injection. Suppressing it in any
+// mode meant the user could never ask "what is my name?" in a technical interview.
+// The mode gate still blocks negotiation coaching and premium context/prompt injection.
+test('streamChat: intro shortcut PASSES THROUGH even in technical-interview mode', async () => {
   const helper = buildHelper();
   helper.setKnowledgeOrchestrator(buildIntroOrchestratorStub());
 
   installActiveMode('technical-interview');
-  const chunks = await drainStream(helper.streamChat('Walk me through your last project.'));
+  const chunks = await drainStream(helper.streamChat('What is my name?'));
 
   assert.ok(
-    !chunks.includes('CANNED_INTRO_RESPONSE_SENTINEL'),
-    'technical-interview must NOT emit a canned intro response (sibling of issue #272)',
+    chunks.includes('CANNED_INTRO_RESPONSE_SENTINEL'),
+    'identity recall (intro shortcut) must fire even in technical-interview mode',
   );
 });
 
-test('chatWithGemini: intro shortcut is SUPPRESSED in lecture mode', async () => {
+test('chatWithGemini: intro shortcut PASSES THROUGH even in lecture mode', async () => {
   const helper = buildHelper();
   helper.setKnowledgeOrchestrator(buildIntroOrchestratorStub());
 
   installActiveMode('lecture');
-  const result = await callChat(helper, 'Tell me about yourself.');
+  const result = await callChat(helper, 'What is my name?');
 
-  assert.notEqual(
+  assert.strictEqual(
     result,
     'CANNED_INTRO_RESPONSE_SENTINEL',
-    'lecture mode must NOT short-circuit to a canned intro (sibling of issue #272)',
+    'identity recall (intro shortcut) must fire even in lecture mode',
   );
 });
 

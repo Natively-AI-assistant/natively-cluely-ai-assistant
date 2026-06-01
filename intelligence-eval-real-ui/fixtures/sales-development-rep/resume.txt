@@ -1,0 +1,23 @@
+Marcus Williams
+marcus.w@umich.edu | 312-555-0156 | Chicago, IL
+
+SUMMARY
+Top-performing SDR with 2 years SaaS sales experience. Consistently exceeded quota 120%+ and transitioned 40+ opportunities to closed-won ARR.
+
+SKILLS
+Salesforce, Outreach, LinkedIn Sales Navigator, Apollo.io, Cold calling, Demo delivery, Negotiation
+
+EXPERIENCE
+Sales Development Representative — Salesforce (2023-01 – Present)
+  - #1 SDR globally for 3 consecutive quarters
+  - Booked $4.2M in qualified pipeline for Financial Services team
+  - Created SDR playbooks adopted firm-wide
+Marketing Coordinator — HubSpot (2021-06 – 2022-12)
+  - Managed inbound lead qualification process
+  - Increased MQL-to-SQL conversion 25%
+
+PROJECTS
+SDR-CLI: Command-line prospecting tool with LinkedIn enrichment API integration. Used by my team of 15 SDRs. [Node.js, LinkedIn API, Apollo]
+
+EDUCATION
+BS Business Administration, Business Administration — University of Michigan (2021)

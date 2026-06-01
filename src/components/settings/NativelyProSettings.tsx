@@ -1377,8 +1377,8 @@ export const NativelyProSettings: React.FC = () => {
             {/* ── Refund Policy ────────────────────────────────── */}
             <Card>
                 <div className="flex items-center gap-3 px-5 pt-5 pb-4">
-                    <div className="w-9 h-9 rounded-xl bg-indigo-500/12 border border-indigo-500/22 flex items-center justify-center shrink-0">
-                        <Shield size={18} className="text-indigo-300" />
+                    <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                        <Shield size={18} className="text-emerald-400" />
                     </div>
                     <div className="min-w-0">
                         <p className="text-[13px] font-semibold text-text-primary">Refund Policy — Natively Pro</p>
@@ -1399,24 +1399,24 @@ export const NativelyProSettings: React.FC = () => {
                         </div>
 
                         <div className="flex items-start gap-3">
-                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-400/70 shrink-0 mt-[6px]" />
+                            <div className="w-1.5 h-1.5 rounded-full bg-text-tertiary/40 shrink-0 mt-[6px]" />
                             <p className="text-[11.5px] text-text-secondary leading-relaxed">
                                 Purchases made with a coupon, voucher, referral credit, or limited-time offer are <strong className="text-text-primary font-semibold">final sale</strong> and not eligible for refund.
                             </p>
                         </div>
 
                         <div className="flex items-start gap-3">
-                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-400/70 shrink-0 mt-[6px]" />
+                            <div className="w-1.5 h-1.5 rounded-full bg-text-tertiary/40 shrink-0 mt-[6px]" />
                             <p className="text-[11.5px] text-text-secondary leading-relaxed">
                                 To cancel your subscription, log in to the{' '}
                                 <span
                                     onClick={() => openExternal('https://customer.dodopayments.com/')}
-                                    className="text-text-primary hover:text-text-secondary underline decoration-border-subtle underline-offset-[3px] cursor-pointer"
+                                    className="text-blue-400 hover:text-blue-300 underline decoration-blue-400/40 underline-offset-[3px] cursor-pointer"
                                     style={{ transition: `color 180ms ${EASE_OUT_CSS}` }}
                                 >
-                                    https://customer.dodopayments.com/
+                                    customer portal
                                 </span>{' '}
-                                portal.
+                                to manage or cancel your plan.
                             </p>
                         </div>
 
@@ -1441,6 +1441,15 @@ export const NativelyProSettings: React.FC = () => {
                             </span>
                             .
                         </p>
+
+                        <div className="mt-3 px-3 py-2.5 rounded-xl bg-amber-500/6 border border-amber-500/15">
+                            <p className="text-[11.5px] text-text-secondary leading-relaxed">
+                                <strong className="text-text-primary font-semibold">A personal note:</strong>{' '}
+                                Natively is built, maintained, and supported entirely by one person — in their free time.
+                                Email replies may take a few days, and weekends (Sat &amp; Sun) are offline.
+                                Your patience is genuinely appreciated.
+                            </p>
+                        </div>
                     </div>
                 </div>
             </Card>

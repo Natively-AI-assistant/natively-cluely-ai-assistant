@@ -1,7 +1,11 @@
 # macOS Signing & Notarization — Operator Checklist
 
-**Audience:** Evin (after enrolling in the Apple Developer Program).
-**Status:** Code path is wired (Phase 1). Real signing/notarization needs an Apple Developer ID cert — steps below.
+**Audience:** Evin.
+**STATUS (2026-05-30): ✅ LIVE & VERIFIED.** A real signed + notarized + stapled build of **v2.7.0** has been produced and verified (both arches, apps + DMGs + ZIPs all `spctl` → "accepted / Notarized Developer ID"). **`apple-signing-report.md` (repo root) is the authoritative, up-to-date record** — read it first. This checklist is background/reference; a few details below predate the final implementation (see report for the current truth):
+> - Entitlements live in **`build/`** (not `assets/`).
+> - Notarization uses an **App Store Connect API key** (`APPLE_API_KEY`/`_KEY_ID`/`_ISSUER`), because the `natively-notary` keychain profile auto-locks mid-build.
+> - The **app** is notarized via `afterSign` (`scripts/notarize.js`, with staple-retry); **DMGs** are rebuilt via `create-dmg` and notarized by `scripts/afterAllArtifactBuild.cjs` (electron-builder's own DMG creation corrupts the embedded signature).
+> - electron-builder builds the **`zip` target only**; the hook makes the DMGs.
 
 ---
 

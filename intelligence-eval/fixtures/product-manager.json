@@ -1,0 +1,127 @@
+{
+  "profileId": "product-manager",
+  "role": "Product Manager",
+  "resume": {
+    "identity": {
+      "name": "Jordan Kim",
+      "email": "jordan.kim@wharton.upenn.edu",
+      "location": "Seattle, WA",
+      "phone": "206-555-0173",
+      "links": []
+    },
+    "summary": "PM with 6 years in consumer tech and fintech. Led products from 0→1 and scaled them to millions of users. Strong data-driven decision making.",
+    "skills": [
+      "Product Strategy",
+      "SQL",
+      "A/B Testing",
+      "Figma",
+      "Looker",
+      "JIRA",
+      "Agile"
+    ],
+    "experience": [
+      {
+        "company": "Airbnb",
+        "role": "Senior Product Manager",
+        "start_date": "2020-09",
+        "end_date": null,
+        "bullets": [
+          "Led Guest Checkout redesign increasing conversion 18% ($120M revenue impact)",
+          "Built host payout system serving 4M hosts globally",
+          "Manage $50M annual product roadmap"
+        ]
+      },
+      {
+        "company": "Square (Block)",
+        "role": "Product Manager",
+        "start_date": "2018-03",
+        "end_date": "2020-08",
+        "bullets": [
+          "Launched Square for Restaurants POS, $80M ARR within 18 months",
+          "Grew Seller Dashboard DAU from 200k to 900k"
+        ]
+      }
+    ],
+    "projects": [
+      {
+        "name": "PaymentsUX Framework",
+        "description": "Internal design system for payment flows. Adopted by 8 product teams at Airbnb.",
+        "technologies": [
+          "Figma",
+          "Notion",
+          "SQL"
+        ]
+      },
+      {
+        "name": "OKR-Tracker",
+        "description": "Internal OKR dashboard for engineering teams. Used by 400+ PMs at Airbnb.",
+        "technologies": [
+          "Looker",
+          "Python",
+          "BigQuery"
+        ]
+      }
+    ],
+    "education": [
+      {
+        "institution": "Wharton School of Business",
+        "degree": "MBA",
+        "field": "MBA",
+        "start_date": "",
+        "end_date": "2018"
+      },
+      {
+        "institution": "UC Berkeley",
+        "degree": "BA Economics",
+        "field": "Economics",
+        "start_date": "",
+        "end_date": "2014"
+      }
+    ],
+    "achievements": [],
+    "certifications": [],
+    "leadership": []
+  },
+  "jd": {
+    "title": "Director of Product Management",
+    "company": "Figma",
+    "location": "San Francisco, CA (Hybrid)",
+    "description_summary": "Lead the platform product organization. Shape how designers and developers collaborate. Drive the product strategy for Figma's most strategic bets.",
+    "level": "director",
+    "employment_type": "full_time",
+    "min_years_experience": 8,
+    "compensation_hint": "$280k-$360k",
+    "requirements": [
+      "8+ years product management",
+      "Consumer or developer tools experience",
+      "B2B SaaS",
+      "Cross-functional leadership",
+      "Data-driven"
+    ],
+    "nice_to_haves": [],
+    "responsibilities": [],
+    "technologies": [
+      "Figma",
+      "SQL",
+      "Amplitude",
+      "JIRA",
+      "Confluence"
+    ],
+    "keywords": []
+  },
+  "customContext": "I want structured recommendations with clear trade-offs. Start with the most important point.",
+  "persona": "Strategic business partner — clear, structured, trade-off focused.",
+  "negotiation": {
+    "targetSalary": 320000,
+    "minimumSalary": 290000,
+    "currentSalary": 265000,
+    "signingBonus": 40000,
+    "equity": "0.03% with 4 year vest, 1 year cliff",
+    "priorities": [
+      "title (Director)",
+      "equity",
+      "hybrid flexibility"
+    ]
+  },
+  "referenceFiles": []
+}

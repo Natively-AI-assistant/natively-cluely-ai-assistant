@@ -117,13 +117,34 @@ function verifyDmgAppSignature(dmgPath) {
     const appInDmg = path.join(mount, app);
     // Throws (non-zero exit) if the embedded signature is invalid — exactly the eb bug.
     execFileSync('codesign', ['--verify', '--deep', '--strict', '--verbose=2', appInDmg], { stdio: 'inherit' });
-    const sp = execFileSync('spctl', ['-a', '-t', 'execute', '-vv', appInDmg], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    // NOTE: spctl writes its "accepted / source=Notarized Developer ID" verdict to
+    // STDERR, not stdout. Capture both (2>&1) or the verdict string is empty and this
+    // guard false-rejects a perfectly notarized app. spctl exits non-zero only on
+    // rejection, so a clean exit already means accepted; we still assert the text.
+    let sp = '';
+    try {
+      sp = execSync(`spctl -a -t execute -vv ${JSON.stringify(appInDmg)} 2>&1`, { encoding: 'utf8' });
+    } catch (e) {
+      sp = `${e.stdout || ''}${e.stderr || ''}`;
+      throw new Error(`[dmg] app inside ${path.basename(dmgPath)} REJECTED by Gatekeeper: ${sp.trim()}`);
+    }
     if (!/Notarized Developer ID|accepted/.test(sp)) {
-      throw new Error(`[dmg] app inside ${path.basename(dmgPath)} not Gatekeeper-accepted: ${sp}`);
+      throw new Error(`[dmg] app inside ${path.basename(dmgPath)} not Gatekeeper-accepted: ${sp.trim()}`);
     }
     console.log(`[dmg] verified embedded app signature + Gatekeeper inside ${path.basename(dmgPath)} ✅`);
   } finally {
     try { execFileSync('hdiutil', ['detach', mount, '-quiet'], { stdio: 'ignore' }); } catch { /* best-effort */ }
+  }
+}
+
+/** Non-throwing check: is this DMG already stapled with a Gatekeeper-accepted app inside? */
+function isDmgAlreadyValid(dmgPath) {
+  try {
+    execFileSync('xcrun', ['stapler', 'validate', dmgPath], { stdio: 'ignore' });
+    verifyDmgAppSignature(dmgPath); // throws if the embedded app isn't accepted
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -244,6 +265,15 @@ module.exports = async function afterAllArtifactBuild(buildResult) {
     if (!appPath) continue;
     const dmgName = `${VOLNAME}-${version}${suffix}.dmg`;
     const outDmg = path.join(outDir, dmgName);
+
+    // Idempotent re-run: if this DMG already exists, is stapled, and its embedded app
+    // passes Gatekeeper, skip the expensive create-dmg + ~15-min notarize round-trip.
+    // (Lets a re-run finish only the missing arch without re-notarizing a good one.)
+    if (fs.existsSync(outDmg) && isDmgAlreadyValid(outDmg)) {
+      console.log(`[dmg] ${dmgName} already built + stapled + Gatekeeper-accepted — skipping rebuild.`);
+      rebuiltDmgs.push(outDmg);
+      continue;
+    }
 
     console.log(`[dmg] Rebuilding clean styled DMG for ${archDir}: ${dmgName}`);
     buildStyledDmg({ appPath, outDmg, identity });

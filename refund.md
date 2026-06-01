@@ -42,7 +42,7 @@ Yearly Pro is billed once for the full term. It isn't refundable mid-term, but y
 
 ### 1.5 Voucher and promo-code purchases are final sale
 
-Anything bought with a coupon (including `INSIDER25`), voucher, referral credit, or limited-time offer is **non-refundable**. Those prices are already as low as we can sustainably offer. This is shown clearly at checkout when the code is applied.
+Anything bought with a coupon (including `INSIDER20`), voucher, referral credit, or limited-time offer is **non-refundable**. Those prices are already as low as we can sustainably offer. This is shown clearly at checkout when the code is applied.
 
 ### 1.6 One license per person
 

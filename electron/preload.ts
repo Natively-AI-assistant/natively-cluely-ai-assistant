@@ -266,6 +266,9 @@ interface ElectronAPI {
       stuck?: boolean;
     }) => void,
   ) => () => void;
+  onAudioInputAutoSwitched: (
+    callback: (payload: { from: string; to: string; reason: string; message?: string }) => void,
+  ) => () => void;
 
   // STT Status Events
   onSttStatusChanged: (
@@ -828,6 +831,14 @@ export const PROCESSING_EVENTS = {
 
 // Expose the Electron API to the renderer process
 contextBridge.exposeInMainWorld('electronAPI', {
+  // ── TEST-ONLY eval bridges (gated in main by NODE_ENV==='test') ──────────────
+  // Exposed unconditionally but inert in production: the underlying IPC handlers
+  // ('test-inject-transcript') refuse unless NODE_ENV==='test'. Used by the real
+  // UI eval (intelligence-eval-real-ui) to feed the production transcript path
+  // and read profile debug metadata WITHOUT bypassing the UI or leaking content.
+  __evalInjectTranscript: (segment: { speaker: string; text: string; timestamp?: number; final?: boolean }) =>
+    ipcRenderer.invoke('test-inject-transcript', segment),
+  __evalProfileDebug: () => ipcRenderer.invoke('profile:get-status'),
   updateContentDimensions: (dimensions: { width: number; height: number }) =>
     ipcRenderer.invoke('update-content-dimensions', dimensions),
   updateContentDimensionsCentered: (dimensions: { width: number; height: number }) =>
@@ -1277,6 +1288,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('audio-capture-failed', subscription);
     return () => {
       ipcRenderer.removeListener('audio-capture-failed', subscription);
+    };
+  },
+  onAudioInputAutoSwitched: (
+    callback: (payload: { from: string; to: string; reason: string; message?: string }) => void,
+  ) => {
+    const subscription = (_: any, payload: any) => callback(payload);
+    ipcRenderer.on('audio-input-auto-switched', subscription);
+    return () => {
+      ipcRenderer.removeListener('audio-input-auto-switched', subscription);
     };
   },
 
@@ -1765,6 +1785,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('embedding:incompatible-provider-warning', subscription);
     return () => {
       ipcRenderer.removeListener('embedding:incompatible-provider-warning', subscription);
+    };
+  },
+  // Automatic background re-index progress (fired when the embedding space changes,
+  // e.g. after a Gemini embedding-model upgrade). started → progress* → complete.
+  onReindexProgress: (
+    callback: (
+      phase: 'started' | 'progress' | 'complete',
+      data: { count?: number; done?: number; total?: number; space?: string; partial?: boolean },
+    ) => void,
+  ) => {
+    const onStarted = (_: any, data: any) => callback('started', data);
+    const onProgress = (_: any, data: any) => callback('progress', data);
+    const onComplete = (_: any, data: any) => callback('complete', data);
+    ipcRenderer.on('embedding:reindex-started', onStarted);
+    ipcRenderer.on('embedding:reindex-progress', onProgress);
+    ipcRenderer.on('embedding:reindex-complete', onComplete);
+    return () => {
+      ipcRenderer.removeListener('embedding:reindex-started', onStarted);
+      ipcRenderer.removeListener('embedding:reindex-progress', onProgress);
+      ipcRenderer.removeListener('embedding:reindex-complete', onComplete);
     };
   },
   reindexIncompatibleMeetings: () => ipcRenderer.invoke('rag:reindex-incompatible-meetings'),

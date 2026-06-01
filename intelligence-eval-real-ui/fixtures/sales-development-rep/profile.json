@@ -1,0 +1,109 @@
+{
+  "profileId": "sales-development-rep",
+  "role": "Sales Development Representative",
+  "resume": {
+    "identity": {
+      "name": "Marcus Williams",
+      "email": "marcus.w@umich.edu",
+      "location": "Chicago, IL",
+      "phone": "312-555-0156",
+      "links": []
+    },
+    "summary": "Top-performing SDR with 2 years SaaS sales experience. Consistently exceeded quota 120%+ and transitioned 40+ opportunities to closed-won ARR.",
+    "skills": [
+      "Salesforce",
+      "Outreach",
+      "LinkedIn Sales Navigator",
+      "Apollo.io",
+      "Cold calling",
+      "Demo delivery",
+      "Negotiation"
+    ],
+    "experience": [
+      {
+        "company": "Salesforce",
+        "role": "Sales Development Representative",
+        "start_date": "2023-01",
+        "end_date": null,
+        "bullets": [
+          "#1 SDR globally for 3 consecutive quarters",
+          "Booked $4.2M in qualified pipeline for Financial Services team",
+          "Created SDR playbooks adopted firm-wide"
+        ]
+      },
+      {
+        "company": "HubSpot",
+        "role": "Marketing Coordinator",
+        "start_date": "2021-06",
+        "end_date": "2022-12",
+        "bullets": [
+          "Managed inbound lead qualification process",
+          "Increased MQL-to-SQL conversion 25%"
+        ]
+      }
+    ],
+    "projects": [
+      {
+        "name": "SDR-CLI",
+        "description": "Command-line prospecting tool with LinkedIn enrichment API integration. Used by my team of 15 SDRs.",
+        "technologies": [
+          "Node.js",
+          "LinkedIn API",
+          "Apollo"
+        ]
+      }
+    ],
+    "education": [
+      {
+        "institution": "University of Michigan",
+        "degree": "BS Business Administration",
+        "field": "Business Administration",
+        "start_date": "",
+        "end_date": "2021"
+      }
+    ],
+    "achievements": [],
+    "certifications": [],
+    "leadership": []
+  },
+  "jd": {
+    "title": "Enterprise SDR",
+    "company": "Databricks",
+    "location": "Chicago, IL",
+    "description_summary": "Drive the top of our enterprise sales funnel. Work with Fortune 500 technical buyers on our data intelligence platform.",
+    "level": "mid",
+    "employment_type": "full_time",
+    "min_years_experience": 1,
+    "compensation_hint": "$75k base + $50k OTE",
+    "requirements": [
+      "1-3 years SDR experience",
+      "SaaS sales",
+      "Technical aptitude",
+      "Enterprise software sales preferred"
+    ],
+    "nice_to_haves": [],
+    "responsibilities": [],
+    "technologies": [
+      "Salesforce",
+      "Outreach",
+      "LinkedIn",
+      "ZoomInfo"
+    ],
+    "keywords": []
+  },
+  "customContext": "Give me practical scripts and talk tracks I can use immediately. Be specific.",
+  "persona": "Energetic sales coach — tactical, practical, confidence-building.",
+  "negotiation": {
+    "targetSalary": 80000,
+    "minimumSalary": 72000,
+    "currentSalary": 65000,
+    "signingBonus": 5000,
+    "equity": "None for SDR level",
+    "priorities": [
+      "base salary",
+      "OTE structure",
+      "ramp period"
+    ]
+  },
+  "referenceFiles": []
+}

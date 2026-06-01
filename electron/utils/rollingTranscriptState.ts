@@ -4,9 +4,24 @@
  * Coalesced OpenAI STT emits growing partial previews (full segment text per
  * tick) and one final per utterance. These helpers replace the in-progress
  * tail on partials and avoid duplicating text when a final matches the preview.
+ *
+ * Google STT quirk: interims arrive lowercase without punctuation ("hello world how")
+ * while finals have proper capitalisation and punctuation ("Hello world, how are you?")
+ * because enableAutomaticPunctuation only applies to final results. All startsWith
+ * comparisons must therefore be done on normalised (lowercased, punctuation-stripped)
+ * copies — the display strings are never mutated.
  */
 
 const FINAL_SEPARATOR = '  ·  ';
+
+/** Normalise a string for overlap comparison only — never used for display. */
+function norm(s: string): string {
+  return s.toLowerCase()
+    .replace(/[\p{Pd}]+/gu, ' ')   // dashes/hyphens → space (state-of-the-art → state of the art)
+    .replace(/[\p{P}\p{S}]+/gu, '') // strip remaining punctuation and symbols (curly quotes, periods, etc.)
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 /** Index after the last finalized segment separator, or -1 when none. */
 export function lastFinalSeparatorIndex(prev: string): number {
@@ -32,12 +47,14 @@ export function mergeRollingTranscriptPartial(prev: string, partialText: string)
 
   const prefix = committedRollingPrefix(prev);
   const inProgress = inProgressRollingTail(prev);
+  const normText = norm(text);
+  const normInProgress = norm(inProgress);
 
   // Same utterance — coalescer preview grew within the current segment.
-  if (!prefix && inProgress && (text.startsWith(inProgress) || inProgress.startsWith(text))) {
+  if (!prefix && inProgress && (normText.startsWith(normInProgress) || normInProgress.startsWith(normText))) {
     return text;
   }
-  if (prefix && (text.startsWith(inProgress) || inProgress.startsWith(text) || !inProgress)) {
+  if (prefix && (normText.startsWith(normInProgress) || normInProgress.startsWith(normText) || !inProgress)) {
     return prefix + text;
   }
 
@@ -56,12 +73,14 @@ export function mergeRollingTranscriptFinal(prev: string, finalText: string): st
 
   const prefix = committedRollingPrefix(prev);
   const inProgress = inProgressRollingTail(prev);
+  const normText = norm(text);
+  const normInProgress = norm(inProgress);
 
-  if (inProgress && (text.startsWith(inProgress) || inProgress.startsWith(text))) {
+  if (inProgress && (normText.startsWith(normInProgress) || normInProgress.startsWith(normText))) {
     return prefix + text;
   }
 
-  if (prev.endsWith(text) && inProgress.endsWith(text)) {
+  if (norm(inProgress).endsWith(normText) && norm(prev).endsWith(normText)) {
     return prev;
   }
 

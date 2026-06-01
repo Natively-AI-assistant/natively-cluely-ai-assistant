@@ -1,0 +1,24 @@
+Chen Wei
+chen.wei@berkeley.edu | 206-555-0184 | Seattle, WA
+
+SUMMARY
+Data analyst with 3 years in e-commerce and logistics. Built dashboards powering $500M+ business decisions. Expert in SQL, Python, andTableau.
+
+SKILLS
+SQL, Python, Tableau, Looker, A/B Testing, Statistical Analysis, Excel, Spark
+
+EXPERIENCE
+Data Analyst — Amazon (2022-06 – Present)
+  - Built inventory forecasting dashboard saving $12M/year in overstocking
+  - Developed seller performance scoring ML model (87% accuracy)
+  - Automate weekly reporting for 50+ stakeholders via Looker
+Business Intelligence Analyst — Zara (2021-01 – 2022-05)
+  - Created customer segmentation model increasing email CTR 34%
+  - Built real-time sales看板 for 200 store managers
+
+PROJECTS
+ABTest-Framework: Python framework for A/B test analysis with bootstrap confidence intervals. Used by 20 analysts at Amazon. [Python, pandas, SciPy, SQL]
+SQL-Copilot: VS Code extension for SQL query optimization suggestions. 500+ daily active users. [TypeScript, OpenAI API, PostgreSQL]
+
+EDUCATION
+BS Statistics, Statistics — UC Berkeley (2021)

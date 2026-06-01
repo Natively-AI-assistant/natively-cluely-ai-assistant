@@ -33,3 +33,35 @@ export function decideToggle(current: boolean, requested: boolean): ToggleDecisi
     broadcast: true,
   };
 }
+
+/**
+ * decideDockTransition — pure decision for whether the (debounced) macOS dock
+ * hide/show side-effect needs to run.
+ *
+ * Why this exists: on macOS, app.dock.hide()/show() flips the app's activation
+ * policy, and rapid flips churn WindowServer (and can reset window sharingType,
+ * undoing content protection). The dock op is debounced so only the SETTLED
+ * state matters — but if the dock is ALREADY in that state (e.g. the user
+ * toggled ON→OFF→ON and the dock was already hidden), running it again is pure
+ * churn. `lastApplied` is the last dock state we actually pushed to the OS
+ * (null = never applied yet, so the first transition always runs).
+ *
+ *   settled   = the desired undetectable state after debounce settles
+ *   lastApplied = the dock state already applied to the OS (or null)
+ *   → shouldApply: run app.dock.hide()/show() only when it would change the OS
+ *   → next: the state to record as applied once it runs
+ */
+export interface DockTransitionDecision {
+  shouldApply: boolean;
+  next: boolean;
+}
+
+export function decideDockTransition(
+  settled: boolean,
+  lastApplied: boolean | null,
+): DockTransitionDecision {
+  return {
+    shouldApply: settled !== lastApplied,
+    next: settled,
+  };
+}

@@ -59,7 +59,15 @@ export class EmbeddingPipeline {
             return this.initPromise ?? Promise.resolve();
         }
         this._lastConfig = { ...config };
-        console.log('[EmbeddingPipeline] Initializing with config:', config);
+        // Log only the SHAPE (which keys are present), never the secret values — the
+        // config carries API keys and this line would otherwise leak them to logs/crash reports.
+        console.log('[EmbeddingPipeline] Initializing with config:', {
+            openaiKey: !!config.openaiKey,
+            geminiKey: !!config.geminiKey,
+            ollamaUrl: config.ollamaUrl || null,
+            geminiEmbeddingModel: config.geminiEmbeddingModel || null,
+            geminiEmbeddingDims: config.geminiEmbeddingDims || null,
+        });
         this.initPromise = this._doInitialize(config);
         return this.initPromise;
     }
@@ -105,29 +113,25 @@ export class EmbeddingPipeline {
                 this.fallbackProvider = this.provider;
             }
 
-            // Check for previous provider mismatches
-            const stateRow = this.db.prepare("SELECT value FROM app_state WHERE key = 'last_embedding_provider'").get() as any;
-            const lastProvider = stateRow?.value;
+            // Check for previous embedding-SPACE mismatches.
+            // Trigger off the count of incompatible meetings (not just lastSpace !=
+            // activeSpace) so a crash mid-reindex — where last_embedding_space may
+            // already equal the active space but rows still hold the old space —
+            // is still detected and resumed.
+            const activeSpace = this.provider.space;
+            const stateRow = this.db.prepare("SELECT value FROM app_state WHERE key = 'last_embedding_space'").get() as any;
+            const lastSpace = stateRow?.value;
 
-            if (lastProvider && lastProvider !== this.provider.name) {
-                const count = this.vectorStore.getIncompatibleMeetingsCount(this.provider.name);
-                if (count > 0) {
-                    console.log(`[EmbeddingPipeline] Found ${count} incompatible meetings from ${lastProvider}.`);
-                    const { BrowserWindow } = require('electron');
-                    BrowserWindow.getAllWindows().forEach((win: any) => {
-                        if (!win.isDestroyed()) {
-                            win.webContents.send('embedding:incompatible-provider-warning', {
-                                count,
-                                oldProvider: lastProvider,
-                                newProvider: this.provider!.name
-                            });
-                        }
-                    });
-                }
+            const incompatibleCount = this.vectorStore.getIncompatibleSpaceCount(activeSpace);
+            if (incompatibleCount > 0) {
+                // RAGManager.scheduleAutoReindex() handles the user-facing notification
+                // and the actual re-embedding. Here we only log — emitting a warning IPC
+                // too would double-notify.
+                console.log(`[EmbeddingPipeline] Found ${incompatibleCount} meetings in an incompatible embedding space (last: ${lastSpace ?? 'unknown'}, active: ${activeSpace}). Auto-reindex will handle them.`);
             }
 
-            // Save new provider
-            this.db.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES ('last_embedding_provider', ?)").run(this.provider.name);
+            // Save active space
+            this.db.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES ('last_embedding_space', ?)").run(activeSpace);
 
         } catch (err) {
             console.error('[EmbeddingPipeline] Failed to initialize primary provider:', err);
@@ -140,10 +144,10 @@ export class EmbeddingPipeline {
             console.warn('[EmbeddingPipeline] Falling back to local-only mode for all meetings.');
             // Promote fallback as the primary so isReady() returns true and queueing works.
             this.provider = this.fallbackProvider;
-            // Persist the fallback provider name so the next launch does not fire a
-            // false-positive incompatible-provider warning (e.g. 'openai' vs 'local').
+            // Persist the fallback provider's space so the next launch does not fire a
+            // false-positive incompatible-space warning (e.g. openai space vs local space).
             try {
-                this.db.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES ('last_embedding_provider', ?)").run(this.provider.name);
+                this.db.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES ('last_embedding_space', ?)").run(this.provider.space);
             } catch (_) { /* non-fatal — DB may not have app_state yet in edge cases */ }
         }
 
@@ -191,6 +195,20 @@ export class EmbeddingPipeline {
     }
 
     /**
+     * Get the active provider's composite embedding-space key
+     * (`${name}:${model}:${dims}`), used to gate re-indexing on space identity
+     * rather than provider name alone.
+     */
+    getActiveSpaceKey(): string | undefined {
+        return this.provider?.space;
+    }
+
+    /** Get the active provider's embedding dimensions (avoids reaching into private state). */
+    getActiveDimensions(): number | undefined {
+        return this.provider?.dimensions;
+    }
+
+    /**
      * Queue a meeting for embedding processing
      * Called when meeting ends
      */
@@ -230,6 +248,49 @@ export class EmbeddingPipeline {
         // Start processing in background
         this.processQueue().catch(err => {
             console.error('[EmbeddingPipeline] Queue processing error:', err);
+        });
+    }
+
+    /**
+     * Atomically clear a meeting's embeddings AND queue it for re-embedding, in a
+     * single transaction. Used by the re-index path so a crash can never leave a
+     * meeting with cleared vectors but no queue entry (which would make it an
+     * orphan: chunks present, embeddings NULL, space NULL, not enqueued, and
+     * NOT picked up by the re-index sweep since that requires embedding IS NOT NULL).
+     *
+     * After this returns, the meeting either has its old vectors AND queue rows
+     * (crash before commit → rolled back, sweep re-detects it) or cleared vectors
+     * AND queue rows (crash after commit → queue drains on next launch). No orphan.
+     */
+    async requeueMeetingForReindex(meetingId: string): Promise<void> {
+        const chunkIds = this.db
+            .prepare('SELECT id FROM chunks WHERE meeting_id = ?')
+            .all(meetingId) as { id: number }[];
+
+        const insert = this.db.prepare(`
+            INSERT OR IGNORE INTO embedding_queue (meeting_id, chunk_id, status)
+            VALUES (?, ?, 'pending')
+        `);
+
+        // One transaction: clear vectors + provider/space metadata, then queue
+        // ALL chunks (not just NULL-embedding ones) + the summary.
+        const tx = this.db.transaction(() => {
+            this.vectorStore.clearEmbeddingsForMeeting(meetingId);
+            // Purge any prior queue rows for this meeting first. The UNIQUE(meeting_id,
+            // chunk_id) constraint does NOT dedupe the summary row (chunk_id IS NULL, and
+            // SQLite treats NULL != NULL), so a re-queue would otherwise accumulate
+            // duplicate summary rows. Deleting first makes this idempotent for chunks AND
+            // the summary, and is safe inside the same transaction as the re-insert.
+            this.db.prepare('DELETE FROM embedding_queue WHERE meeting_id = ?').run(meetingId);
+            for (const c of chunkIds) insert.run(meetingId, c.id);
+            insert.run(meetingId, null); // summary
+        });
+        tx();
+
+        console.log(`[EmbeddingPipeline] Requeued meeting ${meetingId} for re-index (${chunkIds.length} chunks + summary, atomic)`);
+
+        this.processQueue().catch(err => {
+            console.error('[EmbeddingPipeline] Queue processing error (reindex):', err);
         });
     }
 
@@ -471,6 +532,46 @@ export class EmbeddingPipeline {
     }
 
     /**
+     * Embed a query using the ON-DEVICE local provider specifically (bundled
+     * MiniLM, ~10ms, fully offline) rather than whatever the primary provider
+     * is. Used for the latency-critical knowledge query path: when the resume
+     * was also indexed locally (same 384d space), this skips a ~100-200ms cloud
+     * embedding round-trip on every question.
+     *
+     * Returns null when no local provider is available (bundled model missing)
+     * — the caller MUST fall back to the index-matching embedder so cosine
+     * similarity is never computed across mismatched dimensions (which silently
+     * returns 0 in HybridSearchEngine). Never throws; resolves null on any error.
+     *
+     * `localDimensions` exposes the local model's vector size so the caller can
+     * dimension-check against the index BEFORE paying for the embed.
+     */
+    get localDimensions(): number | null {
+        return this.fallbackProvider?.dimensions ?? null;
+    }
+
+    /**
+     * The on-device fallback provider's composite space key. Lets the knowledge
+     * query path verify the fast local embedder shares the indexed nodes' SPACE
+     * (not just their dimension) before using it — guards against a same-dimension
+     * but different-space collision (e.g. Gemini pinned to 384d via env lever).
+     */
+    get localSpaceKey(): string | null {
+        return this.fallbackProvider?.space ?? null;
+    }
+
+    async getEmbeddingForQueryLocalOnly(text: string): Promise<number[] | null> {
+        const local = this.fallbackProvider;
+        if (!local) return null;
+        try {
+            return await this.embedWithTimeout(local, text, 'local-query');
+        } catch (e: any) {
+            console.warn('[EmbeddingPipeline] Local query embed failed:', e?.message || e);
+            return null;
+        }
+    }
+
+    /**
      * BUG-5 fix: Wraps a single embed() call with a hard timeout so a frozen API
      * (network partition, provider hang) cannot lock isProcessing=true indefinitely.
      * Throws if the provider does not respond within EMBED_TIMEOUT_MS (30s).
@@ -510,8 +611,8 @@ export class EmbeddingPipeline {
         // Record provider metadata on the meeting after first successful embedding
         try {
             this.db.prepare(
-                'UPDATE meetings SET embedding_provider = ?, embedding_dimensions = ? WHERE id = ? AND embedding_provider IS NULL'
-            ).run(p.name, p.dimensions, row.meeting_id);
+                'UPDATE meetings SET embedding_provider = ?, embedding_dimensions = ?, embedding_space = ? WHERE id = ? AND embedding_provider IS NULL'
+            ).run(p.name, p.dimensions, p.space, row.meeting_id);
         } catch (e) {
             // Non-fatal — metadata is for safety filtering, not critical path
         }
@@ -544,8 +645,8 @@ export class EmbeddingPipeline {
         // cover meetings whose only embedding is a summary (no chunks).
         try {
             this.db.prepare(
-                'UPDATE meetings SET embedding_provider = ?, embedding_dimensions = ? WHERE id = ? AND embedding_provider IS NULL'
-            ).run(p.name, p.dimensions, meetingId);
+                'UPDATE meetings SET embedding_provider = ?, embedding_dimensions = ?, embedding_space = ? WHERE id = ? AND embedding_provider IS NULL'
+            ).run(p.name, p.dimensions, p.space, meetingId);
         } catch (e) {
             // Non-fatal — metadata is for safety filtering, not critical path
         }

@@ -1,0 +1,128 @@
+{
+  "profileId": "backend-engineer",
+  "role": "Backend Engineer",
+  "resume": {
+    "identity": {
+      "name": "Aarav Menon",
+      "email": "aarav.menon@gmail.com",
+      "location": "San Francisco, CA",
+      "phone": "415-555-0142",
+      "links": []
+    },
+    "summary": "Backend engineer with 5 years building scalable payment systems at high-growth fintech companies. Strong in distributed systems, Go, and Python.",
+    "skills": [
+      "Go",
+      "Python",
+      "PostgreSQL",
+      "Redis",
+      "Kubernetes",
+      "gRPC",
+      "Kafka",
+      "Terraform"
+    ],
+    "experience": [
+      {
+        "company": "Stripe",
+        "role": "Backend Engineer",
+        "start_date": "2021-03",
+        "end_date": null,
+        "bullets": [
+          "Built payment reconciliation pipeline processing $2B+ daily",
+          "Designed real-time fraud detection system reducing chargebacks 40%",
+          "Migrated monolith to microservices, improved p99 latency from 800ms to 120ms"
+        ]
+      },
+      {
+        "company": "Twilio",
+        "role": "Software Engineer",
+        "start_date": "2019-06",
+        "end_date": "2021-02",
+        "bullets": [
+          "Developed SMS routing engine handling 50M messages/day",
+          "Built programmable video signaling infrastructure"
+        ]
+      }
+    ],
+    "projects": [
+      {
+        "name": "OpenRate",
+        "description": "Open-source Go rate limiting library with token bucket and sliding window algorithms. 2k GitHub stars.",
+        "technologies": [
+          "Go",
+          "Redis",
+          "gRPC"
+        ]
+      },
+      {
+        "name": "LedgerSync",
+        "description": "CLI tool for personal finance tracking with bank API integration. Used by 500+ engineers.",
+        "technologies": [
+          "Python",
+          "Plaid",
+          "SQLite"
+        ]
+      }
+    ],
+    "education": [
+      {
+        "institution": "Carnegie Mellon University",
+        "degree": "MS Computer Science",
+        "field": "Computer Science",
+        "start_date": "",
+        "end_date": "2019"
+      },
+      {
+        "institution": " IIT Bombay",
+        "degree": "BTech Computer Science",
+        "field": "Computer Science",
+        "start_date": "",
+        "end_date": "2017"
+      }
+    ],
+    "achievements": [],
+    "certifications": [],
+    "leadership": []
+  },
+  "jd": {
+    "title": "Senior Backend Engineer",
+    "company": "Datadog",
+    "location": "Remote (US)",
+    "description_summary": "Building observability infrastructure at scale. Help engineers understand systems processing trillions of data points daily.",
+    "level": "senior",
+    "employment_type": "full_time",
+    "min_years_experience": 5,
+    "compensation_hint": "$180k-$220k",
+    "requirements": [
+      "5+ years backend development",
+      "Go or Python expertise",
+      "Distributed systems experience",
+      "AWS/GCP",
+      "Database optimization"
+    ],
+    "nice_to_haves": [],
+    "responsibilities": [],
+    "technologies": [
+      "Go",
+      "Kafka",
+      "PostgreSQL",
+      "Redis",
+      "Kubernetes"
+    ],
+    "keywords": []
+  },
+  "customContext": "Give me concise, technical answers. I prefer bullet points when possible. Focus on concrete examples from my experience.",
+  "persona": "Calm senior engineering mentor — precise, technical, no fluff.",
+  "negotiation": {
+    "targetSalary": 195000,
+    "minimumSalary": 175000,
+    "currentSalary": 185000,
+    "signingBonus": 25000,
+    "equity": "0.05% with 4 year vest, 1 year cliff",
+    "priorities": [
+      "target salary",
+      "equity vesting acceleration",
+      "remote-first"
+    ]
+  },
+  "referenceFiles": []
+}

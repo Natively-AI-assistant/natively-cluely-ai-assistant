@@ -1,0 +1,6 @@
+NEGOTIATION CONTEXT
+Target salary: $160000
+Minimum acceptable: $140000
+Current salary: $200000
+Equity: 3% with 4 year vest, 1 year cliff
+Priorities: founder equity, technical role, board seat

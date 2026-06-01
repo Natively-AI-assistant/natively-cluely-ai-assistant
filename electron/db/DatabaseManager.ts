@@ -4,6 +4,7 @@ import path from 'path';
 import { app } from 'electron';
 import fs from 'fs';
 import * as sqliteVec from 'sqlite-vec';
+import { buildLegacySpaceCaseSql } from '../rag/embeddingSpace';
 
 // Interfaces for our data objects
 export interface Meeting {
@@ -46,11 +47,25 @@ export class DatabaseManager {
     private db: Database.Database | null = null;
     private dbPath: string;
     private resolvedExtPath: string = '';
+    private initError: Error | null = null;
 
     private constructor() {
         const userDataPath = app.getPath('userData');
         this.dbPath = path.join(userDataPath, 'natively.db');
-        this.init();
+        // IMPORTANT: never throw out of the constructor. If init() throws and
+        // escapes, `DatabaseManager.instance` is never assigned — so every
+        // subsequent getInstance() call re-enters the constructor and re-emits
+        // the identical failure (this is why a single dlopen error used to print
+        // as a wall of ~dozens of identical stack traces across seed-demo,
+        // get-recent-meetings, modes:get-active, etc.). Instead we capture the
+        // error once and degrade to db: null; every public method already guards
+        // with `if (!this.db)`, so callers get empty/null results, not throws.
+        try {
+            this.init();
+        } catch (error) {
+            this.initError = error as Error;
+            this.reportInitFailure(error);
+        }
     }
 
     public static getInstance(): DatabaseManager {
@@ -58,6 +73,49 @@ export class DatabaseManager {
             DatabaseManager.instance = new DatabaseManager();
         }
         return DatabaseManager.instance;
+    }
+
+    /** True when the underlying SQLite database opened successfully. */
+    public isAvailable(): boolean {
+        return this.db !== null;
+    }
+
+    /**
+     * The error that caused initialization to fail, if any. Lets the app surface
+     * a single user-facing banner (e.g. "Local database unavailable — meeting
+     * history disabled") instead of relying on log scraping.
+     */
+    public getInitError(): Error | null {
+        return this.initError;
+    }
+
+    /**
+     * Translate an init failure into a single, actionable log line. The most
+     * common fatal cause is a native-module architecture mismatch (an x86_64
+     * better-sqlite3 binary loaded under the arm64 Electron runtime, typically
+     * produced by an `npm install` that ran under a Rosetta shell).
+     */
+    private reportInitFailure(error: unknown): void {
+        const err = error as NodeJS.ErrnoException;
+        const msg = err?.message || String(error);
+        const isArchMismatch =
+            err?.code === 'ERR_DLOPEN_FAILED' ||
+            /incompatible architecture|ERR_DLOPEN_FAILED|mach-o/i.test(msg);
+
+        if (isArchMismatch) {
+            console.error(
+                '[DatabaseManager] FATAL: native module (better-sqlite3) failed to load — the compiled ' +
+                'binary architecture does not match the Electron runtime. Local database is DISABLED ' +
+                '(meeting history, modes, and notes will not persist this session).\n' +
+                '  Fix: run `npm run rebuild:native` from a native (non-Rosetta) terminal, then restart the app.'
+            );
+        } else {
+            console.error(
+                '[DatabaseManager] FATAL: database initialization failed. Local database is DISABLED ' +
+                '(meeting history, modes, and notes will not persist this session).',
+                error
+            );
+        }
     }
 
     private init() {
@@ -602,6 +660,44 @@ export class DatabaseManager {
             this.db.pragma('user_version = 15');
         }
 
+        // Version 15 → 16: Add embedding_space identity column + backfill.
+        // The previous re-index compatibility check keyed on `embedding_provider`
+        // (name only, e.g. 'gemini'), which CANNOT distinguish two models with the
+        // same provider+dimensions but incompatible vector spaces (e.g.
+        // gemini-embedding-001 768d vs gemini-embedding-2 768d). embedding_space is
+        // the composite `${name}:${model}:${dims}` identity that fixes this.
+        //
+        // Backfill synthesizes the v1 space for each legacy row from its existing
+        // provider+dims so it correctly DIFFERS from any new model's space. The
+        // model strings below must match each provider's shipped default at the
+        // time legacy rows were written (see electron/rag/embeddingSpace.ts:legacySpaceForProvider).
+        if (version < 16) {
+            console.log('[DatabaseManager] Applying migration v15 → v16: Add embedding_space column + backfill');
+            try { this.db.exec('ALTER TABLE meetings ADD COLUMN embedding_space TEXT'); } catch (e) { /* column already exists */ }
+            try {
+                // Build the CASE arms from the SAME shared map legacySpaceForProvider uses,
+                // so the migration backfill and the runtime space key can never drift apart.
+                const caseArms = buildLegacySpaceCaseSql();
+                this.db.exec(`
+                    UPDATE meetings
+                    SET embedding_space =
+                        embedding_provider || ':' ||
+                        CASE embedding_provider
+                          ${caseArms}
+                          ELSE 'unknown'
+                        END || ':' ||
+                        COALESCE(CAST(embedding_dimensions AS TEXT), 'unknown')
+                    WHERE embedding_provider IS NOT NULL
+                      AND embedding_space IS NULL;
+                `);
+                this.db.exec('CREATE INDEX IF NOT EXISTS idx_meetings_embedding_space ON meetings(embedding_space);');
+                console.log('[DatabaseManager] v16 migration: embedding_space backfilled + indexed ✓');
+            } catch (e) {
+                console.error('[DatabaseManager] v16 migration backfill failed (non-fatal):', e);
+            }
+            this.db.pragma('user_version = 16');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 
@@ -972,6 +1068,32 @@ export class DatabaseManager {
         } catch (e) {
             console.error(`[DatabaseManager] Failed to create vec0 tables for dim=${dim}:`, e);
         }
+    }
+
+    /**
+     * Enumerate every embedding dimension that actually has a vec0 table, unioned
+     * with KNOWN_DIMS. Used by delete/clear paths so they cover dims provisioned
+     * at runtime via ensureVecTableForDim() — not just the static KNOWN_DIMS list.
+     *
+     * Without this, a provider that introduced a dimension outside KNOWN_DIMS (e.g.
+     * a future model at 1024d) would have its rows created on insert but NEVER
+     * deleted, orphaning vec0 rows on re-index/fallback.
+     */
+    public getExistingVecDims(): number[] {
+        const dims = new Set<number>(DatabaseManager.KNOWN_DIMS);
+        if (!this.db) return [...dims];
+        try {
+            const rows = this.db.prepare(
+                `SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'vec_chunks_%'`
+            ).all() as { name: string }[];
+            for (const r of rows) {
+                const m = r.name.match(/^vec_chunks_(\d+)$/);
+                if (m) dims.add(Number(m[1]));
+            }
+        } catch (e) {
+            console.warn('[DatabaseManager] getExistingVecDims failed; falling back to KNOWN_DIMS:', e);
+        }
+        return [...dims];
     }
 
     /**

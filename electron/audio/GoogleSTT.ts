@@ -1,6 +1,8 @@
 import { SpeechClient } from '@google-cloud/speech';
 import { EventEmitter } from 'events';
 import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
 import { RECOGNITION_LANGUAGES, EnglishVariant } from '../config/languages';
 
 /**
@@ -20,6 +22,15 @@ export class GoogleSTT extends EventEmitter {
     private isFatalError = false;
     private label = 'default';
     private writeCount = 0;
+
+    // Diagnostic raw-PCM dump. Opt-in via NATIVELY_STT_DUMP=1. Captures the
+    // EXACT bytes forwarded to Google's gRPC stream (post keepalive-drop), so
+    // we can play the file back and hear what Google actually receives —
+    // settling "is the audio garbled or is Google misconfigured?" empirically
+    // rather than by inference. One raw file per channel; convert with:
+    //   ffmpeg -f s16le -ar <rate> -ac 1 -i google_stt_<label>.raw out.wav
+    private dumpStream: fs.WriteStream | null = null;
+    private dumpBytes = 0;
 
     // gRPC permanent failure codes — retrying these is pointless.
     //   3  = INVALID_ARGUMENT (config the server will never accept)
@@ -146,8 +157,30 @@ export class GoogleSTT extends EventEmitter {
         this.isFatalError = false;
         this.writeCount = 0;
 
+        this.openDumpStream();
+
         console.log(`[GoogleSTT/${this.label}] Starting recognition stream (rate=${this.sampleRateHertz}Hz, ch=${this.audioChannelCount})...`);
         this.startStream();
+    }
+
+    /** Opt-in diagnostic: open a raw-PCM dump of the exact bytes sent to Google. */
+    private openDumpStream(): void {
+        if (process.env.NATIVELY_STT_DUMP !== '1' || this.dumpStream) return;
+        try {
+            const file = path.join(os.homedir(), `google_stt_${this.label}_${this.sampleRateHertz}hz.raw`);
+            this.dumpStream = fs.createWriteStream(file);
+            this.dumpBytes = 0;
+            console.log(`[GoogleSTT/${this.label}] 🎙️  PCM dump OPEN → ${file} (play: ffmpeg -f s16le -ar ${this.sampleRateHertz} -ac ${this.audioChannelCount} -i "${file}" out.wav)`);
+        } catch (e) {
+            console.error(`[GoogleSTT/${this.label}] Failed to open PCM dump:`, e);
+        }
+    }
+
+    private closeDumpStream(): void {
+        if (!this.dumpStream) return;
+        try { this.dumpStream.end(); } catch { /* ignore */ }
+        console.log(`[GoogleSTT/${this.label}] 🎙️  PCM dump CLOSED (${this.dumpBytes} bytes ≈ ${(this.dumpBytes / 2 / Math.max(1, this.sampleRateHertz)).toFixed(1)}s @ ${this.sampleRateHertz}Hz)`);
+        this.dumpStream = null;
     }
 
     public stop(): void {
@@ -181,6 +214,8 @@ export class GoogleSTT extends EventEmitter {
             this.stream.destroy();
             this.stream = null;
         }
+
+        this.closeDumpStream();
     }
 
     public finalize(): void {
@@ -205,11 +240,44 @@ export class GoogleSTT extends EventEmitter {
     private proactiveRestartTimer: NodeJS.Timeout | null = null;
     private static readonly PROACTIVE_RESTART_MS = 270_000; // 4 min 30 sec
 
+    /**
+     * True only if every byte of the chunk is zero (a Rust-DSP keepalive frame).
+     * Scans the whole buffer — never strided — so a chunk containing even one
+     * non-zero sample of real audio is never misclassified as silence and dropped.
+     * Chunks are ≤5760 bytes and arrive every 20–60ms, so a full scan is cheap.
+     */
+    private isAllZeroChunk(buf: Buffer): boolean {
+        if (buf.length === 0) return true;
+        for (let i = 0; i < buf.length; i++) {
+            if (buf[i] !== 0) return false;
+        }
+        return true;
+    }
+
     public write(audioData: Buffer): void {
         if (!this.isActive || this.isFatalError) {
             // Only log occasionally to avoid spam
             if (this.writeCount === 0) console.warn(`[GoogleSTT/${this.label}] write() called but isActive=false — data dropped`);
             return;
+        }
+
+        // Drop pure zero-fill keepalive frames injected by the Rust DSP
+        // (FrameAction::SendSilence → vec![0u8; chunk_size*2]). For system audio
+        // the suppressor runs with VAD disabled and a permissive RMS floor, so it
+        // oscillates between real low-amplitude Send frames and these silent
+        // keepalives. Google's streamingRecognize (unlike Deepgram/Natively, which
+        // endpoint cleanly on silence) hallucinates tiny interim fragments —
+        // "he", "heh", "hehehe" — when real audio is interleaved with zero frames.
+        // Google holds the gRPC stream open on its own (10s idle timeout) and
+        // write() lazily reconnects on the next real chunk, so the keepalive serves
+        // no purpose here and only corrupts recognition. Real audio is never
+        // bit-exactly zero (noise floor/dither), so an all-zero chunk is
+        // unambiguously a keepalive.
+        if (this.isAllZeroChunk(audioData)) return;
+
+        // Diagnostic: capture the exact non-keepalive bytes handed to Google.
+        if (this.dumpStream) {
+            try { this.dumpStream.write(audioData); this.dumpBytes += audioData.length; } catch { /* ignore */ }
         }
 
         this.writeCount++;

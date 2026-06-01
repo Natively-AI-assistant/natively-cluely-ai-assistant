@@ -1,0 +1,24 @@
+Kwame Osei
+kwame.osei@gmail.com | 310-555-0167 | Los Angeles, CA
+
+SUMMARY
+SRE with 7 years building and operating large-scale distributed systems. Deep expertise in Kubernetes, observability, and incident response. Reduced outage time 60% at Netflix.
+
+SKILLS
+Kubernetes, Terraform, Go, Python, Prometheus, Grafana, AWS, Chaos Engineering
+
+EXPERIENCE
+Site Reliability Engineer — Netflix (2020-08 – Present)
+  - Built automated chaos engineering system (400+ experiments/month)
+  - Reduced P1 incident MTTR from 45min to 12min via runbook automation
+  - Designed multi-region failover reducing regional outage impact 80%
+Senior DevOps Engineer — Twitter (X) (2017-03 – 2020-07)
+  - Migrated 500-service monolith to Kubernetes in 18 months
+  - Built real-time monitoring for 300M daily active users
+
+PROJECTS
+ChaosMonkey-Pro: Enhanced chaos engineering tool with fault injection campaigns and 自动化recovery. 2k stars. [Go, Kubernetes, Prometheus, Grafana]
+SRE-Dashboard: Real-time SRE metrics dashboard for Netflix internal use. Tracks 1000+ services. [React, Grafana, PromQL, Tempo]
+
+EDUCATION
+BS Computer Engineering, Computer Engineering — Georgia Tech (2017)

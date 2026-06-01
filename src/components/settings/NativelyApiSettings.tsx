@@ -866,11 +866,10 @@ export const NativelyApiSettings: React.FC = () => {
 
                       {/* Action / Checkout section */}
                       <motion.div className="mt-6 space-y-3" variants={cardCtaVariants}>
-                        <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg transition-opacity border natively-api-pricing-promo-wrapper ${
-                          plan.includesPro 
-                            ? 'opacity-100' 
-                            : 'opacity-0 pointer-events-none select-none'
-                        }`}>
+                        <div 
+                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border natively-api-pricing-promo-wrapper"
+                          style={{ visibility: plan.includesPro ? 'visible' : 'hidden' }}
+                        >
                           <span className="text-[11px] font-medium natively-api-pricing-promo-text">
                             Code <strong className="natively-api-pricing-promo-bold font-bold select-all">INSIDER20</strong> for 20% off
                           </span>
@@ -1462,11 +1461,11 @@ export const NativelyApiSettings: React.FC = () => {
                 To cancel your subscription, log in to the{' '}
                 <span
                   onClick={() => openExternal('https://customer.dodopayments.com/')}
-                  className="text-text-primary hover:text-text-secondary underline decoration-border-subtle underline-offset-[3px] cursor-pointer transition-colors"
+                  className="text-blue-400 hover:text-blue-300 underline decoration-blue-400/40 underline-offset-[3px] cursor-pointer transition-colors"
                 >
-                  https://customer.dodopayments.com/
+                  customer portal
                 </span>{' '}
-                portal.
+                to manage or cancel your plan.
               </p>
             </div>
 
@@ -1490,6 +1489,15 @@ export const NativelyApiSettings: React.FC = () => {
               </span>
               .
             </p>
+
+            <div className="mt-3 px-3 py-2.5 rounded-xl bg-amber-500/6 border border-amber-500/15">
+              <p className="text-[11.5px] text-text-secondary leading-relaxed">
+                <strong className="text-text-primary font-semibold">A personal note:</strong>{' '}
+                Natively is built, maintained, and supported entirely by one person — in their free time.
+                Email replies may take a few days, and weekends (Sat &amp; Sun) are offline.
+                Your patience is genuinely appreciated.
+              </p>
+            </div>
           </div>
         </div>
       </Card>

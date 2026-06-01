@@ -83,12 +83,12 @@ export class RAGRetriever {
         }
 
         // 2. Retrieve candidates (over-fetch for reranking)
-        const providerName = this.embeddingPipeline.getActiveProviderName();
+        const spaceKey = this.embeddingPipeline.getActiveSpaceKey();
         let candidates = await this.vectorStore.searchSimilar(queryEmbedding, {
             meetingId,
             limit: topK * 2,
             minSimilarity: 0.25,
-            providerName
+            spaceKey
         });
 
         if (candidates.length === 0) {
@@ -179,14 +179,14 @@ export class RAGRetriever {
         }
 
         // Search both chunks and summaries
-        const providerName = this.embeddingPipeline.getActiveProviderName();
+        const spaceKey = this.embeddingPipeline.getActiveSpaceKey();
         const chunkResults = await this.vectorStore.searchSimilar(queryEmbedding, {
             limit: topK * 2,
             minSimilarity: 0.25,
-            providerName
+            spaceKey
         });
 
-        const summaryResults = await this.vectorStore.searchSummaries(queryEmbedding, 5, providerName);
+        const summaryResults = await this.vectorStore.searchSummaries(queryEmbedding, 5, spaceKey);
 
         // Get meeting IDs from top summaries
         const relevantMeetingIds = new Set(summaryResults.map(s => s.meetingId));

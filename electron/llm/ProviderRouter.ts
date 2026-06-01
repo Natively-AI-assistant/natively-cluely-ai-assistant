@@ -332,7 +332,7 @@ export class ProviderRouter {
             // All providers down, return lowest priority
             return {
                 provider: 'gemini',
-                model: 'gemini-3.1-flash-lite-preview',
+                model: 'gemini-3.5-flash',
                 reason: 'all providers unhealthy, using Gemini as last resort'
             };
         }
@@ -416,7 +416,7 @@ export class ProviderRouter {
 
     private getDefaultModel(provider: string): string {
         const models: Record<string, string> = {
-            'gemini': 'gemini-3.1-flash-lite-preview',
+            'gemini': 'gemini-3.5-flash',
             'groq': 'llama-3.3-70b-versatile',
             'openai': 'gpt-5.4',
             'claude': 'claude-sonnet-4-6',

@@ -1,0 +1,15 @@
+Staff Machine Learning Engineer — Anthropic (San Francisco, CA)
+Level: staff
+
+Build foundation model infrastructure. Help make AI systems safe and beneficial. Work on the core systems powering Claude.
+
+REQUIREMENTS
+- PhD or equivalent experience
+- NLP expertise
+- Production ML systems
+- LLM experience preferred
+- Python + PyTorch
+
+TECHNOLOGIES: Python, PyTorch, Hugging Face, Kubernetes, Weave
+
+COMPENSATION: $280k-$350k

@@ -134,6 +134,18 @@ export class LiveRAGIndexer {
                 }
                 this.indexedChunkCount += embeddedCount;
                 console.log(`[LiveRAGIndexer] Embedded ${embeddedCount}/${chunkIds.length} chunks (${this.indexedChunkCount} total with embeddings)`);
+
+                // Stamp the meeting's embedding space so these live chunks are (a) searchable
+                // in-session (search filters on embedding_space) and (b) NOT swept into the
+                // "unknown-space" re-index. Only stamps if currently NULL.
+                if (embeddedCount > 0) {
+                    const providerName = this.embeddingPipeline.getActiveProviderName();
+                    const space = this.embeddingPipeline.getActiveSpaceKey();
+                    const dims = this.embeddingPipeline.getActiveDimensions();
+                    if (providerName && space && dims) {
+                        this.vectorStore.stampMeetingSpaceIfUnset(meetingId, providerName, dims, space);
+                    }
+                }
             } else {
                 console.log('[LiveRAGIndexer] Embedding pipeline not ready, chunks saved without embeddings');
             }

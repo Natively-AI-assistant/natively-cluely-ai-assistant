@@ -1,0 +1,1309 @@
+{
+  "iteration": "real-ui-iteration-001",
+  "date": "2026-06-01",
+  "appVersion": "2.7.0",
+  "platform": "darwin-arm64",
+  "provider": "natively /v1/chat",
+  "realUiUsed": true,
+  "realApiUsed": true,
+  "mockResponsesDetected": 0,
+  "total": 20,
+  "passed": 18,
+  "failed": 2,
+  "accuracy": 0.9,
+  "criticalTotal": 5,
+  "criticalPassed": 5,
+  "criticalFailed": [],
+  "latency": {
+    "fut_avg": 6300.545,
+    "fut_p50": 7625.705,
+    "fut_p95": 10674.034,
+    "fut_p99": 10674.034,
+    "fut_max": 10674.034,
+    "total_p50": 7622.063,
+    "total_p95": 27122.985,
+    "total_max": 27122.985,
+    "manual_fut_p50": 7625.705,
+    "manual_fut_p95": 10674.034,
+    "wta_fut_p50": 0,
+    "wta_fut_p95": 0
+  },
+  "cost": {
+    "total": 0.002,
+    "avg": 0,
+    "wastedOnFailures": 0
+  },
+  "rows": [
+    {
+      "testId": "ML-001",
+      "profileId": "ml-engineer",
+      "mode": "manual_input",
+      "pattern": "identity_manual",
+      "critical": true,
+      "question": "what is my name?",
+      "expectedBehavior": "",
+      "actualResponse": "You are Priya Sharma.",
+      "passed": true,
+      "score": 1,
+      "failReasons": [],
+      "accuracy": {
+        "requiredFactsFound": [
+          "Priya Sharma"
+        ],
+        "missingRequiredFacts": [],
+        "forbiddenFactsFound": [],
+        "hallucinationFlags": [],
+        "perspectiveCorrect": true,
+        "usedCorrectContext": true
+      },
+      "latency": {
+        "testStartMs": 0,
+        "appReadyMs": 0,
+        "contextLoadStartMs": 0,
+        "contextLoadCompleteMs": 0,
+        "questionSubmitMs": 103.461,
+        "buttonClickMs": 0,
+        "loadingIndicatorMs": 0,
+        "firstNetworkRequestMs": 0,
+        "firstResponseByteMs": 0,
+        "firstStreamChunkMs": 14.396,
+        "firstVisibleTextMs": 14.397,
+        "firstUsefulTokenMs": 14.394,
+        "responseCompleteMs": 14.397,
+        "totalResponseMs": 14.397
+      },
+      "cost": {
+        "inputTokens": 401,
+        "outputTokens": 6,
+        "totalTokens": 407,
+        "estimatedCostUsd": 0.000064,
+        "actualCostUsd": 0,
+        "costSource": "estimated",
+        "model": "gemini-3.5-flash"
+      },
+      "contextUsage": {
+        "expectedContextLayers": [
+          "stable_identity",
+          "resume"
+        ],
+        "actualContextLayers": [],
+        "forbiddenContextLayers": [
+          "jd",
+          "negotiation",
+          "assistant_identity"
+        ],
+        "contextLeakDetected": false,
+        "notes": ""
+      },
+      "artifacts": {
+        "visibleConfirmed": true
+      },
+      "providerName": "natively",
+      "modelName": "gemini-3.5-flash"
+    },
+    {
+      "testId": "ML-002",
+      "profileId": "ml-engineer",
+      "mode": "what_to_answer",
+      "pattern": "identity_interviewer",
+      "critical": true,
+      "transcript": "Interviewer: Please introduce yourself with your name first.",
+      "expectedBehavior": "",
+      "actualResponse": "I'm Priya Sharma, a research-minded technical lead. I focus on translating deep technical research into robust, production-grade systems, ensuring our engineering decisions are thoroughly validated. I look forward to discussing how we can apply this rigorous, citation-rich approach to your current architecture challenges.",
+      "passed": true,
+      "score": 1,
+      "failReasons": [],
+      "accuracy": {
+        "requiredFactsFound": [
+          "Priya Sharma"
+        ],
+        "missingRequiredFacts": [],
+        "forbiddenFactsFound": [],
+        "hallucinationFlags": [],
+        "perspectiveCorrect": true,
+        "usedCorrectContext": true
+      },
+      "latency": {
+        "testStartMs": 0,
+        "appReadyMs": 0,
+        "contextLoadStartMs": 0,
+        "contextLoadCompleteMs": 0,
+        "questionSubmitMs": 0,
+        "buttonClickMs": 176.2,
+        "loadingIndicatorMs": 0,
+        "firstNetworkRequestMs": 0,
+        "firstResponseByteMs": 0,
+        "firstStreamChunkMs": 0,
+        "firstVisibleTextMs": 0,
+        "firstUsefulTokenMs": 0,
+        "responseCompleteMs": 27122.985,
+        "totalResponseMs": 27122.985
+      },
+      "cost": {
+        "inputTokens": 412,
+        "outputTokens": 81,
+        "totalTokens": 493,
+        "estimatedCostUsd": 0.00011,
+        "actualCostUsd": 0,
+        "costSource": "estimated",
+        "model": "gemini-3.5-flash"
+      },
+      "contextUsage": {
+        "expectedContextLayers": [
+          "stable_identity",
+          "resume"
+        ],
+        "actualContextLayers": [],
+        "forbiddenContextLayers": [
+          "assistant_identity"
+        ],
+        "contextLeakDetected": false,
+        "notes": ""
+      },
+      "artifacts": {
+        "visibleConfirmed": false
+      },
+      "providerName": "natively",
+      "modelName": "gemini-3.5-flash"
+    },
+    {
+      "testId": "ML-003",
+      "profileId": "ml-engineer",
+      "mode": "manual_input",
+      "pattern": "projects_manual",
+      "critical": false,
+      "question": "what are my machine learning projects?",
+      "expectedBehavior": "",
+      "actualResponse": "I've built two primary machine learning projects. The first is LLM-Eval, an open-source framework using PyTorch and Hugging Face designed to evaluate language model performance across 15 benchmarks. The second is RecSys-Factory, a production recommendation library built with TensorFlow and Redis that implements multi-armed bandit algorithms to optimize real-time exploration and exploitation.",
+      "passed": true,
+      "score": 1,
+      "failReasons": [],
+      "accuracy": {
+        "requiredFactsFound": [
+          "LLM-Eval"
+        ],
+        "missingRequiredFacts": [],
+        "forbiddenFactsFound": [],
+        "hallucinationFlags": [],
+        "perspectiveCorrect": true,
+        "usedCorrectContext": true
+      },
+      "latency": {
+        "testStartMs": 0,
+        "appReadyMs": 0,
+        "contextLoadStartMs": 0,
+        "contextLoadCompleteMs": 0,
+        "questionSubmitMs": 108.664,
+        "buttonClickMs": 0,
+        "loadingIndicatorMs": 0,
+        "firstNetworkRequestMs": 0,
+        "firstResponseByteMs": 0,
+        "firstStreamChunkMs": 7625.714,
+        "firstVisibleTextMs": 7625.716,
+        "firstUsefulTokenMs": 7625.705,
+        "responseCompleteMs": 7625.716,
+        "totalResponseMs": 7625.716
+      },
+      "cost": {
+        "inputTokens": 407,
+        "outputTokens": 99,
+        "totalTokens": 506,
+        "estimatedCostUsd": 0.00012,
+        "actualCostUsd": 0,
+        "costSource": "estimated",
+        "model": "gemini-3.5-flash"
+      },
+      "contextUsage": {
+        "expectedContextLayers": [
+          "resume",
+          "projects"
+        ],
+        "actualContextLayers": [],
+        "forbiddenContextLayers": [
+          "negotiation",
+          "assistant_identity"
+        ],
+        "contextLeakDetected": false,
+        "notes": ""
+      },
+      "artifacts": {
+        "visibleConfirmed": true
+      },
+      "providerName": "natively",
+      "modelName": "gemini-3.5-flash"
+    },
+    {
+      "testId": "ML-004",
+      "profileId": "ml-engineer",
+      "mode": "what_to_answer",
+      "pattern": "projects_interviewer",
+      "critical": false,
+      "transcript": "Interviewer: Can you walk me through one ML project from your resume?",
+      "expectedBehavior": "",
+      "actualResponse": "I developed RecSys-Factory, a production recommendation system library designed to handle real-time exploration and exploitation. Using Python and TensorFlow, I implemented multi-armed bandit strategies to dynamically optimize user recommendations. We backed the system with Redis to maintain low-latency state updates for the bandit arms, which successfully moved us away from static heuristic baselines to a fully adaptive framework.",
+      "passed": true,
+      "score": 1,
+      "failReasons": [],
+      "accuracy": {
+        "requiredFactsFound": [],
+        "missingRequiredFacts": [],
+        "forbiddenFactsFound": [],
+        "hallucinationFlags": [],
+        "perspectiveCorrect": true,
+        "usedCorrectContext": true
+      },
+      "latency": {
+        "testStartMs": 0,
+        "appReadyMs": 0,
+        "contextLoadStartMs": 0,
+        "contextLoadCompleteMs": 0,
+        "questionSubmitMs": 0,
+        "buttonClickMs": 96.088,
+        "loadingIndicatorMs": 0,
+        "firstNetworkRequestMs": 0,
+        "firstResponseByteMs": 0,
+        "firstStreamChunkMs": 0,
+        "firstVisibleTextMs": 0,
+        "firstUsefulTokenMs": 0,
+        "responseCompleteMs": 5257.439,
+        "totalResponseMs": 5257.439
+      },
+      "cost": {
+        "inputTokens": 415,
+        "outputTokens": 109,
+        "totalTokens": 524,
+        "estimatedCostUsd": 0.000128,
+        "actualCostUsd": 0,
+        "costSource": "estimated",
+        "model": "gemini-3.5-flash"
+      },
+      "contextUsage": {
+        "expectedContextLayers": [
+          "resume",
+          "projects"
+        ],
+        "actualContextLayers": [],
+        "forbiddenContextLayers": [
+          "negotiation",
+          "assistant_identity"
+        ],
+        "contextLeakDetected": false,
+        "notes": ""
+      },
+      "artifacts": {
+        "visibleConfirmed": false
+      },
+      "providerName": "natively",
+      "modelName": "gemini-3.5-flash"
+    },
+    {
+      "testId": "ML-005",
+      "profileId": "ml-engineer",
+      "mode": "what_to_answer",
+      "pattern": "jd_alignment",
+      "critical": false,
+      "transcript": "Interviewer: How does your ML experience match this job description?",
+      "expectedBehavior": "",
+      "actualResponse": "",
+      "passed": false,
+      "score": 0,
+      "failReasons": [
+        "empty_answer"
+      ],
+      "accuracy": {
+        "requiredFactsFound": [],
+        "missingRequiredFacts": [],
+        "forbiddenFactsFound": [],
+        "hallucinationFlags": [],
+        "perspectiveCorrect": false,
+        "usedCorrectContext": true
+      },
+      "latency": {
+        "testStartMs": 0,
+        "appReadyMs": 0,
+        "contextLoadStartMs": 0,
+        "contextLoadCompleteMs": 0,
+        "questionSubmitMs": 0,
+        "buttonClickMs": 184.889,
+        "loadingIndicatorMs": 0,
+        "firstNetworkRequestMs": 0,
+        "firstResponseByteMs": 0,
+        "firstStreamChunkMs": 0,
+        "firstVisibleTextMs": 0,
+        "firstUsefulTokenMs": 0,
+        "responseCompleteMs": 0,
+        "totalResponseMs": 0
+      },
+      "cost": {
+        "inputTokens": 414,
+        "outputTokens": 0,
+        "totalTokens": 414,
+        "estimatedCostUsd": 0.000062,
+        "actualCostUsd": 0,
+        "costSource": "estimated",
+        "model": "gemini-3.5-flash"
+      },
+      "contextUsage": {
+        "expectedContextLayers": [],
+        "actualContextLayers": [],
+        "forbiddenContextLayers": [
+          "negotiation",
+          "assistant_identity"
+        ],
+        "contextLeakDetected": false,
+        "notes": ""
+      },
+      "artifacts": {
+        "visibleConfirmed": false
+      },
+      "providerName": "natively",
+      "modelName": "gemini-3.5-flash",
+      "error": "wta_observer_timeout"
+    },
+    {
+      "testId": "ML-006",
+      "profileId": "ml-engineer",
+      "mode": "manual_input",
+      "pattern": "skills",
+      "critical": false,
+      "question": "what ML frameworks do I know?",
+      "expectedBehavior": "",
+      "actualResponse": "I primarily work with PyTorch, TensorFlow, and Hugging Face for building and evaluating models. I also use Spark and MLflow for data processing and managing the machine learning lifecycle.",
+      "passed": true,
+      "score": 1,
+      "failReasons": [],
+      "accuracy": {
+        "requiredFactsFound": [],
+        "missingRequiredFacts": [],
+        "forbiddenFactsFound": [],
+        "hallucinationFlags": [],
+        "perspectiveCorrect": true,
+        "usedCorrectContext": true
+      },
+      "latency": {
+        "testStartMs": 0,
+        "appReadyMs": 0,
+        "contextLoadStartMs": 0,
+        "contextLoadCompleteMs": 0,
+        "questionSubmitMs": 94.558,
+        "buttonClickMs": 0,
+        "loadingIndicatorMs": 0,
+        "firstNetworkRequestMs": 0,
+        "firstResponseByteMs": 0,
+        "firstStreamChunkMs": 5492.864,
+        "firstVisibleTextMs": 5492.865,
+        "firstUsefulTokenMs": 5492.861,
+        "responseCompleteMs": 6407.056,
+        "totalResponseMs": 6407.056
+      },
+      "cost": {
+        "inputTokens": 405,
+        "outputTokens": 47,
+        "totalTokens": 452,
+        "estimatedCostUsd": 0.000089,
+        "actualCostUsd": 0,
+        "costSource": "estimated",
+        "model": "gemini-3.5-flash"
+      },
+      "contextUsage": {
+        "expectedContextLayers": [
+          "resume",
+          "skills"
+        ],
+        "actualContextLayers": [],
+        "forbiddenContextLayers": [
+          "assistant_identity"
+        ],
+        "contextLeakDetected": false,
+        "notes": ""
+      },
+      "artifacts": {
+        "visibleConfirmed": true
+      },
+      "providerName": "natively",
+      "modelName": "gemini-3.5-flash"
+    },
+    {
+      "testId": "ML-007",
+      "profileId": "ml-engineer",
+      "mode": "what_to_answer",
+      "pattern": "follow_up",
+      "critical": false,
+      "transcript": "Interviewer: You mentioned a recommendation system project.\nCandidate: Yes, I built it using user interaction data.\nInterviewer: How did you evaluate the model?",
+      "expectedBehavior": "",
+      "actualResponse": "I evaluated the bandit policies offline using counterfactual estimation on historical interaction logs, specifically utilizing Li's replay method to unbiasedly estimate expected payoff. We then transitioned to an online A/B test to measure the reduction in cumulative regret and click-through rate improvements against the baseline.",
+      "passed": true,
+      "score": 1,
+      "failReasons": [],
+      "accuracy": {
+        "requiredFactsFound": [],
+        "missingRequiredFacts": [],
+        "forbiddenFactsFound": [],
+        "hallucinationFlags": [],
+        "perspectiveCorrect": true,
+        "usedCorrectContext": true
+      },
+      "latency": {
+        "testStartMs": 0,
+        "appReadyMs": 0,
+        "contextLoadStartMs": 0,
+        "contextLoadCompleteMs": 0,
+        "questionSubmitMs": 0,
+        "buttonClickMs": 145.81,
+        "loadingIndicatorMs": 0,
+        "firstNetworkRequestMs": 0,
+        "firstResponseByteMs": 0,
+        "firstStreamChunkMs": 0,
+        "firstVisibleTextMs": 0,
+        "firstUsefulTokenMs": 0,
+        "responseCompleteMs": 8501.904,
+        "totalResponseMs": 8501.904
+      },
+      "cost": {
+        "inputTokens": 437,
+        "outputTokens": 83,
+        "totalTokens": 520,
+        "estimatedCostUsd": 0.000115,
+        "actualCostUsd": 0,
+        "costSource": "estimated",
+        "model": "gemini-3.5-flash"
+      },
+      "contextUsage": {
+        "expectedContextLayers": [
+          "live_transcript"
+        ],
+        "actualContextLayers": [],
+        "forbiddenContextLayers": [
+          "assistant_identity"
+        ],
+        "contextLeakDetected": false,
+        "notes": ""
+      },
+      "artifacts": {
+        "visibleConfirmed": false
+      },
+      "providerName": "natively",
+      "modelName": "gemini-3.5-flash"
+    },
+    {
+      "testId": "ML-008",
+      "profileId": "ml-engineer",
+      "mode": "manual_input",
+      "pattern": "persona",
+      "critical": false,
+      "question": "answer like a confident but concise ML engineer: why should they hire me?",
+      "expectedBehavior": "",
+      "actualResponse": "What would you like help with?",
+      "passed": true,
+      "score": 1,
+      "failReasons": [],
+      "accuracy": {
+        "requiredFactsFound": [],
+        "missingRequiredFacts": [],
+        "forbiddenFactsFound": [],
+        "hallucinationFlags": [],
+        "perspectiveCorrect": true,
+        "usedCorrectContext": true
+      },
+      "latency": {
+        "testStartMs": 0,
+        "appReadyMs": 0,
+        "contextLoadStartMs": 0,
+        "contextLoadCompleteMs": 0,
+        "questionSubmitMs": 94.156,
+        "buttonClickMs": 0,
+        "loadingIndicatorMs": 0,
+        "firstNetworkRequestMs": 0,
+        "firstResponseByteMs": 0,
+        "firstStreamChunkMs": 8227.9,
+        "firstVisibleTextMs": 8227.9,
+        "firstUsefulTokenMs": 8227.897,
+        "responseCompleteMs": 8533.281,
+        "totalResponseMs": 8533.281
+      },
+      "cost": {
+        "inputTokens": 416,
+        "outputTokens": 8,
+        "totalTokens": 424,
+        "estimatedCostUsd": 0.000067,
+        "actualCostUsd": 0,
+        "costSource": "estimated",
+        "model": "gemini-3.5-flash"
+      },
+      "contextUsage": {
+        "expectedContextLayers": [],
+        "actualContextLayers": [],
+        "forbiddenContextLayers": [
+          "assistant_identity"
+        ],
+        "contextLeakDetected": false,
+        "notes": ""
+      },
+      "artifacts": {
+        "visibleConfirmed": true
+      },
+      "providerName": "natively",
+      "modelName": "gemini-3.5-flash"
+    },
+    {
+      "testId": "ML-009",
+      "profileId": "ml-engineer",
+      "mode": "manual_input",
+      "pattern": "unknown",
+      "critical": false,
+      "question": "what was the exact accuracy of my best model?",
+      "expectedBehavior": "",
+      "actualResponse": "What would you like help with?",
+      "passed": false,
+      "score": 0.875,
+      "failReasons": [
+        "missing_not_admitted:exact model accuracy"
+      ],
+      "accuracy": {
+        "requiredFactsFound": [],
+        "missingRequiredFacts": [],
+        "forbiddenFactsFound": [],
+        "hallucinationFlags": [],
+        "perspectiveCorrect": true,
+        "usedCorrectContext": true
+      },
+      "latency": {
+        "testStartMs": 0,
+        "appReadyMs": 0,
+        "contextLoadStartMs": 0,
+        "contextLoadCompleteMs": 0,
+        "questionSubmitMs": 101.839,
+        "buttonClickMs": 0,
+        "loadingIndicatorMs": 0,
+        "firstNetworkRequestMs": 0,
+        "firstResponseByteMs": 0,
+        "firstStreamChunkMs": 7317.836,
+        "firstVisibleTextMs": 7317.836,
+        "firstUsefulTokenMs": 7317.832,
+        "responseCompleteMs": 7622.063,
+        "totalResponseMs": 7622.063
+      },
+      "cost": {
+        "inputTokens": 409,
+        "outputTokens": 8,
+        "totalTokens": 417,
+        "estimatedCostUsd": 0.000066,
+        "actualCostUsd": 0,
+        "costSource": "estimated",
+        "model": "gemini-3.5-flash"
+      },
+      "contextUsage": {
+        "expectedContextLayers": [],
+        "actualContextLayers": [],
+        "forbiddenContextLayers": [
+          "assistant_identity"
+        ],
+        "contextLeakDetected": false,
+        "notes": ""
+      },
+      "artifacts": {
+        "visibleConfirmed": true
+      },
+      "providerName": "natively",
+      "modelName": "gemini-3.5-flash"
+    },
+    {
+      "testId": "ML-010",
+      "profileId": "ml-engineer",
+      "mode": "what_to_answer",
+      "pattern": "context_isolation",
+      "critical": true,
+      "transcript": "Interviewer: What is your name?\nInterviewer: Also we will discuss salary later.",
+      "expectedBehavior": "",
+      "actualResponse": "I'm Priya Sharma, a machine learning engineer specializing in recommendation systems and sequential decision-making frameworks. My work focuses on building robust offline evaluation pipelines and translating those models into measurable online performance.",
+      "passed": true,
+      "score": 1,
+      "failReasons": [],
+      "accuracy": {
+        "requiredFactsFound": [
+          "Priya Sharma"
+        ],
+        "missingRequiredFacts": [],
+        "forbiddenFactsFound": [],
+        "hallucinationFlags": [],
+        "perspectiveCorrect": true,
+        "usedCorrectContext": true
+      },
+      "latency": {
+        "testStartMs": 0,
+        "appReadyMs": 0,
+        "contextLoadStartMs": 0,
+        "contextLoadCompleteMs": 0,
+        "questionSubmitMs": 0,
+        "buttonClickMs": 126.024,
+        "loadingIndicatorMs": 0,
+        "firstNetworkRequestMs": 0,
+        "firstResponseByteMs": 0,
+        "firstStreamChunkMs": 0,
+        "firstVisibleTextMs": 0,
+        "firstUsefulTokenMs": 0,
+        "responseCompleteMs": 6278.852,
+        "totalResponseMs": 6278.852
+      },
+      "cost": {
+        "inputTokens": 417,
+        "outputTokens": 64,
+        "totalTokens": 481,
+        "estimatedCostUsd": 0.000101,
+        "actualCostUsd": 0,
+        "costSource": "estimated",
+        "model": "gemini-3.5-flash"
+      },
+      "contextUsage": {
+        "expectedContextLayers": [
+          "stable_identity"
+        ],
+        "actualContextLayers": [],
+        "forbiddenContextLayers": [
+          "jd",
+          "negotiation",
+          "assistant_identity",
+          "meeting_mode"
+        ],
+        "contextLeakDetected": false,
+        "notes": ""
+      },
+      "artifacts": {
+        "visibleConfirmed": false
+      },
+      "providerName": "natively",
+      "modelName": "gemini-3.5-flash"
+    },
+    {
+      "testId": "PM-001",
+      "profileId": "product-manager",
+      "mode": "manual_input",
+      "pattern": "identity_manual",
+      "critical": true,
+      "question": "what is my name?",
+      "expectedBehavior": "",
+      "actualResponse": "You are Jordan Kim.",
+      "passed": true,
+      "score": 1,
+      "failReasons": [],
+      "accuracy": {
+        "requiredFactsFound": [
+          "Jordan Kim"
+        ],
+        "missingRequiredFacts": [],
+        "forbiddenFactsFound": [],
+        "hallucinationFlags": [],
+        "perspectiveCorrect": true,
+        "usedCorrectContext": true
+      },
+      "latency": {
+        "testStartMs": 0,
+        "appReadyMs": 0,
+        "contextLoadStartMs": 0,
+        "contextLoadCompleteMs": 0,
+        "questionSubmitMs": 113.088,
+        "buttonClickMs": 0,
+        "loadingIndicatorMs": 0,
+        "firstNetworkRequestMs": 0,
+        "firstResponseByteMs": 0,
+        "firstStreamChunkMs": 19.43,
+        "firstVisibleTextMs": 19.43,
+        "firstUsefulTokenMs": 19.427,
+        "responseCompleteMs": 19.43,
+        "totalResponseMs": 19.43
+      },
+      "cost": {
+        "inputTokens": 380,
+        "outputTokens": 5,
+        "totalTokens": 385,
+        "estimatedCostUsd": 0.00006,
+        "actualCostUsd": 0,
+        "costSource": "estimated",
+        "model": "gemini-3.5-flash"
+      },
+      "contextUsage": {
+        "expectedContextLayers": [
+          "stable_identity",
+          "resume"
+        ],
+        "actualContextLayers": [],
+        "forbiddenContextLayers": [
+          "jd",
+          "negotiation",
+          "assistant_identity"
+        ],
+        "contextLeakDetected": false,
+        "notes": ""
+      },
+      "artifacts": {
+        "visibleConfirmed": true
+      },
+      "providerName": "natively",
+      "modelName": "gemini-3.5-flash"
+    },
+    {
+      "testId": "PM-002",
+      "profileId": "product-manager",
+      "mode": "what_to_answer",
+      "pattern": "interviewer_intro",
+      "critical": false,
+      "transcript": "Interviewer: Could you introduce yourself as a product manager?",
+      "expectedBehavior": "",
+      "actualResponse": "I'm Jordan Kim. My core strength as a product manager is driving alignment on complex product decisions by clearly structuring trade-offs. I specialize in taking ambiguous user problems, breaking them down into structured roadmaps, and collaborating with engineering and design to execute. Ultimately, I focus on delivering measurable business value while keeping the user experience seamless.",
+      "passed": true,
+      "score": 1,
+      "failReasons": [],
+      "accuracy": {
+        "requiredFactsFound": [
+          "Jordan Kim"
+        ],
+        "missingRequiredFacts": [],
+        "forbiddenFactsFound": [],
+        "hallucinationFlags": [],
+        "perspectiveCorrect": true,
+        "usedCorrectContext": true
+      },
+      "latency": {
+        "testStartMs": 0,
+        "appReadyMs": 0,
+        "contextLoadStartMs": 0,
+        "contextLoadCompleteMs": 0,
+        "questionSubmitMs": 0,
+        "buttonClickMs": 125.606,
+        "loadingIndicatorMs": 0,
+        "firstNetworkRequestMs": 0,
+        "firstResponseByteMs": 0,
+        "firstStreamChunkMs": 0,
+        "firstVisibleTextMs": 0,
+        "firstUsefulTokenMs": 0,
+        "responseCompleteMs": 21650.928,
+        "totalResponseMs": 21650.928
+      },
+      "cost": {
+        "inputTokens": 391,
+        "outputTokens": 99,
+        "totalTokens": 490,
+        "estimatedCostUsd": 0.000118,
+        "actualCostUsd": 0,
+        "costSource": "estimated",
+        "model": "gemini-3.5-flash"
+      },
+      "contextUsage": {
+        "expectedContextLayers": [
+          "stable_identity",
+          "resume"
+        ],
+        "actualContextLayers": [],
+        "forbiddenContextLayers": [
+          "assistant_identity"
+        ],
+        "contextLeakDetected": false,
+        "notes": ""
+      },
+      "artifacts": {
+        "visibleConfirmed": false
+      },
+      "providerName": "natively",
+      "modelName": "gemini-3.5-flash"
+    },
+    {
+      "testId": "PM-003",
+      "profileId": "product-manager",
+      "mode": "manual_input",
+      "pattern": "projects_manual",
+      "critical": false,
+      "question": "what products or projects have I worked on?",
+      "expectedBehavior": "",
+      "actualResponse": "Throughout my career, I have focused on high-impact commerce and platform products. At Airbnb, I led the Guest Checkout redesign that drove an eighteen percent conversion lift, scaled our global host payout system for four million hosts, and championed internal platforms like the PaymentsUX Framework and our engineering OKR-Tracker. Prior to that, at Square, I launched Square for Restaurants POS to eighty million in ARR and scaled our Seller Dashboard to nine hundred thousand daily active users.",
+      "passed": true,
+      "score": 1,
+      "failReasons": [],
+      "accuracy": {
+        "requiredFactsFound": [
+          "PaymentsUX Framework"
+        ],
+        "missingRequiredFacts": [],
+        "forbiddenFactsFound": [],
+        "hallucinationFlags": [],
+        "perspectiveCorrect": true,
+        "usedCorrectContext": true
+      },
+      "latency": {
+        "testStartMs": 0,
+        "appReadyMs": 0,
+        "contextLoadStartMs": 0,
+        "contextLoadCompleteMs": 0,
+        "questionSubmitMs": 103.738,
+        "buttonClickMs": 0,
+        "loadingIndicatorMs": 0,
+        "firstNetworkRequestMs": 0,
+        "firstResponseByteMs": 0,
+        "firstStreamChunkMs": 7937.702,
+        "firstVisibleTextMs": 7937.702,
+        "firstUsefulTokenMs": 7937.699,
+        "responseCompleteMs": 7937.702,
+        "totalResponseMs": 7937.702
+      },
+      "cost": {
+        "inputTokens": 386,
+        "outputTokens": 125,
+        "totalTokens": 511,
+        "estimatedCostUsd": 0.000133,
+        "actualCostUsd": 0,
+        "costSource": "estimated",
+        "model": "gemini-3.5-flash"
+      },
+      "contextUsage": {
+        "expectedContextLayers": [
+          "resume",
+          "projects"
+        ],
+        "actualContextLayers": [],
+        "forbiddenContextLayers": [
+          "negotiation",
+          "assistant_identity"
+        ],
+        "contextLeakDetected": false,
+        "notes": ""
+      },
+      "artifacts": {
+        "visibleConfirmed": true
+      },
+      "providerName": "natively",
+      "modelName": "gemini-3.5-flash"
+    },
+    {
+      "testId": "PM-004",
+      "profileId": "product-manager",
+      "mode": "what_to_answer",
+      "pattern": "behavioral",
+      "critical": false,
+      "transcript": "Interviewer: Tell me about a time you prioritized a product roadmap.",
+      "expectedBehavior": "",
+      "actualResponse": "I don't have specific past experience loaded right now. I can frame this honestly as a small, relevant example if that matches my background:\n\nWhen managing a growing backlog with competing stakeholder demands, I structured our prioritization using a framework that balanced customer impact against engineering complexity. I brought the engineering and design leads together to score the initiatives transparently, which helped us align on a unified roadmap. By focusing on the highest-value user friction points first, we delivered the core features on schedule and kept the team aligned on the primary goal.",
+      "passed": true,
+      "score": 1,
+      "failReasons": [],
+      "accuracy": {
+        "requiredFactsFound": [],
+        "missingRequiredFacts": [],
+        "forbiddenFactsFound": [],
+        "hallucinationFlags": [],
+        "perspectiveCorrect": true,
+        "usedCorrectContext": true
+      },
+      "latency": {
+        "testStartMs": 0,
+        "appReadyMs": 0,
+        "contextLoadStartMs": 0,
+        "contextLoadCompleteMs": 0,
+        "questionSubmitMs": 0,
+        "buttonClickMs": 94.294,
+        "loadingIndicatorMs": 0,
+        "firstNetworkRequestMs": 0,
+        "firstResponseByteMs": 0,
+        "firstStreamChunkMs": 0,
+        "firstVisibleTextMs": 0,
+        "firstUsefulTokenMs": 0,
+        "responseCompleteMs": 5463.235,
+        "totalResponseMs": 5463.235
+      },
+      "cost": {
+        "inputTokens": 393,
+        "outputTokens": 153,
+        "totalTokens": 546,
+        "estimatedCostUsd": 0.000151,
+        "actualCostUsd": 0,
+        "costSource": "estimated",
+        "model": "gemini-3.5-flash"
+      },
+      "contextUsage": {
+        "expectedContextLayers": [],
+        "actualContextLayers": [],
+        "forbiddenContextLayers": [
+          "negotiation",
+          "assistant_identity"
+        ],
+        "contextLeakDetected": false,
+        "notes": ""
+      },
+      "artifacts": {
+        "visibleConfirmed": false
+      },
+      "providerName": "natively",
+      "modelName": "gemini-3.5-flash"
+    },
+    {
+      "testId": "PM-005",
+      "profileId": "product-manager",
+      "mode": "manual_input",
+      "pattern": "jd_alignment",
+      "critical": false,
+      "question": "how do I fit this PM JD?",
+      "expectedBehavior": "",
+      "actualResponse": "To map your profile precisely, please provide the specific job description. Based on your background at Airbnb and Square, you fit three primary Product Manager archetypes:\n\n### 1. Growth & Conversion PM\n* **Your Fit:** Led the Airbnb Guest Checkout redesign, achieving an 18% conversion lift. Scaled Square Seller Dashboard to 900k DAU.\n* **Key Value Prop:** Proven ability to optimize high-intent user funnels and drive engagement at massive scale.\n* **Strategic Trade-off:** Balancing friction reduction (conversion) with risk mitigation, fraud prevention, and data security.\n\n### 2. Fintech, Payments, & Commerce PM\n* **Your Fit:** Scaled Airbnb’s global host payout system for 4M hosts; launched Square for Restaurants POS to $80M ARR.\n* **Key Value Prop:** Deep expertise in monetization, transactional systems, and complex merchant/marketplace ecosystems.\n* **Strategic Trade-off:** Managing the tension between localized payment preferences/regulatory compliance and global platform scalability.\n\n### 3. Platform & Technical PM\n* **Your Fit:** Championed Airbnb's PaymentsUX Framework and internal engineering OKR-Tracker.\n* **Key Value Prop:** Ability to build scalable internal leverage, improving developer velocity and UI consistency across product lines.\n* **Strategic Trade-off:** Prioritizing long-term platform health and technical debt reduction over short-term, customer-facing feature requests.\n\n***\n\n*Provide the specific JD text to generate a tailored gap analysis and positioning strategy.*",
+      "passed": true,
+      "score": 1,
+      "failReasons": [],
+      "accuracy": {
+        "requiredFactsFound": [],
+        "missingRequiredFacts": [],
+        "forbiddenFactsFound": [],
+        "hallucinationFlags": [],
+        "perspectiveCorrect": true,
+        "usedCorrectContext": true
+      },
+      "latency": {
+        "testStartMs": 0,
+        "appReadyMs": 0,
+        "contextLoadStartMs": 0,
+        "contextLoadCompleteMs": 0,
+        "questionSubmitMs": 108.923,
+        "buttonClickMs": 0,
+        "loadingIndicatorMs": 0,
+        "firstNetworkRequestMs": 0,
+        "firstResponseByteMs": 0,
+        "firstStreamChunkMs": 8376.59,
+        "firstVisibleTextMs": 8376.59,
+        "firstUsefulTokenMs": 8376.587,
+        "responseCompleteMs": 8376.59,
+        "totalResponseMs": 8376.59
+      },
+      "cost": {
+        "inputTokens": 382,
+        "outputTokens": 378,
+        "totalTokens": 760,
+        "estimatedCostUsd": 0.000284,
+        "actualCostUsd": 0,
+        "costSource": "estimated",
+        "model": "gemini-3.5-flash"
+      },
+      "contextUsage": {
+        "expectedContextLayers": [],
+        "actualContextLayers": [],
+        "forbiddenContextLayers": [
+          "negotiation",
+          "assistant_identity"
+        ],
+        "contextLeakDetected": false,
+        "notes": ""
+      },
+      "artifacts": {
+        "visibleConfirmed": true
+      },
+      "providerName": "natively",
+      "modelName": "gemini-3.5-flash"
+    },
+    {
+      "testId": "PM-006",
+      "profileId": "product-manager",
+      "mode": "what_to_answer",
+      "pattern": "metrics_guard",
+      "critical": false,
+      "transcript": "Interviewer: What product metrics have you worked with?",
+      "expectedBehavior": "",
+      "actualResponse": "I primarily focus on conversion, adoption, and monetization metrics. For instance, at Airbnb, my North Star was checkout conversion rate, where we drove an eighteen percent lift, alongside platform health metrics for our global host payout system. At Square, I owned both top-line revenue metrics, scaling Square for Restaurants to eighty million in ARR, and active usage metrics like daily active users on our seller dashboard.",
+      "passed": true,
+      "score": 1,
+      "failReasons": [],
+      "accuracy": {
+        "requiredFactsFound": [],
+        "missingRequiredFacts": [],
+        "forbiddenFactsFound": [],
+        "hallucinationFlags": [],
+        "perspectiveCorrect": true,
+        "usedCorrectContext": true
+      },
+      "latency": {
+        "testStartMs": 0,
+        "appReadyMs": 0,
+        "contextLoadStartMs": 0,
+        "contextLoadCompleteMs": 0,
+        "questionSubmitMs": 0,
+        "buttonClickMs": 145.75,
+        "loadingIndicatorMs": 0,
+        "firstNetworkRequestMs": 0,
+        "firstResponseByteMs": 0,
+        "firstStreamChunkMs": 0,
+        "firstVisibleTextMs": 0,
+        "firstUsefulTokenMs": 0,
+        "responseCompleteMs": 9315.857,
+        "totalResponseMs": 9315.857
+      },
+      "cost": {
+        "inputTokens": 389,
+        "outputTokens": 107,
+        "totalTokens": 496,
+        "estimatedCostUsd": 0.000123,
+        "actualCostUsd": 0,
+        "costSource": "estimated",
+        "model": "gemini-3.5-flash"
+      },
+      "contextUsage": {
+        "expectedContextLayers": [],
+        "actualContextLayers": [],
+        "forbiddenContextLayers": [
+          "assistant_identity"
+        ],
+        "contextLeakDetected": false,
+        "notes": ""
+      },
+      "artifacts": {
+        "visibleConfirmed": false
+      },
+      "providerName": "natively",
+      "modelName": "gemini-3.5-flash"
+    },
+    {
+      "testId": "PM-007",
+      "profileId": "product-manager",
+      "mode": "what_to_answer",
+      "pattern": "follow_up",
+      "critical": false,
+      "transcript": "Interviewer: You mentioned improving onboarding.\nCandidate: Yes, I worked on onboarding flow improvements.\nInterviewer: How did you decide what to change first?",
+      "expectedBehavior": "",
+      "actualResponse": "I started by mapping the entire onboarding funnel to pinpoint exactly where we were losing the most users. Once we isolated the biggest drop-off point, we mapped those friction areas against engineering complexity. We decided to tackle the high-impact, low-effort changes first, like simplifying the initial account creation fields, which gave us an immediate conversion lift while we kicked off the heavier backend work for identity verification.",
+      "passed": true,
+      "score": 1,
+      "failReasons": [],
+      "accuracy": {
+        "requiredFactsFound": [],
+        "missingRequiredFacts": [],
+        "forbiddenFactsFound": [],
+        "hallucinationFlags": [],
+        "perspectiveCorrect": true,
+        "usedCorrectContext": true
+      },
+      "latency": {
+        "testStartMs": 0,
+        "appReadyMs": 0,
+        "contextLoadStartMs": 0,
+        "contextLoadCompleteMs": 0,
+        "questionSubmitMs": 0,
+        "buttonClickMs": 136.539,
+        "loadingIndicatorMs": 0,
+        "firstNetworkRequestMs": 0,
+        "firstResponseByteMs": 0,
+        "firstStreamChunkMs": 0,
+        "firstVisibleTextMs": 0,
+        "firstUsefulTokenMs": 0,
+        "responseCompleteMs": 4666.315,
+        "totalResponseMs": 4666.315
+      },
+      "cost": {
+        "inputTokens": 416,
+        "outputTokens": 112,
+        "totalTokens": 528,
+        "estimatedCostUsd": 0.00013,
+        "actualCostUsd": 0,
+        "costSource": "estimated",
+        "model": "gemini-3.5-flash"
+      },
+      "contextUsage": {
+        "expectedContextLayers": [
+          "live_transcript"
+        ],
+        "actualContextLayers": [],
+        "forbiddenContextLayers": [
+          "assistant_identity"
+        ],
+        "contextLeakDetected": false,
+        "notes": ""
+      },
+      "artifacts": {
+        "visibleConfirmed": false
+      },
+      "providerName": "natively",
+      "modelName": "gemini-3.5-flash"
+    },
+    {
+      "testId": "PM-008",
+      "profileId": "product-manager",
+      "mode": "manual_input",
+      "pattern": "negotiation",
+      "critical": false,
+      "question": "what should I say if they ask my expected CTC?",
+      "expectedBehavior": "",
+      "actualResponse": "**Most Important Point: Anchor high with a specific total compensation range of $490,000 to $530,000 rather than just a base salary, backing it immediately with your scale metrics from Airbnb and Square.**\n\n**The Script to Use:**\n\n\"Given the scale of this Director role at Figma and my track record of driving high-impact growth at Airbnb and Square, I am looking for a total compensation package in the range of 490,000 to 530,000 dollars. This aligns with market data for principal-level product leaders in San Francisco, and it reflects the leadership expectations for scaling Figma's platform. I am highly motivated by equity-upside, so I am happy to be flexible on the exact mix of base and RSUs to find a structure that works for both of us.\"\n\n***\n\n### Trade-offs of Anchoring Strategies\n\n* **Strategy 1: Anchoring High ($490k, $530k TC)**\n  * **Pros:** Sets a strong baseline, positions you immediately as a principal-level leader, and prevents Figma from underoffering based on standard recruiter bands.\n  * **Cons:** Risks being near the top of their target band if they have strict budget constraints post-merger, though this is mitigated by your willingness to take equity.\n\n* **Strategy 2: Deferring to Figma's Range**\n  * **Pros:** Gathers information first, ensuring you do not leave money on the table if their internal band goes up to $680k TC.\n  * **Cons:** Weakens your positioning as a high-conviction leader and risks them anchoring the conversation to the lower end of their internal range.\n\n***\n\n**Sources:**\n* Figma Director of Product Management Salary Estimates: General Knowledge (Low Confidence)\n* Seattle Senior Product Manager Market Salary Estimate: General Knowledge (Medium Confidence)",
+      "passed": true,
+      "score": 1,
+      "failReasons": [],
+      "accuracy": {
+        "requiredFactsFound": [],
+        "missingRequiredFacts": [],
+        "forbiddenFactsFound": [],
+        "hallucinationFlags": [],
+        "perspectiveCorrect": true,
+        "usedCorrectContext": true
+      },
+      "latency": {
+        "testStartMs": 0,
+        "appReadyMs": 0,
+        "contextLoadStartMs": 0,
+        "contextLoadCompleteMs": 0,
+        "questionSubmitMs": 107.601,
+        "buttonClickMs": 0,
+        "loadingIndicatorMs": 0,
+        "firstNetworkRequestMs": 0,
+        "firstResponseByteMs": 0,
+        "firstStreamChunkMs": 10674.036,
+        "firstVisibleTextMs": 10674.036,
+        "firstUsefulTokenMs": 10674.034,
+        "responseCompleteMs": 10674.036,
+        "totalResponseMs": 10674.036
+      },
+      "cost": {
+        "inputTokens": 387,
+        "outputTokens": 430,
+        "totalTokens": 817,
+        "estimatedCostUsd": 0.000316,
+        "actualCostUsd": 0,
+        "costSource": "estimated",
+        "model": "gemini-3.5-flash"
+      },
+      "contextUsage": {
+        "expectedContextLayers": [
+          "negotiation"
+        ],
+        "actualContextLayers": [],
+        "forbiddenContextLayers": [
+          "assistant_identity"
+        ],
+        "contextLeakDetected": false,
+        "notes": ""
+      },
+      "artifacts": {
+        "visibleConfirmed": false
+      },
+      "providerName": "natively",
+      "modelName": "gemini-3.5-flash"
+    },
+    {
+      "testId": "PM-009",
+      "profileId": "product-manager",
+      "mode": "manual_input",
+      "pattern": "unknown",
+      "critical": false,
+      "question": "what was my exact NPS improvement percentage?",
+      "expectedBehavior": "",
+      "actualResponse": "I don't have an exact NPS improvement percentage in my records. For the guest checkout redesign, we tracked success primarily through our eighteen percent conversion lift, and for the payout system, we focused on platform reliability and transaction success rates.",
+      "passed": true,
+      "score": 1,
+      "failReasons": [],
+      "accuracy": {
+        "requiredFactsFound": [],
+        "missingRequiredFacts": [],
+        "forbiddenFactsFound": [],
+        "hallucinationFlags": [],
+        "perspectiveCorrect": true,
+        "usedCorrectContext": true
+      },
+      "latency": {
+        "testStartMs": 0,
+        "appReadyMs": 0,
+        "contextLoadStartMs": 0,
+        "contextLoadCompleteMs": 0,
+        "questionSubmitMs": 97.494,
+        "buttonClickMs": 0,
+        "loadingIndicatorMs": 0,
+        "firstNetworkRequestMs": 0,
+        "firstResponseByteMs": 0,
+        "firstStreamChunkMs": 7319.018,
+        "firstVisibleTextMs": 7319.018,
+        "firstUsefulTokenMs": 7319.016,
+        "responseCompleteMs": 7319.018,
+        "totalResponseMs": 7319.018
+      },
+      "cost": {
+        "inputTokens": 387,
+        "outputTokens": 66,
+        "totalTokens": 453,
+        "estimatedCostUsd": 0.000098,
+        "actualCostUsd": 0,
+        "costSource": "estimated",
+        "model": "gemini-3.5-flash"
+      },
+      "contextUsage": {
+        "expectedContextLayers": [],
+        "actualContextLayers": [],
+        "forbiddenContextLayers": [
+          "assistant_identity"
+        ],
+        "contextLeakDetected": false,
+        "notes": ""
+      },
+      "artifacts": {
+        "visibleConfirmed": false
+      },
+      "providerName": "natively",
+      "modelName": "gemini-3.5-flash"
+    },
+    {
+      "testId": "PM-010",
+      "profileId": "product-manager",
+      "mode": "what_to_answer",
+      "pattern": "context_isolation",
+      "critical": true,
+      "transcript": "Interviewer: Can you confirm your name before we begin the product case?",
+      "expectedBehavior": "",
+      "actualResponse": "I'm Jordan Kim. Yes, that's correct, and I'm ready to dive into the product case.",
+      "passed": true,
+      "score": 1,
+      "failReasons": [],
+      "accuracy": {
+        "requiredFactsFound": [
+          "Jordan Kim"
+        ],
+        "missingRequiredFacts": [],
+        "forbiddenFactsFound": [],
+        "hallucinationFlags": [],
+        "perspectiveCorrect": true,
+        "usedCorrectContext": true
+      },
+      "latency": {
+        "testStartMs": 0,
+        "appReadyMs": 0,
+        "contextLoadStartMs": 0,
+        "contextLoadCompleteMs": 0,
+        "questionSubmitMs": 0,
+        "buttonClickMs": 138.252,
+        "loadingIndicatorMs": 0,
+        "firstNetworkRequestMs": 0,
+        "firstResponseByteMs": 0,
+        "firstStreamChunkMs": 0,
+        "firstVisibleTextMs": 0,
+        "firstUsefulTokenMs": 0,
+        "responseCompleteMs": 3247.49,
+        "totalResponseMs": 3247.49
+      },
+      "cost": {
+        "inputTokens": 394,
+        "outputTokens": 21,
+        "totalTokens": 415,
+        "estimatedCostUsd": 0.000072,
+        "actualCostUsd": 0,
+        "costSource": "estimated",
+        "model": "gemini-3.5-flash"
+      },
+      "contextUsage": {
+        "expectedContextLayers": [
+          "stable_identity"
+        ],
+        "actualContextLayers": [],
+        "forbiddenContextLayers": [
+          "jd",
+          "negotiation",
+          "assistant_identity",
+          "meeting_mode"
+        ],
+        "contextLeakDetected": false,
+        "notes": ""
+      },
+      "artifacts": {
+        "visibleConfirmed": false
+      },
+      "providerName": "natively",
+      "modelName": "gemini-3.5-flash"
+    }
+  ]
+}

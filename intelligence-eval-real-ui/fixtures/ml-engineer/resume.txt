@@ -1,0 +1,25 @@
+Priya Sharma
+priya.sharma@stanford.edu | 650-555-0198 | Mountain View, CA
+
+SUMMARY
+ML engineer specializing in NLP and recommendation systems. Published 8 papers on transformer architectures. Building production ML systems at scale.
+
+SKILLS
+Python, PyTorch, TensorFlow, Hugging Face, Spark, MLflow, Kubernetes
+
+EXPERIENCE
+ML Engineer — Google DeepMind (2022-01 – Present)
+  - Led BERT fine-tuning pipeline for 500M-parameter model
+  - Reduced training cost 35% via mixed precision + gradient checkpointing
+  - Productionized 12 ML models serving Google News recommendations
+Research Engineer — OpenAI (2020-08 – 2021-12)
+  - Contributed to GPT-3 evaluation harness
+  - Built RLHF data pipeline for InstructGPT
+
+PROJECTS
+LLM-Eval: Open-source framework for evaluating language model performance across 15 benchmarks. 1.5k stars. [Python, PyTorch, Hugging Face]
+RecSys-Factory: Production recommendation system library with multi-armed bandit exploration strategies. [Python, TensorFlow, Redis]
+
+EDUCATION
+PhD Machine Learning, Machine Learning — Stanford University (2020)
+BTech Computer Science, Computer Science —  IIT Delhi (2015)

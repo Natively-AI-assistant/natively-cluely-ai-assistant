@@ -1,0 +1,7 @@
+NEGOTIATION CONTEXT
+Target salary: $155000
+Minimum acceptable: $140000
+Current salary: $135000
+Signing bonus target: $10000
+Equity: 0.01% with 4 year vest, 1 year cliff
+Priorities: crypto exposure, equity upside, hybrid schedule

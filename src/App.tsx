@@ -15,7 +15,7 @@ import { FreeTrialBanner }      from "./components/trial/FreeTrialBanner"
 import { FreeTrialModal }       from "./components/trial/FreeTrialModal"
 import { TrialPromoToaster }    from "./components/trial/TrialPromoToaster"
 import { PermissionsToaster }   from "./components/onboarding/PermissionsToaster"
-import { AlertCircle } from "lucide-react"
+import { AlertCircle, RefreshCw } from "lucide-react"
 import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity } from "./lib/overlayAppearance"
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
 import { isMac } from "./utils/platformUtils"
@@ -152,6 +152,8 @@ const App: React.FC = () => {
 
   // Re-index State
   const [incompatibleWarning, setIncompatibleWarning] = useState<{count: number; oldProvider: string; newProvider: string} | null>(null);
+  // Automatic background re-index progress (fired after an embedding-model upgrade).
+  const [reindexProgress, setReindexProgress] = useState<{done: number; total: number} | null>(null);
   
   // API check
   const [hasNativelyApi, setHasNativelyApi] = useState<boolean>(false);
@@ -326,6 +328,25 @@ const App: React.FC = () => {
       });
     }
 
+    let removeReindexProgress: (() => void) | undefined;
+    if (window.electronAPI?.onReindexProgress) {
+      removeReindexProgress = window.electronAPI.onReindexProgress((phase, data) => {
+        if (phase === 'started') {
+          setReindexProgress({ done: 0, total: data.count ?? 0 });
+        } else if (phase === 'progress') {
+          setReindexProgress({ done: data.done ?? 0, total: data.total ?? 0 });
+        } else if (phase === 'complete') {
+          // On a full completion show 100%; on a partial bail (paused by continuous
+          // live meetings — resumes next launch) reflect the actual done count rather
+          // than forcing 100%. Either way, briefly show then dismiss.
+          const total = data.total ?? 0;
+          const done = data.partial ? (data.done ?? 0) : total;
+          setReindexProgress({ done, total });
+          setTimeout(() => setReindexProgress(null), 4000);
+        }
+      });
+    }
+
     // Listen for real-time license status changes (activation, revocation, deactivation)
     const removeLicenseListener = window.electronAPI?.onLicenseStatusChanged?.((data) => {
       setIsPremiumActive(data.isPremium);
@@ -338,6 +359,7 @@ const App: React.FC = () => {
       if (removeProgress) removeProgress();
       if (removeComplete) removeComplete();
       if (removeWarning) removeWarning();
+      if (removeReindexProgress) removeReindexProgress();
       if (removeLicenseListener) removeLicenseListener();
       if (trialPollId) clearInterval(trialPollId);
       if (removeTrialListener) removeTrialListener();
@@ -698,6 +720,43 @@ const App: React.FC = () => {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {reindexProgress && isDefault && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="fixed bottom-6 right-6 z-50 pointer-events-auto"
+          >
+            <div className="bg-[#1A1A1A] border border-white/10 shadow-2xl rounded-2xl p-5 max-w-[340px] flex flex-col gap-3">
+              <div className="flex items-start gap-3">
+                <RefreshCw className={`w-5 h-5 text-[#A0A0A0] shrink-0 mt-0.5 ${reindexProgress.done < reindexProgress.total ? 'animate-spin' : ''}`} />
+                <div className="flex-1">
+                  <h3 className="text-[#E0E0E0] font-medium text-sm">
+                    {reindexProgress.done >= reindexProgress.total && reindexProgress.total > 0
+                      ? 'Search index updated'
+                      : 'Updating search index'}
+                  </h3>
+                  <p className="text-[#A0A0A0] text-xs mt-1 leading-relaxed">
+                    {reindexProgress.done >= reindexProgress.total && reindexProgress.total > 0
+                      ? 'Your past conversations are searchable again.'
+                      : `Re-indexing your past conversations for the upgraded AI model… ${reindexProgress.done}/${reindexProgress.total}`}
+                  </p>
+                  {reindexProgress.total > 0 && (
+                    <div className="mt-2 h-1 w-full rounded-full bg-white/10 overflow-hidden">
+                      <div
+                        className="h-full bg-[#E0E0E0] transition-all duration-500"
+                        style={{ width: `${Math.min(100, Math.round((reindexProgress.done / reindexProgress.total) * 100))}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <UpdateBanner />
       <SupportToaster />
       <NativelyQuotaBanner />
@@ -798,12 +857,13 @@ const App: React.FC = () => {
             }}
           />
 
-          {/* Remote Campaigns Render Logic */}
+          {/* Remote Campaigns Render Logic (Commented out)
           <RemoteCampaignToaster
             isOpen={typeof activeAd === 'object' && activeAd !== null}
             campaign={typeof activeAd === 'object' && activeAd !== null ? activeAd : undefined as any}
             onDismiss={dismissAd}
           />
+          */}
         </>
       )}
 

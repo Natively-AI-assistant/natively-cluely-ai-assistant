@@ -2,9 +2,11 @@
 
 **Purpose:** If a Claude Code session hits a limit, crashes, or stops, ANOTHER session must be able to resume safely from this file alone. Updated after every phase/sub-phase.
 
+> **⚠️ SIGNING/NOTARIZATION SUPERSEDED (2026-05-30): NOW LIVE.** The "pending Apple Developer Program / wired-but-unverified / opt-in" signing language below is HISTORICAL. As of 2026-05-30, Natively v2.7.0 is **really signed (Developer ID) + notarized + stapled** on both arches (apps + DMGs + ZIPs all `spctl` "accepted / Notarized Developer ID"). Entitlements moved to `build/`; notarization uses an App Store Connect **API key**; app via `afterSign` (`scripts/notarize.js`), DMGs rebuilt via `create-dmg` (`scripts/afterAllArtifactBuild.cjs`). **`apple-signing-report.md` (repo root) is the authoritative signing record.**
+
 **Last updated:** 2026-05-29 (Phase 0 complete, Phase 1 starting)
 **Branch:** main (NO PR — direct edits per instructions)
-**App version:** 2.6.0
+**App version:** 2.6.0 (signing work below later completed against 2.7.0)
 
 ---
 

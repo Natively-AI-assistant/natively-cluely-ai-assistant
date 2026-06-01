@@ -125,6 +125,7 @@ module.exports = async function notarizeHook(context) {
 
   // Lazy-require so machines without the dep installed (or non-mac CI) don't choke at load time.
   const { notarize } = require('@electron/notarize');
+  const { stapleWithRetry } = require('./staple-with-retry');
 
   const start = Date.now();
   try {
@@ -133,8 +134,44 @@ module.exports = async function notarizeHook(context) {
       `[notarize] Success — notarized and stapled in ${Math.round((Date.now() - start) / 1000)}s.`
     );
   } catch (err) {
+    const msg = (err && err.message ? err.message : String(err)) || '';
+    // STAPLE RACE RECOVERY: @electron/notarize submits + waits for the verdict,
+    // then staples ONCE. If only the staple failed due to CDN ticket-propagation
+    // lag (Error 65 / "Record not found" / "Could not find base64 encoded ticket"),
+    // the submission ALREADY SUCCEEDED — so we recover by retrying just the staple
+    // with backoff rather than failing the whole build. Any OTHER failure (e.g. a
+    // genuine notarization rejection, auth error, network failure during submit)
+    // does NOT match these signatures and is rethrown loudly.
+    const isStapleRace =
+      /staple/i.test(msg) &&
+      (/Error 65/i.test(msg) ||
+        /Record not found/i.test(msg) ||
+        /Could not find base64 encoded ticket/i.test(msg) ||
+        /CloudKit/i.test(msg));
+
+    if (isStapleRace) {
+      console.warn(
+        '[notarize] Notarization succeeded but the initial staple hit the CDN ticket-propagation race. ' +
+          'Recovering via staple-with-retry (exponential backoff)…'
+      );
+      try {
+        await stapleWithRetry(appPath, { maxAttempts: 6, baseDelayMs: 15000 });
+        console.log(
+          `[notarize] Success — notarized, then stapled via retry in ${Math.round((Date.now() - start) / 1000)}s total.`
+        );
+        return;
+      } catch (stapleErr) {
+        console.error(
+          '[notarize] Staple still failed after retries — the notarization verdict was accepted but the ' +
+            'ticket never became stapleable. Failing the build.',
+          stapleErr && stapleErr.message ? stapleErr.message : stapleErr
+        );
+        throw stapleErr;
+      }
+    }
+
     // Fail the build loudly: a release that silently skipped notarization is worse than a failed build.
-    console.error('[notarize] Notarization FAILED:', err && err.message ? err.message : err);
+    console.error('[notarize] Notarization FAILED:', msg);
     throw err;
   }
 };

@@ -65,6 +65,23 @@ export class MicrophoneCapture extends EventEmitter {
     }
 
     /**
+     * The NATIVE hardware sample rate (e.g. 24000 when AirPods are in Bluetooth
+     * HFP "call mode", 48000 for the built-in mic) — distinct from getSampleRate(),
+     * which returns the canonical EMITTED rate (16000) after the DSP resampler.
+     * Used for HFP/Bluetooth-degradation detection. Returns 0 if unavailable.
+     */
+    public getNativeSampleRate(): number {
+        if (this.monitor) {
+            if (typeof this.monitor.getNativeSampleRate === 'function') {
+                return this.monitor.getNativeSampleRate();
+            } else if (typeof this.monitor.get_native_sample_rate === 'function') {
+                return this.monitor.get_native_sample_rate();
+            }
+        }
+        return 0;
+    }
+
+    /**
      * Start capturing microphone audio
      */
     public start(): void {

@@ -1,0 +1,29 @@
+David Okonkwo
+d.okonkwo@purdue.edu | 512-555-0147 | Austin, TX
+
+SUMMARY
+Cybersecurity analyst with 4 years in endpoint protection and threat hunting. OSCP and AWS Security certified. Detected and remediated APT campaigns targeting financial services.
+
+SKILLS
+SIEM, EDR, Threat Hunting, Incident Response, Splunk, CrowdStrike, Python, YARA, MITRE ATT&CK
+
+EXPERIENCE
+Security Analyst — CrowdStrike (2022-03 – Present)
+  - Detected and remediated APT41 campaign in customer environment (CIR $2M)
+  - Built automated threat hunting playbook library (50+ playbooks)
+  - Reduced false positive rate 60% via ML-based alert triage
+Consultant — Mandiant (2020-06 – 2022-02)
+  - Led incident response for 15+ breaches across healthcare and finance
+  - Developed persistence mechanism detection methodology
+
+PROJECTS
+ThreatHunter-Playbook: Sigma rule library for detecting MITRE ATT&CK techniques. 500+ rules, community contribution. [Sigma, Splunk, YARA]
+PhishDetect: Email phishing detection using ML. 94% precision, used by 3 MSSPs. [Python, TensorFlow, DMARC, SPF]
+
+EDUCATION
+BS Cybersecurity, Cybersecurity — Purdue University (2020)
+
+CERTIFICATIONS
+- undefined
+- undefined
+- undefined

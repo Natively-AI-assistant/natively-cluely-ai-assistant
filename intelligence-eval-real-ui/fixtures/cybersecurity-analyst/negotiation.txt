@@ -1,0 +1,7 @@
+NEGOTIATION CONTEXT
+Target salary: $185000
+Minimum acceptable: $168000
+Current salary: $158000
+Signing bonus target: $20000
+Equity: 0.02% with 4 year vest
+Priorities: technical mission, scale of problems, equity

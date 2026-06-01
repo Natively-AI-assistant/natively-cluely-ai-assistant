@@ -438,6 +438,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                 <div className={`flex items-center gap-1 no-drag shrink-0 ${isMac ? 'mr-1' : ''}`}>
                     <div className="relative group/profile-btn select-none">
                         <button
+                            data-testid="open-profile-intelligence"
                             onClick={() => {
                                 setShowProfileOnboarding(false);
                                 localStorage.setItem('natively_seen_profile_onboarding_v1', 'true');

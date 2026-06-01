@@ -1,0 +1,127 @@
+{
+  "profileId": "ml-engineer",
+  "role": "Machine Learning Engineer",
+  "resume": {
+    "identity": {
+      "name": "Priya Sharma",
+      "email": "priya.sharma@stanford.edu",
+      "location": "Mountain View, CA",
+      "phone": "650-555-0198",
+      "links": []
+    },
+    "summary": "ML engineer specializing in NLP and recommendation systems. Published 8 papers on transformer architectures. Building production ML systems at scale.",
+    "skills": [
+      "Python",
+      "PyTorch",
+      "TensorFlow",
+      "Hugging Face",
+      "Spark",
+      "MLflow",
+      "Kubernetes"
+    ],
+    "experience": [
+      {
+        "company": "Google DeepMind",
+        "role": "ML Engineer",
+        "start_date": "2022-01",
+        "end_date": null,
+        "bullets": [
+          "Led BERT fine-tuning pipeline for 500M-parameter model",
+          "Reduced training cost 35% via mixed precision + gradient checkpointing",
+          "Productionized 12 ML models serving Google News recommendations"
+        ]
+      },
+      {
+        "company": "OpenAI",
+        "role": "Research Engineer",
+        "start_date": "2020-08",
+        "end_date": "2021-12",
+        "bullets": [
+          "Contributed to GPT-3 evaluation harness",
+          "Built RLHF data pipeline for InstructGPT"
+        ]
+      }
+    ],
+    "projects": [
+      {
+        "name": "LLM-Eval",
+        "description": "Open-source framework for evaluating language model performance across 15 benchmarks. 1.5k stars.",
+        "technologies": [
+          "Python",
+          "PyTorch",
+          "Hugging Face"
+        ]
+      },
+      {
+        "name": "RecSys-Factory",
+        "description": "Production recommendation system library with multi-armed bandit exploration strategies.",
+        "technologies": [
+          "Python",
+          "TensorFlow",
+          "Redis"
+        ]
+      }
+    ],
+    "education": [
+      {
+        "institution": "Stanford University",
+        "degree": "PhD Machine Learning",
+        "field": "Machine Learning",
+        "start_date": "",
+        "end_date": "2020"
+      },
+      {
+        "institution": " IIT Delhi",
+        "degree": "BTech Computer Science",
+        "field": "Computer Science",
+        "start_date": "",
+        "end_date": "2015"
+      }
+    ],
+    "achievements": [],
+    "certifications": [],
+    "leadership": []
+  },
+  "jd": {
+    "title": "Staff Machine Learning Engineer",
+    "company": "Anthropic",
+    "location": "San Francisco, CA",
+    "description_summary": "Build foundation model infrastructure. Help make AI systems safe and beneficial. Work on the core systems powering Claude.",
+    "level": "staff",
+    "employment_type": "full_time",
+    "min_years_experience": 5,
+    "compensation_hint": "$280k-$350k",
+    "requirements": [
+      "PhD or equivalent experience",
+      "NLP expertise",
+      "Production ML systems",
+      "LLM experience preferred",
+      "Python + PyTorch"
+    ],
+    "nice_to_haves": [],
+    "responsibilities": [],
+    "technologies": [
+      "Python",
+      "PyTorch",
+      "Hugging Face",
+      "Kubernetes",
+      "Weave"
+    ],
+    "keywords": []
+  },
+  "customContext": "I prefer detailed explanations with technical depth. Include relevant papers or approaches when applicable.",
+  "persona": "Research-minded technical lead — thoughtful, thorough, citation-rich.",
+  "negotiation": {
+    "targetSalary": 310000,
+    "minimumSalary": 280000,
+    "currentSalary": 275000,
+    "signingBonus": 50000,
+    "equity": "0.08% with 4 year vest, 1 year cliff",
+    "priorities": [
+      "research freedom",
+      "equity",
+      "conference budget"
+    ]
+  },
+  "referenceFiles": []
+}

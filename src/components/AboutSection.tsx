@@ -246,6 +246,26 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                         </a>
                     </div>
 
+                    {/* 0.6. Natively LinkedIn */}
+                    <div className="bg-bg-item-surface rounded-xl border border-border-subtle p-5 flex flex-col md:flex-row items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500 shadow-sm shadow-blue-500/5">
+                                <Linkedin size={18} className="opacity-80" />
+                            </div>
+                            <div>
+                                <h5 className="text-sm font-bold text-text-primary">LinkedIn Company Page</h5>
+                            </div>
+                        </div>
+                        <a
+                            href="https://www.linkedin.com/company/nativley-ai"
+                            onClick={(e) => handleOpenLink(e, "https://www.linkedin.com/company/nativley-ai")}
+                            className="whitespace-nowrap px-4 py-2 bg-text-primary hover:bg-white/90 text-bg-main text-xs font-bold rounded-lg transition-all shadow hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 flex items-center gap-2"
+                        >
+                            <Linkedin size={14} />
+                            Follow Page
+                        </a>
+                    </div>
+
                     {/* 1. Founder Profile */}
                     <div className="bg-bg-item-surface rounded-xl p-5">
                         <div className="flex flex-col gap-4">

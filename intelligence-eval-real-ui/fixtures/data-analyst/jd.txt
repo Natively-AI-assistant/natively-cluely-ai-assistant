@@ -1,0 +1,15 @@
+Senior Data Analyst — Coinbase (San Francisco, CA (Hybrid))
+Level: senior
+
+Drive data-informed product decisions for our retail trading platform. Work with trading, growth, and compliance teams to understand our 80M users.
+
+REQUIREMENTS
+- 3+ years data analysis
+- SQL expertise
+- Crypto/Web3 interest
+- Tableau or Looker
+- Python
+
+TECHNOLOGIES: SQL, Python, Tableau, dbt, Snowflake
+
+COMPENSATION: $130k-$165k

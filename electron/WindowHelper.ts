@@ -34,7 +34,16 @@ export class WindowHelper {
   private opacityTimeout: NodeJS.Timeout | null = null;
 
   // Constants
-  private static readonly OVERLAY_DEFAULT_WIDTH = 780;
+  // MUST equal the renderer's SHELL_WIDTH_COLLAPSED (NativelyInterface.tsx).
+  // The overlay window is shown at this width and the shell mounts at the same
+  // width (centered via mx-auto). If this is wider than the shell (it was 780
+  // vs the shell's 600), the first size-report shrinks the window to 600 and
+  // re-centers it — and because the native resize lands a frame before the
+  // renderer repaints at the new width, the old wider framebuffer (shell offset
+  // +90px right) is briefly shown in the moved window, producing a visible
+  // sideways slide on every meeting start. Keeping them equal means no
+  // first-paint resize, so the overlay appears already at its final position.
+  private static readonly OVERLAY_DEFAULT_WIDTH = 600;
   private static readonly OVERLAY_MIN_HEIGHT = 216;
   // Vertical offset for the meeting overlay's initial position, expressed as
   // a fraction of the screen's work-area height. 0.035 places the top edge
@@ -80,6 +89,17 @@ export class WindowHelper {
         win.setContentProtection(enable);
       }
     });
+  }
+
+  // Force-reapply the CURRENT content-protection state to every live window,
+  // bypassing the dedupe guard in setContentProtection(). Needed because
+  // app.dock.hide()/show() flips the macOS activation policy, which makes
+  // WindowServer re-evaluate each NSWindow and can silently reset its
+  // sharingType (the NSWindowSharingNone flag setContentProtection set). The
+  // in-memory `this.contentProtection` is still correct, so the normal setter
+  // would no-op — we must push the value to the OS again unconditionally.
+  public reassertContentProtection(): void {
+    this.applyContentProtection(this.contentProtection);
   }
 
   public setWindowDimensions(width: number, height: number): void {

@@ -18,26 +18,26 @@ export default function TopPill({
     onLogoClick,
 }: TopPillProps) {
     return (
-        <div className="flex justify-center mt-2 select-none z-50">
+        <div className="flex justify-center select-none z-50">
             <div
                 className="
           draggable-area
-          flex items-center gap-5
+          flex items-center gap-2
           rounded-full
           border
           overlay-pill-surface
           backdrop-blur-md
-          pl-2.5 pr-2.5 py-1.5
+          px-1.5 py-1.5
           transition-all duration-300 ease-sculpted
         "
                 style={appearance.pillStyle}
             >
-                <div className="draggable-area p-1">
+                <div className="draggable-area">
                     {/* LOGO BUTTON */}
                     <button
                         onClick={onLogoClick}
                         className={`
-              w-8 h-8
+              w-7 h-7
               rounded-full
               overlay-icon-surface
               overlay-icon-surface-hover
@@ -63,7 +63,7 @@ export default function TopPill({
                     className={`
             flex items-center gap-2
             group
-            px-4 py-1.5
+            px-3 py-1
             rounded-full
             backdrop-blur-md
             overlay-chip-surface
@@ -89,7 +89,7 @@ export default function TopPill({
                 <button
                     onClick={onQuit}
                     className={`
-            w-8 h-8
+            w-7 h-7
             rounded-full
             overlay-icon-surface
             overlay-text-primary

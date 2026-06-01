@@ -18,7 +18,7 @@ export interface CodexCliConfig {
   fastModel: string;
   timeoutMs: number;
   sandboxMode: CodexSandboxMode;
-  serviceTier?: CodexServiceTier;
+  serviceTier: CodexServiceTier;
   modelReasoningEffort?: CodexModelReasoningEffort;
 }
 
@@ -309,7 +309,7 @@ export class CodexCliService {
     if (options.signal?.aborted) throw new Error('Codex CLI request aborted before start.');
 
     return new Promise((resolve, reject) => {
-      const child = spawn(path, this.buildArgs(options.model, options.imagePaths, options.sandboxMode), { stdio: ['pipe', 'pipe', 'pipe'] });
+      const child = spawn(path, this.buildArgs(options.model, options.imagePaths, options.sandboxMode, options.serviceTier, options.modelReasoningEffort), { stdio: ['pipe', 'pipe', 'pipe'] });
       let stdout = '';
       let stderr = '';
       let settled = false;

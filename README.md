@@ -45,7 +45,8 @@ If you’re looking for a hosted desktop recording API, consider checking out [R
 ![Repo Views](https://img.shields.io/badge/Views-341k-orange?style=flat-square)
 [![Stars](https://img.shields.io/github/stars/evinjohnn/natively-cluely-ai-assistant?style=flat-square&color=gold)](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant)
 ![Status](https://img.shields.io/badge/Status-active-success?style=flat-square)
-[![X Community](https://img.shields.io/badge/Community-black?style=flat-square&logo=x&logoColor=white)](https://x.com/i/communities/2031398735515693507)
+[![Telegram Chat](https://img.shields.io/badge/Telegram-Chat-229ED9?style=flat-square&logo=telegram&logoColor=white)](https://t.me/nativelyaichat)
+[![LinkedIn Company](https://img.shields.io/badge/LinkedIn-Company-0077B5?style=flat-square&logo=linkedin&logoColor=white)](https://www.linkedin.com/company/nativley-ai)
 
 > **Competitors charge $20–$149/month, store your data on their servers, and one already breached 83,000 users.** Natively costs $0, runs locally, and has never had a data breach. Your keys, your models, your machine.
 
@@ -267,6 +268,12 @@ Natively works as a **free, undetectable AI coding interview assistant** for sta
 ---
 
 <div align="center">
+
+[![Natively Website](https://img.shields.io/badge/Natively_Website-natively.software-22C55E?style=flat-square&logo=vercel&logoColor=white)](https://natively.software)
+[![Telegram Chat](https://img.shields.io/badge/Telegram_Chat-nativelyaichat-229ED9?style=flat-square&logo=telegram&logoColor=white)](https://t.me/nativelyaichat)
+[![LinkedIn Company](https://img.shields.io/badge/LinkedIn_Company-nativley--ai-0077B5?style=flat-square&logo=linkedin&logoColor=white)](https://www.linkedin.com/company/nativley-ai)
+
+<br/>
 
 [![Portfolio](https://img.shields.io/badge/Portfolio-evinjohn.vercel.app-blueviolet?style=flat-square&logo=vercel&logoColor=white)](https://evinjohn.vercel.app/)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0077B5?style=flat-square&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/evinjohn/)

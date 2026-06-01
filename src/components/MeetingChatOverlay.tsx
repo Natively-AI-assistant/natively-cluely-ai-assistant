@@ -4,14 +4,104 @@ import { X, Copy, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { genMessageId } from '../utils/messageId';
 import nativelyIcon from './icon.png';
+import { useResolvedTheme } from '../hooks/useResolvedTheme';
 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism-light';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import python from 'react-syntax-highlighter/dist/esm/languages/prism/python';
+import javascript from 'react-syntax-highlighter/dist/esm/languages/prism/javascript';
+import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript';
+import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash';
+import yaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml';
+import sql from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
+import go from 'react-syntax-highlighter/dist/esm/languages/prism/go';
+import rust from 'react-syntax-highlighter/dist/esm/languages/prism/rust';
+import cpp from 'react-syntax-highlighter/dist/esm/languages/prism/cpp';
+import csharp from 'react-syntax-highlighter/dist/esm/languages/prism/csharp';
+import css from 'react-syntax-highlighter/dist/esm/languages/prism/css';
+import json from 'react-syntax-highlighter/dist/esm/languages/prism/json';
+import markdown from 'react-syntax-highlighter/dist/esm/languages/prism/markdown';
+import markup from 'react-syntax-highlighter/dist/esm/languages/prism/markup';
+
+SyntaxHighlighter.registerLanguage('python', python);
+SyntaxHighlighter.registerLanguage('py', python);
+SyntaxHighlighter.registerLanguage('javascript', javascript);
+SyntaxHighlighter.registerLanguage('js', javascript);
+SyntaxHighlighter.registerLanguage('typescript', typescript);
+SyntaxHighlighter.registerLanguage('ts', typescript);
+SyntaxHighlighter.registerLanguage('bash', bash);
+SyntaxHighlighter.registerLanguage('sh', bash);
+SyntaxHighlighter.registerLanguage('shell', bash);
+SyntaxHighlighter.registerLanguage('yaml', yaml);
+SyntaxHighlighter.registerLanguage('yml', yaml);
+SyntaxHighlighter.registerLanguage('sql', sql);
+SyntaxHighlighter.registerLanguage('go', go);
+SyntaxHighlighter.registerLanguage('rust', rust);
+SyntaxHighlighter.registerLanguage('rs', rust);
+SyntaxHighlighter.registerLanguage('cpp', cpp);
+SyntaxHighlighter.registerLanguage('c++', cpp);
+SyntaxHighlighter.registerLanguage('csharp', csharp);
+SyntaxHighlighter.registerLanguage('cs', csharp);
+SyntaxHighlighter.registerLanguage('css', css);
+SyntaxHighlighter.registerLanguage('json', json);
+SyntaxHighlighter.registerLanguage('markdown', markdown);
+SyntaxHighlighter.registerLanguage('md', markdown);
+SyntaxHighlighter.registerLanguage('markup', markup);
+SyntaxHighlighter.registerLanguage('html', markup);
+
+const mapLanguageForPrism = (lang: string, code: string): string => {
+  if (!lang) {
+    if (code.includes('def ') || code.includes('import ') || code.includes('elif ') || code.includes('print(') || code.includes(':\n')) {
+      return 'python';
+    }
+    return 'javascript';
+  }
+  const lower = lang.toLowerCase().trim();
+  const mapper: Record<string, string> = {
+    'js': 'javascript',
+    'javascript': 'javascript',
+    'ts': 'typescript',
+    'typescript': 'typescript',
+    'py': 'python',
+    'python': 'python',
+    'rb': 'ruby',
+    'ruby': 'ruby',
+    'sh': 'bash',
+    'bash': 'bash',
+    'shell': 'bash',
+    'zsh': 'bash',
+    'go': 'go',
+    'golang': 'go',
+    'rs': 'rust',
+    'rust': 'rust',
+    'cs': 'csharp',
+    'csharp': 'csharp',
+    'cpp': 'cpp',
+    'c++': 'cpp',
+    'h': 'cpp',
+    'c': 'c',
+    'java': 'java',
+    'kt': 'kotlin',
+    'kotlin': 'kotlin',
+    'swift': 'swift',
+    'yml': 'yaml',
+    'yaml': 'yaml',
+    'xml': 'markup',
+    'html': 'markup',
+    'svg': 'markup',
+    'json': 'json',
+    'css': 'css',
+    'md': 'markdown',
+    'markdown': 'markdown',
+    'sql': 'sql',
+  };
+  return mapper[lower] || lower;
+};
 
 // ============================================
 // Types 
@@ -47,25 +137,35 @@ type ChatState = 'idle' | 'opening' | 'waiting_for_llm' | 'streaming_response' |
 // Typing Indicator Component
 // ============================================
 
-const TypingIndicator: React.FC = () => (
-    <div className="flex items-center gap-1 py-4">
-        <div className="flex items-center gap-1">
-            {[0, 1, 2].map((i) => (
-                <motion.div
-                    key={i}
-                    className="w-2 h-2 rounded-full bg-text-tertiary"
-                    animate={{ opacity: [0.4, 1, 0.4] }}
-                    transition={{
-                        duration: 0.6,
-                        repeat: Infinity,
-                        delay: i * 0.15,
-                        ease: "easeInOut"
-                    }}
-                />
-            ))}
+const TypingIndicator: React.FC = () => {
+    const isLightTheme = useResolvedTheme() === 'light';
+    const isModernTheme = !!document.querySelector('[data-interface-theme="modern"]');
+    const isGlassTheme = !!document.querySelector('[data-interface-theme="liquid-glass"]');
+    const isWhiteDots = isModernTheme || isGlassTheme;
+    const cardBgBorderClass = isLightTheme
+        ? 'bg-emerald-500/10 backdrop-blur-md border border-emerald-500/20 text-emerald-900'
+        : 'bg-emerald-600/20 backdrop-blur-md border border-emerald-500/30 text-emerald-100';
+
+    return (
+        <div className={`w-fit rounded-[20px] rounded-tl-[4px] px-[16.5px] py-[12.5px] ${cardBgBorderClass} my-2.5 flex items-center justify-center`}>
+            <div className="flex items-center gap-1.5 py-0.5">
+                {[0, 1, 2].map((i) => (
+                    <motion.div
+                        key={i}
+                        className={`w-2 h-2 rounded-full ${isWhiteDots ? 'bg-white' : 'bg-emerald-400'}`}
+                        animate={{ opacity: [0.4, 1, 0.4] }}
+                        transition={{
+                            duration: 0.6,
+                            repeat: Infinity,
+                            delay: i * 0.15,
+                            ease: "easeInOut"
+                        }}
+                    />
+                ))}
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 // ============================================
 // Message Components
@@ -86,6 +186,10 @@ const UserMessage: React.FC<{ content: string }> = ({ content }) => (
 
 const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = ({ content, isStreaming }) => {
     const [copied, setCopied] = useState(false);
+    const isLightTheme = useResolvedTheme() === 'light';
+    const cardBgBorderClass = isLightTheme
+        ? 'bg-emerald-500/10 backdrop-blur-md border border-emerald-500/20 text-emerald-900'
+        : 'bg-emerald-600/20 backdrop-blur-md border border-emerald-500/30 text-emerald-100';
 
     const handleCopy = async () => {
         try {
@@ -102,45 +206,65 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.15 }}
-            className="flex flex-col items-start mb-6"
+            className="flex flex-col items-start mb-6 w-full"
         >
-            <div className="text-text-primary text-[15px] leading-relaxed max-w-[85%]">
+            <div className={`w-full max-w-[85%] rounded-[20px] rounded-tl-[4px] p-[14px_18px] ai-response-card ${cardBgBorderClass} my-2.5`}>
+                {/* Minimal Copy Button (no AI response header) */}
+                {!isStreaming && content && (
+                    <div className="flex justify-end mb-2 select-none w-full">
+                        <button
+                            onClick={handleCopy}
+                            className="flex items-center gap-1.5 text-[11px] text-text-tertiary hover:text-[#4ade80] transition-colors"
+                        >
+                            {copied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                            {copied ? 'Copied' : 'Copy'}
+                        </button>
+                    </div>
+                )}
+
+                {/* Markdown Content with tight line height and spacing */}
                 <div className="markdown-content">
                     <ReactMarkdown
                         remarkPlugins={[remarkGfm, remarkMath]}
                         rehypePlugins={[rehypeKatex]}
                         components={{
-                            p: ({ node, ...props }: any) => <p className="mb-2 last:mb-0 whitespace-pre-wrap" {...props} />,
-                            a: ({ node, ...props }: any) => <a className="text-blue-500 hover:underline" {...props} />,
-                            pre: ({ children }: any) => <div className="not-prose mb-4">{children}</div>,
+                            p: ({ node, ...props }: any) => <p className="mb-[6px] last:mb-0 leading-relaxed whitespace-pre-wrap text-[13.5px]" {...props} />,
+                            a: ({ node, ...props }: any) => <a className="text-[#4ade80] hover:underline" {...props} />,
+                            h1: ({ node, ...props }: any) => <h1 className="text-sm font-bold mt-2 mb-[4.5px] leading-relaxed uppercase tracking-wide" {...props} />,
+                            h2: ({ node, ...props }: any) => <h2 className="text-xs font-bold mt-1.5 mb-[4.5px] leading-relaxed uppercase tracking-wide" {...props} />,
+                            h3: ({ node, ...props }: any) => <h3 className="text-xs font-semibold mt-1.5 mb-[4.5px] leading-relaxed" {...props} />,
+                            ul: ({ node, ...props }: any) => <ul className="list-disc pl-4 mt-[4.5px] mb-[4.5px] space-y-0 leading-relaxed text-[13.5px]" {...props} />,
+                            ol: ({ node, ...props }: any) => <ol className="list-decimal pl-4 mt-[4.5px] mb-[4.5px] space-y-0 leading-relaxed text-[13.5px]" {...props} />,
+                            li: ({ node, ...props }: any) => <li className="pl-1 mb-[4.5px] last:mb-0 leading-relaxed text-[13.5px]" {...props} />,
+                            pre: ({ children }: any) => <div className="not-prose mb-3 mt-1.5">{children}</div>,
                             code: ({ node, inline, className, children, ...props }: any) => {
                                 const match = /language-(\w+)/.exec(className || '');
                                 const isInline = inline ?? false;
                                 const lang = match ? match[1] : '';
 
                                 return !isInline ? (
-                                    <div className="my-3 rounded-xl overflow-hidden border border-white/[0.08] shadow-lg bg-zinc-800/60 backdrop-blur-md">
-                                        <div className="bg-white/[0.04] px-3 py-1.5 border-b border-white/[0.08]">
-                                            <span className="text-[10px] uppercase tracking-widest font-semibold text-white/40 font-mono">
+                                    <div className="my-2 rounded-xl overflow-hidden border border-white/[0.08] shadow-lg bg-zinc-800/60 backdrop-blur-md">
+                                        <div className="bg-white/[0.04] px-3 py-1 border-b border-white/[0.08]">
+                                            <span className="text-[9px] uppercase tracking-widest font-semibold text-white/40 font-mono">
                                                 {lang || 'CODE'}
                                             </span>
                                         </div>
                                         <div className="bg-transparent">
                                             <SyntaxHighlighter
-                                                language={lang || 'text'}
+                                                language={mapLanguageForPrism(lang, String(children))}
                                                 style={vscDarkPlus}
                                                 customStyle={{
                                                     margin: 0,
                                                     borderRadius: 0,
-                                                    fontSize: '13px',
-                                                    lineHeight: '1.6',
+                                                    fontSize: '12px',
+                                                    lineHeight: '1.45',
                                                     background: 'transparent',
-                                                    padding: '16px',
+                                                    padding: '12px',
                                                     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
                                                 }}
                                                 wrapLongLines={true}
                                                 showLineNumbers={true}
-                                                lineNumberStyle={{ minWidth: '2.5em', paddingRight: '1.2em', color: 'rgba(255,255,255,0.2)', textAlign: 'right', fontSize: '11px' }}
+                                                lineNumberStyle={{ minWidth: '2.5em', paddingRight: '1.2em', color: 'rgba(255,255,255,0.2)', textAlign: 'right', fontSize: '10px' }}
                                                 {...props}
                                             >
                                                 {String(children).replace(/\n$/, '')}
@@ -148,7 +272,7 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
                                         </div>
                                     </div>
                                 ) : (
-                                    <code className="bg-bg-tertiary px-1.5 py-0.5 rounded text-[13px] font-mono text-text-primary border border-border-subtle whitespace-pre-wrap" {...props}>
+                                    <code className="bg-bg-tertiary px-1.5 py-0.5 rounded text-[12px] font-mono text-text-primary border border-border-subtle whitespace-pre-wrap" {...props}>
                                         {children}
                                     </code>
                                 );
@@ -157,24 +281,15 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
                     >
                         {content}
                     </ReactMarkdown>
+                    {isStreaming && (
+                        <motion.span
+                            className="inline-block w-0.5 h-3.5 bg-[#fbbf24] ml-1 align-middle"
+                            animate={{ opacity: [1, 0] }}
+                            transition={{ duration: 0.5, repeat: Infinity }}
+                        />
+                    )}
                 </div>
-                {isStreaming && (
-                    <motion.span
-                        className="inline-block w-0.5 h-4 bg-text-secondary ml-0.5 align-middle"
-                        animate={{ opacity: [1, 0] }}
-                        transition={{ duration: 0.5, repeat: Infinity }}
-                    />
-                )}
             </div>
-            {!isStreaming && content && (
-                <button
-                    onClick={handleCopy}
-                    className="flex items-center gap-2 mt-3 text-[13px] text-text-tertiary hover:text-text-secondary transition-colors"
-                >
-                    {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                    {copied ? 'Copied' : 'Copy message'}
-                </button>
-            )}
         </motion.div>
     );
 };
@@ -408,7 +523,7 @@ ${contextString}`;
                         question,
                         undefined,
                         systemPrompt,
-                        { skipSystemPrompt: true, ignoreKnowledgeMode: true }
+                        { skipSystemPrompt: true }
                     );
                 }
             } else {
@@ -460,7 +575,7 @@ ${contextString}`;
                     question,
                     undefined,
                     systemPrompt,
-                    { skipSystemPrompt: true, ignoreKnowledgeMode: true }
+                    { skipSystemPrompt: true }
                 );
             }
 

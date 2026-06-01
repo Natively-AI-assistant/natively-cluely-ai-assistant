@@ -185,6 +185,7 @@ export interface ElectronAPI {
   onSystemAudioPermissionDenied: (callback: (message: string) => void) => () => void
   onDeviceSelectionApplied: (callback: (payload: { kind: 'input' | 'output'; requested: string | null; actual: string | null; fellBack: boolean; reason?: string }) => void) => () => void
   onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; attempt: number; maxAttempts: number; terminal?: boolean; stuck?: boolean }) => void) => () => void
+  onAudioInputAutoSwitched: (callback: (payload: { from: string; to: string; reason: string; message?: string }) => void) => () => void
 
   // STT Status Events
   onSttStatusChanged: (callback: (data: { state: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio'; provider: string; error?: string; channel: 'user' | 'interviewer'; reconnectAttempts?: number }) => void) => () => void
@@ -342,6 +343,7 @@ export interface ElectronAPI {
 
   // Provider Compatibility
   onIncompatibleProviderWarning: (callback: (data: { count: number, oldProvider: string, newProvider: string }) => void) => () => void;
+  onReindexProgress: (callback: (phase: 'started' | 'progress' | 'complete', data: { count?: number, done?: number, total?: number, space?: string, partial?: boolean }) => void) => () => void;
   reindexIncompatibleMeetings: () => Promise<void>;
 
   // Theme API

@@ -86,7 +86,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
         const codexCliName = getCodexCliModelDisplayName(model);
         if (codexCliName) return codexCliName;
         if (model.startsWith('ollama-')) return model.replace('ollama-', '');
-        if (model === 'gemini-3.1-flash-lite-preview') return 'Gemini 3.1 Flash';
+        if (model === 'gemini-3.5-flash') return 'Gemini 3.5 Flash';
+        if (model === 'gemini-3.1-flash-lite') return 'Gemini 3.1 Flash Lite';
         if (model === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
         if (model === 'llama-3.3-70b-versatile') return 'Groq Llama 3.3';
         if (model === 'gpt-5.4') return 'GPT 5.4';

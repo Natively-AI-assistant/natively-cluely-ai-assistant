@@ -1,0 +1,45 @@
+{
+  "timestamp": "2026-06-01T09:20:41.327Z",
+  "iteration": 2,
+  "summary": {
+    "totalTests": 190,
+    "passed": 190,
+    "failed": 0,
+    "accuracy": 1,
+    "identityRecallAccuracy": 1,
+    "perProfileAccuracy": {
+      "backend-eng-001": 1,
+      "ml-eng-002": 1,
+      "pm-003": 1,
+      "sales-sdr-004": 1,
+      "ux-designer-005": 1,
+      "data-analyst-006": 1,
+      "devops-sre-007": 1,
+      "csm-008": 1,
+      "security-009": 1,
+      "founder-010": 1
+    },
+    "perCategoryAccuracy": {
+      "identity_recall": 1,
+      "resume_recall": 1,
+      "jd_alignment": 1,
+      "custom_context": 1,
+      "negotiation": 1,
+      "unknown_handling": 1,
+      "anti_hardcoding": 1
+    }
+  },
+  "failures": [],
+  "crossFixtureInvariants": {
+    "fixtureCount": 10,
+    "candidateRefRegexCoversFirstPerson": true,
+    "zeroHardcoding": true
+  },
+  "patternMetadata": {
+    "identityDirectPatternCount": 32,
+    "introPatternCount": 10,
+    "negotiationPatternCount": 20,
+    "genericPatternCount": 46,
+    "profileDetailPatternCount": 35
+  }
+}

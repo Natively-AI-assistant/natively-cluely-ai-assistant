@@ -1,0 +1,25 @@
+Jordan Kim
+jordan.kim@wharton.upenn.edu | 206-555-0173 | Seattle, WA
+
+SUMMARY
+PM with 6 years in consumer tech and fintech. Led products from 0→1 and scaled them to millions of users. Strong data-driven decision making.
+
+SKILLS
+Product Strategy, SQL, A/B Testing, Figma, Looker, JIRA, Agile
+
+EXPERIENCE
+Senior Product Manager — Airbnb (2020-09 – Present)
+  - Led Guest Checkout redesign increasing conversion 18% ($120M revenue impact)
+  - Built host payout system serving 4M hosts globally
+  - Manage $50M annual product roadmap
+Product Manager — Square (Block) (2018-03 – 2020-08)
+  - Launched Square for Restaurants POS, $80M ARR within 18 months
+  - Grew Seller Dashboard DAU from 200k to 900k
+
+PROJECTS
+PaymentsUX Framework: Internal design system for payment flows. Adopted by 8 product teams at Airbnb. [Figma, Notion, SQL]
+OKR-Tracker: Internal OKR dashboard for engineering teams. Used by 400+ PMs at Airbnb. [Looker, Python, BigQuery]
+
+EDUCATION
+MBA, MBA — Wharton School of Business (2018)
+BA Economics, Economics — UC Berkeley (2014)

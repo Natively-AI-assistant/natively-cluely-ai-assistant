@@ -3,10 +3,12 @@ name: Release (macOS signed + notarized)
 # Builds a Developer ID-signed, notarized, stapled macOS release (dmg + zip)
 # for both arm64 and x64, then uploads the artifacts to the GitHub Release.
 #
-# This mirrors the LOCAL signing path (`npm run dist:signed` →
-# electron-builder.signed.cjs). The .app is signed + notarized + stapled by
-# electron-builder's built-in `mac.notarize: true` (notarytool under the hood),
-# and the DMGs are signed + notarized + stapled by scripts/afterAllArtifactBuild.cjs.
+# This mirrors the LOCAL signing path (electron-builder.signed.cjs). The .app is
+# signed by electron-builder (deep, Developer ID, hardened runtime) and notarized +
+# stapled by the afterSign hook scripts/notarize.js (with Error-65 staple-retry);
+# the DMGs are rebuilt via create-dmg and notarized + stapled by
+# scripts/afterAllArtifactBuild.cjs (electron-builder's own DMG creation corrupts
+# the embedded app signature). electron-builder builds the zip target only.
 # The only difference vs local is credential delivery: locally we use the
 # `natively-notary` keychain profile; in CI we use an App Store Connect API key
 # (APPLE_API_KEY / APPLE_API_KEY_ID / APPLE_API_ISSUER), the recommended
@@ -102,12 +104,24 @@ jobs:
 
       - name: Build, sign, notarize, staple
         env:
-          # App Store Connect API-key strategy (built-in notarytool + DMG hook):
+          # App Store Connect API-key strategy (consumed by notarize.js + afterAllArtifactBuild.cjs):
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           # GH token for electron-builder publish (artifacts attach to the release on tag builds).
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run dist:signed
+        # Explicit stages (NOT `npm run dist:signed`): the dist:signed chain re-runs
+        # `npm run build` (rimraf dist dist-electron) which can race electron-builder's
+        # native rebuild and ENOENT on dist-electron at package time. Building the stages
+        # first, then invoking electron-builder directly, is the reliable path.
+        run: |
+          set -euo pipefail
+          # create-dmg is required by afterAllArtifactBuild.cjs (DMG rebuild) — install FIRST.
+          which create-dmg >/dev/null 2>&1 || brew install create-dmg
+          npm run build
+          npm run build:electron
+          NATIVELY_BUILD_ALL_MAC_ARCHES=1 npm run build:native
+          node scripts/ensure-sharp-mac-deps.js
+          ./node_modules/.bin/electron-builder --mac --config electron-builder.signed.cjs --publish never
 
       - name: Verify signature + notarization (both arches + DMGs)
         run: |

@@ -129,21 +129,66 @@ const PI_CSS = `
     .pi-cta-group--trial .pi-cta-icon-ring { background: rgba(255,255,255,0.18); }
     .pi-cta-group--trial:hover { box-shadow: 0 8px 22px rgba(124,58,237,0.45); }
 
-    /* ── Yellow BETA pill ── */
-    .pi-beta-badge {
+    /* ── Jelly-clay pill base ── */
+    .pi-jelly-pill {
         display: inline-flex; align-items: center; justify-content: center;
         height: 22px;
         padding: 0 10px;
         border-radius: 999px;
-        background: #FACC15;
-        color: #0a0a0a;
         font-size: 9.5px;
         font-weight: 800;
         letter-spacing: 0.14em;
         text-transform: uppercase;
         line-height: 1;
-        box-shadow: 0 1px 0 rgba(255,255,255,0.4) inset,
-                    0 2px 6px rgba(250,204,21,0.35);
+        position: relative;
+        overflow: hidden;
+        /* Jelly gloss top strip */
+    }
+    .pi-jelly-pill::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        height: 45%;
+        background: linear-gradient(180deg, rgba(255,255,255,0.32) 0%, rgba(255,255,255,0) 100%);
+        border-radius: 999px 999px 0 0;
+        pointer-events: none;
+        z-index: 1;
+    }
+
+    /* ── Yellow BETA pill (jelly) ── */
+    .pi-beta-badge {
+        display: inline-flex; align-items: center; justify-content: center;
+        height: 22px;
+        padding: 0 10px;
+        border-radius: 999px;
+        position: relative;
+        overflow: hidden;
+        font-size: 9.5px;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        line-height: 1;
+        background:
+            linear-gradient(180deg, rgba(255,255,255,0.30) 0%, rgba(255,255,255,0.04) 50%, rgba(0,0,0,0.14) 100%),
+            #FACC15;
+        color: #0a0a0a;
+        border: 1px solid rgba(253,224,71,0.70);
+        box-shadow:
+            inset 0 1.5px 0.5px rgba(255,255,255,0.80),
+            inset 0 -1.5px 2.5px rgba(0,0,0,0.30),
+            inset 0 0 0 1px rgba(255,255,255,0.15),
+            0 3px 10px rgba(250,204,21,0.40),
+            0 1px 3px rgba(0,0,0,0.18);
+    }
+    .pi-beta-badge::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        height: 45%;
+        background: linear-gradient(180deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0) 100%);
+        border-radius: 999px 999px 0 0;
+        pointer-events: none;
+        z-index: 1;
     }
 
     /* ── Subtle pill badges (plan / trial) ── */
@@ -157,18 +202,68 @@ const PI_CSS = `
         letter-spacing: 0.14em;
         text-transform: uppercase;
         line-height: 1;
+        position: relative;
+        overflow: hidden;
     }
+    .pi-meta-badge::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        height: 45%;
+        background: linear-gradient(180deg, rgba(255,255,255,0.24) 0%, rgba(255,255,255,0) 100%);
+        border-radius: 999px 999px 0 0;
+        pointer-events: none;
+        z-index: 1;
+    }
+    /* Plan badge — neutral slate jelly */
     .pi-meta-badge--plan {
-        background: var(--pi-shell-bg);
+        background:
+            linear-gradient(180deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.04) 50%, rgba(0,0,0,0.10) 100%),
+            rgba(148,163,184,0.22);
         color: var(--pi-hero);
-        border: 1px solid var(--pi-shell-border);
+        border: 1px solid rgba(255,255,255,0.22);
+        box-shadow:
+            inset 0 1.5px 0.5px rgba(255,255,255,0.65),
+            inset 0 -1.5px 2.5px rgba(0,0,0,0.32),
+            inset 0 0 0 1px rgba(255,255,255,0.12),
+            0 2px 8px rgba(0,0,0,0.20);
     }
+    .pi-root[data-theme='light'] .pi-meta-badge--plan {
+        background:
+            linear-gradient(180deg, rgba(255,255,255,0.60) 0%, rgba(255,255,255,0.10) 50%, rgba(0,0,0,0.05) 100%),
+            rgba(100,116,139,0.18);
+        border: 1px solid rgba(0,0,0,0.12);
+        box-shadow:
+            inset 0 1.5px 0.5px rgba(255,255,255,0.90),
+            inset 0 -1.5px 2.5px rgba(0,0,0,0.12),
+            inset 0 0 0 1px rgba(255,255,255,0.40),
+            0 2px 8px rgba(0,0,0,0.10);
+    }
+    /* Trial badge — violet jelly */
     .pi-meta-badge--trial {
-        background: linear-gradient(135deg, rgba(139,92,246,0.18) 0%, rgba(124,58,237,0.14) 100%);
+        background:
+            linear-gradient(180deg, rgba(255,255,255,0.30) 0%, rgba(255,255,255,0.05) 50%, rgba(0,0,0,0.16) 100%),
+            rgba(139,92,246,0.30);
         color: #c4b5fd;
-        border: 1px solid rgba(139,92,246,0.32);
+        border: 1px solid rgba(196,181,253,0.42);
+        box-shadow:
+            inset 0 1.5px 0.5px rgba(255,255,255,0.72),
+            inset 0 -1.5px 2.5px rgba(0,0,0,0.40),
+            inset 0 0 0 1px rgba(255,255,255,0.14),
+            0 3px 10px rgba(139,92,246,0.35);
     }
-    .pi-root[data-theme='light'] .pi-meta-badge--trial { color: #6d28d9; }
+    .pi-root[data-theme='light'] .pi-meta-badge--trial {
+        color: #6d28d9;
+        background:
+            linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.10) 50%, rgba(0,0,0,0.06) 100%),
+            rgba(139,92,246,0.18);
+        border: 1px solid rgba(139,92,246,0.30);
+        box-shadow:
+            inset 0 1.5px 0.5px rgba(255,255,255,0.90),
+            inset 0 -1.5px 2.5px rgba(0,0,0,0.10),
+            inset 0 0 0 1px rgba(255,255,255,0.40),
+            0 3px 10px rgba(139,92,246,0.20);
+    }
 
     /* ── Long upload pill with internal indeterminate progress ── */
     .pi-upload-pill {
@@ -282,7 +377,7 @@ const PI_CSS = `
     .pi-upload-spinner { animation: pi-spin 0.9s linear infinite; }
     @keyframes pi-spin { to { transform: rotate(360deg); } }
 
-    /* ── "Pro" badge shown next to upload card titles for Free Tier ── */
+    /* ── "Pro" badge shown next to upload card titles for Free Tier (jelly) ── */
     .pi-upload-pill__pro-badge {
         display: inline-flex; align-items: center;
         height: 18px;
@@ -294,12 +389,42 @@ const PI_CSS = `
         letter-spacing: 0.14em;
         text-transform: uppercase;
         line-height: 1;
-        background: linear-gradient(135deg, rgba(139,92,246,0.22) 0%, rgba(124,58,237,0.18) 100%);
+        position: relative;
+        overflow: hidden;
+        background:
+            linear-gradient(180deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.04) 50%, rgba(0,0,0,0.16) 100%),
+            rgba(139,92,246,0.28);
         color: #c4b5fd;
-        border: 1px solid rgba(139,92,246,0.36);
+        border: 1px solid rgba(196,181,253,0.40);
+        box-shadow:
+            inset 0 1px 0.5px rgba(255,255,255,0.68),
+            inset 0 -1px 2px rgba(0,0,0,0.38),
+            inset 0 0 0 1px rgba(255,255,255,0.12),
+            0 2px 8px rgba(139,92,246,0.30);
         vertical-align: middle;
     }
-    .pi-root[data-theme='light'] .pi-upload-pill__pro-badge { color: #6d28d9; }
+    .pi-upload-pill__pro-badge::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        height: 45%;
+        background: linear-gradient(180deg, rgba(255,255,255,0.26) 0%, rgba(255,255,255,0) 100%);
+        border-radius: 999px 999px 0 0;
+        pointer-events: none;
+        z-index: 1;
+    }
+    .pi-root[data-theme='light'] .pi-upload-pill__pro-badge {
+        color: #6d28d9;
+        background:
+            linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.10) 50%, rgba(0,0,0,0.05) 100%),
+            rgba(139,92,246,0.16);
+        border: 1px solid rgba(139,92,246,0.28);
+        box-shadow:
+            inset 0 1px 0.5px rgba(255,255,255,0.90),
+            inset 0 -1px 2px rgba(0,0,0,0.08),
+            inset 0 0 0 1px rgba(255,255,255,0.40),
+            0 2px 8px rgba(139,92,246,0.18);
+    }
 
     /* ── Header close button (mirrors ModesSettings manager closeBtn — flat, no shadow) ── */
     .pi-close-btn {
@@ -703,11 +828,11 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                     <div className="w-10 h-10 rounded-lg bg-bg-input border border-border-subtle flex items-center justify-center text-text-tertiary shrink-0 mt-0.5 shadow-sm">
                                                         <Upload size={20} />
                                                     </div>
-                                                    <div className="min-w-0">
-                                                        <h4 className="text-[15px] font-bold text-text-primary mb-1 tracking-tight">
-                                                            {profileStatus.hasProfile ? 'Overwrite Source Document' : 'Initialize Knowledge Base'}
+                                                    <div className="min-w-0 flex-1">
+                                                        <h4 className="text-[15px] font-bold text-text-primary mb-1 tracking-tight flex items-center flex-wrap gap-1.5">
+                                                            <span>{profileStatus.hasProfile ? 'Overwrite Source Document' : 'Initialize Knowledge Base'}</span>
                                                             {!hasProfileAccess && (
-                                                                <span className="pi-upload-pill__pro-badge" aria-label="Pro feature">Pro</span>
+                                                                <span className="pi-upload-pill__pro-badge !ml-0" aria-label="Pro feature">Pro</span>
                                                             )}
                                                         </h4>
                                                         <p className="text-xs text-text-secondary leading-relaxed pr-2">
@@ -786,10 +911,10 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         <Briefcase size={20} />
                                                     </div>
                                                     <div className="min-w-0 flex-1">
-                                                        <h4 className="text-[15px] font-bold text-text-primary mb-1 tracking-tight">
-                                                            {profileData?.hasActiveJD ? `${profileData.activeJD?.title} @ ${profileData.activeJD?.company}` : 'Upload Job Description'}
+                                                        <h4 className="text-[15px] font-bold text-text-primary mb-1 tracking-tight flex items-center flex-wrap gap-1.5">
+                                                            <span>{profileData?.hasActiveJD ? `${profileData.activeJD?.title} @ ${profileData.activeJD?.company}` : 'Upload Job Description'}</span>
                                                             {!hasProfileAccess && (
-                                                                <span className="pi-upload-pill__pro-badge" aria-label="Pro feature">Pro</span>
+                                                                <span className="pi-upload-pill__pro-badge !ml-0" aria-label="Pro feature">Pro</span>
                                                             )}
                                                         </h4>
                                                         {profileData?.hasActiveJD ? (
@@ -949,9 +1074,6 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                     <div className="flex-1 min-w-0">
                                                         <div className="flex items-center gap-2">
                                                             <h4 className="text-sm font-bold text-text-primary">AI Persona</h4>
-                                                            {!hasProfileAccess && (
-                                                                <span className="text-[9px] font-bold text-accent-primary px-1.5 py-0.5 bg-accent-primary/10 rounded-full border border-accent-primary/20 uppercase tracking-wide">Pro Only</span>
-                                                            )}
                                                             {personaSaved && hasProfileAccess && (
                                                                 <span className="text-[9px] font-bold text-emerald-500 px-1.5 py-0.5 bg-emerald-500/10 rounded-full border border-emerald-500/20 uppercase tracking-wide flex items-center gap-1">
                                                                     <Check size={8} /> Updated

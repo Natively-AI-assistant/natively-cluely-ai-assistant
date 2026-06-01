@@ -203,6 +203,17 @@ export class PromptAssembler {
         priorResponses?: string[];
         intentContext?: string;
         retrievedModeContext?: string;
+        /**
+         * Candidate's own profile facts (resume projects/experience/skills/...)
+         * already XML-formatted by KnowledgeOrchestrator.assemblePromptContext.
+         * Trusted (it originates from the user's uploaded resume), so it sorts
+         * above untrusted transcript/screen/reference blocks. Used on the
+         * "What to answer?" path so an interviewer question like "tell me about
+         * your projects" is grounded in the loaded resume instead of answered
+         * blind. The answer VOICE stays first-person-candidate via the system
+         * prompt — this only supplies facts, never a persona override.
+         */
+        candidateProfile?: string;
         tokenBudget: number;
         systemPrompt: string;
         developerPrompt?: string;
@@ -235,6 +246,24 @@ export class PromptAssembler {
         //    blocks can reference prior turns if needed.
         if (params.priorResponses && params.priorResponses.length > 0) {
             this.addBlock(packet, this.buildAssistantHistoryBlock(params.priorResponses));
+        }
+
+        // 2b. CANDIDATE PROFILE — the user's own resume facts (trusted). Sorts
+        //     above untrusted transcript/screen so it's preserved under budget
+        //     pressure; supplies facts, not voice.
+        if (params.candidateProfile && params.candidateProfile.trim()) {
+            this.addBlock(packet, {
+                type: 'candidate_profile',
+                trustLevel: TrustLevel.TRUSTED_PROFILE,
+                source: 'knowledge_orchestrator',
+                tokenBudget: 1200,
+                // Content is already XML-tagged (<candidate_projects> ...) by the
+                // orchestrator and derives from the user's own resume — do not
+                // re-escape (would corrupt the tags) and no injection scrub
+                // needed for first-party data, consistent with existing
+                // candidate-node handling.
+                content: params.candidateProfile.trim(),
+            });
         }
 
         // 3. SCREEN CONTEXT — untrusted visual evidence from a vision LLM (legacy OCR also accepted).

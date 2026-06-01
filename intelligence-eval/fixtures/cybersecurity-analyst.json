@@ -1,0 +1,127 @@
+{
+  "profileId": "cybersecurity-analyst",
+  "role": "Cybersecurity Analyst",
+  "resume": {
+    "identity": {
+      "name": "David Okonkwo",
+      "email": "d.okonkwo@purdue.edu",
+      "location": "Austin, TX",
+      "phone": "512-555-0147",
+      "links": []
+    },
+    "summary": "Cybersecurity analyst with 4 years in endpoint protection and threat hunting. OSCP and AWS Security certified. Detected and remediated APT campaigns targeting financial services.",
+    "skills": [
+      "SIEM",
+      "EDR",
+      "Threat Hunting",
+      "Incident Response",
+      "Splunk",
+      "CrowdStrike",
+      "Python",
+      "YARA",
+      "MITRE ATT&CK"
+    ],
+    "experience": [
+      {
+        "company": "CrowdStrike",
+        "role": "Security Analyst",
+        "start_date": "2022-03",
+        "end_date": null,
+        "bullets": [
+          "Detected and remediated APT41 campaign in customer environment (CIR $2M)",
+          "Built automated threat hunting playbook library (50+ playbooks)",
+          "Reduced false positive rate 60% via ML-based alert triage"
+        ]
+      },
+      {
+        "company": "Mandiant",
+        "role": "Consultant",
+        "start_date": "2020-06",
+        "end_date": "2022-02",
+        "bullets": [
+          "Led incident response for 15+ breaches across healthcare and finance",
+          "Developed persistence mechanism detection methodology"
+        ]
+      }
+    ],
+    "projects": [
+      {
+        "name": "ThreatHunter-Playbook",
+        "description": "Sigma rule library for detecting MITRE ATT&CK techniques. 500+ rules, community contribution.",
+        "technologies": [
+          "Sigma",
+          "Splunk",
+          "YARA"
+        ]
+      },
+      {
+        "name": "PhishDetect",
+        "description": "Email phishing detection using ML. 94% precision, used by 3 MSSPs.",
+        "technologies": [
+          "Python",
+          "TensorFlow",
+          "DMARC",
+          "SPF"
+        ]
+      }
+    ],
+    "education": [
+      {
+        "institution": "Purdue University",
+        "degree": "BS Cybersecurity",
+        "field": "Cybersecurity",
+        "start_date": "",
+        "end_date": "2020"
+      }
+    ],
+    "achievements": [],
+    "certifications": [
+      "OSCP",
+      "AWS Security Specialty",
+      "GCIH"
+    ],
+    "leadership": []
+  },
+  "jd": {
+    "title": "Senior Security Operations Engineer",
+    "company": "Cloudflare",
+    "location": "Austin, TX (Hybrid)",
+    "description_summary": "Defend Cloudflare's global network. Build detection and response capabilities for the backbone of the internet. Work on problems at terabit scale.",
+    "level": "senior",
+    "employment_type": "full_time",
+    "min_years_experience": 4,
+    "compensation_hint": "$160k-$200k",
+    "requirements": [
+      "4+ years security operations",
+      "SIEM expertise",
+      "Threat hunting experience",
+      "Cloud security (AWS/GCP)",
+      "Scripting (Python/Go)"
+    ],
+    "nice_to_haves": [],
+    "responsibilities": [],
+    "technologies": [
+      "Splunk",
+      "CrowdStrike",
+      "Python",
+      "AWS Security",
+      "MITRE ATT&CK"
+    ],
+    "keywords": []
+  },
+  "customContext": "Include specific ATT&CK framework mappings when discussing detection strategies.",
+  "persona": "Technical security expert — framework-driven, incident-experienced, methodical.",
+  "negotiation": {
+    "targetSalary": 185000,
+    "minimumSalary": 168000,
+    "currentSalary": 158000,
+    "signingBonus": 20000,
+    "equity": "0.02% with 4 year vest",
+    "priorities": [
+      "technical mission",
+      "scale of problems",
+      "equity"
+    ]
+  },
+  "referenceFiles": []
+}

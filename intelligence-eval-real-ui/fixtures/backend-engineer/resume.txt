@@ -1,0 +1,25 @@
+Aarav Menon
+aarav.menon@gmail.com | 415-555-0142 | San Francisco, CA
+
+SUMMARY
+Backend engineer with 5 years building scalable payment systems at high-growth fintech companies. Strong in distributed systems, Go, and Python.
+
+SKILLS
+Go, Python, PostgreSQL, Redis, Kubernetes, gRPC, Kafka, Terraform
+
+EXPERIENCE
+Backend Engineer — Stripe (2021-03 – Present)
+  - Built payment reconciliation pipeline processing $2B+ daily
+  - Designed real-time fraud detection system reducing chargebacks 40%
+  - Migrated monolith to microservices, improved p99 latency from 800ms to 120ms
+Software Engineer — Twilio (2019-06 – 2021-02)
+  - Developed SMS routing engine handling 50M messages/day
+  - Built programmable video signaling infrastructure
+
+PROJECTS
+OpenRate: Open-source Go rate limiting library with token bucket and sliding window algorithms. 2k GitHub stars. [Go, Redis, gRPC]
+LedgerSync: CLI tool for personal finance tracking with bank API integration. Used by 500+ engineers. [Python, Plaid, SQLite]
+
+EDUCATION
+MS Computer Science, Computer Science — Carnegie Mellon University (2019)
+BTech Computer Science, Computer Science —  IIT Bombay (2017)

@@ -3,6 +3,7 @@ import { MessageSquare, Camera, Zap, User } from 'lucide-react';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { getModifierSymbol } from '../utils/platformUtils';
+import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 
 const SettingsPopup = () => {
     const { shortcuts } = useShortcuts();
@@ -18,6 +19,9 @@ const SettingsPopup = () => {
     const isFirstRender = React.useRef(true);
 
     const [hasStoredKey, setHasStoredKey] = useState<Record<string, boolean>>({});
+    const [interfaceTheme, setInterfaceTheme] = useState<MeetingInterfaceTheme>(() => {
+        return getMeetingInterfaceTheme();
+    });
 
     // Load credentials func
     const loadCredentials = async () => {
@@ -63,6 +67,25 @@ const SettingsPopup = () => {
         loadProfile();
 
         return () => window.removeEventListener('focus', handleFocus);
+    }, []);
+
+    // Sync meeting interface theme from localStorage and main process
+    useEffect(() => {
+        const handleStorage = () => {
+            setInterfaceTheme(getMeetingInterfaceTheme());
+        };
+        window.addEventListener('storage', handleStorage);
+        // @ts-ignore
+        const unsubscribe = window.electronAPI?.onMeetingInterfaceThemeChanged?.((theme: string) => {
+            const valid: MeetingInterfaceTheme[] = ['default', 'liquid-glass', 'modern'];
+            if (valid.includes(theme as MeetingInterfaceTheme)) {
+                setInterfaceTheme(theme as MeetingInterfaceTheme);
+            }
+        });
+        return () => {
+            window.removeEventListener('storage', handleStorage);
+            unsubscribe?.();
+        };
     }, []);
 
     // Fetch initial undetectable state from main process (source of truth)
@@ -178,19 +201,24 @@ const SettingsPopup = () => {
         return () => observer.disconnect();
     }, []);
 
-    const popupPanelClass = isLightTheme
-        ? 'bg-[#F3F4F6]/92 border-black/10 shadow-black/10'
-        : 'bg-[#1E1E1E]/80 border-white/10 shadow-black/40';
-    const itemHoverClass = isLightTheme ? 'hover:bg-black/[0.04]' : 'hover:bg-white/5';
+    // Determine if the background is dark (glass themes are always dark glass)
+    const isDarkBg = interfaceTheme === 'liquid-glass' || interfaceTheme === 'modern' || !isLightTheme;
+
+    const popupPanelClass = isDarkBg
+        ? 'bg-[#1E1E1E]/80 border-white/10 shadow-black/40'
+        : 'bg-[#F3F4F6]/92 border-black/10 shadow-black/10';
+    const itemHoverClass = isDarkBg ? 'hover:bg-white/5' : 'hover:bg-black/[0.04]';
     const glassRowClass = 'glass-popup-row';
-    const labelInactiveClass = isLightTheme ? 'text-slate-700 group-hover:text-slate-900' : 'text-slate-400 group-hover:text-slate-200';
-    const iconInactiveClass = isLightTheme ? 'text-slate-500 group-hover:text-slate-700' : 'text-slate-500 group-hover:text-slate-300';
-    const dividerClass = isLightTheme ? 'bg-black/[0.06]' : 'bg-white/[0.04]';
-    const shortcutKeyClass = isLightTheme
-        ? 'border-black/10 bg-black/[0.04] text-slate-600 glass-shortcut-key'
-        : 'border-white/10 bg-white/5 text-slate-500 glass-shortcut-key';
-    const defaultToggleTrackClass = isLightTheme ? 'bg-black/[0.22] glass-toggle-track' : 'bg-white/10 glass-toggle-track';
-    const toggleKnobClass = isLightTheme ? 'bg-white shadow-[0_1px_4px_rgba(0,0,0,0.18)]' : 'bg-black shadow-sm';
+    const labelColorClass = isDarkBg ? 'text-white' : 'text-slate-900';
+    const inactiveIconColorClass = isDarkBg
+        ? 'text-white/60 group-hover:text-white/90'
+        : 'text-slate-500 group-hover:text-slate-800';
+    const dividerClass = isDarkBg ? 'bg-white/[0.04]' : 'bg-black/[0.06]';
+    const shortcutKeyClass = isDarkBg
+        ? 'border-white/10 bg-white/5 text-slate-400 glass-shortcut-key'
+        : 'border-black/10 bg-black/[0.04] text-slate-600 glass-shortcut-key';
+    const defaultToggleTrackClass = isDarkBg ? 'bg-white/10 glass-toggle-track' : 'bg-black/[0.22] glass-toggle-track';
+    const toggleKnobClass = isDarkBg ? 'bg-black shadow-sm' : 'bg-white shadow-[0_1px_4px_rgba(0,0,0,0.18)]';
 
     return (
         <div className="w-fit h-fit bg-transparent flex flex-col">
@@ -201,12 +229,12 @@ const SettingsPopup = () => {
                 <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group cursor-default ${itemHoverClass} ${glassRowClass}`}>
                     <div className="flex items-center gap-2.5">
                         <CustomGhost
-                            className={`w-4 h-4 transition-colors ${isUndetectable ? (isLightTheme ? 'text-slate-900' : 'text-white') : iconInactiveClass}`}
+                            className={`w-4 h-4 transition-colors ${isUndetectable ? (isDarkBg ? 'text-white' : 'text-slate-900') : inactiveIconColorClass}`}
                             fill={isUndetectable ? "currentColor" : "none"}
                             stroke={isUndetectable ? "none" : "currentColor"}
-                            eyeColor={isUndetectable ? (isLightTheme ? "white" : "black") : (isLightTheme ? "#334155" : "white")}
+                            eyeColor={isUndetectable ? (isDarkBg ? "black" : "white") : (isDarkBg ? "white" : "#334155")}
                         />
-                        <span className={`text-[12px] font-medium transition-colors ${isUndetectable ? (isLightTheme ? 'text-slate-950' : 'text-white') : labelInactiveClass}`}>{isUndetectable ? 'Undetectable' : 'Detectable'}</span>
+                        <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>{isUndetectable ? 'Undetectable' : 'Detectable'}</span>
                     </div>
                     <button
                         onClick={() => {
@@ -216,7 +244,7 @@ const SettingsPopup = () => {
                             window.electronAPI?.setUndetectable(newState);
                         }}
                         className={`w-[30px] h-[18px] rounded-full p-[1.5px] transition-all duration-300 ease-spring active:scale-[0.92] ${isUndetectable
-                            ? (isLightTheme ? 'bg-slate-900 shadow-[0_2px_8px_rgba(15,23,42,0.18)]' : 'bg-white shadow-[0_2px_8px_rgba(255,255,255,0.2)]')
+                            ? (isDarkBg ? 'bg-white shadow-[0_2px_8px_rgba(255,255,255,0.2)]' : 'bg-slate-900 shadow-[0_2px_8px_rgba(15,23,42,0.18)]')
                             : defaultToggleTrackClass}`}
                     >
                         <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${isUndetectable ? 'translate-x-[12px]' : 'translate-x-0'}`} />
@@ -228,10 +256,10 @@ const SettingsPopup = () => {
                 <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group ${!(hasStoredKey.groq || hasStoredKey.natively) ? 'opacity-50 grayscale cursor-not-allowed' : `${itemHoverClass} ${glassRowClass} cursor-default`}`} title={!(hasStoredKey.groq || hasStoredKey.natively) ? "Requires Groq or Natively API key" : ""}>
                     <div className="flex items-center gap-2.5">
                         <Zap
-                            className={`w-4 h-4 transition-colors ${useGroqFastText ? 'text-orange-500' : iconInactiveClass}`}
+                            className={`w-4 h-4 transition-colors ${useGroqFastText ? 'text-orange-500' : inactiveIconColorClass}`}
                             fill={useGroqFastText ? "currentColor" : "none"}
                         />
-                        <span className={`text-[12px] font-medium transition-colors ${useGroqFastText ? (isLightTheme ? 'text-slate-950' : 'text-white') : labelInactiveClass}`}>Fast Response</span>
+                        <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>Fast Response</span>
                     </div>
                     <button
                         onClick={() => {
@@ -249,10 +277,10 @@ const SettingsPopup = () => {
                 <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group cursor-default ${itemHoverClass} ${glassRowClass}`}>
                     <div className="flex items-center gap-2.5">
                         <MessageSquare
-                            className={`w-3.5 h-3.5 transition-colors ${showTranscript ? 'text-emerald-400' : iconInactiveClass}`}
+                            className={`w-3.5 h-3.5 transition-colors ${showTranscript ? 'text-emerald-400' : inactiveIconColorClass}`}
                             fill={showTranscript ? "currentColor" : "none"}
                         />
-                        <span className={`text-[12px] font-medium transition-colors ${showTranscript ? (isLightTheme ? 'text-slate-950' : 'text-white') : labelInactiveClass}`}>Transcript</span>
+                        <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>Transcript</span>
                     </div>
                     <button
                         onClick={() => {
@@ -279,14 +307,14 @@ const SettingsPopup = () => {
                             strokeWidth="2"
                             strokeLinecap="round"
                             strokeLinejoin="round"
-                            className={`w-3.5 h-3.5 transition-colors ${actionButtonMode === 'brainstorm' ? 'text-violet-400' : iconInactiveClass}`}
+                            className={`w-3.5 h-3.5 transition-colors ${actionButtonMode === 'brainstorm' ? 'text-violet-400' : inactiveIconColorClass}`}
                         >
                             <line x1="6" y1="3" x2="6" y2="15" />
                             <circle cx="18" cy="6" r="3" />
                             <circle cx="6" cy="18" r="3" />
                             <path d="M18 9a9 9 0 0 1-9 9" />
                         </svg>
-                        <span className={`text-[12px] font-medium transition-colors ${actionButtonMode === 'brainstorm' ? (isLightTheme ? 'text-slate-950' : 'text-white') : labelInactiveClass}`}>Interview Mode</span>
+                        <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>Interview Mode</span>
                     </div>
                     <button
                         onClick={async () => {
@@ -308,10 +336,10 @@ const SettingsPopup = () => {
                     <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group ${!isPremium ? 'opacity-50 grayscale cursor-not-allowed' : `${itemHoverClass} ${glassRowClass} cursor-default`}`} title={!isPremium ? 'Requires Pro license to be active' : ''}>
                         <div className="flex items-center gap-2.5">
                             <User
-                                className={`w-3.5 h-3.5 transition-colors ${profileMode && isPremium ? 'text-accent-primary' : iconInactiveClass}`}
+                                className={`w-3.5 h-3.5 transition-colors ${profileMode && isPremium ? 'text-accent-primary' : inactiveIconColorClass}`}
                                 fill={profileMode && isPremium ? "currentColor" : "none"}
                             />
-                            <span className={`text-[12px] font-medium transition-colors ${profileMode && isPremium ? (isLightTheme ? 'text-slate-950' : 'text-white') : labelInactiveClass}`}>Profile Mode</span>
+                            <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>Profile Mode</span>
                         </div>
                         <button
                             onClick={async () => {
@@ -336,8 +364,8 @@ const SettingsPopup = () => {
                 {/* Show/Hide Natively */}
                 <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group interaction-base interaction-press ${itemHoverClass} ${glassRowClass}`}>
                     <div className="flex items-center gap-2.5">
-                        <MessageSquare className={`w-3.5 h-3.5 transition-colors ${iconInactiveClass}`} />
-                        <span className={`text-[12px] transition-colors ${labelInactiveClass}`}>Show/Hide</span>
+                        <MessageSquare className={`w-3.5 h-3.5 transition-colors ${inactiveIconColorClass}`} />
+                        <span className={`text-[12px] transition-colors ${labelColorClass}`}>Show/Hide</span>
                     </div>
                     <div className="flex gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
                         {/* Dynamic Keys for Toggle Visibility */}
@@ -352,8 +380,8 @@ const SettingsPopup = () => {
                 {/* Screenshot */}
                 <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group interaction-base interaction-press ${itemHoverClass} ${glassRowClass}`}>
                     <div className="flex items-center gap-2.5">
-                        <Camera className={`w-3.5 h-3.5 transition-colors ${iconInactiveClass}`} />
-                        <span className={`text-[12px] transition-colors ${labelInactiveClass}`}>Screenshot</span>
+                        <Camera className={`w-3.5 h-3.5 transition-colors ${inactiveIconColorClass}`} />
+                        <span className={`text-[12px] transition-colors ${labelColorClass}`}>Screenshot</span>
                     </div>
                     <div className="flex gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
                         {/* Dynamic Keys for Take Screenshot */}

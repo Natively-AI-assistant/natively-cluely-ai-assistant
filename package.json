@@ -11,7 +11,8 @@
     "build:electron:tsc": "tsc -p electron/tsconfig.json",
     "typecheck:electron": "tsc -p electron/tsconfig.json --noEmit",
     "preview": "vite preview",
-    "postinstall": "cross-env SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm rebuild sharp && electron-rebuild -f -w better-sqlite3,keytar && node scripts/download-models.js && node scripts/ensure-sqlite-vec.js && node scripts/patch-electron-plist.js",
+    "postinstall": "cross-env SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm rebuild sharp && node scripts/rebuild-native-electron.js && node scripts/download-models.js && node scripts/ensure-sqlite-vec.js && node scripts/patch-electron-plist.js && node scripts/verify-native-arch.js",
+    "rebuild:native": "node scripts/rebuild-native-electron.js && node scripts/verify-native-arch.js",
     "electron:dev": "npm run build:electron && cross-env NODE_ENV=development electron .",
     "electron:build": "npm run build:electron && cross-env NODE_ENV=production electron .",
     "app:dev": "concurrently \"npm run dev -- --port 5180 --strictPort\" \"wait-on http://localhost:5180 && npm run electron:dev\"",
@@ -33,7 +34,12 @@
     "test:e2e:parity": "ELECTRON_E2E=1 ELECTRON_APP_PORT=${ELECTRON_APP_PORT:-5173} npx playwright test tests/e2e/parity-gaps-evidence.spec.ts",
     "test:e2e:screen-understanding": "npm run build:electron && node natively-api/tests/screen-understanding-live.e2e.mjs",
     "bench:screen-understanding": "npm run build:electron && node scripts/bench-screen-understanding.mjs",
-    "doctor": "npx react-doctor@latest"
+    "doctor": "npx react-doctor@latest",
+    "test:intelligence:ui": "playwright test --config intelligence-eval-real-ui/playwright.config.ts",
+    "test:intelligence:ui:headed": "playwright test --config intelligence-eval-real-ui/playwright.config.ts --headed",
+    "test:intelligence:ui:debug": "PWDEBUG=1 playwright test --config intelligence-eval-real-ui/playwright.config.ts",
+    "test:intelligence:ui:report": "playwright show-report intelligence-eval-real-ui/results/playwright-report",
+    "eval:intelligence:ui": "node --experimental-strip-types intelligence-eval-real-ui/run-real-ui-e2e.ts"
   },
   "build": {
     "generateUpdatesFilesForAllChannels": true,
@@ -52,7 +58,9 @@
     ],
     "asarUnpack": [
       "**/*.node",
-      "**/*.dylib"
+      "**/*.dylib",
+      "**/vectorSearchWorker.js",
+      "**/whisperWorker.js"
     ],
     "directories": {
       "output": "release",

@@ -1,0 +1,120 @@
+{
+  "profileId": "ui-ux-designer",
+  "role": "UI/UX Designer",
+  "resume": {
+    "identity": {
+      "name": "Sofia Rodriguez",
+      "email": "sofia.r@risd.edu",
+      "location": "Brooklyn, NY",
+      "phone": "718-555-0139",
+      "links": []
+    },
+    "summary": "Senior product designer with 5 years in music streaming and consumer apps. Crafted experiences for 50M+ monthly active users. Expert in design systems and user research.",
+    "skills": [
+      "Figma",
+      "Sketch",
+      "Principle",
+      "Framer",
+      "User Research",
+      "Design Systems",
+      "Prototyping",
+      "HTML/CSS"
+    ],
+    "experience": [
+      {
+        "company": "Spotify",
+        "role": "Senior Product Designer",
+        "start_date": "2021-05",
+        "end_date": null,
+        "bullets": [
+          "Led redesign of Discover Weekly experience (50M users impacted)",
+          "Built Spotify Design System across 6 product teams",
+          "Conducted 200+ user research sessions informing product direction"
+        ]
+      },
+      {
+        "company": "Adobe",
+        "role": "Product Designer",
+        "start_date": "2019-03",
+        "end_date": "2021-04",
+        "bullets": [
+          "Designed Creative Cloud mobile companion app (4.5 stars, 2M downloads)",
+          "Established design token architecture used across Adobe products"
+        ]
+      }
+    ],
+    "projects": [
+      {
+        "name": "DesignToken.io",
+        "description": "Open-source tool for managing design tokens across platforms. 800+ designers use it weekly.",
+        "technologies": [
+          "Figma API",
+          "React",
+          "Style Dictionary"
+        ]
+      },
+      {
+        "name": "PodcastPlayer",
+        "description": "Redesigned podcast listening experience for Spotify. In production for 30M users.",
+        "technologies": [
+          "Figma",
+          "SwiftUI",
+          "Spotify API"
+        ]
+      }
+    ],
+    "education": [
+      {
+        "institution": "Rhode Island School of Design",
+        "degree": "BFA Design",
+        "field": "Design",
+        "start_date": "",
+        "end_date": "2019"
+      }
+    ],
+    "achievements": [],
+    "certifications": [],
+    "leadership": []
+  },
+  "jd": {
+    "title": "Lead Product Designer",
+    "company": "Canva",
+    "location": "Remote (US)",
+    "description_summary": "Lead design for Canva's collaborative whiteboarding product. Shape how millions design together. Work across product, research, and engineering.",
+    "level": "lead",
+    "employment_type": "full_time",
+    "min_years_experience": 5,
+    "compensation_hint": "$150k-$190k",
+    "requirements": [
+      "5+ years product design",
+      "Design systems expertise",
+      "Consumer or creative tools",
+      "Portfolio required",
+      "Figma expert"
+    ],
+    "nice_to_haves": [],
+    "responsibilities": [],
+    "technologies": [
+      "Figma",
+      "Design Systems",
+      "Prototyping",
+      "User Testing"
+    ],
+    "keywords": []
+  },
+  "customContext": "I respond well to visual examples and portfolio references. Show me what great looks like.",
+  "persona": "Visual design leader — portfolio-focused, references concrete work.",
+  "negotiation": {
+    "targetSalary": 175000,
+    "minimumSalary": 160000,
+    "currentSalary": 155000,
+    "signingBonus": 15000,
+    "equity": "0.02% with 4 year vest, 1 year cliff",
+    "priorities": [
+      "design autonomy",
+      "portfolio showcase opportunity",
+      "equity"
+    ]
+  },
+  "referenceFiles": []
+}

@@ -1,0 +1,2350 @@
+{
+  "schemaVersion": 1,
+  "generatedFrom": "intelligence-eval/fixtures/*.json (synthetic)",
+  "totalCases": 100,
+  "criticalCases": 22,
+  "cases": [
+    {
+      "testId": "BE-001",
+      "profileId": "backend-engineer",
+      "mode": "manual_input",
+      "pattern": "identity_manual",
+      "question": "what is my name?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [
+        "Aarav Menon"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant",
+        "Natively"
+      ],
+      "expectedLayers": [
+        "stable_identity",
+        "resume"
+      ],
+      "excludedLayers": [
+        "jd",
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": true
+    },
+    {
+      "testId": "BE-002",
+      "profileId": "backend-engineer",
+      "mode": "what_to_answer",
+      "pattern": "identity_interviewer",
+      "transcript": "Interviewer: Before we start, can you tell me your name?\nCandidate: Sure.\nInterviewer: Yes, what is your full name?",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [
+        "Aarav Menon"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant"
+      ],
+      "expectedLayers": [
+        "stable_identity",
+        "resume"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": true
+    },
+    {
+      "testId": "BE-003",
+      "profileId": "backend-engineer",
+      "mode": "manual_input",
+      "pattern": "projects_manual",
+      "question": "what are my projects?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [
+        "OpenRate"
+      ],
+      "anyOfFacts": [
+        "OpenRate",
+        "LedgerSync"
+      ],
+      "forbiddenFacts": [
+        "I have your background loaded",
+        "Full Stack Engineer Intern"
+      ],
+      "expectedLayers": [
+        "resume",
+        "projects"
+      ],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false
+    },
+    {
+      "testId": "BE-004",
+      "profileId": "backend-engineer",
+      "mode": "what_to_answer",
+      "pattern": "projects_interviewer",
+      "transcript": "Interviewer: I saw your resume. Tell me about the backend projects you have worked on.",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [
+        "OpenRate"
+      ],
+      "forbiddenFacts": [
+        "I have your background loaded"
+      ],
+      "expectedLayers": [
+        "resume",
+        "projects"
+      ],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "BE-005",
+      "profileId": "backend-engineer",
+      "mode": "what_to_answer",
+      "pattern": "jd_alignment",
+      "transcript": "Interviewer: Why do you think you are a good fit for this backend engineering role?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "jd_alignment",
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "BE-006",
+      "profileId": "backend-engineer",
+      "mode": "manual_input",
+      "pattern": "skills",
+      "question": "what backend skills do I have?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [],
+      "anyOfFacts": [
+        "Go",
+        "Python",
+        "PostgreSQL",
+        "Redis",
+        "Kubernetes",
+        "gRPC",
+        "Kafka",
+        "Terraform"
+      ],
+      "forbiddenFacts": [],
+      "expectedLayers": [
+        "resume",
+        "skills"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false,
+      "noHallucinationWatch": false
+    },
+    {
+      "testId": "BE-007",
+      "profileId": "backend-engineer",
+      "mode": "what_to_answer",
+      "pattern": "follow_up",
+      "transcript": "Interviewer: Tell me about your API gateway project.\nCandidate: It handled authentication and routing.\nInterviewer: Can you explain how you improved latency in that project?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [
+        "live_transcript"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "follow_up",
+      "followUpTarget": "gateway",
+      "isFollowUp": true,
+      "noHallucinationWatch": true,
+      "critical": false
+    },
+    {
+      "testId": "BE-008",
+      "profileId": "backend-engineer",
+      "mode": "what_to_answer",
+      "pattern": "negotiation",
+      "transcript": "Interviewer: What salary range are you expecting for this backend role?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [
+        "negotiation"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "negotiation",
+      "personaNoInvention": false,
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "BE-009",
+      "profileId": "backend-engineer",
+      "mode": "manual_input",
+      "pattern": "unknown",
+      "question": "what was my manager's name in my first internship?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "missingInfo": "manager name",
+      "expectedLayers": [],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "mustAdmitMissing": true,
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "BE-010",
+      "profileId": "backend-engineer",
+      "mode": "what_to_answer",
+      "pattern": "context_isolation",
+      "transcript": "Interviewer: What is your name?\nCandidate: I am interviewing for the backend role.\nInterviewer: Great, just confirm your name once.",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [
+        "Aarav Menon"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant",
+        "salary",
+        "$"
+      ],
+      "expectedLayers": [
+        "stable_identity"
+      ],
+      "excludedLayers": [
+        "jd",
+        "negotiation",
+        "assistant_identity",
+        "meeting_mode"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": true,
+      "isolationCheck": true
+    },
+    {
+      "testId": "ML-001",
+      "profileId": "ml-engineer",
+      "mode": "manual_input",
+      "pattern": "identity_manual",
+      "question": "what is my name?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [
+        "Priya Sharma"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant",
+        "Natively"
+      ],
+      "expectedLayers": [
+        "stable_identity",
+        "resume"
+      ],
+      "excludedLayers": [
+        "jd",
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": true
+    },
+    {
+      "testId": "ML-002",
+      "profileId": "ml-engineer",
+      "mode": "what_to_answer",
+      "pattern": "identity_interviewer",
+      "transcript": "Interviewer: Please introduce yourself with your name first.",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [
+        "Priya Sharma"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant"
+      ],
+      "expectedLayers": [
+        "stable_identity",
+        "resume"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": true
+    },
+    {
+      "testId": "ML-003",
+      "profileId": "ml-engineer",
+      "mode": "manual_input",
+      "pattern": "projects_manual",
+      "question": "what are my machine learning projects?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [
+        "LLM-Eval"
+      ],
+      "anyOfFacts": [
+        "LLM-Eval",
+        "RecSys-Factory"
+      ],
+      "forbiddenFacts": [
+        "I have your background loaded",
+        "Full Stack Engineer Intern"
+      ],
+      "expectedLayers": [
+        "resume",
+        "projects"
+      ],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false
+    },
+    {
+      "testId": "ML-004",
+      "profileId": "ml-engineer",
+      "mode": "what_to_answer",
+      "pattern": "projects_interviewer",
+      "transcript": "Interviewer: Can you walk me through one ML project from your resume?",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [],
+      "anyOfFacts": [
+        "LLM-Eval",
+        "RecSys-Factory"
+      ],
+      "forbiddenFacts": [
+        "I have your background loaded"
+      ],
+      "expectedLayers": [
+        "resume",
+        "projects"
+      ],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "ML-005",
+      "profileId": "ml-engineer",
+      "mode": "what_to_answer",
+      "pattern": "jd_alignment",
+      "transcript": "Interviewer: How does your ML experience match this job description?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "jd_alignment",
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "ML-006",
+      "profileId": "ml-engineer",
+      "mode": "manual_input",
+      "pattern": "skills",
+      "question": "what ML frameworks do I know?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [],
+      "anyOfFacts": [
+        "Python",
+        "PyTorch",
+        "TensorFlow",
+        "Hugging Face",
+        "Spark",
+        "MLflow",
+        "Kubernetes"
+      ],
+      "forbiddenFacts": [],
+      "expectedLayers": [
+        "resume",
+        "skills"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false,
+      "noHallucinationWatch": false
+    },
+    {
+      "testId": "ML-007",
+      "profileId": "ml-engineer",
+      "mode": "what_to_answer",
+      "pattern": "follow_up",
+      "transcript": "Interviewer: You mentioned a recommendation system project.\nCandidate: Yes, I built it using user interaction data.\nInterviewer: How did you evaluate the model?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [
+        "live_transcript"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "follow_up",
+      "followUpTarget": "recommendation",
+      "isFollowUp": true,
+      "noHallucinationWatch": true,
+      "critical": false
+    },
+    {
+      "testId": "ML-008",
+      "profileId": "ml-engineer",
+      "mode": "manual_input",
+      "pattern": "persona",
+      "question": "answer like a confident but concise ML engineer: why should they hire me?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "persona_style",
+      "personaNoInvention": true,
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "ML-009",
+      "profileId": "ml-engineer",
+      "mode": "manual_input",
+      "pattern": "unknown",
+      "question": "what was the exact accuracy of my best model?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "missingInfo": "exact model accuracy",
+      "expectedLayers": [],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "mustAdmitMissing": true,
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "ML-010",
+      "profileId": "ml-engineer",
+      "mode": "what_to_answer",
+      "pattern": "context_isolation",
+      "transcript": "Interviewer: What is your name?\nInterviewer: Also we will discuss salary later.",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [
+        "Priya Sharma"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant",
+        "salary",
+        "$"
+      ],
+      "expectedLayers": [
+        "stable_identity"
+      ],
+      "excludedLayers": [
+        "jd",
+        "negotiation",
+        "assistant_identity",
+        "meeting_mode"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": true,
+      "isolationCheck": true
+    },
+    {
+      "testId": "PM-001",
+      "profileId": "product-manager",
+      "mode": "manual_input",
+      "pattern": "identity_manual",
+      "question": "what is my name?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [
+        "Jordan Kim"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant",
+        "Natively"
+      ],
+      "expectedLayers": [
+        "stable_identity",
+        "resume"
+      ],
+      "excludedLayers": [
+        "jd",
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": true
+    },
+    {
+      "testId": "PM-002",
+      "profileId": "product-manager",
+      "mode": "what_to_answer",
+      "pattern": "interviewer_intro",
+      "transcript": "Interviewer: Could you introduce yourself as a product manager?",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [
+        "Jordan Kim"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant"
+      ],
+      "expectedLayers": [
+        "stable_identity",
+        "resume"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": false
+    },
+    {
+      "testId": "PM-003",
+      "profileId": "product-manager",
+      "mode": "manual_input",
+      "pattern": "projects_manual",
+      "question": "what products or projects have I worked on?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [
+        "PaymentsUX Framework"
+      ],
+      "anyOfFacts": [
+        "PaymentsUX Framework",
+        "OKR-Tracker"
+      ],
+      "forbiddenFacts": [
+        "I have your background loaded",
+        "Full Stack Engineer Intern"
+      ],
+      "expectedLayers": [
+        "resume",
+        "projects"
+      ],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false
+    },
+    {
+      "testId": "PM-004",
+      "profileId": "product-manager",
+      "mode": "what_to_answer",
+      "pattern": "behavioral",
+      "transcript": "Interviewer: Tell me about a time you prioritized a product roadmap.",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [],
+      "forbiddenFacts": [
+        "I have your background loaded"
+      ],
+      "expectedLayers": [],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "behavioral",
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "PM-005",
+      "profileId": "product-manager",
+      "mode": "manual_input",
+      "pattern": "jd_alignment",
+      "question": "how do I fit this PM JD?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "jd_alignment",
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "PM-006",
+      "profileId": "product-manager",
+      "mode": "what_to_answer",
+      "pattern": "metrics_guard",
+      "transcript": "Interviewer: What product metrics have you worked with?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "PM-007",
+      "profileId": "product-manager",
+      "mode": "what_to_answer",
+      "pattern": "follow_up",
+      "transcript": "Interviewer: You mentioned improving onboarding.\nCandidate: Yes, I worked on onboarding flow improvements.\nInterviewer: How did you decide what to change first?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [
+        "live_transcript"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "follow_up",
+      "followUpTarget": "onboarding",
+      "isFollowUp": true,
+      "noHallucinationWatch": true,
+      "critical": false
+    },
+    {
+      "testId": "PM-008",
+      "profileId": "product-manager",
+      "mode": "manual_input",
+      "pattern": "negotiation",
+      "question": "what should I say if they ask my expected CTC?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [
+        "negotiation"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "negotiation",
+      "personaNoInvention": false,
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "PM-009",
+      "profileId": "product-manager",
+      "mode": "manual_input",
+      "pattern": "unknown",
+      "question": "what was my exact NPS improvement percentage?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "missingInfo": "exact NPS improvement",
+      "expectedLayers": [],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "mustAdmitMissing": true,
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "PM-010",
+      "profileId": "product-manager",
+      "mode": "what_to_answer",
+      "pattern": "context_isolation",
+      "transcript": "Interviewer: Can you confirm your name before we begin the product case?",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [
+        "Jordan Kim"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant",
+        "salary",
+        "$"
+      ],
+      "expectedLayers": [
+        "stable_identity"
+      ],
+      "excludedLayers": [
+        "jd",
+        "negotiation",
+        "assistant_identity",
+        "meeting_mode"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": true,
+      "isolationCheck": true
+    },
+    {
+      "testId": "SDR-001",
+      "profileId": "sales-development-rep",
+      "mode": "manual_input",
+      "pattern": "identity_manual",
+      "question": "what is my name?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [
+        "Marcus Williams"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant",
+        "Natively"
+      ],
+      "expectedLayers": [
+        "stable_identity",
+        "resume"
+      ],
+      "excludedLayers": [
+        "jd",
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": true
+    },
+    {
+      "testId": "SDR-002",
+      "profileId": "sales-development-rep",
+      "mode": "what_to_answer",
+      "pattern": "interviewer_intro",
+      "transcript": "Interviewer: Tell me about yourself and your sales background.",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [
+        "Marcus Williams"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant"
+      ],
+      "expectedLayers": [
+        "stable_identity",
+        "resume"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": false
+    },
+    {
+      "testId": "SDR-003",
+      "profileId": "sales-development-rep",
+      "mode": "manual_input",
+      "pattern": "experience_manual",
+      "question": "what sales experience do I have?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [
+        "Salesforce"
+      ],
+      "forbiddenFacts": [
+        "I have your background loaded",
+        "Full Stack Engineer Intern"
+      ],
+      "expectedLayers": [
+        "resume",
+        "experience"
+      ],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false
+    },
+    {
+      "testId": "SDR-004",
+      "profileId": "sales-development-rep",
+      "mode": "what_to_answer",
+      "pattern": "skill",
+      "transcript": "Interviewer: Which CRM or outreach tools have you used?",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [],
+      "forbiddenFacts": [
+        "I have your background loaded"
+      ],
+      "expectedLayers": [],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "SDR-005",
+      "profileId": "sales-development-rep",
+      "mode": "manual_input",
+      "pattern": "jd_alignment",
+      "question": "how should I answer why I fit this SDR role?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "jd_alignment",
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "SDR-006",
+      "profileId": "sales-development-rep",
+      "mode": "what_to_answer",
+      "pattern": "approach",
+      "transcript": "Interviewer: How would you approach cold outreach for a new market?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "SDR-007",
+      "profileId": "sales-development-rep",
+      "mode": "what_to_answer",
+      "pattern": "follow_up",
+      "transcript": "Interviewer: You said you worked on lead qualification.\nCandidate: Yes.\nInterviewer: What criteria did you use to qualify leads?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [
+        "live_transcript"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "follow_up",
+      "followUpTarget": "lead qualification",
+      "isFollowUp": true,
+      "noHallucinationWatch": true,
+      "critical": false
+    },
+    {
+      "testId": "SDR-008",
+      "profileId": "sales-development-rep",
+      "mode": "what_to_answer",
+      "pattern": "negotiation",
+      "transcript": "Interviewer: What compensation are you expecting, including incentives?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [
+        "negotiation"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "negotiation",
+      "personaNoInvention": false,
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "SDR-009",
+      "profileId": "sales-development-rep",
+      "mode": "manual_input",
+      "pattern": "unknown",
+      "question": "what was my exact quota attainment last quarter?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "missingInfo": "exact quota attainment",
+      "expectedLayers": [],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "mustAdmitMissing": true,
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "SDR-010",
+      "profileId": "sales-development-rep",
+      "mode": "what_to_answer",
+      "pattern": "context_isolation",
+      "transcript": "Interviewer: What is your name?\nCandidate: I am interested in sales.\nInterviewer: Just your name please.",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [
+        "Marcus Williams"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant",
+        "salary",
+        "$"
+      ],
+      "expectedLayers": [
+        "stable_identity"
+      ],
+      "excludedLayers": [
+        "jd",
+        "negotiation",
+        "assistant_identity",
+        "meeting_mode"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": true,
+      "isolationCheck": true
+    },
+    {
+      "testId": "UX-001",
+      "profileId": "ui-ux-designer",
+      "mode": "manual_input",
+      "pattern": "identity_manual",
+      "question": "what is my name?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [
+        "Sofia Rodriguez"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant",
+        "Natively"
+      ],
+      "expectedLayers": [
+        "stable_identity",
+        "resume"
+      ],
+      "excludedLayers": [
+        "jd",
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": true
+    },
+    {
+      "testId": "UX-002",
+      "profileId": "ui-ux-designer",
+      "mode": "what_to_answer",
+      "pattern": "interviewer_intro",
+      "transcript": "Interviewer: Please introduce yourself as a designer.",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [
+        "Sofia Rodriguez"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant"
+      ],
+      "expectedLayers": [
+        "stable_identity",
+        "resume"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": false
+    },
+    {
+      "testId": "UX-003",
+      "profileId": "ui-ux-designer",
+      "mode": "manual_input",
+      "pattern": "projects_manual",
+      "question": "what design projects are in my profile?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [
+        "DesignToken.io"
+      ],
+      "anyOfFacts": [
+        "DesignToken.io",
+        "PodcastPlayer"
+      ],
+      "forbiddenFacts": [
+        "I have your background loaded",
+        "Full Stack Engineer Intern"
+      ],
+      "expectedLayers": [
+        "resume",
+        "projects"
+      ],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false
+    },
+    {
+      "testId": "UX-004",
+      "profileId": "ui-ux-designer",
+      "mode": "what_to_answer",
+      "pattern": "process",
+      "transcript": "Interviewer: Walk me through your design process.",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [],
+      "forbiddenFacts": [
+        "I have your background loaded"
+      ],
+      "expectedLayers": [],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "UX-005",
+      "profileId": "ui-ux-designer",
+      "mode": "manual_input",
+      "pattern": "jd_alignment",
+      "question": "how do my design skills match this JD?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "jd_alignment",
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "UX-006",
+      "profileId": "ui-ux-designer",
+      "mode": "what_to_answer",
+      "pattern": "skills",
+      "transcript": "Interviewer: What design tools are you comfortable with?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "anyOfFacts": [
+        "Figma",
+        "Sketch",
+        "Principle",
+        "Framer",
+        "User Research",
+        "Design Systems",
+        "Prototyping",
+        "HTML/CSS"
+      ],
+      "forbiddenFacts": [],
+      "expectedLayers": [
+        "resume",
+        "skills"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false,
+      "noHallucinationWatch": false
+    },
+    {
+      "testId": "UX-007",
+      "profileId": "ui-ux-designer",
+      "mode": "what_to_answer",
+      "pattern": "follow_up",
+      "transcript": "Interviewer: You mentioned redesigning a dashboard.\nCandidate: Yes, that was one of my main projects.\nInterviewer: How did you validate the redesign?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [
+        "live_transcript"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "follow_up",
+      "followUpTarget": "dashboard",
+      "isFollowUp": true,
+      "noHallucinationWatch": true,
+      "critical": false
+    },
+    {
+      "testId": "UX-008",
+      "profileId": "ui-ux-designer",
+      "mode": "manual_input",
+      "pattern": "negotiation",
+      "question": "what should I say when they ask expected salary for this designer role?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [
+        "negotiation"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "negotiation",
+      "personaNoInvention": false,
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "UX-009",
+      "profileId": "ui-ux-designer",
+      "mode": "manual_input",
+      "pattern": "unknown",
+      "question": "what was my exact Figma prototype link?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "missingInfo": "Figma prototype link",
+      "expectedLayers": [],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "mustAdmitMissing": true,
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "UX-010",
+      "profileId": "ui-ux-designer",
+      "mode": "what_to_answer",
+      "pattern": "context_isolation",
+      "transcript": "Interviewer: Can you confirm your name before the portfolio review?",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [
+        "Sofia Rodriguez"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant",
+        "salary",
+        "$"
+      ],
+      "expectedLayers": [
+        "stable_identity"
+      ],
+      "excludedLayers": [
+        "jd",
+        "negotiation",
+        "assistant_identity",
+        "meeting_mode"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": true,
+      "isolationCheck": true
+    },
+    {
+      "testId": "DA-001",
+      "profileId": "data-analyst",
+      "mode": "manual_input",
+      "pattern": "identity_manual",
+      "question": "what is my name?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [
+        "Chen Wei"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant",
+        "Natively"
+      ],
+      "expectedLayers": [
+        "stable_identity",
+        "resume"
+      ],
+      "excludedLayers": [
+        "jd",
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": true
+    },
+    {
+      "testId": "DA-002",
+      "profileId": "data-analyst",
+      "mode": "what_to_answer",
+      "pattern": "interviewer_intro",
+      "transcript": "Interviewer: Tell me about yourself as a data analyst.",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [
+        "Chen Wei"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant"
+      ],
+      "expectedLayers": [
+        "stable_identity",
+        "resume"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": false
+    },
+    {
+      "testId": "DA-003",
+      "profileId": "data-analyst",
+      "mode": "manual_input",
+      "pattern": "projects_manual",
+      "question": "what data projects have I done?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [
+        "ABTest-Framework"
+      ],
+      "anyOfFacts": [
+        "ABTest-Framework",
+        "SQL-Copilot"
+      ],
+      "forbiddenFacts": [
+        "I have your background loaded",
+        "Full Stack Engineer Intern"
+      ],
+      "expectedLayers": [
+        "resume",
+        "projects"
+      ],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false
+    },
+    {
+      "testId": "DA-004",
+      "profileId": "data-analyst",
+      "mode": "what_to_answer",
+      "pattern": "skill",
+      "transcript": "Interviewer: How comfortable are you with SQL?",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [],
+      "forbiddenFacts": [
+        "I have your background loaded"
+      ],
+      "expectedLayers": [],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "DA-005",
+      "profileId": "data-analyst",
+      "mode": "manual_input",
+      "pattern": "jd_alignment",
+      "question": "how should I explain that I fit this data analyst JD?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "jd_alignment",
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "DA-006",
+      "profileId": "data-analyst",
+      "mode": "what_to_answer",
+      "pattern": "followup",
+      "transcript": "Interviewer: You mentioned a sales dashboard.\nCandidate: Yes.\nInterviewer: What insights did it provide?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "follow_up",
+      "critical": false,
+      "followUpTarget": "dashboard",
+      "noHallucinationWatch": false
+    },
+    {
+      "testId": "DA-007",
+      "profileId": "data-analyst",
+      "mode": "manual_input",
+      "pattern": "metrics_manual",
+      "question": "what metrics have I worked with?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "isFollowUp": false,
+      "noHallucinationWatch": true,
+      "critical": false
+    },
+    {
+      "testId": "DA-008",
+      "profileId": "data-analyst",
+      "mode": "what_to_answer",
+      "pattern": "negotiation",
+      "transcript": "Interviewer: What salary are you expecting for this analyst position?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [
+        "negotiation"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "negotiation",
+      "personaNoInvention": false,
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "DA-009",
+      "profileId": "data-analyst",
+      "mode": "manual_input",
+      "pattern": "unknown",
+      "question": "what was the exact revenue increase from my dashboard project?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "missingInfo": "exact revenue increase",
+      "expectedLayers": [],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "mustAdmitMissing": true,
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "DA-010",
+      "profileId": "data-analyst",
+      "mode": "manual_input",
+      "pattern": "regression_projects",
+      "question": "what are my projects?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [
+        "ABTest-Framework",
+        "SQL-Copilot"
+      ],
+      "forbiddenFacts": [
+        "I have your background loaded as an AI and Full Stack Engineer Intern",
+        "Full Stack Engineer Intern"
+      ],
+      "expectedLayers": [
+        "resume",
+        "projects"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": true
+    },
+    {
+      "testId": "SRE-001",
+      "profileId": "devops-sre",
+      "mode": "manual_input",
+      "pattern": "identity_manual",
+      "question": "what is my name?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [
+        "Kwame Osei"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant",
+        "Natively"
+      ],
+      "expectedLayers": [
+        "stable_identity",
+        "resume"
+      ],
+      "excludedLayers": [
+        "jd",
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": true
+    },
+    {
+      "testId": "SRE-002",
+      "profileId": "devops-sre",
+      "mode": "what_to_answer",
+      "pattern": "interviewer_intro",
+      "transcript": "Interviewer: Introduce yourself for this SRE role.",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [
+        "Kwame Osei"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant"
+      ],
+      "expectedLayers": [
+        "stable_identity",
+        "resume"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": false
+    },
+    {
+      "testId": "SRE-003",
+      "profileId": "devops-sre",
+      "mode": "manual_input",
+      "pattern": "projects_manual",
+      "question": "what DevOps projects have I worked on?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [
+        "ChaosMonkey-Pro"
+      ],
+      "anyOfFacts": [
+        "ChaosMonkey-Pro",
+        "SRE-Dashboard"
+      ],
+      "forbiddenFacts": [
+        "I have your background loaded",
+        "Full Stack Engineer Intern"
+      ],
+      "expectedLayers": [
+        "resume",
+        "projects"
+      ],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false
+    },
+    {
+      "testId": "SRE-004",
+      "profileId": "devops-sre",
+      "mode": "what_to_answer",
+      "pattern": "behavioral",
+      "transcript": "Interviewer: Tell me about a time you handled a production incident.",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [],
+      "forbiddenFacts": [
+        "I have your background loaded"
+      ],
+      "expectedLayers": [],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "behavioral",
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "SRE-005",
+      "profileId": "devops-sre",
+      "mode": "manual_input",
+      "pattern": "jd_alignment",
+      "question": "how do my skills match this SRE JD?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "jd_alignment",
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "SRE-006",
+      "profileId": "devops-sre",
+      "mode": "what_to_answer",
+      "pattern": "skills",
+      "transcript": "Interviewer: Which monitoring or deployment tools have you used?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "anyOfFacts": [
+        "Kubernetes",
+        "Terraform",
+        "Go",
+        "Python",
+        "Prometheus",
+        "Grafana",
+        "AWS",
+        "Chaos Engineering"
+      ],
+      "forbiddenFacts": [],
+      "expectedLayers": [
+        "resume",
+        "skills"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false,
+      "noHallucinationWatch": false
+    },
+    {
+      "testId": "SRE-007",
+      "profileId": "devops-sre",
+      "mode": "what_to_answer",
+      "pattern": "follow_up",
+      "transcript": "Interviewer: You mentioned Kubernetes deployment work.\nCandidate: Yes.\nInterviewer: How did you manage rollbacks?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [
+        "live_transcript"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "follow_up",
+      "followUpTarget": "Kubernetes",
+      "isFollowUp": true,
+      "noHallucinationWatch": true,
+      "critical": false
+    },
+    {
+      "testId": "SRE-008",
+      "profileId": "devops-sre",
+      "mode": "manual_input",
+      "pattern": "negotiation",
+      "question": "how should I answer expected salary for this SRE role?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [
+        "negotiation"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "negotiation",
+      "personaNoInvention": false,
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "SRE-009",
+      "profileId": "devops-sre",
+      "mode": "manual_input",
+      "pattern": "unknown",
+      "question": "what was the exact uptime percentage I maintained?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "missingInfo": "exact uptime percentage",
+      "expectedLayers": [],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "mustAdmitMissing": true,
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "SRE-010",
+      "profileId": "devops-sre",
+      "mode": "what_to_answer",
+      "pattern": "context_isolation",
+      "transcript": "Interviewer: What is your name before we start the infra round?",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [
+        "Kwame Osei"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant",
+        "salary",
+        "$"
+      ],
+      "expectedLayers": [
+        "stable_identity"
+      ],
+      "excludedLayers": [
+        "jd",
+        "negotiation",
+        "assistant_identity",
+        "meeting_mode"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": true,
+      "isolationCheck": true
+    },
+    {
+      "testId": "CSM-001",
+      "profileId": "customer-success-manager",
+      "mode": "manual_input",
+      "pattern": "identity_manual",
+      "question": "what is my name?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [
+        "Aisha Patel"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant",
+        "Natively"
+      ],
+      "expectedLayers": [
+        "stable_identity",
+        "resume"
+      ],
+      "excludedLayers": [
+        "jd",
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": true
+    },
+    {
+      "testId": "CSM-002",
+      "profileId": "customer-success-manager",
+      "mode": "what_to_answer",
+      "pattern": "interviewer_intro",
+      "transcript": "Interviewer: Tell me about yourself from a customer success perspective.",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [
+        "Aisha Patel"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant"
+      ],
+      "expectedLayers": [
+        "stable_identity",
+        "resume"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": false
+    },
+    {
+      "testId": "CSM-003",
+      "profileId": "customer-success-manager",
+      "mode": "manual_input",
+      "pattern": "experience_manual",
+      "question": "what customer success experience do I have?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [
+        "Slack"
+      ],
+      "forbiddenFacts": [
+        "I have your background loaded",
+        "Full Stack Engineer Intern"
+      ],
+      "expectedLayers": [
+        "resume",
+        "experience"
+      ],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false
+    },
+    {
+      "testId": "CSM-004",
+      "profileId": "customer-success-manager",
+      "mode": "what_to_answer",
+      "pattern": "behavioral",
+      "transcript": "Interviewer: How do you handle an unhappy customer?",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [],
+      "forbiddenFacts": [
+        "I have your background loaded"
+      ],
+      "expectedLayers": [],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "behavioral",
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "CSM-005",
+      "profileId": "customer-success-manager",
+      "mode": "manual_input",
+      "pattern": "jd_alignment",
+      "question": "how should I explain my fit for this customer success JD?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "jd_alignment",
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "CSM-006",
+      "profileId": "customer-success-manager",
+      "mode": "what_to_answer",
+      "pattern": "skills",
+      "transcript": "Interviewer: What customer support or CRM tools have you used?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "anyOfFacts": [
+        "Gainsight",
+        "Salesforce",
+        "Churn.io",
+        "Executive presentation",
+        "QBR",
+        "Renewal negotiation",
+        "Technical aptitude"
+      ],
+      "forbiddenFacts": [],
+      "expectedLayers": [
+        "resume",
+        "skills"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false,
+      "noHallucinationWatch": false
+    },
+    {
+      "testId": "CSM-007",
+      "profileId": "customer-success-manager",
+      "mode": "what_to_answer",
+      "pattern": "follow_up",
+      "transcript": "Interviewer: You mentioned improving onboarding for customers.\nCandidate: Yes.\nInterviewer: What did you change in the onboarding process?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [
+        "live_transcript"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "follow_up",
+      "followUpTarget": "onboarding",
+      "isFollowUp": true,
+      "noHallucinationWatch": true,
+      "critical": false
+    },
+    {
+      "testId": "CSM-008",
+      "profileId": "customer-success-manager",
+      "mode": "what_to_answer",
+      "pattern": "negotiation",
+      "transcript": "Interviewer: What compensation are you looking for?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [
+        "negotiation"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "negotiation",
+      "personaNoInvention": false,
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "CSM-009",
+      "profileId": "customer-success-manager",
+      "mode": "manual_input",
+      "pattern": "unknown",
+      "question": "what was my exact churn reduction percentage?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "missingInfo": "exact churn reduction",
+      "expectedLayers": [],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "mustAdmitMissing": true,
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "CSM-010",
+      "profileId": "customer-success-manager",
+      "mode": "what_to_answer",
+      "pattern": "context_isolation",
+      "transcript": "Interviewer: Please confirm your name before the customer success case round.",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [
+        "Aisha Patel"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant",
+        "salary",
+        "$"
+      ],
+      "expectedLayers": [
+        "stable_identity"
+      ],
+      "excludedLayers": [
+        "jd",
+        "negotiation",
+        "assistant_identity",
+        "meeting_mode"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": true,
+      "isolationCheck": true
+    },
+    {
+      "testId": "CY-001",
+      "profileId": "cybersecurity-analyst",
+      "mode": "manual_input",
+      "pattern": "identity_manual",
+      "question": "what is my name?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [
+        "David Okonkwo"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant",
+        "Natively"
+      ],
+      "expectedLayers": [
+        "stable_identity",
+        "resume"
+      ],
+      "excludedLayers": [
+        "jd",
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": true
+    },
+    {
+      "testId": "CY-002",
+      "profileId": "cybersecurity-analyst",
+      "mode": "what_to_answer",
+      "pattern": "interviewer_intro",
+      "transcript": "Interviewer: Introduce yourself for this cybersecurity analyst role.",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [
+        "David Okonkwo"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant"
+      ],
+      "expectedLayers": [
+        "stable_identity",
+        "resume"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": false
+    },
+    {
+      "testId": "CY-003",
+      "profileId": "cybersecurity-analyst",
+      "mode": "manual_input",
+      "pattern": "projects_manual",
+      "question": "what cybersecurity projects have I worked on?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [
+        "ThreatHunter-Playbook"
+      ],
+      "anyOfFacts": [
+        "ThreatHunter-Playbook",
+        "PhishDetect"
+      ],
+      "forbiddenFacts": [
+        "I have your background loaded",
+        "Full Stack Engineer Intern"
+      ],
+      "expectedLayers": [
+        "resume",
+        "projects"
+      ],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false
+    },
+    {
+      "testId": "CY-004",
+      "profileId": "cybersecurity-analyst",
+      "mode": "what_to_answer",
+      "pattern": "approach",
+      "transcript": "Interviewer: How would you investigate a suspicious login alert?",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [],
+      "forbiddenFacts": [
+        "I have your background loaded"
+      ],
+      "expectedLayers": [],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "CY-005",
+      "profileId": "cybersecurity-analyst",
+      "mode": "manual_input",
+      "pattern": "jd_alignment",
+      "question": "how do my skills fit this cyber analyst JD?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "jd_alignment",
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "CY-006",
+      "profileId": "cybersecurity-analyst",
+      "mode": "what_to_answer",
+      "pattern": "skills",
+      "transcript": "Interviewer: What security tools have you used?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "anyOfFacts": [
+        "SIEM",
+        "EDR",
+        "Threat Hunting",
+        "Incident Response",
+        "Splunk",
+        "CrowdStrike",
+        "Python",
+        "YARA",
+        "MITRE ATT&CK"
+      ],
+      "forbiddenFacts": [],
+      "expectedLayers": [
+        "resume",
+        "skills"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false,
+      "noHallucinationWatch": false
+    },
+    {
+      "testId": "CY-007",
+      "profileId": "cybersecurity-analyst",
+      "mode": "what_to_answer",
+      "pattern": "follow_up",
+      "transcript": "Interviewer: You mentioned a log analysis project.\nCandidate: Yes.\nInterviewer: What kind of anomalies did you detect?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [
+        "live_transcript"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "follow_up",
+      "followUpTarget": "log analysis",
+      "isFollowUp": true,
+      "noHallucinationWatch": true,
+      "critical": false
+    },
+    {
+      "testId": "CY-008",
+      "profileId": "cybersecurity-analyst",
+      "mode": "manual_input",
+      "pattern": "negotiation",
+      "question": "what should I say for expected salary in this cyber analyst interview?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [
+        "negotiation"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "negotiation",
+      "personaNoInvention": false,
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "CY-009",
+      "profileId": "cybersecurity-analyst",
+      "mode": "manual_input",
+      "pattern": "unknown",
+      "question": "what was my exact SOC ticket closure rate?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "missingInfo": "exact SOC ticket closure rate",
+      "expectedLayers": [],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "mustAdmitMissing": true,
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "CY-010",
+      "profileId": "cybersecurity-analyst",
+      "mode": "what_to_answer",
+      "pattern": "context_isolation",
+      "transcript": "Interviewer: What is your name before we begin the security round?",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [
+        "David Okonkwo"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant",
+        "salary",
+        "$"
+      ],
+      "expectedLayers": [
+        "stable_identity"
+      ],
+      "excludedLayers": [
+        "jd",
+        "negotiation",
+        "assistant_identity",
+        "meeting_mode"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": true,
+      "isolationCheck": true
+    },
+    {
+      "testId": "FND-001",
+      "profileId": "founder-ceo-bd",
+      "mode": "manual_input",
+      "pattern": "identity_manual",
+      "question": "what is my name?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [
+        "Michael Zhang"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant",
+        "Natively"
+      ],
+      "expectedLayers": [
+        "stable_identity",
+        "resume"
+      ],
+      "excludedLayers": [
+        "jd",
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": true
+    },
+    {
+      "testId": "FND-002",
+      "profileId": "founder-ceo-bd",
+      "mode": "what_to_answer",
+      "pattern": "interviewer_intro",
+      "transcript": "Interviewer: Tell me about yourself and what you are building.",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [
+        "Michael Zhang"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant"
+      ],
+      "expectedLayers": [
+        "stable_identity",
+        "resume"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": false
+    },
+    {
+      "testId": "FND-003",
+      "profileId": "founder-ceo-bd",
+      "mode": "manual_input",
+      "pattern": "projects_manual",
+      "question": "what startups or projects have I built?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [
+        "Nexus AI"
+      ],
+      "anyOfFacts": [
+        "Nexus AI",
+        "StackIQ"
+      ],
+      "forbiddenFacts": [
+        "I have your background loaded",
+        "Full Stack Engineer Intern"
+      ],
+      "expectedLayers": [
+        "resume",
+        "projects"
+      ],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false
+    },
+    {
+      "testId": "FND-004",
+      "profileId": "founder-ceo-bd",
+      "mode": "what_to_answer",
+      "pattern": "approach",
+      "transcript": "Interviewer: How do you approach partnerships or business development?",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [],
+      "forbiddenFacts": [
+        "I have your background loaded"
+      ],
+      "expectedLayers": [],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "FND-005",
+      "profileId": "founder-ceo-bd",
+      "mode": "manual_input",
+      "pattern": "jd_alignment",
+      "question": "how do I fit this business development role?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [],
+      "excludedLayers": [
+        "negotiation",
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "jd_alignment",
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "FND-006",
+      "profileId": "founder-ceo-bd",
+      "mode": "what_to_answer",
+      "pattern": "metrics_guard",
+      "transcript": "Interviewer: What traction or growth metrics can you share?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "FND-007",
+      "profileId": "founder-ceo-bd",
+      "mode": "what_to_answer",
+      "pattern": "follow_up",
+      "transcript": "Interviewer: You mentioned launching a SaaS product.\nCandidate: Yes.\nInterviewer: How did you get your first customers?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [
+        "live_transcript"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "follow_up",
+      "followUpTarget": "SaaS",
+      "isFollowUp": true,
+      "noHallucinationWatch": true,
+      "critical": false
+    },
+    {
+      "testId": "FND-008",
+      "profileId": "founder-ceo-bd",
+      "mode": "what_to_answer",
+      "pattern": "negotiation",
+      "transcript": "Interviewer: What kind of compensation or equity structure are you expecting?",
+      "expectedPerspective": "first_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "expectedLayers": [
+        "negotiation"
+      ],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "negotiation",
+      "personaNoInvention": false,
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "FND-009",
+      "profileId": "founder-ceo-bd",
+      "mode": "manual_input",
+      "pattern": "unknown",
+      "question": "what was my exact ARR last quarter?",
+      "expectedPerspective": "second_person",
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "missingInfo": "exact ARR",
+      "expectedLayers": [],
+      "excludedLayers": [
+        "assistant_identity"
+      ],
+      "expectedIntentLike": "profile_detail",
+      "mustAdmitMissing": true,
+      "critical": false,
+      "noHallucinationWatch": true
+    },
+    {
+      "testId": "FND-010",
+      "profileId": "founder-ceo-bd",
+      "mode": "what_to_answer",
+      "pattern": "context_isolation",
+      "transcript": "Interviewer: Can you confirm your name before we discuss your company?",
+      "expectedPerspective": "first_person",
+      "expectedSpeaker": "interviewer",
+      "requiredFacts": [
+        "Michael Zhang"
+      ],
+      "forbiddenFacts": [
+        "I'm Natively",
+        "AI assistant",
+        "salary",
+        "$"
+      ],
+      "expectedLayers": [
+        "stable_identity"
+      ],
+      "excludedLayers": [
+        "jd",
+        "negotiation",
+        "assistant_identity",
+        "meeting_mode"
+      ],
+      "expectedIntentLike": "identity",
+      "critical": true,
+      "isolationCheck": true
+    }
+  ]
+}

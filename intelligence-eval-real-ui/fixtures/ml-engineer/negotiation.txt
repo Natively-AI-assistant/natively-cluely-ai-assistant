@@ -1,0 +1,7 @@
+NEGOTIATION CONTEXT
+Target salary: $310000
+Minimum acceptable: $280000
+Current salary: $275000
+Signing bonus target: $50000
+Equity: 0.08% with 4 year vest, 1 year cliff
+Priorities: research freedom, equity, conference budget

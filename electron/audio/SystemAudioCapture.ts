@@ -31,26 +31,48 @@ export class SystemAudioCapture extends EventEmitter {
         }
     }
 
+    /**
+     * The EMITTED sample rate handed to STT — canonical 16000 after the DSP
+     * resampler (or the native rate if resampling was unavailable). Declare THIS
+     * to STT providers. (Pre-resampler this returned the native rate; the DSP now
+     * normalizes to 16kHz so providers receive one consistent, anti-aliased rate.)
+     */
     public getSampleRate(): number {
         if (this.monitor) {
             // NAPI-RS V3 auto-converts Rust snake_case to camelCase
             if (typeof this.monitor.getSampleRate === 'function') {
-                const nativeRate = this.monitor.getSampleRate();
-                if (nativeRate !== this.detectedSampleRate) {
-                    console.log(`[SystemAudioCapture] Real native rate: ${nativeRate}`);
-                    this.detectedSampleRate = nativeRate;
+                const emittedRate = this.monitor.getSampleRate();
+                if (emittedRate !== this.detectedSampleRate) {
+                    console.log(`[SystemAudioCapture] Emitted STT rate: ${emittedRate}`);
+                    this.detectedSampleRate = emittedRate;
                 }
-                return nativeRate;
+                return emittedRate;
             } else if (typeof this.monitor.get_sample_rate === 'function') {
-                const nativeRate = this.monitor.get_sample_rate();
-                if (nativeRate !== this.detectedSampleRate) {
-                    console.log(`[SystemAudioCapture] Real native rate: ${nativeRate}`);
-                    this.detectedSampleRate = nativeRate;
+                const emittedRate = this.monitor.get_sample_rate();
+                if (emittedRate !== this.detectedSampleRate) {
+                    console.log(`[SystemAudioCapture] Emitted STT rate: ${emittedRate}`);
+                    this.detectedSampleRate = emittedRate;
                 }
-                return nativeRate;
+                return emittedRate;
             }
         }
         return this.detectedSampleRate;
+    }
+
+    /**
+     * NATIVE hardware sample rate (e.g. 48000) — diagnostics only, NOT the rate
+     * of emitted bytes. Returns 0 if unavailable.
+     */
+    public getNativeSampleRate(): number {
+        if (!this.monitor) return 0;
+        try {
+            if (typeof this.monitor.getNativeSampleRate === 'function') {
+                return this.monitor.getNativeSampleRate();
+            }
+        } catch (e) {
+            console.warn('[SystemAudioCapture] getNativeSampleRate failed:', e);
+        }
+        return 0;
     }
 
     /**

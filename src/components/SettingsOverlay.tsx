@@ -1272,13 +1272,17 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     }, []);
 
     // Use the native mic test path so device IDs stay consistent with the meeting runtime.
+    // Guard: only start when selectedInput is populated (loadDevices sets it after device enum).
+    // No else branch: cleanup in the return function handles stopAudioTest when this effect
+    // unmounts (tab switch, settings close, selectedInput change). Avoids redundant stop calls
+    // on every render where activeTab !== 'audio'.
     useEffect(() => {
-        if (isOpen && activeTab === 'audio') {
+        if (isOpen && activeTab === 'audio' && selectedInput) {
             const unsubscribe = window.electronAPI?.onAudioTestLevel?.((level) => {
                 setMicLevel(Math.max(0, Math.min(100, level * 100)));
             });
 
-            window.electronAPI?.startAudioTest(selectedInput || undefined).catch((error) => {
+            window.electronAPI?.startAudioTest(selectedInput).catch((error) => {
                 console.error("Error starting native microphone test:", error);
                 setMicLevel(0);
             });
@@ -1290,12 +1294,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                 });
                 setMicLevel(0);
             };
-        } else {
-            setMicLevel(0);
-            window.electronAPI?.stopAudioTest?.().catch((error) => {
-                console.error("Error stopping native microphone test:", error);
-            });
         }
+        // Effect didn't run (activeTab !== 'audio' or isOpen === false or selectedInput empty).
+        // Reset meter but do NOT call stopAudioTest — cleanup above handles it when test was running.
+        setMicLevel(0);
     }, [isOpen, activeTab, selectedInput]);
 
     return (

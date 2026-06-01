@@ -2,7 +2,16 @@
 /* eslint-disable */
 export declare class MicrophoneCapture {
   constructor(deviceId?: string | undefined | null)
+  /**
+   * EMITTED sample rate — the rate of the PCM handed to STT (16000 when the
+   * resampler is active). Declare THIS to STT providers.
+   */
   getSampleRate(): number
+  /**
+   * NATIVE hardware rate (e.g. 24000 for AirPods HFP, 48000 built-in) — for
+   * diagnostics and HFP/Bluetooth-degradation detection only.
+   */
+  getNativeSampleRate(): number
   start(callback: ((err: Error | null, arg: Buffer) => any), onSpeechEnded?: (((err: Error | null, arg: boolean) => any)) | undefined | null): void
   stop(): void
 }
@@ -50,7 +59,16 @@ export declare class StealthKeyboardTap {
 
 export declare class SystemAudioCapture {
   constructor(deviceId?: string | undefined | null)
+  /**
+   * EMITTED sample rate — the rate of the PCM handed to STT (16000 when the
+   * resampler is active). This is what callers must declare to STT providers.
+   */
   getSampleRate(): number
+  /**
+   * NATIVE hardware sample rate (e.g. 48000) — for diagnostics and
+   * HFP/Bluetooth-degradation detection only. NOT the rate of emitted bytes.
+   */
+  getNativeSampleRate(): number
   start(callback: ((err: Error | null, arg: Buffer) => any), onSpeechEnded?: (((err: Error | null, arg: boolean) => any)) | undefined | null): void
   stop(): void
 }

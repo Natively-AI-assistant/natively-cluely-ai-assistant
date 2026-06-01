@@ -1,13 +1,19 @@
 import { IEmbeddingProvider } from './IEmbeddingProvider';
+import { embeddingSpaceKey } from '../embeddingSpace';
 
 export class OllamaEmbeddingProvider implements IEmbeddingProvider {
   readonly name = 'ollama';
   readonly dimensions = 768; // nomic-embed-text outputs 768
+  readonly model: string;
+  readonly space: string;
 
   constructor(
     private baseUrl = 'http://localhost:11434',
-    private model = 'nomic-embed-text'
-  ) {}
+    model = 'nomic-embed-text'
+  ) {
+    this.model = model;
+    this.space = embeddingSpaceKey({ name: this.name, model: this.model, dimensions: this.dimensions });
+  }
 
   async isAvailable(): Promise<boolean> {
     try {

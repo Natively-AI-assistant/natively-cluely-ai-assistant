@@ -9,7 +9,8 @@ import {
     AnswerLLM, AssistLLM, BrainstormLLM, ClarifyLLM, CodeHintLLM, FollowUpLLM, RecapLLM,
     FollowUpQuestionsLLM, WhatToAnswerLLM,
     prepareTranscriptForWhatToAnswer, buildTemporalContext,
-    AssistantResponse as LLMAssistantResponse, classifyIntent, planNextAssistantAction, PlannerDecision
+    AssistantResponse as LLMAssistantResponse, classifyIntent, planNextAssistantAction, PlannerDecision,
+    extractLatestQuestion, toCandidateFraming
 } from './llm';
 import { DynamicActionEngine } from './services/dynamic-actions/DynamicActionEngine';
 import { DynamicAction } from './services/dynamic-actions/DynamicAction';
@@ -454,7 +455,8 @@ export class IntelligenceEngine extends EventEmitter {
      * interim interviewer speech, and recent assistant responses.
      */
     private buildPreparedTranscriptContext(lastSeconds: number = 180): string {
-        return assemblePreparedTranscriptContext(this.session, lastSeconds);
+        // session implements PreparedContextSession (getContextWithInterim + getAssistantResponseHistory)
+        return assemblePreparedTranscriptContext(this.session as any, lastSeconds);
     }
 
     /**
@@ -606,6 +608,103 @@ export class IntelligenceEngine extends EventEmitter {
                 this.session.getAssistantResponseHistory().length
             );
 
+            // ── Candidate-profile grounding for interviewer questions ─────────
+            // The "What to answer?" path streams with ignoreKnowledgeMode=true, so
+            // the KnowledgeOrchestrator never runs here — which is why an
+            // interviewer's "tell me about your projects" used to be answered
+            // WITHOUT the loaded resume. Bridge that gap deterministically:
+            //   1. Extract the latest meaningful interviewer question (no LLM).
+            //   2. When the question is about the candidate AND a typed question
+            //      wasn't supplied, run the orchestrator on the EXTRACTED text to
+            //      get its candidate contextBlock (projects/experience/skills).
+            // We take only the FACTS (contextBlock); the orchestrator's
+            // systemPromptInjection (first-person persona) is intentionally
+            // ignored so it can't fight UNIVERSAL_WHAT_TO_ANSWER_PROMPT's voice
+            // rules. Negotiation/coaching are NOT pulled here — salary stays on
+            // its own gated channel. Fully dynamic; resume-derived.
+            let candidateProfile = '';
+            try {
+                const orchestrator = this.llmHelper.getKnowledgeOrchestrator?.();
+                if (orchestrator?.isKnowledgeMode?.()) {
+                    const extracted = extractLatestQuestion(transcriptTurns);
+                    // Only ground question types that resolve to the candidate's
+                    // own plain facts. jd_alignment/company questions are
+                    // deliberately EXCLUDED: they classify as COMPANY_RESEARCH in
+                    // the orchestrator (factualRecall=false, so they'd be rejected
+                    // by the gate below anyway) and could trigger a live
+                    // company-research LLM call on this latency-critical path. The
+                    // UNIVERSAL prompt + active-mode context already handle role
+                    // fit; grounding adds nothing there.
+                    const groundable = extracted.detectedSpeaker === 'interviewer'
+                        && extracted.confidence >= 0.6
+                        && (extracted.questionType === 'identity'
+                            || extracted.questionType === 'profile_detail'
+                            || extracted.questionType === 'behavioral'
+                            || extracted.questionType === 'follow_up');
+                    if (groundable && !question) {
+                        // The orchestrator routes on the candidate's first-person
+                        // framing ("my name/projects"); the interviewer says
+                        // "your", so normalize before lookup. Display/answer text
+                        // is unaffected — this only fetches grounding facts.
+                        // For a follow-up ("can you explain that in more detail?")
+                        // the question itself has no topic noun — append the
+                        // resolved target (e.g. the project named a turn ago) so
+                        // the orchestrator grounds on the RIGHT item, not a blank.
+                        let lookupQ = toCandidateFraming(extracted.latestQuestion);
+                        if (extracted.isFollowUp && extracted.followUpTarget) {
+                            lookupQ = `Tell me about my ${extracted.followUpTarget}`;
+                        }
+                        const knowledge = await orchestrator.processQuestion(lookupQ);
+                        // factualRecall is the orchestrator's OWN signal that this
+                        // result is the candidate's plain facts (identity/projects/
+                        // skills/experience) and NOT the premium coaching layer. It
+                        // is explicitly false for NEGOTIATION intent (salary/comp),
+                        // so gating on it closes the leak the reviewer flagged: the
+                        // extractor's questionType and the orchestrator's intent
+                        // classifier can disagree, but a question that resolves to
+                        // NEGOTIATION inside processQuestion will have factualRecall
+                        // falsy and its salary block will NOT be pulled into the
+                        // live answer here.
+                        if (knowledge && knowledge.factualRecall === true && !knowledge.liveNegotiationResponse) {
+                            // PROFILE_DETAIL/identity-ambiguous → facts in contextBlock.
+                            // Direct identity (name/role) → orchestrator returns a
+                            // ready introResponse with empty contextBlock; wrap it as
+                            // a fact so the live answer can restate it in first person
+                            // ("My name is ...") instead of the manual second-person form.
+                            if (knowledge.contextBlock) {
+                                candidateProfile = knowledge.contextBlock;
+                            } else if (knowledge.isIntroQuestion && knowledge.introResponse) {
+                                candidateProfile = `<candidate_identity_fact>\n${knowledge.introResponse}\n</candidate_identity_fact>`;
+                            }
+                            // For an explicit name/intro ask, the grounded name is a
+                            // hard requirement, not optional colour. The WTA prompt's
+                            // NAME RULE is permissive ("open WITHOUT a name if none is
+                            // grounded") and the model otherwise drifts into a thematic
+                            // intro that omits the name even when it IS grounded. When
+                            // the extractor saw an identity question AND we have the
+                            // candidate's name, attach an explicit MUST-lead-with-name
+                            // directive so the answer opens with it. Derived purely
+                            // from grounded facts — no fixture/name hardcoding.
+                            if (candidateProfile && extracted.questionType === 'identity') {
+                                candidateProfile +=
+                                    `\n<answer_directive>\nThe interviewer asked the candidate to state their name / introduce themselves. ` +
+                                    `You MUST open the answer with the candidate's real name from the grounded identity fact above ` +
+                                    `(e.g. "I'm <Name>, ...") before any narrative. Do NOT omit the name; do NOT use the assistant's or creator's name.\n</answer_directive>`;
+                            }
+                            if (candidateProfile) {
+                                console.log('[IntelligenceEngine] Grounded what-to-answer in candidate profile', {
+                                    questionType: extracted.questionType,
+                                    isFollowUp: extracted.isFollowUp,
+                                    profileChars: candidateProfile.length,
+                                });
+                            }
+                        }
+                    }
+                }
+            } catch (groundErr: any) {
+                console.warn('[IntelligenceEngine] Profile grounding skipped:', groundErr?.message);
+            }
+
             const screenContext = options?.screenContext;
             console.log('[IntelligenceEngine] Temporal RAG', {
                 previousResponses: temporalContext.previousResponses.length,
@@ -622,7 +721,7 @@ export class IntelligenceEngine extends EventEmitter {
             // to properly terminate the network request when a new generation starts.
             // Note: options?.domContext is the optional browser DOM context captured via the companion
             // extension. When provided, it is securely routed through the sanitization pipeline.
-            const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePaths, screenContext, options?.promptInstruction, options?.activeSkill, options?.domContext);
+            const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePaths, screenContext, options?.promptInstruction, options?.activeSkill, options?.domContext, candidateProfile || undefined);
             let streamAborted = false;
 
             for await (const token of stream) {

@@ -284,6 +284,16 @@ export class ModelSelectorWindowHelper {
         }
     }
 
+    // Force-reapply the current content-protection state, bypassing the dedupe
+    // guard above. Called after app.dock.hide()/show() flips the macOS
+    // activation policy, which can reset the window's sharingType even though
+    // our in-memory flag is unchanged.
+    public reassertContentProtection(): void {
+        if (this.window && !this.window.isDestroyed()) {
+            this.window.setContentProtection(this.contentProtection);
+        }
+    }
+
     public syncActivationPolicy(): void {
         if (process.platform !== 'win32') return;
         if (!this.window || this.window.isDestroyed()) return;

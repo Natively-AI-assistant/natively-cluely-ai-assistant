@@ -1,0 +1,7 @@
+NEGOTIATION CONTEXT
+Target salary: $175000
+Minimum acceptable: $160000
+Current salary: $155000
+Signing bonus target: $15000
+Equity: 0.02% with 4 year vest, 1 year cliff
+Priorities: design autonomy, portfolio showcase opportunity, equity

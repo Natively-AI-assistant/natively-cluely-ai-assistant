@@ -1,0 +1,15 @@
+Staff SRE — Stripe (Remote (US))
+Level: staff
+
+Build the reliability foundations for Stripe's payment infrastructure. Our systems process billions daily with 99.999% uptime requirements.
+
+REQUIREMENTS
+- 7+ years SRE/DevOps
+- Kubernetes at scale
+- Observability expertise
+- Payment systems experience preferred
+- Go/Python
+
+TECHNOLOGIES: Kubernetes, Go, Prometheus, Terraform, AWS
+
+COMPENSATION: $240k-$300k

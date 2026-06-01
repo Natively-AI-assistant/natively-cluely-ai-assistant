@@ -1,10 +1,16 @@
 import { IEmbeddingProvider } from './IEmbeddingProvider';
+import { embeddingSpaceKey } from '../embeddingSpace';
 
 export class OpenAIEmbeddingProvider implements IEmbeddingProvider {
   readonly name = 'openai';
   readonly dimensions = 1536;
-  
-  constructor(private apiKey: string, private model = 'text-embedding-3-small') {}
+  readonly model: string;
+  readonly space: string;
+
+  constructor(private apiKey: string, model = 'text-embedding-3-small') {
+    this.model = model;
+    this.space = embeddingSpaceKey({ name: this.name, model: this.model, dimensions: this.dimensions });
+  }
 
   async isAvailable(): Promise<boolean> {
     // Fast check — just validate the key format and do a single test embed

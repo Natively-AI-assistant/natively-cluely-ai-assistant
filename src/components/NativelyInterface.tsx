@@ -4,17 +4,15 @@ import {
   ChevronDown,
   Code,
   Copy,
+  Check,
   HelpCircle,
   Image,
-  LayoutGrid,
   Lightbulb,
   MessageSquare,
   Mic,
-  Monitor,
   Pencil,
   PointerOff,
   RefreshCw,
-  ShieldCheck,
   SlidersHorizontal,
   X,
   Zap,
@@ -33,6 +31,45 @@ const ANSWER_PANEL_INTENTS = new Set([
   'follow_up_questions',
   'shorten',
 ]);
+
+const CardCopyButton = ({
+  text,
+  onCopy,
+  isLightTheme,
+  isModernTheme: _isModernTheme,
+  isGlassTheme: _isGlassTheme,
+}: {
+  text: string;
+  onCopy: (text: string) => void;
+  isLightTheme?: boolean;
+  isModernTheme?: boolean;
+  isGlassTheme?: boolean;
+}) => {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    onCopy(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const buttonColorClass = isLightTheme
+    ? 'text-slate-400 hover:text-slate-700'
+    : 'text-slate-500 hover:text-slate-200';
+
+  return (
+    <button
+      onClick={handleCopy}
+      className={`p-1 transition-colors duration-200 flex items-center justify-center ${buttonColorClass}`}
+      title="Copy answer"
+    >
+      {copied ? (
+        <Check className="w-3.5 h-3.5 text-emerald-400" />
+      ) : (
+        <Copy className="w-3.5 h-3.5" />
+      )}
+    </button>
+  );
+};
 
 import React, {
   startTransition as reactStartTransition,
@@ -64,8 +101,48 @@ import {
   commitStreamingFlush,
   shouldFlushPreviousStream,
 } from '../lib/streamingTokenQueue.mjs';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism-light';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import python from 'react-syntax-highlighter/dist/esm/languages/prism/python';
+import javascript from 'react-syntax-highlighter/dist/esm/languages/prism/javascript';
+import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript';
+import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash';
+import yaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml';
+import sql from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
+import go from 'react-syntax-highlighter/dist/esm/languages/prism/go';
+import rust from 'react-syntax-highlighter/dist/esm/languages/prism/rust';
+import cpp from 'react-syntax-highlighter/dist/esm/languages/prism/cpp';
+import csharp from 'react-syntax-highlighter/dist/esm/languages/prism/csharp';
+import css from 'react-syntax-highlighter/dist/esm/languages/prism/css';
+import json from 'react-syntax-highlighter/dist/esm/languages/prism/json';
+import markdown from 'react-syntax-highlighter/dist/esm/languages/prism/markdown';
+import markup from 'react-syntax-highlighter/dist/esm/languages/prism/markup';
+
+SyntaxHighlighter.registerLanguage('python', python);
+SyntaxHighlighter.registerLanguage('py', python);
+SyntaxHighlighter.registerLanguage('javascript', javascript);
+SyntaxHighlighter.registerLanguage('js', javascript);
+SyntaxHighlighter.registerLanguage('typescript', typescript);
+SyntaxHighlighter.registerLanguage('ts', typescript);
+SyntaxHighlighter.registerLanguage('bash', bash);
+SyntaxHighlighter.registerLanguage('sh', bash);
+SyntaxHighlighter.registerLanguage('shell', bash);
+SyntaxHighlighter.registerLanguage('yaml', yaml);
+SyntaxHighlighter.registerLanguage('yml', yaml);
+SyntaxHighlighter.registerLanguage('sql', sql);
+SyntaxHighlighter.registerLanguage('go', go);
+SyntaxHighlighter.registerLanguage('rust', rust);
+SyntaxHighlighter.registerLanguage('rs', rust);
+SyntaxHighlighter.registerLanguage('cpp', cpp);
+SyntaxHighlighter.registerLanguage('c++', cpp);
+SyntaxHighlighter.registerLanguage('csharp', csharp);
+SyntaxHighlighter.registerLanguage('cs', csharp);
+SyntaxHighlighter.registerLanguage('css', css);
+SyntaxHighlighter.registerLanguage('json', json);
+SyntaxHighlighter.registerLanguage('markdown', markdown);
+SyntaxHighlighter.registerLanguage('md', markdown);
+SyntaxHighlighter.registerLanguage('markup', markup);
+SyntaxHighlighter.registerLanguage('html', markup);
 // import { ModelSelector } from './ui/ModelSelector'; // REMOVED
 import 'katex/dist/katex.min.css';
 import DOMPurify from 'dompurify';
@@ -156,7 +233,59 @@ interface HighlightedCodeProps {
   codeHeaderTextClass: string;
   codeLineNumberColor: string;
   appearance: any;
+  isModernTheme?: boolean;
+  isGlassTheme?: boolean;
 }
+
+const mapLanguageForPrism = (lang: string, code: string): string => {
+  if (!lang) {
+    if (code.includes('def ') || code.includes('import ') || code.includes('elif ') || code.includes('print(') || code.includes(':\n')) {
+      return 'python';
+    }
+    return 'javascript';
+  }
+  const lower = lang.toLowerCase().trim();
+  const mapper: Record<string, string> = {
+    'js': 'javascript',
+    'javascript': 'javascript',
+    'ts': 'typescript',
+    'typescript': 'typescript',
+    'py': 'python',
+    'python': 'python',
+    'rb': 'ruby',
+    'ruby': 'ruby',
+    'sh': 'bash',
+    'bash': 'bash',
+    'shell': 'bash',
+    'zsh': 'bash',
+    'go': 'go',
+    'golang': 'go',
+    'rs': 'rust',
+    'rust': 'rust',
+    'cs': 'csharp',
+    'csharp': 'csharp',
+    'cpp': 'cpp',
+    'c++': 'cpp',
+    'h': 'cpp',
+    'c': 'c',
+    'java': 'java',
+    'kt': 'kotlin',
+    'kotlin': 'kotlin',
+    'swift': 'swift',
+    'yml': 'yaml',
+    'yaml': 'yaml',
+    'xml': 'markup',
+    'html': 'markup',
+    'svg': 'markup',
+    'json': 'json',
+    'css': 'css',
+    'md': 'markdown',
+    'markdown': 'markdown',
+    'sql': 'sql',
+  };
+  return mapper[lower] || lower;
+};
+
 const HighlightedCode = React.memo(
   function HighlightedCode({
     code,
@@ -167,16 +296,19 @@ const HighlightedCode = React.memo(
     codeHeaderTextClass,
     codeLineNumberColor,
     appearance,
+    isModernTheme,
+    isGlassTheme,
   }: HighlightedCodeProps) {
+    const isSpecialTheme = isModernTheme || isGlassTheme;
     return (
       <div
         className={`my-3 rounded-xl overflow-hidden border shadow-lg ${codeBlockClass}`}
-        style={appearance.codeBlockStyle}
+        style={isSpecialTheme ? undefined : appearance.codeBlockStyle}
       >
         {/* Minimalist Apple Header */}
         <div
           className={`px-3 py-1.5 border-b ${codeHeaderClass}`}
-          style={appearance.codeHeaderStyle}
+          style={isSpecialTheme ? undefined : appearance.codeHeaderStyle}
         >
           <span
             className={`text-[10px] uppercase tracking-widest font-semibold font-mono ${codeHeaderTextClass}`}
@@ -189,7 +321,7 @@ const HighlightedCode = React.memo(
                 spring tick, the block height jitters, and content below shifts. */}
         <div className="bg-transparent overflow-x-auto">
           <SyntaxHighlighter
-            language={lang}
+            language={mapLanguageForPrism(lang, code)}
             style={codeTheme}
             customStyle={HC_CUSTOM_STYLE}
             wrapLongLines={false}
@@ -211,7 +343,11 @@ const HighlightedCode = React.memo(
   (prev, next) =>
     // codeTheme / codeBlockClass / appearance are all theme-derived; checking
     // appearance (a useMemo'd ref) covers them transitively.
-    prev.code === next.code && prev.lang === next.lang && prev.appearance === next.appearance,
+    prev.code === next.code &&
+    prev.lang === next.lang &&
+    prev.appearance === next.appearance &&
+    prev.isModernTheme === next.isModernTheme &&
+    prev.isGlassTheme === next.isGlassTheme,
 );
 
 // PERF: MessageRow renders one chat-message bubble. Module-scope + React.memo
@@ -253,6 +389,8 @@ const getSttSummary = (
   userProvider: string,
   interviewerProvider: string,
   notConfigured: boolean,
+  userError?: string | null,
+  interviewerError?: string | null,
 ): { label: string; tone: 'ok' | 'warn' | 'error'; detail: string } => {
   if (notConfigured) {
     return {
@@ -262,10 +400,13 @@ const getSttSummary = (
     };
   }
   if (userStatus === 'failed' || interviewerStatus === 'failed') {
+    const parts: string[] = [];
+    if (userStatus === 'failed' && userError) parts.push(`Mic: ${userError}`);
+    if (interviewerStatus === 'failed' && interviewerError) parts.push(`System: ${interviewerError}`);
     return {
       label: 'STT needs attention',
       tone: 'error',
-      detail: `${formatProviderLabel(userProvider)} mic · ${formatProviderLabel(interviewerProvider)} system`,
+      detail: parts.length > 0 ? parts.join(' · ') : `${formatProviderLabel(userProvider)} mic · ${formatProviderLabel(interviewerProvider)} system`,
     };
   }
   if (userStatus === 'reconnecting' || interviewerStatus === 'reconnecting') {
@@ -302,14 +443,18 @@ const MessageRow = React.memo(
   function MessageRow({
     msg,
     isLightTheme,
-    appearance,
-    onCopy,
+    appearance: _appearance,
+    onCopy: _onCopy,
     renderMessageText,
   }: MessageRowProps) {
     const isCodeMsg = msg.role === 'system' && (msg.isCode || msg.text.includes('```'));
     // bubbleMaxClass: user bubbles are tighter; system + code use the same width.
     const bubbleMaxClass =
-      msg.role === 'user' ? 'max-w-[72%] px-[13.6px] py-[10.2px]' : 'max-w-[85%] px-4 py-3';
+      msg.role === 'user'
+        ? 'max-w-[72%] px-[13.6px] py-[10.2px]'
+        : msg.role === 'system'
+        ? 'max-w-[85%] p-0'
+        : 'max-w-[85%] px-4 py-3';
     return (
       <div className="w-full" {...(isCodeMsg ? { 'data-code-msg': 'true' } : {})}>
         <div
@@ -317,7 +462,7 @@ const MessageRow = React.memo(
         >
           <div
             className={`
-              ${bubbleMaxClass} text-[14px] leading-relaxed relative group whitespace-pre-wrap
+              ${bubbleMaxClass} text-[15px] leading-relaxed relative group whitespace-pre-wrap
               ${
                 msg.role === 'user'
                   ? isLightTheme
@@ -327,14 +472,12 @@ const MessageRow = React.memo(
               }
               ${
                 msg.role === 'system'
-                  ? msg.isStreaming
-                    ? `${subtleSurfaceClass} border rounded-[18px] overlay-text-primary font-normal`
-                    : 'overlay-text-primary font-normal'
+                  ? 'overlay-text-primary font-normal'
                   : ''
               }
-              ${msg.role === 'interviewer' ? 'overlay-text-muted italic pl-0 text-[13px]' : ''}
+              ${msg.role === 'interviewer' ? 'overlay-text-muted italic pl-0 text-[14px]' : ''}
             `}
-            style={msg.role === 'system' && msg.isStreaming ? appearance.subtleStyle : undefined}
+            style={undefined}
           >
             {msg.role === 'interviewer' && (
               <div className="flex items-center gap-1.5 mb-1 text-[10px] font-medium uppercase tracking-wider overlay-text-muted">
@@ -351,16 +494,6 @@ const MessageRow = React.memo(
                 <Image className="w-2.5 h-2.5" />
                 <span>Screenshot attached</span>
               </div>
-            )}
-            {msg.role === 'system' && !msg.isStreaming && (
-              <button
-                onClick={() => onCopy(msg.text)}
-                className="absolute top-2 right-2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive"
-                title="Copy to clipboard"
-                style={appearance.iconStyle}
-              >
-                <Copy className="w-3.5 h-3.5" />
-              </button>
             )}
             {renderMessageText(msg)}
           </div>
@@ -602,6 +735,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const voiceInputRef = useRef<string>(''); // Ref for capturing in async handlers
   const textInputRef = useRef<HTMLInputElement>(null); // Ref for input focus
   const isStealthRef = useRef<boolean>(false); // Tracks if the next expansion should be stealthy
+  // Startup-flicker guards (restored from 2de1b62, reverted by 18b139b):
+  //  - isExpandedEffectInitializedRef: skip the FIRST run of the visibility-sync
+  //    effect so the mount-time isExpanded=true does not fire showWindow() and
+  //    re-enter switchToOverlay() (double setBounds + focus flash) on top of the
+  //    swap main.startMeeting() already performed.
+  //  - hasRenderedExpandedRef: suppress the shell's scale/translate entry
+  //    animation on the first content render (it is the only moment the OS
+  //    window is simultaneously settling its bounds, so the transform tween
+  //    would otherwise read as a shake). Re-expansions after mount still animate.
+  const isExpandedEffectInitializedRef = useRef(false);
+  const hasRenderedExpandedRef = useRef(false);
   // CGEventTap stealth-typing state. Driven by IPC from main; ref shadows
   // the state so the captured-key handler can early-out without depending
   // on React's render cycle for stop signals.
@@ -754,8 +898,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     };
   }, []);
 
-  const codeTheme = isLightTheme ? oneLight : vscDarkPlus;
-  const codeLineNumberColor = isLightTheme ? 'rgba(15,23,42,0.35)' : 'rgba(255,255,255,0.2)';
+  const useDarkCodeTheme = !isLightTheme || isGlassTheme || isModernTheme;
+  const codeTheme = useDarkCodeTheme ? vscDarkPlus : oneLight;
+  const codeLineNumberColor = useDarkCodeTheme ? 'rgba(255,255,255,0.2)' : 'rgba(15,23,42,0.35)';
   const appearance = useMemo(
     () =>
       isGlassTheme
@@ -795,7 +940,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     () => ({
       standard: {
         p: ({ node, ...props }: any) => (
-          <p className="mb-2 last:mb-0 whitespace-pre-wrap" {...props} />
+          <p className="mb-[2.5px] last:mb-0 leading-[1.45] text-[14px] whitespace-pre-wrap" {...props} />
         ),
         strong: ({ node, ...props }: any) => (
           <strong className="font-bold opacity-100 overlay-text-strong" {...props} />
@@ -804,18 +949,43 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           <em className="italic opacity-90 overlay-text-secondary" {...props} />
         ),
         ul: ({ node, ...props }: any) => (
-          <ul className="list-disc ml-4 mb-2 space-y-1" {...props} />
+          <ul className="list-disc ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] text-[14px]" {...props} />
         ),
         ol: ({ node, ...props }: any) => (
-          <ol className="list-decimal ml-4 mb-2 space-y-1" {...props} />
+          <ol className="list-decimal ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] text-[14px]" {...props} />
         ),
-        li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
-        code: ({ node, ...props }: any) => (
-          <code
-            className={`overlay-inline-code-surface rounded px-1 py-0.5 text-xs font-mono ${isLightTheme ? 'text-slate-800' : ''}`}
-            {...props}
-          />
-        ),
+        li: ({ node, ...props }: any) => <li className="pl-1 mb-[2.5px] last:mb-0 leading-[1.45] text-[14px]" {...props} />,
+        code: ({ node, inline, className, children, ...props }: any) => {
+          const match = /language-(\w+)/.exec(className || '');
+          const isInline = inline ?? !match;
+          if (!isInline) {
+            const lang = match ? match[1] : '';
+            const code = String(children).replace(/\n$/, '');
+            return (
+              <HighlightedCode
+                code={code}
+                lang={lang}
+                isLightTheme={isLightTheme}
+                codeTheme={codeTheme}
+                codeBlockClass={codeBlockClass}
+                codeHeaderClass={codeHeaderClass}
+                codeHeaderTextClass={codeHeaderTextClass}
+                codeLineNumberColor={codeLineNumberColor}
+                appearance={appearance}
+                isModernTheme={isModernTheme}
+                isGlassTheme={isGlassTheme}
+              />
+            );
+          }
+          return (
+            <code
+              className={`overlay-inline-code-surface rounded px-1 py-0.5 text-[13px] font-mono ${isLightTheme ? 'text-slate-800' : ''}`}
+              {...props}
+            >
+              {children}
+            </code>
+          );
+        },
         a: ({ node, ...props }: any) => (
           <a
             className="underline hover:opacity-80"
@@ -827,45 +997,45 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       },
       codeText: {
         p: ({ node, ...props }: any) => (
-          <p className="mb-2 last:mb-0 whitespace-pre-wrap" {...props} />
+          <p className="mb-[2.5px] last:mb-0 leading-[1.45] whitespace-pre-wrap text-[14px]" {...props} />
         ),
         strong: ({ node, ...props }: any) => (
-          <strong className="font-bold overlay-text-strong" {...props} />
+          <strong className="font-bold opacity-100 overlay-text-strong" {...props} />
         ),
         em: ({ node, ...props }: any) => (
           <em className="italic overlay-text-secondary" {...props} />
         ),
         ul: ({ node, ...props }: any) => (
-          <ul className="list-disc ml-4 mb-2 space-y-1" {...props} />
+          <ul className="list-disc ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] text-[14px]" {...props} />
         ),
         ol: ({ node, ...props }: any) => (
-          <ol className="list-decimal ml-4 mb-2 space-y-1" {...props} />
+          <ol className="list-decimal ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] text-[14px]" {...props} />
         ),
-        li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
+        li: ({ node, ...props }: any) => <li className="pl-1 mb-[2.5px] last:mb-0 leading-[1.45] text-[14px]" {...props} />,
         h1: ({ node, ...props }: any) => (
-          <h1 className="text-lg font-bold mb-2 mt-3 overlay-text-strong" {...props} />
+          <h1 className="text-[15px] font-bold mb-[2.5px] mt-1.5 leading-[1.45] overlay-text-strong uppercase tracking-wide" {...props} />
         ),
         h2: ({ node, ...props }: any) => (
-          <h2 className="text-base font-bold mb-2 mt-3 overlay-text-strong" {...props} />
+          <h2 className="text-[13px] font-bold mb-[2.5px] mt-1 leading-[1.45] overlay-text-strong uppercase tracking-wide" {...props} />
         ),
         h3: ({ node, ...props }: any) => (
-          <h3 className="text-sm font-bold mb-1 mt-2 overlay-text-primary" {...props} />
+          <h3 className="text-[13px] font-semibold mb-[2.5px] mt-1 leading-[1.45] overlay-text-primary" {...props} />
         ),
         code: ({ node, ...props }: any) => (
           <code
-            className={`overlay-inline-code-surface rounded px-1 py-0.5 text-xs font-mono whitespace-pre-wrap ${isLightTheme ? 'text-violet-700' : 'text-purple-200'}`}
+            className="overlay-inline-code-surface rounded px-1 py-0.5 text-[13px] font-mono whitespace-pre-wrap"
             {...props}
           />
         ),
         blockquote: ({ node, ...props }: any) => (
           <blockquote
-            className={`border-l-2 pl-3 italic my-2 ${isLightTheme ? 'border-violet-500/30 text-slate-600' : 'border-purple-500/50 text-slate-400'}`}
+            className={`border-l-2 pl-3 italic my-1 ${isLightTheme ? 'border-slate-300 text-slate-600' : 'border-slate-700 text-slate-400'}`}
             {...props}
           />
         ),
         a: ({ node, ...props }: any) => (
           <a
-            className={`hover:underline ${isLightTheme ? 'text-blue-600 hover:text-blue-700' : 'text-blue-400 hover:text-blue-300'}`}
+            className="hover:underline text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
             target="_blank"
             rel="noopener noreferrer"
             {...props}
@@ -873,59 +1043,60 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         ),
       },
       whatToAnswerText: {
-        p: ({ node, ...props }: any) => <p className="mb-2 last:mb-0" {...props} />,
+        p: ({ node, ...props }: any) => <p className="mb-[2.5px] last:mb-0 leading-[1.45] text-[14px]" {...props} />,
         strong: ({ node, ...props }: any) => (
           <strong
-            className={`font-bold ${isLightTheme ? 'text-emerald-700' : 'text-emerald-100'}`}
+            className="font-bold opacity-100 overlay-text-strong"
             {...props}
           />
         ),
         em: ({ node, ...props }: any) => (
           <em
-            className={`italic ${isLightTheme ? 'text-emerald-700/80' : 'text-emerald-200/80'}`}
+            className="italic opacity-90 overlay-text-secondary"
             {...props}
           />
         ),
         ul: ({ node, ...props }: any) => (
-          <ul className="list-disc ml-4 mb-2 space-y-1" {...props} />
+          <ul className="list-disc ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] text-[14px]" {...props} />
         ),
         ol: ({ node, ...props }: any) => (
-          <ol className="list-decimal ml-4 mb-2 space-y-1" {...props} />
+          <ol className="list-decimal ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] text-[14px]" {...props} />
         ),
-        li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
+        li: ({ node, ...props }: any) => <li className="pl-1 mb-[2.5px] last:mb-0 leading-[1.45] text-[14px]" {...props} />,
       },
       recapText: {
-        p: ({ node, ...props }: any) => <p className="mb-2 last:mb-0" {...props} />,
+        p: ({ node, ...props }: any) => <p className="mb-[2.5px] last:mb-0 leading-[1.45] text-[14px]" {...props} />,
         strong: ({ node, ...props }: any) => (
           <strong
-            className={`font-bold ${isLightTheme ? 'text-indigo-800' : 'text-indigo-100'}`}
+            className="font-bold opacity-100 overlay-text-strong"
             {...props}
           />
         ),
-        ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mb-2" {...props} />,
-        li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
+        ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] text-[14px]" {...props} />,
+        li: ({ node, ...props }: any) => <li className="pl-1 mb-[2.5px] last:mb-0 leading-[1.45] text-[14px]" {...props} />,
       },
       followUpQuestionsText: {
-        p: ({ node, ...props }: any) => <p className="mb-2 last:mb-0" {...props} />,
+        p: ({ node, ...props }: any) => <p className="mb-[2.5px] last:mb-0 leading-[1.45] text-[14px]" {...props} />,
         strong: ({ node, ...props }: any) => (
           <strong
-            className={`font-bold ${isLightTheme ? 'text-amber-800' : 'text-[#FFF9C4]'}`}
+            className="font-bold opacity-100 overlay-text-strong"
             {...props}
           />
         ),
-        ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mb-2" {...props} />,
-        li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
+        ul: ({ node, ...props }: any) => <ol className="list-decimal ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] text-[14px]" {...props} />,
+        ol: ({ node, ...props }: any) => <ol className="list-decimal ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] text-[14px]" {...props} />,
+        li: ({ node, ...props }: any) => <li className="pl-1 mb-[2.5px] last:mb-0 leading-[1.45] text-[14px]" {...props} />,
       },
       shortenText: {
-        p: ({ node, ...props }: any) => <p className="mb-2 last:mb-0" {...props} />,
+        p: ({ node, ...props }: any) => <p className="mb-[2.5px] last:mb-0 leading-[1.45] text-[14px]" {...props} />,
         strong: ({ node, ...props }: any) => (
           <strong
-            className={`font-bold ${isLightTheme ? 'text-cyan-800' : 'text-cyan-100'}`}
+            className="font-bold opacity-100 overlay-text-strong"
             {...props}
           />
         ),
-        ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mb-2" {...props} />,
-        li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
+        ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] text-[14px]" {...props} />,
+        li: ({ node, ...props }: any) => <li className="pl-1 mb-[2.5px] last:mb-0 leading-[1.45] text-[14px]" {...props} />,
       },
     }),
     [isLightTheme],
@@ -1045,6 +1216,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     channel?: 'system' | 'mic';
   };
   const [systemAudioWarning, setSystemAudioWarning] = useState<SystemAudioWarning | null>(null);
+  // Transient, informational notice when the mic is auto-switched (e.g. a
+  // Bluetooth mic that would drop to low-quality HFP "call mode" — capture is
+  // moved to the built-in mic while the BT device stays in high-quality A2DP
+  // for playback). Distinct from systemAudioWarning (failures); this is a
+  // success/info message that auto-dismisses.
+  const [audioNotice, setAudioNotice] = useState<string | null>(null);
   // UX2: in-flight guard for the "Repair Permissions" button so a double-click
   // can't fire two concurrent tccutil sequences (whose second-arriving response
   // would clobber the first's banner mid-render).
@@ -1059,6 +1236,32 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     });
     return () => unsub?.();
   }, []);
+
+  // Audio-input auto-switch notice (mic rerouted to avoid Bluetooth HFP, or to
+  // resolve a same-device input/output conflict). The switch happens during
+  // audio (re)configuration, which can run before isMeetingActive flips, so
+  // this subscription is always on. Auto-dismisses after a few seconds.
+  useEffect(() => {
+    const unsub = window.electronAPI?.onAudioInputAutoSwitched?.((payload) => {
+      const msg = payload.message
+        ?? (payload.reason === 'bluetooth-hfp-avoided'
+          ? `Using ${payload.to} for better quality while ${payload.from} plays audio.`
+          : payload.reason === 'same-device-conflict'
+            ? `Switched microphone to ${payload.to} so system audio can be captured.`
+            : payload.to
+              ? `Microphone switched to ${payload.to}.`
+              : 'Microphone quality is degraded.');
+      console.log('[NativelyInterface] Audio input auto-switched:', payload);
+      setAudioNotice(msg);
+    });
+    return () => unsub?.();
+  }, []);
+
+  useEffect(() => {
+    if (!audioNotice) return;
+    const t = setTimeout(() => setAudioNotice(null), 6000);
+    return () => clearTimeout(t);
+  }, [audioNotice]);
 
   useEffect(() => {
     const unsub = window.electronAPI?.onAudioCaptureFailed?.((payload) => {
@@ -1121,9 +1324,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // TopPill's horizontal center invariant across resizes.
   const reportShellSize = useCallback(() => {
     if (!contentRef.current) return;
-    const rect = contentRef.current.getBoundingClientRect();
+    // offsetHeight is the LAYOUT (untransformed) border-box height. We must NOT
+    // use getBoundingClientRect().height here: that returns the POST-transform
+    // box, so the shell's scale 0.95→1 / y 20→0 entry animation would feed a
+    // continuously-changing height into this OS-resize channel, and the native
+    // setBounds() would chase the CSS transform frame-by-frame on a separate
+    // clock — the startup shake. Layout height is immune to descendant
+    // transforms, so genuine content growth still flows through while the
+    // entry flourish stays purely compositor-side.
     const width = Math.round(shellWidth.get());
-    const height = Math.ceil(rect.height);
+    const height = contentRef.current.offsetHeight;
     const api = window.electronAPI as any;
     if (api?.updateContentDimensionsCentered) {
       api.updateContentDimensionsCentered({ width, height });
@@ -1147,7 +1357,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (Math.abs(width - lastSentWidth) < 1) return;
       lastSentWidth = width;
       if (!contentRef.current) return;
-      const height = Math.ceil(contentRef.current.getBoundingClientRect().height);
+      // offsetHeight (layout height) — not getBoundingClientRect, which would
+      // include descendant CSS transforms and reintroduce the entry-animation
+      // resize feedback loop. See reportShellSize above.
+      const height = contentRef.current.offsetHeight;
       const api = window.electronAPI as any;
       if (api?.updateContentDimensionsCentered) {
         api.updateContentDimensionsCentered({ width, height });
@@ -1418,6 +1631,18 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   // Sync Window Visibility with Expanded State
   useEffect(() => {
+    // First run is the mount-time isExpanded=true. main.startMeeting() has
+    // already shown the overlay via switchToOverlay(); calling showWindow()
+    // here would re-enter switchToOverlay() (a second setBounds + focus()),
+    // producing the startup focus flash. Skip it exactly once. The
+    // `ensure-expanded` IPC handler still sets isStealthRef before any later
+    // expansion, so stealth is preserved.
+    if (!isExpandedEffectInitializedRef.current) {
+      isExpandedEffectInitializedRef.current = true;
+      isStealthRef.current = false;
+      return;
+    }
+
     if (isExpanded) {
       window.electronAPI.showWindow(isStealthRef.current);
       isStealthRef.current = false; // Reset back to default
@@ -2207,9 +2432,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       typeof promptInstruction === 'string' ? promptInstruction : undefined;
     setIsExpanded(true);
     setIsProcessing(true);
-    prepareIntelligenceStreamPlaceholder('what_to_answer');
-    analytics.trackCommandExecuted('what_to_say');
-
     // Capture and clear attached image context.
     // Also merge in any screenshot from the capture-and-process shortcut that
     // arrived via pendingCaptureRef before the React state flush (React 18 fix).
@@ -2221,7 +2443,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     if (currentAttachments.length > 0) {
       setAttachedContext([]);
-      // Show the attached image in chat
+      // Show the attached image in chat FIRST — question card must appear before AI response
       setMessages((prev) => [
         ...prev,
         {
@@ -2237,6 +2459,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 50);
     }
+
+    // Create AI response placeholder AFTER user message so thinking dots + response
+    // appear BELOW the screenshot question card (not above it)
+    prepareIntelligenceStreamPlaceholder('what_to_answer');
+    analytics.trackCommandExecuted('what_to_say');
 
     try {
       const rawDomContext = (window as any).lastCapturedDOM;
@@ -3012,6 +3239,13 @@ Provide only the answer, nothing else.`;
   // other deps so its inclusion is mostly defensive.
   const renderMessageText = useCallback(
     (msg: Message) => {
+      const cardBgBorderClass = isLightTheme
+        ? 'bg-slate-100/70 backdrop-blur-md border border-slate-200/50 text-slate-900 shadow-sm'
+        : 'bg-zinc-800/60 backdrop-blur-md border border-zinc-700/40 text-zinc-100 shadow-md';
+
+      const labelColorClass = isLightTheme ? 'text-slate-500' : 'text-slate-400';
+      const headerBorderClass = isLightTheme ? 'border-b pb-1.5 border-black/5' : 'border-b pb-1.5 border-white/5';
+
       // ── Imperative streaming short-circuit ──────────────────────────────
       // While the message is mid-stream, render a plain div with a ref so
       // queueToken can write rendered markdown HTML directly to the DOM node
@@ -3033,11 +3267,16 @@ Provide only the answer, nothing else.`;
           // imperative path wrote — the user sees the streaming markdown
           // STACKED on top of the React-rendered "Code Solution" tree, which is
           // exactly the duplicate-answer bug.
+          const isThinking = !msg.text;
           return (
             <div
               key="streaming"
               ref={(el) => registerStreamingNode(msg.id, el)}
-              className="markdown-content whitespace-pre-wrap"
+              className={`${
+                isThinking
+                  ? 'w-fit px-[16.5px] py-[12.5px]'
+                  : 'w-full p-[14px_18px]'
+              } rounded-[20px] rounded-tl-[4px] ai-response-card ${cardBgBorderClass} my-2.5 transition-all duration-300 markdown-content whitespace-pre-wrap text-[14.5px] leading-relaxed`}
             >
               {/*
                * Typing-dots indicator INSIDE the streaming bubble. Renders
@@ -3062,15 +3301,15 @@ Provide only the answer, nothing else.`;
               {!msg.text && (
                 <div className="flex gap-1.5 items-center py-0.5">
                   <div
-                    className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"
+                    className={`w-2 h-2 ${isLightTheme ? 'bg-slate-400' : 'bg-white'} rounded-full animate-bounce`}
                     style={{ animationDelay: '0ms' }}
                   />
                   <div
-                    className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"
+                    className={`w-2 h-2 ${isLightTheme ? 'bg-slate-400' : 'bg-white'} rounded-full animate-bounce`}
                     style={{ animationDelay: '150ms' }}
                   />
                   <div
-                    className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"
+                    className={`w-2 h-2 ${isLightTheme ? 'bg-slate-400' : 'bg-white'} rounded-full animate-bounce`}
                     style={{ animationDelay: '300ms' }}
                   />
                 </div>
@@ -3082,7 +3321,7 @@ Provide only the answer, nothing else.`;
         // not yet reconciled — keep showing accumulated text instead of blank.
         if (msg.text) {
           return (
-            <div key="streaming" className="markdown-content whitespace-pre-wrap">{msg.text}</div>
+            <div key="streaming" className={`w-full rounded-[20px] rounded-tl-[4px] p-[14px_18px] ai-response-card ${cardBgBorderClass} my-2.5 transition-all duration-300 markdown-content whitespace-pre-wrap text-[14.5px] leading-relaxed`}>{msg.text}</div>
           );
         }
       }
@@ -3118,19 +3357,17 @@ Provide only the answer, nothing else.`;
       if (msg.isCode || (msg.role === 'system' && msg.text.includes('```'))) {
         const parts = msg.text.split(/(```[\s\S]*?```)/g);
         return (
-          <div
-            className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`}
-            style={appearance.subtleStyle}
-          >
-            <div
-              className={`flex items-center gap-2 mb-2 font-semibold text-xs uppercase tracking-wide ${isLightTheme ? 'text-violet-600' : 'text-purple-300'}`}
-            >
-              <Code className="w-3.5 h-3.5" />
-              <span>Code Solution</span>
+          <div className={`w-full rounded-[20px] rounded-tl-[4px] p-[14px_18px] ai-response-card ${cardBgBorderClass} my-2.5 transition-all duration-300 relative group`}>
+            <div className="absolute top-[-16px] right-[-16px] z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
+              <CardCopyButton
+                text={msg.text}
+                onCopy={handleCopy}
+                isLightTheme={isLightTheme}
+                isModernTheme={isModernTheme}
+                isGlassTheme={isGlassTheme}
+              />
             </div>
-            <div
-              className={`space-y-2 text-[13px] leading-relaxed ${isLightTheme ? 'text-slate-800' : 'text-slate-200'}`}
-            >
+            <div className="space-y-2 text-[14.5px] leading-relaxed">
               {parts.map((part, i) => {
                 if (part.startsWith('```')) {
                   const match = part.match(/```(\w+)?\n?([\s\S]*?)```/);
@@ -3149,6 +3386,8 @@ Provide only the answer, nothing else.`;
                         codeHeaderTextClass={codeHeaderTextClass}
                         codeLineNumberColor={codeLineNumberColor}
                         appearance={appearance}
+                        isModernTheme={isModernTheme}
+                        isGlassTheme={isGlassTheme}
                       />
                     );
                   }
@@ -3174,19 +3413,17 @@ Provide only the answer, nothing else.`;
       // Custom Styled Labels (Shorten, Recap, Follow-up) - also use Markdown for content
       if (msg.intent === 'shorten') {
         return (
-          <div
-            className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`}
-            style={appearance.subtleStyle}
-          >
-            <div
-              className={`flex items-center gap-2 mb-2 font-semibold text-xs uppercase tracking-wide ${isLightTheme ? 'text-cyan-700' : 'text-cyan-300'}`}
-            >
-              <MessageSquare className="w-3.5 h-3.5" />
-              <span>Shortened</span>
+          <div className={`w-full rounded-[20px] rounded-tl-[4px] p-[14px_18px] ai-response-card ${cardBgBorderClass} my-2.5 transition-all duration-300 relative group`}>
+            <div className="absolute top-[-16px] right-[-16px] z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
+              <CardCopyButton
+                text={msg.text}
+                onCopy={handleCopy}
+                isLightTheme={isLightTheme}
+                isModernTheme={isModernTheme}
+                isGlassTheme={isGlassTheme}
+              />
             </div>
-            <div
-              className={`text-[13px] leading-relaxed markdown-content ${isLightTheme ? 'text-slate-800' : 'text-slate-200'}`}
-            >
+            <div className="text-[14.5px] leading-relaxed markdown-content">
               <ReactMarkdown
                 remarkPlugins={REMARK_PLUGINS}
                 rehypePlugins={REHYPE_PLUGINS}
@@ -3201,19 +3438,17 @@ Provide only the answer, nothing else.`;
 
       if (msg.intent === 'recap') {
         return (
-          <div
-            className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`}
-            style={appearance.subtleStyle}
-          >
-            <div
-              className={`flex items-center gap-2 mb-2 font-semibold text-xs uppercase tracking-wide ${isLightTheme ? 'text-indigo-700' : 'text-indigo-300'}`}
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Recap</span>
+          <div className={`w-full rounded-[20px] rounded-tl-[4px] p-[14px_18px] ai-response-card ${cardBgBorderClass} my-2.5 transition-all duration-300 relative group`}>
+            <div className="absolute top-[-16px] right-[-16px] z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
+              <CardCopyButton
+                text={msg.text}
+                onCopy={handleCopy}
+                isLightTheme={isLightTheme}
+                isModernTheme={isModernTheme}
+                isGlassTheme={isGlassTheme}
+              />
             </div>
-            <div
-              className={`text-[13px] leading-relaxed markdown-content ${isLightTheme ? 'text-slate-800' : 'text-slate-200'}`}
-            >
+            <div className="text-[14.5px] leading-relaxed markdown-content">
               <ReactMarkdown
                 remarkPlugins={REMARK_PLUGINS}
                 rehypePlugins={REHYPE_PLUGINS}
@@ -3228,19 +3463,17 @@ Provide only the answer, nothing else.`;
 
       if (msg.intent === 'follow_up_questions') {
         return (
-          <div
-            className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`}
-            style={appearance.subtleStyle}
-          >
-            <div
-              className={`flex items-center gap-2 mb-2 font-semibold text-xs uppercase tracking-wide ${isLightTheme ? 'text-amber-700' : 'text-[#FFD60A]'}`}
-            >
-              <HelpCircle className="w-3.5 h-3.5" />
-              <span>Follow-Up Questions</span>
+          <div className={`w-full rounded-[20px] rounded-tl-[4px] p-[14px_18px] ai-response-card ${cardBgBorderClass} my-2.5 transition-all duration-300 relative group`}>
+            <div className="absolute top-[-16px] right-[-16px] z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
+              <CardCopyButton
+                text={msg.text}
+                onCopy={handleCopy}
+                isLightTheme={isLightTheme}
+                isModernTheme={isModernTheme}
+                isGlassTheme={isGlassTheme}
+              />
             </div>
-            <div
-              className={`text-[13px] leading-relaxed markdown-content ${isLightTheme ? 'text-slate-800' : 'text-slate-200'}`}
-            >
+            <div className="text-[14.5px] leading-relaxed markdown-content">
               <ReactMarkdown
                 remarkPlugins={REMARK_PLUGINS}
                 rehypePlugins={REHYPE_PLUGINS}
@@ -3258,14 +3491,17 @@ Provide only the answer, nothing else.`;
         const parts = msg.text.split(/(```[\s\S]*?(?:```|$))/g);
 
         return (
-          <div
-            className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`}
-            style={appearance.subtleStyle}
-          >
-            <div className="flex items-center gap-2 mb-2 text-emerald-400 font-semibold text-xs uppercase tracking-wide">
-              <span>Say this</span>
+          <div className={`w-full rounded-[20px] rounded-tl-[4px] p-[14px_18px] ai-response-card ${cardBgBorderClass} my-2.5 transition-all duration-300 relative group`}>
+            <div className="absolute top-[-16px] right-[-16px] z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
+              <CardCopyButton
+                text={msg.text}
+                onCopy={handleCopy}
+                isLightTheme={isLightTheme}
+                isModernTheme={isModernTheme}
+                isGlassTheme={isGlassTheme}
+              />
             </div>
-            <div className="text-[14px] leading-relaxed overlay-text-primary">
+            <div className="text-[14.5px] leading-relaxed">
               {parts.map((part, i) => {
                 if (part.startsWith('```')) {
                   // Robust matching: handles unclosed blocks for streaming (```...$)
@@ -3298,15 +3534,13 @@ Provide only the answer, nothing else.`;
                         codeHeaderTextClass={codeHeaderTextClass}
                         codeLineNumberColor={codeLineNumberColor}
                         appearance={appearance}
+                        isModernTheme={isModernTheme}
+                        isGlassTheme={isGlassTheme}
                       />
                     );
                   }
                 }
                 // Regular text - Render Markdown
-                // PERF: hoisted components map — see mdComponents useMemo
-                // at top of component. Inline literal here would create a
-                // fresh object on every streaming token, defeating
-                // ReactMarkdown's internal render-bailout.
                 return (
                   <div key={i} className="markdown-content">
                     <ReactMarkdown
@@ -3319,6 +3553,32 @@ Provide only the answer, nothing else.`;
                   </div>
                 );
               })}
+            </div>
+          </div>
+        );
+      }
+
+      // Fallback for general system/chat messages to ensure they maintain card structure after streaming ends
+      if (msg.role === 'system' && !msg.isNegotiationCoaching) {
+        return (
+          <div className={`w-full rounded-[20px] rounded-tl-[4px] p-[14px_18px] ai-response-card ${cardBgBorderClass} my-2.5 transition-all duration-300 relative group`}>
+            <div className="absolute top-[-16px] right-[-16px] z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
+              <CardCopyButton
+                text={msg.text}
+                onCopy={handleCopy}
+                isLightTheme={isLightTheme}
+                isModernTheme={isModernTheme}
+                isGlassTheme={isGlassTheme}
+              />
+            </div>
+            <div className="text-[14.5px] leading-relaxed markdown-content">
+              <ReactMarkdown
+                remarkPlugins={REMARK_PLUGINS}
+                rehypePlugins={REHYPE_PLUGINS}
+                components={mdComponents.standard}
+              >
+                {msg.text}
+              </ReactMarkdown>
             </div>
           </div>
         );
@@ -4152,6 +4412,8 @@ Provide only the answer, nothing else.`;
     sttUserProvider,
     sttInterviewerProvider,
     sttNotConfigured,
+    sttUserError,
+    sttInterviewerError,
   );
   const showAnswerPanel =
     messages.length > 0 || isManualRecording || isProcessing || answerPanelPinned;
@@ -4174,14 +4436,29 @@ Provide only the answer, nothing else.`;
   const visionPillFailed = screenContextStatus === 'failed' || !!latestVisionFailureReason;
   const visionPillSucceeded =
     (latestUsedImageInput || screenContextStatus === 'available') && !visionPillFailed;
-  const showVisionPill =
-    attachedContext.length > 0 || visionPillFailed || visionPillSucceeded;
+  // Suppressed: vision pill ("Vision: provider") is not required in the UI.
+  const showVisionPill = false;
   // Gate the whole status-pill row on having at least one pill. Otherwise the
   // empty row still reserved pt-3+pb-1, leaving a visible gap above the rolling
   // transcript on launch (no mode yet, STT pill suppressed, no vision/llm).
-  const hasStatusPill =
-    !!activeModeLabel || shouldShowSttSummaryPill || showVisionPill || !!llmPrivacyLabel;
+  // Suppressed: mode label pill is not required in the UI.
+  // Suppressed: LLM privacy label pill is not required in the UI.
+  // Suppressed: vision pill ("Vision: provider") is not required in the UI.
+  const hasStatusPill = shouldShowSttSummaryPill;
   const statusPillBaseClass = `flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium shadow-sm backdrop-blur-xl ${isLightTheme ? 'bg-white/55 border-black/10' : 'bg-black/20 border-white/10'}`;
+
+  // Suppress the shell's scale/translate entry animation until it has rendered
+  // expanded at least once (set via onAnimationComplete). On the first content
+  // render the OS window is still settling its bounds, so animating
+  // scale 0.95→1 / y 20→0 would feed the size-reporter a moving box and read as
+  // a shake. `false` tells Framer Motion to mount at the `animate` state with no
+  // enter transition. Re-expansions after mount get the full animation.
+  const expandedMotionInitial = hasRenderedExpandedRef.current
+    ? { opacity: 0, y: 20, scale: 0.95 }
+    : false;
+  const markExpandedRendered = useCallback(() => {
+    hasRenderedExpandedRef.current = true;
+  }, []);
 
   const copyDiagnostics = async () => {
     const version = import.meta.env.VITE_APP_VERSION || 'unknown';
@@ -4227,16 +4504,17 @@ Provide only the answer, nothing else.`;
   return (
     <div
       ref={contentRef}
-      data-interface-theme={isGlassTheme ? 'liquid-glass' : isModernTheme ? 'modern' : undefined}
+      data-interface-theme={isGlassTheme ? 'liquid-glass' : isModernTheme ? 'modern' : 'default'}
       className="flex flex-col items-center w-fit mx-auto h-fit min-h-0 bg-transparent p-0 rounded-[24px] font-sans gap-2 overlay-text-primary"
     >
       <AnimatePresence initial={false}>
         {isExpanded && (
           <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            initial={expandedMotionInitial}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ duration: 0.3, ease: 'easeInOut' }}
+            onAnimationComplete={markExpandedRendered}
             className="flex flex-col items-center gap-2 w-full"
           >
             <TopPill
@@ -4262,15 +4540,6 @@ Provide only the answer, nothing else.`;
 
               {hasStatusPill && (
               <div className="relative no-drag flex flex-wrap items-center justify-center gap-1.5 px-4 pt-3 pb-1">
-                {activeModeLabel && (
-                  <div
-                    className={`${statusPillBaseClass} overlay-text-primary`}
-                    title={`Active mode: ${activeModeLabel}`}
-                  >
-                    <LayoutGrid className="h-3 w-3 opacity-70" />
-                    <span>Mode: {activeModeLabel}</span>
-                  </div>
-                )}
                 {shouldShowSttSummaryPill && (
                   <div
                     className={`${statusPillBaseClass} ${getStatusToneClass(sttSummary.tone)}`}
@@ -4278,83 +4547,6 @@ Provide only the answer, nothing else.`;
                   >
                     <Mic className="h-3 w-3 opacity-70" />
                     <span>{sttSummary.label}</span>
-                  </div>
-                )}
-                {(() => {
-                  // Vision-first status chip. Order of preference for what to show:
-                  //   1. attached screenshots queued for this turn
-                  //   2. failure from the last vision call (reason-aware)
-                  //   3. success from the last vision call (provider/model surfaced)
-                  //   4. legacy ocr-available fallback (only fires if a legacy mode is re-enabled)
-                  const visionFailed =
-                    screenContextStatus === 'failed' || !!latestVisionFailureReason;
-                  const visionSucceeded =
-                    (latestUsedImageInput || screenContextStatus === 'available') && !visionFailed;
-                  if (attachedContext.length === 0 && !visionFailed && !visionSucceeded) return null;
-                  const failureLabelMap: Record<string, string> = {
-                    no_vision_provider: 'No vision provider',
-                    all_vision_failed: 'Vision failed',
-                    privacy_blocked: 'Private mode blocked vision',
-                    scope_blocked: 'Screenshots disabled',
-                    provider_timeout: 'Vision timed out',
-                  };
-                  const failureLabel = latestVisionFailureReason
-                    ? failureLabelMap[latestVisionFailureReason] || 'Vision failed'
-                    : 'Vision failed';
-                  const failureTitleMap: Record<string, string> = {
-                    no_vision_provider:
-                      'No vision-capable provider is configured. Add a Natively, OpenAI, Claude, Gemini, or Groq key — or configure a local Ollama vision model.',
-                    all_vision_failed:
-                      'All configured vision providers failed for this turn. Check provider quotas and try again.',
-                    privacy_blocked:
-                      'Private vision mode blocked cloud vision providers; no local vision provider is configured.',
-                    scope_blocked:
-                      'Screenshots are disabled for the current provider. Enable the screenshots scope in Settings.',
-                    provider_timeout:
-                      'Vision provider exceeded its per-call timeout; the chain moved on to the next provider.',
-                  };
-                  const failureTitle = latestVisionFailureReason
-                    ? failureTitleMap[latestVisionFailureReason] ||
-                      'The vision provider failed for this turn.'
-                    : 'Screen vision did not return a result for this turn.';
-                  const providerLabel = latestVisionProviderUsed
-                    ? `Vision: ${latestVisionProviderUsed}`
-                    : 'Vision input used';
-                  const providerTitle =
-                    latestVisionProviderUsed && latestVisionModelUsed
-                      ? `Latest answer used ${latestVisionProviderUsed} (${latestVisionModelUsed}) vision on the screenshot`
-                      : latestVisionProviderUsed
-                        ? `Latest answer used ${latestVisionProviderUsed} vision on the screenshot`
-                        : 'The latest answer received direct image input from the attached screen';
-                  return (
-                    <div
-                      className={`${statusPillBaseClass} ${visionFailed ? getStatusToneClass('warn') : visionSucceeded ? getStatusToneClass('ok') : 'overlay-text-primary'}`}
-                      title={
-                        attachedContext.length > 0
-                          ? 'Attached screenshots will be sent to the vision provider when you send this turn'
-                          : visionFailed
-                            ? failureTitle
-                            : providerTitle
-                      }
-                    >
-                      <Monitor className="h-3 w-3 opacity-70" />
-                      <span>
-                        {attachedContext.length > 0
-                          ? `${attachedContext.length} screen attached`
-                          : visionFailed
-                            ? failureLabel
-                            : providerLabel}
-                      </span>
-                    </div>
-                  );
-                })()}
-                {llmPrivacyLabel && (
-                  <div
-                    className={`${statusPillBaseClass} overlay-text-primary`}
-                    title={`${llmPrivacyLabel}: ${llmProviderLabel}`}
-                  >
-                    <ShieldCheck className="h-3 w-3 opacity-70" />
-                    <span>{llmPrivacyLabel}</span>
                   </div>
                 )}
               </div>
@@ -4555,13 +4747,11 @@ Provide only the answer, nothing else.`;
                   for hard failures. Reconnecting/awaiting-audio status is owned by
                   the top status pill, so the bar no longer mounts for those (which
                   also avoids an empty bar / duplicated status text). */}
-              {(showTranscript && rollingTranscript) ||
-              interviewerSttIndicatorStatus === 'failed' ||
-              sttUserStatus === 'failed' ? (
+              {showTranscript && rollingTranscript ? (
                 <RollingTranscript
-                  text={showTranscript ? rollingTranscript : ''}
+                  text={rollingTranscript}
                   isActive={isInterviewerSpeaking}
-                  surfaceStyle={showTranscript ? appearance.transcriptStyle : undefined}
+                  surfaceStyle={appearance.transcriptStyle}
                   interviewerChannel={{
                     status: interviewerSttIndicatorStatus,
                     error: interviewerSttIndicatorError,
@@ -4572,7 +4762,6 @@ Provide only the answer, nothing else.`;
                     error: sttUserError,
                     provider: sttUserProvider,
                   }}
-                  onCopyDiagnostics={copyDiagnostics}
                 />
               ) : null}
 
@@ -4873,6 +5062,7 @@ Provide only the answer, nothing else.`;
                 <div className="relative group" data-stealth-engage="true">
                   <input
                     ref={textInputRef}
+                    data-testid="overlay-chat-input"
                     type="text"
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
@@ -4954,7 +5144,8 @@ Provide only the answer, nothing else.`;
                           const codexCliName = getCodexCliModelDisplayName(m);
                           if (codexCliName) return codexCliName;
                           if (m.startsWith('ollama-')) return m.replace('ollama-', '');
-                          if (m === 'gemini-3.1-flash-lite-preview') return 'Gemini 3.1 Flash';
+                          if (m === 'gemini-3.5-flash') return 'Gemini 3.5 Flash';
+                          if (m === 'gemini-3.1-flash-lite') return 'Gemini 3.1 Flash Lite';
                           if (m === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
                           if (m === 'llama-3.3-70b-versatile') return 'Groq Llama 3.3';
                           if (m === 'gpt-5.4') return 'GPT 5.4';

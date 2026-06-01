@@ -1,0 +1,92 @@
+{
+  "timestamp": "2026-05-31T01:45:00.000Z",
+  "iteration": 3,
+  "summary": {
+    "totalTests": 362,
+    "passed": 362,
+    "failed": 0,
+    "accuracy": 1.0,
+    "identityRecallAccuracy": 1.0,
+    "perProfileAccuracy": {
+      "backend-eng-001": 1.0,
+      "ml-eng-002": 1.0,
+      "pm-003": 1.0,
+      "sales-sdr-004": 1.0,
+      "ux-designer-005": 1.0,
+      "data-analyst-006": 1.0,
+      "devops-sre-007": 1.0,
+      "csm-008": 1.0,
+      "security-009": 1.0,
+      "founder-010": 1.0
+    },
+    "perCategoryAccuracy": {
+      "identity_recall": 1.0,
+      "resume_recall": 1.0,
+      "jd_alignment": 1.0,
+      "custom_context": 1.0,
+      "negotiation": 1.0,
+      "unknown_handling": 1.0,
+      "anti_hardcoding": 1.0
+    },
+    "byTestSuite": {
+      "IntelligenceEval": { "tests": 51, "passed": 51, "failed": 0 },
+      "IntelligenceEvalComprehensive": { "tests": 201, "passed": 201, "failed": 0 },
+      "ModesManager": { "tests": 27, "passed": 27, "failed": 0 },
+      "ModePersonaScenarios": { "tests": 22, "passed": 22, "failed": 0 },
+      "ModeBleedingMatrix": { "tests": 12, "passed": 12, "failed": 0 },
+      "PromptAssembler": { "tests": 10, "passed": 10, "failed": 0 },
+      "LLMHelperNegotiationCoachingGate": { "tests": 15, "passed": 15, "failed": 0 },
+      "ToggleStateReducer": { "tests": 16, "passed": 16, "failed": 0 },
+      "DockTransition": { "tests": 8, "passed": 8, "failed": 0 }
+    }
+  },
+  "fixesAppliedInIteration3": [
+    {
+      "id": "FIX-008",
+      "title": "chatWithGemini identity bypass before mode gate",
+      "file": "electron/LLMHelper.ts",
+      "description": "Applied the same intro-question bypass (before isPremiumKnowledgeInterceptAllowed gate) to chatWithGemini that was previously only applied to _streamChatInner. Fixes identity recall for non-streaming callers (gemini-chat IPC, email body path, internal suggestion path) in technical-interview and lecture modes.",
+      "severity": "HIGH",
+      "dynamic": true,
+      "hardcoding": "none"
+    },
+    {
+      "id": "FIX-009",
+      "title": "Persona startup restoration wrapped in try/catch",
+      "file": "electron/main.ts",
+      "description": "Wrapped persona DB read at startup in isolated try/catch so it cannot abort the KnowledgeOrchestrator init sequence if DatabaseManager.getPersona() throws.",
+      "severity": "MEDIUM",
+      "dynamic": true,
+      "hardcoding": "none"
+    },
+    {
+      "id": "FIX-010",
+      "title": "Remove dead GENERIC_QUESTION_PATTERNS entries subsumed by 'implement a '",
+      "file": "premium/electron/knowledge/IntentClassifier.ts",
+      "description": "Removed 'implement a function ' and 'implement a class ' (now dead code since 'implement a ' was added as catch-all). Kept 'implement a ' and 'implement the '.",
+      "severity": "MEDIUM (maintainability)",
+      "dynamic": true,
+      "hardcoding": "none"
+    },
+    {
+      "id": "FIX-011",
+      "title": "Updated test for intro shortcut mode-gate behavior",
+      "file": "electron/services/__tests__/LLMHelperNegotiationCoachingGate.test.mjs",
+      "description": "Two tests previously asserted intro shortcut was SUPPRESSED in technical-interview/lecture. Now correctly assert it PASSES THROUGH (identity recall is mode-independent). Test descriptions updated with explanatory comment.",
+      "severity": "TEST UPDATE",
+      "dynamic": true,
+      "hardcoding": "none"
+    }
+  ],
+  "antiHardcodingAudit": {
+    "result": "PASS",
+    "fixtureNamesInProductionCode": [],
+    "fixtureCompaniesInProductionCode": [],
+    "fixtureSalariesInProductionCode": [],
+    "conditionalHardcoding": [],
+    "note": "All fixture values appear only in tests/intelligence-fixtures/ and intelligence-eval-results/"
+  },
+  "buildStatus": "PASS",
+  "typecheckStatus": "PRE-EXISTING_ERRORS_ONLY",
+  "typecheckNote": "35 pre-existing TS errors in ipcHandlers.ts, main.ts, erp-test files, preparedTranscriptContext.ts — none introduced by these changes"
+}

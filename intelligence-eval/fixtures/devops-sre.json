@@ -1,0 +1,123 @@
+{
+  "profileId": "devops-sre",
+  "role": "DevOps/SRE Engineer",
+  "resume": {
+    "identity": {
+      "name": "Kwame Osei",
+      "email": "kwame.osei@gmail.com",
+      "location": "Los Angeles, CA",
+      "phone": "310-555-0167",
+      "links": []
+    },
+    "summary": "SRE with 7 years building and operating large-scale distributed systems. Deep expertise in Kubernetes, observability, and incident response. Reduced outage time 60% at Netflix.",
+    "skills": [
+      "Kubernetes",
+      "Terraform",
+      "Go",
+      "Python",
+      "Prometheus",
+      "Grafana",
+      "AWS",
+      "Chaos Engineering"
+    ],
+    "experience": [
+      {
+        "company": "Netflix",
+        "role": "Site Reliability Engineer",
+        "start_date": "2020-08",
+        "end_date": null,
+        "bullets": [
+          "Built automated chaos engineering system (400+ experiments/month)",
+          "Reduced P1 incident MTTR from 45min to 12min via runbook automation",
+          "Designed multi-region failover reducing regional outage impact 80%"
+        ]
+      },
+      {
+        "company": "Twitter (X)",
+        "role": "Senior DevOps Engineer",
+        "start_date": "2017-03",
+        "end_date": "2020-07",
+        "bullets": [
+          "Migrated 500-service monolith to Kubernetes in 18 months",
+          "Built real-time monitoring for 300M daily active users"
+        ]
+      }
+    ],
+    "projects": [
+      {
+        "name": "ChaosMonkey-Pro",
+        "description": "Enhanced chaos engineering tool with fault injection campaigns and 自动化recovery. 2k stars.",
+        "technologies": [
+          "Go",
+          "Kubernetes",
+          "Prometheus",
+          "Grafana"
+        ]
+      },
+      {
+        "name": "SRE-Dashboard",
+        "description": "Real-time SRE metrics dashboard for Netflix internal use. Tracks 1000+ services.",
+        "technologies": [
+          "React",
+          "Grafana",
+          "PromQL",
+          "Tempo"
+        ]
+      }
+    ],
+    "education": [
+      {
+        "institution": "Georgia Tech",
+        "degree": "BS Computer Engineering",
+        "field": "Computer Engineering",
+        "start_date": "",
+        "end_date": "2017"
+      }
+    ],
+    "achievements": [],
+    "certifications": [],
+    "leadership": []
+  },
+  "jd": {
+    "title": "Staff SRE",
+    "company": "Stripe",
+    "location": "Remote (US)",
+    "description_summary": "Build the reliability foundations for Stripe's payment infrastructure. Our systems process billions daily with 99.999% uptime requirements.",
+    "level": "staff",
+    "employment_type": "full_time",
+    "min_years_experience": 7,
+    "compensation_hint": "$240k-$300k",
+    "requirements": [
+      "7+ years SRE/DevOps",
+      "Kubernetes at scale",
+      "Observability expertise",
+      "Payment systems experience preferred",
+      "Go/Python"
+    ],
+    "nice_to_haves": [],
+    "responsibilities": [],
+    "technologies": [
+      "Kubernetes",
+      "Go",
+      "Prometheus",
+      "Terraform",
+      "AWS"
+    ],
+    "keywords": []
+  },
+  "customContext": "Include specific reliability metrics and SLAs when relevant. Technical depth preferred.",
+  "persona": "Reliability expert — metrics-driven, incident-hardened, systematic.",
+  "negotiation": {
+    "targetSalary": 280000,
+    "minimumSalary": 255000,
+    "currentSalary": 245000,
+    "signingBonus": 30000,
+    "equity": "0.06% with 4 year vest, 1 year cliff",
+    "priorities": [
+      "technical challenge",
+      "payment infra scale",
+      "equity"
+    ]
+  },
+  "referenceFiles": []
+}

@@ -231,10 +231,15 @@ export class SessionTracker {
 
         this.evictOldEntries();
 
-        // Filter out internal system prompts that might be passed via IPC
-        const isInternalPrompt = text.startsWith("You are a real-time interview assistant") ||
-            text.startsWith("You are a helper") ||
-            text.startsWith("CONTEXT:");
+        // Filter out only exact internal system prompts (not broad prefix match)
+        // These are injected internally and should not be treated as real transcript
+        const knownInternalPrompts = [
+            "You are a real-time interview assistant",
+            "You are a helper",
+        ];
+        const isExactInternalPrompt = knownInternalPrompts.some(p => text === p);
+        const isContextInjection = text.startsWith("CONTEXT:");
+        const isInternalPrompt = isExactInternalPrompt || isContextInjection;
 
         if (!isInternalPrompt) {
             // Add to session transcript

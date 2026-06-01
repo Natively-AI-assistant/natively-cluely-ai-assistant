@@ -253,6 +253,15 @@ export class CropperWindowHelper {
         }
     }
 
+    // Force-reapply the current content-protection state. Called after
+    // app.dock.hide()/show() flips the macOS activation policy, which can reset
+    // the window's sharingType even though our in-memory flag is unchanged.
+    public reassertContentProtection(): void {
+        if (this.cropperWindow && !this.cropperWindow.isDestroyed()) {
+            this.cropperWindow.setContentProtection(this.isUndetectable);
+        }
+    }
+
     /**
      * Pre-creates the window in hidden state to eliminate cold-start delay.
      * Recommended to call this during AppState initialization on Windows.

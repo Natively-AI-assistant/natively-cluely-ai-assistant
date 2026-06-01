@@ -1,0 +1,24 @@
+Michael Zhang
+mzhang@mit.edu | 617-555-0193 | Boston, MA
+
+SUMMARY
+Serial founder with 2 successful exits. Building Nexus AI (Series A, $18M raised). Looking for co-founder or founding team role at a hard-tech startup.
+
+SKILLS
+Fundraising, Team Building, Go, Python, SQL, Product Strategy, Enterprise Sales, M&A
+
+EXPERIENCE
+Founder & CEO — Nexus AI (2022-01 – Present)
+  - Raised $18M Series A for AI-powered code review platform
+  - Grew to 120 paying customers and $2.4M ARR
+  - Built 12-person technical team from scratch
+Co-founder & CTO — StackIQ (Acquired by PagerDuty) (2019-03 – 2021-12)
+  - Built infrastructure automation tool, $40M acquisition
+  - Scaled engineering team from 3 to 25
+
+PROJECTS
+Nexus AI: AI-powered code review platform. 120 customers, $2.4M ARR. Raised $18M Series A. [Go, Python, GPT-4, PostgreSQL]
+StackIQ: Infrastructure automation for cloud deployments. Acquired for $40M by PagerDuty. [Terraform, AWS, Go]
+
+EDUCATION
+BS Computer Science + MBA, Computer Science + MBA — MIT (2015)

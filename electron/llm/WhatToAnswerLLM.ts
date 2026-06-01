@@ -55,7 +55,14 @@ export class WhatToAnswerLLM {
         // mode-context retrieval step is skipped — the skill defines the entire
         // intent and mixing custom-mode reference docs in just dilutes it.
         activeSkill?: { id: string; name: string; promptBlock: string },
-        domContext?: string
+        domContext?: string,
+        // Candidate's own resume facts (already XML-formatted by the
+        // KnowledgeOrchestrator) for grounding interviewer questions like "tell
+        // me about your projects". Supplies FACTS only; the first-person
+        // candidate VOICE is owned by UNIVERSAL_WHAT_TO_ANSWER_PROMPT. Empty/
+        // undefined when knowledge mode is off or the question isn't about the
+        // candidate, so non-profile turns are unaffected.
+        candidateProfile?: string
     ): AsyncGenerator<string> {
         const MEASURE = process.env.MEASURE_LATENCY === 'true';
         let tStart = 0, tIntent = 0, tTemporal = 0, tMode = 0, tTrunc = 0, tPrompt = 0, tStream = 0;
@@ -179,6 +186,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
             const assemblerBudget = 2000
                 + estimateTokens(intentContext || '')
                 + estimateTokens(modeContextBlock)
+                + estimateTokens(candidateProfile || '')
                 + estimateTokens(screenContext?.ocrText || '')
                 + domTokenEstimate
                 + estimateTokens((temporalContext?.previousResponses || []).join('\n'));
@@ -225,6 +233,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 priorResponses: temporalContext?.hasRecentResponses ? temporalContext.previousResponses : undefined,
                 intentContext,
                 retrievedModeContext: modeContextBlock || undefined,
+                candidateProfile: candidateProfile || undefined,
                 tokenBudget: Math.max(1000, assemblerBudget),
                 systemPrompt: finalPromptOverride,
             });
@@ -241,7 +250,11 @@ ANSWER SHAPE: ${intentResult.answerShape}
             const streamedBuffer: string[] = [];
             const packetScopes: ProviderDataScope[] = [];
             if (modeContextBlock) packetScopes.push('reference_files');
-            if (temporalContext?.hasRecentResponses && temporalContext.previousResponses.length > 0) packetScopes.push('profile_history');
+            // Candidate resume facts AND prior assistant responses both fall under
+            // the 'profile_history' data scope; push once if either is present.
+            const hasProfileHistory = Boolean(candidateProfile)
+                || Boolean(temporalContext?.hasRecentResponses && temporalContext.previousResponses.length > 0);
+            if (hasProfileHistory) packetScopes.push('profile_history');
             for await (const token of this.llmHelper.streamChat(packet.userMessage, imagePaths, undefined, finalPromptOverride, true, true, packetScopes)) {
                 if (MEASURE) {
                     const now = performance.now();

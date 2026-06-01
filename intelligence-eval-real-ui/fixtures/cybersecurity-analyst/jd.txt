@@ -1,0 +1,15 @@
+Senior Security Operations Engineer — Cloudflare (Austin, TX (Hybrid))
+Level: senior
+
+Defend Cloudflare's global network. Build detection and response capabilities for the backbone of the internet. Work on problems at terabit scale.
+
+REQUIREMENTS
+- 4+ years security operations
+- SIEM expertise
+- Threat hunting experience
+- Cloud security (AWS/GCP)
+- Scripting (Python/Go)
+
+TECHNOLOGIES: Splunk, CrowdStrike, Python, AWS Security, MITRE ATT&CK
+
+COMPENSATION: $160k-$200k

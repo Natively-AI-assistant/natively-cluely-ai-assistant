@@ -31,10 +31,15 @@ export function buildPreparedTranscriptContext(
     timestamp: item.timestamp,
   }));
 
-  const preparedTranscript = prepareTranscriptForWhatToAnswer(transcriptTurns, 12);
+  // `as any` here bridges the structural-but-nominally-distinct turn/context
+  // shapes: the llm helpers (prepareTranscriptForWhatToAnswer / buildTemporalContext)
+  // declare their own RollingTranscript-derived turn types, and the items above
+  // (role/text/timestamp + PreparedContextItem) are field-compatible at runtime
+  // but not assignable nominally. The casts are safe given that field alignment.
+  const preparedTranscript = prepareTranscriptForWhatToAnswer(transcriptTurns as any, 12);
   const temporalContext = buildTemporalContext(
-    contextItems,
-    session.getAssistantResponseHistory(),
+    contextItems as any,
+    session.getAssistantResponseHistory() as any,
     lastSeconds,
   );
 

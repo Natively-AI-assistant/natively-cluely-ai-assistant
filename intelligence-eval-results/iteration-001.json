@@ -1,0 +1,68 @@
+{
+  "timestamp": "2026-05-31T00:30:00.000Z",
+  "iteration": 1,
+  "summary": {
+    "totalTests": 26,
+    "passed": 26,
+    "failed": 0,
+    "accuracy": 1.0,
+    "identityRecallAccuracy": 1.0,
+    "productionPathVerified": true,
+    "antiHardcodingAudit": "PASS"
+  },
+  "testCategories": {
+    "intentClassifier": {
+      "tests": 21,
+      "passed": 21,
+      "failed": 0,
+      "details": [
+        "11 identity questions classified as INTRO",
+        "5 first-person questions NOT classified as generic",
+        "5 generic questions correctly classified as generic"
+      ]
+    },
+    "contextAssembler": {
+      "tests": 5,
+      "passed": 5,
+      "failed": 0,
+      "details": [
+        "\"what is my name\" → intro shortcut with response",
+        "\"hi\" → bare greeting handled",
+        "JD context in system prompt",
+        "candidate name in system prompt",
+        "\"hi\" without resume → graceful"
+      ]
+    }
+  },
+  "criticalTests": {
+    "whatIsMyName": {
+      "classifyIntent": "INTRO",
+      "isIntroQuestion": true,
+      "hasIntroResponse": true,
+      "hasSystemPromptInjection": true,
+      "candidateNameInPrompt": true
+    }
+  },
+  "antiHardcodingAudit": {
+    "fixtureNamesInProduction": [],
+    "fixtureCompaniesInProduction": [],
+    "result": "PASS"
+  },
+  "buildStatus": "PASS",
+  "filesChanged": [
+    "premium/electron/knowledge/IntentClassifier.ts",
+    "premium/electron/knowledge/ContextAssembler.ts",
+    "premium/electron/knowledge/KnowledgeOrchestrator.ts",
+    "src/components/MeetingChatOverlay.tsx",
+    "src/components/GlobalChatOverlay.tsx"
+  ],
+  "bugsFound": [
+    {
+      "bug": "CANDIDATE_FRAMING_REGEX in KnowledgeOrchestrator.processQuestion missing me|my|mine|myself",
+      "file": "premium/electron/knowledge/KnowledgeOrchestrator.ts:354",
+      "fix": "Added me|my|mine|myself to local CANDIDATE_FRAMING_REGEX",
+      "severity": "CRITICAL",
+      "symptom": "\"what is my name\" bypassed persona pipeline at processQuestion gate"
+    }
+  ]
+}

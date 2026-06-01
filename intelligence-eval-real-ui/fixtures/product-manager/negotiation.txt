@@ -1,0 +1,7 @@
+NEGOTIATION CONTEXT
+Target salary: $320000
+Minimum acceptable: $290000
+Current salary: $265000
+Signing bonus target: $40000
+Equity: 0.03% with 4 year vest, 1 year cliff
+Priorities: title (Director), equity, hybrid flexibility

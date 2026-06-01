@@ -1,0 +1,21 @@
+{
+  "iteration": "interviewer-perspective",
+  "generatedNote": "timestamp omitted (deterministic harness; Date.now unavailable in some runners)",
+  "total": 100,
+  "passed": 100,
+  "failed": 0,
+  "accuracy": 1,
+  "perProfile": {
+    "Backend Engineer": 1,
+    "Machine Learning Engineer": 1,
+    "Product Manager": 1,
+    "Sales Development Representative": 1,
+    "UI/UX Designer": 1,
+    "Data Analyst": 1,
+    "DevOps/SRE Engineer": 1,
+    "Customer Success Manager": 1,
+    "Cybersecurity Analyst": 1,
+    "Founder / CEO (Business Development)": 1
+  },
+  "failures": []
+}

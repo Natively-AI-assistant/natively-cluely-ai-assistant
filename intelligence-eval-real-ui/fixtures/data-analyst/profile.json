@@ -1,0 +1,122 @@
+{
+  "profileId": "data-analyst",
+  "role": "Data Analyst",
+  "resume": {
+    "identity": {
+      "name": "Chen Wei",
+      "email": "chen.wei@berkeley.edu",
+      "location": "Seattle, WA",
+      "phone": "206-555-0184",
+      "links": []
+    },
+    "summary": "Data analyst with 3 years in e-commerce and logistics. Built dashboards powering $500M+ business decisions. Expert in SQL, Python, andTableau.",
+    "skills": [
+      "SQL",
+      "Python",
+      "Tableau",
+      "Looker",
+      "A/B Testing",
+      "Statistical Analysis",
+      "Excel",
+      "Spark"
+    ],
+    "experience": [
+      {
+        "company": "Amazon",
+        "role": "Data Analyst",
+        "start_date": "2022-06",
+        "end_date": null,
+        "bullets": [
+          "Built inventory forecasting dashboard saving $12M/year in overstocking",
+          "Developed seller performance scoring ML model (87% accuracy)",
+          "Automate weekly reporting for 50+ stakeholders via Looker"
+        ]
+      },
+      {
+        "company": "Zara",
+        "role": "Business Intelligence Analyst",
+        "start_date": "2021-01",
+        "end_date": "2022-05",
+        "bullets": [
+          "Created customer segmentation model increasing email CTR 34%",
+          "Built real-time sales看板 for 200 store managers"
+        ]
+      }
+    ],
+    "projects": [
+      {
+        "name": "ABTest-Framework",
+        "description": "Python framework for A/B test analysis with bootstrap confidence intervals. Used by 20 analysts at Amazon.",
+        "technologies": [
+          "Python",
+          "pandas",
+          "SciPy",
+          "SQL"
+        ]
+      },
+      {
+        "name": "SQL-Copilot",
+        "description": "VS Code extension for SQL query optimization suggestions. 500+ daily active users.",
+        "technologies": [
+          "TypeScript",
+          "OpenAI API",
+          "PostgreSQL"
+        ]
+      }
+    ],
+    "education": [
+      {
+        "institution": "UC Berkeley",
+        "degree": "BS Statistics",
+        "field": "Statistics",
+        "start_date": "",
+        "end_date": "2021"
+      }
+    ],
+    "achievements": [],
+    "certifications": [],
+    "leadership": []
+  },
+  "jd": {
+    "title": "Senior Data Analyst",
+    "company": "Coinbase",
+    "location": "San Francisco, CA (Hybrid)",
+    "description_summary": "Drive data-informed product decisions for our retail trading platform. Work with trading, growth, and compliance teams to understand our 80M users.",
+    "level": "senior",
+    "employment_type": "full_time",
+    "min_years_experience": 3,
+    "compensation_hint": "$130k-$165k",
+    "requirements": [
+      "3+ years data analysis",
+      "SQL expertise",
+      "Crypto/Web3 interest",
+      "Tableau or Looker",
+      "Python"
+    ],
+    "nice_to_haves": [],
+    "responsibilities": [],
+    "technologies": [
+      "SQL",
+      "Python",
+      "Tableau",
+      "dbt",
+      "Snowflake"
+    ],
+    "keywords": []
+  },
+  "customContext": "Include specific numbers and metrics in your answers. Quantify whenever possible.",
+  "persona": "Analytical partner — data-first, metric-focused, precise.",
+  "negotiation": {
+    "targetSalary": 155000,
+    "minimumSalary": 140000,
+    "currentSalary": 135000,
+    "signingBonus": 10000,
+    "equity": "0.01% with 4 year vest, 1 year cliff",
+    "priorities": [
+      "crypto exposure",
+      "equity upside",
+      "hybrid schedule"
+    ]
+  },
+  "referenceFiles": []
+}
