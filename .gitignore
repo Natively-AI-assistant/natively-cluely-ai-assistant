@@ -206,6 +206,7 @@ docs/superpowers/
 **/AGENTS.md
 **/CLAUDE.md
 **/.claude/
+.codex/
 
 # Temporary working files
 temp/

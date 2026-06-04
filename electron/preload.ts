@@ -114,7 +114,7 @@ interface ElectronAPI {
   onSttLanguageAutoDetected: (callback: (bcp47: string) => void) => () => void
   onSystemAudioPermissionDenied: (callback: (message: string) => void) => () => void
   onDeviceSelectionApplied: (callback: (payload: { kind: 'input' | 'output'; requested: string | null; actual: string | null; fellBack: boolean; reason?: string }) => void) => () => void
-  onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; attempt: number; maxAttempts: number; terminal?: boolean; stuck?: boolean }) => void) => () => void
+  onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; reason?: string; attempt: number; maxAttempts: number; terminal?: boolean; stuck?: boolean }) => void) => () => void
 
   // STT Status Events
   onSttStatusChanged: (callback: (data: { state: 'connected' | 'reconnecting' | 'failed'; provider: string; error?: string; channel: 'user' | 'interviewer'; reconnectAttempts?: number }) => void) => () => void
@@ -128,12 +128,22 @@ interface ElectronAPI {
   getIntelligenceContext: () => Promise<{ context: string; lastAssistantMessage: string | null; activeMode: string }>
   resetIntelligence: () => Promise<{ success: boolean; error?: string }>
 
+  // Interview Setup
+  interviewGetContexts: () => Promise<any[]>
+  interviewSaveContext: (input: any) => Promise<{ success: boolean; context?: any; error?: string }>
+  interviewDeleteContext: (id: string) => Promise<{ success: boolean; error?: string }>
+  interviewSelectFile: () => Promise<{ success?: boolean; cancelled?: boolean; filePath?: string; fileName?: string; extension?: string; error?: string }>
+  interviewExtractFile: (filePath: string) => Promise<{ success: boolean; text?: string; fileName?: string; filePath?: string; extension?: string; error?: string }>
+  interviewGetActiveContext: () => Promise<any | null>
+
   // Meeting Lifecycle
   startMeeting: (metadata?: any) => Promise<{ success: boolean; error?: string }>
   endMeeting: () => Promise<{ success: boolean; error?: string }>
   finalizeMicSTT: () => Promise<void>
   getRecentMeetings: () => Promise<Array<{ id: string; title: string; date: string; duration: string; summary: string }>>
   getMeetingDetails: (id: string) => Promise<any>
+  openMeetingRecording: (id: string) => Promise<{ success: boolean; error?: string }>
+  revealMeetingRecording: (id: string) => Promise<{ success: boolean; error?: string }>
   updateMeetingTitle: (id: string, title: string) => Promise<boolean>
   updateMeetingSummary: (id: string, updates: { overview?: string, actionItems?: string[], keyPoints?: string[], actionItemsTitle?: string, keyPointsTitle?: string }) => Promise<boolean>
   onMeetingsUpdated: (callback: () => void) => () => void
@@ -163,7 +173,8 @@ interface ElectronAPI {
   setModel: (modelId: string) => Promise<{ success: boolean; error?: string }>
   setDefaultModel: (modelId: string) => Promise<{ success: boolean; error?: string }>
   toggleModelSelector: (coords: { x: number; y: number }) => Promise<void>
-  forceRestartOllama: () => Promise<void>
+  ensureOllamaRunning: () => Promise<{ success: boolean; error?: string }>
+  forceRestartOllama: () => Promise<{ success: boolean; error?: string }>
 
   // Settings Window
   toggleSettingsWindow: (coords?: { x: number; y: number }) => Promise<void>
@@ -705,10 +716,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on('device-selection-applied', subscription);
     return () => { ipcRenderer.removeListener('device-selection-applied', subscription); };
   },
-  onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; attempt: number; maxAttempts: number; terminal?: boolean; stuck?: boolean }) => void) => {
+  onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; reason?: string; attempt: number; maxAttempts: number; terminal?: boolean; stuck?: boolean }) => void) => {
     const subscription = (_: any, payload: any) => callback(payload);
     ipcRenderer.on('audio-capture-failed', subscription);
     return () => { ipcRenderer.removeListener('audio-capture-failed', subscription); };
+  },
+  onAudioCaptureRecovered: (callback: (payload: { channel: 'system' | 'mic'; reason?: string }) => void) => {
+    const subscription = (_: any, payload: any) => callback(payload);
+    ipcRenderer.on('audio-capture-recovered', subscription);
+    return () => { ipcRenderer.removeListener('audio-capture-recovered', subscription); };
   },
 
   // STT Status Events
@@ -731,6 +747,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getIntelligenceContext: () => ipcRenderer.invoke("get-intelligence-context"),
   resetIntelligence: () => ipcRenderer.invoke("reset-intelligence"),
 
+  // Interview Setup
+  interviewGetContexts: () => ipcRenderer.invoke("interview:get-contexts"),
+  interviewSaveContext: (input: any) => ipcRenderer.invoke("interview:save-context", input),
+  interviewDeleteContext: (id: string) => ipcRenderer.invoke("interview:delete-context", id),
+  interviewSelectFile: () => ipcRenderer.invoke("interview:select-file"),
+  interviewExtractFile: (filePath: string) => ipcRenderer.invoke("interview:extract-file", filePath),
+  interviewGetActiveContext: () => ipcRenderer.invoke("interview:get-active-context"),
+
   // Action Button Mode (Dynamic Recap / Brainstorm toggle)
   getActionButtonMode: () => ipcRenderer.invoke("get-action-button-mode"),
   setActionButtonMode: (mode: 'recap' | 'brainstorm') => ipcRenderer.invoke("set-action-button-mode", mode),
@@ -752,6 +776,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   finalizeMicSTT: () => ipcRenderer.invoke("finalize-mic-stt"),
   getRecentMeetings: () => ipcRenderer.invoke("get-recent-meetings"),
   getMeetingDetails: (id: string) => ipcRenderer.invoke("get-meeting-details", id),
+  openMeetingRecording: (id: string) => ipcRenderer.invoke("open-meeting-recording", id),
+  revealMeetingRecording: (id: string) => ipcRenderer.invoke("reveal-meeting-recording", id),
   updateMeetingTitle: (id: string, title: string) => ipcRenderer.invoke("update-meeting-title", { id, title }),
   updateMeetingSummary: (id: string, updates: any) => ipcRenderer.invoke("update-meeting-summary", { id, updates }),
   deleteMeeting: (id: string) => ipcRenderer.invoke("delete-meeting", id),
@@ -930,6 +956,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   setModel: (modelId: string) => ipcRenderer.invoke('set-model', modelId),
   setDefaultModel: (modelId: string) => ipcRenderer.invoke('set-default-model', modelId),
   toggleModelSelector: (coords: { x: number; y: number }) => ipcRenderer.invoke('toggle-model-selector', coords),
+  ensureOllamaRunning: () => ipcRenderer.invoke('ensure-ollama-running'),
   forceRestartOllama: () => ipcRenderer.invoke('force-restart-ollama'),
 
   // Settings Window

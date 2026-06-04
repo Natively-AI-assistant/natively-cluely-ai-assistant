@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ToggleLeft, ToggleRight, Search, Zap, Calendar, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, LayoutGrid, RefreshCw, Eye, EyeOff, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle, User, UserSearch } from 'lucide-react';
+import { ToggleLeft, ToggleRight, Search, Zap, Calendar, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, LayoutGrid, RefreshCw, Eye, EyeOff, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle, User, UserSearch, FileText, Upload, Briefcase, X } from 'lucide-react';
 import { generateMeetingPDF } from '../utils/pdfGenerator';
 import icon from "./icon.png";
 import mainui from "../UI_comp/mainui.png";
@@ -15,6 +15,8 @@ import { useShortcuts } from '../hooks/useShortcuts';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { isMac } from '../utils/platformUtils';
 import WindowControls from './WindowControls';
+import { ModelSelector } from './ui/ModelSelector';
+import type { InterviewAnswerLength, InterviewAnswerTone, InterviewContext } from '../types/electron';
 
 interface Meeting {
     id: string;
@@ -43,7 +45,7 @@ interface Meeting {
 }
 
 interface LauncherProps {
-    onStartMeeting: () => void;
+    onStartMeeting: (metadata?: any) => void;
     onOpenSettings: (tab?: string) => void;
     onOpenProfile?: () => void;
     onOpenModes?: () => void;
@@ -78,6 +80,9 @@ const formatTime = (dateStr: string) => {
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
 };
 
+const ANSWER_LENGTH_OPTIONS: InterviewAnswerLength[] = ['Short', 'Balanced', 'Detailed'];
+const ANSWER_TONE_OPTIONS: InterviewAnswerTone[] = ['Direct', 'Conversational', 'Confident', 'Technical'];
+
 const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onOpenProfile, onOpenModes, onPageChange, ollamaPullStatus = 'idle', ollamaPullPercent = 0, ollamaPullMessage = '' }) => {
     const [meetings, setMeetings] = useState<Meeting[]>([]);
     const [isDetectable, setIsDetectable] = useState(false);
@@ -95,6 +100,26 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     const [submittedGlobalQuery, setSubmittedGlobalQuery] = useState('');
 
     const [showModesOnboarding, setShowModesOnboarding] = useState(false);
+    const [interviewContexts, setInterviewContexts] = useState<InterviewContext[]>([]);
+    const [selectedInterviewContextId, setSelectedInterviewContextId] = useState<string>('new');
+    const [roleDraft, setRoleDraft] = useState({
+        id: '',
+        position: '',
+        company: '',
+        jobDescription: '',
+        companyDescription: '',
+    });
+    const [resumeText, setResumeText] = useState('');
+    const [resumeFileName, setResumeFileName] = useState<string | null>(null);
+    const [resumeFilePath, setResumeFilePath] = useState<string | null>(null);
+    const [optionalContextText, setOptionalContextText] = useState('');
+    const [optionalContextFileName, setOptionalContextFileName] = useState<string | null>(null);
+    const [optionalContextFilePath, setOptionalContextFilePath] = useState<string | null>(null);
+    const [selectedModel, setSelectedModel] = useState('gemini-3.1-flash-lite-preview');
+    const [answerLength, setAnswerLength] = useState<InterviewAnswerLength>('Balanced');
+    const [answerTone, setAnswerTone] = useState<InterviewAnswerTone>('Confident');
+    const [isSavingInterviewSetup, setIsSavingInterviewSetup] = useState(false);
+    const [interviewSetupError, setInterviewSetupError] = useState<string | null>(null);
 
     const fetchMeetings = () => {
         if (window.electronAPI && window.electronAPI.getRecentMeetings) {
@@ -107,6 +132,172 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
             window.electronAPI.getUpcomingEvents().then(setUpcomingEvents).catch(err => console.error("Failed to fetch events:", err));
         }
     }
+
+    const loadInterviewContexts = async () => {
+        try {
+            const [contexts, defaultModel] = await Promise.all([
+                window.electronAPI?.interviewGetContexts?.() ?? Promise.resolve([]),
+                window.electronAPI?.getDefaultModel?.().catch(() => null),
+            ]);
+            setInterviewContexts(contexts || []);
+            if (defaultModel?.model) setSelectedModel(defaultModel.model);
+
+            const active = (contexts || []).find(ctx => ctx.isLastUsed) || contexts?.[0];
+            if (active) {
+                applyInterviewContext(active);
+            }
+        } catch (err) {
+            console.error('Failed to load interview contexts:', err);
+        }
+    };
+
+    const applyInterviewContext = (context: InterviewContext) => {
+        setSelectedInterviewContextId(context.id);
+        setRoleDraft({
+            id: context.role?.id || '',
+            position: context.role?.position || '',
+            company: context.role?.company || '',
+            jobDescription: context.role?.jobDescription || '',
+            companyDescription: context.role?.companyDescription || '',
+        });
+        setResumeText(context.resumeText || '');
+        setResumeFileName(context.resumeFileName || null);
+        setResumeFilePath(context.resumeFilePath || null);
+        setOptionalContextText(context.optionalContextText || '');
+        setOptionalContextFileName(context.optionalContextFileName || null);
+        setOptionalContextFilePath(context.optionalContextFilePath || null);
+        setSelectedModel(context.modelId || selectedModel);
+        setAnswerLength(context.answerLength || 'Balanced');
+        setAnswerTone(context.answerTone || 'Confident');
+    };
+
+    const resetInterviewDraft = () => {
+        setSelectedInterviewContextId('new');
+        setRoleDraft({ id: '', position: '', company: '', jobDescription: '', companyDescription: '' });
+        setResumeText('');
+        setResumeFileName(null);
+        setResumeFilePath(null);
+        setOptionalContextText('');
+        setOptionalContextFileName(null);
+        setOptionalContextFilePath(null);
+        setAnswerLength('Balanced');
+        setAnswerTone('Confident');
+    };
+
+    const extractInterviewFile = async (kind: 'resume' | 'context', filePath?: string) => {
+        setInterviewSetupError(null);
+        try {
+            const chosen = filePath
+                ? { success: true, filePath }
+                : await window.electronAPI?.interviewSelectFile?.();
+            if (!chosen || chosen.cancelled || !chosen.filePath) return;
+            const extracted = await window.electronAPI?.interviewExtractFile?.(chosen.filePath);
+            if (!extracted?.success || extracted.text === undefined) {
+                throw new Error(extracted?.error || 'Could not extract text');
+            }
+            if (kind === 'resume') {
+                setResumeText(extracted.text);
+                setResumeFileName(extracted.fileName || null);
+                setResumeFilePath(extracted.filePath || chosen.filePath);
+            } else {
+                setOptionalContextText(extracted.text);
+                setOptionalContextFileName(extracted.fileName || null);
+                setOptionalContextFilePath(extracted.filePath || chosen.filePath);
+            }
+        } catch (err: any) {
+            setInterviewSetupError(err?.message || 'Could not read that file');
+        }
+    };
+
+    const handleInterviewDrop = (kind: 'resume' | 'context') => (event: React.DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        const file = event.dataTransfer.files?.[0] as any;
+        if (file?.path) {
+            extractInterviewFile(kind, file.path);
+        }
+    };
+
+    const saveInterviewSetup = async (): Promise<string | undefined> => {
+        const hasSetup = Boolean(
+            roleDraft.position.trim() ||
+            roleDraft.company.trim() ||
+            roleDraft.jobDescription.trim() ||
+            roleDraft.companyDescription.trim() ||
+            resumeText.trim() ||
+            optionalContextText.trim()
+        );
+
+        if (!hasSetup) return undefined;
+
+        const result = await window.electronAPI?.interviewSaveContext?.({
+            id: selectedInterviewContextId === 'new' ? undefined : selectedInterviewContextId,
+            roleId: roleDraft.id || undefined,
+            role: roleDraft,
+            resumeText,
+            resumeFileName,
+            resumeFilePath,
+            optionalContextText,
+            optionalContextFileName,
+            optionalContextFilePath,
+            modelId: selectedModel,
+            answerLength,
+            answerTone,
+            markLastUsed: true,
+        });
+        if (!result?.success || !result.context) {
+            throw new Error(result?.error || 'Could not save interview setup');
+        }
+
+        setInterviewContexts(prev => {
+            const others = prev.filter(ctx => ctx.id !== result.context!.id).map(ctx => ({ ...ctx, isLastUsed: false }));
+            return [{ ...result.context!, isLastUsed: true }, ...others];
+        });
+        setSelectedInterviewContextId(result.context.id);
+        return result.context.id;
+    };
+
+    const handleDeleteInterviewContext = async () => {
+        if (selectedInterviewContextId === 'new') return;
+        try {
+            const result = await window.electronAPI?.interviewDeleteContext?.(selectedInterviewContextId);
+            if (!result?.success) throw new Error(result?.error || 'Could not delete setup');
+            setInterviewContexts(prev => prev.filter(ctx => ctx.id !== selectedInterviewContextId));
+            resetInterviewDraft();
+        } catch (err: any) {
+            setInterviewSetupError(err?.message || 'Could not delete setup');
+        }
+    };
+
+    const buildInterviewMeetingMetadata = (contextId?: string) => ({
+        interviewContextId: contextId,
+        answerLength,
+        answerTone,
+        answerPrefs: { answerLength, answerTone },
+        modelId: selectedModel,
+    });
+
+    const handleStartInterviewMeeting = async () => {
+        if (isMeetingActive) {
+            await window.electronAPI?.setWindowMode?.('overlay', true);
+            analytics.trackCommandExecuted('resume_meeting_from_launcher');
+            return;
+        }
+
+        setIsSavingInterviewSetup(true);
+        setInterviewSetupError(null);
+        try {
+            const contextId = await saveInterviewSetup();
+            if (selectedModel) {
+                await window.electronAPI?.setModel?.(selectedModel);
+            }
+            onStartMeeting(buildInterviewMeetingMetadata(contextId));
+            analytics.trackCommandExecuted('start_interview_setup');
+        } catch (err: any) {
+            setInterviewSetupError(err?.message || 'Could not start interview meeting');
+        } finally {
+            setIsSavingInterviewSetup(false);
+        }
+    };
 
     const handleRefresh = async () => {
         setIsRefreshing(true);
@@ -142,14 +333,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
             window.electronAPI.seedDemo().catch(err => console.error("Failed to seed demo:", err));
         }
 
-        // Onboarding Check
-        const hasSeenModesOnboarding = localStorage.getItem('natively_seen_modes_onboarding_v5');
-        if (!hasSeenModesOnboarding) {
-            setTimeout(() => {
-                if (mounted) setShowModesOnboarding(true);
-            }, 8000); // Increased delay so it doesn't overlap with other startup notifications
-        }
-
         // Sync initial undetectable state
         if (window.electronAPI?.getUndetectable) {
             window.electronAPI.getUndetectable().then((undetectable) => {
@@ -167,6 +350,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
 
         fetchMeetings();
         fetchEvents();
+        loadInterviewContexts();
 
         // Sync initial meeting active state — guarded so unmounted component isn't written to
         if (window.electronAPI?.getMeetingActive) {
@@ -243,19 +427,30 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     const handleStartPreparedMeeting = async () => {
         if (!preparedEvent) return;
         analytics.trackCommandExecuted('start_prepared_meeting');
+        setIsSavingInterviewSetup(true);
+        setInterviewSetupError(null);
         try {
             const inputDeviceId = localStorage.getItem('preferredInputDeviceId');
             const outputDeviceId = localStorage.getItem('preferredOutputDeviceId');
+            const contextId = await saveInterviewSetup();
+
+            if (selectedModel) {
+                await window.electronAPI?.setModel?.(selectedModel);
+            }
 
             await window.electronAPI.startMeeting({
                 title: preparedEvent.title,
                 calendarEventId: preparedEvent.id,
                 source: 'calendar',
+                ...buildInterviewMeetingMetadata(contextId),
                 audio: { inputDeviceId, outputDeviceId }
             });
             setIsPrepared(false);
         } catch (e) {
             console.error("Failed to start prepared meeting", e);
+            setInterviewSetupError((e as any)?.message || 'Could not start prepared meeting');
+        } finally {
+            setIsSavingInterviewSetup(false);
         }
     };
 
@@ -688,20 +883,8 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
 
                                         {/* Unified CTA pill — same jelly shape, morphs between idle and active-meeting state */}
                                         <motion.button
-                                            onClick={() => {
-                                                if (isMeetingActive) {
-                                                    // inactive=true: overlay appears on top but doesn't activate
-                                                    // the Natively app or steal OS focus — preserves stealth.
-                                                    // setWindowMode (not showWindow) is required because
-                                                    // logo-click set currentWindowMode='launcher', so showWindow()
-                                                    // would re-show the launcher rather than switch to overlay.
-                                                    window.electronAPI?.setWindowMode?.('overlay', true);
-                                                    analytics.trackCommandExecuted('resume_meeting_from_launcher');
-                                                } else {
-                                                    onStartMeeting();
-                                                    analytics.trackCommandExecuted('start_natively_cta');
-                                                }
-                                            }}
+                                            onClick={handleStartInterviewMeeting}
+                                            disabled={isSavingInterviewSetup}
                                             whileHover={{ scale: 1.01, filter: 'brightness(1.1)' }}
                                             whileTap={{ scale: 0.99 }}
                                             transition={{ duration: 0.18, ease: 'easeOut' }}
@@ -758,7 +941,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                             className="flex items-center gap-3"
                                                         >
                                                             <img src={icon} alt="Logo" className="w-[18px] h-[18px] object-contain brightness-0 invert drop-shadow-[0_1px_2px_rgba(0,0,0,0.1)] opacity-90" />
-                                                            <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)] text-[20px] leading-none">Start Natively</span>
+                                                            <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)] text-[20px] leading-none">{isSavingInterviewSetup ? 'Saving setup' : 'Start interview'}</span>
                                                         </motion.div>
                                                     )}
                                                 </AnimatePresence>
@@ -766,59 +949,212 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                         </motion.button>
                                     </div>
 
-                                    {/* 2. Hero Section Cards */}
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 h-[198px]">
-                                        {/* PREPARED STATE CARD */}
-                                        {isPrepared && preparedEvent ? (
-                                            <div className={`md:col-span-3 relative group rounded-xl overflow-hidden border border-emerald-500/30 ${isLight ? 'bg-bg-elevated' : 'bg-bg-secondary'} flex flex-col items-center justify-center p-6 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-900/40 ${isLight ? 'via-bg-elevated to-bg-elevated' : 'via-bg-secondary to-bg-secondary'}`}>
-
-                                                <div className="absolute top-4 right-4 text-emerald-400">
-                                                    <Zap size={16} className="text-yellow-400" />
+                                    {/* 2. Interview Setup Workspace */}
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className={`md:col-span-2 rounded-xl border ${isLight ? 'bg-bg-elevated border-border-muted shadow-sm' : 'bg-bg-secondary border-border-subtle'} p-4 space-y-4`}>
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${isLight ? 'bg-blue-50 text-blue-600' : 'bg-blue-500/10 text-blue-300'}`}>
+                                                        <Briefcase size={18} />
+                                                    </div>
+                                                    <div>
+                                                        <h2 className="text-[17px] font-semibold text-text-primary leading-tight">Interview Setup</h2>
+                                                        <p className="text-[12px] text-text-secondary mt-0.5">Role, resume, model, and answer style.</p>
+                                                    </div>
                                                 </div>
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={resetInterviewDraft}
+                                                        className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors ${isLight ? 'bg-bg-primary hover:bg-black/5 text-text-secondary' : 'bg-bg-input hover:bg-white/10 text-text-secondary'}`}
+                                                    >
+                                                        New
+                                                    </button>
+                                                    {selectedInterviewContextId !== 'new' && (
+                                                        <button
+                                                            onClick={handleDeleteInterviewContext}
+                                                            className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
+                                                            title="Delete setup"
+                                                        >
+                                                            <Trash2 size={15} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
 
-                                                <div className="text-center max-w-lg z-10">
-                                                    <span className="inline-block px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold tracking-wider mb-4 border border-emerald-500/20">
-                                                        READY TO JOIN
-                                                    </span>
-                                                    <h2 className="text-2xl font-bold text-text-primary mb-2">{preparedEvent.title}</h2>
-                                                    <p className="text-xs text-text-secondary mb-6 flex items-center justify-center gap-2">
-                                                        <Calendar size={12} />
-                                                        {new Date(preparedEvent.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - {new Date(preparedEvent.endTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                                                        {preparedEvent.link && " • Link Ready"}
-                                                    </p>
-
-                                                    <div className="flex items-center gap-3 justify-center">
+                                            {isPrepared && preparedEvent && (
+                                                <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+                                                    <div className="min-w-0">
+                                                        <p className="text-[12px] font-semibold text-emerald-500 truncate">{preparedEvent.title}</p>
+                                                        <p className="text-[11px] text-text-secondary">
+                                                            {new Date(preparedEvent.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - {new Date(preparedEvent.endTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 shrink-0">
                                                         <button
                                                             onClick={handleStartPreparedMeeting}
-                                                            className="bg-emerald-500 hover:bg-emerald-400 text-white px-8 py-3 rounded-xl text-sm font-semibold transition-all shadow-lg hover:shadow-emerald-500/25 active:scale-95 flex items-center gap-2"
+                                                            disabled={isSavingInterviewSetup}
+                                                            className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-white text-[12px] font-semibold transition-colors disabled:opacity-60"
                                                         >
-                                                            Start Meeting
-                                                            <ArrowRight size={16} />
+                                                            Start
                                                         </button>
                                                         <button
                                                             onClick={() => setIsPrepared(false)}
-                                                            className="px-4 py-3 rounded-xl text-xs font-medium text-text-tertiary hover:text-white transition-colors"
+                                                            className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-input transition-colors"
+                                                            title="Cancel prepared meeting"
                                                         >
-                                                            Cancel
+                                                            <X size={14} />
                                                         </button>
                                                     </div>
                                                 </div>
+                                            )}
 
-                                                {/* Glows */}
-                                                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[300px] h-[300px] bg-emerald-500/10 blur-[100px] pointer-events-none" />
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                <div className="sm:col-span-2 flex items-center gap-2">
+                                                    <select
+                                                        value={selectedInterviewContextId}
+                                                        onChange={(event) => {
+                                                            const value = event.target.value;
+                                                            if (value === 'new') {
+                                                                resetInterviewDraft();
+                                                            } else {
+                                                                const context = interviewContexts.find(ctx => ctx.id === value);
+                                                                if (context) applyInterviewContext(context);
+                                                            }
+                                                        }}
+                                                        className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-[12px] text-text-primary outline-none focus:border-accent-primary"
+                                                    >
+                                                        <option value="new">Create new role</option>
+                                                        {interviewContexts.map(context => (
+                                                            <option key={context.id} value={context.id}>
+                                                                {[context.role?.position, context.role?.company].filter(Boolean).join(' at ') || `Setup ${context.updatedAt ? new Date(context.updatedAt).toLocaleDateString() : ''}`}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <input
+                                                    value={roleDraft.position}
+                                                    onChange={(event) => setRoleDraft(prev => ({ ...prev, position: event.target.value }))}
+                                                    placeholder="Position"
+                                                    className="bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-[12px] text-text-primary outline-none focus:border-accent-primary"
+                                                />
+                                                <input
+                                                    value={roleDraft.company}
+                                                    onChange={(event) => setRoleDraft(prev => ({ ...prev, company: event.target.value }))}
+                                                    placeholder="Company"
+                                                    className="bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-[12px] text-text-primary outline-none focus:border-accent-primary"
+                                                />
+                                                <textarea
+                                                    value={roleDraft.jobDescription}
+                                                    onChange={(event) => setRoleDraft(prev => ({ ...prev, jobDescription: event.target.value }))}
+                                                    placeholder="Job description"
+                                                    rows={3}
+                                                    className="sm:col-span-2 resize-none bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-[12px] text-text-primary outline-none focus:border-accent-primary"
+                                                />
+                                                <textarea
+                                                    value={roleDraft.companyDescription}
+                                                    onChange={(event) => setRoleDraft(prev => ({ ...prev, companyDescription: event.target.value }))}
+                                                    placeholder="Company notes"
+                                                    rows={2}
+                                                    className="sm:col-span-2 resize-none bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-[12px] text-text-primary outline-none focus:border-accent-primary"
+                                                />
                                             </div>
-                                        ) : (
-                                            /* Default Intro — natively support & upcoming features.
-                                               Calendar "Up Next" lives in Settings → Calendar, not here. */
-                                            <div className="md:col-span-2 h-full">
-                                                <FeatureSpotlight />
+
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                <div
+                                                    onDragOver={(event) => event.preventDefault()}
+                                                    onDrop={handleInterviewDrop('resume')}
+                                                    className="rounded-lg border border-border-subtle bg-bg-input/70 p-3 space-y-2"
+                                                >
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <span className="flex items-center gap-2 text-[12px] font-semibold text-text-primary"><FileText size={14} /> Resume</span>
+                                                        <button onClick={() => extractInterviewFile('resume')} className="p-1.5 rounded-md hover:bg-bg-elevated text-text-secondary hover:text-text-primary transition-colors" title="Upload resume">
+                                                            <Upload size={14} />
+                                                        </button>
+                                                    </div>
+                                                    {resumeFileName && <p className="text-[10px] text-text-tertiary truncate">{resumeFileName}</p>}
+                                                    <textarea
+                                                        value={resumeText}
+                                                        onChange={(event) => {
+                                                            setResumeText(event.target.value);
+                                                            setResumeFileName(null);
+                                                            setResumeFilePath(null);
+                                                        }}
+                                                        placeholder="Paste resume text or drop a file"
+                                                        rows={5}
+                                                        className="w-full resize-none bg-transparent text-[12px] text-text-primary outline-none placeholder:text-text-tertiary"
+                                                    />
+                                                </div>
+                                                <div
+                                                    onDragOver={(event) => event.preventDefault()}
+                                                    onDrop={handleInterviewDrop('context')}
+                                                    className="rounded-lg border border-border-subtle bg-bg-input/70 p-3 space-y-2"
+                                                >
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <span className="flex items-center gap-2 text-[12px] font-semibold text-text-primary"><FileText size={14} /> Extra context</span>
+                                                        <button onClick={() => extractInterviewFile('context')} className="p-1.5 rounded-md hover:bg-bg-elevated text-text-secondary hover:text-text-primary transition-colors" title="Upload context">
+                                                            <Upload size={14} />
+                                                        </button>
+                                                    </div>
+                                                    {optionalContextFileName && <p className="text-[10px] text-text-tertiary truncate">{optionalContextFileName}</p>}
+                                                    <textarea
+                                                        value={optionalContextText}
+                                                        onChange={(event) => {
+                                                            setOptionalContextText(event.target.value);
+                                                            setOptionalContextFileName(null);
+                                                            setOptionalContextFilePath(null);
+                                                        }}
+                                                        placeholder="Paste notes or drop a file"
+                                                        rows={5}
+                                                        className="w-full resize-none bg-transparent text-[12px] text-text-primary outline-none placeholder:text-text-tertiary"
+                                                    />
+                                                </div>
                                             </div>
-                                        )}
 
+                                            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <ModelSelector currentModel={selectedModel} onSelectModel={setSelectedModel} />
+                                                    <div className="flex items-center rounded-lg border border-border-subtle bg-bg-input p-0.5">
+                                                        {ANSWER_LENGTH_OPTIONS.map(option => (
+                                                            <button
+                                                                key={option}
+                                                                onClick={() => setAnswerLength(option)}
+                                                                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${answerLength === option ? 'bg-accent-primary text-white' : 'text-text-secondary hover:text-text-primary'}`}
+                                                            >
+                                                                {option}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                    <div className="flex items-center rounded-lg border border-border-subtle bg-bg-input p-0.5">
+                                                        {ANSWER_TONE_OPTIONS.map(option => (
+                                                            <button
+                                                                key={option}
+                                                                onClick={() => setAnswerTone(option)}
+                                                                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${answerTone === option ? 'bg-accent-primary text-white' : 'text-text-secondary hover:text-text-primary'}`}
+                                                            >
+                                                                {option}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={handleStartInterviewMeeting}
+                                                    disabled={isSavingInterviewSetup}
+                                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-primary hover:bg-accent-primary/90 text-white text-[13px] font-semibold transition-colors disabled:opacity-60"
+                                                >
+                                                    {isSavingInterviewSetup ? 'Saving' : isMeetingActive ? 'Open overlay' : 'Start'}
+                                                    <ArrowRight size={15} />
+                                                </button>
+                                            </div>
 
-
+                                            {interviewSetupError && (
+                                                <div className="flex items-center gap-2 text-[12px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                                                    <AlertCircle size={14} />
+                                                    <span>{interviewSetupError}</span>
+                                                </div>
+                                            )}
+                                        </div>
                                         {/* Right Secondary Card — violet-tinted, "Calendar Connected" + peeking next meeting */}
-                                        <div className="md:col-span-1 rounded-xl overflow-hidden bg-bg-elevated relative group flex flex-col shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]">
+                                        <div className="md:col-span-1 rounded-xl overflow-hidden bg-bg-elevated relative group flex flex-col min-h-[360px] shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]">
                                             {/* Backdrop image with violet tint mask */}
                                             <div className="absolute inset-0">
                                                 <img

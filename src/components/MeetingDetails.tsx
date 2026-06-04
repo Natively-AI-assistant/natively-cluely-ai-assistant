@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
-import { ArrowLeft, Search, Mail, Link, ChevronDown, Play, ArrowUp, Copy, Check, MoreHorizontal, Settings, ArrowRight } from 'lucide-react';
+import { ArrowLeft, Search, Mail, Link, ChevronDown, Play, ArrowUp, Copy, Check, MoreHorizontal, Settings, ArrowRight, FileAudio, FolderOpen } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import MeetingChatOverlay from './MeetingChatOverlay';
 import EditableTextBlock from './EditableTextBlock';
@@ -19,6 +19,12 @@ const formatDuration = (ms: number) => {
     const minutes = Math.floor(ms / 60000);
     const seconds = ((ms % 60000) / 1000).toFixed(0);
     return `${minutes}:${Number(seconds) < 10 ? '0' : ''}${seconds}`;
+};
+
+const formatFileSize = (bytes: number) => {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '0 KB';
+    if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
 const cleanMarkdown = (content: string) => {
@@ -53,6 +59,14 @@ interface Meeting {
         answer?: string;
         items?: string[];
     }>;
+    audioRecording?: {
+        path: string;
+        format: 'wav';
+        sampleRate: number;
+        sizeBytes: number;
+        durationMs: number;
+        exists?: boolean;
+    };
 }
 
 interface MeetingDetailsProps {
@@ -70,6 +84,7 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const [isCopied, setIsCopied] = useState(false);
     const [isChatOpen, setIsChatOpen] = useState(false);
     const [submittedQuery, setSubmittedQuery] = useState('');
+    const [recordingError, setRecordingError] = useState<string | null>(null);
 
     const handleSubmitQuestion = () => {
         if (query.trim()) {
@@ -180,6 +195,25 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
         }
     };
 
+    const handleRecordingAction = async (action: 'open' | 'reveal') => {
+        if (!meeting.audioRecording) return;
+        setRecordingError(null);
+        const result = action === 'open'
+            ? await window.electronAPI?.openMeetingRecording?.(meeting.id)
+            : await window.electronAPI?.revealMeetingRecording?.(meeting.id);
+
+        if (!result?.success) {
+            setMeeting(prev => prev.audioRecording
+                ? { ...prev, audioRecording: { ...prev.audioRecording, exists: false } }
+                : prev
+            );
+            setRecordingError(result?.error || 'Recording unavailable');
+        }
+    };
+
+    const recording = meeting.audioRecording;
+    const recordingAvailable = !!recording && recording.exists !== false;
+
 
     return (
         <div className="h-full w-full flex flex-col bg-bg-secondary text-text-secondary font-sans overflow-hidden">
@@ -212,6 +246,43 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                         {/* Moved Actions: Follow-up & Share (REMOVED per user request) */}
                         {/* <div className="flex items-center gap-2 mt-1"> ... </div> */}
                     </div>
+
+                    {recording && (
+                        <div className="mb-8 flex items-center justify-between gap-4 rounded-lg border border-border-subtle bg-bg-primary/40 px-4 py-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-8 h-8 rounded-md bg-bg-item-active flex items-center justify-center shrink-0">
+                                    <FileAudio size={16} className="text-text-secondary" />
+                                </div>
+                                <div className="min-w-0">
+                                    <div className="text-sm font-medium text-text-primary">Recording</div>
+                                    <div className="text-xs text-text-tertiary truncate">
+                                        {recordingAvailable
+                                            ? `${formatDuration(recording.durationMs)} • ${formatFileSize(recording.sizeBytes)}`
+                                            : recordingError || 'Recording unavailable'}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                    onClick={() => handleRecordingAction('open')}
+                                    disabled={!recordingAvailable}
+                                    className="inline-flex items-center gap-1.5 rounded-md border border-border-subtle px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-item-hover hover:text-text-primary disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
+                                >
+                                    <Play size={13} />
+                                    Open
+                                </button>
+                                <button
+                                    onClick={() => handleRecordingAction('reveal')}
+                                    disabled={!recordingAvailable}
+                                    className="inline-flex items-center gap-1.5 rounded-md border border-border-subtle px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-item-hover hover:text-text-primary disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
+                                >
+                                    <FolderOpen size={13} />
+                                    Reveal
+                                </button>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Tabs */}
                     {/* Designing Tabs to match reference 1:1 (Dark Pill Container) */}

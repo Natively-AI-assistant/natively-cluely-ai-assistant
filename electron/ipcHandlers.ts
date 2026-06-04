@@ -9,6 +9,7 @@ import * as path from "path";
 import * as fs from "fs";
 import { AudioDevices } from "./audio/AudioDevices";
 import { PhoneMirrorService } from "./services/PhoneMirrorService";
+import { InterviewContextManager } from "./services/InterviewContextManager";
 
 
 import { RECOGNITION_LANGUAGES, AI_RESPONSE_LANGUAGES } from "./config/languages"
@@ -55,6 +56,15 @@ export function initializeIpcHandlers(appState: AppState): void {
       });
       console.log('[IPC] Active mode cleared due to license loss');
     } catch (e) { /* non-fatal */ }
+  };
+
+  const getRecordingsDir = (): string => path.resolve(app.getPath('userData'), 'recordings');
+  const resolveSafeRecordingPath = (recordingPath: string | undefined | null): string | null => {
+    if (!recordingPath) return null;
+    const recordingsDir = getRecordingsDir();
+    const resolved = path.resolve(recordingPath);
+    if (!resolved.startsWith(recordingsDir + path.sep)) return null;
+    return resolved;
   };
 
   // --- NEW Test Helper ---
@@ -532,8 +542,9 @@ export function initializeIpcHandlers(appState: AppState): void {
 
 
 
-  safeHandle("quit-app", () => {
-    app.quit()
+  safeHandle("quit-app", async () => {
+    await appState.gracefulQuit()
+    return { success: true }
   })
 
   safeHandle("quit-and-install-update", async () => {
@@ -809,7 +820,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle("ensure-ollama-running", async () => {
     try {
       const { OllamaManager } = require('./services/OllamaManager');
-      await OllamaManager.getInstance().init();
+      await OllamaManager.getInstance().init({ force: true });
       return { success: true };
     } catch (error: any) {
       return { success: false, message: error.message };
@@ -2139,6 +2150,83 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // ==========================================
+  // Interview Setup Handlers
+  // ==========================================
+
+  safeHandle("interview:get-contexts", async () => {
+    try {
+      return InterviewContextManager.getInstance().getContexts();
+    } catch (error: any) {
+      console.error("[IPC] interview:get-contexts error:", error);
+      return [];
+    }
+  });
+
+  safeHandle("interview:get-active-context", async () => {
+    try {
+      return InterviewContextManager.getInstance().getActiveContext();
+    } catch (error: any) {
+      console.error("[IPC] interview:get-active-context error:", error);
+      return null;
+    }
+  });
+
+  safeHandle("interview:save-context", async (_, input: any) => {
+    try {
+      const context = InterviewContextManager.getInstance().saveContext(input || {});
+      return { success: true, context };
+    } catch (error: any) {
+      console.error("[IPC] interview:save-context error:", error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle("interview:delete-context", async (_, id: string) => {
+    try {
+      InterviewContextManager.getInstance().deleteContext(id);
+      return { success: true };
+    } catch (error: any) {
+      console.error("[IPC] interview:delete-context error:", error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle("interview:select-file", async () => {
+    try {
+      const result = await (dialog.showOpenDialog({
+        properties: ['openFile'],
+        filters: [
+          { name: 'Text & Documents', extensions: ['txt', 'md', 'pdf', 'docx', 'doc'] },
+          { name: 'All Files', extensions: ['*'] },
+        ],
+      }) as unknown as Promise<Electron.OpenDialogReturnValue>);
+      if (result.canceled || !result.filePaths.length) {
+        return { success: false, cancelled: true };
+      }
+      const filePath = result.filePaths[0];
+      return {
+        success: true,
+        filePath,
+        fileName: path.basename(filePath),
+        extension: path.extname(filePath).toLowerCase(),
+      };
+    } catch (error: any) {
+      console.error("[IPC] interview:select-file error:", error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle("interview:extract-file", async (_, filePath: string) => {
+    try {
+      const result = await InterviewContextManager.getInstance().extractFile(filePath);
+      return { success: true, ...result };
+    } catch (error: any) {
+      console.error("[IPC] interview:extract-file error:", error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // ==========================================
   // Meeting Lifecycle Handlers
   // ==========================================
 
@@ -2170,6 +2258,26 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle("get-meeting-details", async (event, id) => {
     // Helper to fetch full details
     return DatabaseManager.getInstance().getMeetingDetails(id);
+  });
+
+  safeHandle("open-meeting-recording", async (_, meetingId: string) => {
+    const meeting = DatabaseManager.getInstance().getMeetingDetails(meetingId);
+    const recordingPath = resolveSafeRecordingPath(meeting?.audioRecording?.path);
+    if (!recordingPath) return { success: false, error: 'Recording not found' };
+    if (!fs.existsSync(recordingPath)) return { success: false, error: 'Recording file is missing' };
+
+    const error = await shell.openPath(recordingPath);
+    return error ? { success: false, error } : { success: true };
+  });
+
+  safeHandle("reveal-meeting-recording", async (_, meetingId: string) => {
+    const meeting = DatabaseManager.getInstance().getMeetingDetails(meetingId);
+    const recordingPath = resolveSafeRecordingPath(meeting?.audioRecording?.path);
+    if (!recordingPath) return { success: false, error: 'Recording not found' };
+    if (!fs.existsSync(recordingPath)) return { success: false, error: 'Recording file is missing' };
+
+    shell.showItemInFolder(recordingPath);
+    return { success: true };
   });
 
   safeHandle("update-meeting-title", async (_, { id, title }: { id: string; title: string }) => {
@@ -3200,13 +3308,13 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle("modes:upload-reference-file", async (_, modeId: string) => {
     try {
       if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
-      const result = await dialog.showOpenDialog({
+      const result = await (dialog.showOpenDialog({
         properties: ['openFile'],
         filters: [
           { name: 'Text & Documents', extensions: ['txt', 'md', 'pdf', 'docx', 'doc'] },
           { name: 'All Files', extensions: ['*'] },
         ],
-      });
+      }) as unknown as Promise<Electron.OpenDialogReturnValue>);
       if (result.canceled || !result.filePaths.length) {
         return { success: false, cancelled: true };
       }
@@ -3360,4 +3468,3 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 }
-

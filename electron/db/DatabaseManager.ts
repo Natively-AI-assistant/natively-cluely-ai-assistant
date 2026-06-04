@@ -35,6 +35,22 @@ export interface Meeting {
     calendarEventId?: string;
     source?: 'manual' | 'calendar';
     isProcessed?: boolean;
+    audioRecording?: {
+        path: string;
+        format: 'wav';
+        sampleRate: number;
+        sizeBytes: number;
+        durationMs: number;
+        exists?: boolean;
+    };
+}
+
+export interface MeetingAudioRecording {
+    path: string;
+    format: 'wav';
+    sampleRate: number;
+    sizeBytes: number;
+    durationMs: number;
 }
 
 export class DatabaseManager {
@@ -584,6 +600,60 @@ export class DatabaseManager {
             this.db.pragma('user_version = 14');
         }
 
+        // Version 14 → 15: Add saved mixed meeting audio recording metadata
+        if (version < 15) {
+            console.log('[DatabaseManager] Applying migration v14 → v15: Add meeting audio recording columns');
+            const columnsToAdd = [
+                "ALTER TABLE meetings ADD COLUMN audio_recording_path TEXT",
+                "ALTER TABLE meetings ADD COLUMN audio_recording_format TEXT",
+                "ALTER TABLE meetings ADD COLUMN audio_recording_sample_rate INTEGER",
+                "ALTER TABLE meetings ADD COLUMN audio_recording_size_bytes INTEGER",
+                "ALTER TABLE meetings ADD COLUMN audio_recording_duration_ms INTEGER"
+            ];
+            for (const sql of columnsToAdd) {
+                try { this.db.exec(sql); } catch (e) { /* Column already exists */ }
+            }
+            this.db.pragma('user_version = 15');
+        }
+
+        // Version 15 → 16: Local interview setup roles and answer contexts
+        if (version < 16) {
+            console.log('[DatabaseManager] Applying migration v15 → v16: Add interview setup tables');
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS interview_roles (
+                    id TEXT PRIMARY KEY,
+                    position TEXT NOT NULL DEFAULT '',
+                    company TEXT NOT NULL DEFAULT '',
+                    job_description TEXT NOT NULL DEFAULT '',
+                    company_description TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS interview_contexts (
+                    id TEXT PRIMARY KEY,
+                    role_id TEXT,
+                    resume_text TEXT NOT NULL DEFAULT '',
+                    resume_file_name TEXT,
+                    resume_file_path TEXT,
+                    optional_context_text TEXT NOT NULL DEFAULT '',
+                    optional_context_file_name TEXT,
+                    optional_context_file_path TEXT,
+                    model_id TEXT NOT NULL DEFAULT 'gemini-3.1-flash-lite-preview',
+                    answer_length TEXT NOT NULL DEFAULT 'Balanced',
+                    answer_tone TEXT NOT NULL DEFAULT 'Confident',
+                    is_last_used INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(role_id) REFERENCES interview_roles(id) ON DELETE SET NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_interview_contexts_role ON interview_contexts(role_id);
+                CREATE INDEX IF NOT EXISTS idx_interview_contexts_last_used ON interview_contexts(is_last_used, updated_at);
+            `);
+            this.db.pragma('user_version = 16');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 
@@ -962,15 +1032,83 @@ export class DatabaseManager {
         return this.resolvedExtPath;
     }
 
+    private getRecordingsDir(): string {
+        return path.join(app.getPath('userData'), 'recordings');
+    }
+
+    private isSafeRecordingPath(filePath: string | null | undefined): filePath is string {
+        if (!filePath) return false;
+        const recordingsDir = path.resolve(this.getRecordingsDir());
+        const resolved = path.resolve(filePath);
+        return resolved.startsWith(recordingsDir + path.sep);
+    }
+
+    private rowToAudioRecording(row: any): Meeting['audioRecording'] | undefined {
+        if (!row?.audio_recording_path) return undefined;
+        if (!this.isSafeRecordingPath(row.audio_recording_path)) return undefined;
+        return {
+            path: row.audio_recording_path,
+            format: (row.audio_recording_format || 'wav') as 'wav',
+            sampleRate: row.audio_recording_sample_rate || 24000,
+            sizeBytes: row.audio_recording_size_bytes || 0,
+            durationMs: row.audio_recording_duration_ms || 0,
+            exists: fs.existsSync(row.audio_recording_path),
+        };
+    }
+
+    public updateMeetingAudioRecording(id: string, metadata: MeetingAudioRecording): boolean {
+        if (!this.db) return false;
+        if (!this.isSafeRecordingPath(metadata.path)) {
+            console.warn(`[DatabaseManager] Rejecting audio recording path outside recordings dir for meeting ${id}:`, metadata.path);
+            return false;
+        }
+
+        try {
+            const stmt = this.db.prepare(`
+                UPDATE meetings
+                SET audio_recording_path = ?,
+                    audio_recording_format = ?,
+                    audio_recording_sample_rate = ?,
+                    audio_recording_size_bytes = ?,
+                    audio_recording_duration_ms = ?
+                WHERE id = ?
+            `);
+            const info = stmt.run(
+                metadata.path,
+                metadata.format,
+                metadata.sampleRate,
+                metadata.sizeBytes,
+                metadata.durationMs,
+                id
+            );
+            return info.changes > 0;
+        } catch (error) {
+            console.error(`[DatabaseManager] Failed to update audio recording for meeting ${id}:`, error);
+            return false;
+        }
+    }
+
     public saveMeeting(meeting: Meeting, startTimeMs: number, durationMs: number) {
         if (!this.db) {
             console.error('[DatabaseManager] DB not initialized');
             return;
         }
 
+        const existingRecording = this.db.prepare(`
+            SELECT audio_recording_path, audio_recording_format, audio_recording_sample_rate,
+                   audio_recording_size_bytes, audio_recording_duration_ms
+            FROM meetings
+            WHERE id = ?
+        `).get(meeting.id) as any;
+        const recording = meeting.audioRecording ?? this.rowToAudioRecording(existingRecording);
+
         const insertMeeting = this.db.prepare(`
-            INSERT OR REPLACE INTO meetings (id, title, start_time, duration_ms, summary_json, created_at, calendar_event_id, source, is_processed)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO meetings (
+                id, title, start_time, duration_ms, summary_json, created_at, calendar_event_id, source, is_processed,
+                audio_recording_path, audio_recording_format, audio_recording_sample_rate,
+                audio_recording_size_bytes, audio_recording_duration_ms
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
         const insertTranscript = this.db.prepare(`
@@ -999,7 +1137,12 @@ export class DatabaseManager {
                 meeting.date, // Using the ISO string as created_at for sorting simply
                 meeting.calendarEventId || null,
                 meeting.source || 'manual',
-                meeting.isProcessed ? 1 : 0
+                meeting.isProcessed ? 1 : 0,
+                recording?.path || null,
+                recording?.format || null,
+                recording?.sampleRate || null,
+                recording?.sizeBytes || null,
+                recording?.durationMs || null
             );
 
             // 2. Insert Transcript
@@ -1137,6 +1280,7 @@ export class DatabaseManager {
                 detailedSummary: summaryData.detailedSummary,
                 calendarEventId: row.calendar_event_id,
                 source: row.source as any,
+                audioRecording: this.rowToAudioRecording(row),
                 // We don't load full transcript/usage for list view to keep it light
                 transcript: [] as any[],
                 usage: [] as any[]
@@ -1205,6 +1349,7 @@ export class DatabaseManager {
             detailedSummary: summaryData.detailedSummary,
             calendarEventId: meetingRow.calendar_event_id,
             source: meetingRow.source,
+            audioRecording: this.rowToAudioRecording(meetingRow),
             transcript: transcript,
             usage: usage
         };
@@ -1214,6 +1359,18 @@ export class DatabaseManager {
         if (!this.db) return false;
 
         try {
+            const row = this.db.prepare('SELECT audio_recording_path FROM meetings WHERE id = ?').get(id) as any;
+            if (this.isSafeRecordingPath(row?.audio_recording_path)) {
+                try {
+                    if (fs.existsSync(row.audio_recording_path)) {
+                        fs.unlinkSync(row.audio_recording_path);
+                        console.log(`[DatabaseManager] Deleted recording for meeting ${id}: ${row.audio_recording_path}`);
+                    }
+                } catch (fileError) {
+                    console.error(`[DatabaseManager] Failed to delete recording for meeting ${id}:`, fileError);
+                }
+            }
+
             const stmt = this.db.prepare('DELETE FROM meetings WHERE id = ?');
             const info = stmt.run(id);
             console.log(`[DatabaseManager] Deleted meeting ${id}. Changes: ${info.changes}`);
@@ -1253,6 +1410,7 @@ export class DatabaseManager {
                 detailedSummary: summaryData.detailedSummary,
                 calendarEventId: row.calendar_event_id,
                 source: row.source,
+                audioRecording: this.rowToAudioRecording(row),
                 isProcessed: false,
                 transcript: [] as any[], // Fetched separately via getMeetingDetails or manually if needed
                 usage: [] as any[]

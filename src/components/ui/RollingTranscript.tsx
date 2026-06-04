@@ -13,6 +13,7 @@ interface ChannelStatus {
 interface RollingTranscriptProps {
     text: string;
     isActive?: boolean;
+    layout?: 'ticker' | 'feed';
     surfaceStyle?: React.CSSProperties;
     /** System audio (interviewer) channel */
     interviewerChannel?: ChannelStatus;
@@ -22,7 +23,7 @@ interface RollingTranscriptProps {
 }
 
 const RollingTranscript: React.FC<RollingTranscriptProps> = ({
-    text, isActive = true, surfaceStyle,
+    text, isActive = true, layout = 'ticker', surfaceStyle,
     interviewerChannel, microphoneChannel,
     onCopyDiagnostics
 }) => {
@@ -73,6 +74,11 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({
         : anyReconnecting
             ? { background: 'linear-gradient(180deg, rgba(202,138,4,0.10) 0%, rgba(202,138,4,0.025) 50%, transparent 100%)' }
             : {};
+    const transcriptItems = text
+        .split(/\s+·\s+/)
+        .map(item => item.trim())
+        .filter(Boolean)
+        .slice(-8);
 
     return (
         <div className="relative w-full">
@@ -89,34 +95,55 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({
                 {anyReconnecting && !anyFailed && <div className="absolute inset-0 bg-amber-500/10 stt-pulse-amber" />}
                 {/* 90% centered content */}
                 <div className="w-[90%] mx-auto pt-2">
-                    <div
-                        ref={containerRef}
-                        className="overflow-hidden whitespace-nowrap scroll-smooth overlay-transcript-surface transition-all duration-500 text-right"
-                        style={{
-                            ...surfaceStyle,
-                            maskImage: 'linear-gradient(to right, transparent, black 10%, black 90%, transparent)',
-                        }}
-                    >
-                        {isNormal && (
-                            <span className="inline-flex items-center text-[13px] italic leading-7 text-[var(--overlay-text-muted)] transition-all duration-300">
-                                {text || 'Listening…'}
-                                {isActive && (
-                                    <span className="inline-flex items-center ml-2">
-                                        <span className="w-[3px] h-[3px] bg-emerald-400/70 rounded-full animate-pulse" />
-                                    </span>
-                                )}
-                            </span>
-                        )}
-
-                        {anyReconnecting && !anyFailed && (
-                            <span className="flex items-center justify-center w-full text-[12px] leading-7 stt-state-enter">
-                                <span className="text-amber-400/70 font-medium tracking-wide">
-                                    Reconnecting
+                    {layout === 'feed' && isNormal ? (
+                        <div
+                            className="overlay-transcript-surface transition-all duration-500 text-left max-h-[108px] overflow-y-auto pr-1 pb-2 space-y-1.5"
+                            style={surfaceStyle}
+                        >
+                            {transcriptItems.length > 0 ? transcriptItems.map((item, index) => (
+                                <div key={`${index}-${item.slice(0, 24)}`} className="flex gap-2 text-[12px] leading-5">
+                                    <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400/60" />
+                                    <p className="text-[var(--overlay-text-muted)]">
+                                        {item}
+                                    </p>
+                                </div>
+                            )) : (
+                                <div className="flex items-center gap-2 text-[12px] leading-7 text-[var(--overlay-text-muted)] italic">
+                                    <span>Listening…</span>
+                                    {isActive && <span className="w-[3px] h-[3px] bg-emerald-400/70 rounded-full animate-pulse" />}
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div
+                            ref={containerRef}
+                            className="overflow-hidden whitespace-nowrap scroll-smooth overlay-transcript-surface transition-all duration-500 text-right"
+                            style={{
+                                ...surfaceStyle,
+                                maskImage: 'linear-gradient(to right, transparent, black 10%, black 90%, transparent)',
+                            }}
+                        >
+                            {isNormal && (
+                                <span className="inline-flex items-center text-[13px] italic leading-7 text-[var(--overlay-text-muted)] transition-all duration-300">
+                                    {text || 'Listening…'}
+                                    {isActive && (
+                                        <span className="inline-flex items-center ml-2">
+                                            <span className="w-[3px] h-[3px] bg-emerald-400/70 rounded-full animate-pulse" />
+                                        </span>
+                                    )}
                                 </span>
-                            </span>
-                        )}
+                            )}
+
+                            {anyReconnecting && !anyFailed && (
+                                <span className="flex items-center justify-center w-full text-[12px] leading-7 stt-state-enter">
+                                    <span className="text-amber-400/70 font-medium tracking-wide">
+                                        Reconnecting
+                                    </span>
+                                </span>
+                            )}
 
                         </div>
+                    )}
                 </div>
 
                 {/* Error chips row — both channels visible */}

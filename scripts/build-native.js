@@ -51,17 +51,30 @@ function getClangLibPath() {
 // We rewrite them to @loader_path so the .node file is portable.
 function fixMacOSDylibPaths(nodeFilePath) {
   try {
-    // List all dependent libraries
-    const otoolOutput = execSync(`otool -L "${nodeFilePath}"`, { encoding: 'utf8' });
-    const lines = otoolOutput.split('\n').slice(1); // Skip first line (filename)
+    // List dependent libraries. Use otool -l so we can ignore LC_ID_DYLIB
+    // (the module's own install name) and only rewrite LC_LOAD_DYLIB entries.
+    const otoolOutput = execSync(`otool -l "${nodeFilePath}"`, { encoding: 'utf8' });
+    const lines = otoolOutput.split('\n');
+    const dylibPaths = [];
+    let inLoadDylib = false;
 
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed) continue;
+      if (trimmed.startsWith('cmd ')) {
+        inLoadDylib = trimmed === 'cmd LC_LOAD_DYLIB';
+        continue;
+      }
+      if (!inLoadDylib || !trimmed.startsWith('name ')) continue;
 
-      // Extract the path (first token before whitespace)
-      const dylibPath = trimmed.split(/\s+/)[0];
+      // Extract the path before the "(offset N)" metadata. The project may live
+      // in a directory with spaces, so splitting on whitespace corrupts it.
+      const dylibPath = (trimmed.match(/^name\s+(.*?)\s+\(offset\s+\d+\)$/)?.[1] || '').trim();
+      if (!dylibPath) continue;
+      dylibPaths.push(dylibPath);
+    }
 
+    for (const dylibPath of dylibPaths) {
       // Skip system frameworks and @-prefixed paths (already relative)
       if (dylibPath.startsWith('/System/') ||
           dylibPath.startsWith('/usr/lib/') ||

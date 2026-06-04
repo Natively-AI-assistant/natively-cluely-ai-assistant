@@ -50,6 +50,14 @@ export class SessionTracker {
         title?: string;
         calendarEventId?: string;
         source?: 'manual' | 'calendar';
+        interviewContextId?: string;
+        answerLength?: string;
+        answerTone?: string;
+        answerPrefs?: {
+            answerLength?: string;
+            answerTone?: string;
+        };
+        modelId?: string;
     } | null = null;
 
     // Full Session Tracking (Persisted)
@@ -93,6 +101,21 @@ export class SessionTracker {
 
     public getMeetingMetadata() {
         return this.currentMeetingMetadata;
+    }
+
+    public getInterviewSetupContextBlock(): string {
+        const contextId = this.currentMeetingMetadata?.interviewContextId;
+        if (!contextId) return '';
+        try {
+            const { InterviewContextManager } = require('./services/InterviewContextManager');
+            return InterviewContextManager.getInstance().buildPromptBlock(contextId, {
+                answerLength: this.currentMeetingMetadata?.answerLength || this.currentMeetingMetadata?.answerPrefs?.answerLength,
+                answerTone: this.currentMeetingMetadata?.answerTone || this.currentMeetingMetadata?.answerPrefs?.answerTone,
+            });
+        } catch (error: any) {
+            console.warn('[SessionTracker] Failed to build interview setup context:', error?.message);
+            return '';
+        }
     }
 
     public clearMeetingMetadata(): void {
@@ -360,12 +383,14 @@ export class SessionTracker {
      */
     getFormattedContext(lastSeconds: number = 120): string {
         const items = this.getContext(lastSeconds);
-        return items.map(item => {
+        const transcript = items.map(item => {
             const label = item.role === 'interviewer' ? 'INTERVIEWER' :
                 item.role === 'user' ? 'ME' :
                     'ASSISTANT (PREVIOUS SUGGESTION)';
             return `[${label}]: ${item.text}`;
         }).join('\n');
+        const interviewContext = this.getInterviewSetupContextBlock();
+        return interviewContext ? `${interviewContext}\n\n${transcript}` : transcript;
     }
 
     /**
@@ -395,10 +420,13 @@ export class SessionTracker {
         // Prepend epoch summaries for full session context preservation
         if (this.transcriptEpochSummaries.length > 0) {
             const epochContext = this.transcriptEpochSummaries.join('\n---\n');
-            return `[SESSION HISTORY - EARLIER DISCUSSION]\n${epochContext}\n\n[RECENT TRANSCRIPT]\n${recentTranscript}`;
+            const fullContext = `[SESSION HISTORY - EARLIER DISCUSSION]\n${epochContext}\n\n[RECENT TRANSCRIPT]\n${recentTranscript}`;
+            const interviewContext = this.getInterviewSetupContextBlock();
+            return interviewContext ? `${interviewContext}\n\n${fullContext}` : fullContext;
         }
 
-        return recentTranscript;
+        const interviewContext = this.getInterviewSetupContextBlock();
+        return interviewContext ? `${interviewContext}\n\n${recentTranscript}` : recentTranscript;
     }
 
     // ============================================
@@ -480,6 +508,7 @@ export class SessionTracker {
         this.codingQuestionSource = null;
         this.codingQuestionSetAt = null;
         this.recentInterviewerBuffer = [];
+        this.currentMeetingMetadata = null;
     }
 
     // ============================================

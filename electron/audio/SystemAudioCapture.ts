@@ -55,8 +55,9 @@ export class SystemAudioCapture extends EventEmitter {
         if (this.isRecording) return;
 
         if (!RustAudioCapture) {
-            console.error('[SystemAudioCapture] Cannot start: Rust module missing');
-            return;
+            const error = new Error('[SystemAudioCapture] Cannot start: Rust module missing');
+            console.error(error.message);
+            throw error;
         }
 
         // LAZY INIT: Create monitor here when meeting starts (not in constructor)
@@ -67,8 +68,7 @@ export class SystemAudioCapture extends EventEmitter {
                 this.monitor = new RustAudioCapture(this.deviceId);
             } catch (e) {
                 console.error('[SystemAudioCapture] Failed to create native monitor:', e);
-                this.emit('error', e);
-                return;
+                throw e;
             }
         }
 
@@ -141,7 +141,7 @@ export class SystemAudioCapture extends EventEmitter {
             console.error('[SystemAudioCapture] Failed to start:', error);
             this.isRecording = false;
             this.monitor = null; // Force recreation on next start() — device may have changed
-            this.emit('error', error);
+            throw error;
         }
     }
 

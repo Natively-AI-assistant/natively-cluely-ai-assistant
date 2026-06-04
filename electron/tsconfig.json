@@ -21,6 +21,7 @@
   ],
   "exclude": [
     "db/seedDemo.ts",
-    "db/test-db.ts"
+    "db/test-db.ts",
+    "**/*.test.ts"
   ]
 }

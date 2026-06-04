@@ -37,6 +37,21 @@ function detectRefinementIntent(userText: string): { isRefinement: boolean; inte
     return { isRefinement: false, intent: '' };
 }
 
+function looksLikeInterviewerQuestion(text: string, confidence?: number): boolean {
+    const trimmed = text.trim();
+    if (trimmed.length < 18) return false;
+    if (confidence !== undefined && confidence > 0 && confidence < 0.7) return false;
+
+    const questionSignals = [
+        /\?$/,
+        /\b(can|could|would|will|do|does|did|are|is|was|were|have|has|how|what|why|when|where|which|tell me|walk me through|explain|describe)\b/i,
+        /\b(give me an example|what would you|how would you|have you ever|what's your|what is your)\b/i,
+    ];
+    const nonQuestionChatter = /\b(thank you|thanks|sounds good|great|awesome|perfect|one moment|hold on)\b/i;
+    if (nonQuestionChatter.test(trimmed) && trimmed.length < 50) return false;
+    return questionSignals.some(pattern => pattern.test(trimmed));
+}
+
 // Events emitted by IntelligenceEngine
 export interface IntelligenceModeEvents {
     'assist_update': (insight: string) => void;
@@ -153,6 +168,18 @@ export class IntelligenceEngine extends EventEmitter {
             if (isRefinement) {
                 this.runFollowUp(intent, segment.text.trim());
             }
+        }
+
+        if (
+            result &&
+            result.role === 'interviewer' &&
+            segment.final &&
+            this.activeMode === 'idle' &&
+            looksLikeInterviewerQuestion(segment.text, segment.confidence)
+        ) {
+            void this.runWhatShouldISay(segment.text.trim(), segment.confidence ?? 0.82).catch(error => {
+                console.warn('[IntelligenceEngine] Auto-answer trigger failed:', error?.message || error);
+            });
         }
     }
 
@@ -306,6 +333,10 @@ export class IntelligenceEngine extends EventEmitter {
             }));
 
             const preparedTranscript = prepareTranscriptForWhatToAnswer(transcriptTurns, 12);
+            const interviewContextBlock = this.session.getInterviewSetupContextBlock();
+            const preparedTranscriptWithInterviewContext = interviewContextBlock
+                ? `${interviewContextBlock}\n\nCONVERSATION:\n${preparedTranscript}`
+                : preparedTranscript;
 
             const temporalContext = buildTemporalContext(
                 contextItems,
@@ -326,7 +357,7 @@ export class IntelligenceEngine extends EventEmitter {
             let fullAnswer = "";
             // RC-03 fix: hold a reference to the generator so we can call .return()
             // to properly terminate the network request when a new generation starts.
-            const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePaths);
+            const stream = this.whatToAnswerLLM.generateStream(preparedTranscriptWithInterviewContext, temporalContext, intentResult, imagePaths);
             let streamAborted = false;
 
             for await (const token of stream) {

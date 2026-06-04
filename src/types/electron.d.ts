@@ -139,7 +139,8 @@ export interface ElectronAPI {
   onSttLanguageAutoDetected: (callback: (bcp47: string) => void) => () => void
   onSystemAudioPermissionDenied: (callback: (message: string) => void) => () => void
   onDeviceSelectionApplied: (callback: (payload: { kind: 'input' | 'output'; requested: string | null; actual: string | null; fellBack: boolean; reason?: string }) => void) => () => void
-  onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; attempt: number; maxAttempts: number; terminal?: boolean; stuck?: boolean }) => void) => () => void
+  onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; reason?: string; attempt: number; maxAttempts: number; terminal?: boolean; stuck?: boolean }) => void) => () => void
+  onAudioCaptureRecovered: (callback: (payload: { channel: 'system' | 'mic'; reason?: string }) => void) => () => void
 
   // STT Status Events
   onSttStatusChanged: (callback: (data: { state: 'connected' | 'reconnecting' | 'failed'; provider: string; error?: string; channel: 'user' | 'interviewer'; reconnectAttempts?: number }) => void) => () => void
@@ -158,6 +159,14 @@ export interface ElectronAPI {
   submitManualQuestion: (question: string) => Promise<{ answer: string | null; question: string }>
   getIntelligenceContext: () => Promise<{ context: string; lastAssistantMessage: string | null; activeMode: string }>
   resetIntelligence: () => Promise<{ success: boolean; error?: string }>
+
+  // Interview Setup
+  interviewGetContexts: () => Promise<InterviewContext[]>
+  interviewSaveContext: (input: SaveInterviewContextInput) => Promise<{ success: boolean; context?: InterviewContext; error?: string }>
+  interviewDeleteContext: (id: string) => Promise<{ success: boolean; error?: string }>
+  interviewSelectFile: () => Promise<{ success?: boolean; cancelled?: boolean; filePath?: string; fileName?: string; extension?: string; error?: string }>
+  interviewExtractFile: (filePath: string) => Promise<{ success: boolean; text?: string; fileName?: string; filePath?: string; extension?: string; error?: string }>
+  interviewGetActiveContext: () => Promise<InterviewContext | null>
 
   // Dynamic Action Button Mode
   getActionButtonMode: () => Promise<'recap' | 'brainstorm'>
@@ -187,6 +196,8 @@ export interface ElectronAPI {
   finalizeMicSTT: () => Promise<void>
   getRecentMeetings: () => Promise<Array<{ id: string; title: string; date: string; duration: string; summary: string }>>
   getMeetingDetails: (id: string) => Promise<any>
+  openMeetingRecording: (id: string) => Promise<{ success: boolean; error?: string }>
+  revealMeetingRecording: (id: string) => Promise<{ success: boolean; error?: string }>
   updateMeetingTitle: (id: string, title: string) => Promise<boolean>
   updateMeetingSummary: (id: string, updates: { overview?: string, actionItems?: string[], keyPoints?: string[], actionItemsTitle?: string, keyPointsTitle?: string }) => Promise<boolean>
   deleteMeeting: (id: string) => Promise<boolean>
@@ -226,7 +237,8 @@ export interface ElectronAPI {
   setModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
   setDefaultModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
   toggleModelSelector: (coords: { x: number; y: number }) => Promise<void>;
-  forceRestartOllama: () => Promise<void>;
+  ensureOllamaRunning: () => Promise<{ success: boolean; error?: string }>;
+  forceRestartOllama: () => Promise<{ success: boolean; error?: string }>;
 
   // Settings Window
   toggleSettingsWindow: (coords?: { x: number; y: number }) => Promise<void>;
@@ -383,6 +395,53 @@ export interface ElectronAPI {
   phoneMirrorSetLan: (exposeOnLan: boolean) => Promise<PhoneMirrorInfo | { error: string }>;
   phoneMirrorRotateToken: () => Promise<PhoneMirrorInfo | { error: string }>;
   onPhoneMirrorStatus: (callback: (info: PhoneMirrorInfo) => void) => () => void;
+}
+
+export type InterviewAnswerLength = 'Short' | 'Balanced' | 'Detailed';
+export type InterviewAnswerTone = 'Direct' | 'Conversational' | 'Confident' | 'Technical';
+
+export interface InterviewRole {
+  id: string;
+  position: string;
+  company: string;
+  jobDescription: string;
+  companyDescription: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InterviewContext {
+  id: string;
+  roleId: string | null;
+  role?: InterviewRole | null;
+  resumeText: string;
+  resumeFileName: string | null;
+  resumeFilePath: string | null;
+  optionalContextText: string;
+  optionalContextFileName: string | null;
+  optionalContextFilePath: string | null;
+  modelId: string;
+  answerLength: InterviewAnswerLength;
+  answerTone: InterviewAnswerTone;
+  isLastUsed: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaveInterviewContextInput {
+  id?: string;
+  roleId?: string | null;
+  role?: Partial<InterviewRole> | null;
+  resumeText?: string;
+  resumeFileName?: string | null;
+  resumeFilePath?: string | null;
+  optionalContextText?: string;
+  optionalContextFileName?: string | null;
+  optionalContextFilePath?: string | null;
+  modelId?: string;
+  answerLength?: InterviewAnswerLength;
+  answerTone?: InterviewAnswerTone;
+  markLastUsed?: boolean;
 }
 
 export interface PhoneMirrorInfo {

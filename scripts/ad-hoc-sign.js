@@ -112,4 +112,13 @@ exports.default = async function (context) {
             }
         }
     }
+
+    // Re-seal the outer bundle after modifying nested code signatures.
+    try {
+        console.log('[Ad-Hoc Signing] Re-sealing app bundle after nested signatures...');
+        execSync(`codesign --force --entitlements "${entitlementsPath}" --sign - "${appPath}"`, { stdio: 'inherit' });
+    } catch (error) {
+        console.error('[Ad-Hoc Signing] Failed to re-seal application:', error);
+        throw error;
+    }
 };

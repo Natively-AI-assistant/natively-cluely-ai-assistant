@@ -17,6 +17,13 @@ const SettingsPopup = () => {
     const isFirstRender = React.useRef(true);
 
     const [hasStoredKey, setHasStoredKey] = useState<Record<string, boolean>>({});
+    const [showTranscript, setShowTranscript] = useState(() => {
+        const stored = localStorage.getItem('natively_interviewer_transcript');
+        return stored !== 'false';
+    });
+    const [transcriptLayout, setTranscriptLayout] = useState<'ticker' | 'feed'>(() => {
+        return localStorage.getItem('natively_transcript_layout') === 'feed' ? 'feed' : 'ticker';
+    });
 
     // Load credentials func
     const loadCredentials = async () => {
@@ -99,36 +106,22 @@ const SettingsPopup = () => {
         if (isFirstRender.current) {
             isFirstRender.current = false;
             // Ensure backend is synced on mount (even if no change)
-            try {
-                // @ts-ignore
-                window.electronAPI?.invoke('set-groq-fast-text-mode', useGroqFastText);
-            } catch (e) {
-                console.error(e);
-            }
+            window.electronAPI?.setGroqFastTextMode?.(useGroqFastText).catch(console.error);
             return;
         }
 
         // Apply Groq Text Mode
         localStorage.setItem('natively_groq_fast_text', String(useGroqFastText));
-        try {
-            // @ts-ignore - electronAPI not typed in this file yet
-            window.electronAPI?.invoke('set-groq-fast-text-mode', useGroqFastText);
-        } catch (e) {
-            console.error(e);
-        }
+        window.electronAPI?.setGroqFastTextMode?.(useGroqFastText).catch(console.error);
     }, [useGroqFastText]);
 
     const [actionButtonMode, setActionButtonModeState] = useState<'recap' | 'brainstorm'>('recap');
-
-    const [showTranscript, setShowTranscript] = useState(() => {
-        const stored = localStorage.getItem('natively_interviewer_transcript');
-        return stored !== 'false'; // Default to true if not set
-    });
 
     useEffect(() => {
         const handleStorage = () => {
             const stored = localStorage.getItem('natively_interviewer_transcript');
             setShowTranscript(stored !== 'false');
+            setTranscriptLayout(localStorage.getItem('natively_transcript_layout') === 'feed' ? 'feed' : 'ticker');
         };
 
         window.addEventListener('storage', handleStorage);
@@ -243,26 +236,47 @@ const SettingsPopup = () => {
                 </div>
 
                 {/* Interviewer Transcript Toggle */}
-                <div className={`flex items-center justify-between px-3 py-2 rounded-lg transition-colors duration-200 group cursor-default ${itemHoverClass}`}>
-                    <div className="flex items-center gap-3">
-                        <MessageSquare
-                            className={`w-3.5 h-3.5 transition-colors ${showTranscript ? 'text-emerald-400' : iconInactiveClass}`}
-                            fill={showTranscript ? "currentColor" : "none"}
-                        />
-                        <span className={`text-[12px] font-medium transition-colors ${showTranscript ? (isLightTheme ? 'text-slate-950' : 'text-white') : labelInactiveClass}`}>Transcript</span>
+                <div className={`px-3 py-2 rounded-lg transition-colors duration-200 group cursor-default ${itemHoverClass}`}>
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <MessageSquare
+                                className={`w-3.5 h-3.5 transition-colors ${showTranscript ? 'text-emerald-400' : iconInactiveClass}`}
+                                fill={showTranscript ? "currentColor" : "none"}
+                            />
+                            <span className={`text-[12px] font-medium transition-colors ${showTranscript ? (isLightTheme ? 'text-slate-950' : 'text-white') : labelInactiveClass}`}>Transcript</span>
+                        </div>
+                        <button
+                            onClick={() => {
+                                const newState = !showTranscript;
+                                setShowTranscript(newState);
+                                localStorage.setItem('natively_interviewer_transcript', String(newState));
+                                window.dispatchEvent(new Event('storage'));
+                            }}
+                            className={`w-[30px] h-[18px] rounded-full p-[1.5px] transition-all duration-300 ease-spring active:scale-[0.92] ${showTranscript ? 'bg-emerald-500 shadow-[0_2px_10px_rgba(16,185,129,0.3)]' : defaultToggleTrackClass}`}
+                        >
+                            <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${showTranscript ? 'translate-x-[12px]' : 'translate-x-0'}`} />
+                        </button>
                     </div>
-                    <button
-                        onClick={() => {
-                            const newState = !showTranscript;
-                            setShowTranscript(newState);
-                            localStorage.setItem('natively_interviewer_transcript', String(newState));
-                            // Dispatch event for same-window listeners
-                            window.dispatchEvent(new Event('storage'));
-                        }}
-                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] transition-all duration-300 ease-spring active:scale-[0.92] ${showTranscript ? 'bg-emerald-500 shadow-[0_2px_10px_rgba(16,185,129,0.3)]' : defaultToggleTrackClass}`}
-                    >
-                        <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${showTranscript ? 'translate-x-[12px]' : 'translate-x-0'}`} />
-                    </button>
+                    {showTranscript && (
+                        <div className="mt-2 ml-6 grid grid-cols-2 gap-1 rounded-lg bg-black/5 dark:bg-white/[0.04] p-1">
+                            {(['ticker', 'feed'] as const).map((mode) => (
+                                <button
+                                    key={mode}
+                                    onClick={() => {
+                                        setTranscriptLayout(mode);
+                                        localStorage.setItem('natively_transcript_layout', mode);
+                                        window.dispatchEvent(new Event('storage'));
+                                    }}
+                                    className={`h-7 rounded-md text-[11px] font-semibold transition-all ${transcriptLayout === mode
+                                        ? 'bg-emerald-500/20 text-emerald-500 shadow-sm'
+                                        : `${labelInactiveClass} hover:bg-black/5 dark:hover:bg-white/[0.06]`
+                                    }`}
+                                >
+                                    {mode === 'ticker' ? 'Ticker' : 'Feed'}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 {/* Interview Mode (Brainstorm) Toggle */}

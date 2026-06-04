@@ -27,20 +27,6 @@ const FEATURES: FeatureSlide[] = [
         bullets: ['Repo aware explanations', 'System design interview specialization'],
         footer: 'Designed to work silently during live interviews.',
         type: 'premium',
-    },
-
-    {
-        id: 'support_natively',
-        headline: 'Support development',
-        subtitle: 'Built openly and sustained by users',
-        bullets: [
-            'Development driven by real users',
-            'Faster iteration on features that matter',
-
-        ],
-        type: 'support',
-        actionLabel: 'Contribute to development',
-        url: 'https://buymeacoffee.com/evinjohnn'
     }
 ];
 

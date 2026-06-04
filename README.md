@@ -144,7 +144,7 @@ This demo shows **a complete live meeting scenario**:
 - Screenshot analysis of shared slides
 - Instant generation of what to say next
 - Follow-up questions and concise responses
-- All happening live, without recording or post-processing
+- All happening live, with transcripts and optional post-meeting review stored locally
 
 ---
 
@@ -704,6 +704,7 @@ Natively includes a powerful, local-first meeting management system to review, s
 ![Dashboard Preview](assets/dashboard-preview.png)
 
 - **Meeting Archives:** Access full transcripts of every past meeting, searchable by keywords or dates.
+- **Local Audio Recordings:** Each completed meeting can include a mixed 24 kHz mono WAV saved locally under the app data `recordings` folder, with Open and Reveal actions in Meeting Details.
 - **Smart Export:** One-click export of transcripts and AI summaries to **Markdown, JSON, or Text**—perfect for pasting into Notion, Obsidian, or Slack.
 - **Usage Statistics:** Track your token usage and API costs in real-time. Know exactly how much you are spending on Gemini, OpenAI, or Claude.
 - **Audio Separation:** Distinct controls for **System Audio** (what they say) vs. **Microphone** (what you dictate).
@@ -765,7 +766,7 @@ timeline
 
 Natively processes audio, screen context, and user input locally, maintains a rolling context window, and sends only the required prompt data to the selected AI provider (local or cloud).
 
-No raw audio, screenshots, or transcripts are stored or transmitted unless explicitly enabled by the user.
+Meeting transcripts, summaries, screenshots, and saved audio recordings are stored locally on your device. When speech-to-text or AI providers are configured, the required audio chunks, transcript text, prompts, or screenshots may be sent directly to the selected provider for processing.
 
 ---
 
@@ -873,7 +874,7 @@ Yes. Natively uses a Rust-based system audio capture that works universally acro
 
 #### Is my data safe?
 
-Natively is built on **Privacy-by-Design**. By default, all transcripts, vector embeddings (Local RAG), and keys are stored locally on your machine. We collect only limited anonymous telemetry (no personal user data).
+Natively is built on **Privacy-by-Design**. By default, transcripts, saved meeting audio recordings, vector embeddings (Local RAG), and keys are stored locally on your machine. We collect only limited anonymous telemetry (no personal user data).
 
 #### Can I use it for technical interviews?
 

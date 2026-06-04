@@ -3059,7 +3059,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       // 2. Restart Ollama through the Manager (which handles polling and background spawn)
       // We don't want to use exec('ollama serve') here directly anymore to avoid duplicate tracking
       const { OllamaManager } = require('./services/OllamaManager');
-      await OllamaManager.getInstance().init();
+      await OllamaManager.getInstance().init({ force: true });
 
       return true;
     } catch (error) {

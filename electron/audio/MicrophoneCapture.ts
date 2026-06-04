@@ -53,8 +53,9 @@ export class MicrophoneCapture extends EventEmitter {
         if (this.isRecording) return;
 
         if (!RustMicCapture) {
-            console.error('[MicrophoneCapture] Cannot start: Rust module missing');
-            return;
+            const error = new Error('[MicrophoneCapture] Cannot start: Rust module missing');
+            console.error(error.message);
+            throw error;
         }
 
         // Defensive fallback: under normal flow the constructor always
@@ -66,8 +67,7 @@ export class MicrophoneCapture extends EventEmitter {
             try {
                 this.monitor = new RustMicCapture(this.deviceId);
             } catch (e) {
-                this.emit('error', e);
-                return;
+                throw e;
             }
         }
 
@@ -111,7 +111,7 @@ export class MicrophoneCapture extends EventEmitter {
         } catch (error) {
             console.error('[MicrophoneCapture] Failed to start:', error);
             this.isRecording = false;
-            this.emit('error', error);
+            throw error;
         }
     }
 

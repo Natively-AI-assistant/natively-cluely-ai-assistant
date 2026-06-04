@@ -462,6 +462,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         const stored = localStorage.getItem('natively_interviewer_transcript');
         return stored !== 'false';
     });
+    const [transcriptLayout, setTranscriptLayout] = useState<'ticker' | 'feed'>(() => {
+        return localStorage.getItem('natively_transcript_layout') === 'feed' ? 'feed' : 'ticker';
+    });
 
     const [autoScroll, setAutoScroll] = useState(() => {
         const stored = localStorage.getItem('natively_auto_scroll');
@@ -753,6 +756,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         const handleStorage = () => {
             const stored = localStorage.getItem('natively_interviewer_transcript');
             setShowTranscript(stored !== 'false');
+            setTranscriptLayout(localStorage.getItem('natively_transcript_layout') === 'feed' ? 'feed' : 'ticker');
         };
         window.addEventListener('storage', handleStorage);
         return () => window.removeEventListener('storage', handleStorage);
@@ -1559,6 +1563,38 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${showTranscript ? 'translate-x-5' : 'translate-x-0'}`} />
                                                     </div>
                                                 </div>
+
+                                                {showTranscript && (
+                                                    <div className="flex items-center justify-between px-4 py-3 border-t border-border-subtle/60">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle flex items-center justify-center text-text-tertiary">
+                                                                <MessageSquare size={18} />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-sm font-bold text-text-primary">Transcript Layout</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5">Choose a single-line ticker or a stacked feed</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-1 rounded-lg bg-bg-item-surface p-1 border border-border-subtle">
+                                                            {(['ticker', 'feed'] as const).map((mode) => (
+                                                                <button
+                                                                    key={mode}
+                                                                    onClick={() => {
+                                                                        setTranscriptLayout(mode);
+                                                                        localStorage.setItem('natively_transcript_layout', mode);
+                                                                        window.dispatchEvent(new Event('storage'));
+                                                                    }}
+                                                                    className={`h-8 px-4 rounded-md text-xs font-semibold transition-colors ${transcriptLayout === mode
+                                                                        ? 'bg-accent-primary text-white'
+                                                                        : 'text-text-secondary hover:text-text-primary hover:bg-bg-hover'
+                                                                    }`}
+                                                                >
+                                                                    {mode === 'ticker' ? 'Ticker' : 'Feed'}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
 
                                                 {/* Auto Scroll */}
                                                 <div className="flex items-center justify-between px-4 py-3">

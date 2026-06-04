@@ -67,6 +67,13 @@ interface Message {
     };
 }
 
+interface InterviewerTranscriptTurn {
+    id: string;
+    text: string;
+    final: boolean;
+    timestamp: number;
+}
+
 interface NativelyInterfaceProps {
     onEndMeeting?: () => void;
     overlayOpacity?: number;
@@ -249,6 +256,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         const stored = localStorage.getItem('natively_interviewer_transcript');
         return stored !== 'false';
     });
+    const [transcriptLayout, setTranscriptLayout] = useState<'ticker' | 'feed'>(() => {
+        return localStorage.getItem('natively_transcript_layout') === 'feed' ? 'feed' : 'ticker';
+    });
     const [autoScroll, setAutoScroll] = useState(() => {
         const stored = localStorage.getItem('natively_auto_scroll');
         return stored === 'true';
@@ -262,6 +272,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         const handleStorage = () => {
             const stored = localStorage.getItem('natively_interviewer_transcript');
             setShowTranscript(stored !== 'false');
+            setTranscriptLayout(localStorage.getItem('natively_transcript_layout') === 'feed' ? 'feed' : 'ticker');
         };
         window.addEventListener('storage', handleStorage);
         return () => window.removeEventListener('storage', handleStorage);
@@ -288,6 +299,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     }, [messages, autoScroll]);
 
     const [rollingTranscript, setRollingTranscript] = useState('');  // For interviewer rolling text bar
+    const [interviewerTranscriptTurns, setInterviewerTranscriptTurns] = useState<InterviewerTranscriptTurn[]>([]);
     const [isInterviewerSpeaking, setIsInterviewerSpeaking] = useState(false);  // Track if actively speaking
     const [voiceInput, setVoiceInput] = useState('');  // Accumulated user voice input
     const voiceInputRef = useRef<string>('');  // Ref for capturing in async handlers
@@ -502,11 +514,23 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         return () => unsub?.();
     }, []);
 
-    // Screen Recording Permission Warning Banner
-    const [systemAudioWarning, setSystemAudioWarning] = useState<string | null>(null);
+    // System audio warning banner. Permission denial and silent/routed-away
+    // audio are different problems, so keep the title/action separate from the
+    // message instead of rendering every capture issue as "Permission Denied".
+    const [systemAudioWarning, setSystemAudioWarning] = useState<{
+        title: string;
+        message: string;
+        actionLabel?: string;
+        actionUrl?: string;
+    } | null>(null);
     useEffect(() => {
         const unsub = window.electronAPI?.onSystemAudioPermissionDenied?.((message: string) => {
-            setSystemAudioWarning(message);
+            setSystemAudioWarning({
+                title: 'Screen Recording Permission Needed',
+                message,
+                actionLabel: 'Open Settings',
+                actionUrl: 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
+            });
             setIsExpanded(true); // Force overlay open so user sees the warning
         });
         return () => unsub?.();
@@ -519,13 +543,37 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     // had no signal that anything was wrong.
     useEffect(() => {
         const unsub = window.electronAPI?.onAudioCaptureFailed?.((payload) => {
-            if (payload.channel !== 'system') return;  // mic failures already shown via STT status
             // Only surface terminal failures or the stuck signal — transient
             // recovery attempts shouldn't spam the banner since recovery
             // typically succeeds within ~1.5s.
             if (payload.terminal || payload.stuck) {
-                setSystemAudioWarning(payload.message);
+                const isPermissionMessage = /permission|notallowed|not allowed|access denied/i.test(payload.message);
+                const isMic = payload.channel === 'mic';
+                const isWaitingForSystemAudio = payload.reason === 'no-system-audio';
+                setSystemAudioWarning({
+                    title: isPermissionMessage
+                        ? (isMic ? 'Microphone Permission Needed' : 'System Audio Permission Needed')
+                        : isWaitingForSystemAudio
+                            ? 'Waiting for System Audio'
+                        : (isMic ? 'Microphone Not Available' : 'System Audio Not Detected'),
+                    message: payload.message,
+                    actionLabel: isPermissionMessage ? 'Open Settings' : undefined,
+                    actionUrl: isPermissionMessage
+                        ? (isMic
+                            ? 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'
+                            : 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture')
+                        : undefined,
+                });
                 setIsExpanded(true);
+            }
+        });
+        return () => unsub?.();
+    }, []);
+
+    useEffect(() => {
+        const unsub = window.electronAPI?.onAudioCaptureRecovered?.((payload) => {
+            if (payload.channel === 'system') {
+                setSystemAudioWarning(null);
             }
         });
         return () => unsub?.();
@@ -840,6 +888,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
             setAttachedContext([]);
             setManualTranscript('');
             setVoiceInput('');
+            setRollingTranscript('');
+            setInterviewerTranscriptTurns([]);
             setIsProcessing(false);
             // Optionally reset connection status if needed, but connection persists
 
@@ -1033,6 +1083,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                     const separator = prev ? '  ·  ' : '';
                     return prev + separator + transcript.text;
                 });
+                setInterviewerTranscriptTurns(prev => [
+                    ...prev.filter(turn => turn.final),
+                    {
+                        id: `${Date.now()}-${prev.length}`,
+                        text: transcript.text,
+                        final: true,
+                        timestamp: Date.now(),
+                    },
+                ].slice(-40));
 
                 // Clear speaking indicator after pause
                 setTimeout(() => {
@@ -1046,6 +1105,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                     const accumulated = lastSeparator >= 0 ? prev.substring(0, lastSeparator + 5) : '';
                     return accumulated + transcript.text;
                 });
+                setInterviewerTranscriptTurns(prev => [
+                    ...prev.filter(turn => turn.final),
+                    {
+                        id: 'interim',
+                        text: transcript.text,
+                        final: false,
+                        timestamp: Date.now(),
+                    },
+                ].slice(-40));
             }
         }));
 
@@ -2658,6 +2726,7 @@ Provide only the answer, nothing else.`;
     const interviewerSttIndicatorStatus = sttInterviewerStatus;
     // Strip consecutive error count from display — show only in expanded diagnostics
     const interviewerSttIndicatorError = sttInterviewerError?.replace(/\s*\(\d+ consecutive errors\):?/gi, '');
+    const visibleInterviewerTurns = interviewerTranscriptTurns.filter(turn => turn.text.trim().length > 0);
 
     const copyDiagnostics = async () => {
         const version = import.meta.env.VITE_APP_VERSION || 'unknown';
@@ -2732,25 +2801,27 @@ Provide only the answer, nothing else.`;
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                                 </svg>
                                             </div>
-                                            <span>Screen Recording Permission Denied</span>
+                                            <span>{systemAudioWarning.title}</span>
                                         </div>
                                         <p className="text-[11px] text-yellow-600/70 dark:text-yellow-400/60 leading-snug pl-[26px]">
-                                            {systemAudioWarning}
+                                            {systemAudioWarning.message}
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
-                                        <button
-                                            onClick={() => { window.electronAPI.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'); }}
-                                            className="px-3 py-1.5 rounded-lg bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-700 dark:text-yellow-500 text-[11px] font-semibold transition-all active:scale-95 border border-yellow-500/20 shadow-sm"
-                                        >
-                                            Open Settings
-                                        </button>
+                                        {systemAudioWarning.actionUrl && systemAudioWarning.actionLabel && (
+                                            <button
+                                                onClick={() => { window.electronAPI.openExternal(systemAudioWarning.actionUrl!); }}
+                                                className="px-3 py-1.5 rounded-lg bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-700 dark:text-yellow-500 text-[11px] font-semibold transition-all active:scale-95 border border-yellow-500/20 shadow-sm"
+                                            >
+                                                {systemAudioWarning.actionLabel}
+                                            </button>
+                                        )}
                                         <button
                                             onClick={() => setSystemAudioWarning(null)}
-                                            className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-yellow-600/50 hover:text-yellow-700 dark:text-yellow-500/50 dark:hover:text-yellow-400 transition-colors absolute top-1 right-1 opacity-0 group-hover/warning:opacity-100"
+                                            className="px-3 py-1.5 rounded-lg bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-700 dark:text-yellow-500 text-[11px] font-semibold transition-all active:scale-95 border border-yellow-500/20 shadow-sm"
                                             title="Dismiss"
                                         >
-                                            <X className="w-3 h-3" />
+                                            Dismiss
                                         </button>
                                     </div>
                                 </div>
@@ -2795,6 +2866,7 @@ Provide only the answer, nothing else.`;
                                 <RollingTranscript
                                     text={showTranscript ? rollingTranscript : ''}
                                     isActive={isInterviewerSpeaking}
+                                    layout={transcriptLayout}
                                     surfaceStyle={showTranscript ? appearance.transcriptStyle : undefined}
                                     interviewerChannel={{
                                         status: interviewerSttIndicatorStatus,
@@ -2811,8 +2883,9 @@ Provide only the answer, nothing else.`;
                             ) : null}
 
                             {/* Chat History - Only show if there are messages OR active states */}
-                            {(messages.length > 0 || isManualRecording || isProcessing) && (
-                                <motion.div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3 no-drag" style={{ scrollbarWidth: 'none', maxHeight: scrollMaxH }}>
+                            {(messages.length > 0 || visibleInterviewerTurns.length > 0 || isManualRecording || isProcessing) && (
+                                <motion.div className="flex min-h-0 no-drag" style={{ maxHeight: scrollMaxH }}>
+                                <motion.div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3" style={{ scrollbarWidth: 'none' }}>
                                     {/* Every row spans the full inner width of the scroll
                                         container, which itself rides the shell's animated
                                         width. Bubble max-widths are percentages so the text
@@ -2870,6 +2943,26 @@ Provide only the answer, nothing else.`;
                                         </div>
                                     )}
                                     <div ref={messagesEndRef} />
+                                </motion.div>
+                                {visibleInterviewerTurns.length > 0 && (
+                                    <aside className={`hidden md:flex w-[220px] shrink-0 flex-col border-l p-3 overflow-y-auto ${isLightTheme ? 'border-black/10 bg-white/35' : 'border-white/10 bg-black/15'}`} style={{ scrollbarWidth: 'none' }}>
+                                        <div className="flex items-center justify-between gap-2 mb-2">
+                                            <span className="text-[10px] font-semibold uppercase tracking-wider overlay-text-muted">Interviewer</span>
+                                            {isInterviewerSpeaking && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+                                        </div>
+                                        <div className="space-y-2">
+                                            {visibleInterviewerTurns.map((turn) => (
+                                                <div key={turn.id} className={`rounded-lg border px-2.5 py-2 ${turn.final ? (isLightTheme ? 'border-black/10 bg-white/40' : 'border-white/10 bg-white/[0.04]') : 'border-emerald-500/20 bg-emerald-500/10'}`}>
+                                                    <div className="flex items-center justify-between gap-2 mb-1">
+                                                        <span className="text-[9px] uppercase tracking-wider overlay-text-muted">{turn.final ? 'Final' : 'Interim'}</span>
+                                                        <span className="text-[9px] overlay-text-muted">{new Date(turn.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+                                                    </div>
+                                                    <p className={`text-[11.5px] leading-snug ${turn.final ? 'overlay-text-primary' : 'text-emerald-400'}`}>{turn.text}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </aside>
+                                )}
                                 </motion.div>
                             )}
 

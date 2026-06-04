@@ -91,7 +91,16 @@ export class MeetingPersistence {
         data: { transcript: TranscriptSegment[], usage: any[], startTime: number, durationMs: number, context: string },
         meetingId: string,
         // BUG-04 fix: accept metadata snapshot so calendar info is not lost after session.reset()
-        metadata?: { title?: string; calendarEventId?: string; source?: 'manual' | 'calendar' } | null
+        metadata?: {
+            title?: string;
+            calendarEventId?: string;
+            source?: 'manual' | 'calendar';
+            interviewContextId?: string;
+            answerLength?: string;
+            answerTone?: string;
+            answerPrefs?: { answerLength?: string; answerTone?: string };
+            modelId?: string;
+        } | null
     ): Promise<void> {
         let title = "Untitled Session";
         let summaryData: { overview?: string; actionItems: string[], keyPoints: string[], sections?: Array<{ title: string; bullets: string[] }> } = { actionItems: [], keyPoints: [] };
