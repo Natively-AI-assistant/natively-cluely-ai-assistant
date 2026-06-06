@@ -29,12 +29,13 @@ import {
     Check,
     PointerOff
 } from 'lucide-react';
-import { motion, AnimatePresence, useMotionValue, useTransform, animate } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValue, animate } from 'framer-motion';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 // import { ModelSelector } from './ui/ModelSelector'; // REMOVED
 import TopPill from './ui/TopPill';
 import RollingTranscript from './ui/RollingTranscript';
+import InterviewWorkspace from './interview/InterviewWorkspace';
 import { NegotiationCoachingCard } from '../premium';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -423,31 +424,19 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         },
     }), [isLightTheme]);
 
-    // ── Code-expansion spring ────────────────────────────────────────────────
-    // Architecture: stable canvas, renderer-only animation.
-    //
-    // The OS window is pinned to STABLE_OVERLAY_WIDTH for the entire chat-
-    // expanded session — its width never changes when code becomes visible or
-    // hidden. The shell width animates 600 ↔ 780 purely in renderer CSS via a
-    // Framer spring. mx-auto centers the shell against a STABLE 780 parent, so
-    // its margin animates symmetrically (90 → 0 on expand, 0 → 90 on contract).
-    //
-    // Why this anchors the TopPill to its screen position:
-    //   • OS window X never moves during code expand/contract (no IPC).
-    //   • OS window content area is always 780 wide.
-    //   • TopPill and shell sit in a flex column centered horizontally inside
-    //     that stable canvas → TopPill's screen X is invariant of the spring.
-    //   • OS window Y is preserved by setBounds → TopPill's screen Y is fixed.
-    //   • Shell height growth is driven by content; ResizeObserver feeds height
-    //     (only) to the OS, which extends downward (Y preserved).
-    //
-    // The 90px transparent gutters on each side when shellWidth == 600 are
-    // invisible (window background is transparent) and click-through.
-    const SHELL_WIDTH_COLLAPSED = 600;
-    const SHELL_WIDTH_EXPANDED = 780;
+    // ── Workspace sizing ────────────────────────────────────────────────────
+    // The live interview overlay now defaults to a wider stable canvas so the
+    // answer can be read comfortably while the transcript lives in a right rail.
+    // Width still flows through updateContentDimensionsCentered, so Electron
+    // grows around the current center instead of jumping sideways. On narrower
+    // displays, the renderer reports a clamped width and CSS collapses the rail.
+    const preferredOverlayWidth = typeof window !== 'undefined'
+        ? Math.min(1080, Math.max(600, (window.screen?.availWidth || 1128) - 48))
+        : 1080;
+    const SHELL_WIDTH_COLLAPSED = preferredOverlayWidth;
+    const SHELL_WIDTH_EXPANDED = preferredOverlayWidth;
     const STABLE_OVERLAY_WIDTH = SHELL_WIDTH_EXPANDED;
-    const shellWidth = useMotionValue(SHELL_WIDTH_COLLAPSED);
-    const scrollMaxH = useTransform(shellWidth, [SHELL_WIDTH_COLLAPSED, SHELL_WIDTH_EXPANDED], [320, 560]);
+    const shellWidth = useMotionValue(SHELL_WIDTH_EXPANDED);
 
     // isExpanded mirror for closures inside refs/observers that must not
     // re-bind on every toggle.
@@ -2861,13 +2850,12 @@ Provide only the answer, nothing else.`;
                                 </div>
                             )}
 
-                            {/* Rolling Transcript Bar — includes STT status indicator inline */}
-                            {(showTranscript && rollingTranscript) || interviewerSttIndicatorStatus !== 'connected' || sttUserStatus !== 'connected' ? (
+                            {/* STT status only; healthy interviewer transcript lives in the right rail. */}
+                            {interviewerSttIndicatorStatus !== 'connected' || sttUserStatus !== 'connected' ? (
                                 <RollingTranscript
-                                    text={showTranscript ? rollingTranscript : ''}
+                                    text=""
                                     isActive={isInterviewerSpeaking}
                                     layout={transcriptLayout}
-                                    surfaceStyle={showTranscript ? appearance.transcriptStyle : undefined}
                                     interviewerChannel={{
                                         status: interviewerSttIndicatorStatus,
                                         error: interviewerSttIndicatorError,
@@ -2882,325 +2870,44 @@ Provide only the answer, nothing else.`;
                                 />
                             ) : null}
 
-                            {/* Chat History - Only show if there are messages OR active states */}
-                            {(messages.length > 0 || visibleInterviewerTurns.length > 0 || isManualRecording || isProcessing) && (
-                                <motion.div className="flex min-h-0 no-drag" style={{ maxHeight: scrollMaxH }}>
-                                <motion.div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3" style={{ scrollbarWidth: 'none' }}>
-                                    {/* Every row spans the full inner width of the scroll
-                                        container, which itself rides the shell's animated
-                                        width. Bubble max-widths are percentages so the text
-                                        and code grow with the canvas — same as iMessage /
-                                        Mail when their windows resize. Reflow during the
-                                        700 ms tween is gentle (≈0.3 px / frame width delta)
-                                        and reads as the canvas "breathing", not jitter.
-                                        The other polish (sticky bottom, stable code line
-                                        layout via wrapLongLines:false, stability gate that
-                                        suppresses transitions during scroll) keeps the
-                                        motion calm.
-
-                                        Each row is rendered through React.memo'd MessageRow
-                                        so a setMessages on the streaming row does NOT
-                                        re-render every prior message — bailout fires on
-                                        identity equality (msg, theme, callbacks). */}
-                                    {messages.map((msg) => (
-                                        <MessageRow
-                                            key={msg.id}
-                                            msg={msg}
-                                            isLightTheme={isLightTheme}
-                                            appearance={appearance}
-                                            onCopy={handleCopy}
-                                            renderMessageText={renderMessageText}
-                                        />
-                                    ))}
-
-                                    {/* Active Recording State with Live Transcription */}
-                                    {isManualRecording && (
-                                        <div className="flex flex-col items-end gap-1 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                            {/* Live transcription preview */}
-                                            {(manualTranscript || voiceInput) && (
-                                                <div className="max-w-[85%] px-3.5 py-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-[18px] rounded-tr-[4px]">
-                                                    <span className="text-[13px] text-emerald-300">
-                                                        {voiceInput}{voiceInput && manualTranscript ? ' ' : ''}{manualTranscript}
-                                                    </span>
-                                                </div>
-                                            )}
-                                            <div className="px-3 py-2 flex gap-1.5 items-center">
-                                                <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                                                <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                                                <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                                                <span className="text-[10px] text-emerald-400/70 ml-1">Listening...</span>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {isProcessing && (
-                                        <div className="flex justify-start">
-                                            <div className="px-3 py-2 flex gap-1.5">
-                                                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                                                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                                                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                                            </div>
-                                        </div>
-                                    )}
-                                    <div ref={messagesEndRef} />
-                                </motion.div>
-                                {visibleInterviewerTurns.length > 0 && (
-                                    <aside className={`hidden md:flex w-[220px] shrink-0 flex-col border-l p-3 overflow-y-auto ${isLightTheme ? 'border-black/10 bg-white/35' : 'border-white/10 bg-black/15'}`} style={{ scrollbarWidth: 'none' }}>
-                                        <div className="flex items-center justify-between gap-2 mb-2">
-                                            <span className="text-[10px] font-semibold uppercase tracking-wider overlay-text-muted">Interviewer</span>
-                                            {isInterviewerSpeaking && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
-                                        </div>
-                                        <div className="space-y-2">
-                                            {visibleInterviewerTurns.map((turn) => (
-                                                <div key={turn.id} className={`rounded-lg border px-2.5 py-2 ${turn.final ? (isLightTheme ? 'border-black/10 bg-white/40' : 'border-white/10 bg-white/[0.04]') : 'border-emerald-500/20 bg-emerald-500/10'}`}>
-                                                    <div className="flex items-center justify-between gap-2 mb-1">
-                                                        <span className="text-[9px] uppercase tracking-wider overlay-text-muted">{turn.final ? 'Final' : 'Interim'}</span>
-                                                        <span className="text-[9px] overlay-text-muted">{new Date(turn.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
-                                                    </div>
-                                                    <p className={`text-[11.5px] leading-snug ${turn.final ? 'overlay-text-primary' : 'text-emerald-400'}`}>{turn.text}</p>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </aside>
-                                )}
-                                </motion.div>
-                            )}
-
-                            {/* Quick Actions - Minimal & Clean */}
-                            <div className={`flex flex-nowrap justify-center items-center gap-1.5 px-4 pb-3 overflow-x-hidden ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3'}`}>
-                                <button onClick={handleWhatToSay} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
-                                    <Pencil className="w-3 h-3 opacity-70" /> What to answer?
-                                </button>
-                                <button onClick={handleClarify} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
-                                    <MessageSquare className="w-3 h-3 opacity-70" /> Clarify
-                                </button>
-                                <button onClick={actionButtonMode === 'brainstorm' ? handleBrainstorm : handleRecap} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
-                                    {actionButtonMode === 'brainstorm'
-                                        ? <><Lightbulb className="w-3 h-3 opacity-70" /> Brainstorm</>
-                                        : <><RefreshCw className="w-3 h-3 opacity-70" /> Recap</>
-                                    }
-                                </button>
-                                <button onClick={handleFollowUpQuestions} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
-                                    <HelpCircle className="w-3 h-3 opacity-70" /> Follow Up Question
-                                </button>
-                                <button
-                                    onClick={handleAnswerNow}
-                                    className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium transition-all active:scale-95 duration-200 interaction-base interaction-press min-w-[74px] whitespace-nowrap shrink-0 ${isManualRecording
-                                        ? 'bg-red-500/10 text-red-400 ring-1 ring-red-500/20'
-                                        : 'overlay-chip-surface overlay-text-interactive hover:text-emerald-500 hover:bg-emerald-500/10'
-                                        }`}
-                                    style={isManualRecording ? undefined : appearance.chipStyle}
-                                >
-                                    {isManualRecording ? (
-                                        <>
-                                            <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-                                            Stop
-                                        </>
-                                    ) : (
-                                        <><Zap className="w-3 h-3 opacity-70" /> Answer</>
-                                    )}
-                                </button>
-                            </div>
-
-                            {/* Input Area */}
-                            <div className="p-3 pt-0">
-                                {/* Latent Context Preview (Attached Screenshot) */}
-                                {attachedContext.length > 0 && (
-                                    <div className={`mb-2 rounded-lg p-2 transition-all duration-200 border ${subtleSurfaceClass}`} style={appearance.subtleStyle}>
-                                        <div className="flex items-center justify-between mb-1.5">
-                                            <span className="text-[11px] font-medium overlay-text-primary">
-                                                {attachedContext.length} screenshot{attachedContext.length > 1 ? 's' : ''} attached
-                                            </span>
-                                            <button
-                                                onClick={() => setAttachedContext([])}
-                                                className="p-1 rounded-full transition-colors overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive"
-                                                title="Remove all"
-                                                style={appearance.iconStyle}
-                                            >
-                                                <X className="w-3.5 h-3.5" />
-                                            </button>
-                                        </div>
-                                        <div className="flex gap-1.5 overflow-x-auto max-w-full pb-1">
-                                            {attachedContext.map((ctx, idx) => (
-                                                <div key={ctx.path} className="relative group/thumb flex-shrink-0">
-                                                    <img
-                                                        src={ctx.preview}
-                                                        alt={`Screenshot ${idx + 1}`}
-                                                        className={`h-10 w-auto rounded border ${isLightTheme ? 'border-black/15' : 'border-white/20'}`}
-                                                    />
-                                                    <button
-                                                        onClick={() => setAttachedContext(prev => prev.filter((_, i) => i !== idx))}
-                                                        className="absolute -top-1 -right-1 w-4 h-4 bg-red-500/80 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity"
-                                                        title="Remove"
-                                                    >
-                                                        <X className="w-2.5 h-2.5 text-white" />
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                        <span className="text-[10px] overlay-text-muted">Ask a question or click Answer</span>
-                                    </div>
-                                )}
-
-                                <div className="relative group">
-                                    <input
-                                        ref={textInputRef}
-                                        type="text"
-                                        value={inputValue}
-                                        onChange={(e) => setInputValue(e.target.value)}
-                                        onKeyDown={(e) => e.key === 'Enter' && handleManualSubmit()}
-
-                                        className={`w-full border focus:ring-1 rounded-xl pl-3 pr-10 py-2.5 focus:outline-none transition-all duration-200 ease-sculpted text-[13px] leading-relaxed ${inputClass}`}
-                                        style={appearance.inputStyle}
-                                    />
-
-                                    {/* Custom Rich Placeholder */}
-                                    {!inputValue && (
-                                        <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none text-[13px] overlay-text-muted">
-                                            <span>Ask anything on screen or conversation, or</span>
-                                            <div className="flex items-center gap-1 opacity-80">
-                                                {(shortcuts.selectiveScreenshot || ['⌘', 'Shift', 'H']).map((key, i) => (
-                                                    <React.Fragment key={i}>
-                                                        {i > 0 && <span className="text-[10px]">+</span>}
-                                                        <kbd className="px-1.5 py-0.5 rounded border text-[10px] font-sans min-w-[20px] text-center overlay-control-surface overlay-text-secondary" style={appearance.controlStyle}>{key}</kbd>
-                                                    </React.Fragment>
-                                                ))}
-                                            </div>
-                                            <span>for selective screenshot</span>
-                                        </div>
-                                    )}
-
-                                    {!inputValue && (
-                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none opacity-20">
-                                            <span className="text-[10px]">↵</span>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Bottom Row */}
-                                <div className="flex items-center justify-between mt-3 px-0.5">
-                                    <div className="flex items-center gap-1.5">
-                                        <button
-                                            onClick={(e) => {
-                                                // Calculate position for detached window
-                                                if (!contentRef.current) return;
-                                                const contentRect = contentRef.current.getBoundingClientRect();
-                                                const buttonRect = e.currentTarget.getBoundingClientRect();
-                                                const GAP = 8;
-
-                                                const x = window.screenX + buttonRect.left;
-                                                const y = window.screenY + contentRect.bottom + GAP;
-
-                                                window.electronAPI.toggleModelSelector({ x, y });
-                                            }}
-                                            className={`
-                                                flex items-center gap-2 px-3 py-1.5
-                                                border rounded-lg transition-colors
-                                                text-xs font-medium w-[140px]
-                                                interaction-base interaction-press
-                                                ${controlSurfaceClass}
-                                            `}
-                                            style={appearance.controlStyle}
-                                        >
-                                            <span className="truncate min-w-0 flex-1">
-                                                {(() => {
-                                                    const m = currentModel;
-                                                    if (m.startsWith('ollama-')) return m.replace('ollama-', '');
-                                                    if (m === 'gemini-3.1-flash-lite-preview') return 'Gemini 3.1 Flash';
-                                                    if (m === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
-                                                    if (m === 'llama-3.3-70b-versatile') return 'Groq Llama 3.3';
-                                                    if (m === 'gpt-5.4') return 'GPT 5.4';
-                                                    if (m === 'claude-sonnet-4-6') return 'Sonnet 4.6';
-                                                    return m;
-                                                })()}
-                                            </span>
-                                            <ChevronDown size={14} className="shrink-0 transition-transform" />
-                                        </button>
-
-                                        <div className="w-px h-3 mx-1" style={appearance.dividerStyle} />
-
-                                        <div className="relative">
-                                            <button
-                                                onClick={(e) => {
-                                                    if (isSettingsOpen) {
-                                                        // If open, just close it (toggle will handle logic but we can be explicit or just toggle)
-                                                        // Actually toggle-settings-window handles hiding if visible, so logic is same.
-                                                        window.electronAPI.toggleSettingsWindow();
-                                                        return;
-                                                    }
-
-                                                    if (!contentRef.current) return;
-
-                                                    const contentRect = contentRef.current.getBoundingClientRect();
-                                                    const buttonRect = e.currentTarget.getBoundingClientRect();
-                                                    const POPUP_WIDTH = 270; // Matches SettingsWindowHelper actual width
-                                                    const GAP = 8; // Same gap as between TopPill and main body (gap-2 = 8px)
-
-                                                    // X: Left-aligned relative to the Settings Button
-                                                    const x = window.screenX + buttonRect.left;
-
-                                                    // Y: Below the main content + gap
-                                                    const y = window.screenY + contentRect.bottom + GAP;
-
-                                                    window.electronAPI.toggleSettingsWindow({ x, y });
-                                                }}
-                                                className={`
-                                            w-7 h-7 flex items-center justify-center rounded-lg
-                                            interaction-base interaction-press
-                                            ${isSettingsOpen
-                                                        ? 'overlay-icon-surface overlay-icon-surface-hover overlay-text-primary'
-                                                        : 'overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive'}
-                                        `}
-
-                                                style={appearance.iconStyle}
-                                            >
-                                                <SlidersHorizontal className="w-3.5 h-3.5" />
-                                            </button>
-                                        </div>
-
-
-
-                                        {/* Mouse Passthrough Toggle */}
-                                        <div className="relative">
-                                            <button
-                                                onClick={() => {
-                                                    const newState = !isMousePassthrough;
-                                                    setIsMousePassthrough(newState);
-                                                    window.electronAPI?.setOverlayMousePassthrough?.(newState);
-                                                }}
-                                                className={`
-                                                    w-7 h-7 flex items-center justify-center rounded-lg
-                                                    interaction-base interaction-press
-                                                    ${isMousePassthrough
-                                                        ? 'overlay-icon-surface overlay-icon-surface-hover text-sky-400 opacity-100'
-                                                        : 'overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive'}
-                                                `}
-
-                                                style={appearance.iconStyle}
-                                            >
-                                                <PointerOff className="w-3.5 h-3.5" />
-                                            </button>
-                                        </div>
-
-                                    </div>
-
-                                    <button
-                                        onClick={handleManualSubmit}
-                                        disabled={!inputValue.trim()}
-                                        className={`
-                                    w-7 h-7 rounded-full flex items-center justify-center
-                                    interaction-base interaction-press
-                                    ${inputValue.trim()
-                                                ? 'bg-[#007AFF] text-white shadow-lg shadow-blue-500/20 hover:bg-[#0071E3]'
-                                                : 'overlay-icon-surface overlay-text-muted cursor-not-allowed'
-                                            }
-                                `}
-                                        style={inputValue.trim() ? undefined : appearance.iconStyle}
-                                    >
-                                        <ArrowRight className="w-3.5 h-3.5" />
-                                    </button>
-                                </div>
-                            </div>
+                            <InterviewWorkspace
+                                actionButtonMode={actionButtonMode}
+                                appearance={appearance}
+                                attachedContext={attachedContext}
+                                contentRef={contentRef}
+                                controlSurfaceClass={controlSurfaceClass}
+                                currentModel={currentModel}
+                                handleAnswerNow={handleAnswerNow}
+                                handleBrainstorm={handleBrainstorm}
+                                handleClarify={handleClarify}
+                                handleFollowUpQuestions={handleFollowUpQuestions}
+                                handleManualSubmit={handleManualSubmit}
+                                handleRecap={handleRecap}
+                                handleWhatToSay={handleWhatToSay}
+                                inputClass={inputClass}
+                                inputValue={inputValue}
+                                isInterviewerSpeaking={isInterviewerSpeaking}
+                                isLightTheme={isLightTheme}
+                                isManualRecording={isManualRecording}
+                                isMousePassthrough={isMousePassthrough}
+                                isProcessing={isProcessing}
+                                isSettingsOpen={isSettingsOpen}
+                                manualTranscript={manualTranscript}
+                                messages={messages}
+                                messagesEndRef={messagesEndRef}
+                                onCopy={handleCopy}
+                                quickActionClass={quickActionClass}
+                                renderMessageText={renderMessageText}
+                                scrollContainerRef={scrollContainerRef}
+                                setAttachedContext={setAttachedContext}
+                                setInputValue={setInputValue}
+                                setIsMousePassthrough={setIsMousePassthrough}
+                                shortcuts={shortcuts}
+                                subtleSurfaceClass={subtleSurfaceClass}
+                                textInputRef={textInputRef}
+                                turns={visibleInterviewerTurns}
+                                voiceInput={voiceInput}
+                            />
                         </motion.div>
                     </motion.div>
                 )}

@@ -507,6 +507,116 @@ body {
   color: var(--overlay-text-placeholder);
 }
 
+/* Live interview workspace */
+.interview-workspace {
+  display: flex;
+  min-height: 0;
+  max-height: min(680px, calc(100vh - 96px));
+  flex-direction: column;
+}
+
+.interview-workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  min-height: 0;
+  height: min(560px, calc(100vh - 220px));
+  border-bottom: 1px solid var(--overlay-border-soft);
+}
+
+.interview-answer-panel {
+  min-height: 0;
+}
+
+.interview-answer-scroll {
+  overflow-wrap: anywhere;
+}
+
+.interview-question-rail {
+  min-height: 0;
+  overflow-y: auto;
+  border-left: 1px solid var(--overlay-border-soft);
+  background: color-mix(in srgb, var(--overlay-chip-bg) 72%, transparent);
+  scrollbar-width: none;
+}
+
+.interview-command-bar {
+  flex-shrink: 0;
+  padding: 12px;
+}
+
+.interview-quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: hidden;
+  padding-bottom: 10px;
+}
+
+.interview-action-chip {
+  display: inline-flex;
+  min-height: 28px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  transition: transform 200ms cubic-bezier(0.25, 1, 0.5, 1), background-color 200ms cubic-bezier(0.25, 1, 0.5, 1), border-color 200ms cubic-bezier(0.25, 1, 0.5, 1), color 200ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.interview-action-chip:active {
+  transform: scale(0.97);
+}
+
+.interview-input-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+@supports not (background: color-mix(in srgb, white 50%, transparent)) {
+  .interview-question-rail {
+    background: var(--overlay-chip-bg);
+  }
+}
+
+@media (max-width: 900px) {
+  .interview-workspace {
+    max-height: min(720px, calc(100vh - 80px));
+  }
+
+  .interview-workspace-grid {
+    grid-template-columns: minmax(0, 1fr);
+    height: min(620px, calc(100vh - 238px));
+  }
+
+  .interview-question-rail {
+    max-height: 190px;
+    border-left: 0;
+    border-top: 1px solid var(--overlay-border-soft);
+  }
+
+  .interview-quick-actions {
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+
+  .interview-input-row {
+    flex-wrap: wrap;
+  }
+
+  .interview-input-row > .group {
+    order: -1;
+    flex-basis: 100%;
+  }
+}
+
 /* Interaction Utilities - Reusable */
 .interaction-base {
   transition-property: transform, opacity, background-color, border-color, color;

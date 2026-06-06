@@ -13,6 +13,14 @@ import { LocalEmbeddingProvider } from './providers/LocalEmbeddingProvider';
 const MAX_RETRIES = 3;
 const RETRY_DELAY_BASE_MS = 2000;
 
+function summarizeEmbeddingConfig(config: AppAPIConfig): Record<string, unknown> {
+    return {
+        openaiKey: config.openaiKey ? '[configured]' : '[missing]',
+        geminiKey: config.geminiKey ? '[configured]' : '[missing]',
+        ollamaUrl: config.ollamaUrl || '[missing]',
+    };
+}
+
 /**
  * EmbeddingPipeline - Handles post-meeting embedding generation
  * 
@@ -54,7 +62,7 @@ export class EmbeddingPipeline {
             return this.initPromise ?? Promise.resolve();
         }
         this._lastConfig = { ...config };
-        console.log('[EmbeddingPipeline] Initializing with config:', config);
+        console.log('[EmbeddingPipeline] Initializing with config:', summarizeEmbeddingConfig(config));
         this.initPromise = this._doInitialize(config);
         return this.initPromise;
     }

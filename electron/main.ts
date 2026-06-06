@@ -1046,6 +1046,14 @@ export class AppState {
         return;
       }
 
+      const preview = segment.text.length > 120
+        ? `${segment.text.slice(0, 117)}...`
+        : segment.text;
+      console.log(
+        `[Main] STT transcript (${speaker}) ${segment.isFinal ? 'final' : 'interim'} ` +
+        `conf=${segment.confidence?.toFixed?.(2) ?? segment.confidence}: "${preview}"`
+      );
+
       this.intelligenceManager.handleTranscript({
         speaker: speaker,
         text: segment.text,
@@ -1226,6 +1234,7 @@ export class AppState {
     // audio isn't being picked up — instead of staring at an empty transcript.
     const NO_SYSTEM_AUDIO_WATCHDOG_MS = 20000;
     let stuckTimer: NodeJS.Timeout | null = null;
+    let idleLogTimer: NodeJS.Timeout | null = null;
     const armStuckWatchdog = () => {
       if (stuckTimer) clearTimeout(stuckTimer);
       stuckTimer = setTimeout(() => {
@@ -1243,6 +1252,19 @@ export class AppState {
           stuck: true,
         });
       }, NO_SYSTEM_AUDIO_WATCHDOG_MS);
+
+      if (idleLogTimer) clearInterval(idleLogTimer);
+      idleLogTimer = setInterval(() => {
+        if (this.systemAudioCapture !== capture || !this.isMeetingActive) return;
+        if (chunkCount === 0 || lastChunkAt === 0) return;
+        const idleMs = Date.now() - lastChunkAt;
+        if (idleMs >= 15000) {
+          console.log(
+            `${prefix}SystemAudio idle: no chunks for ${Math.round(idleMs / 1000)}s ` +
+            `after ${chunkCount} chunks — likely silence suppression, quiet Zoom output, or an output-route change.`
+          );
+        }
+      }, 15000);
     };
 
     // TCC zero-fill detector. Apple's CoreAudio Process Tap returns zero-filled
@@ -1267,6 +1289,7 @@ export class AppState {
     capture.on('start', armStuckWatchdog);
     capture.on('stop', () => {
       if (stuckTimer) { clearTimeout(stuckTimer); stuckTimer = null; }
+      if (idleLogTimer) { clearInterval(idleLogTimer); idleLogTimer = null; }
     });
     // Inter-chunk gap tracking. Normal cadence is one 20ms chunk every 20ms
     // (so ~50/sec). A gap >2s while the meeting is active and the capture is

@@ -31,6 +31,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
     private keepAliveInterval: NodeJS.Timeout | null = null;
     private buffer: Buffer[] = [];
     private isConnecting = false;
+    private connectionSeq = 0;
 
     constructor(apiKey: string) {
         super();
@@ -85,6 +86,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
 
     public stop(): void {
         this.shouldReconnect = false;
+        this.connectionSeq++;
         this.clearTimers();
 
         if (this.live) {
@@ -135,7 +137,9 @@ export class DeepgramStreamingSTT extends EventEmitter {
 
     private connect(): void {
         if (this.isConnecting) return;
+        this.clearTimers();
         this.isConnecting = true;
+        const connectionId = ++this.connectionSeq;
 
         console.log(`[DeepgramStreaming] Connecting (rate=${this.sampleRate}, ch=${this.numChannels}, lang=${this.languageCode})...`);
 
@@ -144,7 +148,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
 
             const deepgram = createClient(this.apiKey);
 
-            this.live = deepgram.listen.live({
+            const live = deepgram.listen.live({
                 model: 'nova-3',
                 language: this.languageCode,
                 smart_format: true,
@@ -156,14 +160,17 @@ export class DeepgramStreamingSTT extends EventEmitter {
                 utterance_end_ms: 1000,
                 vad_events: true,
             });
+            this.live = live;
 
-            this.live.on(LiveTranscriptionEvents.Open, () => {
+            live.on(LiveTranscriptionEvents.Open, () => {
+                if (!this.isCurrentConnection(connectionId, live)) return;
                 this.isConnecting = false;
                 this.isOpen = true;
                 console.log('[DeepgramStreaming] Connected');
 
                 // Register Transcript inside Open per SDK README pattern
-                this.live.on(LiveTranscriptionEvents.Transcript, (data: any) => {
+                live.on(LiveTranscriptionEvents.Transcript, (data: any) => {
+                    if (!this.isCurrentConnection(connectionId, live)) return;
                     try {
                         const alt = data.channel?.alternatives?.[0];
                         const transcript = alt?.transcript;
@@ -183,31 +190,36 @@ export class DeepgramStreamingSTT extends EventEmitter {
                 // Flush buffered audio
                 const buffered = this.buffer.splice(0);
                 for (const chunk of buffered) {
-                    try { this.live?.send(chunk); } catch { }
+                    try { live.send(chunk); } catch { }
                 }
                 if (buffered.length > 0) {
                     console.log(`[DeepgramStreaming] Flushed ${buffered.length} buffered chunks`);
                 }
 
-                // SDK keepAlive() every 8s prevents idle timeout (per Deepgram docs)
+                // SDK keepAlive() every 8s prevents idle timeout (per Deepgram docs).
+                // Send one immediately too, so a stream started before audio arrives
+                // does not sit completely idle during capture warm-up.
+                this.sendKeepAlive(live);
                 this.keepAliveInterval = setInterval(() => {
-                    if (this.isOpen) {
-                        try { this.live?.keepAlive(); } catch { }
+                    if (this.isCurrentConnection(connectionId, live) && this.isOpen) {
+                        this.sendKeepAlive(live);
                     }
                 }, KEEPALIVE_INTERVAL_MS);
 
                 // Reset backoff only after 5s of stable connection
                 setTimeout(() => {
-                    if (this.isOpen) this.reconnectAttempts = 0;
+                    if (this.isCurrentConnection(connectionId, live) && this.isOpen) this.reconnectAttempts = 0;
                 }, 5000);
             });
 
-            this.live.on(LiveTranscriptionEvents.Error, (err: any) => {
+            live.on(LiveTranscriptionEvents.Error, (err: any) => {
+                if (!this.isCurrentConnection(connectionId, live)) return;
                 console.error('[DeepgramStreaming] Error:', err);
                 this.emit('error', err instanceof Error ? err : new Error(String(err)));
             });
 
-            this.live.on(LiveTranscriptionEvents.Close, (event: any) => {
+            live.on(LiveTranscriptionEvents.Close, (event: any) => {
+                if (!this.isCurrentConnection(connectionId, live)) return;
                 const code = event?.code ?? 'unknown';
                 const reason = event?.reason || '(empty)';
                 console.log(`[DeepgramStreaming] Closed (code=${code}, reason=${reason})`);
@@ -223,7 +235,9 @@ export class DeepgramStreamingSTT extends EventEmitter {
 
         } catch (err: any) {
             console.error('[DeepgramStreaming] Initialization error:', err?.message);
-            this.isConnecting = false;
+            if (connectionId === this.connectionSeq) {
+                this.isConnecting = false;
+            }
             if (this.shouldReconnect) this.scheduleReconnect();
         }
     }
@@ -263,6 +277,22 @@ export class DeepgramStreamingSTT extends EventEmitter {
         if (this.keepAliveInterval) {
             clearInterval(this.keepAliveInterval);
             this.keepAliveInterval = null;
+        }
+    }
+
+    private isCurrentConnection(connectionId: number, live: any): boolean {
+        return connectionId === this.connectionSeq && this.live === live;
+    }
+
+    private sendKeepAlive(live: any): void {
+        try {
+            if (typeof live?.keepAlive === 'function') {
+                live.keepAlive();
+            } else {
+                live?.send?.(JSON.stringify({ type: 'KeepAlive' }));
+            }
+        } catch {
+            // Keepalive failures surface via the socket close/error events.
         }
     }
 }
