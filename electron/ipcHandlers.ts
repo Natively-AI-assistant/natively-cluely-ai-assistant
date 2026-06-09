@@ -1923,6 +1923,43 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle('set-litellm-config', async (_, config: { apiKey: string; baseURL: string }) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const creds = CredentialsManager.getInstance();
+      creds.saveCredential('litellmApiKey', config.apiKey || '');
+      creds.saveCredential('litellmBaseURL', config.baseURL || '');
+
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      llmHelper.setLitellmConfig(config.apiKey, config.baseURL);
+
+      appState.getIntelligenceManager().resetEngine();
+      appState.getIntelligenceManager().initializeLLMs();
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error saving LiteLLM config:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('get-available-litellm-models', async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const creds = CredentialsManager.getInstance().getCredentials();
+      const baseURL = (creds.litellmBaseURL || 'http://localhost:4000/v1').replace(/\/+$/, '');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (creds.litellmApiKey) headers['Authorization'] = `Bearer ${creds.litellmApiKey}`;
+      const resp = await fetch(`${baseURL}/models`, { method: 'GET', headers, signal: AbortSignal.timeout(5000) });
+      if (!resp.ok) return [];
+      const data = await resp.json();
+      const models = (data.data || []).map((m: any) => m.id).filter(Boolean);
+      return models;
+    } catch {
+      return [];
+    }
+  });
+
   // ── Usage cache (60-second TTL, keyed by API key) ──────────────────────────
   const _usageCache = new Map<string, { data: any; ts: number }>();
   const USAGE_CACHE_TTL_MS = 60_000;
@@ -2528,6 +2565,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasOpenaiKey: hasKey(creds.openaiApiKey),
         hasClaudeKey: hasKey(creds.claudeApiKey),
         hasDeepseekKey: hasKey(creds.deepseekApiKey),
+        hasLitellmBaseURL: hasKey(creds.litellmBaseURL),
         hasNativelyKey: hasKey(creds.nativelyApiKey),
         googleServiceAccountPath: creds.googleServiceAccountPath || null,
         sttProvider: creds.sttProvider || 'none',
@@ -2568,6 +2606,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasOpenaiKey: false,
         hasClaudeKey: false,
         hasDeepseekKey: false,
+        hasLitellmBaseURL: false,
         hasNativelyKey: false,
         googleServiceAccountPath: null,
         sttProvider: 'none',

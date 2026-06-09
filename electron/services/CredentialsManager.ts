@@ -37,6 +37,8 @@ export interface StoredCredentials {
     openaiApiKey?: string;
     claudeApiKey?: string;
     deepseekApiKey?: string;
+    litellmApiKey?: string;
+    litellmBaseURL?: string;
     googleServiceAccountPath?: string;
     customProviders?: CustomProvider[];
     curlProviders?: CurlProvider[];

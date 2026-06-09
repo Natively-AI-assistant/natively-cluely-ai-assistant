@@ -65,6 +65,8 @@ interface ElectronAPI {
   setOpenaiApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setClaudeApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setDeepseekApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
+  setLitellmConfig: (config: { apiKey: string; baseURL: string }) => Promise<{ success: boolean; error?: string }>;
+  getAvailableLiteLLMModels: () => Promise<string[]>;
   setNativelyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   getNativelyPricing: () => Promise<{
     ok: boolean;
@@ -1108,6 +1110,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setOpenaiApiKey: (apiKey: string) => ipcRenderer.invoke('set-openai-api-key', apiKey),
   setClaudeApiKey: (apiKey: string) => ipcRenderer.invoke('set-claude-api-key', apiKey),
   setDeepseekApiKey: (apiKey: string) => ipcRenderer.invoke('set-deepseek-api-key', apiKey),
+  setLitellmConfig: (config: { apiKey: string; baseURL: string }) => ipcRenderer.invoke('set-litellm-config', config),
+  getAvailableLiteLLMModels: () => ipcRenderer.invoke('get-available-litellm-models'),
   setNativelyApiKey: (apiKey: string) => ipcRenderer.invoke('set-natively-api-key', apiKey),
   getNativelyPricing: () => ipcRenderer.invoke('get-natively-pricing'),
   getNativelyUsage: () => ipcRenderer.invoke('get-natively-usage'),

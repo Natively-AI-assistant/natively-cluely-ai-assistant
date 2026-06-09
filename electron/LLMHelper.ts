@@ -213,11 +213,15 @@ export class LLMHelper {
   // DeepSeek is OpenAI-compatible; reuse the OpenAI SDK with a custom baseURL.
   // Kept as a separate client so credentials/scope/telemetry stay provider-specific.
   private deepseekClient: OpenAI | null = null
+  // LiteLLM proxy is OpenAI-compatible; same pattern as DeepSeek.
+  private litellmClient: OpenAI | null = null
   private apiKey: string | null = null
   private groqApiKey: string | null = null
   private openaiApiKey: string | null = null
   private claudeApiKey: string | null = null
   private deepseekApiKey: string | null = null
+  private litellmApiKey: string | null = null
+  private litellmBaseURL: string = "http://localhost:4000/v1"
   private useOllama: boolean = false
   private ollamaModel: string = ""
   private ollamaUrl: string = "http://127.0.0.1:11434"
@@ -449,6 +453,21 @@ export class LLMHelper {
     console.log("[LLMHelper] DeepSeek API Key updated.");
   }
 
+  public setLitellmConfig(apiKey: string, baseURL: string) {
+    const trimmedURL = (baseURL || '').trim();
+    if (!trimmedURL) {
+      this.litellmApiKey = null;
+      this.litellmClient = null;
+      this.litellmBaseURL = "http://localhost:4000/v1";
+      console.log("[LLMHelper] LiteLLM config cleared.");
+      return;
+    }
+    this.litellmApiKey = (apiKey || '').trim() || null;
+    this.litellmBaseURL = trimmedURL;
+    this.litellmClient = new OpenAI({ apiKey: this.litellmApiKey || "dummy", baseURL: trimmedURL });
+    console.log(`[LLMHelper] LiteLLM client initialized with base URL: ${trimmedURL}`);
+  }
+
   public setNativelyKey(key: string | null): void {
     this.nativelyKey = key || null;
     console.log(`[LLMHelper] Natively key ${key ? 'set' : 'cleared'}`);
@@ -567,6 +586,8 @@ export class LLMHelper {
     this.openaiApiKey = null;
     this.claudeApiKey = null;
     this.deepseekApiKey = null;
+    this.litellmApiKey = null;
+    this.litellmClient = null;
     this.nativelyKey = null;
     this.client = null;
     this.groqClient = null;
@@ -616,6 +637,10 @@ export class LLMHelper {
   private isDeepseekModel(modelId: string): boolean {
     if (!modelId) return false;
     return /^deepseek-v\d/.test(modelId.toLowerCase());
+  }
+
+  private isLiteLLMModel(modelId: string): boolean {
+    return modelId.startsWith("litellm/");
   }
 
   private getDeepseekMaxOutput(_modelId: string): number {
@@ -1907,6 +1932,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           return await this.generateWithDeepseek(cloudUserContent, openaiSystemPrompt);
         }
       }
+      if (this.isLiteLLMModel(this.currentModelId) && this.litellmClient) {
+        return await this.generateWithLiteLLM(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined);
+      }
       if (this.isGroqModel(this.currentModelId) && this.groqClient) {
         if (cloudIsMultimodal && cloudImagePaths) {
           return await this.generateWithGroqMultimodal(cloudUserContent, cloudImagePaths, openaiSystemPrompt);
@@ -2441,6 +2469,37 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       })),
       60000,
       `DeepSeek (${model})`
+    );
+
+    return response.choices[0]?.message?.content || "";
+  }
+
+  private async generateWithLiteLLM(userMessage: string, systemPrompt?: string, imagePaths?: string[]): Promise<string> {
+    if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
+    if (!this.litellmClient) throw new Error("LiteLLM client not initialized");
+
+    const litellmModel = this.currentModelId.replace('litellm/', '');
+    const messages: any[] = [];
+    if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
+    if (imagePaths?.length) {
+      const content: any[] = [{ type: "text", text: userMessage }];
+      for (const p of imagePaths) {
+        const b64 = fs.readFileSync(p).toString("base64");
+        content.push({ type: "image_url", image_url: { url: `data:image/png;base64,${b64}` } });
+      }
+      messages.push({ role: "user", content });
+    } else {
+      messages.push({ role: "user", content: userMessage });
+    }
+
+    const response = await this.withTimeout(
+      this.withRetry(() => this.litellmClient!.chat.completions.create({
+        model: litellmModel,
+        messages,
+        max_tokens: 4096,
+      })),
+      60000,
+      `LiteLLM (${litellmModel})`
     );
 
     return response.choices[0]?.message?.content || "";
@@ -3912,6 +3971,14 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       return;
     }
 
+    // LiteLLM (OpenAI-compatible proxy)
+    if (this.isLiteLLMModel(this.currentModelId) && this.litellmClient) {
+      const litellmSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
+      const finalLitellmSystem = this.injectLanguageInstruction(litellmSystem);
+      yield* this.streamWithLiteLLM(userContent, finalLitellmSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, abortSignal);
+      return;
+    }
+
     // Groq (Text + Multimodal)
     if (this.isGroqModel(this.currentModelId) && this.groqClient) {
       if (isMultimodal && imagePaths) {
@@ -4483,6 +4550,43 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       temperature: INTERACTIVE_TEMPERATURE,
       seed: INTERACTIVE_SEED, // DeepSeek is OpenAI-compatible and honors seed
       max_tokens: this.getDeepseekMaxOutput(model),
+    }, { signal: abortSignal });
+
+    try {
+      for await (const chunk of stream) {
+        if (abortSignal?.aborted) return;
+        const content = chunk.choices[0]?.delta?.content;
+        if (content) yield content;
+      }
+    } finally {
+      if (abortSignal?.aborted && typeof (stream as any).abort === 'function') (stream as any).abort();
+    }
+  }
+
+  private async * streamWithLiteLLM(userMessage: string, systemPrompt?: string, imagePaths?: string[], abortSignal?: AbortSignal): AsyncGenerator<string, void, unknown> {
+    if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
+    if (!this.litellmClient) throw new Error("LiteLLM client not initialized");
+
+    const litellmModel = this.currentModelId.replace('litellm/', '');
+    const messages: any[] = [];
+    if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
+    if (imagePaths?.length) {
+      const content: any[] = [{ type: "text", text: userMessage }];
+      for (const p of imagePaths) {
+        const b64 = fs.readFileSync(p).toString("base64");
+        content.push({ type: "image_url", image_url: { url: `data:image/png;base64,${b64}` } });
+      }
+      messages.push({ role: "user", content });
+    } else {
+      messages.push({ role: "user", content: userMessage });
+    }
+
+    if (abortSignal?.aborted) return;
+    const stream = await this.litellmClient.chat.completions.create({
+      model: litellmModel,
+      messages,
+      stream: true,
+      max_tokens: 4096,
     }, { signal: abortSignal });
 
     try {

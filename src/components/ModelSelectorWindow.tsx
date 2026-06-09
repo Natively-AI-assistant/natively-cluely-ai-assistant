@@ -111,6 +111,16 @@ const ModelSelectorWindow = () => {
                     models.push({ id: `ollama-${m}`, name: `${m} (Local)`, type: 'ollama' });
                 });
 
+                // LiteLLM proxy
+                try {
+                    const litellmModels = await window.electronAPI?.getAvailableLiteLLMModels?.() || [];
+                    litellmModels.forEach((m: string) => {
+                        models.push({ id: `litellm/${m}`, name: `${m} (LiteLLM)`, type: 'cloud', provider: 'litellm' });
+                    });
+                } catch {
+                    // LiteLLM proxy may not be running
+                }
+
                 localStorage.setItem('cached-models', JSON.stringify(models));
                 setAvailableModels(models);
 
