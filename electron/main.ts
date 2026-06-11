@@ -3705,7 +3705,16 @@ export class AppState {
     if (!(await ensureMacMicrophoneAccess('meeting start'))) {
       const message = formatPermissionMessage('mic-denied');
       this.broadcast('meeting-audio-error', message);
-      throw new Error(message);
+      // Tag the thrown error so the renderer's start-meeting caller (still on
+      // the launcher — the overlay/meeting surface hasn't been shown yet, so
+      // the in-overlay audio banner would not be visible) can recognise this
+      // as a recoverable mic-permission denial and re-open the permissions
+      // card instead of failing silently with only a console.error. Pre-fix,
+      // a denied/revoked mic grant made "Start Natively" do nothing on screen.
+      const err = new Error(message) as Error & { code?: string; channel?: string };
+      err.code = 'mic-permission-denied';
+      err.channel = 'mic';
+      throw err;
     }
 
     // Check Screen Recording permission required for system audio capture
@@ -5180,10 +5189,47 @@ export class AppState {
     this.disguiseMode = mode;
     SettingsManager.getInstance().set('disguiseMode', mode);
 
+    // DUAL-DOCK-ICON FIX (runtime half): _applyDisguise() performs the same
+    // app.setName() + setProcessDisplayName() LaunchServices re-registration that
+    // duplicates the dock tile at startup. At runtime the app is on 'regular'
+    // with a tile already showing, so a live disguise change can paint a second
+    // tile too. Bracket the rename in accessory→regular (no visible tile during
+    // re-registration) exactly like the startup path. macOS-only; skipped in
+    // stealth (the dock is already hidden and must stay hidden — never promote).
+    const bracketDock =
+      process.platform === 'darwin' && !this.isUndetectable;
+
+    // Capture which Natively window currently holds focus BEFORE the bracket.
+    // The accessory→regular activation-policy churn deactivates the app and
+    // resigns key-window status (AppKit does not auto-restore it on the way
+    // back to 'regular'), which would silently hand control to the app behind
+    // Natively — the same hazard the stealth dock-hide path guards against via
+    // win.focus() (see _enforceDockState). setDisguise runs while the user is
+    // foregrounded in Settings, so we restore focus to the same surface after.
+    const focusWin = bracketDock
+      ? (this.settingsWindowHelper.getSettingsWindow()
+          ?? this.windowHelper.getMainWindow())
+      : null;
+    const nativelyWasFocused =
+      !!focusWin && !focusWin.isDestroyed() && focusWin.isFocused();
+
+    if (bracketDock) {
+      app.setActivationPolicy('accessory');
+    }
+
     // Apply the disguise regardless of undetectable state
     // (disguise affects Activity Monitor name via process.title,
     //  dock icon only updates when NOT in stealth)
     this._applyDisguise(mode);
+
+    if (bracketDock) {
+      app.setActivationPolicy('regular');
+      // Restore key-window so the live disguise switch doesn't drop Natively
+      // behind the previously-active app. win.focus(), not app.focus().
+      if (nativelyWasFocused && focusWin && !focusWin.isDestroyed()) {
+        focusWin.focus();
+      }
+    }
   }
 
   public applyInitialDisguise(): void {
@@ -5391,8 +5437,20 @@ async function initializeApp() {
   // 2. Wait for app to be ready
   await app.whenReady()
 
-  // 2a. PRE-EMPTIVE dock hide: must happen before ANY operation that causes macOS to
-  // register a dock entry (app.setName, BrowserWindow creation, etc.).
+  // 2a. PRE-EMPTIVE dock hide / activation-policy clamp: must happen before ANY
+  // operation that causes macOS to register a dock entry (app.setName, the
+  // LaunchServices live-rename in _applyDisguise, BrowserWindow creation, etc.).
+  //
+  // DUAL-DOCK-ICON FIX: even in NORMAL (non-stealth) mode, applyInitialDisguise()
+  // → app.setName() + the native setProcessDisplayName() LaunchServices rename
+  // re-register the running app's LS identity. Doing that while the app is on the
+  // default 'regular' activation policy makes macOS paint a SECOND dock tile (the
+  // old identity's tile lingers while the renamed one registers) — the duplicate
+  // "Natively" icon multiple users reported. We therefore drop to 'accessory'
+  // (no dock tile) for the whole rename+window-creation window, then promote back
+  // to 'regular' exactly once AFTER createWindow() so a single, correctly-named
+  // tile appears together with the window. Stealth mode stays hidden via dock.hide()
+  // and is never promoted.
   // We read isUndetectable directly from settings here — AppState singleton isn't
   // constructed yet, so we cannot call appState.getUndetectable().
   if (process.platform === 'darwin') {
@@ -5400,6 +5458,11 @@ async function initializeApp() {
     const isUndetectableOnStartup = SettingsManager.getInstance().get('isUndetectable') ?? false;
     if (isUndetectableOnStartup) {
       app.dock.hide();
+    } else {
+      // Non-stealth: clamp to accessory (dock-tile-less) until the disguised
+      // name/icon is painted and the window exists. Do NOT promote to 'regular'
+      // here — that happens once after createWindow() below.
+      app.setActivationPolicy('accessory');
     }
   }
 
@@ -5534,6 +5597,17 @@ if (process.env.THINKING_MATRIX === '1') {
   }
 
   appState.createWindow()
+
+  // DUAL-DOCK-ICON FIX (promotion half): now that the disguised name/icon are
+  // applied and the window exists, promote back to 'regular' so a SINGLE dock
+  // tile appears together with the window. Gated on darwin && !undetectable so
+  // stealth mode is never promoted (it must stay dock-tile-less). This pairs
+  // with the 'accessory' clamp in step 2a above — together they ensure the LS
+  // re-registration from app.setName()/setProcessDisplayName() happens while no
+  // tile is visible, so macOS never paints a second "Natively" icon.
+  if (process.platform === 'darwin' && !appState.getUndetectable()) {
+    app.setActivationPolicy('regular');
+  }
 
   // Apply initial stealth state based on isUndetectable setting.
   if (!appState.getUndetectable()) {

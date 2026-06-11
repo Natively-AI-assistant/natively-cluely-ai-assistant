@@ -352,10 +352,41 @@ const App: React.FC = () => {
         // First ever launch — show permissions toaster
         setShowPermissionsToaster(true);
       } else {
-        // Subsequent launches — trial promo will self-gate via TrialPromoToaster
-        const trialShown = localStorage.getItem('natively_trial_promo_ts');
-        if (!trialShown) {
-          setShowTrialPromo(true);
+        // Returning launch: re-check live TCC status. A macOS permission grant
+        // can be DROPPED out from under a returning user — most commonly after
+        // an app update changes the code signature (macOS may re-evaluate /
+        // invalidate the Screen Recording or Microphone grant for the new
+        // binary), or if the user revoked it in System Settings. In that state
+        // askForMediaAccess() returns denied WITHOUT a prompt (macOS only
+        // prompts from 'not-determined'), so the app would silently fail to
+        // capture with nothing on screen. Surface the recoverable permissions
+        // card (it deep-links to the exact System Settings pane) instead of the
+        // trial promo when mic/screen is denied or restricted. The main process
+        // also broadcasts a denied banner at startup, but that targets the
+        // in-overlay meeting surface — at launch the user is on the launcher,
+        // so this launcher-side check is what they actually see.
+        const showTrialPromoFallback = () => {
+          // Subsequent launches — trial promo will self-gate via TrialPromoToaster
+          const trialShown = localStorage.getItem('natively_trial_promo_ts');
+          if (!trialShown) {
+            setShowTrialPromo(true);
+          }
+        };
+        const maybeSurfacePermissions = window.electronAPI?.checkPermissions;
+        if (maybeSurfacePermissions) {
+          maybeSurfacePermissions()
+            .then((p) => {
+              const blocked = (s?: string) => s === 'denied' || s === 'restricted';
+              if (p?.platform === 'darwin' && (blocked(p.microphone) || blocked(p.screen))) {
+                setShowPermissionsToaster(true);
+              } else {
+                showTrialPromoFallback();
+              }
+            })
+            .catch(showTrialPromoFallback);
+        } else {
+          // Non-macOS or API unavailable — preserve the original behaviour.
+          showTrialPromoFallback();
         }
       }
     }
@@ -525,9 +556,26 @@ const App: React.FC = () => {
         // launcher. No follow-up setWindowMode IPC needed here.
       } else {
         console.error("Failed to start meeting:", result.error);
+        // A mic-permission denial aborts the meeting before the overlay (which
+        // hosts the in-meeting audio banner) is ever shown — so the user is
+        // left on the launcher with nothing actionable. Re-open the permissions
+        // card, which checks live mic/screen status, re-requests the mic, and
+        // deep-links to System Settings. This is the recoverable surface for
+        // the "I press Start Natively and nothing happens" report.
+        if (result.code === 'mic-permission-denied') {
+          setShowPermissionsToaster(true);
+        }
       }
     } catch (err) {
       console.error("Failed to start meeting:", err);
+      // Defense-in-depth: today the start-meeting IPC handler catches and
+      // resolves {success:false, code}, so a mic denial lands in the else
+      // branch above. If the call ever rejects instead, Electron preserves the
+      // serialized error .code across ipcRenderer.invoke — keep the recovery
+      // working so the denial never regresses to a silent failure.
+      if ((err as { code?: string })?.code === 'mic-permission-denied') {
+        setShowPermissionsToaster(true);
+      }
     }
   };
 

@@ -3564,7 +3564,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: true };
     } catch (error: any) {
       console.error('Error starting meeting:', error);
-      return { success: false, error: error.message };
+      // Forward the structured error code (e.g. 'mic-permission-denied') so the
+      // renderer can surface a recoverable permissions prompt rather than a
+      // silent failure. Falls back to undefined for plain errors.
+      return { success: false, error: error?.message, code: error?.code };
     }
   });
 

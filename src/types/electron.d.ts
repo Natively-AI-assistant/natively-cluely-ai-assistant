@@ -240,7 +240,7 @@ export interface ElectronAPI {
   modesRemoveAllNoteSections: (modeId: string) => Promise<{ success: boolean; error?: string }>
 
   // Meeting Lifecycle
-  startMeeting: (metadata?: any) => Promise<{ success: boolean; error?: string }>
+  startMeeting: (metadata?: any) => Promise<{ success: boolean; error?: string; code?: string }>
   endMeeting: () => Promise<{ success: boolean; error?: string }>
   finalizeMicSTT: () => Promise<void>
   getRecentMeetings: () => Promise<Array<{ id: string; title: string; date: string; duration: string; summary: string }>>
