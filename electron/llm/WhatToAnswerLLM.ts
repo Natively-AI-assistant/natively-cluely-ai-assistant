@@ -55,7 +55,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
             // Note: WhatToAnswer has a very specific prompt. 
             // We should use UNIVERSAL_WHAT_TO_ANSWER_PROMPT as override
 
-            yield* this.llmHelper.streamChat(fullMessage, imagePaths, undefined, UNIVERSAL_WHAT_TO_ANSWER_PROMPT);
+            yield* this.llmHelper.streamChat(fullMessage, imagePaths, undefined, UNIVERSAL_WHAT_TO_ANSWER_PROMPT, true);
 
         } catch (error) {
             console.error("[WhatToAnswerLLM] Stream failed:", error);

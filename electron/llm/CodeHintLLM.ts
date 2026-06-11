@@ -25,7 +25,8 @@ export class CodeHintLLM {
                 message,
                 imagePaths,
                 undefined,
-                CODE_HINT_PROMPT
+                CODE_HINT_PROMPT,
+                true
             );
         } catch (error) {
             console.error("[CodeHintLLM] Stream failed:", error);

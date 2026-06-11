@@ -242,6 +242,12 @@ Tone: ${tone}
 Use these preferences only for answer shape. Keep all existing safety, truthfulness, and "speak as the user" rules.
 </answer_preferences>`);
 
+        parts.push(`<live_interview_rules>
+This interview setup is the source of truth for the current live interview.
+If any global profile, mode, salary, company, or persona context conflicts with this setup, use this setup.
+Do not invent experience, metrics, credentials, or technical depth that are not supported by the resume or added interview context.
+</live_interview_rules>`);
+
         if (role) {
             parts.push(`<target_role>
 Position: ${role.position || 'Unknown'}

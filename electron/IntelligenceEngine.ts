@@ -107,6 +107,8 @@ export class IntelligenceEngine extends EventEmitter {
     private lastTranscriptTime: number = 0;
     private lastTriggerTime: number = 0;
     private readonly triggerCooldown: number = 3000; // 3 seconds
+    private pendingAutoAnswerTimer: NodeJS.Timeout | null = null;
+    private readonly autoAnswerDebounceMs: number = 1200;
 
     constructor(llmHelper: LLMHelper, session: SessionTracker) {
         super();
@@ -177,9 +179,27 @@ export class IntelligenceEngine extends EventEmitter {
             this.activeMode === 'idle' &&
             looksLikeInterviewerQuestion(segment.text, segment.confidence)
         ) {
-            void this.runWhatShouldISay(segment.text.trim(), segment.confidence ?? 0.82).catch(error => {
-                console.warn('[IntelligenceEngine] Auto-answer trigger failed:', error?.message || error);
-            });
+            if (this.pendingAutoAnswerTimer) {
+                clearTimeout(this.pendingAutoAnswerTimer);
+            }
+            this.pendingAutoAnswerTimer = setTimeout(() => {
+                this.pendingAutoAnswerTimer = null;
+                if (this.activeMode !== 'idle') return;
+
+                const recentInterviewerTurns = this.session.getContext(10)
+                    .filter(item => item.role === 'interviewer')
+                    .map(item => item.text.trim())
+                    .filter(Boolean);
+                const question = recentInterviewerTurns.length > 0
+                    ? recentInterviewerTurns.join(' ')
+                    : segment.text.trim();
+
+                if (!looksLikeInterviewerQuestion(question, segment.confidence)) return;
+
+                void this.runWhatShouldISay(question, segment.confidence ?? 0.82).catch(error => {
+                    console.warn('[IntelligenceEngine] Auto-answer trigger failed:', error?.message || error);
+                });
+            }, this.autoAnswerDebounceMs);
         }
     }
 
@@ -928,6 +948,10 @@ export class IntelligenceEngine extends EventEmitter {
     reset(): void {
         this.activeMode = 'idle';
         this.currentGenerationId++; // Increment to break all active LLM streams
+        if (this.pendingAutoAnswerTimer) {
+            clearTimeout(this.pendingAutoAnswerTimer);
+            this.pendingAutoAnswerTimer = null;
+        }
         if (this.assistCancellationToken) {
             this.assistCancellationToken.abort();
             this.assistCancellationToken = null;

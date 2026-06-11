@@ -268,7 +268,8 @@ export class LLMHelper {
     this.customProvider = null;
     this.currentModelId = targetModelId;
 
-    // Update specific model props if needed
+    // Update Gemini model prop for non-streaming calls.
+    if (this.isGeminiModel(targetModelId)) this.geminiModel = targetModelId;
     if (targetModelId === GEMINI_PRO_MODEL) this.geminiModel = GEMINI_PRO_MODEL;
     if (targetModelId === GEMINI_FLASH_MODEL) this.geminiModel = GEMINI_FLASH_MODEL;
 

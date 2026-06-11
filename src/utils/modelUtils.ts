@@ -7,9 +7,9 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
 }> = {
     gemini: {
         hasKeyCheck: (creds) => !!creds?.hasGeminiKey,
-        ids: ['gemini-3.1-flash-lite-preview', 'gemini-3.1-pro-preview'],
-        names: ['Gemini 3.1 Flash', 'Gemini 3.1 Pro'],
-        descs: ['Fastest • Multimodal', 'Reasoning • High Quality'],
+        ids: ['gemini-3.5-flash', 'gemini-3.1-flash-lite-preview', 'gemini-3.1-pro-preview'],
+        names: ['Gemini 3.5 Flash', 'Gemini 3.1 Flash', 'Gemini 3.1 Pro'],
+        descs: ['Fast • Frontier reasoning', 'Fastest • Multimodal', 'Reasoning • High Quality'],
         pmKey: 'geminiPreferredModel'
     },
     openai: {

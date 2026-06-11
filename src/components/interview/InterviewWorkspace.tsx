@@ -312,6 +312,7 @@ interface OverlayCommandBarProps {
 
 const formatModelName = (model: string) => {
     if (model.startsWith('ollama-')) return model.replace('ollama-', '');
+    if (model === 'gemini-3.5-flash') return 'Gemini 3.5 Flash';
     if (model === 'gemini-3.1-flash-lite-preview') return 'Gemini 3.1 Flash';
     if (model === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
     if (model === 'llama-3.3-70b-versatile') return 'Groq Llama 3.3';

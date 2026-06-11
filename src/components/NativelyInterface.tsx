@@ -1063,6 +1063,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                 return;  // Safety check for any other speaker types
             }
 
+            if (transcript.text.trim()) {
+                setSystemAudioWarning(null);
+            }
+
             // Route to rolling transcript bar - accumulate text continuously
             setIsInterviewerSpeaking(!transcript.final);
 

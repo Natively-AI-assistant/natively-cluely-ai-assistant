@@ -2757,7 +2757,18 @@ export class AppState {
   }
 
   private setupIntelligenceEvents(): void {
-    const mainWindow = this.getMainWindow.bind(this)
+    const getUiWindows = (): BrowserWindow[] => {
+      const windows = [
+        this.getWindowHelper().getLauncherWindow(),
+        this.getWindowHelper().getOverlayWindow(),
+      ].filter((win): win is BrowserWindow => Boolean(win && !win.isDestroyed()));
+      return Array.from(new Set(windows));
+    };
+    const sendToUiWindows = (channel: string, payload?: any) => {
+      for (const win of getUiWindows()) {
+        win.webContents.send(channel, payload);
+      }
+    };
 
     // Sprint 9: time-batched IPC token sends.
     //
@@ -2780,11 +2791,13 @@ export class AppState {
     const tokenBatches = new Map<BatchKind, any[]>();
     let batchFlushScheduled = false;
     const flushBatchesNow = () => {
-      const win = mainWindow();
-      if (!win) { tokenBatches.clear(); return; }
+      const windows = getUiWindows();
+      if (windows.length === 0) { tokenBatches.clear(); return; }
       for (const [kind, items] of tokenBatches.entries()) {
         if (items.length > 0) {
-          win.webContents.send('intelligence-token-batch', { kind, items });
+          for (const win of windows) {
+            win.webContents.send('intelligence-token-batch', { kind, items });
+          }
         }
       }
       tokenBatches.clear();
@@ -2819,10 +2832,7 @@ export class AppState {
 
     this.intelligenceManager.on('suggested_answer', (answer: string, question: string, confidence: number) => {
       flushBatchesBeforeFinal();
-      const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-suggested-answer', { answer, question, confidence })
-      }
+      sendToUiWindows('intelligence-suggested-answer', { answer, question, confidence })
 
     })
 
@@ -2839,10 +2849,7 @@ export class AppState {
       // Sprint 9: flush any pending batched tokens first so the renderer
       // sees them before the coaching card swap.
       flushBatchesBeforeFinal();
-      const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-negotiation-coaching', { payload })
-      }
+      sendToUiWindows('intelligence-negotiation-coaching', { payload })
     })
 
     this.intelligenceManager.on('refined_answer_token', (token: string, intent: string) => {
@@ -2852,19 +2859,13 @@ export class AppState {
 
     this.intelligenceManager.on('refined_answer', (answer: string, intent: string) => {
       flushBatchesBeforeFinal();
-      const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-refined-answer', { answer, intent })
-      }
+      sendToUiWindows('intelligence-refined-answer', { answer, intent })
 
     })
 
     this.intelligenceManager.on('recap', (summary: string) => {
       flushBatchesBeforeFinal();
-      const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-recap', { summary })
-      }
+      sendToUiWindows('intelligence-recap', { summary })
     })
 
     this.intelligenceManager.on('recap_token', (token: string) => {
@@ -2874,10 +2875,7 @@ export class AppState {
 
     this.intelligenceManager.on('clarify', (clarification: string) => {
       flushBatchesBeforeFinal();
-      const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-clarify', { clarification })
-      }
+      sendToUiWindows('intelligence-clarify', { clarification })
     })
 
     this.intelligenceManager.on('clarify_token', (token: string) => {
@@ -2887,10 +2885,7 @@ export class AppState {
 
     this.intelligenceManager.on('follow_up_questions_update', (questions: string) => {
       flushBatchesBeforeFinal();
-      const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-follow-up-questions-update', { questions })
-      }
+      sendToUiWindows('intelligence-follow-up-questions-update', { questions })
     })
 
     this.intelligenceManager.on('follow_up_questions_token', (token: string) => {
@@ -2899,33 +2894,21 @@ export class AppState {
     })
 
     this.intelligenceManager.on('manual_answer_started', () => {
-      const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-manual-started')
-      }
+      sendToUiWindows('intelligence-manual-started')
     })
 
     this.intelligenceManager.on('manual_answer_result', (answer: string, question: string) => {
-      const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-manual-result', { answer, question })
-      }
+      sendToUiWindows('intelligence-manual-result', { answer, question })
 
     })
 
     this.intelligenceManager.on('mode_changed', (mode: string) => {
-      const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-mode-changed', { mode })
-      }
+      sendToUiWindows('intelligence-mode-changed', { mode })
     })
 
     this.intelligenceManager.on('error', (error: Error, mode: string) => {
       console.error(`[IntelligenceManager] Error in ${mode}:`, error)
-      const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-error', { error: error.message, mode })
-      }
+      sendToUiWindows('intelligence-error', { error: error.message, mode })
     })
   }
 
