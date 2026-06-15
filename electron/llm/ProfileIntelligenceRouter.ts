@@ -14,6 +14,7 @@
 
 import { planAnswer } from './AnswerPlanner';
 import type { AnswerType, AnswerSource, SpeakerPerspective, ContextLayer, ProfileContextPolicy } from './AnswerPlanner';
+import type { ActiveModeInfo } from './modeProfiles';
 import { buildContextRoute } from './contextRoute';
 
 // The spec's ProfileContextType vocabulary (§3).
@@ -69,12 +70,32 @@ export interface DecideProfileInput {
   question: string;
   source: AnswerSource;
   speakerPerspective?: SpeakerPerspective;
-  /** Active mode id (general | sales | team-meet | technical-interview | lecture | custom). */
+  /**
+   * Active mode TEMPLATE id (general | sales | team-meet | technical-interview |
+   * lecture | recruiting | looking-for-work). PI v3 (W1): now a live routing
+   * prior — threaded into planAnswer's mode fallback. A full ActiveModeInfo can
+   * be passed via `activeModeInfo` for custom-mode awareness; this string form
+   * is kept for backward compatibility with existing callers/evals.
+   */
   activeMode?: string;
+  /** Full active-mode info (preferred over `activeMode` when both are set). */
+  activeModeInfo?: ActiveModeInfo | null;
   /** Whether a usable candidate profile (resume/identity) is loaded. */
   profileAvailable?: boolean;
   /** Whether a JD is loaded. */
   jdAvailable?: boolean;
+}
+
+const MODE_TEMPLATE_TYPES: ReadonlySet<string> = new Set([
+  'general', 'looking-for-work', 'sales', 'recruiting', 'team-meet', 'lecture', 'technical-interview',
+]);
+
+/** Normalize the legacy string form into ActiveModeInfo (unknown ids → null). */
+function toActiveModeInfo(input: DecideProfileInput): ActiveModeInfo | null {
+  if (input.activeModeInfo) return input.activeModeInfo;
+  const id = (input.activeMode || '').trim();
+  if (!id || !MODE_TEMPLATE_TYPES.has(id)) return null;
+  return { id, templateType: id as ActiveModeInfo['templateType'], name: id, isCustom: false };
 }
 
 // Answer types that speak as the candidate in first person when interviewer-asked.
@@ -160,6 +181,7 @@ export function decideProfileIntelligence(input: DecideProfileInput): ProfileInt
     speakerPerspective: input.speakerPerspective,
     hasCandidateProfile: input.profileAvailable,
     hasJobDescription: input.jdAvailable,
+    activeMode: toActiveModeInfo(input),
   });
   const route = buildContextRoute(plan);
 

@@ -94,9 +94,6 @@ export class EmbeddingProviderResolver {
     }
 
     candidates.push(new OllamaEmbeddingProvider(config.ollamaUrl || 'http://localhost:11434'));
-    if (!embeddingsDenied) {
-      candidates.push(new LocalEmbeddingProvider()); // always last, always works
-    }
 
     for (const provider of candidates) {
       const available = await EmbeddingProviderResolver.probeAvailable(provider);
@@ -107,13 +104,18 @@ export class EmbeddingProviderResolver {
       console.log(`[EmbeddingProviderResolver] Provider ${provider.name} unavailable, trying next...`);
     }
 
+    // Local is the terminal fallback. Do NOT probe isAvailable() here: that loads
+    // the MiniLM ONNX model and defeats startup lazy-loading for keyless/offline
+    // users. Construction exposes dimensions/space cheaply; the actual model load
+    // happens on first embed()/embedQuery(), where failures can still surface and
+    // retry normally.
     if (embeddingsDenied) {
-      console.warn('[ScopeFallback] embeddings denied; Ollama unavailable, using bundled local embedding model');
-      return new LocalEmbeddingProvider();
+      console.warn('[ScopeFallback] embeddings denied; Ollama unavailable, using bundled local embedding model lazily');
+    } else {
+      console.log('[EmbeddingProviderResolver] No cloud/Ollama provider available; using bundled local embedding model lazily');
     }
-
-    // This should never happen since LocalEmbeddingProvider.isAvailable()
-    // only returns false if the bundled model is corrupted — a fatal install error
-    throw new Error('No embedding provider available. The bundled model may be corrupted. Please reinstall.');
+    const local = new LocalEmbeddingProvider();
+    console.log(`[EmbeddingProviderResolver] Selected provider: ${local.name} (${local.dimensions}d, lazy load)`);
+    return local;
   }
 }

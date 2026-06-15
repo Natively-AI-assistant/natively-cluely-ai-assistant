@@ -10,11 +10,15 @@ import {
     FollowUpQuestionsLLM, WhatToAnswerLLM,
     prepareTranscriptForWhatToAnswer, buildTemporalContext,
     AssistantResponse as LLMAssistantResponse, classifyIntent, planNextAssistantAction, PlannerDecision,
-    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCodingAnswerType, resolveFollowUp,
+    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCodingAnswerType, resolveFollowUp, resolveFollowUpOrClarify,
+    isLiveSessionMemoryEnabled, resolveLiveFollowup, toMemoryMode, toSurface, effectiveMemoryMode,
+    resolveLiveSessionMemoryConfig, piTelemetry, ageBucket,
     buildContextRoute, summarizeContextRoute, shouldThrottleTrigger,
-    validateProfileOutput, buildProfileRepairInstruction,
+    validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, sanitizeCandidateAnswer, CANDIDATE_VOICE_ANSWER_TYPES,
     raceStreamWithDeadline, firstUsefulDeadlineMs, LIVE_INTER_TOKEN_STALL_MS, LIVE_TOTAL_HARD_TIMEOUT_MS
 } from './llm';
+import type { ActiveModeInfo } from './llm/modeProfiles';
+import { buildGracefulRetry } from './llm/manualProfileIntelligence';
 import { CodingStreamGate } from './llm/codingStreamGate';
 import { isCodeVerificationEnabled } from './llm/codeVerification/verificationEnabled';
 import { DynamicActionEngine } from './services/dynamic-actions/DynamicActionEngine';
@@ -22,6 +26,10 @@ import { DynamicAction } from './services/dynamic-actions/DynamicAction';
 import { ScreenContext } from './services/screen/ScreenContextService';
 import { buildPreparedTranscriptContext as assemblePreparedTranscriptContext } from './utils/preparedTranscriptContext';
 import { PiLatencyTrace } from './services/telemetry/PiLatencyTracer';
+import { beginTrace, commitTrace } from './intelligence/IntelligenceTrace';
+import { isDurableMemoryWindowEnabled, isIntelligenceFlagEnabled } from './intelligence/intelligenceFlags';
+import { normalizeOutputShape } from './intelligence/OutputShapeNormalizer';
+import { LiveTranscriptBrain } from './intelligence/LiveTranscriptBrain';
 
 // Mode types
 export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'follow_up' | 'recap' | 'clarify' | 'manual' | 'follow_up_questions' | 'code_hint' | 'brainstorm';
@@ -117,6 +125,13 @@ export interface IntelligenceModeEvents {
 export class IntelligenceEngine extends EventEmitter {
     // Mode state
     private activeMode: IntelligenceMode = 'idle';
+
+    // Live SessionMemory window (seconds): how far back to gather turns when building
+    // the per-turn memory for long-range follow-up recall. Wide (2h) so a project
+    // named at minute 1 is still present at minute 62 — distinct from the 180s ANSWER
+    // window. Capped by SessionTracker.maxContextItems (500). Half-life decay (in
+    // SessionMemory) still governs salience; this just ensures the entity is present.
+    private readonly LIVE_MEMORY_WINDOW_SECONDS = 7200;
 
     // Mode-specific LLMs
     private answerLLM: AnswerLLM | null = null;
@@ -570,8 +585,14 @@ export class IntelligenceEngine extends EventEmitter {
      * Manual trigger - uses clean transcript pipeline for question inference
      * NEVER returns null - always provides a usable response
      */
-    async runWhatShouldISay(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string } }): Promise<string | null> {
+    async runWhatShouldISay(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string }): Promise<string | null> {
         const now = Date.now();
+        // Intelligence OS observe-only trace (Phase 1). Zero-cost NO-OP unless
+        // intelligence_trace_enabled is on. Committed at the primary final-answer emit
+        // below; rare early-returns (provider-key error / clarification) are not traced
+        // yet (documented in the wiring status) — an uncommitted trace simply isn't
+        // recorded, no leak.
+        const wtaTrace = beginTrace(typeof question === 'string' ? question : '');
         const isSpeculative = options?.speculative === true;
         const skipCooldown = options?.skipCooldown === true;
 
@@ -624,6 +645,26 @@ export class IntelligenceEngine extends EventEmitter {
         });
         this.lastTrace = trace;
 
+        // Foreground gate (manual regression 2026-06-12): pause background
+        // embedding/RAG drains while a live answer is in flight. Speculative
+        // prefetch doesn't gate (no user is waiting on it). Auto-expires in
+        // 60s even if a return path is missed.
+        let fgToken: string | null = null;
+        if (!isSpeculative) {
+            try {
+                const { ForegroundGate } = require('./services/ForegroundGate') as typeof import('./services/ForegroundGate');
+                fgToken = ForegroundGate.begin('wta');
+            } catch { /* advisory only */ }
+        }
+        const releaseFg = () => {
+            if (!fgToken) return;
+            try {
+                const { ForegroundGate } = require('./services/ForegroundGate') as typeof import('./services/ForegroundGate');
+                ForegroundGate.end(fgToken);
+            } catch { /* noop */ }
+            fgToken = null;
+        };
+
         // Method-scope so the abort/sentinel/error paths below (and the catch)
         // can tell whether a streaming row was opened that must be discarded /
         // resolved (set true on the first coding/non-coding chunk emitted).
@@ -651,7 +692,7 @@ export class IntelligenceEngine extends EventEmitter {
                     this.speculativeTextExpiry = Infinity;
                     this.lastTriggerTime = Date.now();
                     this.setMode('idle');
-                    return answer || "Could you repeat that? I want to make sure I address your question properly.";
+                    return answer || buildGracefulRetry(question);
                 }
                 if (answer && IntelligenceEngine.isNonAnswerSentinel(answer)) {
                     this.setMode('idle');
@@ -709,13 +750,66 @@ export class IntelligenceEngine extends EventEmitter {
             );
 
             const lastInterviewerTurn = this.session.getLastInterviewerTurn();
-            const intentResult = await classifyIntent(
+            // ── PARALLEL PRE-STREAM STAGES (PI v3, W5) ─────────────────────────
+            // The three pre-stream awaits are mutually independent, so they run
+            // CONCURRENTLY instead of serially:
+            //   1. classifyIntent      (~50-800ms — regex fast path → SLM)
+            //   2. profile grounding   (≤2000ms budget, below)
+            //   3. mode-context retrieval (hybrid; one query embed since W3)
+            // Serial worst case was their SUM (~3s+ before the provider saw the
+            // prompt); now it's their MAX. Mode retrieval is kicked here and the
+            // PROMISE is handed to WhatToAnswerLLM, which still applies its own
+            // budget race + the reference_files scope/route gates — a forbidden
+            // layer simply discards the prefetched result, so the leak surface
+            // is unchanged. answerType is irrelevant to retrieval since W2
+            // (customContext is pinned, not retrieved — reference files only).
+            // .catch() inline: the promise floats unawaited through the
+            // follow-up/grounding blocks below — a rejection there would be an
+            // unhandled rejection. The neutral fallback mirrors the classifier's
+            // own Tier-3 default.
+            const intentPromise = classifyIntent(
                 lastInterviewerTurn,
                 preparedTranscript,
                 this.session.getAssistantResponseHistory().length
-            );
-            trace.mark('intent_classified', { intent: intentResult.intent, confidence: intentResult.confidence });
+            ).catch((): { intent: 'general'; confidence: number; answerShape: string } => (
+                { intent: 'general', confidence: 0.4, answerShape: 'Concise, direct answer to the question.' }
+            ));
+            const modeContextPromise: Promise<string> = options?.activeSkill
+                ? Promise.resolve('') // skill mode skips mode retrieval entirely
+                : (async () => {
+                    try {
+                        const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
+                        const mm = ModesManager.getInstance();
+                        if (typeof mm.buildRetrievedActiveModeContextBlockHybrid === 'function') {
+                            return await mm.buildRetrievedActiveModeContextBlockHybrid(
+                                preparedTranscript, preparedTranscript, 1800, undefined, true,
+                            );
+                        }
+                        return '';
+                    } catch { return ''; }
+                })();
             const extractedQuestion = extractLatestQuestion(transcriptTurns);
+
+            // LIVE TRANSCRIPT BRAIN (Phase 6 wiring, SHADOW/PARITY behind live_transcript_brain_enabled):
+            // the WTA path already builds the hot window inline (getContext(180) + interim
+            // injection above) and extracts the question — exactly what LiveTranscriptBrain
+            // encapsulates. Replacing the proven inline logic outright is a pure refactor =
+            // regression risk for zero gain. So we run the brain in SHADOW: enrich the trace
+            // with its current-question + entity view and record a PARITY marker when its
+            // extracted question diverges from the live one. This proves the brain is a safe
+            // drop-in for a future refactor, with ZERO behavior change. Flag OFF → not run.
+            try {
+                if (isIntelligenceFlagEnabled('liveTranscriptBrain')) {
+                    const brain = new LiveTranscriptBrain(this.session as any, extractLatestQuestion as any);
+                    const brainQ = brain.getCurrentQuestion(180);
+                    wtaTrace.noteContext({
+                        source: 'live_transcript_brain', trustLevel: 'low',
+                        requested: true, retrieved: Boolean(brainQ), included: false,
+                        reason: brainQ && extractedQuestion.latestQuestion && brainQ !== extractedQuestion.latestQuestion
+                            ? 'brain_question_divergence' : 'brain_parity',
+                    });
+                }
+            } catch { /* shadow brain is observe-only; never affects the answer */ }
             // Bare follow-up resolution ("And SQL?", "What about complexity?",
             // "Why?") — resolve into a concrete question + inherited answer type so
             // it routes correctly instead of falling to general/unknown. Only
@@ -728,15 +822,98 @@ export class IntelligenceEngine extends EventEmitter {
                     const latestQ = extractedQuestion.latestQuestion.trim().toLowerCase();
                     const priorInterviewer = [...transcriptTurns].reverse()
                         .find((t) => t.role === 'interviewer' && t.text.trim().toLowerCase() !== latestQ);
-                    const fr = resolveFollowUp({
-                        latestQuestion: extractedQuestion.latestQuestion,
-                        previousQuestion: priorInterviewer?.text,
-                        lastEntity: extractedQuestion.followUpTarget || undefined,
+
+                    // LIVE SESSION MEMORY (release 2026-06-07c, flag-gated): when
+                    // enabled, resolve the follow-up against the FULL session memory
+                    // (long-range entity recall, mode boundaries, corrections) instead
+                    // of just the single prior turn. Flag OFF → the proven
+                    // single-prior-turn path below runs unchanged.
+                    let fr: ReturnType<typeof resolveFollowUpOrClarify> & { recalledEntity?: string; recalledAgeSeconds?: number; resolvedVia?: string };
+                    // Resolve the rollout decision for THIS session (deterministic
+                    // per-session bucketing for the percentage gate; kill switch wins).
+                    const lsmConfig = resolveLiveSessionMemoryConfig(this.currentSessionId ?? undefined);
+                    piTelemetry.emit('wta_live_session_memory_enabled', {
+                        enabled: lsmConfig.enabled, reason: lsmConfig.reason,
+                        rolloutPercent: lsmConfig.rolloutPercent, bucket: lsmConfig.bucket,
+                        killSwitch: lsmConfig.killSwitch,
                     });
-                    if (fr && fr.confidence >= 0.7 && fr.resolvedQuestion) {
+                    if (lsmConfig.enabled) {
+                        const modeId = this.getActiveModeId();
+                        // CRITICAL (code-review 2026-06-07c): SessionMemory's half-life
+                        // decay is defined in SECONDS, but SessionTracker timestamps are
+                        // wall-clock MILLISECONDS — feeding ms would collapse a 1-hour
+                        // half-life to a ~15-SECOND window (everything decays to 0). And
+                        // the 180s answer window (`transcriptTurns`) drops the very
+                        // long-range entities this feature targets. So build the memory
+                        // turns from a WIDE window (the whole session, capped) and
+                        // convert ms → SECONDS here.
+                        // DURABLE WINDOW FIX (Phase 2 wiring, behind durableMemoryWindow flag):
+                        // getContext() reads `contextItems`, which SessionTracker evicts to
+                        // ~120s on every segment, so the intended 2h window silently saw at
+                        // most the last 2 minutes (a project named at minute 1 was gone by
+                        // minute 3). getDurableContext() reads the persisted `fullTranscript`
+                        // (survives eviction) so long-range recall actually works. Flag OFF
+                        // keeps the original getContext path byte-for-byte.
+                        const memWindowSource = isDurableMemoryWindowEnabled()
+                            ? this.session.getDurableContext(this.LIVE_MEMORY_WINDOW_SECONDS)
+                            : this.session.getContext(this.LIVE_MEMORY_WINDOW_SECONDS);
+                        const memWindowTurns = memWindowSource.map(item => ({
+                            role: item.role, text: item.text, t: Math.floor(item.timestamp / 1000),
+                        }));
+                        const latestTurnSec = Math.floor((transcriptTurns[transcriptTurns.length - 1]?.timestamp ?? Date.now()) / 1000);
+                        // The EFFECTIVE memory mode is derived from the QUESTION's intent,
+                        // not just the ambient ModesManager mode (code-review 2026-06-07c
+                        // HIGH): a coding/SQL/technical question inside a technical-
+                        // interview session must use the restrictive `coding` boundary so
+                        // the interview project is NOT recalled into a coding answer; a
+                        // comp question uses `negotiation`. ModeTemplateType can't express
+                        // these, so plan the question to get its answer type first.
+                        const intentType = planAnswer({
+                            question: extractedQuestion.latestQuestion,
+                            source: 'what_to_answer',
+                            speakerPerspective: 'interviewer',
+                            activeMode: this.getActiveModeInfo(),
+                        }).answerType;
+                        fr = resolveLiveFollowup({
+                            turns: memWindowTurns,
+                            latestQuestion: extractedQuestion.latestQuestion,
+                            now: latestTurnSec,
+                            mode: effectiveMemoryMode(modeId, intentType),
+                            surface: toSurface(modeId, true),
+                        }) as any;
+                    } else {
+                        fr = resolveFollowUpOrClarify({
+                            latestQuestion: extractedQuestion.latestQuestion,
+                            previousQuestion: priorInterviewer?.text,
+                            lastEntity: extractedQuestion.followUpTarget || undefined,
+                            surface: 'what_to_answer',
+                            hasPriorContext: Boolean(priorInterviewer?.text) || Boolean(extractedQuestion.followUpTarget),
+                        });
+                    }
+                    // Context-free bare follow-up ("why?" with no prior turn): emit a
+                    // safe clarification deterministically — NEVER fall through to the
+                    // LLM (which can self-identify as "an AI assistant" or dump the
+                    // profile). No prior context exists, so there's nothing to answer.
+                    if (fr.isClarification && fr.clarificationText && !isSpeculative) {
+                        piTelemetry.emit('wta_context_free_clarification', { surface: 'what_to_answer', via: (fr as any).resolvedVia ?? 'clarification' });
+                        this.session.addAssistantMessage(fr.clarificationText);
+                        this.emit('suggested_answer', fr.clarificationText, extractedQuestion.latestQuestion || 'inferred', 0.9);
+                        this.setMode('idle');
+                        trace.mark('repair_used', { reason: 'context_free_clarification' });
+                        return fr.clarificationText;
+                    }
+                    if (fr && fr.confidence >= 0.7 && fr.resolvedQuestion && !fr.isClarification) {
+                        const via = (fr as any).resolvedVia;
                         extractedQuestion.latestQuestion = fr.resolvedQuestion;
                         if (fr.resolvedEntity) extractedQuestion.followUpTarget = fr.resolvedEntity;
-                        trace.mark('repair_used', { reason: 'followup_resolved', resolved: fr.reason });
+                        trace.mark('repair_used', { reason: via === 'session_memory' ? 'session_memory_followup' : 'followup_resolved', resolved: fr.reason });
+                        // MARKER-ONLY: recalled KIND/age bucket, never the entity value.
+                        piTelemetry.emit('wta_live_followup_resolved', {
+                            via: via ?? 'prior_turn', answerType: fr.resolvedAnswerType,
+                            recalledKind: (fr as any).recalledEntity ? 'entity' : 'none',
+                            ageBucket: ageBucket((fr as any).recalledAgeSeconds),
+                            reason: fr.reason,
+                        });
                     }
                 } catch { /* keep extractor result */ }
             }
@@ -889,6 +1066,12 @@ export class IntelligenceEngine extends EventEmitter {
                 }
             }
 
+            // Join the parallel intent classification (kicked above). The
+            // grounding await it overlapped with has settled by now, so this is
+            // usually instant; worst case is the classifier's own tail.
+            const intentResult = await intentPromise;
+            trace.mark('intent_classified', { intent: intentResult.intent, confidence: intentResult.confidence });
+
             const answerPlan = planAnswer({
                 question: question || extractedQuestion.latestQuestion || lastInterviewerTurn,
                 source: question ? 'manual_input' : 'what_to_answer',
@@ -896,6 +1079,7 @@ export class IntelligenceEngine extends EventEmitter {
                 extractedQuestion,
                 intentResult,
                 hasCandidateProfile: Boolean(candidateProfile),
+                activeMode: this.getActiveModeInfo(),
             });
             trace.mark('answer_type_selected', {
                 answerType: answerPlan.answerType,
@@ -955,7 +1139,12 @@ export class IntelligenceEngine extends EventEmitter {
             trace.mark('provider_request_started', { answerType: answerPlan.answerType });
             // RC-03 fix: hold a reference to the generator so we can call .return()
             // to properly terminate the network request when a new generation starts.
-            const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePaths, screenContext, options?.promptInstruction, options?.activeSkill, candidateProfile || undefined, answerPlan);
+            // Note: options?.domContext is the optional browser DOM context captured via the companion
+            // extension. When provided, it is securely routed through the sanitization pipeline.
+            // PI v3 (W5): modeContextPromise is the parallel-prefetched mode-context retrieval
+            // (overlaps intent classification + profile grounding). Both args coexist —
+            // generateStream's signature is (…activeSkill, domContext, candidateProfile, answerPlan, preFetchedModeContext).
+            const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePaths, screenContext, options?.promptInstruction, options?.activeSkill, options?.domContext, candidateProfile || undefined, answerPlan, modeContextPromise);
             let streamAborted = false;
             let emittedStreamingToken = false;
             let streamingTokenBuffer = '';
@@ -1101,7 +1290,8 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             if (!fullAnswer || fullAnswer.trim().length < 5) {
-                fullAnswer = "Could you repeat that? I want to make sure I address your question properly.";
+                // W6b: topic-aware graceful retry instead of the fixed canned line.
+                fullAnswer = buildGracefulRetry(question || extractedQuestion.latestQuestion || lastInterviewerTurn);
             }
 
             trace.mark('validation_started', { answerType: answerPlan.answerType });
@@ -1132,36 +1322,63 @@ export class IntelligenceEngine extends EventEmitter {
             try {
                 const profileLoaded = Boolean(candidateProfile && candidateProfile.trim().length > 0);
                 if (profileLoaded && answerPlan.voicePerspective === 'first_person_candidate') {
-                    const pv = validateProfileOutput({
+                    // PI v3 (W6a): EVIDENCE-composing validation on the LIVE path —
+                    // upgrades the output-only check to also flag FABRICATED
+                    // metrics ("improved retention by 25%") absent from the
+                    // grounded facts. Same deterministic regex cost (µs); the
+                    // evidence is exactly the candidateProfile block the model saw.
+                    const pv = validateProfileEvidence({
                         answer: fullAnswer,
                         plan: answerPlan,
+                        evidence: candidateProfile,
                         profileAvailable: true,
                         candidateDirected: true,
                     });
                     // WTA candidate-voice contract: identity leak, false refusal,
-                    // AND wrong-person voice (second/third person about the user)
-                    // are all critical — the live copilot must say what the
-                    // candidate says aloud, in first person.
+                    // wrong-person voice, AND (for profile-REQUIRED answers) a
+                    // fabricated metric are all critical — a confident invented
+                    // number spoken aloud in an interview is the worst kind of
+                    // hallucination, so it now triggers the same bounded repair.
+                    //
+                    // FALSE-POSITIVE GUARD (review 2026-06-12): the evidence here
+                    // is whatever grounding block the model SAW — for identity
+                    // questions that's a SHORT <candidate_identity_fact>, not the
+                    // full resume, so a REAL resume metric would read as
+                    // "unsupported" against it and trigger a wrong repair. Only
+                    // promote a metric to critical when the evidence is
+                    // substantial enough to plausibly contain the candidate's
+                    // real numbers; thin evidence keeps it log-only (the base
+                    // identity/refusal/voice criticals are unaffected).
+                    const evidenceIsSubstantial = candidateProfile.length >= 600
+                        && !candidateProfile.trim().startsWith('<candidate_identity_fact>');
                     const criticalViolation = pv.violations.find(v =>
                         v.severity === 'error' && (
                             v.code === 'assistant_identity_leak'
                             || v.code === 'false_no_access_refusal'
                             || v.code === 'false_no_experience_refusal'
-                            || v.code === 'wrong_perspective_not_first_person'));
+                            || v.code === 'wrong_perspective_not_first_person'
+                            || (v.code === 'unsupported_metric'
+                                && answerPlan.profileContextPolicy === 'required'
+                                && evidenceIsSubstantial)));
                     if (criticalViolation && this.currentGenerationId === generationId) {
                         trace.mark('repair_used', { reason: 'profile', code: criticalViolation.code });
-                        const repairInstruction = buildProfileRepairInstruction(pv);
+                        // The evidence validator pre-builds the corrective
+                        // instruction (covers the metric/company lines the base
+                        // builder doesn't know about).
+                        const repairInstruction = pv.repairInstruction || buildProfileRepairInstruction(pv as any);
                         const repairPrompt =
                             `${repairInstruction}\n\nCandidate facts (ground every claim in these, first person, never say you are Natively or an AI):\n${candidateProfile}\n\nQuestion: ${question || ''}\n\nRewrite the answer now as the candidate.`;
                         let repaired = '';
                         // Bounded single regeneration via the centralized deadline
-                        // driver (4s) so a stalled repair provider can't re-hang the
-                        // live answer after text already showed. Fire-and-forget
-                        // cleanup — no `await iterator.return()` anti-pattern.
+                        // driver (7s) so a stalled repair provider can't re-hang the
+                        // live answer after text already showed. 7s (was 4s) clears
+                        // MiniMax's 4-6s first-token so a fallback-served repair isn't
+                        // aborted to nothing. Fire-and-forget cleanup — no
+                        // `await iterator.return()` anti-pattern.
                         try {
                             await raceStreamWithDeadline({
                                 stream: this.llmHelper.streamChat(repairPrompt, undefined, undefined, undefined, true, true) as AsyncGenerator<string>,
-                                firstUsefulDeadlineMs: 4000,
+                                firstUsefulDeadlineMs: 7000,
                                 isUsefulYet: () => repaired.length >= 5,
                                 shouldAbort: () => repaired.length > 1200,
                                 onToken: (tok: string) => { repaired += tok; },
@@ -1169,15 +1386,17 @@ export class IntelligenceEngine extends EventEmitter {
                         } catch { /* keep partial repaired */ }
                         const repairedTrim = repaired.trim();
                         if (repairedTrim.length >= 5) {
-                            const reCheck = validateProfileOutput({
+                            const reCheck = validateProfileEvidence({
                                 answer: repairedTrim, plan: answerPlan,
+                                evidence: candidateProfile,
                                 profileAvailable: true, candidateDirected: true,
                             });
                             // Accept the repair only if NO critical violation remains
                             // — not just the original one (a regen that fixes the
                             // identity leak but introduces a false refusal must be
-                            // rejected too — code-review 2026-06-05, MED).
-                            const CRITICAL_CODES = new Set(['assistant_identity_leak', 'false_no_access_refusal', 'false_no_experience_refusal']);
+                            // rejected too — code-review 2026-06-05, MED). W6a: a
+                            // repair that invents a NEW metric is also rejected.
+                            const CRITICAL_CODES = new Set(['assistant_identity_leak', 'false_no_access_refusal', 'false_no_experience_refusal', 'unsupported_metric']);
                             const stillCritical = reCheck.violations.some(v => v.severity === 'error' && CRITICAL_CODES.has(v.code));
                             if (!stillCritical) {
                                 fullAnswer = repairedTrim;
@@ -1190,6 +1409,22 @@ export class IntelligenceEngine extends EventEmitter {
                 }
             } catch (profileRepairErr: any) {
                 console.warn('[IntelligenceEngine] profile repair failed (non-fatal):', profileRepairErr?.message || profileRepairErr);
+            }
+
+            // Release 2026-06-07c: FINAL candidate-answer sanitizer on the WTA path —
+            // strip an assistant-meta tail ("as an AI assistant", "I'm Natively", "I
+            // can't share") from a candidate-voice answer. If stripping empties it, the
+            // non-answer-sentinel / live-fallback paths below handle the replacement.
+            if (CANDIDATE_VOICE_ANSWER_TYPES.has(answerPlan.answerType)) {
+                try {
+                    const sani = sanitizeCandidateAnswer(fullAnswer);
+                    if (sani.repaired && !sani.needsFallback) {
+                        fullAnswer = sani.text;
+                        trace.mark('repair_used', { reason: 'candidate_sanitizer', markers: sani.removedMarkers.length });
+                    }
+                } catch (saniErr: any) {
+                    console.warn('[IntelligenceEngine] candidate sanitizer skipped:', saniErr?.message);
+                }
             }
 
             if (IntelligenceEngine.isNonAnswerSentinel(fullAnswer)) {
@@ -1247,16 +1482,39 @@ export class IntelligenceEngine extends EventEmitter {
                     this.emit('suggested_answer_token', fullAnswer, question || 'inferred', confidence);
                 }
             }
-            this.session.addAssistantMessage(fullAnswer);
+            // OUTPUT SHAPE NORMALIZER (Phase 4 wiring, behind answer_diversity_guard_enabled):
+            // the WTA path applies NO answer polish today (unlike the manual path), so empty
+            // "*" bullets and visible scaffold labels in a default-style answer reach the UI
+            // uncleaned. normalizeOutputShape strips those (code blocks preserved; coding
+            // answers skipped). Computed BEFORE addAssistantMessage/pushUsage so session
+            // history and the final emit all use the same normalized text (no double-add).
+            // The renderer's onIntelligenceSuggestedAnswer finalizes with the final `answer`,
+            // so the normalized final cleanly replaces the streamed text. Flag OFF →
+            // finalWtaAnswer === fullAnswer (current behavior, byte-for-byte).
+            let finalWtaAnswer = fullAnswer;
+            try {
+                if (isIntelligenceFlagEnabled('answerDiversityGuard')) {
+                    const shaped = normalizeOutputShape({ answer: fullAnswer, answerStyle: answerPlan.answerStyle as string, isCoding });
+                    if (shaped.changed && shaped.text.trim().length >= 10) finalWtaAnswer = shaped.text;
+                }
+            } catch { /* normalizer never blocks the answer */ }
+
+            this.session.addAssistantMessage(finalWtaAnswer);
 
             this.session.pushUsage({
                 type: 'assist',
                 timestamp: Date.now(),
                 question: question || 'What to Answer',
-                answer: fullAnswer
+                answer: finalWtaAnswer
             });
 
-            this.emit('suggested_answer', fullAnswer, question || 'What to Answer', confidence);
+            this.emit('suggested_answer', finalWtaAnswer, question || 'What to Answer', confidence);
+            try {
+                wtaTrace.setRouting({ source: 'what_to_answer', answerType: answerPlan.answerType });
+                wtaTrace.noteContext({ source: 'live_transcript', trustLevel: 'low', requested: true, retrieved: true, included: true, reason: 'wta_window' });
+                if (finalWtaAnswer !== fullAnswer) wtaTrace.noteFallback('output_shape_normalized');
+                commitTrace(wtaTrace);
+            } catch { /* trace never affects the answer */ }
 
             // VERIFIED CODE EXECUTION (background, strictly additive). For coding
             // answers, run the code against test cases AFTER it's shown — never
@@ -1281,7 +1539,10 @@ export class IntelligenceEngine extends EventEmitter {
             if (openedStreamRow) this.emit('suggested_answer_discard', 'error');
             this.emit('error', error as Error, 'what_to_say');
             this.setMode('idle');
-            return "Could you repeat that? I want to make sure I address your question properly.";
+            return buildGracefulRetry(question);
+        } finally {
+            // Resume background drains on EVERY exit path (answer, abort, error).
+            releaseFg();
         }
     }
 
@@ -1318,11 +1579,12 @@ export class IntelligenceEngine extends EventEmitter {
                 correct: async (repairPrompt: string) => {
                     // Background coding-correction (post-answer, fire-and-forget) —
                     // deadline-guarded so a stalled provider can't leave a hung
-                    // background task / leaked request (Issue 1 consistency).
+                    // background task / leaked request (Issue 1 consistency). 7s (was
+                    // 6s) clears MiniMax's 4-6s first-token when it's the fallback.
                     let fixed = '';
                     await raceStreamWithDeadline({
                         stream: this.llmHelper.streamChat(repairPrompt, undefined, undefined, undefined, true, true) as AsyncGenerator<string>,
-                        firstUsefulDeadlineMs: 6000,
+                        firstUsefulDeadlineMs: 7000,
                         isUsefulYet: () => fixed.length >= 5,
                         onToken: (tok: string) => { fixed += tok; },
                     });
@@ -1652,6 +1914,7 @@ export class IntelligenceEngine extends EventEmitter {
                 question,
                 source: 'manual_input',
                 speakerPerspective: 'user',
+                activeMode: this.getActiveModeInfo(),
             });
             const context = isCodingAnswerType(answerPlan.answerType)
                 ? undefined
@@ -1863,6 +2126,31 @@ export class IntelligenceEngine extends EventEmitter {
             this.activeMode = mode;
             this.emit('mode_changed', mode);
         }
+    }
+
+    /**
+     * The ModesManager active-mode TYPE id ('general'/'sales'/'technical-interview'/…)
+     * for live session-memory routing. Read defensively (dynamic require avoids a
+     * load-time cycle); returns 'general' when unavailable. Never throws.
+     */
+    private getActiveModeId(): string {
+        try {
+            const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
+            return ModesManager.getInstance().getActiveMode()?.templateType || 'general';
+        } catch { return 'general'; }
+    }
+
+    /**
+     * The active mode INFO for the answer planner's mode prior (PI v3, W1).
+     * Cached inside ModesManager (invalidate-on-write), read defensively the
+     * same way as getActiveModeId. Returns null when unavailable — planAnswer
+     * treats null as "no prior" (mode-blind behavior).
+     */
+    private getActiveModeInfo(): ActiveModeInfo | null {
+        try {
+            const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
+            return ModesManager.getInstance().getActiveModeInfo();
+        } catch { return null; }
     }
 
     getActiveMode(): IntelligenceMode {

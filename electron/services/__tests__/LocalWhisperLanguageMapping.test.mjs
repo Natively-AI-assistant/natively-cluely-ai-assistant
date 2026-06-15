@@ -55,11 +55,11 @@ test('English-only local Whisper models are identifiable before language overrid
 test('Whisper Large v3 Turbo uses the canonical Transformers.js model id', () => {
   assert.equal(
     normalizeWhisperModelId('onnx-community/whisper-large-v3-turbo-ONNX'),
-    'onnx-community/whisper-large-v3-turbo',
+    'onnx-community/whisper-large-v3-turbo-ONNX',
   );
   assert.equal(
     normalizeWhisperModelId('onnx-community/whisper-large-v3-turbo'),
-    'onnx-community/whisper-large-v3-turbo',
+    'onnx-community/whisper-large-v3-turbo-ONNX',
   );
 });
 

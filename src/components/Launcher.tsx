@@ -419,11 +419,33 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                         setIsGlobalChatOpen(true);
                     }}
                     onLiteralSearch={(query) => {
-                        // For now, also use AI query for literal search
-                        // Could be enhanced to do fuzzy filtering in the UI
                         analytics.trackCommandExecuted('literal_search');
-                        setSubmittedGlobalQuery(query);
-                        setIsGlobalChatOpen(true);
+                        // GLOBAL SEARCH V2 (Phase 9): real local-DB literal search behind
+                        // global_search_v2_enabled. When enabled and there's a match, open
+                        // the top-ranked meeting directly. Otherwise fall back to the
+                        // existing AI-query behavior (preserved). The backend returns
+                        // { enabled:false } when the flag is off, so this is a pure no-op then.
+                        // The handler stays synchronous (prop is `(q) => void`); the await
+                        // runs in an inner IIFE so we never return a floating Promise to the
+                        // event-handler prop.
+                        const runFallback = () => {
+                            setSubmittedGlobalQuery(query);
+                            setIsGlobalChatOpen(true);
+                        };
+                        void (async () => {
+                            try {
+                                const resp = await window.electronAPI.searchGlobalMeetings?.(query);
+                                if (resp?.enabled && Array.isArray(resp.results) && resp.results.length > 0) {
+                                    const top = resp.results[0];
+                                    const meeting = meetings.find((m) => m.id === top.meetingId);
+                                    if (meeting) {
+                                        handleOpenMeeting(meeting);
+                                        return;
+                                    }
+                                }
+                            } catch (_) { /* fall through to AI query */ }
+                            runFallback();
+                        })();
                     }}
                     onOpenMeeting={(meetingId) => {
                         const meeting = meetings.find(m => m.id === meetingId);

@@ -1,7 +1,9 @@
 export const CODE_EXPANSION_TRANSITION: {
-  type: 'tween';
-  ease: [number, number, number, number];
+  type: 'spring';
   duration: number;
+  bounce: number;
+  restDelta: number;
+  restSpeed: number;
 };
 
 export function shouldEagerExpandForCodeToken(

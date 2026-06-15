@@ -88,6 +88,18 @@ export interface VisionFallbackConfig {
   /** Lower/upper clamp on the hedge delay so it stays well below ttftTimeoutMs. */
   hedgeDelayMinMs: number;
   hedgeDelayMaxMs: number;
+  /**
+   * Optional: abort the ENTIRE provider chain (not just the current provider's
+   * attempts) when a pre-commit error matches. Use when the remaining providers
+   * would fail for the SAME reason — e.g. a serial cascade of models that all
+   * share one API key: an expired-key / no-credits error on the first model
+   * means every sibling on that key fails too, so retrying them is wasted
+   * latency. When this returns true the engine stops immediately and throws (the
+   * caller's catch can then fall through to a DIFFERENT provider). Receives the
+   * raw error and its classified VisionErrorClass. Post-commit failures never
+   * reach this (output already started). Default: never stop early.
+   */
+  stopChainOnError?: (err: any, errorClass: VisionErrorClass) => boolean;
 }
 
 export interface VisionFallbackHooks {
@@ -465,6 +477,18 @@ export async function* runStreamingVisionFallback(
         const detail = `${provider.name} attempt ${attempt}/${cfg.maxAttempts}: ${cls}`;
         warn(`[Vision] ${detail} (${err?.message || err})`);
         failures.push(detail);
+
+        // Whole-chain abort: when the remaining providers would fail for the SAME
+        // reason (e.g. every sibling shares one expired/no-credit API key), stop
+        // immediately instead of walking them. The `finally` below still runs for
+        // THIS attempt; the throw exits both loops so the caller can fall through
+        // to a different provider. Mark this provider unhealthy first so it isn't
+        // tried first next time either.
+        if (cfg.stopChainOnError && cfg.stopChainOnError(err, cls)) {
+          markVisionUnhealthy(health, provider.id, cfg.authCooldownMs, now());
+          warn(`[Vision] ${provider.name}: ${cls} is fatal for the whole chain (shared-credential) — aborting remaining providers`);
+          throw new Error(`Provider chain aborted (${cls}): ${err?.message || err}`);
+        }
 
         if (cls === 'auth') {
           // Won't self-heal without a config change — open the breaker long.

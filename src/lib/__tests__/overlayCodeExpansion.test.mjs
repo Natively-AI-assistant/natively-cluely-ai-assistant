@@ -57,8 +57,11 @@ describe('overlayCodeExpansion', () => {
     );
   });
 
-  test('uses a fast polished transition for frequent coding expansions', () => {
+  test('uses a short subtle spring for Apple-like coding expansion', () => {
+    assert.equal(CODE_EXPANSION_TRANSITION.type, 'spring');
     assert.equal(CODE_EXPANSION_TRANSITION.duration <= 0.28, true);
-    assert.deepEqual(CODE_EXPANSION_TRANSITION.ease, [0.23, 1, 0.32, 1]);
+    assert.equal(CODE_EXPANSION_TRANSITION.bounce, 0.16);
+    assert.equal(CODE_EXPANSION_TRANSITION.restDelta, 0.5);
+    assert.equal(CODE_EXPANSION_TRANSITION.restSpeed, 12);
   });
 });

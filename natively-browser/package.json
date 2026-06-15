@@ -1,0 +1,23 @@
+{
+  "name": "natively-browser-extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Natively companion browser extension — captures the active tab's readable content and sends it to the local Natively desktop app over a paired loopback connection.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "build:test": "node esbuild.test.mjs",
+    "build:store": "npm run build && node scripts/build-store.js",
+    "typecheck": "tsc --noEmit",
+    "test": "node esbuild.test.mjs && node --test src/__tests__/*.test.mjs"
+  },
+  "dependencies": {
+    "@mozilla/readability": "^0.5.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "esbuild": "0.21.5",
+    "typescript": "^5.4.0"
+  }
+}

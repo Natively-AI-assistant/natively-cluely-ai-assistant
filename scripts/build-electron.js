@@ -49,7 +49,7 @@ build({
   target: 'node20',
   format: 'cjs',          // Electron loads package.json main as CommonJS in this repo
                           // (package.json has no "type": "module").
-  external: ['electron', 'better-sqlite3', 'keytar', 'sqlite-vec'],
+  external: ['electron', 'better-sqlite3', 'keytar', 'sqlite-vec', '@vectorize-io/hindsight-client'],
   sourcemap: true,
   jsx: 'automatic',
   loader: {

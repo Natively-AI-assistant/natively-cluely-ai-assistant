@@ -15,13 +15,18 @@ import { PhoneMirrorService } from './services/PhoneMirrorService';
 import { SettingsManager } from './services/SettingsManager';
 import { SkillsManager } from './services/SkillsManager';
 
-import { TRIAL_SENTINEL_KEY } from './config/constants';
+import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
-import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs } from './llm';
+import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, CANDIDATE_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError } from './llm';
 import { buildLiveFallbackAnswer } from './llm/manualProfileIntelligence';
 import { isCodeVerificationEnabled } from './llm/codeVerification/verificationEnabled';
 import { CodingStreamGate } from './llm/codingStreamGate';
 import { PiLatencyTrace } from './services/telemetry/PiLatencyTracer';
+import { beginTrace, commitTrace } from './intelligence/IntelligenceTrace';
+import { ProfileTreeService } from './intelligence/ProfileTreeService';
+import { isIntelligenceFlagEnabled } from './intelligence/intelligenceFlags';
+import { routeContext, isBackwardLookingQuery } from './intelligence/ContextRouter';
+import { SearchOrchestrator, type SearchCandidate } from './intelligence/SearchOrchestrator';
 import { CHAT_MODE_PROMPT } from './llm/prompts';
 import { isAssistantIdentityQuestion, profileFactsReady } from './llm/manualProfileIntelligence';
 import { buildManualProfileBackendAnswer } from './llm/profileAnswerBackend';
@@ -483,6 +488,15 @@ export function initializeIpcHandlers(appState: AppState): void {
     },
   );
 
+  // (Removed) 'animate-overlay-width' — the overlay window is a FIXED WIDTH
+  // (WindowHelper.OVERLAY_DEFAULT_WIDTH = 780) and is NEVER width-resized. The
+  // expand/contract animation is CSS-only in the renderer (the panel tweens
+  // 600↔780 centered inside the fixed window). 'update-content-dimensions-centered'
+  // now only carries HEIGHT changes (the renderer always sends the fixed width),
+  // which is a top-anchored resize that does not move X — so there is no
+  // sideways jump and no per-frame transparent-window re-raster. See
+  // NativelyInterface.startTransition for the renderer side.
+
   safeHandle('set-window-mode', async (event, mode: 'launcher' | 'overlay', inactive?: boolean) => {
     appState.getWindowHelper().setWindowMode(mode, inactive);
     return { success: true };
@@ -704,14 +718,34 @@ export function initializeIpcHandlers(appState: AppState): void {
   let _chatStreamId = 0;
   // Keep IDs globally unique for phone/desktop message correlation; supersession is per sender.
   const _chatStreamsBySender = new Map<number, { streamId: number; controller: AbortController }>();
+  // Per-process diversity guard for manual chat (manual regression 2026-06-12):
+  // last-20 answer fingerprints; repeated answers across DIFFERENT questions are
+  // compressed to speakable prose. Survives across questions within the app run
+  // — exactly the long-session repetition window users hit.
+  const { AnswerDiversityGuard } = require('./llm/answerPolish') as typeof import('./llm/answerPolish');
+  const _manualDiversityGuard = new AnswerDiversityGuard(20);
 
-  // Matches narrow identity/meta probes only. Kept tight so coding/normal asks don't trip it.
-  // Prevents the small fast-mode model from over-firing the "I'm Natively" canned reply
-  // (which used to escape the prompt's hard rule for any ambiguous input).
-  const IDENTITY_PROBE_RE =
-    /^\s*(who\s+(are|r)\s+(you|u|this|natively)|what\s+(are|r)\s+(you|u)|are\s+you\s+(chatgpt|gpt[-\s]?\d?|claude|gemini|llama|an?\s+(ai|bot|llm|model|assistant))|what('?s|\s+is)\s+your\s+(name|model)|which\s+(ai|model|llm)\s+are\s+you|who\s+(made|built|created|developed|trained)\s+(you|this|natively)|what\s+model\s+(are\s+you|do\s+you\s+use)|introduce\s+yourself)\s*\??\s*$/i;
-  const CREATOR_PROBE_RE =
-    /^\s*(who\s+(made|built|created|developed|trained)\s+(you|this|natively))\s*\??\s*$/i;
+  // CONVERSATION MEMORY V2 (Phase 11 wiring, behind conversation_memory_v2_enabled).
+  // The manual chat path is SINGLE-SHOT — no conversation history is threaded to its
+  // IPC handler, so a bare follow-up ("make that shorter", "why?", "continue") with no
+  // pasted context falls to a generic clarification. This per-process store records each
+  // delivered manual answer per sender (= session) so a bare follow-up can resolve
+  // against the prior turn instead. Same-session only (no Hindsight). Bounded per session.
+  const { ConversationMemoryService } = require('./intelligence/ConversationMemoryService') as typeof import('./intelligence/ConversationMemoryService');
+  const _manualConversationMemory = new ConversationMemoryService();
+  // Senders that already have a one-time conversation-memory cleanup listener attached.
+  // The 'destroyed' listener must be registered ONCE per WebContents, not per chat
+  // message — otherwise every message adds another listener (the MaxListenersExceeded
+  // warning at 11 messages). Guarded by this set.
+  const _convoCleanupRegistered = new Set<number>();
+
+  // Identity-probe routing lives in electron/llm/manualIdentityRouting.ts
+  // (manual regression 2026-06-12): the old inline IDENTITY_PROBE_RE answered
+  // "who are you?" / "what is your name?" / "introduce yourself" with the
+  // canned assistant reply BEFORE the candidate-profile fast path could run —
+  // the real-app assistant-identity leak users hit. resolveIdentityProbe keeps
+  // assistant-meta probes canned but routes candidate-ambiguous probes to the
+  // profile fast path whenever a profile is loaded.
 
   safeHandle(
     'gemini-chat-stream',
@@ -723,6 +757,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean },
     ) => {
       let myController: AbortController | null = null;
+      let _manualFgToken: string | null = null;
+      // Intelligence OS observe-only trace (Phase 1). Hoisted so the catch can record
+      // an error + commit. Assigned to the real trace right after planAnswer; until
+      // then it's the shared zero-cost NO-OP, so this is free when the flag is off.
+      let iTrace = beginTrace('');
+      const { ForegroundGate } = require('./services/ForegroundGate') as typeof import('./services/ForegroundGate');
       try {
         console.log('[IPC] gemini-chat-stream started using LLMHelper.streamChat');
         const llmHelper = appState.processingHelper.getLLMHelper();
@@ -736,18 +776,43 @@ export function initializeIpcHandlers(appState: AppState): void {
         myController = new AbortController();
         _chatStreamsBySender.set(senderId, { streamId: myStreamId, controller: myController });
 
+        // Reap this sender's conversation memory when the renderer goes away, so the
+        // per-process store cannot grow unbounded across window reloads / churn and
+        // doesn't retain raw Q/A content after a window closes (security review
+        // 2026-06-13 MEDIUM). Register the 'destroyed' listener ONCE per WebContents
+        // (guarded by _convoCleanupRegistered) — registering per-message added a new
+        // listener each time and tripped MaxListenersExceeded at 11 messages.
+        try {
+          if (!_convoCleanupRegistered.has(senderId)) {
+            _convoCleanupRegistered.add(senderId);
+            event.sender?.once?.('destroyed', () => {
+              _convoCleanupRegistered.delete(senderId);
+              try { _manualConversationMemory.clearSession(String(senderId)); } catch { /* noop */ }
+            });
+          }
+        } catch { /* noop */ }
+
         const intelligenceManager = appState.getIntelligenceManager();
 
         // Identity probe short-circuit — bypasses the LLM entirely so small models can't
         // reframe the canned reply or misfire it on coding asks (the original bug).
-        // Regex is `^...$` anchored, so non-probe questions cannot match.
+        // Manual regression 2026-06-12: routing now distinguishes assistant-meta
+        // probes (always canned) from candidate-ambiguous probes ("who are you?",
+        // "what is your name?", "introduce yourself") which — with a profile
+        // loaded — are interview-rehearsal questions about the CANDIDATE and must
+        // reach the deterministic profile fast path instead of leaking
+        // "I'm Natively, an AI assistant".
         if (!imagePaths?.length && typeof message === 'string') {
-          const identityHit = CREATOR_PROBE_RE.test(message)
-            ? 'I was developed by Evin John.'
-            : IDENTITY_PROBE_RE.test(message)
-              ? "I'm Natively, an AI assistant."
-              : null;
-          if (identityHit) {
+          const { resolveIdentityProbe } = require('./llm/manualIdentityRouting') as typeof import('./llm/manualIdentityRouting');
+          let probeProfileReady = false;
+          try {
+            const orchProbe = llmHelper.getKnowledgeOrchestrator?.();
+            probeProfileReady = profileFactsReady((orchProbe as any)?.activeResume?.structured_data ?? null);
+          } catch { /* no profile — assistant reply stands */ }
+          const probe = resolveIdentityProbe(message, probeProfileReady);
+          // candidate_fast_path → fall through; the fast-path block below owns it.
+          if (probe.kind === 'assistant_reply') {
+            const identityHit = probe.reply;
             intelligenceManager.addTranscript(
               { text: message, speaker: 'user', timestamp: Date.now(), final: true },
               true,
@@ -780,6 +845,15 @@ export function initializeIpcHandlers(appState: AppState): void {
             }
             intelligenceManager.addAssistantMessage(identityHit);
             intelligenceManager.logUsage('chat', message, identityHit);
+            // Observe-only trace for the app-identity canned reply (common path). The
+            // hoisted iTrace is still the NOOP here (real trace is created post-planAnswer),
+            // so begin a dedicated one. Zero-cost when the flag is off.
+            try {
+              const probeTrace = beginTrace(message);
+              probeTrace.setRouting({ source: 'manual_input', answerType: 'unknown_answer', deterministicFastPathUsed: true, profileFactsReady: probeProfileReady });
+              probeTrace.noteFallback('assistant_identity_reply');
+              commitTrace(probeTrace);
+            } catch { /* trace never affects the answer */ }
             return null;
           }
         }
@@ -823,19 +897,161 @@ export function initializeIpcHandlers(appState: AppState): void {
         const chatTrace = new PiLatencyTrace({ source: 'manual' });
         chatTrace.mark('question_submitted');
 
+        // Intelligence OS — observe-only per-answer trace (Phase 1 wiring). Returns a
+        // zero-cost NO-OP when intelligence_trace_enabled is off (default), so this
+        // never affects answer behavior or latency. Committed at every exit point.
+        iTrace = beginTrace(typeof message === 'string' ? message : '');
+
+        // Foreground gate (manual regression 2026-06-12): pause background
+        // embedding/RAG drain loops while this answer is in flight so their
+        // synchronous DB work can't add event-loop stalls to the user's answer.
+        // Released in the handler's finally below.
+        _manualFgToken = ForegroundGate.begin('manual');
+
+        // Active mode as a routing PRIOR (PI v3, W1): an ambiguous manual
+        // question in a sales/lecture mode routes to that mode's answer type
+        // instead of unknown_answer. Read defensively — null keeps mode-blind.
+        let manualActiveMode: import('./llm/modeProfiles').ActiveModeInfo | null = null;
+        try {
+          const { ModesManager } = require('./services/ModesManager');
+          manualActiveMode = ModesManager.getInstance().getActiveModeInfo();
+        } catch { /* mode prior unavailable — planAnswer stays mode-blind */ }
+
         const answerPlan = planAnswer({
           question: message,
           source: 'manual_input',
           speakerPerspective: 'user',
+          activeMode: manualActiveMode,
         });
         const isCodingChat = isCodingAnswerType(answerPlan.answerType);
         chatTrace.mark('answer_type_selected', { answerType: answerPlan.answerType, isCoding: isCodingChat });
+        piTelemetry.emit('pi_answer_plan_created', { answerType: answerPlan.answerType, surface: 'manual', isCoding: isCodingChat, profilePolicy: answerPlan.profileContextPolicy, answerStyle: answerPlan.answerStyle });
+        iTrace.setRouting({
+          source: 'manual_input',
+          mode: manualActiveMode?.templateType,
+          answerType: answerPlan.answerType,
+        });
+
+        // CONTEXT ROUTER V2 (Phase 5 wiring, SHADOW MODE behind context_router_v2_enabled):
+        // the manual path already routes context via answerPlan.requiredContextLayers /
+        // forbiddenContextLayers + the CONTRACT/CANDIDATE_CONTRACT sets below — a hardened,
+        // benchmark-green path. Rather than have ContextRouter DRIVE that (risking a
+        // regression for no behavioral gain), we run it in SHADOW: compute its decision,
+        // record it on the trace, and emit a telemetry marker when it DISAGREES with the
+        // live profile-policy routing. This validates the router against the proven path
+        // with ZERO behavior change — the prerequisite before ever letting it drive.
+        // Flag OFF → not computed at all.
+        try {
+          if (isIntelligenceFlagEnabled('contextRouterV2')) {
+            const orchRouter = llmHelper.getKnowledgeOrchestrator?.();
+            const routerProfileAvailable = profileFactsReady((orchRouter as any)?.activeResume?.structured_data ?? null);
+            const routerDecision = routeContext({
+              userQuery: message,
+              source: 'manual_input',
+              mode: manualActiveMode?.templateType,
+              profileAvailable: routerProfileAvailable,
+              jdAvailable: Boolean((orchRouter as any)?.activeJD?.structured_data),
+            }, iTrace);
+            // Live routing's view of whether profile grounds this answer. The router
+            // gates useProfileTree on profile AVAILABILITY, so AND availability into the
+            // proxy too (test-engineer Phase 5 CONCERN): otherwise a profile-type question
+            // asked before a resume is loaded reads as a false divergence (the live path
+            // also can't ground without a profile). Now the marker fires only on a GENUINE
+            // routing disagreement when a profile actually exists.
+            const liveWantsProfile = routerProfileAvailable && (
+              answerPlan.profileContextPolicy === 'required'
+              || answerPlan.requiredContextLayers.some((l) => l === 'stable_identity' || l === 'resume' || l === 'jd')
+            );
+            if (routerDecision.useProfileTree !== liveWantsProfile) {
+              piTelemetry.emit('pi_context_policy_applied', {
+                answerType: answerPlan.answerType,
+                via: 'context_router_shadow_divergence',
+                profilePolicy: answerPlan.profileContextPolicy,
+              });
+            }
+          }
+        } catch { /* shadow routing is observe-only; never affects the answer */ }
+
+        // Context-free bare follow-up ("why?", "and?", "continue") typed in MANUAL
+        // mode has no prior turn to resolve against (manual chat is single-shot — no
+        // conversation history is threaded here). Emit a safe clarification
+        // deterministically instead of letting the LLM self-identify or dump the
+        // profile (release 2026-06-07c). A provided `context` string counts as prior
+        // context, so a follow-up with pasted context still flows normally.
+        //
+        // SAFETY ORDERING (code-review 2026-06-07c): this runs BEFORE the stealth/
+        // safety route, which is sound because `isBareFollowUp` only matches
+        // content-free single fragments ("why", "and", "continue", "explain") — a
+        // stealth/evasion ask is necessarily multi-word ("how do I stay undetected"),
+        // so it can never be classified bare and short-circuited here. The emitted
+        // clarification is a fixed safe string. If `isBareFollowUp` is ever broadened,
+        // re-verify it cannot swallow a stealth ask.
+        // Manual regression 2026-06-12: the gate previously checked only the
+        // explicit `context` param — the rolling transcript snapshot captured
+        // above was IGNORED, so "why?" / "explain" mid-lecture emitted a generic
+        // clarification despite plenty of conversation context existing. A bare
+        // follow-up with transcript context now flows to the LLM (which can
+        // resolve it against the rolling window). The clarification also speaks
+        // the ACTIVE MODE's surface (lecture/sales) instead of always 'manual'.
+        // CONVERSATION MEMORY V2 (Phase 11): before emitting the generic clarification
+        // for a bare follow-up with no context, try to recover the prior turn from this
+        // session's conversation memory. If found, synthesize a compact context block so
+        // the follow-up flows to the LLM (which can resolve "make that shorter" / "why?"
+        // against the real prior Q/A) instead of a dead-end clarification. Flag OFF →
+        // skipped entirely (original clarification behavior preserved byte-for-byte).
+        if (!context && !autoContextSnapshot && isBareFollowUp(message)
+            && isIntelligenceFlagEnabled('conversationMemoryV2')) {
+          try {
+            const prior = _manualConversationMemory.resolveSameSession(String(senderId), message);
+            if (prior && prior.userMessage && prior.assistantAnswer) {
+              context = `PRIOR EXCHANGE IN THIS CONVERSATION:\nUser asked: ${prior.userMessage}\nYou answered: ${prior.assistantAnswer}\n\nThe user's new message is a follow-up to that. Resolve it against the prior exchange.`;
+              iTrace.noteContext({ source: 'conversation_history', trustLevel: 'medium', requested: true, retrieved: true, included: true, reason: 'same_session_followup' });
+            }
+          } catch { /* fall through to the clarification below */ }
+        }
+        if (!context && !autoContextSnapshot && isBareFollowUp(message)) {
+          let clarSurface: 'manual' | 'lecture' | 'sales' = 'manual';
+          try {
+            const { ModesManager } = require('./services/ModesManager');
+            const tpl = ModesManager.getInstance().getActiveModeInfo()?.templateType;
+            if (tpl === 'lecture') clarSurface = 'lecture';
+            else if (tpl === 'sales') clarSurface = 'sales';
+          } catch { /* default manual */ }
+          const clarification = buildContextFreeClarification(clarSurface);
+          if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) return null;
+          event.sender.send('gemini-stream-token', clarification);
+          event.sender.send('gemini-stream-done', { finalText: clarification });
+          try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), clarification); } catch (_) { /* noop */ }
+          try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), clarification); } catch (_) { /* noop */ }
+          intelligenceManager.addAssistantMessage(clarification);
+          intelligenceManager.logUsage('chat', message, clarification);
+          chatTrace.markFirstUseful({ via: 'context_free_clarification' });
+          chatTrace.mark('response_completed', { chars: clarification.length, deterministic: true });
+          chatTrace.finish({ chars: clarification.length });
+          iTrace.setRouting({ answerType: 'follow_up_answer', deterministicFastPathUsed: true }).noteFallback('context_free_clarification');
+          commitTrace(iTrace);
+          return null;
+        }
 
         // Manual Profile Intelligence preflight: simple profile facts must not fall
         // through to generic CHAT_MODE_PROMPT, where the assistant identity can win
         // over the loaded candidate identity. Structured resume/JD facts are ready
         // before embeddings/AOT, so answer these deterministically with no provider.
-        if (!imagePaths?.length && !isCodingChat && !isAssistantIdentityQuestion(message)) {
+        // SAFETY (code-review 2026-06-06b CRITICAL): the deterministic fast-path
+        // runs BEFORE the safety route, so a stealth/evasion ask that also trips an
+        // intro/skill pattern could get a candidate answer instead of the decline.
+        // Skip the fast-path entirely for a stealth/evasion question AND for any
+        // CONTRACT-ENFORCED type (safety/link/source/product-about) so those always
+        // flow through the contract-injected streamChat below.
+        const isStealthChat = isStealthEvasionQuestion(message);
+        const fastPathEligible = !imagePaths?.length && !isCodingChat
+          && !isAssistantIdentityQuestion(message)
+          && !isStealthChat
+          && answerPlan.answerType !== 'ethical_usage_answer'
+          && answerPlan.answerType !== 'project_link_answer'
+          && answerPlan.answerType !== 'source_code_evidence_answer'
+          && answerPlan.answerType !== 'project_about_answer';
+        if (fastPathEligible) {
           try {
             const orchestrator = llmHelper.getKnowledgeOrchestrator?.();
             const { route: fastPath, routeLog } = buildManualProfileBackendAnswer({
@@ -857,6 +1073,14 @@ export function initializeIpcHandlers(appState: AppState): void {
               chatTrace.markFirstUseful({ via: 'profile_fast_path' });
               chatTrace.mark('response_completed', { chars: fastPath.answer.length, deterministic: true });
               chatTrace.finish({ chars: fastPath.answer.length });
+              iTrace.setRouting({
+                answerType: fastPath.answerType,
+                deterministicFastPathUsed: true,
+                profileFactsReady: routeLog.profileFactsReady,
+                promptContainsProfileContext: true,
+              });
+              iTrace.noteContext({ source: 'profile_tree', trustLevel: 'high', requested: true, retrieved: true, included: true, reason: 'manual_fast_path' });
+              commitTrace(iTrace);
               return null;
             }
           } catch (profileRouteError: any) {
@@ -888,16 +1112,109 @@ export function initializeIpcHandlers(appState: AppState): void {
           } catch { /* safe logging only */ }
         }
 
-        if (!context && autoContextSnapshot && !isCodingChat) {
+        // Answer types whose deterministic TEMPLATE carries non-negotiable
+        // behavior the model MUST follow — the safety decline (stealth/evasion),
+        // the no-invented-link rule, the no-hallucinated-source-code rule, and the
+        // grounded product-about rule. For these we inject the answer contract into
+        // the prompt (like coding) so the template reaches the model, and we drop
+        // the rolling 100s context (it would dilute the contract). Release 2026-06-06b.
+        const CONTRACT_ENFORCED_TYPES = new Set([
+          'ethical_usage_answer', 'project_link_answer',
+          'source_code_evidence_answer', 'project_about_answer',
+        ]);
+        const isContractEnforced = CONTRACT_ENFORCED_TYPES.has(answerPlan.answerType);
+        if (isCodingChat || isContractEnforced) {
+          context = formatAnswerPlanForPrompt(answerPlan, isCodingChat && isCodeVerificationEnabled());
+          console.log('[IPC] Answer-contract enforced; rolling context excluded', {
+            answerType: answerPlan.answerType,
+          });
+        } else if (!context && autoContextSnapshot) {
           context = autoContextSnapshot;
           console.log(
             `[IPC] Auto-injected 100s context for gemini-chat-stream (${context.length} chars)`,
           );
-        } else if (isCodingChat) {
-          context = formatAnswerPlanForPrompt(answerPlan, isCodeVerificationEnabled());
-          console.log('[IPC] Coding chat detected; excluding rolling resume/JD/transcript context and enforcing answer contract', {
-            answerType: answerPlan.answerType,
-          });
+        }
+        // MANUAL REGRESSION FIX (release 2026-06-08): for ANY profile-required
+        // candidate answer type (jd_fit / skill / behavioral / project / experience /
+        // identity / negotiation), ADDITIVELY prepend the answer-contract — the
+        // answerType + the adaptive STYLE directive + the strict response template —
+        // WITHOUT dropping the rolling profile grounding. Without this the model
+        // received the profile facts as raw context with no instruction and collapsed
+        // EVERY non-fast-path question into the generic self-intro (the exact bug the
+        // user hit: "why should we hire you", "rate your Python", "JD fit", "what gap"
+        // all returned the same intro). The contract makes the model produce the RIGHT
+        // answer type AND honor the requested style (one-line / bullets / detailed).
+        const CANDIDATE_CONTRACT_TYPES = new Set([
+          'identity_answer', 'profile_fact_answer', 'experience_answer', 'project_answer',
+          'project_followup_answer', 'skills_answer', 'skill_experience_answer',
+          'jd_fit_answer', 'gap_analysis_answer', 'behavioral_interview_answer', 'negotiation_answer',
+          // Manual regression 2026-06-12: sales/lecture answers ALSO need their
+          // contract — without it the model had no voice instruction and fell
+          // back to "I'm Natively, an AI assistant. I don't have a product."
+          // in real sales-mode sessions. The SALES_TEMPLATE carries the
+          // seller-voice rules; lecture gets the neutral template + mode prompt.
+          'sales_answer', 'product_candidate_mix_answer', 'lecture_answer',
+        ]);
+        const wantsCandidateContract = CANDIDATE_CONTRACT_TYPES.has(answerPlan.answerType)
+          // a styled question ALWAYS gets the contract so the style reaches the model.
+          || (answerPlan.answerStyle && answerPlan.answerStyle !== 'default');
+        if (wantsCandidateContract && !isContractEnforced && !isCodingChat) {
+          const candidateContract = formatAnswerPlanForPrompt(answerPlan, false);
+          context = context ? `${candidateContract}\n\n${context}` : candidateContract;
+        }
+
+        // HINDSIGHT LIVE RECALL (the deferred last step, behind hindsight_live_recall_enabled).
+        // Surface cross-meeting long-term memory INTO the live answer — but ONLY for
+        // genuinely BACKWARD-LOOKING questions ("what did we discuss last time about X?",
+        // "did we cover the pricing objection before?"). isBackwardLookingQuery gates this,
+        // so a normal/coding/identity/sales question NEVER calls recall → ZERO added latency
+        // on the vast majority of answers. Hard 800ms timeout (AbortController+Promise.race
+        // in the adapter): on timeout/empty/error it returns [] and the answer proceeds
+        // WITHOUT memory — never blocks, never throws. Skipped for coding/safety answers.
+        // Config from HindsightManager (settings OR env) so live recall works in a packaged
+        // build. Resolved up-front so the gate itself depends on a configured server, not env.
+        const { HindsightManager: _HM } = require('./services/HindsightManager') as typeof import('./services/HindsightManager');
+        const _liveHsCfg = _HM.getInstance().getHindsightConfig();
+        // isAvailable() = configured AND a recent health-check passed (cached ~30s, primed
+        // at startup). Short-circuit a known-down server so the live answer NEVER pays the
+        // 800ms recall timeout when Hindsight is unreachable (2026-06-14 fix).
+        if (!isCodingChat && !isContractEnforced
+            && isIntelligenceFlagEnabled('hindsightLiveRecall')
+            && isIntelligenceFlagEnabled('hindsightMemory')
+            && _liveHsCfg
+            && _HM.getInstance().isAvailable()
+            && typeof message === 'string'
+            && isBackwardLookingQuery(message)) {
+          try {
+            const { LongTermMemoryService } = require('./intelligence/memory/LongTermMemoryService') as typeof import('./intelligence/memory/LongTermMemoryService');
+            const ltm = LongTermMemoryService.fromFlags({ hindsight: { ..._liveHsCfg, timeoutMs: 800 } });
+            if (ltm.enabled) {
+              const t0 = Date.now();
+              const memories = await ltm.recallRelevantMemory(message, { userId: _HM.getInstance().localUserId() }, { timeoutMs: 800, maxResults: 5 });
+              const recallMs = Date.now() - t0;
+              const facts = memories.map((m) => m?.text?.trim()).filter(Boolean) as string[];
+              if (facts.length > 0) {
+                const memBlock = `RELEVANT LONG-TERM MEMORY (from prior meetings — may be incomplete):\n${facts.map((f) => `- ${f}`).join('\n')}\nUse these only if they help answer the question; ignore if irrelevant.`;
+                context = context ? `${memBlock}\n\n${context}` : memBlock;
+              }
+              // Record real recall latency + empty-rate into the metrics registry
+              // (was dead code with 0 callers — code-review M1). Cheap, content-free.
+              try {
+                const { intelligenceMetrics } = require('./intelligence/IntelligenceMetrics') as typeof import('./intelligence/IntelligenceMetrics');
+                intelligenceMetrics.timing('hindsight_recall_ms', recallMs);
+                intelligenceMetrics.rate('memory_recall_empty_rate', facts.length === 0);
+              } catch { /* metrics never affect the answer */ }
+              // Content-free debug line (counts/timing only), gated behind the trace flag
+              // so it stays quiet by default (the iTrace context note below is the durable
+              // record). Only fires on a real recall (flag on + backward query + server up).
+              if (isIntelligenceFlagEnabled('trace')) {
+                console.log('[HindsightLiveRecall]', { ms: recallMs, facts: facts.length, injected: facts.length > 0 });
+              }
+              iTrace.noteContext({ source: 'hindsight_recall', trustLevel: 'medium', requested: true, retrieved: facts.length > 0, included: facts.length > 0, reason: 'live_backward_recall' });
+            }
+          } catch (recallErr: any) {
+            console.warn('[HindsightLiveRecall] skipped (non-fatal):', recallErr?.message);
+          }
         }
 
         // Use CHAT_MODE_PROMPT for general chat — bypasses the interview-copilot
@@ -918,14 +1235,19 @@ export function initializeIpcHandlers(appState: AppState): void {
           // processQuestion, cache create, provider connect) lazily on the first
           // `for await` pull — so the gap between this mark and first_useful_token
           // below is exactly the pre-work + provider TTFT we're hunting.
-          chatTrace.mark('provider_request_started', { ignoreKnowledgeMode: isCodingChat ? true : Boolean(options?.ignoreKnowledgeMode) });
+          // A pure SAFETY answer (stealth/evasion decline) must not run the
+          // knowledge intercept at all — no profile, no intro, no candidate
+          // grounding belongs in a policy redirect (release 2026-06-06b).
+          const isSafetyAnswer = answerPlan.answerType === 'ethical_usage_answer';
+          const ignoreKnowledge = isCodingChat || isSafetyAnswer ? true : options?.ignoreKnowledgeMode;
+          chatTrace.mark('provider_request_started', { ignoreKnowledgeMode: Boolean(ignoreKnowledge) });
           const stream = llmHelper.streamChat(
             message,
             imagePaths,
             context,
             systemPromptOverride,
-            isCodingChat ? true : options?.ignoreKnowledgeMode,
-            isCodingChat, // skipModeInjection; coding chat must not pull active-mode resume/JD/reference context
+            ignoreKnowledge,
+            isCodingChat || isSafetyAnswer, // skipModeInjection; safety/coding must not pull active-mode resume/JD/reference context
             [],    // extraDataScopes
             myController.signal,
             // Coding gets a small reasoning budget (correctness); everything else
@@ -1116,11 +1438,12 @@ export function initializeIpcHandlers(appState: AppState): void {
                   const repairInstruction = buildProfileRepairInstruction({ ok: false, violations: [critical] } as any);
                   const repairPrompt = `${repairInstruction}\n\nCandidate facts (ground every claim in these; second person to the user is fine, but NEVER say you are Natively or an AI, and NEVER claim the profile is missing):\n${facts}\n\nQuestion: ${message}\n\nRewrite the answer now.`;
                   let repaired = '';
-                  // Deadline-guarded (4s) so a stalled repair provider can't re-hang
-                  // the request after a streamed answer already showed (Issue 1).
+                  // Deadline-guarded (7s) so a stalled repair provider can't re-hang
+                  // the request after a streamed answer already showed (Issue 1). 7s
+                  // (was 4s) clears MiniMax's 4-6s first-token when it's the fallback.
                   await raceStreamWithDeadline({
                     stream: llmHelper.streamChat(repairPrompt, undefined, undefined, undefined, true, true) as AsyncGenerator<string>,
-                    firstUsefulDeadlineMs: 4000,
+                    firstUsefulDeadlineMs: 7000,
                     isUsefulYet: () => repaired.length >= 5,
                     shouldAbort: () => repaired.length > 1200,
                     onToken: (tok: string) => { repaired += tok; },
@@ -1144,6 +1467,159 @@ export function initializeIpcHandlers(appState: AppState): void {
             }
           }
 
+          // Release 2026-06-07 (code-review hardening): ANY profile-FORBIDDEN answer
+          // (coding/DSA/technical-concept/system-design/debugging/sales/lecture/
+          // meeting) must NOT name Natively, the candidate, a loaded project/company,
+          // or reference the profile/JD/salary — flash-lite intermittently appends a
+          // stray mention. Detect deterministically and STRIP the offending prose
+          // sentence (code blocks preserved). Self-gated by the validator (only fires
+          // for forbidden types) → zero happy-path cost on profile answers. The user
+          // can opt in ("use my Natively project"). Runs for coding AND non-coding
+          // forbidden types (previously coding-only).
+          if (answerPlan.profileContextPolicy === 'forbidden') {
+            try {
+              const orchC = llmHelper.getKnowledgeOrchestrator?.();
+              const resumeC = (orchC as any)?.activeResume?.structured_data ?? null;
+              const profileTokens = resumeC ? {
+                firstName: (resumeC.identity?.name || resumeC.name || '').trim().split(/\s+/)[0] || undefined,
+                projects: (resumeC.projects || []).map((p: any) => (p?.name || '').split(/[–—-]/)[0].trim()).filter((s: string) => s.length >= 3),
+                companies: (resumeC.experience || []).map((e: any) => (e?.company || '').trim()).filter((s: string) => s.length >= 3),
+              } : undefined;
+              const profileExplicitlyInvited = /\b(use|using|with|in|from)\s+(my|your|the)\s+(natively|project|portfolio)\b|\bin natively\b|\b(my|your) natively project\b/i.test(message);
+              const codeLeak = validateProfileOutput({
+                answer: fullResponse, plan: answerPlan, profileAvailable: Boolean(resumeC),
+                candidateDirected: false, profileTokens, profileExplicitlyInvited,
+              }).violations.find(v => v.code === 'profile_token_in_coding_answer');
+              if (codeLeak) {
+                const tokens = [profileTokens?.firstName, ...(profileTokens?.projects || []), ...(profileTokens?.companies || [])].filter((t): t is string => !!t);
+                const stripped = stripProfileTokensFromCoding(fullResponse, tokens);
+                const reCheck = validateProfileOutput({ answer: stripped, plan: answerPlan, profileAvailable: Boolean(resumeC), candidateDirected: false, profileTokens, profileExplicitlyInvited });
+                const stillLeaks = reCheck.violations.some(v => v.code === 'profile_token_in_coding_answer');
+                if (!stillLeaks && stripped.trim().length >= 20) {
+                  fullResponse = stripped;
+                  finalText = stripped;
+                  console.warn('[ProfileIntelligence] stripped stray profile token from a profile-forbidden answer', { answerType: answerPlan.answerType });
+                }
+              }
+            } catch (codeLeakErr: any) {
+              console.warn('[ProfileIntelligence] forbidden-answer leak validation skipped:', codeLeakErr?.message);
+            }
+          }
+
+          // Release 2026-06-07c: FINAL candidate-answer sanitizer. A candidate-facing
+          // answer (identity/experience/project/skills/jd-fit/behavioral/negotiation)
+          // must NOT tail-append assistant-meta ("as an AI assistant", "I'm Natively",
+          // "I can't share", "I don't have your resume"). Flash-lite occasionally adds
+          // such a sentence to an otherwise-valid answer. Strip it deterministically;
+          // if stripping empties the answer, fall back to the deterministic profile
+          // backend so the user never gets a broken/empty answer.
+          // ProfileTree V2 perspective guard (Phase 3 wiring, behind profile_tree_v2_enabled):
+          // the existing sanitizer triggers on ANSWER TYPE. But a candidate-identity ask in
+          // an interview/looking-for-work mode that gets MISCLASSIFIED to a non-candidate
+          // answerType (e.g. general_meeting_answer) would skip the assistant-meta strip and
+          // could leak "I'm Natively". The mode-based guard is independent of answerType, so
+          // it widens the trigger to catch that gap. Flag OFF → original answerType-only trigger.
+          let _perspectiveExpectsCandidate = false;
+          try {
+            if (isIntelligenceFlagEnabled('profileTreeV2')) {
+              const guard = ProfileTreeService.getCandidatePerspectiveGuard(manualActiveMode?.templateType, message);
+              _perspectiveExpectsCandidate = guard.assistantIdentityWouldLeak;
+            }
+          } catch { /* guard never blocks the answer */ }
+          if (CANDIDATE_VOICE_ANSWER_TYPES.has(answerPlan.answerType) || _perspectiveExpectsCandidate) {
+            try {
+              const sani = sanitizeCandidateAnswer(fullResponse);
+              if (sani.repaired && !sani.needsFallback) {
+                fullResponse = sani.text;
+                finalText = sani.text;
+                piTelemetry.emit('pi_candidate_sanitizer_applied', { answerType: answerPlan.answerType, repaired: true, needsFallback: false, markerCount: sani.removedMarkers.length });
+                console.warn('[ProfileIntelligence] sanitized assistant-meta tail from candidate answer', { answerType: answerPlan.answerType, markers: sani.removedMarkers });
+              } else if (sani.needsFallback) {
+                piTelemetry.emit('pi_candidate_sanitizer_applied', { answerType: answerPlan.answerType, repaired: true, needsFallback: true, markerCount: sani.removedMarkers.length });
+                // The whole answer was assistant-meta. Build a deterministic
+                // profile-grounded replacement instead of shipping an empty/broken one.
+                const orchS = llmHelper.getKnowledgeOrchestrator?.();
+                const fb = buildManualProfileBackendAnswer({ question: message, orchestrator: orchS, source: 'manual_input' });
+                if (fb?.route?.answer && fb.route.answer.trim().length >= 15) {
+                  fullResponse = fb.route.answer;
+                  finalText = fb.route.answer;
+                  console.warn('[ProfileIntelligence] candidate answer was all assistant-meta; used deterministic fallback', { answerType: answerPlan.answerType });
+                } else {
+                  // Manual regression 2026-06-12 (stress seq_056): the backend has
+                  // NO fast-path for behavioral/jd-fit asks, so an all-assistant-
+                  // meta answer ("I'm Natively, I don't have personal experiences")
+                  // shipped UNREPAIRED. buildLiveFallbackAnswer covers those
+                  // profile routes (grounded experience/intro line) — an honest
+                  // grounded line always beats an identity leak.
+                  try {
+                    const resumeS = (orchS as any)?.activeResume?.structured_data ?? null;
+                    const jdS = (orchS as any)?.activeJD?.structured_data ?? null;
+                    const lf = resumeS ? buildLiveFallbackAnswer({ question: message, answerType: answerPlan.answerType, profile: resumeS, jobDescription: jdS }) : null;
+                    if (lf && lf.trim().length >= 15) {
+                      fullResponse = lf;
+                      finalText = lf;
+                      console.warn('[ProfileIntelligence] assistant-meta answer replaced with grounded live fallback', { answerType: answerPlan.answerType });
+                    }
+                  } catch { /* keep sanitized-but-thin answer */ }
+                }
+              }
+            } catch (saniErr: any) {
+              console.warn('[ProfileIntelligence] candidate sanitizer skipped:', saniErr?.message);
+            }
+          }
+
+          // ── FINAL ANSWER POLISH + DIVERSITY GUARD (manual regression 2026-06-12) ──
+          // 1. Artifact cleanup: orphan "*" bullet lines, dangling markers, blank-
+          //    line runs. Cheap regex, code blocks preserved.
+          // 2. Identity guard at the RENDER boundary: a candidate-voice answer that
+          //    still self-identifies as the assistant after the sanitizer is
+          //    replaced with the deterministic profile answer (covered above) — the
+          //    artifact cleanup never weakens that.
+          // 3. Diversity: same first-sentence / template / near-duplicate answers
+          //    across DIFFERENT questions are compressed to speakable prose so a
+          //    long session never reads as canned. Deterministic; no extra LLM call.
+          if (!isCodingChat) {
+            try {
+              const { cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE } = require('./llm/answerPolish') as typeof import('./llm/answerPolish');
+              const cleaned = cleanAnswerArtifacts(fullResponse);
+              if (cleaned !== fullResponse && cleaned.length >= 10) {
+                fullResponse = cleaned;
+                finalText = cleaned;
+              }
+              // Visible scaffold in a DEFAULT-style answer (user didn't ask for
+              // structure): compress to the speakable form. detectAnswerStyle
+              // already ran inside planAnswer (answerStyle on the plan).
+              SCAFFOLD_LABEL_RE.lastIndex = 0;
+              const hasVisibleScaffold = SCAFFOLD_LABEL_RE.test(fullResponse);
+              const structureRequested = ['detailed', 'bullets', 'star', 'exam', 'notes'].includes(answerPlan.answerStyle as string);
+              if (hasVisibleScaffold && !structureRequested) {
+                const speakable = compressToSpeakable(fullResponse);
+                if (speakable.length >= 40) {
+                  fullResponse = speakable;
+                  finalText = speakable;
+                  piTelemetry.emit('pi_scaffold_compressed', { answerType: answerPlan.answerType });
+                }
+              }
+              // Diversity check vs the session's recent answers.
+              const verdict = _manualDiversityGuard.check(fullResponse, answerPlan.answerType, message);
+              if (verdict.repeated) {
+                piTelemetry.emit('pi_answer_repeated', { answerType: answerPlan.answerType, reason: verdict.reason });
+                const speakable = compressToSpeakable(fullResponse);
+                // Only swap when compression actually changes the shape — a
+                // repeated PROSE answer can't be improved deterministically
+                // without an LLM round-trip (the prompt-side anti-repetition
+                // context already biases against it).
+                if (speakable.length >= 40 && speakable !== fullResponse && !_manualDiversityGuard.check(speakable, answerPlan.answerType, message).repeated) {
+                  fullResponse = speakable;
+                  finalText = speakable;
+                }
+              }
+              _manualDiversityGuard.record(fullResponse, answerPlan.answerType, message);
+            } catch (polishErr: any) {
+              console.warn('[ProfileIntelligence] answer polish skipped:', polishErr?.message);
+            }
+          }
+
           // Final check: only send done if we are still the active stream
           if (_chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
             // finalText is set ONLY when repair changed the streamed answer — the
@@ -1153,6 +1629,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             event.sender.send('gemini-stream-done', finalText ? { finalText } : undefined);
             chatTrace.mark('response_completed', { chars: fullResponse.length, repaired: Boolean(finalText) });
             chatTrace.finish({ chars: fullResponse.length });
+            iTrace.setProvider({ provider: 'llm', model: undefined });
+            commitTrace(iTrace);
             try {
               PhoneMirrorService.getInstance().publishDone(String(myStreamId), fullResponse);
             } catch (_) {
@@ -1164,6 +1642,23 @@ export function initializeIpcHandlers(appState: AppState): void {
               intelligenceManager.addAssistantMessage(fullResponse);
               // Log Usage for streaming chat
               intelligenceManager.logUsage('chat', message, fullResponse);
+              // Conversation Memory V2 (Phase 11): record this turn so a later bare
+              // follow-up in this session can resolve against it. GATED on the flag
+              // (2026-06-14 fix): previously recorded unconditionally, which retained raw
+              // Q/A in process memory even with every Intelligence flag OFF — breaking the
+              // "flag-OFF is byte-for-byte the original path" guarantee. The small cost of
+              // gating is that enabling mid-session starts with empty history (negligible).
+              if (isIntelligenceFlagEnabled('conversationMemoryV2')) {
+                try {
+                  _manualConversationMemory.record({
+                    sessionId: String(senderId),
+                    userMessage: message,
+                    assistantAnswer: fullResponse,
+                    mode: manualActiveMode?.templateType,
+                    timestamp: Date.now(),
+                  });
+                } catch { /* memory recording never affects the answer */ }
+              }
             }
 
             // VERIFIED CODE EXECUTION (background, strictly additive). For coding
@@ -1183,11 +1678,12 @@ export function initializeIpcHandlers(appState: AppState): void {
                     question: message,
                     correct: async (repairPrompt: string) => {
                       // Background coding-correction (post-answer). Deadline-guarded
-                      // so a stalled provider can't leave a hung background task.
+                      // so a stalled provider can't leave a hung background task. 7s
+                      // (was 6s) clears MiniMax's 4-6s first-token when it's the fallback.
                       let fixed = '';
                       await raceStreamWithDeadline({
                         stream: llmHelper.streamChat(repairPrompt, undefined, undefined, undefined, true, true) as AsyncGenerator<string>,
-                        firstUsefulDeadlineMs: 6000,
+                        firstUsefulDeadlineMs: 7000,
                         isUsefulYet: () => fixed.length >= 5,
                         onToken: (tok: string) => { fixed += tok; },
                       });
@@ -1218,6 +1714,31 @@ export function initializeIpcHandlers(appState: AppState): void {
           }
         } catch (streamError: any) {
           console.error('[IPC] Streaming error:', streamError);
+          // Classify the provider failure (marker-only telemetry) and, when the route
+          // can answer deterministically (a profile-required answer), emit the
+          // deterministic profile fallback instead of a blank error — no empty answer
+          // when a safe fallback exists. The fallback uses buildManualProfileBackendAnswer
+          // (the DETERMINISTIC profile backend, NO LLM), so it cannot contain assistant-
+          // meta and does not need the candidate sanitizer — same as the happy-path
+          // profile fast-path which also emits this builder's output directly. It is
+          // gated to profileContextPolicy==='required', so it can NEVER fire for a
+          // coding/technical answer (those are 'forbidden') — no profile-into-coding leak.
+          try {
+            const klass = classifyProviderError(streamError);
+            piTelemetry.emit('pi_provider_error_classified', { kind: klass.kind, outage: klass.isOutage, retryable: klass.retryable, surface: 'manual' });
+            if (klass.isOutage && answerPlan.profileContextPolicy === 'required' && !fullResponse.trim()) {
+              const orchE = llmHelper.getKnowledgeOrchestrator?.();
+              const fb = buildManualProfileBackendAnswer({ question: message, orchestrator: orchE, source: 'manual_input' });
+              if (fb?.route?.answer && fb.route.answer.trim().length >= 15 && _chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
+                piTelemetry.emit('provider_fallback_used', { surface: 'manual', kind: klass.kind, answerType: answerPlan.answerType });
+                event.sender.send('gemini-stream-token', fb.route.answer);
+                event.sender.send('gemini-stream-done', { finalText: fb.route.answer });
+                try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), fb.route.answer); PhoneMirrorService.getInstance().publishDone(String(myStreamId), fb.route.answer); } catch (_) { /* noop */ }
+                intelligenceManager.addAssistantMessage(fb.route.answer);
+                return null;
+              }
+            }
+          } catch (classifyErr: any) { console.warn('[IPC] provider-error classify/fallback skipped:', classifyErr?.message); }
           if (_chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
             event.sender.send(
               'gemini-stream-error',
@@ -1237,8 +1758,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         return null; // Return null as data is sent via events
       } catch (error: any) {
         console.error('[IPC] Error in gemini-chat-stream setup:', error);
+        try { iTrace.noteError(error?.name || 'handler_error'); commitTrace(iTrace); } catch { /* trace must never mask the real error */ }
         throw error;
       } finally {
+        if (_manualFgToken) ForegroundGate.end(_manualFgToken);
         if (myController) {
           const current = _chatStreamsBySender.get(event.sender.id);
           if (current?.controller === myController) {
@@ -1292,7 +1815,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('download-update', async () => {
     try {
       console.log('[IPC] Download update requested');
-      appState.downloadUpdate();
+      await appState.downloadUpdate();
       return { success: true };
     } catch (err: any) {
       console.error('[IPC] download-update failed:', err);
@@ -1405,6 +1928,25 @@ export function initializeIpcHandlers(appState: AppState): void {
     return appState.getOverlayMousePassthrough();
   });
 
+  // Hover-gated click-through for the fixed-width overlay's transparent margins.
+  // The renderer hit-tests the pointer against the painted panel rect and reports
+  // whether the pointer is currently over interactive content (true) or over a
+  // transparent margin / outside it (false). This ONLY affects interactive mode —
+  // when the master stealth passthrough is on, the window stays fully
+  // click-through regardless (enforced in syncOverlayInteractionPolicy). Only the
+  // overlay window's own webContents may drive this.
+  safeHandle('set-overlay-interactive-region', async (event, overContent: boolean) => {
+    const overlayWin = appState.getWindowHelper().getOverlayWindow();
+    if (
+      overlayWin &&
+      !overlayWin.isDestroyed() &&
+      overlayWin.webContents.id === event.sender.id
+    ) {
+      appState.getWindowHelper().setOverlayHoverInteractive(!!overContent);
+    }
+    return { success: true };
+  });
+
   safeHandle('get-disguise', async () => {
     return appState.getDisguise();
   });
@@ -1515,6 +2057,90 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
     });
     return { success: true };
+  });
+
+  // INTELLIGENCE OS FEATURE FLAGS (Phase 14): get/set the experimental flags so they
+  // can be toggled from a dev/experimental settings panel without editing env vars.
+  // The flags read from SettingsManager already, so set() takes effect on the next
+  // answer. Production defaults stay conservative (all OFF) — this only surfaces an
+  // opt-in toggle. No flag here changes behavior unless its wiring is also exercised.
+  safeHandle('intelligence-flags:get', async () => {
+    try {
+      const { intelligenceFlagKeys, intelligenceFlagMeta, isIntelligenceFlagEnabled } = require('./intelligence/intelligenceFlags') as typeof import('./intelligence/intelligenceFlags');
+      return intelligenceFlagKeys().map((key) => {
+        const meta = intelligenceFlagMeta(key);
+        return { key, enabled: isIntelligenceFlagEnabled(key), setting: meta.setting, env: meta.env, default: meta.default };
+      });
+    } catch (e: any) {
+      console.warn('[IntelligenceFlags] get failed:', e?.message);
+      return [];
+    }
+  });
+
+  safeHandle('intelligence-flags:set', async (_, { key, value }: { key: string; value: boolean | null }) => {
+    try {
+      const { setIntelligenceFlag, isIntelligenceFlagEnabled, intelligenceFlagKeys } = require('./intelligence/intelligenceFlags') as typeof import('./intelligence/intelligenceFlags');
+      if (typeof key !== 'string' || !intelligenceFlagKeys().includes(key as any)) return { success: false, error: 'unknown_flag' };
+      if (value !== null && typeof value !== 'boolean') return { success: false, error: 'invalid_value' };
+      const ok = setIntelligenceFlag(key as any, value === null ? null : Boolean(value));
+      return { success: ok, enabled: isIntelligenceFlagEnabled(key as any) };
+    } catch (e: any) {
+      console.warn('[IntelligenceFlags] set failed:', e?.message);
+      return { success: false, error: 'set_failed' };
+    }
+  });
+
+  // HINDSIGHT SERVER CONFIG (Cloud OR local long-term-memory server). The flags IPC above
+  // covers the boolean feature flags; this handles the string config (baseUrl/apiKey/…) +
+  // a live health probe so the settings UI can show a "Connected" chip. The raw apiKey is
+  // NEVER returned to the renderer — only `hasApiKey: boolean` (credential privacy posture).
+  safeHandle('hindsight-config:get', async () => {
+    try {
+      const sm = SettingsManager.getInstance();
+      const { HindsightManager } = require('./services/HindsightManager') as typeof import('./services/HindsightManager');
+      const available = HindsightManager.getInstance().isAvailable();
+      return {
+        baseUrl: String(sm.get('hindsightBaseUrl') || ''),
+        hasApiKey: Boolean(sm.get('hindsightApiKey')),
+        autoStart: sm.get('hindsightAutoStart') !== false, // default on
+        serverCommand: String(sm.get('hindsightServerCommand') || ''),
+        llmProvider: String(sm.get('hindsightLlmProvider') || ''),
+        available,
+      };
+    } catch (e: any) {
+      console.warn('[HindsightConfig] get failed:', e?.message);
+      return { baseUrl: '', hasApiKey: false, autoStart: true, serverCommand: '', llmProvider: '', available: false };
+    }
+  });
+
+  safeHandle('hindsight-config:set', async (_, cfg: { baseUrl?: string; apiKey?: string; autoStart?: boolean; serverCommand?: string; llmProvider?: string }) => {
+    try {
+      const sm = SettingsManager.getInstance();
+      if (typeof cfg?.baseUrl === 'string') sm.set('hindsightBaseUrl', cfg.baseUrl.trim());
+      // Blank apiKey on resave = KEEP the stored one (don't wipe a saved key with an empty
+      // field — the documented blank-key-on-resave gotcha). Only write a non-empty value.
+      if (typeof cfg?.apiKey === 'string' && cfg.apiKey.trim()) sm.set('hindsightApiKey', cfg.apiKey.trim());
+      if (typeof cfg?.autoStart === 'boolean') sm.set('hindsightAutoStart', cfg.autoStart);
+      if (typeof cfg?.serverCommand === 'string') sm.set('hindsightServerCommand', cfg.serverCommand.trim());
+      if (typeof cfg?.llmProvider === 'string') sm.set('hindsightLlmProvider', cfg.llmProvider.trim());
+      // Re-probe so the caller gets fresh availability.
+      const { HindsightManager } = require('./services/HindsightManager') as typeof import('./services/HindsightManager');
+      const healthy = await HindsightManager.getInstance().healthCheck();
+      return { success: true, healthy };
+    } catch (e: any) {
+      console.warn('[HindsightConfig] set failed:', e?.message);
+      return { success: false, error: 'set_failed' };
+    }
+  });
+
+  safeHandle('hindsight-config:test', async () => {
+    try {
+      const { HindsightManager } = require('./services/HindsightManager') as typeof import('./services/HindsightManager');
+      const healthy = await HindsightManager.getInstance().healthCheck();
+      return { healthy };
+    } catch (e: any) {
+      return { healthy: false, error: e?.message };
+    }
   });
 
   // Legacy alias for renderer builds that still call the old IPC name.
@@ -1881,6 +2507,51 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       console.error('Error saving DeepSeek API key:', error);
       return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('set-litellm-config', async (_, config: { apiKey: string; baseURL: string; maxTokens?: number }) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      cm.setLitellmConfig(config?.apiKey || '', config?.baseURL || '', config?.maxTokens);
+
+      // Update the LLMHelper with the EFFECTIVE stored key — a blank apiKey on
+      // re-save means "keep the stored one" (the field is masked in Settings),
+      // so read back what CredentialsManager actually persisted.
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      llmHelper.setLitellmConfig(cm.getLitellmApiKey() || '', config?.baseURL || '', config?.maxTokens);
+
+      // Cancel in-flight stream before re-init (engine only, not session)
+      appState.getIntelligenceManager().resetEngine();
+      // Re-init IntelligenceManager
+      appState.getIntelligenceManager().initializeLLMs();
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error saving LiteLLM config:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Discover models from the configured LiteLLM proxy (OpenAI-compatible /v1/models).
+  // Returns [] on any failure (proxy down, auth rejected, timeout) so the model
+  // selector degrades gracefully rather than throwing.
+  safeHandle('get-available-litellm-models', async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      const baseURL = (cm.getLitellmBaseURL() || 'http://localhost:4000/v1').replace(/\/+$/, '');
+      const apiKey = cm.getLitellmApiKey();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+      const resp = await fetch(`${baseURL}/models`, { method: 'GET', headers, signal: AbortSignal.timeout(5000) });
+      if (!resp.ok) return [];
+      const data: any = await resp.json();
+      const models = (data?.data || []).map((m: any) => m?.id).filter(Boolean);
+      return models;
+    } catch {
+      return [];
     }
   });
 
@@ -2489,6 +3160,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasOpenaiKey: hasKey(creds.openaiApiKey),
         hasClaudeKey: hasKey(creds.claudeApiKey),
         hasDeepseekKey: hasKey(creds.deepseekApiKey),
+        hasLitellmBaseURL: hasKey(creds.litellmBaseURL),
+        // The base URL is config, not a secret — returned in full so Settings can
+        // prefill it (unlike API keys, which are only reported as booleans).
+        litellmBaseURL: creds.litellmBaseURL || null,
+        litellmMaxTokens: creds.litellmMaxTokens || null,
         hasNativelyKey: hasKey(creds.nativelyApiKey),
         googleServiceAccountPath: creds.googleServiceAccountPath || null,
         sttProvider: creds.sttProvider || 'none',
@@ -2529,6 +3205,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasOpenaiKey: false,
         hasClaudeKey: false,
         hasDeepseekKey: false,
+        hasLitellmBaseURL: false,
+        litellmBaseURL: null,
+        litellmMaxTokens: null,
         hasNativelyKey: false,
         googleServiceAccountPath: null,
         sttProvider: 'none',
@@ -3612,7 +4291,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: true };
     } catch (error: any) {
       console.error('Error starting meeting:', error);
-      return { success: false, error: error.message };
+      // Forward the structured error code (e.g. 'mic-permission-denied') so the
+      // renderer can surface a recoverable permissions prompt rather than a
+      // silent failure. Falls back to undefined for plain errors.
+      return { success: false, error: error?.message, code: error?.code };
     }
   });
 
@@ -3634,6 +4316,188 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('get-meeting-details', async (event, id) => {
     // Helper to fetch full details
     return DatabaseManager.getInstance().getMeetingDetails(id);
+  });
+
+  // GLOBAL MEETING SEARCH V2 (Phase 9 wiring, behind global_search_v2_enabled).
+  // REAL local-DB literal/lexical search over past meetings — replaces the fake
+  // "literal search" in Launcher.tsx that just re-ran the AI query. Builds search
+  // candidates from each meeting's title + summary + structured meetingMemory
+  // (Phase 8: topics/entities/decisions/questions), then ranks them with
+  // SearchOrchestrator.globalSearch (the spec's fusion formula). Local-first: results
+  // come from the local DB; when Hindsight is configured (Phase D) cross-meeting
+  // long-term memories are ALSO merged in as memory-source candidates (see below).
+  // Single-user desktop DB → all candidates share the one local user, so the isolation
+  // invariant (user/org filter before ranking) holds trivially.
+  // Returns [] when the flag is off so the renderer keeps its current behavior.
+  safeHandle('search:global-meetings', async (_event, { query, filters }: { query: string; filters?: any }) => {
+    try {
+      if (!isIntelligenceFlagEnabled('globalSearchV2')) return { enabled: false, results: [] };
+      // Explicit renderer→main input validation (security review 2026-06-13 LOW): reject
+      // non-string query / non-object filters rather than relying on coercion + catch.
+      if (typeof query !== 'string') return { enabled: true, results: [] };
+      if (filters !== undefined && (typeof filters !== 'object' || filters === null || Array.isArray(filters))) filters = {};
+      const q = (query || '').toLowerCase().trim();
+      if (!q) return { enabled: true, results: [] };
+      const terms = q.split(/\s+/).filter((t) => t.length > 1);
+      // Scan the SAME window the renderer's meetings array holds (50). The renderer
+      // opens a result by finding its meetingId in that array, so scanning a wider
+      // window than the renderer has loaded would return hits it can't open (they'd
+      // silently fall back to the AI query). Keep them aligned (test-engineer Phase 9).
+      const meetings = DatabaseManager.getInstance().getRecentMeetings(50);
+      const candidates: SearchCandidate[] = [];
+      for (const m of meetings) {
+        const ds: any = m.detailedSummary || {};
+        const mem: any = ds.meetingMemory || {};
+        // Lexical haystack: title + summary + overview + keyPoints + memory facts.
+        const haystackParts = [
+          m.title, m.summary, ds.overview,
+          ...(Array.isArray(ds.keyPoints) ? ds.keyPoints : []),
+          ...(Array.isArray(mem.topics) ? mem.topics : []),
+          ...(Array.isArray(mem.entities) ? mem.entities : []),
+          ...(Array.isArray(mem.decisions) ? mem.decisions : []),
+          ...(Array.isArray(mem.questionsAsked) ? mem.questionsAsked : []),
+          ...(Array.isArray(mem.skillsDiscussed) ? mem.skillsDiscussed : []),
+        ].filter(Boolean).map((s: any) => String(s));
+        const hay = haystackParts.join(' • ').toLowerCase();
+        if (!hay) continue;
+        let hits = 0;
+        for (const t of terms) if (hay.includes(t)) hits++;
+        if (hits === 0) continue;
+        const phraseBonus = hay.includes(q) ? 0.5 : 0;
+        const score = Math.min(1, hits / Math.max(1, terms.length) + phraseBonus);
+        // Best matching snippet for display.
+        const snippet = haystackParts.find((p) => p.toLowerCase().includes(terms[0])) || m.title || m.summary || '';
+        candidates.push({
+          meetingId: m.id,
+          title: m.title,
+          date: m.date ? Date.parse(m.date) || undefined : undefined,
+          snippet: snippet.slice(0, 240),
+          source: 'lexical',
+          score,
+          userId: 'local',
+          metadata: { company: String(mem.companiesDiscussed?.[0] ?? '') },
+        });
+      }
+      // HINDSIGHT GLOBAL RECALL (Phase D, behind hindsight_memory + a configured server).
+      // Surface cross-meeting long-term memories ("what did we discuss last time?") as
+      // additional MEMORY-source candidates so they fuse with the local lexical hits.
+      // Bounded 2s timeout; Noop/[] when Hindsight is off, unconfigured, or the server is
+      // down — the local results always stand. NOT on the live answer path (search only).
+      try {
+        // Config from HindsightManager (settings OR env) so global recall works in a
+        // packaged build, not only when HINDSIGHT_BASE_URL is exported in a dev shell.
+        const { HindsightManager } = require('./services/HindsightManager') as typeof import('./services/HindsightManager');
+        const _hm = HindsightManager.getInstance();
+        const hsCfg = _hm.getHindsightConfig();
+        // Short-circuit a known-down server (cached health) so search doesn't pay the 2s
+        // recall timeout when Hindsight is unreachable (2026-06-14 fix).
+        if (isIntelligenceFlagEnabled('hindsightMemory') && hsCfg && _hm.isAvailable()) {
+          const { LongTermMemoryService } = require('./intelligence/memory/LongTermMemoryService') as typeof import('./intelligence/memory/LongTermMemoryService');
+          const ltm = LongTermMemoryService.fromFlags({ hindsight: { ...hsCfg, timeoutMs: 2000 } });
+          if (ltm.enabled) {
+            const memories = await ltm.recallRelevantMemory(q, { userId: _hm.localUserId() }, { timeoutMs: 2000, maxResults: 8 });
+            for (const mem of memories) {
+              if (!mem?.text?.trim()) continue;
+              candidates.push({
+                meetingId: `hindsight:${candidates.length}`, // no source meeting; memory-level
+                title: 'Long-term memory',
+                snippet: mem.text.slice(0, 240),
+                source: 'memory',
+                score: 0.85, // recall already relevance-ranked server-side
+                userId: 'local',
+                metadata: { hindsight: '1', factType: mem.source || '' },
+              });
+            }
+          }
+        }
+      } catch (memErr: any) {
+        console.warn('[GlobalSearchV2] Hindsight recall skipped (non-fatal):', memErr?.message);
+      }
+
+      const _gsT0 = Date.now();
+      const results = new SearchOrchestrator().globalSearch(candidates, { userId: 'local' }, filters || {}, Date.now());
+      try {
+        const { intelligenceMetrics } = require('./intelligence/IntelligenceMetrics') as typeof import('./intelligence/IntelligenceMetrics');
+        intelligenceMetrics.timing('global_search_ms', Date.now() - _gsT0);
+      } catch { /* metrics never affect results */ }
+      return { enabled: true, results };
+    } catch (e: any) {
+      console.warn('[GlobalSearchV2] search failed (non-fatal):', e?.message);
+      return { enabled: true, results: [] };
+    }
+  });
+
+  // IN-MEETING SEARCH V2 (Phase 10 wiring, behind in_meeting_search_v2_enabled).
+  // Fast LOCAL-FIRST lexical search over the CURRENT meeting's finalized transcript
+  // (SessionTracker.getFullTranscript via IntelligenceManager) — NO Hindsight, NO
+  // RAG/embeddings, no network (rule: in-meeting search is local-first and fast,
+  // <150ms). Returns timestamped, speaker-attributed, relevance-ranked snippets so
+  // the UI can jump to the transcript segment. Returns {enabled:false} when the flag
+  // is off so any caller is a pure no-op then.
+  safeHandle('search:in-meeting', async (_event, { query }: { query: string }) => {
+    try {
+      if (!isIntelligenceFlagEnabled('inMeetingSearchV2')) return { enabled: false, results: [] };
+      if (typeof query !== 'string') return { enabled: true, results: [] };
+      const transcript = appState.getIntelligenceManager().getCurrentMeetingTranscript();
+      const chunks = transcript.map((t) => ({ text: t.text, timestampMs: t.timestamp, speaker: t.speaker }));
+      const results = new SearchOrchestrator().inMeetingSearch(chunks, query || '');
+      return { enabled: true, results };
+    } catch (e: any) {
+      console.warn('[InMeetingSearchV2] search failed (non-fatal):', e?.message);
+      return { enabled: true, results: [] };
+    }
+  });
+
+  // LECTURE NOTES (Phase 12 wiring, behind lecture_intelligence_v2_enabled). Generates
+  // structured student notes (concepts/definitions/examples/important-points/flashcards/
+  // exam-questions/revision-checklist) from the CURRENT meeting transcript. Deterministic,
+  // no LLM, local. Returns {enabled:false} when off. The renderer can call this on demand
+  // (a lecture-notes panel is a separate UI feature).
+  safeHandle('lecture:generate-notes', async (_event, opts?: { title?: string; course?: string }) => {
+    try {
+      if (!isIntelligenceFlagEnabled('lectureIntelligenceV2')) return { enabled: false, notes: null };
+      const { LectureIntelligenceService } = require('./intelligence/LectureIntelligenceService') as typeof import('./intelligence/LectureIntelligenceService');
+      const transcript = appState.getIntelligenceManager().getCurrentMeetingTranscript();
+      const segments = transcript.map((t) => ({ speaker: t.speaker, text: t.text, timestamp: t.timestamp }));
+      const notes = new LectureIntelligenceService().generateNotes({
+        lectureId: `live-${Date.now()}`,
+        segments,
+        title: opts?.title,
+        course: opts?.course,
+      });
+      return { enabled: true, notes };
+    } catch (e: any) {
+      console.warn('[LectureIntelligenceV2] notes generation failed (non-fatal):', e?.message);
+      return { enabled: true, notes: null };
+    }
+  });
+
+  // DIAGRAM GENERATION (Phase 12 wiring, behind diagram_intelligence). Generates a
+  // validated Mermaid diagram from explanatory text (the query, or the recent transcript).
+  // SAFETY: text-derived diagrams are labeled `ai_reconstructed_diagram` (never "exact"),
+  // syntax-validated, with an ASCII fallback — the service never fabricates edges when it
+  // can't extract structure. Returns {enabled:false} when off.
+  safeHandle('diagram:generate', async (_event, { text }: { text?: string }) => {
+    try {
+      if (!isIntelligenceFlagEnabled('diagramIntelligence')) return { enabled: false, diagram: null };
+      if (text !== undefined && typeof text !== 'string') return { enabled: true, diagram: null };
+      const { DiagramIntelligenceService } = require('./intelligence/DiagramIntelligenceService') as typeof import('./intelligence/DiagramIntelligenceService');
+      // Use the supplied text, else fall back to the recent transcript window. CAP the
+      // input length: the sequence generator's SEND_RE has nested lazy quantifiers that
+      // backtrack ~quadratically, so a multi-MB single sentence would stall the main
+      // event loop (security review 2026-06-13 MEDIUM). 8000 chars is ample for any real
+      // diagram-worthy explanation.
+      let source = (text || '').trim().slice(0, 8000);
+      if (!source) {
+        const transcript = appState.getIntelligenceManager().getCurrentMeetingTranscript();
+        source = transcript.slice(-30).map((t) => t.text).join('. ').slice(0, 8000);
+      }
+      const diagram = new DiagramIntelligenceService().generate({ text: source, fromSourceVisual: false });
+      return { enabled: true, diagram };
+    } catch (e: any) {
+      console.warn('[DiagramIntelligence] generation failed (non-fatal):', e?.message);
+      return { enabled: true, diagram: null };
+    }
   });
 
   safeHandle('update-meeting-title', async (_, { id, title }: { id: string; title: string }) => {
@@ -3806,7 +4670,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       _,
       question?: string,
       imagePaths?: string[],
-      options?: { promptInstruction?: string },
+      options?: { promptInstruction?: string; domContext?: string },
     ) => {
       try {
         let screenContext: any;
@@ -3930,6 +4794,10 @@ export function initializeIpcHandlers(appState: AppState): void {
             promptInstruction:
               typeof options?.promptInstruction === 'string'
                 ? options.promptInstruction
+                : undefined,
+            domContext:
+              typeof options?.domContext === 'string'
+                ? options.domContext.substring(0, DOM_CONTEXT_MAX_CHARS)
                 : undefined,
           },
         );
@@ -5394,9 +6262,39 @@ export function initializeIpcHandlers(appState: AppState): void {
       } catch {
         /* non-fatal */
       }
+      // PI v3 (W3) — PREWARM on activation, fire-and-forget: index any
+      // not-yet-ready reference files (so the first question's retrieval is a
+      // pure index lookup) and warm the static prompt cache. Never blocks the
+      // mode switch.
+      if (activeMode) {
+        void (async () => {
+          try {
+            await ModesManager.getInstance().prewarmModeReferenceIndex(activeMode.id);
+            BrowserWindow.getAllWindows().forEach((win) => {
+              if (!win.isDestroyed()) win.webContents.send('mode-file-index-status', { modeId: activeMode.id });
+            });
+          } catch (warmErr: any) {
+            console.warn('[IPC] mode reference prewarm failed (non-fatal):', warmErr?.message);
+          }
+          try {
+            await appState.processingHelper?.getLLMHelper?.()?.prewarmPromptCache?.();
+          } catch { /* non-fatal */ }
+        })();
+      }
       return { success: true };
     } catch (e: any) {
       console.error('[IPC] modes:set-active error:', e);
+      return { success: false, error: e.message };
+    }
+  });
+
+  // PI v3 (W3): per-file index status for the Modes Manager UI badges.
+  safeHandle('modes:get-reference-file-status', async (_, modeId: string) => {
+    try {
+      const { ModesManager } = require('./services/ModesManager');
+      return { success: true, statuses: ModesManager.getInstance().getReferenceFileIndexStatuses(modeId) };
+    } catch (e: any) {
+      console.error('[IPC] modes:get-reference-file-status error:', e);
       return { success: false, error: e.message };
     }
   });
@@ -5582,6 +6480,19 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       const { ModesManager } = require('./services/ModesManager');
       const file = ModesManager.getInstance().addReferenceFile({ modeId, fileName, content });
+      // PI v3 (W3) — index at UPLOAD time (fire-and-forget): chunk + embed +
+      // persist vectors now so live retrieval never pays the embedding cost.
+      // Status events let the UI show pending → ready.
+      void (async () => {
+        try {
+          await ModesManager.getInstance().indexReferenceFile(file);
+        } catch (idxErr: any) {
+          console.warn('[IPC] reference-file indexing failed (lexical fallback remains):', idxErr?.message);
+        }
+        BrowserWindow.getAllWindows().forEach((win) => {
+          if (!win.isDestroyed()) win.webContents.send('mode-file-index-status', { modeId, fileId: file.id });
+        });
+      })();
       return { success: true, file };
     } catch (e: any) {
       console.error('[IPC] modes:upload-reference-file error:', e);

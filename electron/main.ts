@@ -2,10 +2,39 @@ import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPref
 import * as crypto from "crypto"
 import path from "path"
 import fs from "fs"
+import dns from "dns"
+import { SystemAudioHealthClassifier } from "./audio/systemAudioHealthClassifier.mjs"
 import { autoUpdater } from "electron-updater"
+
+// Override global dns.lookup to resolve macOS system resolver issues with api.natively.software
+const originalLookup = dns.lookup;
+dns.lookup = function(hostname: any, options: any, callback: any) {
+  if (typeof options === 'function') {
+    callback = options;
+    options = {};
+  }
+  if (hostname === 'api.natively.software') {
+    dns.resolve4(hostname, (err, addresses) => {
+      if (err || !addresses.length) {
+        originalLookup(hostname, options, callback);
+      } else {
+        const addr = addresses[0];
+        if (options && (options as any).all) {
+          callback(null, [{ address: addr, family: 4 }] as any);
+        } else {
+          callback(null, addr, 4);
+        }
+      }
+    });
+  } else {
+    originalLookup(hostname, options, callback);
+  }
+} as any;
+
 if (!app.isPackaged) {
   require('dotenv').config();
 }
+
 
 /**
  * Whether THIS build carries a real Developer ID signature.
@@ -467,6 +496,9 @@ export class AppState {
   private knowledgeOrchestrator: any = null
   private tray: Tray | null = null
   private updateAvailable: boolean = false
+  private updateDownloadState: 'idle' | 'available' | 'downloading' | 'downloaded' = 'idle'
+  private updateDownloadPromise: Promise<unknown> | null = null
+  private downloadedUpdateInfo: any = null
   private disguiseMode: 'terminal' | 'settings' | 'activity' | 'none' = 'none'
 
   // View management
@@ -843,11 +875,17 @@ export class AppState {
     // Check and prep Ollama embedding model
     this.bootstrapOllamaEmbeddings()
 
+    // Prime the optional Hindsight long-term-memory server health cache (settings/env
+    // config; Noop when unconfigured). Fire-and-forget — never blocks startup.
+    try {
+      const { HindsightManager } = require('./services/HindsightManager');
+      HindsightManager.getInstance().start().catch(() => { /* never blocks startup */ });
+    } catch { /* optional */ }
 
     this.setupIntelligenceEvents()
 
-    // Pre-warm the zero-shot intent classifier in background
-    warmupIntentClassifier();
+    // Intent-classifier warmup is scheduled after the launcher is visible so
+    // transformers/ONNX initialization cannot contend with the first paint.
 
     // Setup Ollama IPC
     this.setupOllamaIpcHandlers()
@@ -1179,13 +1217,11 @@ export class AppState {
   }
 
   private setupAutoUpdater(): void {
-    // On signed builds we can swap+relaunch in place, so download in the
-    // background the moment an update is found and let it apply on quit if the
-    // user doesn't click "Restart". On builds that can't auto-install (dev, or
-    // an unsigned macOS build) we keep the manual flow: no silent download, no
-    // install-on-quit — the UI routes the user to the manual download instead.
+    // Keep downloads user-initiated so the renderer's "Update Now" CTA is the
+    // single source of truth. Signed/packaged builds can still apply a downloaded
+    // update on quit; unsigned macOS builds use the manual GitHub DMG flow.
     const autoInstall = canAutoInstall()
-    autoUpdater.autoDownload = autoInstall
+    autoUpdater.autoDownload = false
     autoUpdater.autoInstallOnAppQuit = autoInstall
     console.log(
       `[AutoUpdater] autoDownload=${autoUpdater.autoDownload} ` +
@@ -1205,6 +1241,8 @@ export class AppState {
     autoUpdater.on("update-available", async (info) => {
       console.log("[AutoUpdater] Update available:", info.version)
       this.updateAvailable = true
+      this.updateDownloadState = 'available'
+      this.downloadedUpdateInfo = null
 
       // Fetch structured release notes
       const releaseManager = ReleaseNotesManager.getInstance();
@@ -1219,11 +1257,16 @@ export class AppState {
 
     autoUpdater.on("update-not-available", (info) => {
       console.log("[AutoUpdater] Update not available:", info.version)
+      this.updateAvailable = false
+      this.updateDownloadState = 'idle'
+      this.downloadedUpdateInfo = null
       this.broadcast("update-not-available", info)
     })
 
     autoUpdater.on("error", (err) => {
       console.error("[AutoUpdater] Error:", err)
+      this.updateDownloadState = this.updateAvailable ? 'available' : 'idle'
+      this.updateDownloadPromise = null
       // Include more details in the error message for debugging
       const errorMessage = err.message || err.toString() || 'Unknown update error'
       this.broadcast("update-error", errorMessage)
@@ -1239,9 +1282,12 @@ export class AppState {
 
     autoUpdater.on("update-downloaded", (info) => {
       console.log("[AutoUpdater] Update downloaded:", info.version)
+      this.updateDownloadState = 'downloaded'
+      this.updateDownloadPromise = null
       // info.filePath is the public path of the staged update zip from Squirrel.Mac.
       // Use it over the private downloadedUpdateHelper.file API (see quitAndInstallUpdate).
-      this.broadcast("update-downloaded", { ...info, updateFile: (info as any).filePath })
+      this.downloadedUpdateInfo = { ...info, updateFile: (info as any).filePath }
+      this.broadcast("update-downloaded", this.downloadedUpdateInfo)
     })
 
     // Start checking for updates with a 10-second delay
@@ -1273,6 +1319,8 @@ export class AppState {
         if (this.isVersionNewer(currentVersion, latestVersion)) {
           console.log('[AutoUpdater] Manual Check: New version found!');
           this.updateAvailable = true;
+          this.updateDownloadState = 'available';
+          this.downloadedUpdateInfo = null;
 
           // Mock an info object compatible with electron-updater
           const info = {
@@ -1291,6 +1339,9 @@ export class AppState {
           });
         } else {
           console.log('[AutoUpdater] Manual Check: App is up to date.');
+          this.updateAvailable = false;
+          this.updateDownloadState = 'idle';
+          this.downloadedUpdateInfo = null;
           this.broadcast("update-not-available", { version: currentVersion });
         }
       }
@@ -1405,16 +1456,42 @@ export class AppState {
     }
   }
 
-  public downloadUpdate(): void {
+  public async downloadUpdate(): Promise<void> {
+    if (this.updateDownloadState === 'downloaded' && this.downloadedUpdateInfo) {
+      console.log('[AutoUpdater] Download already completed — re-broadcasting downloaded update')
+      this.broadcast('update-downloaded', this.downloadedUpdateInfo)
+      return
+    }
+
+    if (this.updateDownloadState === 'downloading') {
+      console.log('[AutoUpdater] Download already in progress — ignoring duplicate request')
+      await this.updateDownloadPromise
+      return
+    }
+
+    if (!this.updateAvailable) {
+      const message = 'No update is currently available to download.'
+      console.warn(`[AutoUpdater] ${message}`)
+      this.broadcast('update-error', message)
+      return
+    }
+
     console.log('[AutoUpdater] Starting download...')
+    this.updateDownloadState = 'downloading'
     try {
       // Errors during download are surfaced via autoUpdater.on("error") which
       // already broadcasts "update-error". Do not broadcast here to avoid duplicates.
-      autoUpdater.downloadUpdate().catch(err => {
+      this.updateDownloadPromise = autoUpdater.downloadUpdate().catch(err => {
         console.error('[AutoUpdater] downloadUpdate failed:', err)
+        this.updateDownloadState = this.updateAvailable ? 'available' : 'idle'
+        this.updateDownloadPromise = null
+        throw err
       })
+      await this.updateDownloadPromise
     } catch (err: any) {
       console.error('[AutoUpdater] downloadUpdate exception:', err)
+      this.updateDownloadState = this.updateAvailable ? 'available' : 'idle'
+      this.updateDownloadPromise = null
     }
   }
 
@@ -1450,7 +1527,22 @@ export class AppState {
         // 'system' for interviewer (system audio), 'mic' for user (microphone).
         // The server uses ${key}:${channel} as the session key so both streams
         // can coexist without triggering concurrent_session_blocked.
-        stt = new NativelyProSTT(nativelyKey, speaker === 'interviewer' ? 'system' : 'mic');
+        //
+        // Phase 7/8: pass appVersion + platform for the regional-relay
+        // session-create body. The class reads the relay feature flags from
+        // SettingsManager itself and derives the control-plane base URL from
+        // its own host, so the construction site stays tiny. The relay path is
+        // flag-gated OFF by default — this is inert until regionalSttRelayEnabled.
+        stt = new NativelyProSTT(
+          nativelyKey,
+          speaker === 'interviewer' ? 'system' : 'mic',
+          {
+            appVersion: app.getVersion(),
+            platform: process.platform === 'darwin' ? 'mac'
+              : process.platform === 'win32' ? 'windows'
+              : 'linux',
+          },
+        );
       }
     } else if (sttProvider === 'deepgram') {
       const apiKey = CredentialsManager.getInstance().getDeepgramApiKey();
@@ -1800,8 +1892,30 @@ export class AppState {
     // and produced false-positive "0 chunks in 8s" banners during legitimate
     // SCK cold-start.
     const STUCK_WATCHDOG_MS = 12000;
+    const systemAudioHealth = new SystemAudioHealthClassifier({ watchdogMs: STUCK_WATCHDOG_MS });
+    const handleSystemAudioHealthDecision = (decision: any) => {
+      if (!decision || decision.type === 'none') return;
+      if (decision.type === 'log') {
+        const logger = decision.level === 'info' ? console.log : console.warn;
+        logger(`${prefix}${decision.message}`);
+        return;
+      }
+      if (decision.type === 'warn-user' && decision.reason === 'same-device-input-output') {
+        const msg = formatPermissionMessage('mac-same-device-input-output', { device: decision.device });
+        console.warn(`${prefix}SystemAudioCapture ${msg}`);
+        this.sendAudioCaptureFailed( {
+          channel: 'system',
+          message: msg,
+          attempt: 0,
+          maxAttempts: 3,
+          terminal: decision.terminal,
+          stuck: decision.stuck,
+        });
+      }
+    };
     let stuckTimer: NodeJS.Timeout | null = null;
     const armStuckWatchdog = () => {
+      handleSystemAudioHealthDecision(systemAudioHealth.handle({ kind: 'capture-started', nowMs: Date.now() }));
       if (stuckTimer) clearTimeout(stuckTimer);
       stuckTimer = setTimeout(() => {
         if (this.systemAudioCapture !== capture) return; // capture was replaced
@@ -1823,50 +1937,18 @@ export class AppState {
           ? this.detectSameInputOutputDevice()
           : null;
         if (sameDeviceName) {
-          const msg = formatPermissionMessage('mac-same-device-input-output', { device: sameDeviceName });
-          console.warn(`${prefix}SystemAudioCapture ${msg}`);
-          this.sendAudioCaptureFailed( {
-            channel: 'system',
-            message: msg,
-            attempt: 0,
-            maxAttempts: 3,
-            terminal: false,
-            stuck: true,
-          });
+          handleSystemAudioHealthDecision(systemAudioHealth.handle({
+            kind: 'same-device-route-detected',
+            nowMs: Date.now(),
+            device: sameDeviceName,
+          }));
           return;
         }
 
-        console.warn(`${prefix}SystemAudioCapture produced 0 chunks in ${STUCK_WATCHDOG_MS / 1000}s — likely silent capture (route mismatch or permission revoked).`);
-        this.sendAudioCaptureFailed( {
-          channel: 'system',
-          message: formatPermissionMessage('system-audio-stuck'),
-          attempt: 0,
-          maxAttempts: 3,
-          terminal: false,
-          stuck: true,
-        });
+        handleSystemAudioHealthDecision(systemAudioHealth.handle({ kind: 'watchdog-tick', nowMs: Date.now() }));
       }, STUCK_WATCHDOG_MS);
     };
 
-    // TCC zero-fill detector. Apple's CoreAudio Process Tap returns zero-filled
-    // buffers (instead of an OSStatus error) when the launched binary's
-    // Screen Recording / audio-capture grant doesn't apply — typically after a
-    // dev rebuild changes the bundle signature, or when the user revokes the
-    // grant mid-session. Symptom: the IO proc fires at the correct cadence and
-    // chunks flow normally, but every f32 sample is 0.0. Without a dedicated
-    // detector, the no-chunks watchdog above never fires and the user just sees
-    // an empty interviewer transcript with no idea why.
-    //
-    // Strategy: track the absolute peak of every chunk (cheap — 960 i16s per
-    // 20ms chunk). After we've seen ZEROFILL_OBSERVATION_MS of nothing but
-    // peak==0 chunks, broadcast a TCC-specific banner. Latch off the detector
-    // permanently as soon as we see a single non-zero peak so a quiet meeting
-    // doesn't trigger the warning later. The latency budget intentionally
-    // exceeds the no-chunks watchdog (8s) so the two banners don't race.
-    const ZEROFILL_OBSERVATION_MS = 12000;
-    let firstChunkAt = 0;
-    let zerofillLatched = false;       // true once a non-zero peak has been observed (detector off)
-    let zerofillTriggered = false;     // true once we've already broadcast — prevent repeats
     // Synchronous disarm closure exposed on the capture instance so endMeeting()
     // and abortStaleAudioInit() can cancel the stuck watchdog BEFORE stop()/destroy()
     // — without relying on the on('stop') event firing synchronously. Otherwise a
@@ -1874,28 +1956,14 @@ export class AppState {
     // banner up to 12s after the user already stopped.
     const disarmStuckWatchdog = () => {
       if (stuckTimer) { clearTimeout(stuckTimer); stuckTimer = null; }
+      handleSystemAudioHealthDecision(systemAudioHealth.handle({ kind: 'capture-stopped', nowMs: Date.now() }));
     };
     (capture as any).__disarmStuckWatchdog = disarmStuckWatchdog;
     capture.on('start', armStuckWatchdog);
     capture.on('stop', disarmStuckWatchdog);
-    // Inter-chunk gap tracking. Normal cadence is one 20ms chunk every 20ms
-    // (so ~50/sec). A gap >2s while the meeting is active and the capture is
-    // still wired indicates a transient route change (AirPods plug/unplug,
-    // HDMI attach, USB hot-plug). The 8s no-chunks watchdog above catches
-    // longer outages; this just logs the in-between case so anyone reading
-    // logs can correlate "transcript stuttered" with a route change instead
-    // of suspecting STT or network problems. Deliberately not promoted to a
-    // UI banner — that would spam during normal device juggling.
-    let lastChunkAt = 0;
     capture.on('data', (chunk: Buffer) => {
       const now = Date.now();
-      if (lastChunkAt > 0) {
-        const gap = now - lastChunkAt;
-        if (gap > 2000 && gap < 8000) {
-          console.warn(`${prefix}SystemAudio chunk gap ${gap}ms — likely transient route change. Resuming.`);
-        }
-      }
-      lastChunkAt = now;
+      handleSystemAudioHealthDecision(systemAudioHealth.handle({ kind: 'chunk', nowMs: now, chunk }));
       chunkCount++;
       if (chunkCount === 1 && stuckTimer) {
         clearTimeout(stuckTimer);
@@ -1912,47 +1980,6 @@ export class AppState {
         console.log(`${prefix}SystemAudio->STT: chunk #${chunkCount}, ${chunk.length}B, googleSTT=${this.googleSTT ? 'active' : 'NULL'}`);
       }
 
-      // TCC zero-fill check. macOS-specific: WASAPI loopback on Windows does
-      // not produce sustained zero-fill on permission revocation, so the
-      // detector has no diagnostic value off Darwin and the suggested fix
-      // (System Settings → Screen Recording) doesn't apply.
-      if (process.platform === 'darwin' && !zerofillLatched && !zerofillTriggered) {
-        if (firstChunkAt === 0) firstChunkAt = Date.now();
-        // B10: peak-to-peak (max - min) detection instead of abs-peak. Pre-fix
-        // used `Math.abs(sample) > 8` which false-latched on a muted-but-biased
-        // mic with sustained DC offset (hardware bias of ±10..±50 is common on
-        // certain USB and Bluetooth devices). A latched-true detector is
-        // permanently disabled, so the user got NO banner even when audio
-        // was actually dead. Peak-to-peak cancels out DC bias by construction:
-        // pure DC has range 0; quantization noise has range ~2-4; thermal mic
-        // noise has range ~20-100; quiet conversation has range >500. A
-        // threshold of 100 reliably detects real (or even noise-floor-live)
-        // mic activity while rejecting DC bias from a dead mic.
-        let minS = 32767;
-        let maxS = -32768;
-        const stride = Math.max(2, (chunk.length >> 5) & ~1); // even byte offset
-        for (let i = 0; i + 1 < chunk.length; i += stride) {
-          const s = chunk.readInt16LE(i);
-          if (s < minS) minS = s;
-          if (s > maxS) maxS = s;
-        }
-        const peakToPeak = maxS - minS;
-        if (peakToPeak > 100) {
-          // Real audio (or live noise floor) observed — disable the detector for the rest of the session.
-          zerofillLatched = true;
-        } else if (Date.now() - firstChunkAt >= ZEROFILL_OBSERVATION_MS) {
-          zerofillTriggered = true;
-          console.warn(`${prefix}SystemAudio chunks all zero-filled (peak-to-peak < 100) for ${ZEROFILL_OBSERVATION_MS / 1000}s — TCC denial suspected (Screen Recording grant may not apply to this binary).`);
-          this.sendAudioCaptureFailed( {
-            channel: 'system',
-            message: formatPermissionMessage('mac-screen-recording-revoked-rebuild'),
-            attempt: 0,
-            maxAttempts: 3,
-            terminal: false,
-            stuck: true,
-          });
-        }
-      }
 
       this.googleSTT?.write(chunk);
     });
@@ -3718,7 +3745,16 @@ export class AppState {
     if (!(await ensureMacMicrophoneAccess('meeting start'))) {
       const message = formatPermissionMessage('mic-denied');
       this.broadcast('meeting-audio-error', message);
-      throw new Error(message);
+      // Tag the thrown error so the renderer's start-meeting caller (still on
+      // the launcher — the overlay/meeting surface hasn't been shown yet, so
+      // the in-overlay audio banner would not be visible) can recognise this
+      // as a recoverable mic-permission denial and re-open the permissions
+      // card instead of failing silently with only a console.error. Pre-fix,
+      // a denied/revoked mic grant made "Start Natively" do nothing on screen.
+      const err = new Error(message) as Error & { code?: string; channel?: string };
+      err.code = 'mic-permission-denied';
+      err.channel = 'mic';
+      throw err;
     }
 
     // Check Screen Recording permission required for system audio capture
@@ -5193,10 +5229,47 @@ export class AppState {
     this.disguiseMode = mode;
     SettingsManager.getInstance().set('disguiseMode', mode);
 
+    // DUAL-DOCK-ICON FIX (runtime half): _applyDisguise() performs the same
+    // app.setName() + setProcessDisplayName() LaunchServices re-registration that
+    // duplicates the dock tile at startup. At runtime the app is on 'regular'
+    // with a tile already showing, so a live disguise change can paint a second
+    // tile too. Bracket the rename in accessory→regular (no visible tile during
+    // re-registration) exactly like the startup path. macOS-only; skipped in
+    // stealth (the dock is already hidden and must stay hidden — never promote).
+    const bracketDock =
+      process.platform === 'darwin' && !this.isUndetectable;
+
+    // Capture which Natively window currently holds focus BEFORE the bracket.
+    // The accessory→regular activation-policy churn deactivates the app and
+    // resigns key-window status (AppKit does not auto-restore it on the way
+    // back to 'regular'), which would silently hand control to the app behind
+    // Natively — the same hazard the stealth dock-hide path guards against via
+    // win.focus() (see _enforceDockState). setDisguise runs while the user is
+    // foregrounded in Settings, so we restore focus to the same surface after.
+    const focusWin = bracketDock
+      ? (this.settingsWindowHelper.getSettingsWindow()
+          ?? this.windowHelper.getMainWindow())
+      : null;
+    const nativelyWasFocused =
+      !!focusWin && !focusWin.isDestroyed() && focusWin.isFocused();
+
+    if (bracketDock) {
+      app.setActivationPolicy('accessory');
+    }
+
     // Apply the disguise regardless of undetectable state
     // (disguise affects Activity Monitor name via process.title,
     //  dock icon only updates when NOT in stealth)
     this._applyDisguise(mode);
+
+    if (bracketDock) {
+      app.setActivationPolicy('regular');
+      // Restore key-window so the live disguise switch doesn't drop Natively
+      // behind the previously-active app. win.focus(), not app.focus().
+      if (nativelyWasFocused && focusWin && !focusWin.isDestroyed()) {
+        focusWin.focus();
+      }
+    }
   }
 
   public applyInitialDisguise(): void {
@@ -5404,8 +5477,20 @@ async function initializeApp() {
   // 2. Wait for app to be ready
   await app.whenReady()
 
-  // 2a. PRE-EMPTIVE dock hide: must happen before ANY operation that causes macOS to
-  // register a dock entry (app.setName, BrowserWindow creation, etc.).
+  // 2a. PRE-EMPTIVE dock hide / activation-policy clamp: must happen before ANY
+  // operation that causes macOS to register a dock entry (app.setName, the
+  // LaunchServices live-rename in _applyDisguise, BrowserWindow creation, etc.).
+  //
+  // DUAL-DOCK-ICON FIX: even in NORMAL (non-stealth) mode, applyInitialDisguise()
+  // → app.setName() + the native setProcessDisplayName() LaunchServices rename
+  // re-register the running app's LS identity. Doing that while the app is on the
+  // default 'regular' activation policy makes macOS paint a SECOND dock tile (the
+  // old identity's tile lingers while the renamed one registers) — the duplicate
+  // "Natively" icon multiple users reported. We therefore drop to 'accessory'
+  // (no dock tile) for the whole rename+window-creation window, then promote back
+  // to 'regular' exactly once AFTER createWindow() so a single, correctly-named
+  // tile appears together with the window. Stealth mode stays hidden via dock.hide()
+  // and is never promoted.
   // We read isUndetectable directly from settings here — AppState singleton isn't
   // constructed yet, so we cannot call appState.getUndetectable().
   if (process.platform === 'darwin') {
@@ -5413,6 +5498,11 @@ async function initializeApp() {
     const isUndetectableOnStartup = SettingsManager.getInstance().get('isUndetectable') ?? false;
     if (isUndetectableOnStartup) {
       app.dock.hide();
+    } else {
+      // Non-stealth: clamp to accessory (dock-tile-less) until the disguised
+      // name/icon is painted and the window exists. Do NOT promote to 'regular'
+      // here — that happens once after createWindow() below.
+      app.setActivationPolicy('accessory');
     }
   }
 
@@ -5425,12 +5515,43 @@ async function initializeApp() {
     const { telemetryService } = require('./services/telemetry/TelemetryService');
     const userDataPath = app.getPath('userData');
     const telemetryEnabledSetting = SettingsManager.getInstance().get('telemetryEnabled');
+
+    // Remote sinks are built from env (set at app launch / packaged build). Each
+    // is added ONLY when its credential is present, so unset = silently local-only.
+    // A stable, NON-PII install id (random, persisted in settings) lets PostHog
+    // dedupe sessions without ever shipping a key/email.
+    const release = (typeof app.getVersion === 'function' ? app.getVersion() : undefined) || process.env.APP_VERSION || 'unknown';
+    const environment = process.env.NODE_ENV === 'development' ? 'development' : 'production';
+    let distinctId: string | undefined;
+    try {
+      const sm = SettingsManager.getInstance() as unknown as { get: (k: string) => unknown; set: (k: string, v: unknown) => void };
+      distinctId = sm.get('telemetryInstallId') as string | undefined;
+      if (!distinctId) {
+        distinctId = `nd_${Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
+        sm.set('telemetryInstallId', distinctId);
+      }
+    } catch { /* settings unavailable — distinctId stays undefined */ }
+
+    const sinks: Array<Record<string, unknown>> = [{ name: 'local-jsonl', enabled: true }];
+    if (process.env.POSTHOG_API_KEY) {
+      sinks.push({ name: 'posthog', enabled: true, apiKey: process.env.POSTHOG_API_KEY, endpoint: process.env.POSTHOG_HOST || 'https://app.posthog.com', distinctId });
+    }
+    if (process.env.SENTRY_DSN) {
+      sinks.push({ name: 'sentry', enabled: true, dsn: process.env.SENTRY_DSN, release, environment });
+    }
+    if (process.env.AXIOM_TOKEN && process.env.AXIOM_DATASET) {
+      sinks.push({ name: 'axiom', enabled: true, apiKey: process.env.AXIOM_TOKEN, dataset: process.env.AXIOM_DATASET });
+    }
+
     telemetryService.configure({
       userDataPath,
       enabled: telemetryEnabledSetting !== false, // default true
       localEnabled: true,
+      sinks,
     });
-    telemetryService.track({ name: 'app_start', properties: { platform: process.platform } });
+    const remote = sinks.filter(s => s.name !== 'local-jsonl').map(s => s.name);
+    console.log(`[Telemetry] sinks: local-jsonl${remote.length ? ' + ' + remote.join(' + ') : ' (remote unconfigured)'} release=${release}`);
+    telemetryService.track({ name: 'app_start', properties: { platform: process.platform, release } });
   } catch (err) {
     console.warn('[Init] TelemetryService configure threw (non-fatal):', err);
   }
@@ -5547,6 +5668,28 @@ if (process.env.THINKING_MATRIX === '1') {
   }
 
   appState.createWindow()
+
+  // Defer the zero-shot intent classifier warmup until after the launcher has
+  // had a chance to paint and settle. The classifier still lazy-loads on first
+  // use, so this only moves startup CPU work out of the visible launch path.
+  setTimeout(() => {
+    try {
+      warmupIntentClassifier();
+    } catch (err) {
+      console.warn('[Init] Intent classifier warmup scheduling failed (non-fatal):', err);
+    }
+  }, Number(process.env.NATIVELY_INTENT_WARMUP_DELAY_MS || '2500'));
+
+  // DUAL-DOCK-ICON FIX (promotion half): now that the disguised name/icon are
+  // applied and the window exists, promote back to 'regular' so a SINGLE dock
+  // tile appears together with the window. Gated on darwin && !undetectable so
+  // stealth mode is never promoted (it must stay dock-tile-less). This pairs
+  // with the 'accessory' clamp in step 2a above — together they ensure the LS
+  // re-registration from app.setName()/setProcessDisplayName() happens while no
+  // tile is visible, so macOS never paints a second "Natively" icon.
+  if (process.platform === 'darwin' && !appState.getUndetectable()) {
+    app.setActivationPolicy('regular');
+  }
 
   // Apply initial stealth state based on isUndetectable setting.
   if (!appState.getUndetectable()) {
@@ -5762,6 +5905,14 @@ if (process.env.THINKING_MATRIX === '1') {
   app.on("before-quit", (event) => {
     console.log("App is quitting, cleaning up resources...");
     appState.setQuitting(true);
+
+    // Stop an app-managed Hindsight server SYNCHRONOUSLY (kills the detached process group
+    // → no orphaned Python/Postgres). No-op unless we spawned one. Must be sync: the app
+    // can exit before any async kill completes.
+    try {
+      const { HindsightManager } = require('./services/HindsightManager');
+      HindsightManager.getInstance().stopSync();
+    } catch { /* optional */ }
 
     // Stop the default-output watcher so the setInterval doesn't keep calling
     // into the native module while V8 is tearing down. Without this, quitting

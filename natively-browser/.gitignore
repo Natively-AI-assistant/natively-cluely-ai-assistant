@@ -1,0 +1,8 @@
+node_modules/
+dist/
+dist-test/
+
+# The extension's signing private key. The PUBLIC key is committed as the
+# manifest "key" field (which pins the extension ID); the private key must
+# NEVER be committed. See README.md for how to regenerate.
+extension-private-key.pem

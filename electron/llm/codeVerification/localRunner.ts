@@ -29,6 +29,29 @@ const TIMEOUT_MS = 3000;
 const MAX_OUTPUT_BYTES = 256 * 1024;
 const MAX_CONCURRENCY = 2;
 
+const isWin = process.platform === 'win32';
+
+// Kill the child AND any grandchildren it spawned. Best-effort, never throws.
+//   POSIX: the child is spawned `detached` so it leads its own process group;
+//          a negative-pid SIGKILL reaps the whole group (parent + double-forked
+//          grandchildren) past the timeout bound.
+//   Windows: there is no POSIX process group, so `process.kill(-pid)` throws.
+//          `taskkill /T` walks and force-kills the child's entire process tree;
+//          the spawn is fire-and-forget (we don't await the reaper). A direct
+//          `child.kill()` is the fallback if taskkill can't be launched.
+const killTree = (child: ReturnType<typeof spawn>): void => {
+  const pid = child.pid;
+  if (isWin) {
+    if (pid) {
+      try { spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' }).unref?.(); } catch { /* noop */ }
+    }
+    try { child.kill(); } catch { /* noop */ }
+    return;
+  }
+  try { if (pid) process.kill(-pid, 'SIGKILL'); } catch { /* group gone */ }
+  try { child.kill('SIGKILL'); } catch { /* noop */ }
+};
+
 // ── tiny async semaphore ──────────────────────────────────────────────────────
 let active = 0;
 const waiters: Array<() => void> = [];
@@ -55,6 +78,30 @@ const isInterpreterAvailable = (cmd: string, versionArgs: string[] = ['--version
   });
 };
 
+// Python interpreter name differs by platform. POSIX installs expose `python3`;
+// the python.org Windows installer ships `python.exe` plus the `py` launcher and
+// does NOT create a `python3` command (the bare `python3` on Windows usually
+// resolves to the Microsoft Store App Execution Alias, which no-ops for
+// non-interactive spawns). We probe candidates in order and cache the first that
+// works, so the availability check and the actual run use the SAME interpreter.
+export const PYTHON_CANDIDATES: ReadonlyArray<readonly [string, string[]]> = isWin
+  ? [['python', ['--version']], ['py', ['-3', '--version']], ['python3', ['--version']]]
+  : [['python3', ['--version']]];
+
+let resolvedPythonCmd: string[] | null | undefined; // undefined=unprobed, null=none found
+const resolvePythonCmd = async (): Promise<string[] | null> => {
+  if (resolvedPythonCmd !== undefined) return resolvedPythonCmd;
+  for (const [cmd, versionArgs] of PYTHON_CANDIDATES) {
+    if (await isInterpreterAvailable(cmd, versionArgs)) {
+      // Drop the trailing `--version` probe flag; keep launcher selectors like `-3`.
+      resolvedPythonCmd = [cmd, ...versionArgs.slice(0, -1)];
+      return resolvedPythonCmd;
+    }
+  }
+  resolvedPythonCmd = null;
+  return resolvedPythonCmd;
+};
+
 export const localLanguageAvailable = async (language: VerifyLanguage): Promise<boolean> => {
   // SQL is verified via sqlite3 but is NOT in LOCAL_LANGUAGES (it doesn't use the
   // entry(args) path); the orchestrator routes it separately and checks this.
@@ -63,14 +110,15 @@ export const localLanguageAvailable = async (language: VerifyLanguage): Promise<
   if (language === 'cpp') return isInterpreterAvailable('g++');
   if (language === 'java') return (await isInterpreterAvailable('javac')) && isInterpreterAvailable('java');
   if (language === 'go') return isInterpreterAvailable('go', ['version']);
-  const cmd = language === 'python' ? 'python3' : 'node';
-  return isInterpreterAvailable(cmd);
+  if (language === 'python') return (await resolvePythonCmd()) !== null;
+  return isInterpreterAvailable('node');
 };
 
 interface RawRun { stdout: string; stderr: string; code: number | null; signal: NodeJS.Signals | null; timedOut: boolean; oversized: boolean; ms: number; }
 
-// Spawn the interpreter on `scriptPath`, feeding the case via the TC env var.
-const spawnOnce = (cmd: string, scriptPath: string, cwd: string, tcJson: string): Promise<RawRun> =>
+// Spawn the interpreter (`argv` = [cmd, ...prefixArgs]) on `scriptPath`, feeding
+// the case via the TC env var.
+const spawnOnce = (argv: string[], scriptPath: string, cwd: string, tcJson: string): Promise<RawRun> =>
   new Promise<RawRun>(resolve => {
     const start = Date.now();
     let stdout = '';
@@ -92,24 +140,20 @@ const spawnOnce = (cmd: string, scriptPath: string, cwd: string, tcJson: string)
       NODE_OPTIONS: '--max-old-space-size=128',
     };
 
+    const [cmd, ...prefixArgs] = argv;
     let child: ReturnType<typeof spawn>;
     try {
-      // detached:true puts the child in its OWN process group so we can kill the
-      // WHOLE group (parent + any grandchildren the model code forked) on
-      // timeout/oversize — a plain child.kill() would orphan a double-forked
-      // grandchild past the 3s bound.
-      child = spawn(cmd, [scriptPath], { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+      // POSIX: detached:true puts the child in its OWN process group so we can
+      // kill the WHOLE group (parent + any grandchildren the model code forked)
+      // on timeout/oversize — a plain child.kill() would orphan a double-forked
+      // grandchild past the 3s bound. On Windows there is no process group;
+      // killTree() uses `taskkill /T` to walk the tree instead, so detaching
+      // would only orphan the child from our handle without helping.
+      child = spawn(cmd, [...prefixArgs, scriptPath], { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], detached: !isWin });
     } catch (e: any) {
       resolve({ stdout: '', stderr: String(e?.message || e), code: null, signal: null, timedOut: false, oversized: false, ms: Date.now() - start });
       return;
     }
-
-    // Kill the child's entire process group (negative pid). Falls back to a
-    // direct kill if the group kill fails (e.g. pid already gone).
-    const killTree = () => {
-      try { if (child.pid) process.kill(-child.pid, 'SIGKILL'); } catch { /* group gone */ }
-      try { child.kill('SIGKILL'); } catch { /* noop */ }
-    };
 
     const finish = (extra: Partial<RawRun>) => {
       if (settled) return;
@@ -118,16 +162,16 @@ const spawnOnce = (cmd: string, scriptPath: string, cwd: string, tcJson: string)
       // Reap the whole process group unconditionally — even on a NORMAL exit the
       // model code may have spawned a detached grandchild that would otherwise
       // outlive the parent past the 3s bound. Idempotent (parent already gone).
-      killTree();
+      killTree(child);
       resolve({ stdout, stderr, code: null, signal: null, timedOut, oversized, ms: Date.now() - start, ...extra });
     };
 
-    const timer = setTimeout(() => { timedOut = true; killTree(); }, TIMEOUT_MS);
+    const timer = setTimeout(() => { timedOut = true; killTree(child); }, TIMEOUT_MS);
     timer.unref?.();
 
     const cap = (buf: string, chunk: Buffer): string => {
       const next = buf + chunk.toString('utf8');
-      if (next.length > MAX_OUTPUT_BYTES) { oversized = true; killTree(); return next.slice(0, MAX_OUTPUT_BYTES); }
+      if (next.length > MAX_OUTPUT_BYTES) { oversized = true; killTree(child); return next.slice(0, MAX_OUTPUT_BYTES); }
       return next;
     };
     child.stdout?.on('data', (c: Buffer) => { stdout = cap(stdout, c); });
@@ -155,6 +199,19 @@ export const runCase = async (
     return { case: tc, status: 'error', stdout: '', error: `no local driver for ${language}`, ms: 0 };
   }
 
+  // Resolve the interpreter argv. `node` is the same everywhere; Python's command
+  // is platform-dependent (python3 on POSIX, python/py on Windows) and is probed
+  // and cached by resolvePythonCmd so the run uses the SAME interpreter the
+  // availability check found.
+  let argv: string[];
+  if (driver.localCmd === 'python3') {
+    const py = await resolvePythonCmd();
+    if (!py) return { case: tc, status: 'error', stdout: '', error: 'no python interpreter available', ms: 0 };
+    argv = py;
+  } else {
+    argv = [driver.localCmd];
+  }
+
   await acquire();
   let tmpDir = '';
   try {
@@ -163,7 +220,7 @@ export const runCase = async (
     fs.writeFileSync(scriptPath, driver.source, { encoding: 'utf8' });
 
     const tcJson = JSON.stringify(tc.input ?? []);
-    const raw = await spawnOnce(driver.localCmd, scriptPath, tmpDir, tcJson);
+    const raw = await spawnOnce(argv, scriptPath, tmpDir, tcJson);
 
     if (raw.timedOut) return { case: tc, status: 'error', stdout: trunc(raw.stdout), error: `timed out after ${TIMEOUT_MS}ms`, ms: raw.ms };
     if (raw.oversized) return { case: tc, status: 'error', stdout: trunc(raw.stdout), error: 'output limit exceeded', ms: raw.ms };
@@ -212,27 +269,25 @@ const spawnCmd = (cmd: string, args: string[], cwd: string, timeoutMs: number, s
     if (stdinPath) { try { stdinFd = fs.openSync(stdinPath, 'r'); } catch { /* fall back to ignore */ } }
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn(cmd, args, { cwd, env, stdio: [stdinFd ?? 'ignore', 'pipe', 'pipe'], detached: true });
+      // detached only on POSIX (own process group for negative-pid group-kill);
+      // on Windows killTree() walks the tree via taskkill instead. See spawnOnce.
+      child = spawn(cmd, args, { cwd, env, stdio: [stdinFd ?? 'ignore', 'pipe', 'pipe'], detached: !isWin });
     } catch (e: any) {
       if (stdinFd !== undefined) { try { fs.closeSync(stdinFd); } catch { /* noop */ } }
       resolve({ stdout: '', stderr: String(e?.message || e), code: null, signal: null, timedOut: false, oversized: false, ms: Date.now() - start });
       return;
     }
     if (stdinFd !== undefined) { try { fs.closeSync(stdinFd); } catch { /* child owns it now */ } }
-    const killTree = () => {
-      try { if (child.pid) process.kill(-child.pid, 'SIGKILL'); } catch { /* noop */ }
-      try { child.kill('SIGKILL'); } catch { /* noop */ }
-    };
     const finish = (extra: Partial<RawRun>) => {
       if (settled) return; settled = true; clearTimeout(timer);
-      killTree(); // reap any detached grandchild even on normal exit (idempotent)
+      killTree(child); // reap any detached grandchild even on normal exit (idempotent)
       resolve({ stdout, stderr, code: null, signal: null, timedOut, oversized, ms: Date.now() - start, ...extra });
     };
-    const timer = setTimeout(() => { timedOut = true; killTree(); }, timeoutMs);
+    const timer = setTimeout(() => { timedOut = true; killTree(child); }, timeoutMs);
     timer.unref?.();
     const cap = (buf: string, chunk: Buffer): string => {
       const next = buf + chunk.toString('utf8');
-      if (next.length > MAX_OUTPUT_BYTES) { oversized = true; killTree(); return next.slice(0, MAX_OUTPUT_BYTES); }
+      if (next.length > MAX_OUTPUT_BYTES) { oversized = true; killTree(child); return next.slice(0, MAX_OUTPUT_BYTES); }
       return next;
     };
     child.stdout?.on('data', (c: Buffer) => { stdout = cap(stdout, c); });

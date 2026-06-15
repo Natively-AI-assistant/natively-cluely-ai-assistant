@@ -271,10 +271,13 @@ export function validateImagePath(imagePath: string, userDataPath: string): { is
         return { isValid: false, reason: 'Path traversal sequences are not allowed' };
     }
 
-    // Block Windows drive paths
-    if (/^[A-Za-z]:\\/.test(imagePath)) {
-        return { isValid: false, reason: 'Windows absolute paths are not allowed' };
-    }
+    // NOTE: the Windows-drive-path check lives AFTER the allowlist below, not here.
+    // On Windows, userData is itself an absolute drive path
+    // (e.g. C:\Users\<user>\AppData\Roaming\natively), so every legitimate
+    // screenshot path starts with a drive letter. Rejecting drive paths up front
+    // blocked the app's own screenshots before the allowlist could approve them
+    // (issue #304). This mirrors the Unix-absolute-path blocks, which also run
+    // after the allowlist.
 
     // Normalize userDataPath for comparison
     const normalizedUserData = userDataPath.replace(/\\/g, '/');
@@ -320,6 +323,13 @@ export function validateImagePath(imagePath: string, userDataPath: string): { is
 
     if (originalIsAllowed) {
         return { isValid: true };
+    }
+
+    // Block Windows drive paths that are outside userData (e.g. C:\Windows\System32,
+    // D:\secrets, or another user's profile). Legitimate Windows screenshot paths
+    // live under <userData> and were already allowed by the allowlist above.
+    if (/^[A-Za-z]:\\/.test(imagePath)) {
+        return { isValid: false, reason: 'Windows absolute paths are not allowed' };
     }
 
     // Block Unix absolute paths that are outside userData

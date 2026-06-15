@@ -35,20 +35,38 @@ export {
 export type { ConversationIntent, IntentResult } from "./IntentClassifier";
 export { planNextAssistantAction } from "./PlannerDecision";
 export type { PlannerDecision, PlannerDecisionKind, PlannerInput } from "./PlannerDecision";
-export { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, shouldScaffold } from "./AnswerPlanner";
+export { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, shouldScaffold, isStealthEvasionQuestion } from "./AnswerPlanner";
+export { detectAnswerStyle, styleSuppressesScaffold } from "./answerStyle";
+export type { AnswerStyle, AnswerStyleResult } from "./answerStyle";
 export type { AnswerPlan, AnswerSource, AnswerType, ContextLayer, OutputPerspective, SpeakerPerspective } from "./AnswerPlanner";
-export { resolveFollowUp } from "./FollowUpResolver";
+export { applyModeFallback, MODE_CONTEXT_PROFILES } from "./modeProfiles";
+export type { ActiveModeInfo, ModeContextProfile, ModeTemplateType } from "./modeProfiles";
+export { resolveFollowUp, resolveFollowUpOrClarify, isBareFollowUp, buildContextFreeClarification } from "./FollowUpResolver";
+export { classifyProviderError, isClarificationStall, isPermanentKeyError } from "./providerErrorClassifier";
+export type { ProviderErrorKind, ProviderErrorClassification } from "./providerErrorClassifier";
+export { SessionMemory, isKindAllowedInMode } from "./SessionMemory";
+export type { MemoryMode, MemoryItemKind, MemoryItem, MemoryQuery, MemoryRecall } from "./SessionMemory";
+export { resolveSessionFollowup } from "./sessionFollowupResolver";
+export type { SessionFollowupInput, SessionFollowupResult } from "./sessionFollowupResolver";
+export { extractTranscriptEntities, isCorrectionTurn, isExplicitCrossModeInvite } from "./transcriptEntityExtractor";
+export type { ExtractedEntity } from "./transcriptEntityExtractor";
+export { isLiveSessionMemoryEnabled, liveSessionMemoryMaxItems, liveSessionMemoryDebug, __resetLiveSessionMemoryCache, resolveLiveSessionMemoryConfig, sessionBucket } from "./liveSessionMemoryConfig";
+export type { LiveSessionMemoryRolloutConfig } from "./liveSessionMemoryConfig";
+export { piTelemetry, scrubTelemetry, ageBucket } from "./piTelemetry";
+export type { PiTelemetryEvent, PiTelemetryRecord } from "./piTelemetry";
+export { resolveLiveFollowup, isContextFreeBareFollowup, toMemoryMode, toSurface, effectiveMemoryMode } from "./liveSessionMemory";
+export type { LiveTurn, LiveResolveInput } from "./liveSessionMemory";
 export {
   raceStreamWithDeadline, firstUsefulDeadlineMs,
   LIVE_FIRST_USEFUL_BUDGET_MS, LIVE_PROVIDER_FIRST_USEFUL_HARD_TIMEOUT_MS,
   LIVE_PROVIDER_FIRST_USEFUL_COMPLEX_TIMEOUT_MS, LIVE_TOTAL_HARD_TIMEOUT_MS,
   LIVE_INTER_TOKEN_STALL_MS, BENCHMARK_PER_QUESTION_HARD_TIMEOUT_MS,
 } from "./liveDeadlines";
-export type { FollowUpContext, ResolvedFollowUp } from "./FollowUpResolver";
+export type { FollowUpContext, ResolvedFollowUp, FollowUpSurface } from "./FollowUpResolver";
 export { renderCodingAnswerMarkdown, repairCodingAnswer, repairCodingMarkdown, validateAnswerStructure, validateCodingMarkdown, buildCodingScaffold } from "./AnswerValidator";
 export type { AnswerValidationResult, CodingAnswer } from "./AnswerValidator";
-export { validateProfileOutput, buildProfileRepairInstruction } from "./ProfileOutputValidator";
-export type { ProfileValidationResult, ProfileViolation, ProfileViolationCode, ProfileValidationInput } from "./ProfileOutputValidator";
+export { validateProfileOutput, buildProfileRepairInstruction, stripProfileTokensFromCoding, sanitizeCandidateAnswer, CANDIDATE_VOICE_ANSWER_TYPES } from "./ProfileOutputValidator";
+export type { ProfileValidationResult, ProfileViolation, ProfileViolationCode, ProfileValidationInput, CandidateSanitizeResult } from "./ProfileOutputValidator";
 export { validateProfileEvidence } from "./profileEvidenceValidator";
 export type { EvidenceValidationResult, EvidenceViolation, EvidenceViolationCode, EvidenceValidationInput } from "./profileEvidenceValidator";
 export { decideProfileIntelligence } from "./ProfileIntelligenceRouter";
@@ -115,6 +133,8 @@ export {
     selectPromptTier,
     estimateTokens,
     truncateTranscriptToFit,
-    parseOllamaSize
+    parseOllamaSize,
+    getOpenAiMaxOutput,
+    getOpenAiReasoningEffort
 } from "./modelCapabilities";
-export type { ModelCapabilities, ModelTier, PromptTier } from "./modelCapabilities";
+export type { ModelCapabilities, ModelTier, PromptTier, OpenAiReasoningEffort } from "./modelCapabilities";

@@ -80,6 +80,28 @@ function neverFirst(id, opts = {}) {
   };
 }
 
+// First token arrives after `delayMs` (real timer), unless the per-attempt signal
+// aborts first. Models a slow-prefill provider like the Natively gateway when its
+// server-side chain has fallen back to MiniMax (first token 3.3-7.7s).
+function slowFirst(id, delayMs, tokens, opts = {}) {
+  return {
+    id, name: id, isLocal: !!opts.isLocal, priority: opts.priority ?? 0,
+    ...(opts.ttftTimeoutMs != null ? { ttftTimeoutMs: opts.ttftTimeoutMs } : {}),
+    _calls: 0,
+    open(signal, _attempt) {
+      this._calls++;
+      return (async function* () {
+        await new Promise((resolve, reject) => {
+          if (signal.aborted) return reject(new Error('aborted'));
+          const t = setTimeout(resolve, delayMs);
+          signal.addEventListener('abort', () => { clearTimeout(t); reject(new Error('aborted')); }, { once: true });
+        });
+        for (const tok of tokens) yield tok;
+      })();
+    },
+  };
+}
+
 async function collect(gen) {
   const out = [];
   for await (const c of gen) out.push(c);
@@ -143,6 +165,35 @@ describe('runStreamingTextFallback — race semantics', () => {
     assert.equal(stalled._calls, 1);
   });
 
+  test('a per-provider ttftTimeoutMs override lets a slow-first-token provider commit (MiniMax fallback regression)', async () => {
+    // The Natively gateway can land on MiniMax (first token 3.3-7.7s) after the
+    // Gemini chain fails. With ONLY the 2.5s default it would be aborted pre-token
+    // and fail over to providers that are typically also down. A per-provider
+    // ttftTimeoutMs override (mirrors LLMHelper.ts natively text entry) must let it
+    // commit. Small real-timer values stand in for the real seconds.
+    const health = new Map();
+    // Default budget 60ms; the slow provider's first token lands at 120ms but it
+    // carries a 400ms override, so it must NOT be aborted — and must win.
+    const slowNatively = slowFirst('natively', 120, ['minimax answer'], { ttftTimeoutMs: 400 });
+    const fallback = okProvider('groq', ['SHOULD-NOT-APPEAR']);
+    const cfg = { ...DEFAULT_TEXT_FALLBACK_CONFIG, ttftTimeoutMs: 60, maxAttempts: 1 };
+    const out = await collect(runStreamingTextFallback([slowNatively, fallback], health, cfg, { log: () => {}, warn: () => {} }));
+    assert.deepEqual(out, ['minimax answer'], 'override let the slow gateway commit; fallback never served');
+    assert.equal(fallback._calls, 0, 'fallback must not open — the override kept the slow provider alive');
+  });
+
+  test('WITHOUT the override, the same slow-first-token provider is aborted by the default budget (proves the gate is real)', async () => {
+    // Control for the test above: same 120ms first token, but NO per-provider
+    // override, so the 60ms default aborts it and the fallback serves. This is the
+    // exact bug the override fixes.
+    const health = new Map();
+    const slowNatively = slowFirst('natively', 120, ['minimax answer']); // no override
+    const fallback = okProvider('groq', ['fallback served']);
+    const cfg = { ...DEFAULT_TEXT_FALLBACK_CONFIG, ttftTimeoutMs: 60, maxAttempts: 1 };
+    const out = await collect(runStreamingTextFallback([slowNatively, fallback], health, cfg, { log: () => {}, warn: () => {} }));
+    assert.deepEqual(out, ['fallback served'], 'no override → default budget aborted the slow provider');
+  });
+
   test('a post-commit failure does NOT switch providers (no duplicate output)', async () => {
     const health = new Map();
     const committed = throwAfterFirst('natively', ['partial answer'], 'socket hangup');
@@ -169,5 +220,45 @@ describe('runStreamingTextFallback — race semantics', () => {
     const p = okProvider('natively', ['x']);
     const out = await collect(runStreamingTextFallback([p], health, DEFAULT_TEXT_FALLBACK_CONFIG, fastHooks(), ctrl.signal));
     assert.deepEqual(out, [], 'aborted before start yields nothing');
+  });
+});
+
+describe('runStreamingTextFallback — stopChainOnError (shared-credential cascade abort)', () => {
+  // Models the Gemini cascade: all rungs share one API key. A permanent key error
+  // on the FIRST rung must abort the whole chain so the caller can switch provider,
+  // instead of wasting two more doomed calls on the same dead key.
+  test('a matching pre-commit error aborts the WHOLE chain (siblings never opened) and throws', async () => {
+    const health = new Map();
+    const flashLite = throwBeforeFirst('gemini_flash_lite', 'API key expired');
+    const flash = okProvider('gemini_flash', ['SHOULD-NOT-APPEAR']);
+    const pro = okProvider('gemini_pro', ['SHOULD-NOT-APPEAR']);
+    const cfg = { ...DEFAULT_TEXT_FALLBACK_CONFIG, maxAttempts: 1, stopChainOnError: (err) => /expired|api key/i.test(String(err?.message)) };
+    await assert.rejects(
+      () => collect(runStreamingTextFallback([flashLite, flash, pro], health, cfg, fastHooks())),
+      /chain aborted/i,
+    );
+    assert.equal(flashLite._calls, 1, 'primary attempted once');
+    assert.equal(flash._calls, 0, 'sibling on the same key NOT opened');
+    assert.equal(pro._calls, 0, 'sibling on the same key NOT opened');
+  });
+
+  test('a NON-matching (transient) pre-commit error still walks the cascade normally', async () => {
+    const health = new Map();
+    const flashLite = throwBeforeFirst('gemini_flash_lite', '429 rate limit');
+    const flash = okProvider('gemini_flash', ['from flash']);
+    const cfg = { ...DEFAULT_TEXT_FALLBACK_CONFIG, maxAttempts: 1, stopChainOnError: (err) => /expired|api key/i.test(String(err?.message)) };
+    const out = await collect(runStreamingTextFallback([flashLite, flash], health, cfg, fastHooks()));
+    assert.deepEqual(out, ['from flash'], 'transient error fell through to the next rung');
+    assert.equal(flash._calls, 1);
+  });
+
+  test('without stopChainOnError (default) every rung is walked even on a key error', async () => {
+    const health = new Map();
+    const flashLite = throwBeforeFirst('gemini_flash_lite', 'API key expired');
+    const flash = okProvider('gemini_flash', ['flash answers']);
+    const cfg = { ...DEFAULT_TEXT_FALLBACK_CONFIG, maxAttempts: 1 };
+    const out = await collect(runStreamingTextFallback([flashLite, flash], health, cfg, fastHooks()));
+    assert.deepEqual(out, ['flash answers'], 'no abort hook → normal fall-through');
+    assert.equal(flash._calls, 1);
   });
 });

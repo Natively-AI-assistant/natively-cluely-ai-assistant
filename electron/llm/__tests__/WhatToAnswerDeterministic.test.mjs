@@ -68,10 +68,18 @@ describe('WTA intro: deterministic first-person, never Natively', () => {
     // decline. Either way it must NOT produce a broken "I'm undefined".
     if (r && r.answer) assert.doesNotMatch(r.answer, /undefined|I'm \./);
   });
-  test('manual mode does NOT use the deterministic intro (richer LLM intro preserved)', () => {
-    const r = tryBuildManualProfileFastPathAnswer({ question: 'Tell me about yourself.', profile: PROFILE, jobDescription: null, source: 'manual_input' });
-    // Manual chat keeps the LLM intro — the deterministic intro is interview-only.
-    if (r && r.answer) assert.doesNotMatch(r.answer, /^I'm Test Candidate, an? /);
+  test('manual mode NOW uses the deterministic first-person intro (2026-06-06b)', () => {
+    // Release 2026-06-06b: the real manual-chat log showed plain "introduce
+    // yourself" / "introduce yourseld" reaching the LLM and answering "I'm
+    // Natively, an AI assistant". With a profile loaded, manual intro now uses the
+    // same deterministic first-person intro as WTA — it can never leak the
+    // assistant identity or refuse.
+    for (const q of ['Tell me about yourself.', 'introduce yourself', 'introduce yourseld', 'hey man introduce yourself']) {
+      const r = tryBuildManualProfileFastPathAnswer({ question: q, profile: PROFILE, jobDescription: null, source: 'manual_input' });
+      assert.ok(r && r.answer, `manual "${q}" should fast-path to the deterministic intro`);
+      assert.match(r.answer, /^I'm Test Candidate/, `manual "${q}" must be the first-person candidate intro`);
+      assert.doesNotMatch(r.answer, NATIVELY, `manual "${q}" must not leak Natively/AI-assistant`);
+    }
   });
 });
 

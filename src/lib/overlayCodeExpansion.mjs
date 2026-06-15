@@ -1,9 +1,11 @@
 const EAGER_CODE_EXPANSION_INTENTS = new Set(['what_to_answer', 'chat']);
 
 export const CODE_EXPANSION_TRANSITION = {
-  type: 'tween',
-  ease: [0.23, 1, 0.32, 1],
-  duration: 0.24,
+  type: 'spring',
+  duration: 0.28,
+  bounce: 0.16,
+  restDelta: 0.5,
+  restSpeed: 12,
 };
 
 /**

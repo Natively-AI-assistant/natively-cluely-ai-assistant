@@ -1,4 +1,4 @@
-import { test, describe } from 'node:test';
+import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -54,8 +54,25 @@ function makeStubWs({ throwOnFirstSend = false, throwOnType = null } = {}) {
 }
 
 /** Construct an STT, force it into a “session ready / WS open” state for tests. */
+// Track every STT instance so we can tear down lingering timers/sockets after the
+// suite — the GA class can start a keep-alive setInterval / reconnect timer that, if
+// left running, keeps the Node event loop alive and HANGS the process AFTER all tests
+// pass (the process never exits → blocks CI). The after() hook below closes them all.
+const _liveSttInstances = [];
+function trackStt(stt) { _liveSttInstances.push(stt); return stt; }
+
+after(() => {
+    for (const stt of _liveSttInstances) {
+        try { if (stt.keepAliveTimer) { clearInterval(stt.keepAliveTimer); stt.keepAliveTimer = null; } } catch { /* noop */ }
+        try { if (stt.reconnectTimer) { clearTimeout(stt.reconnectTimer); stt.reconnectTimer = null; } } catch { /* noop */ }
+        try { stt.shouldReconnect = false; stt.isActive = false; } catch { /* noop */ }
+        try { stt._closeWs?.(false); } catch { /* noop */ }
+        try { stt.stop?.(); } catch { /* noop */ }
+    }
+});
+
 function makeReadySTT({ stubWs, pcmSamples = 0 } = {}) {
-    const stt = new OpenAIStreamingSTT('sk-test-key');
+    const stt = trackStt(new OpenAIStreamingSTT('sk-test-key'));
     stt.isActive = true;
     stt.shouldReconnect = false;
     stt.mode = 'ws';
@@ -212,7 +229,7 @@ describe('race / late-arrival safety', () => {
         // must NOT set isSessionReady, must NOT start a keep-alive, must NOT
         // flush the ring buffer. The session.created case body should be a
         // pure warn-and-ignore.
-        const stt = new OpenAIStreamingSTT('sk-test-key');
+        const stt = trackStt(new OpenAIStreamingSTT('sk-test-key'));
         stt.isActive = true;
         stt.mode = 'ws';
         stt.isSessionReady = false;
@@ -234,7 +251,7 @@ describe('race / late-arrival safety', () => {
 
     test('inbound transcription_session.created DOES set isSessionReady (positive control)', () => {
         // Asymmetric pair: this proves the negative test above is meaningful.
-        const stt = new OpenAIStreamingSTT('sk-test-key');
+        const stt = trackStt(new OpenAIStreamingSTT('sk-test-key'));
         stt.isActive = true;
         stt.mode = 'ws';
         stt.isSessionReady = false;
@@ -310,7 +327,7 @@ describe('timer ownership', () => {
         // If _connectWs is somehow invoked twice without an intervening close,
         // the first timer would orphan and could fire on the new socket.
         // We exercise just the cleanup half so we don't open a real socket.
-        const stt = new OpenAIStreamingSTT('sk-test-key');
+        const stt = trackStt(new OpenAIStreamingSTT('sk-test-key'));
         let firstTimerFired = false;
         const firstTimer = setTimeout(() => { firstTimerFired = true; }, 100_000);
         stt.connectionTimeoutTimer = firstTimer;
@@ -347,7 +364,7 @@ describe('exhaustion error propagation', () => {
         // main.ts increments _consecutiveErrors only on emitted errors. Without
         // this emit, sustained DNS/TLS/RST outages would churn silently and the
         // user would see no "failed" banner.
-        const stt = new OpenAIStreamingSTT('sk-test-key');
+        const stt = trackStt(new OpenAIStreamingSTT('sk-test-key'));
         stt.isActive = true;
         stt.shouldReconnect = true;
         stt.mode = 'ws';
@@ -416,7 +433,7 @@ describe('setApiKey live rotation', () => {
 
 describe('security — log scrubbing (case-insensitive)', () => {
     test('scrubs lowercase bearer (proxies / lowercased headers)', () => {
-        const stt = new OpenAIStreamingSTT('sk-test-key');
+        const stt = trackStt(new OpenAIStreamingSTT('sk-test-key'));
         const errors = [];
         stt.isActive = true;
         stt.on('error', (e) => errors.push(e));
@@ -430,7 +447,7 @@ describe('security — log scrubbing (case-insensitive)', () => {
     });
 
     test('scrubs sk-proj- project key variants', () => {
-        const stt = new OpenAIStreamingSTT('sk-test-key');
+        const stt = trackStt(new OpenAIStreamingSTT('sk-test-key'));
         const errors = [];
         stt.isActive = true;
         stt.on('error', (e) => errors.push(e));
@@ -471,7 +488,7 @@ describe('lifecycle — post-stop safety', () => {
     test('stop() clears restSafetyTimer when STT is in REST mode', () => {
         // Without this, a future refactor that early-returns from stop() based
         // on mode would leak a 10s setInterval forever.
-        const stt = new OpenAIStreamingSTT('sk-test-key');
+        const stt = trackStt(new OpenAIStreamingSTT('sk-test-key'));
         stt.isActive = true;
         stt.shouldReconnect = true;
         stt.mode = 'ws';
@@ -492,7 +509,7 @@ describe('lifecycle — post-stop safety', () => {
 
 describe('observability — rate_limits.updated', () => {
     test('emits warning when a rate limit drops below 10% remaining', () => {
-        const stt = new OpenAIStreamingSTT('sk-test-key');
+        const stt = trackStt(new OpenAIStreamingSTT('sk-test-key'));
         stt.isActive = true;
         const warnings = [];
         stt.on('warning', (w) => warnings.push(w));
@@ -514,7 +531,7 @@ describe('observability — rate_limits.updated', () => {
     });
 
     test('does not re-warn for the same limit name within a session', () => {
-        const stt = new OpenAIStreamingSTT('sk-test-key');
+        const stt = trackStt(new OpenAIStreamingSTT('sk-test-key'));
         stt.isActive = true;
         const warnings = [];
         stt.on('warning', (w) => warnings.push(w));
@@ -534,7 +551,7 @@ describe('observability — rate_limits.updated', () => {
     });
 
     test('warns separately for different limit names', () => {
-        const stt = new OpenAIStreamingSTT('sk-test-key');
+        const stt = trackStt(new OpenAIStreamingSTT('sk-test-key'));
         stt.isActive = true;
         const warnings = [];
         stt.on('warning', (w) => warnings.push(w));
@@ -551,7 +568,7 @@ describe('observability — rate_limits.updated', () => {
     });
 
     test('handles malformed entries gracefully (no throw)', () => {
-        const stt = new OpenAIStreamingSTT('sk-test-key');
+        const stt = trackStt(new OpenAIStreamingSTT('sk-test-key'));
         stt.isActive = true;
         const warnings = [];
         stt.on('warning', (w) => warnings.push(w));
@@ -571,7 +588,7 @@ describe('observability — rate_limits.updated', () => {
     });
 
     test('start() resets the per-session warning dedup', () => {
-        const stt = new OpenAIStreamingSTT('sk-test-key');
+        const stt = trackStt(new OpenAIStreamingSTT('sk-test-key'));
         stt.isActive = true;
         // Stub _connectWs so start() does NOT open a real socket against api.openai.com.
         stt._connectWs = () => {};
@@ -601,7 +618,7 @@ describe('fallback — ring-buffer transfer', () => {
         // Without this, the leading audio captured before fallback is silently
         // dropped — the user loses the first seconds of speech every time the
         // WS path exhausts.
-        const stt = new OpenAIStreamingSTT('sk-test-key');
+        const stt = trackStt(new OpenAIStreamingSTT('sk-test-key'));
         stt.isActive = true;
         stt.shouldReconnect = true;
         stt.mode = 'ws';
@@ -668,7 +685,7 @@ describe('lifecycle — close behavior', () => {
 
 describe('telemetry — ring buffer eviction', () => {
     test('emits warning event on first eviction; subsequent evictions stay silent', () => {
-        const stt = new OpenAIStreamingSTT('sk-test-key');
+        const stt = trackStt(new OpenAIStreamingSTT('sk-test-key'));
         stt.isActive = true;
         stt.mode = 'ws';
         // No WS — write() will route to ring buffer.
@@ -691,7 +708,7 @@ describe('telemetry — ring buffer eviction', () => {
 
 describe('security — log scrubbing', () => {
     test('Bearer tokens in server error bodies are not propagated upstream', () => {
-        const stt = new OpenAIStreamingSTT('sk-test-key');
+        const stt = trackStt(new OpenAIStreamingSTT('sk-test-key'));
         stt.isActive = true; // _handleWsMessage now no-ops when inactive (R3-2 guard)
         const errors = [];
         stt.on('error', (e) => errors.push(e));

@@ -1,3 +1,5 @@
+import type { WorkerInitMessage } from './types';
+
 /**
  * Resolves the optimal ONNX Runtime execution providers and per-module
  * quantization (dtype) strategy for the current platform at runtime.
@@ -44,29 +46,85 @@ const WHISPER_SAFE_DTYPE: Record<string, string> = {
 };
 
 /**
+ * Scale the catalog `sizeMb` (which is measured for the default mixed-q8
+ * download: fp32 encoder + q8 decoders) toward the bytes the CURRENT platform
+ * will actually download, so the progress-bar denominator (`expectedBytes`) is
+ * directionally right per-platform instead of platform-blind.
+ *
+ * WHY THIS MATTERS: the bar denominator is `max(expectedBytes, observedTotal)`.
+ * That self-corrects an UNDER-estimate (observed grows past it) but CANNOT
+ * correct an OVER-estimate (the bar would finish at e.g. 65% then vanish). So
+ * the only safe failure direction is to under-estimate. This factor is kept
+ * deliberately conservative — at or below the true ratio — so the result stays
+ * a lower bound on every platform and the un-correctable over-estimate case
+ * can never occur. Being a bit low just means the bar advances slightly faster
+ * early and the observed total takes over partway through, which is smooth.
+ *
+ *   - Apple Silicon resolves uniform fp32 (see resolveInferenceConfig): the q8
+ *     decoders are instead downloaded at fp32, so the real download is larger
+ *     than the catalog q8 figure. A factor >1 keeps expectedBytes a lower bound
+ *     while starting far closer to reality. 1.6 is intentionally below the
+ *     true fp32/q8 ratio (~2–3× on the decoder-heavy portion) so we never
+ *     over-shoot.
+ *   - Everything else already matches the catalog's mixed-q8 measurement → 1.0.
+ */
+function dtypeSizeFactor(dtype: string | Record<string, string>): number {
+    // Uniform fp32 across all modules = the Apple Silicon / large-download path.
+    if (dtype === 'fp32') return 1.6;
+    // Mixed per-module map (WHISPER_SAFE_DTYPE) or any q8/q4 string: the catalog
+    // figure already reflects this, so no scaling.
+    return 1.0;
+}
+
+/**
  * Construct the worker `init` message for a given model. Single source of
  * truth — three callers (LocalWhisperSTT.spawnWorker, modelPreloader.preload,
  * local-whisper-start-download IPC) all use this so the message shape stays
  * consistent. The cacheDir lookup is lazy (avoids importing electron from
  * this leaf module).
  */
-export function buildWorkerInitMessage(modelId: string): {
-    type: 'init';
-    modelId: string;
-    cacheDir: string;
-    executionProviders: string[];
-    dtype: string | Record<string, string>;
-} {
+export function buildWorkerInitMessage(modelId: string): WorkerInitMessage {
     // Late require — modelManager imports electron, which isn't available
     // when this module is first loaded in some contexts (test harnesses).
-    const { getModelsDir, normalizeWhisperModelId } = require('./modelManager');
+    const {
+        getModelsDir,
+        normalizeWhisperModelId,
+        getModelSizeBytes,
+        getModelExternalDataFormat,
+    } = require('./modelManager');
     const { executionProviders, dtype } = resolveInferenceConfig();
+    // Catalog download size — progress-bar denominator from byte zero. The
+    // lookup is best-effort: if it's missing (unknown id) or the call fails
+    // for any reason, we send 0 and the worker falls back to summing the
+    // per-file byte totals it observes during the download. The size is a
+    // UX nicety for the progress bar, never required for the download itself,
+    // so a failure here must NEVER prevent the worker from starting.
+    let expectedBytes = 0;
+    try {
+        const n = Number(getModelSizeBytes(modelId)) * dtypeSizeFactor(dtype);
+        if (Number.isFinite(n) && n > 0) expectedBytes = Math.round(n);
+    } catch {
+        expectedBytes = 0;
+    }
+    // External-data flag for checkpoints whose weights live in sibling
+    // `*.onnx_data` files but whose own config.json doesn't declare it (e.g.
+    // Whisper Large v3 Turbo). undefined for every other model — the worker
+    // then lets transformers read each model's config.json as before. Like the
+    // size lookup above, never let this block worker startup.
+    let useExternalDataFormat: boolean | Record<string, boolean> | undefined;
+    try {
+        useExternalDataFormat = getModelExternalDataFormat(modelId);
+    } catch {
+        useExternalDataFormat = undefined;
+    }
     return {
         type: 'init',
         modelId: normalizeWhisperModelId(modelId),
         cacheDir: getModelsDir(),
         executionProviders,
         dtype,
+        expectedBytes,
+        useExternalDataFormat,
     };
 }
 

@@ -1,6 +1,9 @@
 
 import { net } from "electron";
 
+const RELEASE_NOTE_BULLET_SECTIONS = new Set(["What's New", "Improvements", "Fixes", "Technical"]);
+const GITHUB_REQUEST_TIMEOUT_MS = 10000;
+
 export interface ReleaseNoteSection {
     title: string;
     items: string[];
@@ -17,7 +20,7 @@ export interface ParsedReleaseNotes {
 export class ReleaseNotesManager {
     private static instance: ReleaseNotesManager;
     private cachedNotes: ParsedReleaseNotes | null = null;
-    private readonly repoOwner = "evinjohnn";
+    private readonly repoOwner = "Natively-AI-assistant";
     private readonly repoName = "natively-cluely-ai-assistant";
 
     private constructor() { }
@@ -38,23 +41,7 @@ export class ReleaseNotesManager {
         console.log(`[ReleaseNotesManager] Fetching release notes for ${version}...`);
 
         try {
-            // We'll fetch the 'latest' release and check if it matches the version we are updating to.
-            // If the update is not 'latest' (e.g. strict version), we might need to search specific tags,
-            // but for now 'latest' is the standard flow for auto-updates.
-            // However, to be safe and robust, let's try to fetch by tag if possible, or just latest.
-            // GitHub API: GET /repos/{owner}/{repo}/releases/tags/{tag}
-            // If version starts with 'v', use it, else add 'v'.
-            // If version is 'latest', fetch from /releases/latest
-            // Otherwise, fetch by tag
-            let url = "";
-            if (version === 'latest') {
-                url = `https://api.github.com/repos/${this.repoOwner}/${this.repoName}/releases/latest`;
-            } else {
-                const tag = version.startsWith('v') ? version : `v${version}`;
-                url = `https://api.github.com/repos/${this.repoOwner}/${this.repoName}/releases/tags/${tag}`;
-            }
-
-            const response = await this.makeRequest(url);
+            const response = await this.makeRequest(this.buildReleaseUrl(version));
 
             if (!response) {
                 console.warn("[ReleaseNotesManager] Failed to fetch release notes from API.");
@@ -76,55 +63,54 @@ export class ReleaseNotesManager {
         }
     }
 
+    private buildReleaseUrl(version: string): string {
+        if (version === 'latest') {
+            return `https://api.github.com/repos/${this.repoOwner}/${this.repoName}/releases/latest`;
+        }
+
+        const tag = version.startsWith('v') ? version : `v${version}`;
+        return `https://api.github.com/repos/${this.repoOwner}/${this.repoName}/releases/tags/${tag}`;
+    }
+
     private parseReleaseNotes(body: string, version: string, url: string): ParsedReleaseNotes {
         console.log(`[ReleaseNotesManager] Parsing body for ${version}. Length: ${body.length}`);
-        const allowedHeaders = ['Summary', "What's New", "Improvements", "Fixes", "Technical"];
-        const bulletSections = ["What's New", "Improvements", "Fixes", "Technical"];
 
         const sections: ReleaseNoteSection[] = [];
         let summary = "";
 
-        // Normalize newlines
         const normalizedBody = body.replace(/\r\n/g, "\n");
+        const headingMatches = [...normalizedBody.matchAll(/^#{2,3}\s+(.+)$/gm)];
 
-        // Split by H2 headers (## )
-        const rawSections = normalizedBody.split(/^## /m);
+        for (let i = 0; i < headingMatches.length; i++) {
+            const match = headingMatches[i];
+            const nextMatch = headingMatches[i + 1];
+            const title = this.normalizeHeadingTitle(match[1]);
+            if (!title) continue;
 
-        for (const raw of rawSections) {
-            const sectionText = raw.trim();
-            if (!sectionText) continue;
+            const contentStart = (match.index ?? 0) + match[0].length;
+            const contentEnd = nextMatch?.index ?? normalizedBody.length;
+            const content = normalizedBody.slice(contentStart, contentEnd).trim();
+            const contentLines = content.split('\n');
 
-            const lines = sectionText.split('\n');
-            const title = lines[0].trim();
-
-            // STRICTNESS: Only process allowed headers
-            if (!allowedHeaders.includes(title)) {
+            if (title === 'Summary') {
+                summary = content.replace(/\n/g, ' ').trim();
+                console.log(`[ReleaseNotesManager] Found Summary: "${summary.substring(0, 50)}..."`);
                 continue;
             }
 
-            const contentLines = lines.slice(1);
-            const content = contentLines.join('\n').trim();
+            if (!RELEASE_NOTE_BULLET_SECTIONS.has(title)) continue;
 
-            if (title === 'Summary') {
-                // Summary: Capture text content (single line description)
-                summary = content.replace(/\n/g, ' ').trim();
-                console.log(`[ReleaseNotesManager] Found Summary: "${summary.substring(0, 50)}..."`);
-            } else if (bulletSections.includes(title)) {
-                // Bullet Sections: Capture ONLY lines starting with - or *
-                const items: string[] = [];
-                for (const line of contentLines) {
-                    const trimmedLine = line.trim();
-                    if (trimmedLine.startsWith('- ') || trimmedLine.startsWith('* ')) {
-                        items.push(trimmedLine.substring(2).trim());
-                    }
-                }
+            const items = contentLines
+                .map((line) => line.trim())
+                .filter((line) => line.startsWith('- ') || line.startsWith('* '))
+                .map((line) => line.substring(2).trim())
+                .filter(Boolean);
 
-                if (items.length > 0) {
-                    sections.push({ title, items });
-                    console.log(`[ReleaseNotesManager] Found Section: "${title}" (${items.length} items)`);
-                } else {
-                    console.warn(`[ReleaseNotesManager] Section "${title}" found but no valid bullet points extracted.`);
-                }
+            if (items.length > 0) {
+                sections.push({ title, items });
+                console.log(`[ReleaseNotesManager] Found Section: "${title}" (${items.length} items)`);
+            } else {
+                console.warn(`[ReleaseNotesManager] Section "${title}" found but no valid bullet points extracted.`);
             }
         }
 
@@ -132,40 +118,73 @@ export class ReleaseNotesManager {
             version,
             summary,
             sections,
-            fullBody: body, // Keep raw body for reference/logging
+            fullBody: body,
             url
         };
     }
 
+    private normalizeHeadingTitle(rawTitle: string): string | null {
+        const normalized = rawTitle
+            .replace(/^\s*[^\p{L}\p{N}'’]+/u, '')
+            .replace(/[*_`#]/g, '')
+            .replace(/[’]/g, "'")
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
+
+        if (!normalized) return null;
+        if (normalized === 'summary') return 'Summary';
+        if (normalized.includes("what's new") || normalized.includes('whats new')) return "What's New";
+        if (normalized.includes('technical')) return 'Technical';
+        if (normalized.includes('improvement')) return 'Improvements';
+        if (normalized.includes('fix')) return 'Fixes';
+        return null;
+    }
+
     private makeRequest(url: string): Promise<string | null> {
         return new Promise((resolve) => {
+            let settled = false;
+            const finish = (value: string | null) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
+                resolve(value);
+            };
+
             const request = net.request(url);
+            const timeout = setTimeout(() => {
+                console.warn(`[ReleaseNotesManager] Request timed out for ${url}`);
+                request.abort();
+                finish(null);
+            }, GITHUB_REQUEST_TIMEOUT_MS);
 
             request.on('response', (response) => {
                 if (response.statusCode !== 200) {
                     console.warn(`[ReleaseNotesManager] HTTP ${response.statusCode} for ${url}`);
-                    resolve(null);
+                    finish(null);
                     return;
                 }
 
-                let data = '';
+                let responseBody = '';
                 response.on('data', (chunk) => {
-                    data += chunk.toString();
+                    responseBody += chunk.toString();
                 });
 
                 response.on('end', () => {
-                    resolve(data);
+                    finish(responseBody);
                 });
 
                 response.on('error', (err) => {
                     console.error("[ReleaseNotesManager] Stream error:", err);
-                    resolve(null);
+                    finish(null);
                 });
             });
 
             request.on('error', (err) => {
-                console.error("[ReleaseNotesManager] Request error:", err);
-                resolve(null);
+                if (!settled) {
+                    console.error("[ReleaseNotesManager] Request error:", err);
+                }
+                finish(null);
             });
 
             request.end();

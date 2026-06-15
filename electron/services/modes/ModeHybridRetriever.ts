@@ -32,7 +32,13 @@ export interface ModeReferenceIndexState {
     fileHash: string;
     indexedAt: number;
     chunkCount: number;
+    /** PI v3 (W3): upload-time index lifecycle. 'ready' = chunk vectors persisted. */
+    status: ModeReferenceIndexStatus;
+    /** Composite embedding-space key the stored vectors were produced in. */
+    embeddingSpace: string | null;
 }
+
+export type ModeReferenceIndexStatus = 'pending' | 'indexing' | 'ready' | 'failed' | 'lexical_only';
 
 const DEFAULT_TOKEN_BUDGET = 1800;
 const DEFAULT_TOP_K = 6;
@@ -125,6 +131,31 @@ export class ModeHybridRetriever {
                     chunk_count INTEGER NOT NULL DEFAULT 0
                 );
             `);
+            // PI v3 (W3): persisted chunk text + vectors so the hot path embeds
+            // ONLY the query. embedding BLOB is a Float32Array buffer;
+            // embedding_space is the composite `${name}:${model}:${dims}` key —
+            // vectors are only comparable within the same space (the v1→v2
+            // migration trap), so retrieval must check it before cosine.
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS mode_reference_chunks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    file_id TEXT NOT NULL,
+                    chunk_index INTEGER NOT NULL,
+                    text TEXT NOT NULL,
+                    embedding BLOB,
+                    embedding_space TEXT,
+                    created_at INTEGER NOT NULL,
+                    UNIQUE(file_id, chunk_index)
+                );
+                CREATE INDEX IF NOT EXISTS idx_mode_ref_chunks_file ON mode_reference_chunks(file_id);
+            `);
+            // Older installs created index_state without the lifecycle columns.
+            for (const col of [
+                "ALTER TABLE mode_reference_index_state ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'",
+                'ALTER TABLE mode_reference_index_state ADD COLUMN embedding_space TEXT',
+            ]) {
+                try { this.db.exec(col); } catch { /* column exists */ }
+            }
         } catch (e) {
             console.warn('[ModeHybridRetriever] Failed to create index state table:', e);
         }
@@ -136,14 +167,16 @@ export class ModeHybridRetriever {
     private getIndexState(fileId: string): ModeReferenceIndexState | null {
         try {
             const row = this.db.prepare(
-                'SELECT file_id, file_hash, indexed_at, chunk_count FROM mode_reference_index_state WHERE file_id = ?'
+                'SELECT file_id, file_hash, indexed_at, chunk_count, status, embedding_space FROM mode_reference_index_state WHERE file_id = ?'
             ).get(fileId) as any;
             if (!row) return null;
             return {
                 fileId: row.file_id,
                 fileHash: row.file_hash,
                 indexedAt: row.indexed_at,
-                chunkCount: row.chunk_count
+                chunkCount: row.chunk_count,
+                status: (row.status as ModeReferenceIndexStatus) || 'pending',
+                embeddingSpace: row.embedding_space ?? null,
             };
         } catch (e) {
             return null;
@@ -153,12 +186,12 @@ export class ModeHybridRetriever {
     /**
      * Update the index state for a file after embedding its chunks
      */
-    private updateIndexState(fileId: string, contentHash: string, chunkCount: number): void {
+    private updateIndexState(fileId: string, contentHash: string, chunkCount: number, status: ModeReferenceIndexStatus = 'ready', embeddingSpace: string | null = null): void {
         try {
             this.db.prepare(`
-                INSERT OR REPLACE INTO mode_reference_index_state (file_id, file_hash, indexed_at, chunk_count)
-                VALUES (?, ?, ?, ?)
-            `).run(fileId, contentHash, Date.now(), chunkCount);
+                INSERT OR REPLACE INTO mode_reference_index_state (file_id, file_hash, indexed_at, chunk_count, status, embedding_space)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `).run(fileId, contentHash, Date.now(), chunkCount, status, embeddingSpace);
         } catch (e) {
             console.warn('[ModeHybridRetriever] Failed to update index state:', e);
         }
@@ -173,6 +206,138 @@ export class ModeHybridRetriever {
         } catch (e) {
             console.warn('[ModeHybridRetriever] Failed to remove index state:', e);
         }
+    }
+
+    // ── PI v3 (W3): upload-time indexing ──────────────────────────────────
+
+    /** Public view of a file's index status (for the Modes Manager UI badge). */
+    public getFileIndexStatus(fileId: string): { status: ModeReferenceIndexStatus; chunkCount: number } {
+        const state = this.getIndexState(fileId);
+        if (!state) return { status: 'pending', chunkCount: 0 };
+        // A space mismatch means the stored vectors are unusable with the
+        // current provider — report as pending so the UI shows re-indexing.
+        const activeSpace = this.embeddingPipeline.getActiveSpaceKey?.();
+        if (state.status === 'ready' && activeSpace && state.embeddingSpace !== activeSpace) {
+            return { status: 'pending', chunkCount: state.chunkCount };
+        }
+        return { status: state.status, chunkCount: state.chunkCount };
+    }
+
+    /**
+     * Chunk + embed + persist one reference file's vectors. Called at UPLOAD
+     * time (fire-and-forget from the IPC handler) and at mode ACTIVATION
+     * (prewarm), so the per-question hot path only ever embeds the query.
+     *
+     * Idempotent: re-indexes only when the content hash or the embedding space
+     * changed. Serialized per file via an in-flight map (a double upload or
+     * upload+activate race embeds once). Never throws — a failure records
+     * status 'failed' (embedding outage → 'lexical_only') and retrieval
+     * degrades to lexical for that file.
+     */
+    private inflightIndex = new Map<string, Promise<void>>();
+
+    public async indexFile(file: ModeReferenceFile): Promise<void> {
+        const existing = this.inflightIndex.get(file.id);
+        if (existing) return existing;
+        const job = this.indexFileInner(file).finally(() => this.inflightIndex.delete(file.id));
+        this.inflightIndex.set(file.id, job);
+        return job;
+    }
+
+    private async indexFileInner(file: ModeReferenceFile): Promise<void> {
+        const content = (file.content || '').trim();
+        if (!content) return;
+        const contentHash = hashContent(content);
+        const activeSpace = this.embeddingPipeline.getActiveSpaceKey?.() ?? null;
+
+        const state = this.getIndexState(file.id);
+        if (state && state.status === 'ready' && state.fileHash === contentHash && state.embeddingSpace === activeSpace) {
+            return; // up to date
+        }
+
+        const chunks = this.chunkText(content);
+        if (chunks.length === 0) return;
+
+        if (!this.isEmbeddingAvailable() || !activeSpace) {
+            // No embedder: persist chunk TEXT (lexical retrieval still wins a
+            // re-chunk per query) and mark lexical_only so prewarm retries later.
+            this.persistChunks(file.id, chunks, null, null);
+            this.updateIndexState(file.id, contentHash, chunks.length, 'lexical_only', null);
+            return;
+        }
+
+        this.updateIndexState(file.id, contentHash, chunks.length, 'indexing', activeSpace);
+        try {
+            const embeddings = await this.embeddingPipeline.getEmbeddings(chunks);
+            if (!Array.isArray(embeddings) || embeddings.length !== chunks.length) {
+                throw new Error(`batch embed returned ${embeddings?.length ?? 'none'} vectors for ${chunks.length} chunks`);
+            }
+            this.persistChunks(file.id, chunks, embeddings, activeSpace);
+            this.updateIndexState(file.id, contentHash, chunks.length, 'ready', activeSpace);
+        } catch (e) {
+            console.warn(`[ModeHybridRetriever] indexFile failed for ${file.fileName}:`, e instanceof Error ? e.message : e);
+            // Keep the chunk text for lexical retrieval; mark failed for retry.
+            this.persistChunks(file.id, chunks, null, null);
+            this.updateIndexState(file.id, contentHash, chunks.length, 'failed', null);
+        }
+    }
+
+    private persistChunks(fileId: string, chunks: string[], embeddings: number[][] | null, space: string | null): void {
+        try {
+            const del = this.db.prepare('DELETE FROM mode_reference_chunks WHERE file_id = ?');
+            const ins = this.db.prepare(`
+                INSERT INTO mode_reference_chunks (file_id, chunk_index, text, embedding, embedding_space, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `);
+            const txn = this.db.transaction(() => {
+                del.run(fileId);
+                const now = Date.now();
+                for (let i = 0; i < chunks.length; i++) {
+                    const vec = embeddings?.[i];
+                    const blob = vec ? Buffer.from(new Float32Array(vec).buffer) : null;
+                    ins.run(fileId, i, chunks[i], blob, vec ? space : null, now);
+                }
+            });
+            txn();
+        } catch (e) {
+            console.warn('[ModeHybridRetriever] persistChunks failed:', e);
+        }
+    }
+
+    /** Remove a deleted file's chunks + index state. */
+    public removeFileIndex(fileId: string): void {
+        try {
+            this.db.prepare('DELETE FROM mode_reference_chunks WHERE file_id = ?').run(fileId);
+        } catch (e) {
+            console.warn('[ModeHybridRetriever] removeFileIndex failed:', e);
+        }
+        this.removeIndexState(fileId);
+    }
+
+    /**
+     * Load persisted chunk vectors for a set of files, keyed by
+     * `${fileId}:${chunkIndex}`. Only vectors produced in `space` are returned
+     * — a space mismatch is treated as un-indexed (degrade to lexical), never
+     * compared cross-space.
+     */
+    private loadPersistedEmbeddings(fileIds: string[], space: string): Map<string, number[]> {
+        const out = new Map<string, number[]>();
+        if (fileIds.length === 0) return out;
+        try {
+            const placeholders = fileIds.map(() => '?').join(',');
+            const rows = this.db.prepare(`
+                SELECT file_id, chunk_index, embedding FROM mode_reference_chunks
+                WHERE file_id IN (${placeholders}) AND embedding IS NOT NULL AND embedding_space = ?
+            `).all(...fileIds, space) as any[];
+            for (const row of rows) {
+                const buf: Buffer = row.embedding;
+                const vec = Array.from(new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4));
+                out.set(`${row.file_id}:${row.chunk_index}`, vec);
+            }
+        } catch (e) {
+            console.warn('[ModeHybridRetriever] loadPersistedEmbeddings failed:', e);
+        }
+        return out;
     }
 
     /**
@@ -463,7 +628,7 @@ export class ModeHybridRetriever {
         // Try hybrid retrieval first, fall back to lexical-only
         if (this.isEmbeddingAvailable()) {
             try {
-                candidates = await this.performHybridRetrieval(allCandidates, queryWords, queryText, adaptiveThreshold);
+                candidates = await this.performHybridRetrieval(allCandidates, queryWords, queryText, adaptiveThreshold, files);
             } catch (error) {
                 console.warn('[ModeHybridRetriever] Hybrid retrieval failed, falling back to lexical:', error);
                 this.emitFallbackTelemetry({
@@ -526,9 +691,14 @@ export class ModeHybridRetriever {
         candidates: ChunkCandidate[],
         queryWords: Set<string>,
         queryText: string,
-        minScore: number = MIN_COMBINED_SCORE
+        minScore: number = MIN_COMBINED_SCORE,
+        files: ModeReferenceFile[] = []
     ): Promise<ChunkCandidate[]> {
-        // Embed query
+        // Embed query — the ONLY embedding round-trip on the hot path (PI v3,
+        // W3). Chunk vectors are persisted at UPLOAD time (indexFile) and
+        // loaded from SQLite below; the per-question cost is one query embed
+        // + a cosine loop, instead of the old re-embed-every-chunk JIT path
+        // that burned the latency budget on every turn.
         let queryEmbedding: number[];
         try {
             queryEmbedding = await this.embeddingPipeline.getEmbeddingForQuery(queryText);
@@ -536,61 +706,65 @@ export class ModeHybridRetriever {
             throw new Error('Query embedding failed: ' + error);
         }
 
-        // Embed all chunks via the provider's batch endpoint. Providers with
-        // a native batch API (OpenAI, Gemini) return all embeddings in one
-        // round-trip; providers without (local Whisper) implement batch as
-        // Promise.all(embed) so we still get concurrency. Either way this
-        // replaces the previous sequential `for await` loop that did one
-        // network round-trip per chunk — historically the dominant cost on
-        // cold-start (~150ms × N chunks for OpenAI). See FINDING-003.
-        const chunkTexts = candidates.map(c => c.text);
-        let chunkEmbeddings: number[][];
+        const activeSpace = this.embeddingPipeline.getActiveSpaceKey?.() ?? null;
+        const fileIds = [...new Set(candidates.map(c => c.sourceId))];
+        // Space identity gate: vectors are only comparable within the same
+        // composite space — a provider/model/dims change makes stored vectors
+        // unusable (NEVER cross-compare; cosine across spaces is semantically
+        // random). Mismatched/missing vectors fall through to the ephemeral
+        // embed below and re-indexing is scheduled in the background.
+        const persisted = activeSpace ? this.loadPersistedEmbeddings(fileIds, activeSpace) : new Map<string, number[]>();
 
-        try {
-            if (typeof (this.embeddingPipeline as any).getEmbeddings === 'function') {
-                chunkEmbeddings = await (this.embeddingPipeline as any).getEmbeddings(chunkTexts);
-            } else {
-                // Backwards compat for older test/mocked pipelines that only
-                // implement getEmbedding. Run them in parallel rather than
-                // sequentially so we still avoid the per-chunk serial cost.
-                chunkEmbeddings = await Promise.all(
-                    chunkTexts.map(text => this.embeddingPipeline.getEmbedding(text))
-                );
+        // Chunks WITHOUT a usable persisted vector (cold DB, brand-new upload,
+        // provider/space change) keep the pre-W3 behavior: batch-embed them
+        // ephemerally for THIS query so semantic matching never regresses.
+        // Once upload-time indexing lands (kicked below), this list is empty
+        // and the hot path is one query embed + a cosine loop.
+        const missing = candidates.filter(c => !persisted.has(`${c.sourceId}:${c.chunkIndex}`));
+        const ephemeral = new Map<string, number[]>();
+        if (missing.length > 0) {
+            const missingTexts = missing.map(c => c.text);
+            try {
+                let vecs: number[][];
+                if (typeof (this.embeddingPipeline as any).getEmbeddings === 'function') {
+                    vecs = await (this.embeddingPipeline as any).getEmbeddings(missingTexts);
+                } else {
+                    // Backwards compat for older test/mocked pipelines that only
+                    // implement getEmbedding — run in parallel (FINDING-003).
+                    vecs = await Promise.all(missingTexts.map(text => this.embeddingPipeline.getEmbedding(text)));
+                }
+                if (Array.isArray(vecs) && vecs.length === missingTexts.length) {
+                    missing.forEach((c, i) => { if (vecs[i]) ephemeral.set(`${c.sourceId}:${c.chunkIndex}`, vecs[i]); });
+                } else {
+                    console.warn(`[ModeHybridRetriever] Batch embed returned ${vecs?.length ?? 'undefined'} vectors for ${missingTexts.length} chunks; vector path will be partially lexical-only.`);
+                }
+            } catch (error) {
+                // Graceful degradation: missing-vector chunks score FTS-only
+                // for this query (same contract as the old batch-embed failure
+                // path — FINDING-003).
+                console.warn(`[ModeHybridRetriever] Batch embed failed (${error instanceof Error ? error.message : String(error)}); degrading to lexical-only for un-indexed chunks.`);
             }
-            // Defensive: provider must return the same number of vectors as
-            // texts we passed in. Mismatch means a buggy provider — fall
-            // through to a lexical-only path by leaving chunkEmbeddings
-            // sparse and letting computeVectorScore handle the gap.
-            if (!Array.isArray(chunkEmbeddings) || chunkEmbeddings.length !== chunkTexts.length) {
-                console.warn(`[ModeHybridRetriever] Batch embed returned ${chunkEmbeddings?.length ?? 'undefined'} vectors for ${chunkTexts.length} chunks; vector path will be partially lexical-only.`);
-                chunkEmbeddings = chunkEmbeddings ?? [];
+
+            // Schedule (fire-and-forget) persistence so the NEXT question is a
+            // pure index lookup. Never awaited — no added hot-path latency.
+            if (activeSpace) {
+                const missingFileIds = new Set(missing.map(c => c.sourceId));
+                for (const file of files) {
+                    if (missingFileIds.has(file.id) && file.content?.trim()) {
+                        this.indexFile(file).catch(() => { /* logged inside */ });
+                    }
+                }
             }
-        } catch (error) {
-            // Pre-FIX-003 the sequential loop swallowed one bad chunk and
-            // carried on. The batch path's "all or nothing" semantics turned
-            // that into a hard failure that bubbled up to retrieve() and
-            // dropped the entire mode to lexical-only. Restore the previous
-            // graceful-degradation contract: log + treat as a fully-empty
-            // embedding set so each chunk's vectorScore is 0, then let FTS
-            // carry the relevance signal. See FINDING-003 in BUGFIX_LOG.
-            console.warn(`[ModeHybridRetriever] Batch embed failed (${error instanceof Error ? error.message : String(error)}); degrading to lexical-only for this query.`);
-            chunkEmbeddings = [];
         }
 
-        // Compute combined scores
+        // Compute combined scores from persisted or ephemeral vectors.
         const scored: ChunkCandidate[] = [];
-        for (let i = 0; i < candidates.length; i++) {
-            const candidate = candidates[i];
+        for (const candidate of candidates) {
+            const key = `${candidate.sourceId}:${candidate.chunkIndex}`;
             const ftsScore = this.computeFtsScore(candidate.text, queryWords);
-            const vectorScore = chunkEmbeddings[i]
-                ? this.computeVectorScore(queryEmbedding, chunkEmbeddings[i])
-                : 0;
-
-            scored.push({
-                ...candidate,
-                ftsScore,
-                vectorScore
-            });
+            const vec = persisted.get(key) ?? ephemeral.get(key);
+            const vectorScore = vec ? this.computeVectorScore(queryEmbedding, vec) : 0;
+            scored.push({ ...candidate, ftsScore, vectorScore });
         }
 
         // Filter by minimum combined score (adaptive — see retrieve()).
@@ -736,14 +910,16 @@ export class ModeHybridRetriever {
         const stats = new Map<string, ModeReferenceIndexState>();
         try {
             const rows = this.db.prepare(
-                'SELECT file_id, file_hash, indexed_at, chunk_count FROM mode_reference_index_state'
+                'SELECT file_id, file_hash, indexed_at, chunk_count, status, embedding_space FROM mode_reference_index_state'
             ).all() as any[];
             for (const row of rows) {
                 stats.set(row.file_id, {
                     fileId: row.file_id,
                     fileHash: row.file_hash,
                     indexedAt: row.indexed_at,
-                    chunkCount: row.chunk_count
+                    chunkCount: row.chunk_count,
+                    status: (row.status as ModeReferenceIndexStatus) || 'pending',
+                    embeddingSpace: row.embedding_space ?? null,
                 });
             }
         } catch (e) {

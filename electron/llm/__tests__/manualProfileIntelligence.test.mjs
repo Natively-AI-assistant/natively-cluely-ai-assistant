@@ -51,10 +51,13 @@ describe('manual Profile Intelligence deterministic fast path', () => {
     assert.ok(result.excludedContextLayers.includes('assistant_identity'));
   });
 
-  test('MANUAL-PI-EXPERIENCE-001: second-person experience question means candidate experience', () => {
+  test('MANUAL-PI-EXPERIENCE-001: a "your experiences" question (asking the CANDIDATE) answers in FIRST person', () => {
+    // Manual regression fix 2026-06-08: "your experiences" addresses the candidate, so
+    // a profile-loaded manual answer is first-person candidate voice ("My experience…"),
+    // not "Your experience…". (A "my experiences" self-query stays second-person.)
     const result = fast('what are your experiences?');
     assert.ok(result);
-    assert.match(result.answer, /Your experience includes/i);
+    assert.match(result.answer, /My experience includes/i);
     assert.match(result.answer, /Acme Analytics/);
     assert.match(result.answer, /Data Analyst/);
     assert.match(result.answer, /Northstar Labs/);
@@ -62,10 +65,10 @@ describe('manual Profile Intelligence deterministic fast path', () => {
     assert.equal(result.providerUsed, false);
   });
 
-  test('MANUAL-PI-PROJECTS-001: second-person projects question means candidate projects', () => {
+  test('MANUAL-PI-PROJECTS-001: a "projects you have done" question answers in FIRST person', () => {
     const result = fast('what all projects have you done?');
     assert.ok(result);
-    assert.match(result.answer, /Your projects include/i);
+    assert.match(result.answer, /My projects include/i);
     assert.match(result.answer, /Revenue Forecasting/);
     assert.match(result.answer, /Churn Dashboard/);
     assert.doesNotMatch(result.answer, /Natively|AI assistant/i);
@@ -129,10 +132,25 @@ describe('manual Profile Intelligence deterministic fast path', () => {
     assert.equal(result.answer, 'My name is Evin John.');
   });
 
-  test('ASSISTANT-IDENTITY-001/002: assistant identity is not hijacked by profile facts', () => {
-    for (const question of ['who are you?', 'what is Natively?', 'what is your name?', "what's your name?", 'who made you?']) {
+  test('GENUINE assistant-meta still bails to the assistant (not hijacked by profile)', () => {
+    // Release 2026-06-06b: narrowed to TRUE assistant-meta — what-is-Natively,
+    // who-built-you, are-you-an-AI/model. These legitimately address the app.
+    for (const question of ['what is Natively?', 'who made you?', 'are you an AI?', 'what model do you use?', 'are you a bot?']) {
       assert.equal(isAssistantIdentityQuestion(question), true, `${question} should be assistant identity`);
       assert.equal(fast(question), null, `${question} must not use candidate profile facts`);
+    }
+  });
+
+  test('identity asks ("who are you", "what is your name") now answer AS the candidate (2026-06-06b)', () => {
+    // In an interview-prep product with a loaded profile, "who are you" / "what is
+    // your name" are the candidate's identity questions and must be answered as the
+    // candidate (real manual-chat log: they leaked "I'm Natively, an AI assistant").
+    for (const question of ['who are you?', 'what is your name?', "what's your name?"]) {
+      assert.equal(isAssistantIdentityQuestion(question), false, `${question} is now a candidate identity ask`);
+      const r = fast(question);
+      assert.ok(r, `${question} should fast-path to a candidate answer`);
+      assert.match(r.answer, /Evin John/, `${question} answers with the loaded candidate name`);
+      assert.doesNotMatch(r.answer, /Natively|AI assistant/i, `${question} must NOT leak the assistant identity`);
     }
   });
 

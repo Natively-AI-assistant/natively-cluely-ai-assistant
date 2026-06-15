@@ -257,6 +257,7 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                       onToggle={handleScrToggle}
                       reduced={reduced}
                       isLight={isLight}
+                      relaunchHintWhenDenied
                     />
                   )}
                   <PermItem
@@ -494,6 +495,7 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
 // ─── Single permission item with toggle ───────────────────────
 function PermItem({
   icon: Icon, label, description, status, platform, onToggle, reduced, isLight,
+  relaunchHintWhenDenied,
 }: {
   icon:        React.ElementType;
   label:       string;
@@ -503,10 +505,17 @@ function PermItem({
   onToggle?:   () => void;
   reduced:     boolean;
   isLight:     boolean;
+  relaunchHintWhenDenied?: boolean;
 }) {
   const isGranted = status === 'granted';
   const isDenied  = status === 'denied' || status === 'restricted';
   const isLoading = status === 'loading' || status === 'not-determined';
+  // macOS reads the Screen Recording grant at process launch: re-enabling it in
+  // System Settings does NOT apply to the running app, so a previously-denied
+  // user must relaunch. The mic grant DOES take effect live, so no hint there.
+  const deniedHint = relaunchHintWhenDenied
+    ? 'Re-enable in Settings, then restart'
+    : 'Re-enable in Settings';
 
   const t1 = isLight ? '#1C1C1E' : '#FFFFFF';
   const t3 = isLight ? 'rgba(28, 28, 30, 0.48)' : 'rgba(255, 255, 255, 0.44)';
@@ -542,7 +551,7 @@ function PermItem({
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: '13.5px', fontWeight: 580, color: t1, letterSpacing: '-0.01em' }}>{label}</div>
         <div style={{ fontSize: '11.5px', color: t3, marginTop: '2px' }}>
-          {platform !== 'darwin' ? description : isGranted ? 'Access granted' : isDenied ? 'Re-enable in Settings' : description}
+          {platform !== 'darwin' ? description : isGranted ? 'Access granted' : isDenied ? deniedHint : description}
         </div>
       </div>
 

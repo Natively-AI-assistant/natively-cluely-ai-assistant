@@ -27,18 +27,43 @@ const ACKNOWLEDGEMENTS = new Set([
  * Clean a single turn's text
  * Removes fillers, acknowledgements, and cleans up formatting
  */
+// Filler/acknowledgement tokens that are ALSO meaningful as mid-sentence content
+// words (adjectives / verbs / prepositions). These must only be stripped as
+// LEADING/TRAILING discourse markers, never from the middle of a sentence —
+// otherwise "why are you the RIGHT person" → "why are you the person" (which then
+// fails JD-fit routing), "do you LIKE Python" loses "like", "is that ALL RIGHT"
+// loses meaning. (release 2026-06-06 WTA benchmark: wta_jdfit_083 false refusal.)
+const CONTENT_AMBIGUOUS = new Set([
+    'right', 'like', 'well', 'so', 'sure', 'great', 'nice', 'perfect', 'cool',
+    'all right', 'alright', 'yes', 'no',
+]);
+
 function cleanText(text: string): string {
     let result = text.toLowerCase().trim();
 
     // Remove repeated words (yeah yeah, okay okay)
     result = result.replace(/\b(\w+)(\s+\1)+\b/gi, '$1');
 
-    // Split into words and filter
+    // Split into words and filter. A filler/acknowledgement word is dropped
+    // UNCONDITIONALLY only when it's unambiguous noise (um, uh, hmm, gotcha). A
+    // CONTENT-AMBIGUOUS token (right, like, well, …) is dropped ONLY when it sits
+    // at the START or END of the turn (a discourse marker), never mid-sentence
+    // where it carries meaning.
     const words = result.split(/\s+/);
-    const cleaned = words.filter(word => {
-        const normalized = word.replace(/[.,!?;:]/g, '');
-        return !FILLER_WORDS.has(normalized) &&
-            !ACKNOWLEDGEMENTS.has(normalized);
+    const norm = (w: string) => w.replace(/[.,!?;:]/g, '');
+    const isFiller = (w: string) => FILLER_WORDS.has(w) || ACKNOWLEDGEMENTS.has(w);
+    // Find the first and last indices that are NOT a leading/trailing filler run.
+    let start = 0, end = words.length - 1;
+    while (start <= end && isFiller(norm(words[start]))) start++;
+    while (end >= start && isFiller(norm(words[end]))) end--;
+    const cleaned = words.filter((word, i) => {
+        const normalized = norm(word);
+        if (!isFiller(normalized)) return true;
+        // Inside the meaningful span: keep content-ambiguous tokens (right/like/…);
+        // still drop pure noise (um/uh/hmm/basically) even mid-sentence.
+        if (i > start && i < end) return CONTENT_AMBIGUOUS.has(normalized);
+        // Leading/trailing filler run → drop.
+        return false;
     });
 
     // Reconstruct

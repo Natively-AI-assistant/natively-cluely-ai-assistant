@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Natively Page Context</title>
+    <style>
+      :root {
+        color-scheme: dark;
+
+        /* Canvas + surfaces (real Natively app tokens) */
+        --bg:        #1E1E21;   /* popup body — app --bg-main */
+        --surface:   #242429;   /* cards — app --bg-card */
+        --surface-2: #27272A;   /* inputs / inset wells — app --bg-item-surface */
+        --logo-navy: #0C1430;   /* logo tile backdrop, matches emblem */
+
+        /* Borders — near-invisible; surface contrast does the work */
+        --border:      #333333;                  /* app --border-muted */
+        --border-hair: rgba(255, 255, 255, 0.06);
+
+        /* Text */
+        --text:   #FFFFFF;
+        --text-2: #A0A0A0;
+        --text-3: #606060;
+
+        /* Accent (blue) — primary action + focus only */
+        --accent:       #3b82f6;
+        --accent-600:   #2563EB;
+        --accent-ring:  rgba(59, 130, 246, 0.45);
+
+        /* Status dot semantics */
+        --green:      #22C55E;
+        --green-glow: rgba(34, 197, 94, 0.55);
+        --amber:      #F59E0B;
+        --red:        #EF4444;
+
+        /* Msg line */
+        --ok:   #4ADE80;
+        --warn: #FBBF24;
+        --err:  #F87171;
+
+        --ease: cubic-bezier(0.22, 1, 0.36, 1);
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        width: 320px;
+        margin: 0;
+        padding: 16px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        font-size: 13px;
+        line-height: 1.45;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ── Brand row ─────────────────────────────────────────── */
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+      .logo {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        flex: 0 0 auto;
+        background: var(--logo-navy);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.10),
+          0 1px 3px rgba(0, 0, 0, 0.45),
+          0 0 0 1px rgba(255, 255, 255, 0.05);
+      }
+      .brand-text { display: flex; flex-direction: column; line-height: 1.15; }
+      .wordmark {
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        color: var(--text);
+      }
+      .product {
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.01em;
+        color: var(--text-2);
+        margin-top: 1px;
+      }
+
+      /* ── Status row ────────────────────────────────────────── */
+      .status-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--text-3);
+        flex: 0 0 auto;
+        transition: background 0.25s var(--ease), box-shadow 0.25s var(--ease);
+      }
+      .dot.green {
+        background: var(--green);
+        box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18), 0 0 6px var(--green-glow);
+      }
+      .dot.amber { background: var(--amber); box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.16); }
+      .dot.red   { background: var(--red);   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.16); }
+      .status-text { font-size: 12px; color: var(--text-2); }
+
+      /* ── Cards ─────────────────────────────────────────────── */
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border-hair);
+        border-radius: 14px;
+        padding: 14px;
+        margin-bottom: 10px;
+      }
+      /* Active card gets the one allowed top-light gradient (faux-glass depth). */
+      #pairCard,
+      #captureCard {
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0) 64%),
+          var(--surface);
+      }
+
+      /* ── Buttons ───────────────────────────────────────────── */
+      button {
+        width: 100%;
+        height: 40px;
+        padding: 0 12px;
+        border: none;
+        border-radius: 10px;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: -0.005em;
+        cursor: pointer;
+        transition: background 0.15s var(--ease), transform 0.08s var(--ease),
+          box-shadow 0.15s var(--ease), opacity 0.15s var(--ease);
+      }
+      button.primary {
+        background: var(--accent-600);
+        color: #fff;
+        box-shadow: 0 1px 0 rgba(255, 255, 255, 0.10) inset, 0 1px 3px rgba(0, 0, 0, 0.35);
+      }
+      button.primary:hover { background: var(--accent); }
+      button.primary:active { transform: translateY(1px); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4); }
+      button.primary:disabled {
+        background: rgba(30, 58, 138, 0.30);
+        color: rgba(96, 165, 250, 0.40);
+        box-shadow: none;
+        cursor: default;
+        transform: none;
+      }
+      button.ghost {
+        background: transparent;
+        color: var(--text-2);
+        border: 1px solid var(--border);
+        height: 36px;
+        font-weight: 500;
+        box-shadow: none;
+      }
+      button.ghost:hover { background: rgba(255, 255, 255, 0.04); color: var(--text); border-color: #404040; }
+      button.ghost:active { transform: translateY(1px); }
+
+      /* ── Input / details / hints ───────────────────────────── */
+      label {
+        display: block;
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--text-3);
+        margin: 8px 0 5px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      input {
+        width: 100%;
+        height: 36px;
+        padding: 0 10px;
+        border-radius: 9px;
+        border: 1px solid var(--border);
+        background: var(--surface-2);
+        color: var(--text);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+        transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease),
+          background 0.15s var(--ease);
+      }
+      input::placeholder { color: var(--text-3); }
+      input:focus {
+        outline: none;
+        border-color: var(--accent);
+        background: #1E1E22;
+        box-shadow: 0 0 0 3px var(--accent-ring);
+      }
+
+      details { margin-top: 10px; }
+      summary {
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--text-2);
+        cursor: pointer;
+        list-style: none;
+        padding: 4px 0;
+        user-select: none;
+        transition: color 0.15s var(--ease);
+      }
+      summary:hover { color: var(--text); }
+      summary::-webkit-details-marker { display: none; }
+      summary::before {
+        content: '▸';
+        display: inline-block;
+        margin-right: 6px;
+        color: var(--text-3);
+        transition: transform 0.18s var(--ease);
+      }
+      details[open] summary::before { transform: rotate(90deg); }
+
+      .mt { margin-top: 8px; }
+      .hint { font-size: 11px; color: var(--text-2); margin-top: 10px; line-height: 1.5; }
+      .hint strong { color: var(--text); font-weight: 600; }
+
+      kbd {
+        display: inline-block;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-radius: 6px;
+        padding: 2px 6px;
+        font-size: 10px;
+        font-weight: 600;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        color: var(--text);
+        box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+        line-height: 1;
+      }
+
+      .msg { font-size: 11px; margin-top: 10px; line-height: 1.45; min-height: 14px; }
+      .msg.ok { color: var(--ok); }
+      .msg.err { color: var(--err); }
+      .msg.warn { color: var(--warn); }
+      .hidden { display: none; }
+
+      /* ── Accessibility ─────────────────────────────────────── */
+      :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 10px; }
+      button:focus-visible { outline-offset: 3px; }
+      @media (prefers-reduced-motion: reduce) {
+        * { transition: none !important; }
+        .dot.green { box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18); }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="brand">
+      <img class="logo" src="icons/icon_128x128.png" alt="" width="30" height="30" />
+      <div class="brand-text">
+        <span class="wordmark">Natively</span>
+        <span class="product">Page Context</span>
+      </div>
+    </header>
+
+    <div class="status-row">
+      <span id="dot" class="dot"></span>
+      <span id="statusText" class="status-text">Checking…</span>
+    </div>
+
+    <!-- Pairing (shown when unpaired or re-pair needed) -->
+    <div id="pairCard" class="card hidden">
+      <button id="connectBtn" class="primary">Connect to Natively</button>
+      <div class="hint">
+        In Natively → Settings → Phone Mirror → Browser Extension, click
+        <strong>Connect browser extension</strong>, then press this within 60s.
+      </div>
+      <details class="mt">
+        <summary>Pair manually instead</summary>
+        <label for="pairInput">Pairing string (port:token)</label>
+        <input id="pairInput" type="text" placeholder="4123:AbC123…" autocomplete="off" spellcheck="false" />
+        <button id="pairBtn" class="ghost mt">Pair</button>
+      </details>
+    </div>
+
+    <!-- Capture (shown when paired) -->
+    <div id="captureCard" class="card hidden">
+      <button id="captureBtn" class="primary">Capture this page</button>
+      <button id="unpairBtn" class="ghost mt">Unpair</button>
+      <div class="hint">Hotkey: <kbd>Ctrl/⌘+Shift+Y</kbd>. Capture pushes once per press.</div>
+    </div>
+
+    <div id="msg" class="msg"></div>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

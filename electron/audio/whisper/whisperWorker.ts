@@ -16,6 +16,7 @@
  */
 import { parentPort } from 'worker_threads';
 import { isEnglishOnlyModel, resolveWhisperLanguage } from './language';
+import { WhisperProgressAggregator } from './whisperProgressAggregator';
 
 let pipe: any = null;
 let loadedModelId = '';
@@ -126,55 +127,69 @@ parentPort.on('message', async (msg: any) => {
 
       console.log(`[WhisperWorker] Loading ${msg.modelId} | providers=${providers.join(',')} | dtype=${dtypeDesc}`);
 
+      // DIAGNOSTICS (2026-06-13): the model files load fine in isolation (raw ORT +
+      // transformers, both in system node), yet the live worker can fail with
+      // "Protobuf parsing failed". Log the exact runtime view so the failing GUI run
+      // prints precisely WHY — cacheDir, resolved file paths + sizes, ORT backend, and
+      // the ORT version transformers actually bound. Cheap, init-only (not per-token).
+      try {
+        const _fs = require('fs');
+        const _path = require('path');
+        const _orgName = String(msg.modelId).split('/');
+        const _modelDir = _path.join(String(msg.cacheDir), _orgName[0] || '', _orgName[1] || '', 'onnx');
+        const _encName = typeof dtype === 'string' && dtype !== 'fp32' ? `encoder_model_${dtype}.onnx` : 'encoder_model.onnx';
+        const _decName = typeof dtype === 'string' && dtype !== 'fp32' ? `decoder_model_merged_${dtype}.onnx` : 'decoder_model_merged.onnx';
+        const _stat = (p: string) => { try { return _fs.statSync(p).size; } catch { return -1; } };
+        let _ortVer = 'unknown';
+        try { _ortVer = require('onnxruntime-node/package.json').version; } catch { /* bundled? */ }
+        console.log('[WhisperWorker][diag]', JSON.stringify({
+          cacheDir: String(msg.cacheDir),
+          modelDir: _modelDir,
+          modelDirExists: _fs.existsSync(_modelDir),
+          encoderFile: _encName, encoderBytes: _stat(_path.join(_modelDir, _encName)),
+          decoderFile: _decName, decoderBytes: _stat(_path.join(_modelDir, _decName)),
+          providers, dtype: dtypeDesc,
+          ortNodeVersion: _ortVer,
+          ortBackend: (env.backends?.onnx ? Object.keys(env.backends.onnx) : []),
+          execEnv: { execPath: process.execPath, nodeVer: process.version, modules: process.versions.modules, electron: process.versions.electron || 'n/a' },
+        }));
+      } catch (diagErr: any) {
+        console.log('[WhisperWorker][diag] diagnostics failed (non-fatal):', diagErr?.message);
+      }
+
       // HF Transformers fires progress_callback per *file* (encoder, decoder,
       // tokenizer, config…). The raw `data.progress` is per-file 0..100, which
       // makes a model-level bar bounce around (3 → 2 → 100 → 5 → …) as files
-      // start, complete, and new ones enter the stream.
+      // start, complete, and new ones enter the stream. The byte-weighted
+      // aggregation that turns those per-file events into a smooth model-level
+      // percentage lives in whisperProgressAggregator.ts (pure + unit-tested);
+      // see that file for the full rationale on why count-averaging produced
+      // the old "jumps to ~80% then stalls" bug.
       //
-      // Strategy: register every file we ever see in a Map, keep its value
-      // monotonic per file (0 on initiate, latest pct on progress, 100 on done),
-      // and report the AVERAGE across the map. Capped at 99 so the bar never
-      // hits 100 before the IPC 'complete' signal — that boundary is owned by
-      // the 'ready' message below.
-      const fileProgress = new Map<string, number>();
-      let lastPostedPct = 0;
+      // expectedBytes = catalog download size, the denominator from byte zero.
+      // 0 when unknown / lookup failed → the aggregator falls back to observed
+      // file totals. The constructor sanitizes any non-finite/negative value.
+      const aggregator = new WhisperProgressAggregator(Number(msg.expectedBytes));
+      // External-data format: forwarded only when the catalog declares it (for
+      // checkpoints whose config.json omits it, e.g. Whisper Large v3 Turbo).
+      // When undefined, transformers falls back to the model's own config —
+      // preserving prior behaviour for every self-declaring model. Without this
+      // the sibling `*.onnx_data` weight file is never fetched and ORT aborts:
+      // "filesystem error: in file_size: ... encoder_model.onnx_data".
+      const useExternalDataFormat: boolean | Record<string, boolean> | undefined =
+        msg.useExternalDataFormat;
       pipe = await pipeline('automatic-speech-recognition', msg.modelId, {
         dtype,
+        ...(useExternalDataFormat !== undefined
+          ? { use_external_data_format: useExternalDataFormat }
+          : {}),
         progress_callback: (data: any) => {
-          const key: string | undefined = data.file ?? data.name;
-          if (!key) return;
-          let val: number | null = null;
-          if (data.status === 'initiate' || data.status === 'download' || data.status === 'downloading') {
-            if (!fileProgress.has(key)) val = 0;
-          } else if (data.status === 'progress') {
-            const p = Number(data.progress);
-            if (!Number.isNaN(p)) val = Math.min(100, Math.max(0, p));
-          } else if (data.status === 'done') {
-            val = 100;
-          } else {
-            return;
-          }
-          if (val !== null) {
-            const prev = fileProgress.get(key) ?? 0;
-            // Per-file monotonic: each file's progress only goes up.
-            fileProgress.set(key, Math.max(prev, val));
-          }
-          if (fileProgress.size === 0) return;
-          let sum = 0;
-          for (const v of fileProgress.values()) sum += v;
-          const avg = sum / fileProgress.size;
-          // Cap at 99 — only the 'ready' completion event sets 100. Floor so
-          // we don't post 0.7 → 1 → 1 → 1.4 → 2 churn.
-          const rounded = Math.min(99, Math.floor(avg));
-          // Cross-file safety net: don't decrease (e.g. when a brand-new file
-          // joins the map at 0% it shouldn't drag the bar backwards).
-          const next = Math.max(lastPostedPct, rounded);
-          if (next === lastPostedPct) return;
-          lastPostedPct = next;
+          const { pct } = aggregator.update(data);
+          if (pct === null) return;
           parentPort!.postMessage({
             type: 'progress',
             modelId: msg.modelId,
-            progress: next,
+            progress: pct,
           });
         },
       });
@@ -186,6 +201,19 @@ parentPort.on('message', async (msg: any) => {
 
       parentPort!.postMessage({ type: 'ready' });
     } catch (e: any) {
+      // Full failure dump (2026-06-13 diag): the error message alone ("Protobuf
+      // parsing failed") doesn't say WHICH file or WHY. Log the full error, stack,
+      // and any ORT-specific cause so the failing GUI run is self-diagnosing.
+      try {
+        console.error('[WhisperWorker][diag] MODEL LOAD FAILED:', {
+          modelId: msg.modelId,
+          message: e?.message,
+          name: e?.name,
+          code: e?.code,
+          cause: e?.cause ? String(e.cause).slice(0, 300) : undefined,
+          stackHead: String(e?.stack || '').split('\n').slice(0, 5).join(' | '),
+        });
+      } catch { /* noop */ }
       parentPort!.postMessage({
         type: 'error',
         message: `Failed to load model: ${e.message}`,

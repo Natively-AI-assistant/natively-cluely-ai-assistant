@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { app } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import http from 'http';
 import os from 'os';
 import QRCode from 'qrcode';
@@ -7,6 +7,7 @@ import { URL } from 'url';
 import { WebSocket, WebSocketServer } from 'ws';
 import { SettingsManager } from './SettingsManager';
 import { PHONE_MIRROR_HTML } from './phoneMirrorClient';
+import { DOM_CONTEXT_MAX_CHARS } from '../config/constants';
 
 export interface PhoneMirrorInfo {
   running: boolean;
@@ -365,13 +366,90 @@ export class PhoneMirrorService {
       res.end('Too many requests');
       return;
     }
+
     const fullUrl = new URL(req.url || '/', 'http://localhost');
+    const requestOrigin = req.headers.origin || '';
+    // Enforce strict 32-character [a-p] Chrome extension ID structure to prevent generic extension spoofing
+    const originMatch = requestOrigin.match(/^chrome-extension:\/\/([a-p]{32})$/);
+    const allowedOrigin = originMatch ? requestOrigin : '';
+
+    // CORS preflight options check for /dom route specifically
+    if (req.method === 'OPTIONS' && fullUrl.pathname === '/dom') {
+      const headers: Record<string, string> = {
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      };
+      if (allowedOrigin) {
+        headers['Access-Control-Allow-Origin'] = allowedOrigin;
+      }
+      res.writeHead(204, headers);
+      res.end();
+      return;
+    }
+
     const provided = fullUrl.searchParams.get('t');
 
     // Health endpoint — minimal info, never reveals token or DB paths.
     if (fullUrl.pathname === '/healthz') {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify({ ok: true, clients: this.wss ? this.wss.clients.size : 0 }));
+      return;
+    }
+
+    // Cross-process companion extension DOM context bridge
+    if (fullUrl.pathname === '/dom') {
+      if (req.method !== 'POST') {
+        const headers: Record<string, string> = { 'Content-Type': 'text/plain' };
+        if (allowedOrigin) headers['Access-Control-Allow-Origin'] = allowedOrigin;
+        res.writeHead(405, headers);
+        res.end('Method Not Allowed');
+        return;
+      }
+
+      if (!provided || !timingSafeEqualStr(provided, this.token)) {
+        const headers: Record<string, string> = { 'Content-Type': 'text/plain' };
+        if (allowedOrigin) headers['Access-Control-Allow-Origin'] = allowedOrigin;
+        res.writeHead(401, headers);
+        res.end('Pairing token missing or invalid.');
+        return;
+      }
+
+      let body = '';
+      let limitExceeded = false;
+      req.on('data', (chunk) => {
+        if (limitExceeded) return;
+        body += chunk;
+        if (body.length > 500000) {
+          limitExceeded = true;
+          const headers: Record<string, string> = { 'Content-Type': 'text/plain' };
+          if (allowedOrigin) headers['Access-Control-Allow-Origin'] = allowedOrigin;
+          res.writeHead(413, headers);
+          res.end('Payload Too Large');
+          req.socket.destroy();
+        }
+      });
+      req.on('end', () => {
+        if (limitExceeded) return;
+        try {
+          const parsed = JSON.parse(body);
+          if (parsed && typeof parsed.dom === 'string') {
+            const cappedDom = parsed.dom.substring(0, DOM_CONTEXT_MAX_CHARS);
+            const targetWin = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows().find((w: any) => !w.isDestroyed());
+            if (targetWin) {
+              targetWin.webContents.send('dom-context-received', cappedDom);
+            }
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (allowedOrigin) headers['Access-Control-Allow-Origin'] = allowedOrigin;
+            res.writeHead(200, headers);
+            res.end(JSON.stringify({ success: true }));
+            return;
+          }
+        } catch (_) {}
+        const headers: Record<string, string> = { 'Content-Type': 'text/plain' };
+        if (allowedOrigin) headers['Access-Control-Allow-Origin'] = allowedOrigin;
+        res.writeHead(400, headers);
+        res.end('Bad Request');
+      });
       return;
     }
 

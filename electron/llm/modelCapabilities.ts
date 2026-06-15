@@ -171,6 +171,68 @@ export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
+// Per-model max output (completion) token ceiling for the OpenAI Chat Completions
+// API. OpenAI rejects max_completion_tokens above a model's documented limit with
+// a 400 "max_tokens is too large" error (see issue #298: gpt-4o caps output at
+// 16384, so the global 65536 default failed on the very first request).
+//
+// Documented output caps (OpenAI docs, 2026-06):
+//   gpt-5 / 5.1 / 5.2 / 5.4 / 5.5 (+ -mini/-nano) → 128000
+//   o1 / o3 / o4 (+ -mini/-pro)                   → 100000
+//   gpt-4.1 (+ -mini)                             → 32768
+//   gpt-4o (+ -mini)                              → 16384
+//   gpt-4-turbo / gpt-4-vision / gpt-3.5-turbo    → 4096
+//   bare gpt-4 / 32k variants                     → 8192
+//   unknown OpenAI-compatible id                  → 16384 (conservative)
+// Every model gets an explicit cap so a future bump to the requested default
+// can't silently reintroduce the 400 on gpt-5.x / o-series.
+export function getOpenAiMaxOutput(modelId: string, requested: number): number {
+  const id = (modelId || '').toLowerCase();
+  let cap: number;
+  if (/\bgpt-5/.test(id)) cap = 128000; // gpt-5.x family
+  else if (/\bo[1-9]\b/.test(id) || /\bo[1-9]-/.test(id)) cap = 100000; // o1/o3/o4 reasoners
+  else if (id.startsWith('gpt-4.1')) cap = 32768;
+  else if (id.startsWith('gpt-4o')) cap = 16384;
+  else if (id.startsWith('gpt-4-turbo') || id.startsWith('gpt-4-1106') || id.startsWith('gpt-4-0125') || id.startsWith('gpt-4-vision')) cap = 4096;
+  else if (id.startsWith('gpt-3.5')) cap = 4096;
+  else if (id.startsWith('gpt-4')) cap = 8192; // bare gpt-4 / 32k variants cap at 8192
+  else cap = 16384; // unknown OpenAI-compatible id — conservative but usable default
+  return Math.min(requested, cap);
+}
+
+export type OpenAiReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+
+// Lowest-latency *valid* reasoning_effort for an OpenAI reasoning model, or null
+// for non-reasoning models (gpt-4*, gpt-3.5) that reject the param entirely.
+//
+// The supported set differs per family and OpenAI dropped `minimal` after the
+// original gpt-5 line (see issue: gpt-5.4/5.5 reject `minimal` with a 400). We
+// pick a low-latency level the model actually accepts so TTFT stays low:
+//   - original gpt-5 / -mini / -nano      → minimal   (none not supported)
+//   - gpt-5.1 / 5.2 / 5.4 / 5.5 (chat)    → low       (minimal removed; low keeps light reasoning)
+//   - gpt-5-codex / gpt-5.x-codex         → low       (neither none nor minimal supported)
+//   - gpt-5-pro                           → high      (only high is accepted)
+//   - o1 / o3 / o4 (and -mini/-pro)       → low       (only low/medium/high)
+// Anything else (gpt-4*, custom proxies)  → null      (omit the param).
+export function getOpenAiReasoningEffort(modelId: string): OpenAiReasoningEffort | null {
+  const id = (modelId || '').toLowerCase();
+
+  // o-series reasoners: low/medium/high only.
+  if (/\bo[1-9]\b/.test(id) || /\bo[1-9]-/.test(id)) return 'low';
+
+  if (/\bgpt-5/.test(id)) {
+    if (id.includes('gpt-5-pro') || id.includes('gpt-5.1-pro') || id.includes('gpt-5.2-pro')) return 'high'; // pro: high only
+    if (id.includes('codex')) return 'low'; // codex variants: no none/minimal
+    // Original gpt-5 / gpt-5-mini / gpt-5-nano (NOT 5.1+) keep `minimal`.
+    if (/\bgpt-5(-mini|-nano)?(\b|-20)/.test(id) && !/\bgpt-5\.\d/.test(id)) return 'minimal';
+    // gpt-5.1 / 5.2 / 5.4 / 5.5 and chat-latest: `minimal` removed; use `low`.
+    return 'low';
+  }
+
+  // gpt-4*, gpt-3.5, unknown — not a reasoning model; omit the param.
+  return null;
+}
+
 // Drop oldest turns until the joined transcript fits the token budget. Most recent turns are preserved.
 export function truncateTranscriptToFit(
   transcript: TranscriptTurn[],

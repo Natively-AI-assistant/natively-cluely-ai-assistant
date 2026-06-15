@@ -24,7 +24,10 @@ export interface Driver {
   source: string;
   /** File extension (no dot). */
   ext: string;
-  /** Interpreter argv[0] for local runs (undefined for cloud-only langs). */
+  /** Interpreter token for local runs (undefined for cloud-only langs).
+   *  `'python3'` is a CANONICAL marker, not the literal command: localRunner
+   *  resolves the real Python interpreter per-platform at run time (python3 on
+   *  POSIX; python/py on Windows). `'node'` is spawned verbatim everywhere. */
   localCmd?: 'python3' | 'node';
 }
 

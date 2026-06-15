@@ -22,6 +22,15 @@ export type TelemetryEventName =
   | 'stt_final_latency'
   | 'stt_reconnect'
   | 'stt_error'
+  // ── Regional STT relay (Phase 7/8) — never carry token/key/transcript text.
+  // Properties are metadata only (region, url-kind, close code, latency bucket).
+  | 'relay_session_resolved'
+  | 'relay_selected'
+  | 'relay_connected'
+  | 'relay_failed'
+  | 'relay_fallback_used'
+  | 'first_transcript_latency_bucket'
+  | 'stt_relay_disabled_flag_off'
   | 'rag_query'
   | 'rag_hit'
   | 'rag_miss'
@@ -71,6 +80,23 @@ export interface TelemetrySinkConfig {
   enabled: boolean;
   endpoint?: string;
   projectId?: string;
+  /**
+   * Credential for the sink. NEVER logged or echoed; used only to authenticate
+   * the outbound POST. PostHog: project API key. Sentry: full DSN. Axiom: token
+   * (with `dataset` set). Absent → the sink is treated as unconfigured (silently
+   * skipped) even if `enabled` is true.
+   */
+  apiKey?: string;
+  /** Sentry only: full DSN (preferred over apiKey when name === 'sentry'). */
+  dsn?: string;
+  /** Axiom only: dataset name (paired with `apiKey` = token). */
+  dataset?: string;
+  /** Optional stable, already-hashed distinct id for PostHog (never a raw key/email). */
+  distinctId?: string;
+  /** Release/version tag for Sentry events. */
+  release?: string;
+  /** Environment tag (e.g. 'production'). */
+  environment?: string;
 }
 
 export interface TelemetryConfig {
@@ -300,11 +326,114 @@ export class TelemetryService {
 
       for (const sink of this.sinks) {
         if (!sink.enabled || sink.name === 'local-jsonl') continue;
-        // Placeholder for future SDK-backed sinks. Intentionally no-op to avoid dependencies
-        // and to preserve local-only default telemetry behavior.
+        // Fire-and-forget remote dispatch. Each sender is fully guarded and
+        // returns immediately — telemetry must never block or break the app.
+        this.dispatchToSink(sink, record);
       }
     } catch {
       // Telemetry must never break app behavior.
+    }
+  }
+
+  /**
+   * Send one record to a remote sink. Dependency-free (raw fetch), non-blocking
+   * (3s timeout, swallowed rejections), no-op when the sink lacks a credential.
+   * NEVER ships a raw key/token — the record's properties are already sanitized;
+   * the sink credential authenticates the transport only.
+   */
+  private dispatchToSink(sink: TelemetrySinkConfig, record: TelemetryRecord): void {
+    try {
+      const f: typeof fetch | undefined = (globalThis as { fetch?: typeof fetch }).fetch;
+      if (typeof f !== 'function') return;
+
+      const post = (url: string, opts: RequestInit) => {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 3000);
+          f(url, { ...opts, signal: controller.signal })
+            .catch(() => {})
+            .finally(() => clearTimeout(timer));
+        } catch {
+          // never throw
+        }
+      };
+
+      if (sink.name === 'posthog') {
+        const apiKey = sink.apiKey;
+        if (!apiKey) return; // unconfigured
+        const host = (sink.endpoint || 'https://app.posthog.com').replace(/\/$/, '');
+        post(`${host}/capture/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            api_key: apiKey,
+            event: record.name,
+            distinct_id: sink.distinctId || 'natively-desktop',
+            properties: {
+              ...record.properties,
+              ...(record.sessionId ? { session_id: record.sessionId } : {}),
+              ...(record.modeId ? { mode_id: record.modeId } : {}),
+              ...(record.provider ? { provider: record.provider } : {}),
+              ...(typeof record.durationMs === 'number' ? { duration_ms: record.durationMs } : {}),
+              ...(record.status ? { status: record.status } : {}),
+              $lib: 'natively-desktop',
+            },
+            timestamp: record.timestamp,
+          }),
+        });
+        return;
+      }
+
+      if (sink.name === 'axiom') {
+        const token = sink.apiKey;
+        const dataset = sink.dataset || sink.endpoint;
+        if (!token || !dataset) return;
+        post(`https://api.axiom.co/v1/datasets/${encodeURIComponent(dataset)}/ingest`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify([{ _time: record.timestamp, kind: record.name, source: 'desktop', ...record.properties,
+            ...(record.sessionId ? { session_id: record.sessionId } : {}),
+            ...(record.provider ? { provider: record.provider } : {}),
+            ...(typeof record.durationMs === 'number' ? { duration_ms: record.durationMs } : {}),
+            ...(record.status ? { status: record.status } : {}) }]),
+        });
+        return;
+      }
+
+      if (sink.name === 'sentry') {
+        // Only ERROR-ish events go to Sentry — it's not an analytics sink. We
+        // forward records whose status looks like a failure or whose name marks
+        // an error/crash; everything else is skipped (analytics belongs in
+        // PostHog/Axiom).
+        const looksError = record.status === 'error' || record.status === 'failed'
+          || /error|fail|crash|reject/i.test(record.name);
+        if (!looksError) return;
+        const parsed = parseClientSentryDsn(sink.dsn || sink.apiKey);
+        if (!parsed) return;
+        const eventId = randomClientHex32();
+        const event = {
+          event_id: eventId,
+          timestamp: record.timestamp,
+          platform: 'node',
+          level: 'error',
+          logger: 'natively-desktop',
+          release: sink.release || 'unknown',
+          environment: sink.environment || 'production',
+          tags: { service: 'natively-desktop', event: record.name, ...(record.provider ? { provider: record.provider } : {}) },
+          extra: { ...record.properties, ...(record.status ? { status: record.status } : {}) },
+          message: { formatted: `desktop:${record.name}${record.status ? ` (${record.status})` : ''}` },
+        };
+        const header = JSON.stringify({ event_id: eventId, sent_at: record.timestamp, dsn: parsed.dsn });
+        const itemHeader = JSON.stringify({ type: 'event' });
+        post(parsed.envelopeUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-sentry-envelope', 'X-Sentry-Auth': parsed.authHeader },
+          body: `${header}\n${itemHeader}\n${JSON.stringify(event)}\n`,
+        });
+        return;
+      }
+    } catch {
+      // never throw from telemetry dispatch
     }
   }
 
@@ -363,6 +492,35 @@ function redactString(value: string): string {
     redacted = redacted.replace(pattern, REDACTED);
   }
   return redacted;
+}
+
+// ── Client Sentry helpers (raw-HTTP envelope; no @sentry/electron dependency) ──
+
+interface ParsedSentryDsn { dsn: string; envelopeUrl: string; authHeader: string }
+
+/** Parse a Sentry DSN into ingest URL + auth header. Returns null if absent/invalid. */
+export function parseClientSentryDsn(dsn: string | undefined): ParsedSentryDsn | null {
+  if (!dsn || typeof dsn !== 'string') return null;
+  try {
+    const u = new URL(dsn);
+    const publicKey = u.username;
+    const projectId = u.pathname.replace(/^\//, '');
+    if (!publicKey || !projectId) return null;
+    return {
+      dsn,
+      envelopeUrl: `${u.protocol}//${u.host}/api/${projectId}/envelope/`,
+      authHeader: `Sentry sentry_version=7, sentry_client=natively-desktop/1.0, sentry_key=${publicKey}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** 32-hex event id, dependency-free (no node:crypto import needed in the renderer-safe path). */
+function randomClientHex32(): string {
+  let s = '';
+  for (let i = 0; i < 32; i++) s += Math.floor(Math.random() * 16).toString(16);
+  return s;
 }
 
 export const telemetryService = new TelemetryService();

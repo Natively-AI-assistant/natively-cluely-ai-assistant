@@ -21,11 +21,31 @@ export const LIVE_FIRST_USEFUL_BUDGET_MS = {
   very_hard: 3500,
 } as const;
 
-/** Hard cap on the FIRST useful token from the provider before we abort. */
-export const LIVE_PROVIDER_FIRST_USEFUL_HARD_TIMEOUT_MS = 3500;
-/** Looser first-useful cap for genuinely complex answers (coding/system-design). */
-export const LIVE_PROVIDER_FIRST_USEFUL_COMPLEX_TIMEOUT_MS = 5000;
-/** Absolute ceiling on a live answer's first-useful token. Nothing waits past this. */
+/**
+ * Hard cap on the FIRST useful token from the provider before we abort.
+ *
+ * 7000ms, NOT 3500ms. MiniMax (the strong fallback when the Gemini chain is down —
+ * see natively-api lib/minimaxProvider.js) has a 4-6s first-token latency; a 3500ms
+ * cap aborted every MiniMax stream before it produced a token, so the fallback could
+ * never serve a live answer. Raising the cap is near-free on healthy responses: this
+ * deadline only FIRES when a provider is genuinely slow to first-token — a healthy
+ * Gemini/Groq still streams its first token in <1s and never reaches the cap, whether
+ * it's set to 3.5s or 7s. The cost is paid only in the narrow window where a provider
+ * takes 3.5-7s AND aborting to the next fallback would have been faster — rare, since
+ * MiniMax IS the next strong fallback.
+ */
+export const LIVE_PROVIDER_FIRST_USEFUL_HARD_TIMEOUT_MS = 7000;
+/**
+ * First-useful cap for genuinely complex answers (coding/system-design). Equal to the
+ * standard cap now that both must clear MiniMax's 4-6s first-token; kept as a separate
+ * symbol so the two can diverge again without touching call sites.
+ */
+export const LIVE_PROVIDER_FIRST_USEFUL_COMPLEX_TIMEOUT_MS = 7000;
+/**
+ * Absolute ceiling on a live answer's first-useful token (the no-fallback budget).
+ * Sits just above the 7s first-useful cap so a MiniMax stream about to deliver at
+ * ~6.5s isn't guillotined by this ceiling.
+ */
 export const LIVE_TOTAL_HARD_TIMEOUT_MS = 8000;
 /**
  * After the first useful token has streamed, a long answer (coding scaffold +

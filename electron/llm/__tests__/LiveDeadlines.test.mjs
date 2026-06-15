@@ -110,10 +110,12 @@ describe('Issue 1: live-deadline harness aborts stalled providers', () => {
   });
 
   test('firstUsefulDeadlineMs uses the complex cap for coding/system-design', () => {
-    assert.equal(firstUsefulDeadlineMs('coding_question_answer'), 5000);
-    assert.equal(firstUsefulDeadlineMs('system_design_answer'), 5000);
+    // Caps must exceed MiniMax's 4-6s first-token (it's the strong fallback when the
+    // Gemini chain is down) or the live driver aborts MiniMax before it ever speaks.
+    assert.equal(firstUsefulDeadlineMs('coding_question_answer'), 7000);
+    assert.equal(firstUsefulDeadlineMs('system_design_answer'), 7000);
     assert.equal(firstUsefulDeadlineMs('identity_answer'), LIVE_PROVIDER_FIRST_USEFUL_HARD_TIMEOUT_MS);
-    assert.equal(firstUsefulDeadlineMs('jd_fit_answer'), 3500);
+    assert.equal(firstUsefulDeadlineMs('jd_fit_answer'), 7000);
   });
 
   // The single most important safety test: a hung provider that REJECTS after the

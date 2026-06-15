@@ -227,6 +227,10 @@ function stripMarkdown(text: string): string {
     // Remove inline code (`text`) - keep content
     result = result.replace(/`([^`]+)`/g, "$1");
 
+    // Remove EMPTY bullet lines first ("*", "* ", "-", "•" with no content) —
+    // the old regex required trailing whitespace+content so a lone "*" survived
+    // to the UI as an orphan bullet (manual regression 2026-06-12).
+    result = result.replace(/^[\s]*[-*•]+[\s]*$/gm, "");
     // Remove bullet points (-, *, •)
     result = result.replace(/^[\s]*[-*•]\s+/gm, "");
 

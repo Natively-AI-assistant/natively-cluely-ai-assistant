@@ -121,9 +121,14 @@ export class LiveRAGIndexer {
 
             // 5. Embed each chunk (fire-and-forget per chunk, but sequential to avoid rate limits)
             if (this.embeddingPipeline.isReady()) {
+                // Foreground gate (manual regression 2026-06-12): yield to any
+                // in-flight manual/WTA answer between chunk embeds — storeEmbedding
+                // is a synchronous DB write that otherwise contends with answers.
+                const { ForegroundGate } = require('../services/ForegroundGate') as typeof import('../services/ForegroundGate');
                 let embeddedCount = 0;
                 for (let i = 0; i < chunkIds.length; i++) {
                     try {
+                        await ForegroundGate.waitUntilIdle();
                         const embedding = await this.embeddingPipeline.getEmbedding(indexedChunks[i].text);
                         this.vectorStore.storeEmbedding(chunkIds[i], embedding);
                         embeddedCount++;

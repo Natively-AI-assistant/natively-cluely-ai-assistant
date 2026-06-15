@@ -65,6 +65,8 @@ interface ElectronAPI {
   setOpenaiApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setClaudeApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setDeepseekApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
+  setLitellmConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number }) => Promise<{ success: boolean; error?: string }>;
+  getAvailableLiteLLMModels: () => Promise<string[]>;
   setNativelyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   getNativelyPricing: () => Promise<{
     ok: boolean;
@@ -177,6 +179,18 @@ interface ElectronAPI {
   ) => Promise<{ success: boolean; error?: string }>;
   localWhisperGetModels: () => Promise<{ models: any[]; activeModelId: string }>;
   localWhisperSetModel: (modelId: string) => Promise<{ success: boolean }>;
+  localWhisperGetChannelConfig: () => Promise<{
+    enabled: boolean;
+    micModelId: string;
+    systemModelId: string;
+    globalModelId: string;
+  }>;
+  localWhisperSetChannelConfig: (cfg: {
+    enabled?: boolean;
+    micModelId?: string;
+    systemModelId?: string;
+    globalModelId?: string;
+  }) => Promise<{ success: boolean; error?: string }>;
   localWhisperDeleteModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
   localWhisperStartDownload: (modelId: string) => Promise<{ success: boolean; error?: string }>;
   onLocalWhisperDownloadProgress: (
@@ -288,7 +302,7 @@ interface ElectronAPI {
   generateWhatToSay: (
     question?: string,
     imagePaths?: string[],
-    options?: { promptInstruction?: string },
+    options?: { promptInstruction?: string; domContext?: string },
   ) => Promise<{
     answer: string | null;
     question?: string;
@@ -331,6 +345,15 @@ interface ElectronAPI {
     Array<{ id: string; title: string; date: string; duration: string; summary: string }>
   >;
   getMeetingDetails: (id: string) => Promise<any>;
+  searchGlobalMeetings: (query: string, filters?: any) => Promise<{ enabled: boolean; results: any[] }>;
+  searchInMeeting: (query: string) => Promise<{ enabled: boolean; results: any[] }>;
+  generateLectureNotes: (opts?: { title?: string; course?: string }) => Promise<{ enabled: boolean; notes: any }>;
+  generateDiagram: (text?: string) => Promise<{ enabled: boolean; diagram: any }>;
+  getIntelligenceFlags: () => Promise<Array<{ key: string; enabled: boolean; setting: string; env: string; default: boolean }>>;
+  setIntelligenceFlag: (key: string, value: boolean | null) => Promise<{ success: boolean; enabled?: boolean; error?: string }>;
+  getHindsightConfig: () => Promise<{ baseUrl: string; hasApiKey: boolean; autoStart: boolean; serverCommand: string; llmProvider: string; available: boolean }>;
+  setHindsightConfig: (cfg: { baseUrl?: string; apiKey?: string; autoStart?: boolean; serverCommand?: string; llmProvider?: string }) => Promise<{ success: boolean; healthy?: boolean; error?: string }>;
+  testHindsightConnection: () => Promise<{ healthy: boolean; error?: string }>;
   updateMeetingTitle: (id: string, title: string) => Promise<boolean>;
   updateMeetingSummary: (
     id: string,
@@ -485,6 +508,10 @@ interface ElectronAPI {
   setOverlayMousePassthrough: (enabled: boolean) => Promise<{ success: boolean }>;
   toggleOverlayMousePassthrough: () => Promise<{ success: boolean; enabled: boolean }>;
   getOverlayMousePassthrough: () => Promise<boolean>;
+  // Hover-gated click-through: true when the pointer is over the painted panel,
+  // false when over the fixed-width overlay's transparent margins (so clicks
+  // pass through to the app behind). Only affects interactive (non-stealth) mode.
+  setOverlayInteractiveRegion: (overContent: boolean) => Promise<{ success: boolean }>;
   onOverlayMousePassthroughChanged: (callback: (enabled: boolean) => void) => () => void;
 
   // Streaming listeners
@@ -795,6 +822,10 @@ interface ElectronAPI {
     modeId: string,
   ) => Promise<{ success: boolean; cancelled?: boolean; file?: any; error?: string }>;
   modesDeleteReferenceFile: (id: string) => Promise<{ success: boolean; error?: string }>;
+  modesGetReferenceFileStatus: (
+    modeId: string,
+  ) => Promise<{ success: boolean; statuses?: Array<{ fileId: string; fileName: string; status: string; chunkCount: number }>; error?: string }>;
+  onModeFileIndexStatus: (callback: (data: { modeId: string; fileId?: string }) => void) => () => void;
   modesGetNoteSections: (modeId: string) => Promise<
     Array<{
       id: string;
@@ -832,6 +863,7 @@ interface ElectronAPI {
   // because a subsequent question's first token has to wait for the prior
   // response to drain through the supersession check.
   cancelChatStream: () => void;
+  onDomContextReceived: (callback: (dom: string) => void) => () => void;
 }
 
 export const PROCESSING_EVENTS = {
@@ -1029,6 +1061,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('set-overlay-mouse-passthrough', enabled),
   toggleOverlayMousePassthrough: () => ipcRenderer.invoke('toggle-overlay-mouse-passthrough'),
   getOverlayMousePassthrough: () => ipcRenderer.invoke('get-overlay-mouse-passthrough'),
+  setOverlayInteractiveRegion: (overContent: boolean) =>
+    ipcRenderer.invoke('set-overlay-interactive-region', overContent),
   setOpenAtLogin: (open: boolean) => ipcRenderer.invoke('set-open-at-login', open),
   getOpenAtLogin: () => ipcRenderer.invoke('get-open-at-login'),
   setDisguise: (mode: 'terminal' | 'settings' | 'activity' | 'none') =>
@@ -1104,6 +1138,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setOpenaiApiKey: (apiKey: string) => ipcRenderer.invoke('set-openai-api-key', apiKey),
   setClaudeApiKey: (apiKey: string) => ipcRenderer.invoke('set-claude-api-key', apiKey),
   setDeepseekApiKey: (apiKey: string) => ipcRenderer.invoke('set-deepseek-api-key', apiKey),
+  setLitellmConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number }) => ipcRenderer.invoke('set-litellm-config', config),
+  getAvailableLiteLLMModels: () => ipcRenderer.invoke('get-available-litellm-models'),
   setNativelyApiKey: (apiKey: string) => ipcRenderer.invoke('set-natively-api-key', apiKey),
   getNativelyPricing: () => ipcRenderer.invoke('get-natively-pricing'),
   getNativelyUsage: () => ipcRenderer.invoke('get-natively-usage'),
@@ -1162,6 +1198,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSttRuntimeStatus: () => ipcRenderer.invoke('stt-runtime-status'),
   localWhisperGetModels: () => ipcRenderer.invoke('local-whisper-get-models'),
   localWhisperSetModel: (modelId: string) => ipcRenderer.invoke('local-whisper-set-model', modelId),
+  localWhisperGetChannelConfig: () => ipcRenderer.invoke('local-whisper-get-channel-config'),
+  localWhisperSetChannelConfig: (cfg: {
+    enabled?: boolean;
+    micModelId?: string;
+    systemModelId?: string;
+    globalModelId?: string;
+  }) => ipcRenderer.invoke('local-whisper-set-channel-config', cfg),
   localWhisperDeleteModel: (modelId: string) =>
     ipcRenderer.invoke('local-whisper-delete-model', modelId),
   localWhisperStartDownload: (modelId: string) =>
@@ -1346,7 +1389,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   generateWhatToSay: (
     question?: string,
     imagePaths?: string[],
-    options?: { promptInstruction?: string },
+    options?: { promptInstruction?: string; domContext?: string },
   ) => ipcRenderer.invoke('generate-what-to-say', question, imagePaths, options),
   generateClarify: () => ipcRenderer.invoke('generate-clarify'),
   generateCodeHint: (imagePaths?: string[], problemStatement?: string) =>
@@ -1396,6 +1439,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   finalizeMicSTT: () => ipcRenderer.invoke('finalize-mic-stt'),
   getRecentMeetings: () => ipcRenderer.invoke('get-recent-meetings'),
   getMeetingDetails: (id: string) => ipcRenderer.invoke('get-meeting-details', id),
+  searchGlobalMeetings: (query: string, filters?: any) => ipcRenderer.invoke('search:global-meetings', { query, filters }),
+  searchInMeeting: (query: string) => ipcRenderer.invoke('search:in-meeting', { query }),
+  generateLectureNotes: (opts?: { title?: string; course?: string }) => ipcRenderer.invoke('lecture:generate-notes', opts),
+  generateDiagram: (text?: string) => ipcRenderer.invoke('diagram:generate', { text }),
+  getIntelligenceFlags: () => ipcRenderer.invoke('intelligence-flags:get'),
+  setIntelligenceFlag: (key: string, value: boolean | null) => ipcRenderer.invoke('intelligence-flags:set', { key, value }),
+  getHindsightConfig: () => ipcRenderer.invoke('hindsight-config:get'),
+  setHindsightConfig: (cfg: { baseUrl?: string; apiKey?: string; autoStart?: boolean; serverCommand?: string; llmProvider?: string }) => ipcRenderer.invoke('hindsight-config:set', cfg),
+  testHindsightConnection: () => ipcRenderer.invoke('hindsight-config:test'),
   updateMeetingTitle: (id: string, title: string) =>
     ipcRenderer.invoke('update-meeting-title', { id, title }),
   updateMeetingSummary: (id: string, updates: any) =>
@@ -2120,6 +2172,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   modesUploadReferenceFile: (modeId: string) =>
     ipcRenderer.invoke('modes:upload-reference-file', modeId),
   modesDeleteReferenceFile: (id: string) => ipcRenderer.invoke('modes:delete-reference-file', id),
+  modesGetReferenceFileStatus: (modeId: string) =>
+    ipcRenderer.invoke('modes:get-reference-file-status', modeId),
+  onModeFileIndexStatus: (callback: (data: { modeId: string; fileId?: string }) => void) => {
+    const subscription = (_: any, data: { modeId: string; fileId?: string }) => callback(data);
+    ipcRenderer.on('mode-file-index-status', subscription);
+    return () => {
+      ipcRenderer.removeListener('mode-file-index-status', subscription);
+    };
+  },
   modesGetNoteSections: (modeId: string) => ipcRenderer.invoke('modes:get-note-sections', modeId),
   modesAddNoteSection: (modeId: string, title: string, description: string) =>
     ipcRenderer.invoke('modes:add-note-section', modeId, title, description),
@@ -2144,6 +2205,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Cancel the in-flight chat stream. See ElectronAPI interface for rationale.
   cancelChatStream: () => {
     ipcRenderer.send('gemini-chat-stream-stop');
+  },
+  onDomContextReceived: (callback: (dom: string) => void) => {
+    const subscription = (_: any, dom: string) => callback(dom);
+    ipcRenderer.on('dom-context-received', subscription);
+    return () => {
+      ipcRenderer.removeListener('dom-context-received', subscription);
+    };
   },
 } as ElectronAPI);
 

@@ -1,7 +1,10 @@
 // electron/llm/__tests__/UnknownFallthrough.test.mjs
 // Issue 8: unknown_answer fallthroughs must be rare (<5 on the 300 dataset). Bare
-// follow-up fragments route to follow_up_answer (resolved with context live);
-// voice/evidence-control directives route to follow_up; "confidence" → skill.
+// follow-up fragments route to a concrete candidate type when they carry signal
+// (a named skill / work noun / voice-control directive — release 2026-06-06
+// Issues 4/5/6/7); only TRULY context-free fragments ("what about data?") stay on
+// the follow_up floor. "confidence" → skill. Whatever the concrete type, NONE of
+// these is ever unknown_answer (the property this suite guards).
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -12,13 +15,19 @@ const plan = (q) => planAnswer({ question: q, source: 'manual_input', speakerPer
 
 describe('Issue 8: bare follow-ups and control directives are not unknown', () => {
   for (const [q, expected] of [
+    // Pure-signal-less fragments stay on the follow_up floor (resolved live).
     ['Why?', 'follow_up_answer'], ['How so?', 'follow_up_answer'],
-    ['And what about SQL?', 'follow_up_answer'], ['What about data?', 'follow_up_answer'],
-    ['Hmm right, and Python?', 'follow_up_answer'], ['What about stakeholders?', 'follow_up_answer'],
-    ['Answer like a candidate, not like an assistant.', 'follow_up_answer'],
-    ['Say what I should say, but in my voice.', 'follow_up_answer'],
-    ['If no metric is there, answer without fake metric.', 'follow_up_answer'],
-    ['Make it sound confident but don\'t lie.', 'follow_up_answer'],
+    ['What about data?', 'follow_up_answer'],
+    // Signal-bearing fragments now resolve to a concrete type even standalone
+    // (release 2026-06-06): a named skill / work noun → skill_experience;
+    // voice/evidence-control directives → a candidate answer by embedded cue.
+    ['And what about SQL?', 'skill_experience_answer'],
+    ['Hmm right, and Python?', 'skill_experience_answer'],
+    ['What about stakeholders?', 'skill_experience_answer'],
+    ['Answer like a candidate, not like an assistant.', 'experience_answer'],
+    ['Say what I should say, but in my voice.', 'experience_answer'],
+    ['If no metric is there, answer without fake metric.', 'project_answer'],
+    ['Make it sound confident but don\'t lie.', 'jd_fit_answer'],
     ['What is your confidence?', 'skill_experience_answer'],
     ['How do you compare with competitors?', 'sales_answer'],
     ['Compare your product to competitors.', 'sales_answer'],

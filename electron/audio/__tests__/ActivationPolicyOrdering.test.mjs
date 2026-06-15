@@ -79,3 +79,39 @@ test('non-stealth cold launch stays on accessory until the disguised window is p
     'BUG: post-window promotion must be gated on darwin && !undetectable so stealth mode never promotes to regular.',
   );
 });
+
+test('runtime setDisguise brackets the rename in accessory→regular and restores focus', () => {
+  // The runtime disguise switch performs the SAME app.setName()/setProcessDisplayName()
+  // LaunchServices re-registration as startup; on the already-foregrounded app it must
+  // (a) drop to accessory before the rename and promote back to regular after (no 2nd
+  // dock tile), and (b) restore key-window focus, because the activation-policy churn
+  // deactivates the app and AppKit does not auto-restore focus on the way back to
+  // regular — without the restore, a live disguise switch hands control to the app
+  // behind Natively.
+  const body = extractIfElseBlock('public setDisguise(');
+
+  // Ordering: accessory ... _applyDisguise(mode) ... regular
+  const accIdx = body.search(/setActivationPolicy\s*\(\s*['"]accessory['"]\s*\)/);
+  const applyIdx = body.indexOf('_applyDisguise(mode)');
+  const regIdx = body.search(/setActivationPolicy\s*\(\s*['"]regular['"]\s*\)/);
+  assert.ok(accIdx >= 0, 'BUG: runtime setDisguise must drop to accessory before the rename.');
+  assert.ok(applyIdx >= 0, 'sanity: setDisguise must call _applyDisguise(mode).');
+  assert.ok(regIdx >= 0, 'BUG: runtime setDisguise must promote back to regular after the rename.');
+  assert.ok(accIdx < applyIdx, 'BUG: accessory clamp must precede _applyDisguise().');
+  assert.ok(applyIdx < regIdx, 'BUG: regular promotion must follow _applyDisguise().');
+
+  // The bracket must be gated so stealth (undetectable) never promotes to regular.
+  assert.ok(
+    /!\s*this\.isUndetectable/.test(body),
+    'BUG: runtime bracket must be gated on !this.isUndetectable so stealth stays dock-hidden.',
+  );
+
+  // Focus restore: a .focus() call must exist AFTER the regular promotion so the
+  // live disguise switch does not drop Natively behind the previously-active app.
+  const afterPromotion = body.slice(regIdx);
+  assert.ok(
+    /\.focus\s*\(\s*\)/.test(afterPromotion),
+    'BUG: runtime setDisguise must restore window focus after promoting back to regular, ' +
+    'otherwise the activation-policy churn hands key-window to the app behind Natively.',
+  );
+});

@@ -82,3 +82,4 @@ describe('GeminiPromptCache.getCachedOrWarmInBackground', () => {
     assert.equal(cache.getCachedOrWarmInBackground(client, 'm', BIG_PROMPT), null);
   });
 });
+

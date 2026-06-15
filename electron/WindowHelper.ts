@@ -46,18 +46,40 @@ export class WindowHelper {
   private appState: AppState;
   private contentProtection: boolean = false;
   private opacityTimeout: NodeJS.Timeout | null = null;
+  private lastLauncherShowInactive: boolean | null = null;
+
+  // Hover-gated click-through state. Because the fixed-width (780) overlay
+  // window is WIDER than its painted panel when collapsed (600), the ~90px
+  // transparent side-margins must pass clicks through to the app behind rather
+  // than capturing dead clicks. The renderer hit-tests the pointer against the
+  // painted content rect and sets this flag: true = pointer over the painted
+  // panel/pill (window must capture), false = pointer over a transparent margin
+  // (window must pass through). This ONLY applies in INTERACTIVE mode — when the
+  // master stealth passthrough (overlayMousePassthrough) is on, the window is
+  // fully click-through regardless of hover. Default true so the window is
+  // interactive before the renderer's first hit-test report arrives.
+  private overlayHoverInteractive: boolean = true;
 
   // Constants
-  // MUST equal the renderer's SHELL_WIDTH_COLLAPSED (NativelyInterface.tsx).
-  // The overlay window is shown at this width and the shell mounts at the same
-  // width (centered via mx-auto). If this is wider than the shell (it was 780
-  // vs the shell's 600), the first size-report shrinks the window to 600 and
-  // re-centers it — and because the native resize lands a frame before the
-  // renderer repaints at the new width, the old wider framebuffer (shell offset
-  // +90px right) is briefly shown in the moved window, producing a visible
-  // sideways slide on every meeting start. Keeping them equal means no
-  // first-paint resize, so the overlay appears already at its final position.
-  private static readonly OVERLAY_DEFAULT_WIDTH = 600;
+  // FIXED OVERLAY WINDOW WIDTH — the OS window is BORN at this width, SHOWN at
+  // this width, and NEVER width-resized for the lifetime of the overlay. It
+  // MUST equal the renderer's SHELL_WIDTH_EXPANDED (NativelyInterface.tsx).
+  //
+  // WHY FIXED (the third-and-final fix for the resize jump/flicker): the panel
+  // animates 600↔780 purely in CSS, centered (mx-auto) inside this fixed 780
+  // window. Because the OS window width never changes, its X origin never moves
+  // — and the entire jump/flicker class of bugs was caused by a programmatic
+  // width setBounds shifting X mid-animation while the renderer's repaint lagged
+  // a frame behind (Chromium does not sync setBounds to renderer paint on
+  // macOS). With a fixed width there is no width setBounds at all, so:
+  //   • TopPill (centered in the fixed window) is pixel-stable.
+  //   • No per-frame transparent-blur-window re-raster → zero flicker.
+  // The startup-slide invariant still holds: window-created-width === shown-width
+  // (both 780), so the first paint already sits at its final origin. When the
+  // shell is collapsed (600 in a 780 window) the ~90px side margins are
+  // transparent and made CLICK-THROUGH by the hover-gated interaction policy
+  // (see setOverlayHoverInteractive / syncOverlayInteractionPolicy).
+  private static readonly OVERLAY_DEFAULT_WIDTH = 780;
   private static readonly OVERLAY_MIN_HEIGHT = 216;
   // Vertical offset for the meeting overlay's initial position, expressed as
   // a fraction of the screen's work-area height. 0.035 places the top edge
@@ -235,6 +257,16 @@ export class WindowHelper {
     });
   }
 
+  // NOTE: the overlay window is a FIXED WIDTH (OVERLAY_DEFAULT_WIDTH = 780) for
+  // its entire visible lifetime. The expand/contract animation is CSS-only in
+  // the renderer (the panel tweens 600↔780 centered inside the fixed window).
+  // The renderer therefore only ever reports `width: 780` to
+  // setOverlayDimensionsCentered, so the width delta is always 0, X never moves,
+  // and only HEIGHT ever changes (content/streaming growth). A height-only
+  // setBounds is top-anchored and does not move X, so it cannot cause the
+  // sideways jump. See NativelyInterface.startTransition (CSS-only) for the
+  // renderer side of this contract.
+
   public createWindow(): void {
     if (this.launcherWindow !== null) return; // Already created
 
@@ -278,7 +310,10 @@ export class WindowHelper {
         : {}),
       transparent: isMac,
       hasShadow: true,
-      backgroundColor: isMac ? '#00000000' : '#000000',
+      // The launcher starts with the black logo splash. Use a black native
+      // background too so macOS doesn't show a grey/white transparent-window
+      // flash before the renderer paints.
+      backgroundColor: '#000000',
       focusable: true,
       resizable: true,
       movable: true,
@@ -635,16 +670,41 @@ export class WindowHelper {
     }
     this.launcherWindow?.hide();
     this.overlayWindow?.hide();
+    this.lastLauncherShowInactive = null;
     this.isWindowVisible = false;
   }
 
-  // Apply or remove click-through (mouse passthrough) on the overlay window.
-  // Called whenever the passthrough state changes in AppState.
+  // Renderer-driven hit-test result: is the pointer currently over the painted
+  // panel/pill (true) or over a transparent margin / outside (false)? The
+  // renderer debounces this to state changes only, so this is low-frequency.
+  // Re-applies the combined interaction policy, but only matters in interactive
+  // mode — stealth passthrough always wins (handled in sync below).
+  public setOverlayHoverInteractive(interactive: boolean): void {
+    if (this.overlayHoverInteractive === interactive) return;
+    this.overlayHoverInteractive = interactive;
+    this.syncOverlayInteractionPolicy();
+  }
+
+  // Apply the combined click-through (mouse passthrough) policy on the overlay
+  // window. There are TWO inputs:
+  //   1. overlayMousePassthrough (master stealth toggle): when ON the window is
+  //      ALWAYS fully click-through regardless of hover (user is in another app).
+  //   2. overlayHoverInteractive (renderer hit-test): in interactive mode, the
+  //      window captures clicks only when the pointer is over the painted panel;
+  //      over the transparent side-margins it passes clicks through so they hit
+  //      the app behind instead of being swallowed as dead clicks.
+  // Called whenever EITHER input changes.
   public syncOverlayInteractionPolicy(): void {
     if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
 
     const passthrough = this.appState.getOverlayMousePassthrough();
-    if (passthrough) {
+
+    // Click-through whenever stealth passthrough is on, OR (in interactive mode)
+    // the pointer is not over the painted content. forward:true keeps pointer
+    // events flowing to the OS layer beneath in either click-through case.
+    const ignoreMouse = passthrough || !this.overlayHoverInteractive;
+
+    if (ignoreMouse) {
       // forward: true — pointer events are still delivered to the OS layer beneath.
       // NOTE: We intentionally do NOT call setFocusable(false) here.
       //
@@ -653,15 +713,16 @@ export class WindowHelper {
       // visible window makes macOS treat the app as having NO active windows.
       // In that state, macOS may stop delivering Carbon/IOKit global hotkey
       // events to the process — silently breaking every globalShortcut binding.
-      // Keeping the window focusable costs nothing: in passthrough mode the
-      // user is in another app and will not accidentally focus the overlay.
+      // Keeping the window focusable costs nothing.
       this.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
-      console.log('[WindowHelper] Overlay mouse passthrough ON');
+      console.log(
+        `[WindowHelper] Overlay click-through ON (passthrough=${passthrough}, hoverInteractive=${this.overlayHoverInteractive})`,
+      );
     } else {
       this.overlayWindow.setIgnoreMouseEvents(false);
-      // Restore full interactivity when passthrough is turned off.
+      // Restore full interactivity when capturing clicks.
       this.overlayWindow.setFocusable(true);
-      console.log('[WindowHelper] Overlay mouse passthrough OFF');
+      console.log('[WindowHelper] Overlay click-through OFF (interactive, pointer over panel)');
     }
   }
 
@@ -827,13 +888,40 @@ export class WindowHelper {
     // Hide Launcher SECOND
     if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
       this.launcherWindow.hide();
+      this.lastLauncherShowInactive = null;
     }
   }
 
   public switchToLauncher(inactive?: boolean): void {
-    console.log(`[WindowHelper] Switching to LAUNCHER (inactive: ${!!inactive})`);
+    const requestedInactive = !!inactive;
+    console.log(`[WindowHelper] Switching to LAUNCHER (inactive: ${requestedInactive})`);
+    const wasLauncher = this.currentWindowMode === 'launcher';
     this.currentWindowMode = 'launcher';
     KeybindManager.getInstance().setMode('launcher'); // Adapted from public PR #123 — verify premium interaction
+
+    const launcherAlreadyVisible =
+      !!this.launcherWindow &&
+      !this.launcherWindow.isDestroyed() &&
+      this.launcherWindow.isVisible() &&
+      this.isWindowVisible;
+    const overlayAlreadyHidden =
+      !this.overlayWindow ||
+      this.overlayWindow.isDestroyed() ||
+      !this.overlayWindow.isVisible();
+
+    // Cold-start can call switchToLauncher twice (launcher ready-to-show plus
+    // startup convergence paths). If the launcher is already visible with the
+    // same focus semantics and the overlay is already hidden, skip repeated
+    // opacity/show/focus work so Chromium/WindowServer don't repaint mid-animation.
+    if (
+      wasLauncher &&
+      launcherAlreadyVisible &&
+      overlayAlreadyHidden &&
+      this.lastLauncherShowInactive === requestedInactive
+    ) {
+      console.log('[WindowHelper] Launcher already visible; skipping duplicate show');
+      return;
+    }
 
     // Show Launcher FIRST
     if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
@@ -859,6 +947,7 @@ export class WindowHelper {
         else this.launcherWindow.show();
         if (!inactive) this.launcherWindow.focus();
       }
+      this.lastLauncherShowInactive = requestedInactive;
       this.isWindowVisible = true;
     }
 

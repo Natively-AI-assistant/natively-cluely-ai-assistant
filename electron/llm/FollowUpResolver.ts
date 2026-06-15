@@ -40,6 +40,97 @@ export interface ResolvedFollowUp {
 
 const NONE: ResolvedFollowUp = { resolvedQuestion: '', confidence: 0, reason: 'not_a_followup' };
 
+// ── Context-free bare follow-up handling (release 2026-06-07c) ──────────────
+// A bare follow-up ("why?", "and?", "continue", "what about it?") that has NO
+// resolvable prior context must NOT fall through to unknown/general (where the LLM
+// can self-identify as "an AI assistant" or randomly dump the profile). Detect the
+// bare-fragment shape deterministically; when the caller confirms there's no prior
+// context, emit a safe, mode-appropriate CLARIFICATION request instead.
+
+/** Pure bare-follow-up fragments that carry no standalone meaning. */
+const BARE_FOLLOWUP_RE = /^(?:ok(?:ay)?,?\s*|so,?\s*|hmm,?\s*|right,?\s*|well,?\s*|and,?\s*|but,?\s*)*(?:why|why not|how so|how come|how|and|and\?|so|that|this|it|what about (?:it|that|this)|what about|continue|go on|carry on|keep going|tell me more|more|explain|expand|elaborate|can you (?:expand|elaborate|explain|go on)|go deeper|in more detail|then\??)[\s?.!]*$/i;
+
+export type FollowUpSurface = 'manual' | 'what_to_answer' | 'meeting' | 'lecture' | 'interview' | 'sales' | 'coding';
+
+/**
+ * Is `question` a bare follow-up fragment that cannot stand on its own? This is the
+ * SHAPE test only — it does NOT decide whether prior context exists (the caller
+ * knows that). Used to gate the context-free clarification fallback.
+ */
+export function isBareFollowUp(question: string): boolean {
+  const q = lc(question);
+  if (!q) return false;
+  const words = q.replace(/[?.!,]/g, '').split(/\s+/).filter(Boolean);
+  if (words.length > 6) return false; // a real, self-contained question
+  return BARE_FOLLOWUP_RE.test(q);
+}
+
+/**
+ * A safe, mode-appropriate clarification for a bare follow-up with NO resolvable
+ * prior context. NEVER says "I'm Natively / an AI assistant", never dumps profile,
+ * never refuses — it asks for the missing topic. Deterministic; no LLM.
+ */
+export function buildContextFreeClarification(surface?: FollowUpSurface): string {
+  switch (surface) {
+    case 'what_to_answer':
+      return 'I need the previous question or topic to answer that — what was just asked?';
+    case 'meeting':
+      return "I don't have enough prior meeting context to resolve that follow-up — which point do you mean?";
+    case 'lecture':
+      return 'Which part of the lecture should I expand on?';
+    case 'sales':
+      return 'Which point should I expand on — the objection, the pricing, or something else?';
+    case 'interview':
+      return 'Could you clarify which question you want me to answer?';
+    case 'coding':
+      return 'Which part of the problem or solution should I expand on?';
+    case 'manual':
+    default:
+      return 'Can you clarify what you want me to explain?';
+  }
+}
+
+/**
+ * Resolve a follow-up, returning a CLARIFICATION when it's a bare fragment with no
+ * usable prior context. This is the caller-facing wrapper around `resolveFollowUp`:
+ *   1. Try the normal single-prior-turn resolution.
+ *   2. If that fails AND the fragment is bare AND there's no prior context, return a
+ *      `context_free_clarification` result (confidence 1, a safe clarification text).
+ *   3. Otherwise return NONE (caller keeps the extractor's routing).
+ *
+ * `hasPriorContext` is whatever the caller can establish: a previous interviewer
+ * question, a last entity/skill, or a session-memory hit. When true we never emit a
+ * clarification (the normal resolver already had its chance).
+ */
+export function resolveFollowUpOrClarify(
+  ctx: FollowUpContext & { surface?: FollowUpSurface; hasPriorContext?: boolean },
+): ResolvedFollowUp & { isClarification?: boolean; clarificationText?: string } {
+  const normal = resolveFollowUp(ctx);
+  const hasPrior = ctx.hasPriorContext
+    || !!lc(ctx.previousQuestion)
+    || !!ctx.lastEntity
+    || !!ctx.lastSkill;
+  // A HIGH-confidence resolution (>=0.7) always wins — it found a concrete answer.
+  if (normal.confidence >= 0.7) return normal;
+  // No prior context + a bare fragment → clarify, even if the resolver produced a
+  // LOW-confidence guess (e.g. "what about data?" → a weak skill topic-shift). With
+  // nothing to anchor to, a clarification is safer than a guessed topic.
+  if (isBareFollowUp(ctx.latestQuestion) && !hasPrior) {
+    const clarificationText = buildContextFreeClarification(ctx.surface);
+    return {
+      resolvedQuestion: clarificationText,
+      resolvedAnswerType: 'unknown_answer',
+      confidence: 1,
+      reason: 'context_free_clarification',
+      isClarification: true,
+      clarificationText,
+    };
+  }
+  // Otherwise keep whatever the normal resolver produced (a low-confidence guess WITH
+  // prior context, or NONE).
+  return normal;
+}
+
 const EXPAND_RE = /^(?:ok(?:ay)?,?\s*|so,?\s*|hmm,?\s*|right,?\s*)*(?:why|how so|how come|can you (?:expand|elaborate|go deeper)|expand|elaborate|tell me more|go on|continue|in more detail)\b[\s?.!]*$/i;
 // "and <skill>?" / "what about <skill>?" — a topic shift to a new skill/tech.
 const TOPIC_SHIFT_RE = /\b(?:and|what about|how about|what's your|and your)\s+([a-z0-9+#.\- ]{2,30}?)\s*\??$/i;
@@ -186,6 +277,32 @@ export function resolveFollowUp(ctx: FollowUpContext): ResolvedFollowUp {
   // 3. "what about complexity?" without an EXPAND lead but after coding.
   if (/\bcomplexity\b/.test(q) && prevWasCoding(ctx)) {
     return { resolvedQuestion: `What is the time and space complexity of the previous solution?`, resolvedAnswerType: 'technical_concept_answer', confidence: 0.8, reason: 'complexity_followup' };
+  }
+
+  // 4. "where?" / "where have you used it?" after a SKILL/experience probe — asks for
+  //    concrete experience evidence for the skill on the table.
+  if (/^(?:and\s+)?where\b[\s?.!]*$|^where have (?:you|i) used (?:it|that|this)\b/.test(q) && (prevWasSkill(ctx) || ctx.lastSkill || prevWasProject(ctx))) {
+    const skill = ctx.lastSkill;
+    return {
+      resolvedQuestion: skill ? `Where have you used ${skill}?` : `Where have you applied that?`,
+      resolvedAnswerType: 'skill_experience_answer',
+      resolvedSkill: skill,
+      confidence: 0.8,
+      reason: 'where_skill_evidence',
+    };
+  }
+
+  // 5. "how are you improving it?" / "how do you improve that?" after a weakness /
+  //    behavioral turn — continues the behavioral story (self-improvement).
+  if (/^how (?:are|do) (?:you|i) (?:improv|work|address|fix|develop|get better)\w*\b/.test(q)
+    && (ctx.previousAnswerType === 'behavioral_interview_answer'
+        || /\b(weakness|struggle|challenge|difficult|conflict|fail)\b/.test(lc(ctx.previousQuestion)))) {
+    return {
+      resolvedQuestion: `How are you improving on that?`,
+      resolvedAnswerType: 'behavioral_interview_answer',
+      confidence: 0.75,
+      reason: 'behavioral_improvement_followup',
+    };
   }
 
   return NONE;

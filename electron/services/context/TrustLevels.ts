@@ -38,7 +38,7 @@
  }
 
  export interface EvidenceRef {
-     source: 'transcript' | 'screen' | 'reference' | 'meeting_history';
+     source: 'transcript' | 'screen' | 'reference' | 'meeting_history' | 'browser_dom';
      text: string;
      timestamp?: number;
      speaker?: string;

@@ -1,9 +1,24 @@
 import React, { useEffect, useState, useRef } from 'react';
 import UpdateModal from './UpdateModal';
 
+type UpdateInfo = {
+    version?: string;
+    parsedNotes?: ParsedReleaseNotes;
+};
+
+type ParsedReleaseNotes = {
+    version: string;
+    summary: string;
+    sections: Array<{ title: string; items: string[] }>;
+    fullBody?: string;
+    url?: string;
+};
+
+const LATEST_RELEASE_URL = 'https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases/latest';
+
 const UpdateBanner: React.FC = () => {
-    const [updateInfo, setUpdateInfo] = useState<any>(null);
-    const [parsedNotes, setParsedNotes] = useState<any>(null);
+    const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+    const [parsedNotes, setParsedNotes] = useState<ParsedReleaseNotes | null>(null);
     const [isVisible, setIsVisible] = useState(false);
     const [downloadProgress, setDownloadProgress] = useState(0);
     const [status, setStatus] = useState<'idle' | 'downloading' | 'ready' | 'error' | 'instructions'>('idle');
@@ -31,7 +46,7 @@ const UpdateBanner: React.FC = () => {
 
     useEffect(() => {
         // Listen for update available
-        const unsubAvailable = window.electronAPI.onUpdateAvailable((info: any) => {
+        const unsubAvailable = window.electronAPI.onUpdateAvailable((info: UpdateInfo) => {
             console.log('[UpdateBanner] Update available:', info);
             setUpdateInfo(info);
             setErrorMessage(null);
@@ -103,7 +118,7 @@ const UpdateBanner: React.FC = () => {
                 e.preventDefault();
                 console.log("[UpdateBanner] Cmd+J pressed: Triggering Instruction UI mock...");
                 setUpdateInfo({ version: '2.0.8' });
-                setParsedNotes({ summary: 'Test Update', fullBody: 'Testing', sections: [{ title: 'Notes', items: ['UI Test'] }] });
+                setParsedNotes({ version: '2.0.8', summary: 'Test Update', fullBody: 'Testing', sections: [{ title: 'Notes', items: ['UI Test'] }] });
                 setStatus('idle');
                 setIsVisible(true);
             }
@@ -128,9 +143,9 @@ const UpdateBanner: React.FC = () => {
         // surface an error) rather than sending user to a broken GitHub URL.
         if (window.electronAPI.platform === 'darwin') {
             if (!updateInfo?.version) {
-                console.warn('[UpdateBanner] No version in updateInfo — triggering in-app download instead of manual DMG URL');
-                setStatus('downloading');
-                window.electronAPI.downloadUpdate();
+                console.warn('[UpdateBanner] No version in updateInfo — opening latest GitHub release instead of in-app download');
+                window.electronAPI.openExternal(LATEST_RELEASE_URL);
+                setStatus('instructions');
                 return;
             }
             try {
@@ -144,8 +159,8 @@ const UpdateBanner: React.FC = () => {
                 setStatus('instructions');
             } catch (err) {
                 console.error("Failed to get arch", err);
-                setStatus('downloading');
-                window.electronAPI.downloadUpdate();
+                window.electronAPI.openExternal(LATEST_RELEASE_URL);
+                setStatus('instructions');
             }
         } else {
             setStatus('downloading');
@@ -173,6 +188,7 @@ const UpdateBanner: React.FC = () => {
             status={status}
             errorMessage={errorMessage}
             instructionsArch={instructionsArch}
+            canAutoUpdate={canAutoUpdate}
         />
     );
 };

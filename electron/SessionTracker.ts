@@ -366,6 +366,45 @@ export class SessionTracker {
         return this.contextItems.filter(item => item.timestamp >= cutoff);
     }
 
+    /**
+     * DURABLE context window (Intelligence OS, 2026-06-12). Unlike `getContext()`,
+     * which reads `contextItems` — hard-evicted to `contextWindowDuration` (120s) on
+     * EVERY final segment by `evictOldEntries()` — this reads `fullTranscript`, the
+     * session's persisted store that survives the 120s eviction. It exists to make
+     * genuinely long-range recall possible: a project named at minute 1 is still
+     * present at minute 62.
+     *
+     * WHY THIS METHOD EXISTS: `IntelligenceEngine.LIVE_MEMORY_WINDOW_SECONDS = 7200`
+     * fed `getContext(7200)` into the long-range follow-up memory and assumed a 2h
+     * window. But `contextItems` can never hold more than ~120s, so that path
+     * silently saw at most the last two minutes — the long-range entity it was built
+     * to recall had already been evicted. Pointing it at the durable store fixes the
+     * bug for the common case (a multi-minute session under the compaction threshold).
+     *
+     * BOUND: after a >1800-segment session `compactTranscriptIfNeeded` summarizes and
+     * evicts the OLDEST 500 raw segments into an epoch summary, so this returns only
+     * the raw segments STILL RESIDENT — a minute-1 entity in a *very* long session can
+     * still age out of the raw store into a summary. That's a far higher bar than the
+     * 120s `contextItems` eviction this fixes; for the full summary-prefixed view see
+     * `getFullSessionContext()`.
+     *
+     * @param lastSeconds Window size in seconds (default 7200 = 2h). `Infinity`
+     *   returns the entire resident transcript.
+     */
+    getDurableContext(lastSeconds: number = 7200): ContextItem[] {
+        const cutoff = Number.isFinite(lastSeconds)
+            ? Date.now() - (lastSeconds * 1000)
+            : -Infinity;
+        const out: ContextItem[] = [];
+        for (const seg of this.fullTranscript) {
+            if (seg.timestamp < cutoff) continue;
+            const text = (seg.text || '').trim();
+            if (!text) continue;
+            out.push({ role: this.mapSpeakerToRole(seg.speaker), text, timestamp: seg.timestamp });
+        }
+        return out;
+    }
+
     getLastAssistantMessage(): string | null {
         return this.lastAssistantMessage;
     }

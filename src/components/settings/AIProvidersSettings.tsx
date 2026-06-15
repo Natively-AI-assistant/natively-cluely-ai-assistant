@@ -7,6 +7,22 @@ import { ProviderCard } from './ProviderCard';
 const CODEX_SERVICE_TIERS = ['default', 'fast', 'flex'] as const;
 const CODEX_MODEL_REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh'] as const;
 
+// LiteLLM max-output-token presets — the standard per-model output budgets
+// (powers of two used across the LiteLLM model registry). '' = Auto: resolve
+// each model's real budget from the proxy's /model/info, fallback 8192.
+const LITELLM_MAX_TOKENS_OPTIONS: ModelOption[] = [
+    { id: '', name: 'Auto (per-model)' },
+    { id: '4096', name: '4,096 (4K)' },
+    { id: '8192', name: '8,192 (8K)' },
+    { id: '16384', name: '16,384 (16K)' },
+    { id: '32768', name: '32,768 (32K)' },
+    { id: '65536', name: '65,536 (64K)' },
+    { id: '131072', name: '131,072 (128K)' },
+    { id: '262144', name: '262,144 (256K)' },
+    { id: '524288', name: '524,288 (512K)' },
+    { id: '1048576', name: '1,048,576 (1M)' },
+];
+
 interface CustomProvider {
     id: string;
     name: string;
@@ -127,6 +143,13 @@ export const AIProvidersSettings: React.FC = () => {
     const [claudeApiKey, setClaudeApiKey] = useState('');
     const [deepseekApiKey, setDeepseekApiKey] = useState('');
 
+    // --- LiteLLM proxy (OpenAI-compatible gateway: baseURL + optional virtual key) ---
+    const [litellmBaseURL, setLitellmBaseURL] = useState('');
+    const [litellmApiKey, setLitellmApiKey] = useState('');
+    // Max output tokens for proxied models. '' = Auto: per-model budget from the
+    // proxy's /model/info (standard registry value), falling back to 8192.
+    const [litellmMaxTokens, setLitellmMaxTokens] = useState('');
+
     // Status
     const [savedStatus, setSavedStatus] = useState<Record<string, boolean>>({});
     const [savingStatus, setSavingStatus] = useState<Record<string, boolean>>({});
@@ -189,8 +212,13 @@ export const AIProvidersSettings: React.FC = () => {
                         openai: creds.hasOpenaiKey,
                         claude: creds.hasClaudeKey,
                         deepseek: creds.hasDeepseekKey || false,
+                        litellm: creds.hasLitellmBaseURL || false,
                         natively: creds.hasNativelyKey || false
                     });
+                    // Prefill stored LiteLLM config so re-saving doesn't silently reset it.
+                    // (baseURL is config, not a secret; the key stays masked/blank = keep.)
+                    if (creds.litellmBaseURL) setLitellmBaseURL(creds.litellmBaseURL);
+                    if (creds.litellmMaxTokens) setLitellmMaxTokens(String(creds.litellmMaxTokens));
                     // Load preferred models
                     const pm: Record<string, string> = {};
                     if (creds.geminiPreferredModel) pm.gemini = creds.geminiPreferredModel;
@@ -430,6 +458,48 @@ export const AIProvidersSettings: React.FC = () => {
             console.error(`Failed to save ${provider} key:`, e);
         } finally {
             setSavingStatus(prev => ({ ...prev, [provider]: false }));
+        }
+    };
+
+    // LiteLLM needs three fields (baseURL + optional key + optional max-tokens),
+    // so it can't use the single-key ProviderCard contract. baseURL is required
+    // to enable the proxy; maxTokens empty → backend default (8192).
+    const handleSaveLitellm = async () => {
+        const url = litellmBaseURL.trim();
+        if (!url) return;
+        setSavingStatus(prev => ({ ...prev, litellm: true }));
+        try {
+            const parsedMax = parseInt(litellmMaxTokens, 10);
+            const result = await window.electronAPI.setLitellmConfig({
+                apiKey: litellmApiKey.trim(),
+                baseURL: url,
+                maxTokens: Number.isFinite(parsedMax) && parsedMax > 0 ? parsedMax : undefined,
+            });
+            if (result && result.success) {
+                setSavedStatus(prev => ({ ...prev, litellm: true }));
+                setHasStoredKey(prev => ({ ...prev, litellm: true }));
+                setLitellmApiKey('');
+                setTimeout(() => setSavedStatus(prev => ({ ...prev, litellm: false })), 2000);
+            }
+        } catch (e) {
+            console.error('Failed to save LiteLLM config:', e);
+        } finally {
+            setSavingStatus(prev => ({ ...prev, litellm: false }));
+        }
+    };
+
+    const handleRemoveLitellm = async () => {
+        if (!confirm('Are you sure you want to remove the LiteLLM proxy configuration?')) return;
+        try {
+            const result = await window.electronAPI.setLitellmConfig({ apiKey: '', baseURL: '' });
+            if (result && result.success) {
+                setHasStoredKey(prev => ({ ...prev, litellm: false }));
+                setLitellmBaseURL('');
+                setLitellmApiKey('');
+                setLitellmMaxTokens('');
+            }
+        } catch (e) {
+            console.error('Failed to remove LiteLLM config:', e);
         }
     };
 
@@ -767,6 +837,82 @@ export const AIProvidersSettings: React.FC = () => {
                         keyUrl="https://platform.deepseek.com/api_keys"
                         onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, deepseek: model }))}
                     />
+
+                    {/* LiteLLM — OpenAI-compatible AI gateway (100+ providers via one proxy).
+                        Three fields: proxy base URL (required), optional virtual key, and an
+                        optional max-output-tokens override. Models are auto-discovered from
+                        the proxy and appear in the model selector with a "litellm/" prefix. */}
+                    <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <label className="block text-xs font-bold text-text-primary mb-0">LiteLLM Proxy</label>
+                                <p className="text-[10px] text-text-secondary">
+                                    OpenAI-compatible gateway to 100+ providers. Models auto-discovered from the proxy.{' '}
+                                    <a href="https://docs.litellm.ai/docs/simple_proxy" target="_blank" rel="noreferrer" className="text-accent-primary hover:underline">Docs</a>
+                                </p>
+                            </div>
+                            {hasStoredKey.litellm && (
+                                <span className="text-[10px] font-medium text-emerald-500 uppercase tracking-wide">Configured</span>
+                            )}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <label className="space-y-1 block">
+                                <span className="text-[10px] font-medium text-text-secondary uppercase tracking-wide">Proxy Base URL</span>
+                                <input
+                                    value={litellmBaseURL}
+                                    onChange={e => setLitellmBaseURL(e.target.value)}
+                                    className="w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary font-mono focus:outline-none focus:border-accent-primary"
+                                    placeholder="http://localhost:4000/v1"
+                                />
+                            </label>
+
+                            <label className="space-y-1 block">
+                                <span className="text-[10px] font-medium text-text-secondary uppercase tracking-wide">Virtual Key (optional)</span>
+                                <input
+                                    type="password"
+                                    value={litellmApiKey}
+                                    onChange={e => setLitellmApiKey(e.target.value)}
+                                    className="w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary font-mono focus:outline-none focus:border-accent-primary"
+                                    placeholder={hasStoredKey.litellm ? '•••••••• (leave blank to keep)' : 'sk-... (only if proxy requires auth)'}
+                                />
+                            </label>
+                        </div>
+
+                        <div className="space-y-1">
+                            <span className="block text-[10px] font-medium text-text-secondary uppercase tracking-wide">Max Output Tokens</span>
+                            <ModelSelect
+                                value={litellmMaxTokens}
+                                options={LITELLM_MAX_TOKENS_OPTIONS}
+                                onChange={setLitellmMaxTokens}
+                                placeholder="Auto (per-model)"
+                                className="py-2"
+                            />
+                            <p className="text-[10px] text-text-secondary">
+                                Auto reads each model's real output budget from the proxy's <span className="font-mono">/model/info</span> (falls back to 8,192 if unavailable). Pick a fixed value to override.
+                            </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={handleSaveLitellm}
+                                disabled={!litellmBaseURL.trim() || !!savingStatus.litellm}
+                                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-accent-primary text-white disabled:opacity-50 transition-opacity"
+                            >
+                                {savingStatus.litellm ? 'Saving…' : savedStatus.litellm ? 'Saved ✓' : 'Save'}
+                            </button>
+                            {hasStoredKey.litellm && (
+                                <button
+                                    type="button"
+                                    onClick={handleRemoveLitellm}
+                                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-border-subtle text-text-secondary hover:text-text-primary transition-colors"
+                                >
+                                    Remove
+                                </button>
+                            )}
+                        </div>
+                    </div>
 
                 </div>
             </div>

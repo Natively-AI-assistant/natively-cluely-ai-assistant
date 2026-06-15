@@ -87,22 +87,17 @@ export class EmbeddingPipeline {
     }
 
     private async _doInitialize(config: AppAPIConfig): Promise<void> {
-        // ── Step 1: Eagerly init the local fallback FIRST, independently of the primary.
-        // This guarantees fallbackProvider is set even if the primary throws,
-        // so activateMeetingFallback() is always safe to call.
-        try {
-            const local = new LocalEmbeddingProvider();
-            if (await local.isAvailable()) {
-                this.fallbackProvider = local;
-                console.log(`[EmbeddingPipeline] Local fallback provider ready (${local.dimensions}d)`);
-            } else {
-                console.warn('[EmbeddingPipeline] Local fallback provider unavailable — bundled model may be missing');
-            }
-        } catch (e) {
-            console.warn('[EmbeddingPipeline] Could not initialize local fallback provider:', e);
-        }
+        // Construct the local fallback up front, but do NOT call isAvailable() here.
+        // LocalEmbeddingProvider construction is cheap (paths + static dimensions/space);
+        // isAvailable() loads the MiniLM ONNX model via transformers.js and can stall
+        // the Electron main process during first paint. The provider loads lazily on
+        // first real fallback/query use through embed()/embedQuery().
+        this.fallbackProvider = new LocalEmbeddingProvider();
+        console.log(`[EmbeddingPipeline] Local fallback provider registered for lazy load (${this.fallbackProvider.dimensions}d)`);
 
-        // ── Step 2: Resolve primary provider.
+        // Resolve primary provider before touching the local model. If the primary is
+        // local, the resolver's instance becomes both primary and fallback so the model
+        // is loaded at most once in local-only mode.
         try {
             this.provider = await EmbeddingProviderResolver.resolve(config);
             console.log(`[EmbeddingPipeline] Ready with provider: ${this.provider.name} (${this.provider.dimensions}d)`);
@@ -135,14 +130,9 @@ export class EmbeddingPipeline {
 
         } catch (err) {
             console.error('[EmbeddingPipeline] Failed to initialize primary provider:', err);
-            // Don't rethrow — if we have a fallback, the pipeline can still function
-            // in local-only mode. Callers check isReady() which checks this.provider.
-            // Only throw if we also have no fallback at all.
-            if (!this.fallbackProvider) {
-                throw err;
-            }
             console.warn('[EmbeddingPipeline] Falling back to local-only mode for all meetings.');
             // Promote fallback as the primary so isReady() returns true and queueing works.
+            // The local model still loads lazily on the first embed call.
             this.provider = this.fallbackProvider;
             // Persist the fallback provider's space so the next launch does not fire a
             // false-positive incompatible-space warning (e.g. openai space vs local space).
@@ -324,11 +314,17 @@ export class EmbeddingPipeline {
         this.isProcessing = true;
 
         try {
+            // Foreground gate (manual regression 2026-06-12): the drain loop's
+            // synchronous better-sqlite3 statements block the main-process event
+            // loop. Yield to any in-flight manual/WTA answer between items so a
+            // post-meeting embedding backlog can't make live questions lag.
+            const { ForegroundGate } = require('../services/ForegroundGate') as typeof import('../services/ForegroundGate');
             while (true) {
+                await ForegroundGate.waitUntilIdle();
                 // Fetch next pending item. Items marked for local fallback (retry_count = -1)
                 // are also eligible, so we use a broad filter.
                 const pending = this.db.prepare(`
-                    SELECT * FROM embedding_queue 
+                    SELECT * FROM embedding_queue
                     WHERE status = 'pending'
                       AND (retry_count < ? OR retry_count = -1)
                     ORDER BY created_at ASC

@@ -78,13 +78,22 @@ describe('fix: JD-fit routing', () => {
     'Full-stack is different from data analyst, explain the connection.',
     'Your experience seems engineering-heavy, why data?',
     "You don't seem like pure analyst, convince me.",
-    'What gap do you have for this role?', 'Where are you weak for this JD?',
-    'What will you need to learn for this job?',
     'If we need SQL daily, how ready are you?', 'If we need Python automation, how ready are you?',
     'Convince me you are right for this role.', 'In what ways are you a match for this job?',
     'Why are you the candidate we should pick?', 'Okay cool yeah, so why this job?',
     'Compare yourself to other candidates.',
   ]) test(`"${q}" → jd_fit`, () => assertRoute(q, 'jd_fit_answer'));
+});
+
+// Release 2026-06-09: gap/weakness-FOR-THE-JD questions now route to the dedicated
+// gap_analysis_answer (honest gap + mitigation), not the jd_fit fit-summary.
+describe('fix: gap-analysis routing', () => {
+  for (const q of [
+    'What gap do you have for this role?', 'Where are you weak for this JD?',
+    'What will you need to learn for this job?', 'What is your weakest match for the JD?',
+    'What do you need to improve for this role?', 'What is missing from your profile for this job?',
+    'What part of this JD are you least ready for?',
+  ]) test(`"${q}" → gap_analysis`, () => assertRoute(q, 'gap_analysis_answer'));
 });
 
 // ── Phase 3: skill self-rating (not coding, not negotiation) ─────────────────

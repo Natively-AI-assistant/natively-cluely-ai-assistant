@@ -2,6 +2,7 @@ import * as crypto from 'crypto';
 import { DatabaseManager } from '../db/DatabaseManager';
 import { ModeContextRetriever } from './ModeContextRetriever';
 import type { AnswerType } from '../llm/AnswerPlanner';
+import type { ActiveModeInfo } from '../llm/modeProfiles';
 import { classifyCustomContext, selectCustomContextForAnswer } from '../llm/customContextClassifier';
 
 /**
@@ -238,6 +239,38 @@ export class ModesManager {
         return row ? rowToMode(row) : null;
     }
 
+    // ── Active-mode info cache (PI v3, W1) ────────────────────────
+    // The live answer path consults the active mode on EVERY turn (routing
+    // prior, pinned instructions, retrieval). The mode itself changes only via
+    // setActiveMode/updateMode/deleteMode, so a tiny invalidate-on-write cache
+    // removes the per-question SQLite read without any staleness risk.
+    private _activeModeInfoCache: ActiveModeInfo | null = null;
+    private _activeModeInfoCacheValid = false;
+
+    private invalidateActiveModeCache(): void {
+        this._activeModeInfoCache = null;
+        this._activeModeInfoCacheValid = false;
+    }
+
+    /**
+     * The slice of the active mode the answer planner needs, cached. A mode is
+     * "custom" when the user built it from the blank template ('general'
+     * templateType but not the seeded General mode) — its name/content are
+     * user-authored and surfaced to prompt builders.
+     */
+    public getActiveModeInfo(): ActiveModeInfo | null {
+        if (this._activeModeInfoCacheValid) return this._activeModeInfoCache;
+        const mode = this.getActiveMode();
+        this._activeModeInfoCache = mode ? {
+            id: mode.id,
+            templateType: mode.templateType,
+            name: mode.name,
+            isCustom: mode.templateType === 'general' && mode.name !== 'General',
+        } : null;
+        this._activeModeInfoCacheValid = true;
+        return this._activeModeInfoCache;
+    }
+
     // Modes where the premium knowledge intercept (negotiation coaching, intro
     // shortcut, premium-flavored systemPromptInjection/contextBlock) is OUT OF
     // SCOPE and would replace the user's expected answer with off-topic content.
@@ -299,14 +332,26 @@ export class ModesManager {
 
     public updateMode(id: string, updates: { name?: string; templateType?: ModeTemplateType; customContext?: string }): void {
         DatabaseManager.getInstance().updateMode(id, updates);
+        this.invalidateActiveModeCache();
     }
 
     public deleteMode(id: string): void {
+        // PI v3 (W3): mode_reference_files rows go via FK CASCADE, but the
+        // persisted chunk vectors (mode_reference_chunks / index_state) have no
+        // FK on purpose (the table is owned by the retriever) — drop them
+        // explicitly BEFORE the cascade removes the file rows we enumerate.
+        try {
+            for (const file of this.getReferenceFiles(id)) {
+                this.modeContextRetriever.removeReferenceFileIndex(file.id);
+            }
+        } catch { /* non-fatal — orphans are disk bloat, not correctness */ }
         DatabaseManager.getInstance().deleteMode(id);
+        this.invalidateActiveModeCache();
     }
 
     public setActiveMode(id: string | null): void {
         DatabaseManager.getInstance().setActiveMode(id);
+        this.invalidateActiveModeCache();
     }
 
     // ── Reference Files ───────────────────────────────────────────
@@ -334,6 +379,38 @@ export class ModesManager {
 
     public deleteReferenceFile(id: string): void {
         DatabaseManager.getInstance().deleteReferenceFile(id);
+        // PI v3 (W3): drop the persisted chunk vectors + index state too.
+        try { this.modeContextRetriever.removeReferenceFileIndex(id); } catch { /* non-fatal */ }
+    }
+
+    // ── PI v3 (W3): upload-time reference-file indexing ───────────
+    // Chunk + embed + persist a file's vectors so the per-question hot path
+    // embeds ONLY the live query. Fire-and-forget from upload/activation; the
+    // retriever degrades to lexical for any file that isn't 'ready' yet.
+
+    /** Index one reference file (idempotent — re-embeds only on content/space change). */
+    public async indexReferenceFile(file: ModeReferenceFile): Promise<void> {
+        await this.modeContextRetriever.indexReferenceFile(file);
+    }
+
+    /** Kick indexing for every not-yet-ready file of a mode (mode activation prewarm). */
+    public async prewarmModeReferenceIndex(modeId: string): Promise<void> {
+        const files = this.getReferenceFiles(modeId);
+        for (const file of files) {
+            const { status } = this.modeContextRetriever.getReferenceFileIndexStatus(file.id);
+            if (status !== 'ready') {
+                await this.modeContextRetriever.indexReferenceFile(file).catch(() => { /* logged inside */ });
+            }
+        }
+    }
+
+    /** Per-file index status for the Modes Manager UI badges. */
+    public getReferenceFileIndexStatuses(modeId: string): Array<{ fileId: string; fileName: string; status: string; chunkCount: number }> {
+        return this.getReferenceFiles(modeId).map(file => ({
+            fileId: file.id,
+            fileName: file.fileName,
+            ...this.modeContextRetriever.getReferenceFileIndexStatus(file.id),
+        }));
     }
 
     // ── Note Sections ─────────────────────────────────────────────
@@ -404,6 +481,43 @@ export class ModesManager {
         return full;
     }
 
+    // Hard cap for the always-pinned "Real-time prompt" (mode customContext).
+    // Roughly 300 tokens — enough for real mode instructions, small enough that
+    // a pasted document can't crowd out the transcript. Anything longer remains
+    // fully available to RETRIEVAL (reference-file path), so nothing is lost.
+    private static readonly PINNED_INSTRUCTIONS_MAX_CHARS = 1_200;
+
+    /**
+     * PI v3 (W2): the active mode's user-authored "Real-time prompt"
+     * (customContext), ALWAYS-ON. Previously this text only reached the prompt
+     * when lexical/vector retrieval happened to score it against the live query —
+     * so a custom mode's instructions silently failed to apply on most turns.
+     * This accessor returns it deterministically (subject to the same
+     * answer-type sensitivity scoping as retrieval, so salary/pricing notes
+     * still can't leak into a coding/identity answer) for pinning into the
+     * prompt as a dedicated block.
+     *
+     * Returns '' when no mode is active or nothing survives scoping. For custom
+     * (user-built) modes the mode NAME is prepended so the model knows whose
+     * instructions these are.
+     */
+    public getActiveModePinnedInstructions(answerType?: AnswerType): string {
+        const mode = this.getActiveMode();
+        if (!mode) return '';
+        const raw = (mode.customContext || '').trim();
+        if (!raw) return '';
+        const scoped = answerType
+            ? selectCustomContextForAnswer(classifyCustomContext(raw), answerType).included.map(c => c.text).join('\n')
+            : raw;
+        if (!scoped.trim()) return '';
+        let text = scoped.trim();
+        if (text.length > ModesManager.PINNED_INSTRUCTIONS_MAX_CHARS) {
+            text = text.slice(0, ModesManager.PINNED_INSTRUCTIONS_MAX_CHARS) + ' …[truncated]';
+        }
+        const info = this.getActiveModeInfo();
+        return info?.isCustom ? `Mode: ${mode.name}\n${text}` : text;
+    }
+
     /**
      * Builds a context block to inject before the user message for the active mode.
      * Includes custom context text and reference file contents.
@@ -414,7 +528,7 @@ export class ModesManager {
     private static readonly MAX_FILE_CHARS = 12_000;
     private static readonly MAX_TOTAL_CHARS = 40_000;
 
-    public buildRetrievedActiveModeContextBlock(query: string, transcript?: string, tokenBudget?: number, answerType?: AnswerType): string {
+    public buildRetrievedActiveModeContextBlock(query: string, transcript?: string, tokenBudget?: number, answerType?: AnswerType, excludeCustomContext?: boolean): string {
         const mode = this.getActiveMode();
         if (!mode) return '';
 
@@ -423,6 +537,7 @@ export class ModesManager {
             transcript,
             tokenBudget,
             answerType,
+            excludeCustomContext,
         });
 
         return result.formattedContext;
@@ -435,7 +550,7 @@ export class ModesManager {
      * we fall back to the existing sync lexical path so the answer flow
      * never breaks. Telemetry distinguishes hybrid hits from lexical fallback.
      */
-    public async buildRetrievedActiveModeContextBlockHybrid(query: string, transcript?: string, tokenBudget?: number, answerType?: AnswerType): Promise<string> {
+    public async buildRetrievedActiveModeContextBlockHybrid(query: string, transcript?: string, tokenBudget?: number, answerType?: AnswerType, excludeCustomContext?: boolean): Promise<string> {
         const mode = this.getActiveMode();
         if (!mode) return '';
         const files = this.getReferenceFiles(mode.id);
@@ -479,7 +594,7 @@ export class ModesManager {
             console.warn('[ModesManager] hybrid retrieval failed, falling back to lexical:', (err as Error)?.message);
         }
 
-        const lexical = this.buildRetrievedActiveModeContextBlock(query, transcript, tokenBudget, answerType);
+        const lexical = this.buildRetrievedActiveModeContextBlock(query, transcript, tokenBudget, answerType, excludeCustomContext);
         try {
             const { telemetryService } = require('./telemetry/TelemetryService');
             telemetryService.track({

@@ -111,6 +111,17 @@ const ModelSelectorWindow = () => {
                     models.push({ id: `ollama-${m}`, name: `${m} (Local)`, type: 'ollama' });
                 });
 
+                // LiteLLM proxy — auto-discovered from the configured proxy's /v1/models.
+                // Wrapped in try/catch so a missing/offline proxy never blocks the list.
+                try {
+                    const litellmModels = await window.electronAPI?.getAvailableLiteLLMModels?.() || [];
+                    litellmModels.forEach((m: string) => {
+                        models.push({ id: `litellm/${m}`, name: `${m} (LiteLLM)`, type: 'cloud', provider: 'litellm' });
+                    });
+                } catch {
+                    // LiteLLM proxy may not be running — ignore.
+                }
+
                 localStorage.setItem('cached-models', JSON.stringify(models));
                 setAvailableModels(models);
 

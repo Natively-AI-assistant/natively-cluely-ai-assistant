@@ -91,18 +91,7 @@ const App: React.FC = () => {
   }, [isLauncherWindow, isOverlayWindow, isDefault]);
 
   // State
-  // One-shot first-run startup sequence. Once the user dismisses it (or any
-  // future code flips the flag), it never appears again on subsequent launches.
-  const [showStartup, setShowStartup] = useState<boolean | null>(() => {
-    try {
-      const val = localStorage.getItem('natively_seen_startup_v1');
-      if (val === 'true') return false;
-      if (val === 'false') return true;
-      return null;
-    } catch {
-      return null;
-    }
-  });
+  const [showStartup, setShowStartup] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<string>('general');
   const [isModesOpen, setIsModesOpen] = useState(false);
@@ -195,35 +184,16 @@ const App: React.FC = () => {
     localStorage.removeItem('useLegacyAudioBackend');
 
     const fallbackLocal = () => {
-      try {
-        const localSeen = localStorage.getItem('natively_seen_startup_v1') === 'true';
-        setShowStartup(!localSeen);
-      } catch {
-        setShowStartup(true);
-      }
+      // The classic launch animation is intentionally shown on every launcher
+      // startup, matching the older app behavior from 93ee4a21.
     };
 
     if (window.electronAPI?.onboardingGetFlags) {
       window.electronAPI.onboardingGetFlags()
         .then((flags) => {
           if (flags) {
-            // 1. seenStartup
-            if (flags.seenStartup) {
-              setShowStartup(false);
-              try { localStorage.setItem('natively_seen_startup_v1', 'true'); } catch {}
-            } else {
-              try {
-                const localSeen = localStorage.getItem('natively_seen_startup_v1') === 'true';
-                if (localSeen) {
-                  setShowStartup(false);
-                  window.electronAPI?.onboardingSetFlag?.('seenStartup', true).catch(() => {});
-                } else {
-                  setShowStartup(true);
-                }
-              } catch {
-                setShowStartup(true);
-              }
-            }
+            // 1. seenStartup intentionally no longer suppresses the classic
+            // black-logo launch animation; the old app played it every launch.
 
             // 2. seenModesOnboarding
             if (flags.seenModesOnboarding) {
@@ -352,10 +322,41 @@ const App: React.FC = () => {
         // First ever launch — show permissions toaster
         setShowPermissionsToaster(true);
       } else {
-        // Subsequent launches — trial promo will self-gate via TrialPromoToaster
-        const trialShown = localStorage.getItem('natively_trial_promo_ts');
-        if (!trialShown) {
-          setShowTrialPromo(true);
+        // Returning launch: re-check live TCC status. A macOS permission grant
+        // can be DROPPED out from under a returning user — most commonly after
+        // an app update changes the code signature (macOS may re-evaluate /
+        // invalidate the Screen Recording or Microphone grant for the new
+        // binary), or if the user revoked it in System Settings. In that state
+        // askForMediaAccess() returns denied WITHOUT a prompt (macOS only
+        // prompts from 'not-determined'), so the app would silently fail to
+        // capture with nothing on screen. Surface the recoverable permissions
+        // card (it deep-links to the exact System Settings pane) instead of the
+        // trial promo when mic/screen is denied or restricted. The main process
+        // also broadcasts a denied banner at startup, but that targets the
+        // in-overlay meeting surface — at launch the user is on the launcher,
+        // so this launcher-side check is what they actually see.
+        const showTrialPromoFallback = () => {
+          // Subsequent launches — trial promo will self-gate via TrialPromoToaster
+          const trialShown = localStorage.getItem('natively_trial_promo_ts');
+          if (!trialShown) {
+            setShowTrialPromo(true);
+          }
+        };
+        const maybeSurfacePermissions = window.electronAPI?.checkPermissions;
+        if (maybeSurfacePermissions) {
+          maybeSurfacePermissions()
+            .then((p) => {
+              const blocked = (s?: string) => s === 'denied' || s === 'restricted';
+              if (p?.platform === 'darwin' && (blocked(p.microphone) || blocked(p.screen))) {
+                setShowPermissionsToaster(true);
+              } else {
+                showTrialPromoFallback();
+              }
+            })
+            .catch(showTrialPromoFallback);
+        } else {
+          // Non-macOS or API unavailable — preserve the original behaviour.
+          showTrialPromoFallback();
         }
       }
     }
@@ -525,9 +526,26 @@ const App: React.FC = () => {
         // launcher. No follow-up setWindowMode IPC needed here.
       } else {
         console.error("Failed to start meeting:", result.error);
+        // A mic-permission denial aborts the meeting before the overlay (which
+        // hosts the in-meeting audio banner) is ever shown — so the user is
+        // left on the launcher with nothing actionable. Re-open the permissions
+        // card, which checks live mic/screen status, re-requests the mic, and
+        // deep-links to System Settings. This is the recoverable surface for
+        // the "I press Start Natively and nothing happens" report.
+        if (result.code === 'mic-permission-denied') {
+          setShowPermissionsToaster(true);
+        }
       }
     } catch (err) {
       console.error("Failed to start meeting:", err);
+      // Defense-in-depth: today the start-meeting IPC handler catches and
+      // resolves {success:false, code}, so a mic denial lands in the else
+      // branch above. If the call ever rejects instead, Electron preserves the
+      // serialized error .code across ipcRenderer.invoke — keep the recovery
+      // working so the denial never regresses to a silent failure.
+      if ((err as { code?: string })?.code === 'mic-permission-denied') {
+        setShowPermissionsToaster(true);
+      }
     }
   };
 
@@ -628,38 +646,29 @@ const App: React.FC = () => {
 
   // --- LAUNCHER WINDOW (Default) ---
   // Renders if window=launcher OR no param
-  if (showStartup === null) {
-    return (
-      <div className="h-full w-full bg-[#000000]" />
-    );
-  }
-
   return (
     <ErrorBoundary context="Launcher">
-    <div className="h-full min-h-0 w-full relative bg-[#000000]">
+    <div className="h-full min-h-0 w-full relative bg-transparent">
       <AnimatePresence>
         {showStartup ? (
           <motion.div
             key="startup"
-            initial={{ opacity: 1 }}
-            exit={{ opacity: 0, scale: 1.1, pointerEvents: "none", transition: { duration: 0.6, ease: "easeInOut" } }}
+            className="h-full w-full"
+            initial={{ opacity: 0, scale: 1.01 }}
+            animate={{ opacity: 1, scale: 1, transition: { duration: 0.5, ease: [0.23, 1, 0.32, 1] } }}
+            exit={{ opacity: 0, scale: 1.04, pointerEvents: "none", transition: { duration: 0.55, ease: [0.4, 0, 0.2, 1] } }}
           >
-            <StartupSequence onComplete={() => {
-              try { localStorage.setItem('natively_seen_startup_v1', 'true'); } catch {}
-              window.electronAPI?.onboardingSetFlag?.('seenStartup', true).catch(() => {});
-              setShowStartup(false);
-            }} />
+            <StartupSequence onComplete={() => setShowStartup(false)} />
           </motion.div>
         ) : (
           <motion.div
             key="main"
             className="h-full w-full"
-            initial={{ opacity: 0, scale: 0.98, y: 15 }} // "Linear" style entry: slightly down and scaled down
-            animate={{ opacity: 1, scale: 1, y: 0 }}      // Slide up and snap to place
+            initial={{ opacity: 0, scale: 0.99, y: 8 }} // "Linear" style entry: slightly down and scaled down
+            animate={{ opacity: 1, scale: 1, y: 0 }}    // Slide up and snap to place
             transition={{
-              duration: 0.8,
+              duration: 0.6,
               ease: [0.19, 1, 0.22, 1], // Expo-out: snappy start, smooth landing
-              delay: 0.1
             }}
           >
             <QueryClientProvider client={queryClient}>

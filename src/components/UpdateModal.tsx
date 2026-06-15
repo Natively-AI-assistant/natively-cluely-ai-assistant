@@ -25,6 +25,7 @@ interface UpdateModalProps {
     status: 'idle' | 'downloading' | 'ready' | 'error' | 'instructions';
     errorMessage?: string | null;
     instructionsArch?: 'arm64' | 'x64' | null;
+    canAutoUpdate?: boolean;
 }
 
 const CopyBlock = ({ command }: { command: string }) => {
@@ -52,21 +53,6 @@ const CopyBlock = ({ command }: { command: string }) => {
             </button>
         </div>
     );
-};
-
-const renderFormattedText = (text: string) => {
-    if (!text) return '';
-    // Match bold (**text**) and code (`text`)
-    const parts = text.split(/(\*\*.*?\*\*|`.*?`)/g);
-    return parts.map((part, i) => {
-        if (part.startsWith('**') && part.endsWith('**')) {
-            return <strong key={i} className="font-semibold text-white">{part.slice(2, -2)}</strong>;
-        }
-        if (part.startsWith('`') && part.endsWith('`')) {
-            return <code key={i} className="font-mono text-blue-400 bg-white/5 px-1.5 py-0.5 rounded text-[10.5px]">{part.slice(1, -1)}</code>;
-        }
-        return part;
-    });
 };
 
 const UpdateModal: React.FC<UpdateModalProps> = ({
@@ -355,7 +341,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                                                     <span className="text-white/30 mt-[6px] text-[10px] transform scale-75 flex-shrink-0">
                                                                         —
                                                                     </span>
-                                                                    <span>{renderFormattedText(item)}</span>
+                                                                    <span>{item}</span>
                                                                 </li>
                                                             ))}
                                                         </ul>

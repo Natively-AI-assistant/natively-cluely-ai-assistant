@@ -3,7 +3,7 @@ import Groq from "groq-sdk"
 import OpenAI from "openai"
 import Anthropic from "@anthropic-ai/sdk"
 import fs from "fs"
-import { createHash } from "crypto"
+import { createHash, randomUUID } from "crypto"
 import sharp from "sharp"
 import { ModelVersionManager, ModelFamily, TextModelFamily } from './services/ModelVersionManager'
 import {
@@ -20,7 +20,7 @@ import {
   TINY_ASSIST_PROMPT, TINY_BRAINSTORM_PROMPT, TINY_CLARIFY_PROMPT, TINY_CODE_HINT_PROMPT,
   TINY_PROMPTS_SET
 } from "./llm/tinyPrompts"
-import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
+import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
 import {
   runStreamingVisionFallback,
@@ -28,6 +28,7 @@ import {
   DEFAULT_VISION_FALLBACK_CONFIG,
   type VisionStreamProvider,
   type VisionHealthEntry,
+  type VisionFallbackConfig,
 } from "./llm/visionStreamFallback"
 import {
   runStreamingTextFallback,
@@ -35,6 +36,7 @@ import {
   DEFAULT_TEXT_FALLBACK_CONFIG,
   type TextStreamProvider,
 } from "./llm/textStreamFallback"
+import { isPermanentKeyError } from "./llm/providerErrorClassifier"
 import { telemetryService } from "./services/telemetry/TelemetryService"
 import {
   ollamaVisionFromShow,
@@ -59,29 +61,69 @@ import { CodexCliConfig, CodexCliService, DEFAULT_CODEX_CLI_CONFIG } from './ser
 const execAsync = promisify(exec);
 const NATIVELY_API_URL = (process.env.NATIVELY_API_URL || 'https://api.natively.software').replace(/\/+$/, '');
 
+function nowMs(): number {
+  try {
+    const p = (globalThis as any).performance;
+    if (p && typeof p.now === 'function') return p.now();
+  } catch { /* ignore */ }
+  return Date.now();
+}
+
+function makeRequestId(prefix = 'nat'): string {
+  try { return `${prefix}_${randomUUID()}`; }
+  catch { return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`; }
+}
+
+function summarizeFetchError(err: any): Record<string, unknown> {
+  return {
+    name: err?.name,
+    message: err?.message ?? String(err),
+    code: err?.code,
+    causeName: err?.cause?.name,
+    causeCode: err?.cause?.code,
+    causeMessage: err?.cause?.message,
+  };
+}
+
+function formatFetchError(err: any): string {
+  const s = summarizeFetchError(err);
+  return Object.entries(s)
+    .filter(([, v]) => v !== undefined && v !== null && v !== '')
+    .map(([k, v]) => `${k}=${String(v)}`)
+    .join(' ');
+}
+
 interface OllamaResponse {
   response: string
   done: boolean
 }
 
-// Model constants for Gemini (priority: flash → flash-lite → pro)
+// Model constants for Gemini (priority: flash-lite → flash → pro)
 const GEMINI_FLASH_MODEL = "gemini-3.5-flash"
 const GEMINI_FLASH_LITE_MODEL = "gemini-3.1-flash-lite"
 const GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 
-// Vision tail-latency hedging: when ON, the Gemini Flash vision provider hedges
-// with flash-lite — if 3.5-flash hasn't produced a first token within a short
-// EWMA-derived delay, flash-lite is launched in parallel and the first usable
-// token wins (loser aborted). Cuts the slow-tail TTFT (the >20s screenshot
-// stalls) without doubling quota on the fast common case. Env kill-switch;
-// default ON (set NATIVELY_VISION_HEDGE=0 to disable).
-const VISION_HEDGE_ENABLED = process.env.NATIVELY_VISION_HEDGE !== '0';
+// NOTE: tail-latency hedging (racing flash against flash-lite) has been removed
+// from BOTH the vision and the direct-Gemini text paths. Both now run a strict
+// serial Gemini cascade (flash-lite → flash → pro) — flash-lite leads, flash and
+// pro are pure pre-first-token fallbacks. The former VISION_HEDGE_ENABLED /
+// TEXT_HEDGE_ENABLED / GEMINI_TEXT_HEDGE_CONFIG knobs were removed.
 const GROQ_MODEL = "llama-3.3-70b-versatile"
 const OPENAI_MODEL = "gpt-5.4"
 const CLAUDE_MODEL = "claude-sonnet-4-6"
 const DEEPSEEK_MODEL = "deepseek-v4-flash"
 const DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 const DEEPSEEK_MAX_OUTPUT_TOKENS = 8192
+// LiteLLM fronts arbitrary upstream models with widely varying output ceilings.
+// Resolution order per request: (1) user manual override from Settings,
+// (2) per-model budget auto-discovered from the proxy's /model/info
+// (max_output_tokens, the standard LiteLLM model-registry value),
+// (3) this default. All clamped to MIN/MAX.
+const LITELLM_DEFAULT_MAX_OUTPUT_TOKENS = 8192
+const LITELLM_MAX_TOKENS_MIN = 256
+const LITELLM_MAX_TOKENS_MAX = 1048576 // 1M — Gemini-class ceilings exist behind proxies
+// /model/info budgets are cached this long; the proxy's model list rarely churns.
+const LITELLM_MODEL_INFO_TTL_MS = 5 * 60_000
 const MAX_OUTPUT_TOKENS = 65536
 const CLAUDE_MAX_OUTPUT_TOKENS = 64000
 
@@ -93,6 +135,14 @@ const CLAUDE_MAX_OUTPUT_TOKENS = 64000
 // tail. The TTFT race (textStreamFallback) handles the separate case of a fast
 // connect that then prefills slowly. Override per-call for non-interactive use.
 const INTERACTIVE_CONNECT_TIMEOUT_MS = 4_000;
+
+// First-useful-token budget for the Natively gateway on the TEXT path. Larger than
+// the shared 2.5s text default because the gateway's server-side fallback chain can
+// land on MiniMax (first token 3.3-7.7s); a 2.5s cap aborts it before it speaks.
+// 8s == LIVE_TOTAL_HARD_TIMEOUT_MS (the outer live-deadline ceiling), so this inner
+// per-provider gate never fires before the single source-of-truth deadline. See the
+// natively text-provider registration for the full rationale.
+const NATIVELY_TEXT_TTFT_MS = 8_000;
 
 // ── Deterministic sampling for interview/coding answers (REPORT §22 D1) ──────
 // The text streaming methods previously used scattered temperatures (0.3/0.4/
@@ -149,17 +199,16 @@ export function buildThinkingConfig(model: string | undefined, budget: number): 
 }
 
 // OpenAI reasoning effort for the interactive path. Per the openai-node docs,
-// `reasoning_effort` (none|minimal|low|medium|high|xhigh) constrains reasoning;
-// models before gpt-5.1 default to the slow `medium` and DON'T support `none`,
-// so we use 'minimal' (lowest universally-supported) to cut TTFT — the same
-// "kill the hidden default reasoning" lever as Gemini's thinkingLevel:minimal.
-// Only returned for genuine OpenAI gpt-* models; when the OpenAI-compatible
-// client proxies a non-OpenAI model (e.g. Claude), no reasoning_effort is sent.
-export const OPENAI_REASONING_EFFORT = 'minimal';
-function openaiReasoningParam(model: string): { reasoning_effort: 'minimal' } | {} {
-  const m = (model || '').toLowerCase();
-  const isGptReasoner = /\bgpt-5/.test(m) || /\bo[0-9]/.test(m); // gpt-5.x / o-series reasoners
-  return isGptReasoner ? { reasoning_effort: OPENAI_REASONING_EFFORT } : {};
+// `reasoning_effort` (none|minimal|low|medium|high|xhigh) constrains reasoning,
+// but the VALID set differs per model: OpenAI removed `minimal` after the original
+// gpt-5 line, so gpt-5.4/5.5 (and o-series) reject it with a 400. We delegate to
+// getOpenAiReasoningEffort, which returns the lowest *valid* effort for each family
+// to keep TTFT low — the same "kill the hidden default reasoning" lever as Gemini's
+// thinkingLevel:minimal — or null for non-reasoning models, in which case the param
+// is omitted (e.g. gpt-4*/gpt-3.5, or when the client proxies a non-OpenAI model).
+function openaiReasoningParam(model: string): { reasoning_effort: OpenAiReasoningEffort } | {} {
+  const effort = getOpenAiReasoningEffort(model);
+  return effort ? { reasoning_effort: effort } : {};
 }
 
 // Simple prompt for image analysis (not interview copilot - kept separate)
@@ -173,11 +222,25 @@ export class LLMHelper {
   // DeepSeek is OpenAI-compatible; reuse the OpenAI SDK with a custom baseURL.
   // Kept as a separate client so credentials/scope/telemetry stay provider-specific.
   private deepseekClient: OpenAI | null = null
+  // LiteLLM proxy is OpenAI-compatible (AI gateway fronting 100+ providers).
+  // Same pattern as DeepSeek: OpenAI SDK + custom baseURL, separate client so
+  // credentials/scope/telemetry stay provider-specific.
+  private litellmClient: OpenAI | null = null
   private apiKey: string | null = null
   private groqApiKey: string | null = null
   private openaiApiKey: string | null = null
   private claudeApiKey: string | null = null
   private deepseekApiKey: string | null = null
+  private litellmApiKey: string | null = null
+  private litellmBaseURL: string = "http://localhost:4000/v1"
+  // Manual output-ceiling override (Settings → LiteLLM Proxy dropdown).
+  // null = Auto: resolve per-model from the proxy's /model/info, falling back
+  // to LITELLM_DEFAULT_MAX_OUTPUT_TOKENS for unknown models.
+  private litellmMaxTokens: number | null = null
+  // Per-model output budgets discovered from /model/info (model id → max_output_tokens).
+  private litellmModelBudgets: Map<string, number> = new Map()
+  private litellmModelBudgetsFetchedAt: number = 0
+  private litellmModelBudgetsFetch: Promise<void> | null = null
   private useOllama: boolean = false
   private ollamaModel: string = ""
   private ollamaUrl: string = "http://127.0.0.1:11434"
@@ -409,6 +472,94 @@ export class LLMHelper {
     console.log("[LLMHelper] DeepSeek API Key updated.");
   }
 
+  /**
+   * Configure the LiteLLM proxy. baseURL is required (the proxy location);
+   * apiKey is the optional virtual/master key (`sk-...`). A keyless local
+   * proxy is supported by sending no Authorization header — represented here
+   * as a "dummy" SDK key (the OpenAI SDK requires a non-empty apiKey, but a
+   * keyless proxy ignores it). When auth is enabled on the proxy, the real
+   * key MUST be supplied or every request 401s. maxTokens is the optional
+   * MANUAL output-ceiling override (clamped); 0/undefined → Auto mode, which
+   * resolves each model's budget from the proxy's /model/info.
+   */
+  public setLitellmConfig(apiKey: string, baseURL: string, maxTokens?: number) {
+    const trimmedURL = (baseURL || '').trim();
+    if (!trimmedURL) {
+      this.litellmApiKey = null;
+      this.litellmClient = null;
+      this.litellmBaseURL = "http://localhost:4000/v1";
+      this.litellmMaxTokens = null;
+      this.litellmModelBudgets.clear();
+      this.litellmModelBudgetsFetchedAt = 0;
+      console.log("[LLMHelper] LiteLLM config cleared.");
+      return;
+    }
+    this.litellmApiKey = (apiKey || '').trim() || null;
+    this.litellmBaseURL = trimmedURL;
+    const n = Number(maxTokens);
+    this.litellmMaxTokens = (Number.isFinite(n) && n > 0)
+      ? Math.min(LITELLM_MAX_TOKENS_MAX, Math.max(LITELLM_MAX_TOKENS_MIN, Math.floor(n)))
+      : null; // Auto
+    // Config changed → budgets may belong to a different proxy. Refetch lazily.
+    this.litellmModelBudgets.clear();
+    this.litellmModelBudgetsFetchedAt = 0;
+    this.litellmClient = new OpenAI({ apiKey: this.litellmApiKey || "dummy", baseURL: trimmedURL });
+    console.log(`[LLMHelper] LiteLLM client initialized with base URL: ${trimmedURL}, max_tokens: ${this.litellmMaxTokens ?? 'auto'}`);
+  }
+
+  /**
+   * Refresh the per-model output-budget cache from the proxy's /model/info.
+   * LiteLLM's registry exposes max_output_tokens (and max_tokens as a legacy
+   * alias) per model. Failures are silent — Auto mode then falls back to the
+   * default budget, never blocking a chat request. Concurrent callers share
+   * one in-flight fetch.
+   */
+  private async refreshLitellmModelBudgets(): Promise<void> {
+    if (Date.now() - this.litellmModelBudgetsFetchedAt < LITELLM_MODEL_INFO_TTL_MS) return;
+    if (this.litellmModelBudgetsFetch) return this.litellmModelBudgetsFetch;
+
+    this.litellmModelBudgetsFetch = (async () => {
+      try {
+        // /model/info lives at the proxy ROOT (and also under /v1/) — strip a
+        // trailing /v1 so both base-URL styles users enter work.
+        const root = this.litellmBaseURL.replace(/\/+$/, '').replace(/\/v1$/, '');
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (this.litellmApiKey) headers['Authorization'] = `Bearer ${this.litellmApiKey}`;
+        const resp = await fetch(`${root}/model/info`, { method: 'GET', headers, signal: AbortSignal.timeout(5000) });
+        if (!resp.ok) return;
+        const data: any = await resp.json();
+        const fresh = new Map<string, number>();
+        for (const entry of (data?.data || [])) {
+          const name = entry?.model_name;
+          const budget = Number(entry?.model_info?.max_output_tokens ?? entry?.model_info?.max_tokens);
+          if (name && Number.isFinite(budget) && budget > 0) fresh.set(name, Math.floor(budget));
+        }
+        this.litellmModelBudgets = fresh;
+        console.log(`[LLMHelper] LiteLLM /model/info: cached output budgets for ${fresh.size} model(s)`);
+      } catch {
+        // Proxy may not expose /model/info (older versions, auth) — Auto falls
+        // back to the default budget; the user can always set a manual value.
+      } finally {
+        // Stamp on failure too (negative cache): without this, a proxy lacking
+        // /model/info would add a fetch attempt — up to 5s — to EVERY request.
+        this.litellmModelBudgetsFetchedAt = Date.now();
+        this.litellmModelBudgetsFetch = null;
+      }
+    })();
+    return this.litellmModelBudgetsFetch;
+  }
+
+  /**
+   * Effective max_tokens for a proxied model. Manual override wins; otherwise
+   * the /model/info budget for this model; otherwise the default. Clamped.
+   */
+  private async resolveLitellmMaxTokens(litellmModel: string): Promise<number> {
+    if (this.litellmMaxTokens !== null) return this.litellmMaxTokens; // manual override
+    await this.refreshLitellmModelBudgets();
+    const budget = this.litellmModelBudgets.get(litellmModel) ?? LITELLM_DEFAULT_MAX_OUTPUT_TOKENS;
+    return Math.min(LITELLM_MAX_TOKENS_MAX, Math.max(LITELLM_MAX_TOKENS_MIN, budget));
+  }
+
   public setNativelyKey(key: string | null): void {
     this.nativelyKey = key || null;
     console.log(`[LLMHelper] Natively key ${key ? 'set' : 'cleared'}`);
@@ -464,7 +615,7 @@ export class LLMHelper {
   // these named entry points so the surface stays auditable.
 
   public async runVisionRequest(
-    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom',
+    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom',
     userPrompt: string,
     systemPrompt: string,
     imagePath: string,
@@ -478,6 +629,7 @@ export class LLMHelper {
         return this.generateWithClaude(userPrompt, systemPrompt, [imagePath]);
       case 'groq_scout':
         return this.generateWithGroqMultimodal(userPrompt, [imagePath], systemPrompt);
+      case 'gemini_flash_lite':
       case 'gemini_flash':
       case 'gemini_pro': {
         const fs = await import('node:fs/promises');
@@ -486,9 +638,11 @@ export class LLMHelper {
           { text: `${systemPrompt}\n\n${userPrompt}` },
           { inlineData: { mimeType: 'image/jpeg', data: b64 } },
         ];
-        const modelId = providerId === 'gemini_flash'
-          ? 'gemini-3.5-flash'
-          : 'gemini-3.1-pro-preview';
+        const modelId = providerId === 'gemini_flash_lite'
+          ? GEMINI_FLASH_LITE_MODEL
+          : providerId === 'gemini_flash'
+            ? GEMINI_FLASH_MODEL
+            : GEMINI_PRO_MODEL;
         return this.generateContent(contents, modelId);
       }
       case 'custom': {
@@ -527,12 +681,14 @@ export class LLMHelper {
     this.openaiApiKey = null;
     this.claudeApiKey = null;
     this.deepseekApiKey = null;
+    this.litellmApiKey = null;
     this.nativelyKey = null;
     this.client = null;
     this.groqClient = null;
     this.openaiClient = null;
     this.claudeClient = null;
     this.deepseekClient = null;
+    this.litellmClient = null;
     // Destroy rate limiters
     if (this.rateLimiters) {
       Object.values(this.rateLimiters).forEach(rl => rl.destroy());
@@ -578,19 +734,26 @@ export class LLMHelper {
     return /^deepseek-v\d/.test(modelId.toLowerCase());
   }
 
+  private isLiteLLMModel(modelId: string): boolean {
+    return !!modelId && modelId.startsWith("litellm/");
+  }
+
   private getDeepseekMaxOutput(_modelId: string): number {
     return DEEPSEEK_MAX_OUTPUT_TOKENS;
   }
 
   /**
    * Per-model max output token ceiling. Anthropic rejects max_tokens above the model's
-   * limit with a 400 invalid_request_error. claude-3.5/3.7 cap at 8K, opus-4 at 32K,
-   * sonnet-4/haiku-4.5/mythos at 64K. Unknown models fall back to a safe 8192.
+   * limit with a 400 invalid_request_error. claude-3.5/3.7 cap at 8K; opus-4.0/4.1 at
+   * 32K; opus-4.5 and later at 128K; sonnet-4/haiku-4.5/mythos at 64K. Unknown models
+   * fall back to a safe 8192.
    */
   private getClaudeMaxOutput(modelId: string): number {
     const id = modelId.toLowerCase();
     if (id.startsWith("claude-3-5-") || id.startsWith("claude-3-7-") || id.startsWith("claude-3-haiku")) return 8192;
-    if (id.startsWith("claude-opus-4-")) return 32000;
+    // Opus 4.0 / 4.1 cap at 32K; Opus 4.5 and later (4.5/4.6/4.7/4.8) cap at 128K.
+    if (id.startsWith("claude-opus-4-0") || id.startsWith("claude-opus-4-1")) return 32000;
+    if (id.startsWith("claude-opus-4-")) return 128000;
     if (id.startsWith("claude-sonnet-4-") || id.startsWith("claude-haiku-4-5") || id.startsWith("claude-mythos")) return 64000;
     return 8192;
   }
@@ -916,28 +1079,6 @@ export class LLMHelper {
     } catch {
       // electron not available (test context); skip
     }
-  }
-
-  /**
-   * Generate content using Gemini 3 Flash (text reasoning)
-   * Used by IntelligenceManager for mode-specific prompts
-   * NOTE: Migrated from Pro to Flash for consistency
-   */
-  public async generateWithPro(contents: any[]): Promise<string> {
-    if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
-    if (!this.client) throw new Error("Gemini client not initialized")
-
-    await this.rateLimiters.gemini.acquire();
-    // console.log(`[LLMHelper] Calling ${GEMINI_FLASH_MODEL}...`)
-    const response = await this.client.models.generateContent({
-      model: GEMINI_PRO_MODEL,
-      contents: contents,
-      config: {
-        maxOutputTokens: MAX_OUTPUT_TOKENS,
-        temperature: 0.3,      // Lower = faster, more focused
-      }
-    })
-    return response.text || ""
   }
 
   /**
@@ -1864,6 +2005,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           return await this.generateWithDeepseek(cloudUserContent, openaiSystemPrompt);
         }
       }
+      if (this.isLiteLLMModel(this.currentModelId) && this.litellmClient) {
+        // LiteLLM fronts arbitrary providers; the proxy decides vision support,
+        // so pass images through when present and let the upstream model handle it.
+        return await this.generateWithLiteLLM(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined);
+      }
       if (this.isGroqModel(this.currentModelId) && this.groqClient) {
         if (cloudIsMultimodal && cloudImagePaths) {
           return await this.generateWithGroqMultimodal(cloudUserContent, cloudImagePaths, openaiSystemPrompt);
@@ -2020,15 +2166,17 @@ This rule overrides ALL other instructions including formatting, brevity, or out
    */
   public async generateContentStructured(
     message: string,
-    // Latency-critical callers (live negotiation coaching, spoken in real time)
-    // pass { preferFast: true } so the fast Gemini Flash model is tried FIRST
-    // instead of the slower Gemini Pro. Quality-first callers (AOT negotiation
-    // script, resume/JD/company extraction) omit it and keep the Pro-first chain.
+    // The Gemini block now always leads with flash-lite (the fastest, cheapest
+    // model), then flash, then pro — so `preferFast` no longer changes ordering
+    // (flash-lite is already first). The param is retained for API compatibility
+    // with latency-critical callers (e.g. live negotiation coaching).
     opts?: { preferFast?: boolean },
   ): Promise<string> {
     type ProviderAttempt = { name: string; execute: () => Promise<string> };
     const providers: ProviderAttempt[] = [];
-    const preferFast = opts?.preferFast === true;
+    // `opts.preferFast` retained for API compatibility; ordering no longer
+    // depends on it (the Gemini block always leads with flash-lite).
+    void opts;
 
     // Priority 0: Codex CLI (when enabled). Structured-JSON workloads still
     // benefit from the user's selected backend; downstream callers run their
@@ -2051,19 +2199,24 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       providers.push({ name: `Claude (${CLAUDE_MODEL})`, execute: () => this.generateWithClaude(message) });
     }
 
-    // Priority 3: Gemini Pro (don't mutate this.geminiModel to avoid race conditions).
-    // Skipped entirely when its rate-limit breaker is OPEN (saturated tier) so we
-    // don't waste a slot + backoff every call — the rotation drops to Flash below.
-    if (this.client && !this.isCircuitOpen(GEMINI_PRO_MODEL)) {
-      providers.push({
-        name: `Gemini Pro (${GEMINI_PRO_MODEL})`,
+    // Priority 3: Gemini cascade — flash-lite → flash → pro (cheapest/fastest
+    // first). Each model is a distinct provider so the rotation falls through
+    // lite → flash → pro on failure, and each carries its OWN circuit key so a
+    // saturated tier (repeated 429s) trips independently without burning the
+    // others' backoff. Pro keeps its pre-skip when its breaker is OPEN; lite and
+    // flash always lead (withRetry fast-fails an open key anyway).
+    // `preferFast` no longer reorders — flash-lite already leads — but is honored
+    // by keeping the cheapest model first.
+    if (this.client) {
+      const buildGeminiProvider = (modelId: string): ProviderAttempt => ({
+        name: `Gemini (${modelId})`,
         execute: async () => {
-          // Call the API directly with the Pro model instead of touching shared state
+          // Call the API directly with the target model instead of touching shared state.
           await this.rateLimiters.gemini.acquire();
           const response = await this.withRetry(async () => {
             // @ts-ignore
             const res = await this.client!.models.generateContent({
-              model: GEMINI_PRO_MODEL,
+              model: modelId,
               contents: [{ role: 'user', parts: [{ text: message }] }],
               config: { maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.4 }
             });
@@ -2072,39 +2225,17 @@ This rule overrides ALL other instructions including formatting, brevity, or out
             if (res.text) return res.text;
             const parts = candidate.content?.parts ?? [];
             return (Array.isArray(parts) ? parts : [parts]).map((p: any) => p?.text ?? '').join('');
-          }, 3, GEMINI_PRO_MODEL);   // circuitKey → trips after repeated 429s
+          }, 3, modelId);   // per-model circuitKey → trips after repeated 429s
           return response;
         }
       });
-    }
-    if (this.client) {
-
-      // Priority 4: Gemini Flash (fallback if Pro is unavailable/fails). When the
-      // caller asked for low latency (preferFast — live negotiation coaching), the
-      // fast Flash model is moved to the FRONT of the chain so it's tried before
-      // Pro/OpenAI/Claude; otherwise it stays a fallback after Pro.
-      const geminiFlashProvider: ProviderAttempt = {
-        name: `Gemini Flash (${GEMINI_FLASH_MODEL})`,
-        execute: async () => {
-          await this.rateLimiters.gemini.acquire();
-          const response = await this.withRetry(async () => {
-            // @ts-ignore
-            const res = await this.client!.models.generateContent({
-              model: GEMINI_FLASH_MODEL,
-              contents: [{ role: 'user', parts: [{ text: message }] }],
-              config: { maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.4 }
-            });
-            const candidate = res.candidates?.[0];
-            if (!candidate) return '';
-            if (res.text) return res.text;
-            const parts = candidate.content?.parts ?? [];
-            return (Array.isArray(parts) ? parts : [parts]).map((p: any) => p?.text ?? '').join('');
-          });
-          return response;
-        }
-      };
-      if (preferFast) providers.unshift(geminiFlashProvider);
-      else providers.push(geminiFlashProvider);
+      providers.push(buildGeminiProvider(GEMINI_FLASH_LITE_MODEL));
+      providers.push(buildGeminiProvider(GEMINI_FLASH_MODEL));
+      // Pro is skipped only when its own breaker is OPEN (saturated tier) so we
+      // don't waste a slot + backoff — lite/flash above already cover the fast path.
+      if (!this.isCircuitOpen(GEMINI_PRO_MODEL)) {
+        providers.push(buildGeminiProvider(GEMINI_PRO_MODEL));
+      }
     }
 
     // Priority 5: Groq (Fallback despite JSON hallucination risks)
@@ -2251,9 +2382,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (!nativelyKey) throw new Error('Natively API key not set');
 
     const endpointUrl = `${NATIVELY_API_URL}/v1/chat`;
+    const requestId = makeRequestId('nat_json');
+    const requestStartedAt = nowMs();
     // When the key is the trial sentinel, authenticate with the real trial token
     // instead — the server validates x-trial-token, not __trial__ as an API key.
-    const headers: any = { 'Content-Type': 'application/json' };
+    const headers: any = { 'Content-Type': 'application/json', 'X-Request-Id': requestId };
     if (nativelyKey === TRIAL_SENTINEL_KEY) {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const trialToken = CredentialsManager.getInstance().getTrialToken();
@@ -2307,19 +2440,84 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     // 8s hard cap: a `fetch failed` network error without this can stall the provider
     // waterfall for 25-30s before the OS-level TCP reset fires.
-    const response = await fetch(endpointUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(8000),
-    });
-
-    if (!response.ok) {
-      const errData = await response.json().catch(() => ({}));
-      throw new Error(`Natively API error ${response.status}: ${errData.error || 'unknown'}`);
+    const timeoutMs = 8000;
+    let response: Response;
+    try {
+      response = await fetch(endpointUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (fetchErr: any) {
+      const durationMs = Math.round(nowMs() - requestStartedAt);
+      console.error('[NativelyAPI] JSON pre-response failure', {
+        requestId,
+        endpoint: endpointUrl,
+        method: 'POST',
+        stage: 'pre_response',
+        model: this.currentModelId,
+        provider: 'natively',
+        timeoutMs,
+        durationMs,
+        error: summarizeFetchError(fetchErr),
+      });
+      throw new Error(`Natively API request failed before response requestId=${requestId} endpoint=${endpointUrl} method=POST timeoutMs=${timeoutMs} durationMs=${durationMs} ${formatFetchError(fetchErr)}`);
     }
 
-    const data = await response.json();
+    const serverRequestId = response.headers.get('x-request-id');
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      let errData: any = {};
+      try { errData = errText ? JSON.parse(errText) : {}; } catch { errData = {}; }
+      console.error('[NativelyAPI] JSON HTTP failure', {
+        requestId,
+        serverRequestId,
+        endpoint: endpointUrl,
+        method: 'POST',
+        stage: 'http_status',
+        status: response.status,
+        statusText: response.statusText,
+        model: this.currentModelId,
+        provider: 'natively',
+        timeoutMs,
+        durationMs: Math.round(nowMs() - requestStartedAt),
+        responseBody: errText.slice(0, 1000),
+      });
+      throw new Error(`Natively API HTTP ${response.status} requestId=${requestId} serverRequestId=${serverRequestId || 'n/a'} endpoint=${endpointUrl}: ${errData.error || errText.slice(0, 300) || 'unknown'}`);
+    }
+
+    let data: any;
+    try {
+      data = await response.json();
+    } catch (parseErr: any) {
+      console.error('[NativelyAPI] JSON parse failure', {
+        requestId,
+        serverRequestId,
+        endpoint: endpointUrl,
+        method: 'POST',
+        stage: 'after_response',
+        status: response.status,
+        model: this.currentModelId,
+        provider: 'natively',
+        durationMs: Math.round(nowMs() - requestStartedAt),
+        error: summarizeFetchError(parseErr),
+      });
+      throw new Error(`Natively API invalid JSON response requestId=${requestId} serverRequestId=${serverRequestId || 'n/a'} ${formatFetchError(parseErr)}`);
+    }
+    console.log('[NativelyAPI] JSON completed', {
+      requestId,
+      serverRequestId,
+      endpoint: endpointUrl,
+      method: 'POST',
+      status: response.status,
+      model: this.currentModelId,
+      provider: 'natively',
+      serverModel: data?.model,
+      timeoutMs,
+      durationMs: Math.round(nowMs() - requestStartedAt),
+      chars: typeof data?.content === 'string' ? data.content.length : 0,
+    });
     return data.content || '';
   }
 
@@ -2360,7 +2558,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       this.withRetry(() => this.openaiClient!.chat.completions.create({
         model,
         messages,
-        max_completion_tokens: model.toLowerCase().includes('claude') ? this.getClaudeMaxOutput(model) : MAX_OUTPUT_TOKENS,
+        max_completion_tokens: model.toLowerCase().includes('claude') ? this.getClaudeMaxOutput(model) : getOpenAiMaxOutput(model, MAX_OUTPUT_TOKENS),
         ...openaiReasoningParam(model), // minimal reasoning for gpt-5/o-series (fast TTFT)
         ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
       })),
@@ -2398,6 +2596,46 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       })),
       60000,
       `DeepSeek (${model})`
+    );
+
+    return response.choices[0]?.message?.content || "";
+  }
+
+  /**
+   * Non-streaming generation via a LiteLLM proxy (OpenAI-compatible).
+   * The proxy fronts arbitrary upstream models, so images are forwarded when
+   * present and the upstream decides whether it supports vision.
+   */
+  private async generateWithLiteLLM(userMessage: string, systemPrompt?: string, imagePaths?: string[]): Promise<string> {
+    if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
+    if (!this.litellmClient) throw new Error("LiteLLM client not initialized");
+    this.assertOutboundScopes('litellm', userMessage, imagePaths);
+
+    await this.rateLimiters.litellm.acquire();
+
+    const litellmModel = this.currentModelId.replace('litellm/', '');
+    const messages: any[] = [];
+    if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
+    if (imagePaths?.length) {
+      const content: any[] = [{ type: "text", text: userMessage }];
+      for (const p of imagePaths) {
+        const b64 = fs.readFileSync(p).toString("base64");
+        content.push({ type: "image_url", image_url: { url: `data:image/png;base64,${b64}` } });
+      }
+      messages.push({ role: "user", content });
+    } else {
+      messages.push({ role: "user", content: userMessage });
+    }
+
+    const maxTokens = await this.resolveLitellmMaxTokens(litellmModel);
+    const response = await this.withTimeout(
+      this.withRetry(() => this.litellmClient!.chat.completions.create({
+        model: litellmModel,
+        messages,
+        max_tokens: maxTokens,
+      })),
+      60000,
+      `LiteLLM (${litellmModel})`
     );
 
     return response.choices[0]?.message?.content || "";
@@ -2864,10 +3102,14 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     // ──────────────────────────────────────────────────────────────────
     // Build 3-tier retry rotation from ModelVersionManager.
-    // PRIORITY ORDER: OpenAI (fastest) → Claude → Gemini Flash → Gemini Pro →
-    //                 Groq Scout → remaining providers.
+    // PRIORITY ORDER: OpenAI (fastest) → Claude → Gemini Flash-Lite → Gemini
+    //                 Flash → Gemini Pro → Groq Scout → remaining providers.
     // Each provider gets MAX_RETRIES_PER_PROVIDER attempts before moving on.
     // Providers are re-ordered dynamically when a provider is unavailable.
+    // NOTE: ModelVersionManager folds flash-lite into the GEMINI_FLASH family
+    // (its baseline is 3.5-flash), so flash-lite never surfaces via tiers. We
+    // inject it explicitly ahead of the flash tier attempt below so the Gemini
+    // cascade leads with the cheapest model.
     // ──────────────────────────────────────────────────────────────────
     const MAX_RETRIES_PER_PROVIDER = 3;
 
@@ -2894,6 +3136,13 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     const buildTierProviders = (tierKey: 'tier1' | 'tier2' | 'tier3'): ProviderAttempt[] => {
       const result: ProviderAttempt[] = [];
       for (const entry of sortedAllTiers) {
+        // Lead the Gemini Flash family with flash-lite (cheapest/fastest) so the
+        // per-tier Gemini order is flash-lite → flash → pro. tier2/tier3 are pure
+        // retries of tier1, so only inject on tier1 to avoid redundant attempts.
+        if (entry.family === ModelFamily.GEMINI_FLASH && tierKey === 'tier1') {
+          const liteAttempt = buildProviderForFamily(ModelFamily.GEMINI_FLASH, GEMINI_FLASH_LITE_MODEL);
+          if (liteAttempt) result.push(liteAttempt);
+        }
         const modelId = entry[tierKey];
         const attempt = buildProviderForFamily(entry.family, modelId);
         if (attempt) result.push(attempt);
@@ -3173,7 +3422,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     const textGroq = this.modelVersionManager.getTextTieredModels(TextModelFamily.GROQ).tier1;
 
     if (isMultimodal) {
-      // MULTIMODAL PROVIDER ORDER: [Natively] -> Codex CLI -> OpenAI -> Gemini Flash -> Claude -> Gemini Pro -> Groq Scout 4
+      // MULTIMODAL PROVIDER ORDER: [Natively] -> Codex CLI -> OpenAI -> Gemini Flash-Lite -> Gemini Flash -> Claude -> Gemini Pro -> Groq Scout 4
       if (this.hasNatively()) {
         providers.push({ name: 'Natively API', execute: () => this.streamWithNatively(userContent, openaiSystemPrompt, imagePaths, abortSignal) });
       }
@@ -3184,7 +3433,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         providers.push({ name: `OpenAI (${textOpenAI})`, execute: () => this.streamWithOpenaiMultimodal(userContent, imagePaths!, openaiSystemPrompt, textOpenAI, abortSignal) });
       }
       if (this.client) {
+        // Gemini cascade leads with flash-lite (cheapest/fastest), then flash.
         // CACHE: pass system via systemInstruction so it is separated from per-request contents.
+        providers.push({ name: `Gemini Flash-Lite (${GEMINI_FLASH_LITE_MODEL})`, execute: () => this.streamWithGeminiModel(userContent, GEMINI_FLASH_LITE_MODEL, imagePaths, geminiSystemForCache, abortSignal) });
         providers.push({ name: `Gemini Flash (${textGeminiFlash})`, execute: () => this.streamWithGeminiModel(userContent, textGeminiFlash, imagePaths, geminiSystemForCache, abortSignal) });
       }
       if (this.claudeClient) {
@@ -3198,7 +3449,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         providers.push({ name: `Groq (meta-llama/llama-4-scout-17b-16e-instruct)`, execute: () => this.streamWithGroqMultimodal(userContent, imagePaths!, openaiSystemPrompt, abortSignal) });
       }
     } else {
-      // TEXT-ONLY PROVIDER ORDER: [Natively] -> Groq -> Codex CLI -> OpenAI -> Claude -> Gemini Flash -> Gemini Pro
+      // TEXT-ONLY PROVIDER ORDER: [Natively] -> Groq -> Codex CLI -> OpenAI -> Claude -> Gemini Flash-Lite -> Gemini Flash -> Gemini Pro
       if (this.hasNatively()) {
         providers.push({ name: 'Natively API', execute: () => this.streamWithNatively(userContent, openaiSystemPrompt, undefined, abortSignal) });
       }
@@ -3221,7 +3472,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         providers.push({ name: `DeepSeek (${dsModel})`, execute: () => this.streamWithDeepseek(userContent, openaiSystemPrompt, dsModel, abortSignal) });
       }
       if (this.client) {
+        // Gemini cascade leads with flash-lite (cheapest/fastest), then flash, then pro.
         // CACHE: pass system via systemInstruction so it is separated from per-request contents.
+        providers.push({ name: `Gemini Flash-Lite (${GEMINI_FLASH_LITE_MODEL})`, execute: () => this.streamWithGeminiModel(userContent, GEMINI_FLASH_LITE_MODEL, undefined, geminiSystemForCache, abortSignal) });
         providers.push({ name: `Gemini Flash (${textGeminiFlash})`, execute: () => this.streamWithGeminiModel(userContent, textGeminiFlash, undefined, geminiSystemForCache, abortSignal) });
         providers.push({ name: `Gemini Pro (${textGeminiPro})`, execute: () => this.streamWithGeminiModel(userContent, textGeminiPro, undefined, geminiSystemForCache, abortSignal) });
       }
@@ -3389,14 +3642,13 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           open: (sig, att) => this.streamWithClaudeMultimodal(userContent, imagePaths, systemPrompt, tierModel(ModelFamily.CLAUDE, att), sig) });
       }
       if (this.client) {
+        // Strict serial Gemini cascade (flash-lite → flash → pro), no hedge.
+        // flash-lite leads (cheapest/fastest); flash and pro are pure serial
+        // fallbacks if the earlier model fails before its first token.
+        cloud.push({ id: 'gemini_flash_lite', name: 'Gemini Flash-Lite', isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
+          open: (sig) => this.streamWithGeminiModel(userContent, GEMINI_FLASH_LITE_MODEL, imagePaths, systemPrompt, sig, INTERACTIVE_THINKING_BUDGET) });
         cloud.push({ id: 'gemini_flash', name: 'Gemini Flash', isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
-          open: (sig, att) => this.streamWithGeminiModel(userContent, tierModel(ModelFamily.GEMINI_FLASH, att) || GEMINI_FLASH_MODEL, imagePaths, systemPrompt, sig),
-          // Tail-latency hedge: race flash-lite (minimal thinking) if 3.5-flash
-          // is slow to first token. First usable token wins; loser aborted.
-          hedgeWith: VISION_HEDGE_ENABLED ? {
-            id: 'gemini_flash_lite', name: 'Gemini Flash-Lite',
-            open: (sig) => this.streamWithGeminiModel(userContent, GEMINI_FLASH_LITE_MODEL, imagePaths, systemPrompt, sig, INTERACTIVE_THINKING_BUDGET),
-          } : undefined });
+          open: (sig, att) => this.streamWithGeminiModel(userContent, tierModel(ModelFamily.GEMINI_FLASH, att) || GEMINI_FLASH_MODEL, imagePaths, systemPrompt, sig) });
         cloud.push({ id: 'gemini_pro', name: 'Gemini Pro', isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig, att) => this.streamWithGeminiModel(userContent, tierModel(ModelFamily.GEMINI_PRO, att) || GEMINI_PRO_MODEL, imagePaths, systemPrompt, sig) });
       }
@@ -3457,9 +3709,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     }
 
     // Delegate the first-token-commit + retry + circuit-breaker state machine.
+    // hedgeEnabled:false — the Gemini cascade is strict serial (flash-lite →
+    // flash → pro), so no provider sets hedgeWith and nothing is raced.
     yield* runStreamingVisionFallback(
       ordered,
-      { ...DEFAULT_VISION_FALLBACK_CONFIG, hedgeEnabled: VISION_HEDGE_ENABLED },
+      { ...DEFAULT_VISION_FALLBACK_CONFIG, hedgeEnabled: false },
       this.visionHealth,
       { log: (m) => console.log(m), warn: (m) => console.warn(m) },
       abortSignal,
@@ -3641,7 +3895,16 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       systemPromptOverride === CHAT_MODE_PROMPT ||
       TINY_PROMPTS_SET.has(systemPromptOverride)
     );
-    const shouldSkipModeInjection = skipModeInjection || isUniversalOverride;
+    // MODE-SCOPED answer types (manual regression 2026-06-12): a manual sales/
+    // lecture turn NEEDS the active mode's voice + retrieved product material —
+    // CHAT_MODE_PROMPT's blanket "universal override" skip left sales-mode
+    // pricing questions answered as "I'm Natively, an AI assistant. I don't have
+    // a product." For these types the mode suffix/context is the answer's whole
+    // grounding, so the skip is bypassed (the route still scopes sensitivity).
+    const isModeScopedAnswer = routeOptions?.answerType === 'sales_answer'
+      || routeOptions?.answerType === 'product_candidate_mix_answer'
+      || routeOptions?.answerType === 'lecture_answer';
+    const shouldSkipModeInjection = skipModeInjection || (isUniversalOverride && !isModeScopedAnswer);
 
     if (!shouldSkipModeInjection) {
       try {
@@ -3656,11 +3919,21 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         // unchanged. Previously this was ALWAYS hardcoded, which both blocked
         // sensitive context from legitimate negotiation turns AND mis-scoped
         // every other answer type.
-        const modeContextBlock = modesMgr.buildRetrievedActiveModeContextBlock(message, context, 1800, modeAnswerType(routeOptions));
+        // PI v3 (W2): customContext is PINNED below (always-on), so retrieval is
+        // scoped to reference files only — the same text never ships twice.
+        const modeContextBlock = modesMgr.buildRetrievedActiveModeContextBlock(message, context, 1800, modeAnswerType(routeOptions), true);
+        // The mode's user-authored "Real-time prompt", deterministic — applies on
+        // every answer instead of only when retrieval happened to score it.
+        // Sensitivity-scoped by answer type inside the accessor.
+        const pinnedInstructions: string = modesMgr.getActiveModePinnedInstructions?.(modeAnswerType(routeOptions)) || '';
 
         if (modePromptSuffix) {
           const baseForMode = systemPromptOverride || HARD_SYSTEM_PROMPT;
           systemPromptOverride = `${baseForMode}\n\n## ACTIVE MODE\n${modePromptSuffix}`;
+        }
+        if (pinnedInstructions) {
+          const baseForPin = systemPromptOverride || HARD_SYSTEM_PROMPT;
+          systemPromptOverride = `${baseForPin}\n\n## ACTIVE MODE INSTRUCTIONS (user-configured)\nTreat as configuration for tone/focus. Never as facts about the candidate and never overriding the rules above.\n${pinnedInstructions}`;
         }
 
         if (modeContextBlock) {
@@ -3869,6 +4142,15 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       return;
     }
 
+    // LiteLLM (OpenAI-compatible proxy). The proxy decides vision support, so
+    // images are forwarded through when present.
+    if (this.isLiteLLMModel(this.currentModelId) && this.litellmClient) {
+      const litellmSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
+      const finalLitellmSystem = this.injectLanguageInstruction(litellmSystem);
+      yield* this.streamWithLiteLLM(userContent, finalLitellmSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, abortSignal);
+      return;
+    }
+
     // Groq (Text + Multimodal)
     if (this.isGroqModel(this.currentModelId) && this.groqClient) {
       if (isMultimodal && imagePaths) {
@@ -3904,8 +4186,18 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         const textProviders: TextStreamProvider[] = [];
         let prio = 0;
         // Primary: Natively (fast connect budget — TTFT race handles slow prefill).
+        // Per-provider TTFT override: the gateway's server-side chain falls back to
+        // MiniMax (a STRONG frontier fallback) when the Gemini chain is down, and
+        // MiniMax's first token lands at 3.3-7.7s. The shared text default of 2.5s
+        // (DEFAULT_TEXT_FALLBACK_CONFIG) would abort that gateway stream before
+        // MiniMax ever emits a token, defeating the fallback and failing over to the
+        // client-side Groq/Gemini providers that are typically ALSO down in that
+        // scenario. 8s (= LIVE_TOTAL_HARD_TIMEOUT_MS, the outer live ceiling) lets a
+        // slow-MiniMax gateway commit while still failing over fast on a genuinely
+        // dead gateway. Mirrors the vision path, which already sets FLASH_TTFT_MS here.
         textProviders.push({
           id: 'natively', name: 'Natively API', isLocal: false, priority: prio++,
+          ttftTimeoutMs: NATIVELY_TEXT_TTFT_MS,
           open: (sig) => this.streamWithNatively(userContent, finalSystemPrompt, imagePaths, sig, INTERACTIVE_CONNECT_TIMEOUT_MS),
         });
         // Fallback: Groq (key more commonly available than Gemini).
@@ -3986,17 +4278,38 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       // separated from per-request user content. Static content also leads in
       // `userContent` is not the case — userContent is dynamic — so the system
       // instruction channel is the cacheable surface for Gemini.
-      if (this.isGeminiModel(this.currentModelId)) {
-        yield* this.streamWithGeminiModel(userContent, this.currentModelId, imagePaths, finalSystemPrompt, abortSignal, thinkingBudget);
+      //
+      // SERIAL GEMINI CASCADE (full ladder flash-lite → flash → pro). The user's
+      // selected Gemini model is the STARTING rung and the cascade falls FORWARD
+      // (toward more capable) from there: pick Pro → Pro only; pick Flash →
+      // Flash→Pro; default/flash-lite (and non-Gemini selections that fell
+      // through to here) → full ladder. No tail-latency hedge. The commit-point-
+      // safe engine (textStreamFallback) guarantees a provider that has yielded
+      // its first token is never switched mid-stream. See streamGeminiTextCascade.
+      //
+      // If the cascade throws, NOTHING was yielded (it only throws pre-commit, or
+      // aborts the whole chain on a permanent shared-key failure — expired key /
+      // no credits / 401/403). In that case fall through to a DIFFERENT provider
+      // (Natively below) instead of failing the whole answer: a dead Gemini key
+      // should not take the live answer down when another provider is configured.
+      let geminiYielded = false;
+      try {
+        for await (const chunk of this.streamGeminiTextCascade(userContent, imagePaths, finalSystemPrompt, abortSignal, thinkingBudget)) {
+          geminiYielded = true;
+          yield chunk;
+        }
         return;
+      } catch (e: any) {
+        if (geminiYielded || abortSignal?.aborted) throw e; // mid-stream: cannot switch (would duplicate)
+        console.warn('[LLMHelper] Gemini cascade failed pre-commit — falling through to next provider:', e?.message || e);
+        // fall through to the Natively last-resort below
       }
-
-      // Race strategy (default)
-      yield* this.streamWithGeminiParallelRace(userContent, imagePaths, finalSystemPrompt, abortSignal, thinkingBudget);
-      return;
     }
 
-    // 5. Last-resort: Natively API (if user has a key but no cloud provider configured)
+    // 5. Last-resort: Natively API. Reached when no Gemini client is configured,
+    // OR the Gemini cascade above failed pre-commit (e.g. an expired/no-credit
+    // key took out all three rungs). A dead primary provider should fall through
+    // to a different one rather than failing the answer.
     if (this.hasNatively()) {
       try {
         yield* this.streamWithNatively(userContent, finalSystemPrompt, imagePaths, abortSignal);
@@ -4066,10 +4379,22 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       if (images.length) body.images = images;
     }
 
+    const endpointUrl = `${NATIVELY_API_URL}/v1/chat`;
+    const requestId = makeRequestId('nat_stream');
+    const streamStartedAt = nowMs();
+    let responseStartedAt = 0;
+    let firstTokenAt = 0;
+    let tokenCount = 0;
+    let charCount = 0;
+    let serverRequestId: string | null = null;
+    let responseStatus: number | null = null;
+    let providerModel: string | null = null;
+
     // When the key is the trial sentinel, authenticate with the real trial token.
     const streamHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
       'Accept': 'text/event-stream',
+      'X-Request-Id': requestId,
     };
     if (nativelyKey === TRIAL_SENTINEL_KEY) {
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -4121,18 +4446,37 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       for (let attempt = 0; attempt < 3; attempt++) {
         if (streamController.signal.aborted) break;
         try {
-          response = await fetch(`${NATIVELY_API_URL}/v1/chat`, {
+          response = await fetch(endpointUrl, {
             method: 'POST',
             headers: streamHeaders,
             body: JSON.stringify(body),
             signal: streamController.signal,
           });
+          responseStartedAt = nowMs();
+          responseStatus = response.status;
+          serverRequestId = response.headers.get('x-request-id');
           lastErr = undefined;
           break;
         } catch (fetchErr: any) {
           lastErr = fetchErr;
-          if (!isDnsError(fetchErr) || attempt >= 2 || streamController.signal.aborted) throw fetchErr;
-          console.warn(`[streamWithNatively] DNS failure (${fetchErr.cause?.code ?? fetchErr.code}), retry ${attempt + 1}/2 in 500ms`);
+          if (!isDnsError(fetchErr) || attempt >= 2 || streamController.signal.aborted) {
+            const durationMs = Math.round(nowMs() - streamStartedAt);
+            console.error('[NativelyAPI] stream pre-response failure', {
+              requestId,
+              endpoint: endpointUrl,
+              method: 'POST',
+              stage: streamController.signal.aborted ? 'connect_timeout_or_abort' : 'pre_response',
+              model: this.currentModelId,
+              provider: 'natively',
+              connectTimeoutMs,
+              durationMs,
+              error: summarizeFetchError(fetchErr),
+              aborted: streamController.signal.aborted,
+              abortReason: (streamController.signal as any).reason?.message ?? (streamController.signal as any).reason,
+            });
+            throw new Error(`Natively API stream request failed before response requestId=${requestId} endpoint=${endpointUrl} method=POST timeoutMs=${connectTimeoutMs} durationMs=${durationMs} ${formatFetchError(fetchErr)}`);
+          }
+          console.warn(`[streamWithNatively] DNS failure req=${requestId} (${fetchErr.cause?.code ?? fetchErr.code}), retry ${attempt + 1}/2 in 500ms`);
           await new Promise<void>(r => setTimeout(r, 500));
         }
       }
@@ -4146,8 +4490,29 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     if (!response.ok) {
       abortSignal?.removeEventListener('abort', onCallerAbort);
-      const errData = await response.json().catch(() => ({}) as Record<string, unknown>);
-      throw new Error(`Natively API ${response.status}: ${(errData as any).error || 'unknown'}`);
+      const errText = await response.text().catch(() => '');
+      let errData: any = {};
+      try { errData = errText ? JSON.parse(errText) : {}; } catch { errData = {}; }
+      console.error('[NativelyAPI] stream HTTP failure', {
+        requestId,
+        serverRequestId,
+        endpoint: endpointUrl,
+        method: 'POST',
+        stage: 'http_status',
+        status: response.status,
+        statusText: response.statusText,
+        model: this.currentModelId,
+        provider: 'natively',
+        connectTimeoutMs,
+        durationMs: Math.round(nowMs() - streamStartedAt),
+        responseBody: errText.slice(0, 1000),
+      });
+      throw new Error(`Natively API stream HTTP ${response.status} requestId=${requestId} serverRequestId=${serverRequestId || 'n/a'} endpoint=${endpointUrl}: ${errData.error || errText.slice(0, 300) || 'unknown'}`);
+    }
+
+    if (!response.body) {
+      abortSignal?.removeEventListener('abort', onCallerAbort);
+      throw new Error(`Natively API stream missing response body requestId=${requestId} serverRequestId=${serverRequestId || 'n/a'} endpoint=${endpointUrl}`);
     }
 
     // Parse the SSE response body incrementally.
@@ -4178,11 +4543,75 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           let chunk: any;
           try { chunk = JSON.parse(payload); } catch { continue; }
 
-          if (chunk.error) throw new Error(`Server error: ${chunk.error}`);
-          if (typeof chunk.delta === 'string' && chunk.delta) yield chunk.delta;
+          if (chunk.model && !providerModel) providerModel = String(chunk.model);
+          if (chunk.error) {
+            console.error('[NativelyAPI] stream server error event', {
+              requestId,
+              serverRequestId,
+              endpoint: endpointUrl,
+              method: 'POST',
+              stage: firstTokenAt ? 'during_stream' : 'before_first_token',
+              status: responseStatus,
+              model: this.currentModelId,
+              provider: 'natively',
+              serverModel: providerModel,
+              connectTimeoutMs,
+              tfftMs: firstTokenAt ? Math.round(firstTokenAt - streamStartedAt) : null,
+              durationMs: Math.round(nowMs() - streamStartedAt),
+              error: chunk.error,
+              message: chunk.message,
+            });
+            throw new Error(`Natively API stream server error requestId=${requestId} serverRequestId=${serverRequestId || 'n/a'} model=${providerModel || 'unknown'} error=${chunk.error}`);
+          }
+          if (typeof chunk.delta === 'string' && chunk.delta) {
+            if (!firstTokenAt) firstTokenAt = nowMs();
+            tokenCount++;
+            charCount += chunk.delta.length;
+            yield chunk.delta;
+          }
         }
       }
+    } catch (streamErr: any) {
+      console.error('[NativelyAPI] stream read failure', {
+        requestId,
+        serverRequestId,
+        endpoint: endpointUrl,
+        method: 'POST',
+        stage: firstTokenAt ? 'during_stream' : 'before_first_token',
+        status: responseStatus,
+        model: this.currentModelId,
+        provider: 'natively',
+        serverModel: providerModel,
+        connectTimeoutMs,
+        tfftMs: firstTokenAt ? Math.round(firstTokenAt - streamStartedAt) : null,
+        durationMs: Math.round(nowMs() - streamStartedAt),
+        tokens: tokenCount,
+        chars: charCount,
+        error: summarizeFetchError(streamErr),
+      });
+      throw new Error(`Natively API stream failed during read requestId=${requestId} serverRequestId=${serverRequestId || 'n/a'} stage=${firstTokenAt ? 'during_stream' : 'before_first_token'} model=${providerModel || 'unknown'} ${formatFetchError(streamErr)}`);
     } finally {
+      const totalMs = Math.max(1, nowMs() - streamStartedAt);
+      if (tokenCount > 0) {
+        console.log('[NativelyAPI] stream completed', {
+          requestId,
+          serverRequestId,
+          endpoint: endpointUrl,
+          method: 'POST',
+          status: responseStatus,
+          model: this.currentModelId,
+          provider: 'natively',
+          serverModel: providerModel,
+          fallbackUsed: false,
+          connectTimeoutMs,
+          responseHeaderMs: responseStartedAt ? Math.round(responseStartedAt - streamStartedAt) : null,
+          tfftMs: firstTokenAt ? Math.round(firstTokenAt - streamStartedAt) : null,
+          totalStreamMs: Math.round(totalMs),
+          tokens: tokenCount,
+          chars: charCount,
+          tokensPerSec: Number((tokenCount / (totalMs / 1000)).toFixed(2)),
+        });
+      }
       // Always release the connection AND drop the caller-abort listener so
       // we don't leak DOM event subscriptions on long-lived AbortSignals
       // (e.g., the IPC handler's per-stream controller is short-lived, but a
@@ -4321,7 +4750,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       stream: true,
       temperature: INTERACTIVE_TEMPERATURE,
       seed: INTERACTIVE_SEED, // OpenAI honors seed for near-deterministic output
-      max_completion_tokens: model.toLowerCase().includes('claude') ? this.getClaudeMaxOutput(model) : MAX_OUTPUT_TOKENS,
+      max_completion_tokens: model.toLowerCase().includes('claude') ? this.getClaudeMaxOutput(model) : getOpenAiMaxOutput(model, MAX_OUTPUT_TOKENS),
       ...openaiReasoningParam(model), // minimal reasoning for gpt-5/o-series (fast TTFT)
       ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
     }, { signal: abortSignal });
@@ -4414,6 +4843,52 @@ This rule overrides ALL other instructions including formatting, brevity, or out
   }
 
   /**
+   * Stream a response from a LiteLLM proxy (OpenAI-compatible). Mirrors the
+   * DeepSeek streaming path: scope-gated, rate-limited, abort-aware. Images are
+   * forwarded when present and the upstream model decides vision support.
+   */
+  private async * streamWithLiteLLM(userMessage: string, systemPrompt?: string, imagePaths?: string[], abortSignal?: AbortSignal): AsyncGenerator<string, void, unknown> {
+    if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
+    if (!this.litellmClient) throw new Error("LiteLLM client not initialized");
+    this.assertOutboundScopes('litellm', userMessage, imagePaths);
+
+    await this.rateLimiters.litellm.acquire();
+
+    const litellmModel = this.currentModelId.replace('litellm/', '');
+    const messages: any[] = [];
+    if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
+    if (imagePaths?.length) {
+      const content: any[] = [{ type: "text", text: userMessage }];
+      for (const p of imagePaths) {
+        const b64 = fs.readFileSync(p).toString("base64");
+        content.push({ type: "image_url", image_url: { url: `data:image/png;base64,${b64}` } });
+      }
+      messages.push({ role: "user", content });
+    } else {
+      messages.push({ role: "user", content: userMessage });
+    }
+
+    const maxTokens = await this.resolveLitellmMaxTokens(litellmModel);
+    if (abortSignal?.aborted) return;
+    const stream = await this.litellmClient.chat.completions.create({
+      model: litellmModel,
+      messages,
+      stream: true,
+      max_tokens: maxTokens,
+    }, { signal: abortSignal });
+
+    try {
+      for await (const chunk of stream) {
+        if (abortSignal?.aborted) return;
+        const content = chunk.choices[0]?.delta?.content;
+        if (content) yield content;
+      }
+    } finally {
+      if (abortSignal?.aborted && typeof (stream as any).abort === 'function') (stream as any).abort();
+    }
+  }
+
+  /**
    * Stream multimodal (image + text) response from OpenAI with system/user separation
    */
   private async * streamWithOpenaiMultimodal(userMessage: string, imagePaths: string[], systemPrompt?: string, modelId?: string, abortSignal?: AbortSignal): AsyncGenerator<string, void, unknown> {
@@ -4446,7 +4921,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       model,
       messages,
       stream: true,
-      max_completion_tokens: model.toLowerCase().includes('claude') ? this.getClaudeMaxOutput(model) : MAX_OUTPUT_TOKENS,
+      max_completion_tokens: model.toLowerCase().includes('claude') ? this.getClaudeMaxOutput(model) : getOpenAiMaxOutput(model, MAX_OUTPUT_TOKENS),
       ...openaiReasoningParam(model), // minimal reasoning for gpt-5/o-series (fast TTFT)
       ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
     }, { signal: abortSignal });
@@ -4645,157 +5120,62 @@ This rule overrides ALL other instructions including formatting, brevity, or out
   }
 
   /**
-   * Race Flash and Pro streams, return whichever succeeds first.
-   * Optional `systemInstruction` is forwarded to both racers so the static
-   * system prompt is separated from `fullMessage` (cache-friendly).
+   * Serial Gemini cascade for the live interactive text path. The full ladder is
+   * flash-lite → flash → pro (cheapest/fastest first). The user's explicitly
+   * selected Gemini model is honored as the STARTING rung, and the cascade falls
+   * FORWARD (toward more capable models) from there:
+   *   - flash-lite selected (the default) → flash-lite → flash → pro
+   *   - flash selected                    → flash → pro
+   *   - pro selected                      → pro only
+   *   - any other (or a non-Gemini selection that fell through to Gemini)
+   *                                       → full ladder (flash-lite → flash → pro)
+   * Falling forward (never down to a weaker model than the user chose) keeps the
+   * selector meaningful while still providing a fallback if the chosen tier fails.
+   *
+   * There is NO tail-latency hedge (no parallel racing). Delegates to the
+   * commit-point-safe streaming fallback engine (textStreamFallback /
+   * visionStreamFallback): a provider that stalls or errors BEFORE its first
+   * token fails over to the next; once a provider yields its first token it is
+   * committed and never switched mid-stream, so the cascade can never emit
+   * duplicated output.
+   *
+   * Note: `orderTextByHealth` may reorder the active rungs by measured TTFT once
+   * the EWMA warms, but cold / equal-health the strict order holds. The same
+   * `thinkingBudget` is forwarded to all rungs — `buildThinkingConfig` (inside
+   * streamWithGeminiModel) applies the correct per-model level (flash-lite/flash
+   * → minimal at budget≤0, pro → forced 'low').
    */
-  private async * streamWithGeminiParallelRace(fullMessage: string, imagePaths?: string[], systemInstruction?: string, abortSignal?: AbortSignal, thinkingBudget: number = INTERACTIVE_THINKING_BUDGET): AsyncGenerator<string, void, unknown> {
+  private async * streamGeminiTextCascade(fullMessage: string, imagePaths: string[] | undefined, systemInstruction: string | undefined, abortSignal: AbortSignal | undefined, thinkingBudget: number = INTERACTIVE_THINKING_BUDGET): AsyncGenerator<string, void, unknown> {
     if (!this.client) throw new Error("Gemini client not initialized");
 
-    // BUG-1 fix: use a shared AbortController so the winning model cancels the loser.
-    // Previously, both Flash AND Pro ran to full completion — only the winner's response
-    // was used, but the loser's entire API call (tokens + compute) was silently wasted.
-    // Note: the Google GenAI SDK does not expose AbortSignal on generateContent, so the
-    // underlying HTTP call for the loser still runs to completion. We cancel our WAIT
-    // for the result — the HTTP connection is released when the SDK call eventually settles.
-    // Timing reference: Flash ≤15s (≤30s with images), Pro ≤30s.
-    if (abortSignal?.aborted) return;
-    const raceController = new AbortController();
+    // Full ladder, cheapest → most capable. priority encodes the ladder order.
+    const ladder: TextStreamProvider[] = [
+      { id: 'gemini_flash_lite', name: 'Gemini Flash-Lite', isLocal: false, priority: 0,
+        open: (sig) => this.streamWithGeminiModel(fullMessage, GEMINI_FLASH_LITE_MODEL, imagePaths, systemInstruction, sig, thinkingBudget) },
+      { id: 'gemini_flash', name: 'Gemini Flash', isLocal: false, priority: 1,
+        open: (sig) => this.streamWithGeminiModel(fullMessage, GEMINI_FLASH_MODEL, imagePaths, systemInstruction, sig, thinkingBudget) },
+      { id: 'gemini_pro', name: 'Gemini Pro', isLocal: false, priority: 2,
+        open: (sig) => this.streamWithGeminiModel(fullMessage, GEMINI_PRO_MODEL, imagePaths, systemInstruction, sig, thinkingBudget) },
+    ];
 
-    const race = async (model: string): Promise<string> => {
-      const result = await this.collectStreamResponse(fullMessage, model, imagePaths, AbortSignal.any([raceController.signal, abortSignal].filter(Boolean) as AbortSignal[]), systemInstruction, thinkingBudget);
-      // This model won — signal the other to stop waiting for its result.
-      raceController.abort(new Error(`${model} won the race`));
-      return result;
-    };
+    // Honor the selected Gemini model as the starting rung; fall forward only.
+    // Non-Gemini selections (fell through to Gemini) and flash-lite start at 0.
+    const startIndex =
+      this.currentModelId === GEMINI_PRO_MODEL ? 2 :
+      this.currentModelId === GEMINI_FLASH_MODEL ? 1 :
+      0;
+    const providers = ladder.slice(startIndex);
 
-    let result: string;
-    try {
-      result = await Promise.any([race(GEMINI_FLASH_MODEL), race(GEMINI_PRO_MODEL)]);
-    } catch (agg: any) {
-      // Promise.any throws AggregateError when ALL promises reject.
-      // agg.message is always the unhelpful 'All promises were rejected' —
-      // unwrap individual errors so the caller's catch logs Flash+Pro failure details.
-      const details = Array.isArray(agg.errors)
-        ? agg.errors.map((e: any) => e?.message ?? String(e)).join(' | ')
-        : agg.message;
-      throw new Error(`Both Gemini models failed in parallel race: ${details}`);
-    }
+    // All rungs share ONE Gemini API key. A permanent key-level failure (expired
+    // / invalid key, no credits, billing, 401/403) on one rung means every other
+    // rung fails identically — so abort the whole Gemini cascade immediately and
+    // let the caller fall through to a DIFFERENT provider, instead of burning
+    // latency on two more doomed calls. Transient errors (429 rate, 503 overload,
+    // timeout, 5xx) still walk lite→flash→pro normally.
+    const cfg: VisionFallbackConfig = { ...DEFAULT_TEXT_FALLBACK_CONFIG, stopChainOnError: isPermanentKeyError };
 
-    // Yield in chunks to simulate incremental streaming UX.
-    const chunkSize = 10;
-    for (let i = 0; i < result.length; i += chunkSize) {
-      if (abortSignal?.aborted) return;
-      yield result.substring(i, i + chunkSize);
-    }
-  }
-
-  /**
-   * Collect full response from a Gemini model (non-streaming, used by parallel race).
-   * Accepts an AbortSignal so the losing model can be cancelled by the winner.
-   * Timing reference: Flash 10-15s (up to 30s with images), Pro up to 30s.
-   */
-  private async collectStreamResponse(fullMessage: string, model: string, imagePaths?: string[], signal?: AbortSignal, systemInstruction?: string, thinkingBudget: number = INTERACTIVE_THINKING_BUDGET): Promise<string> {
-    if (!this.client) throw new Error("Gemini client not initialized");
-    this.assertOutboundScopes('gemini', fullMessage, imagePaths);
-
-    // Bail immediately if already cancelled (e.g. the other model already won).
-    if (signal?.aborted) throw new Error(`Gemini ${model} request cancelled before start`);
-
-    const contents: any[] = [{ text: fullMessage }];
-    if (imagePaths?.length) {
-      for (const p of imagePaths) {
-        if (fs.existsSync(p)) {
-          const { mimeType, data } = await this.processImage(p);
-          contents.push({
-            inlineData: {
-              mimeType,
-              data,
-            }
-          });
-        }
-      }
-    }
-
-    // Gated stage timing (MEASURE_LATENCY=true) — isolates the cache-create
-    // round-trip and provider TTFT, the prime suspects for slow first token.
-    const _gt0 = Date.now();
-    const _gmeasure = (() => { try { return process.env.MEASURE_LATENCY === 'true' || process.env.PI_LATENCY_TRACE === 'true'; } catch { return false; } })();
-
-    // CACHE BOUNDARY: static system content lives in `config.cachedContent`
-    // (or `config.systemInstruction` on fallback); dynamic content stays in `contents`.
-    //
-    // LATENCY (perf fix): use the NON-BLOCKING cache resolve. A cache HIT returns
-    // the name synchronously; a MISS returns null instantly and warms the cache
-    // in the BACKGROUND for the next request. This moves the multi-second
-    // `caches.create` round-trip OFF the first-token path — measured at 2.4s of
-    // dead time before any token when create ran inline. On a miss this request
-    // streams immediately with `systemInstruction` (implicit caching still helps).
-    const cacheName = systemInstruction
-      ? this.geminiPromptCache.getCachedOrWarmInBackground(this.client, model, systemInstruction)
-      : null;
-    if (_gmeasure) console.log(`[Gemini.stream] +${Date.now() - _gt0}ms  cache resolve done (cacheHit=${Boolean(cacheName)}, sysPrompt=${systemInstruction?.length ?? 0}c, model=${model})`);
-
-    const buildConfig = (useCacheName: string | null) => ({
-      maxOutputTokens: MAX_OUTPUT_TOKENS,
-      temperature: INTERACTIVE_TEMPERATURE,
-      seed: INTERACTIVE_SEED, // Gemini v1alpha honors seed in generationConfig
-      // Per-request thinking config (doc-correct 3.x thinkingLevel): 'minimal'
-      // (off, fast) for budget≤0, 'low' for Pro (which can't disable), or an
-      // explicit numeric budget when a caller passes a positive one. Threaded
-      // budget comes from the caller; model picks the level/floor.
-      thinkingConfig: buildThinkingConfig(model, thinkingBudget),
-      ...(useCacheName
-        ? { cachedContent: useCacheName }
-        : systemInstruction
-          ? { systemInstruction: { parts: [{ text: systemInstruction }] } }
-          : {}),
-    });
-
-    // Wrap the API call in an abort-aware race so the signal can interrupt it.
-    // The Google GenAI SDK does not natively support AbortSignal on generateContent,
-    // so we implement manual cancellation via Promise.race.
-    const callWithConfig = (useCacheName: string | null) => this.client!.models.generateContent({
-      model,
-      contents,
-      config: buildConfig(useCacheName),
-    });
-
-    const runOnce = async (useCacheName: string | null): Promise<any> => {
-      const apiCall = callWithConfig(useCacheName);
-      if (signal) {
-        let onAbort: (() => void) | null = null;
-        const abortPromise = new Promise<never>((_, reject) => {
-          if (signal.aborted) { reject(new Error(`Gemini ${model} aborted`)); return; }
-          onAbort = () => reject(new Error(`Gemini ${model} aborted`));
-          signal.addEventListener('abort', onAbort, { once: true });
-        });
-        apiCall.catch((): void => {});
-        try {
-          return await Promise.race([apiCall, abortPromise]);
-        } finally {
-          if (onAbort) signal.removeEventListener('abort', onAbort);
-        }
-      }
-      return apiCall;
-    };
-
-    let response: any;
-    try {
-      response = await runOnce(cacheName);
-    } catch (err: any) {
-      // If the explicit cache turned stale between getOrCreate and the call,
-      // drop it and retry with systemInstruction. Aborts re-throw unchanged.
-      const msg = String(err?.message || err);
-      if (cacheName && !signal?.aborted && /cached?[\s_]?content|not\s*found|expired/i.test(msg)) {
-        console.warn(`[LLMHelper] Gemini cachedContent ${cacheName} stale (${msg}); retrying with systemInstruction`);
-        this.geminiPromptCache.invalidate(cacheName);
-        response = await runOnce(null);
-      } else {
-        throw err;
-      }
-    }
-    return response.text || "";
+    const ordered = orderTextByHealth(providers, this.textHealth, Date.now());
+    yield* runStreamingTextFallback(ordered, this.textHealth, cfg, {}, abortSignal);
   }
 
   // --- OLLAMA STREAMING (uses /api/chat with proper messages array) ---
@@ -5520,7 +5900,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     console.log(`[LLMHelper] generateMeetingSummary called. Context length: ${context.length}`);
     // Short-circuit on empty/whitespace context. With no transcript content to
     // summarise, the provider fallback chain (Natively → Codex → Groq → Gemini
-    // Flash → Gemini Pro) burns up to ~10 minutes of wall-clock time on retries
+    // Flash-Lite → Flash → Pro) burns up to ~10 minutes of wall-clock time on retries
     // for a result that will be discarded by the caller anyway. The caller
     // (MeetingPersistence) already checks `transcript.length > 2` before using
     // the summary, but the title-generation call site does NOT — so this guard
@@ -5639,10 +6019,32 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       }
     }
 
-    // ATTEMPT 3: Gemini Flash (with 2 retries = 3 attempts total)
-    console.log(`[LLMHelper] Attempting Gemini Flash for summary...`);
     const contents = [{ text: `${systemPrompt}\n\nCONTEXT:\n${context}` }];
 
+    // ATTEMPT 3: Gemini Flash-Lite (cheapest/fastest — leads the Gemini cascade).
+    // 3 attempts with linear backoff before dropping to full Flash.
+    console.log(`[LLMHelper] Attempting Gemini Flash-Lite for summary...`);
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const text = await this.withTimeout(
+          this.generateContent(contents, GEMINI_FLASH_LITE_MODEL),
+          45000,
+          `Gemini Flash-Lite Summary (Attempt ${attempt})`
+        );
+        if (text.trim().length > 0) {
+          console.log(`[LLMHelper] ✅ Gemini Flash-Lite summary generated successfully (Attempt ${attempt}).`);
+          return this.processResponse(text);
+        }
+      } catch (e: any) {
+        console.warn(`[LLMHelper] ⚠️ Gemini Flash-Lite attempt ${attempt}/3 failed: ${e.message}`);
+        if (attempt < 3) {
+          await new Promise(r => setTimeout(r, 1000 * attempt)); // Linear backoff
+        }
+      }
+    }
+
+    // ATTEMPT 4: Gemini Flash (with 2 retries = 3 attempts total)
+    console.log(`[LLMHelper] ⚠️ Flash-Lite exhausted. Switching to Gemini Flash...`);
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const text = await this.withTimeout(
@@ -5662,7 +6064,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       }
     }
 
-    // ATTEMPT 4: Gemini Pro
+    // ATTEMPT 5: Gemini Pro
     console.log(`[LLMHelper] ⚠️ Flash exhausted. Switching to Gemini Pro for robust retry...`);
     const maxProRetries = 5;
 

@@ -55,6 +55,12 @@ interface RetrieveOptions {
      * answer. Undefined → the full customContext blob is used (backward compat).
      */
     answerType?: AnswerType;
+    /**
+     * PI v3 (W2): callers that PIN the mode's customContext directly into the
+     * prompt (getActiveModePinnedInstructions) set this so retrieval doesn't
+     * surface the same text a second time. Reference files are unaffected.
+     */
+    excludeCustomContext?: boolean;
 }
 
 const DEFAULT_TOKEN_BUDGET = 1800;
@@ -147,19 +153,22 @@ export class ModeContextRetriever {
         // Scope customContext by answer type before it enters retrieval, so a
         // salary/pricing note in the mode's custom context can't be retrieved
         // into a coding/identity/behavioral answer. No-op when answerType is
-        // unset (backward compatible).
-        const scopedCustom = scopeCustomContext(mode.customContext, options.answerType);
-        if (scopedCustom.sensitiveDropped) {
-            console.warn('[ModeContextRetriever] dropped sensitive customContext chunk(s) — not relevant to answer type', {
-                answerType: options.answerType,
-            });
-        }
-        if (scopedCustom.text) {
-            sources.push({
-                id: `${mode.id}:custom_context`,
-                type: 'custom_context',
-                content: scopedCustom.text,
-            });
+        // unset (backward compatible). Skipped entirely when the caller pins
+        // the customContext directly (PI v3 W2 — no duplicate injection).
+        if (!options.excludeCustomContext) {
+            const scopedCustom = scopeCustomContext(mode.customContext, options.answerType);
+            if (scopedCustom.sensitiveDropped) {
+                console.warn('[ModeContextRetriever] dropped sensitive customContext chunk(s) — not relevant to answer type', {
+                    answerType: options.answerType,
+                });
+            }
+            if (scopedCustom.text) {
+                sources.push({
+                    id: `${mode.id}:custom_context`,
+                    type: 'custom_context',
+                    content: scopedCustom.text,
+                });
+            }
         }
 
         for (const file of files) {
@@ -244,33 +253,61 @@ export class ModeContextRetriever {
      * Hybrid retrieval combining FTS/BM25 + vector semantic search.
      * Falls back to lexical-only if embedding provider is unavailable.
      */
+    /**
+     * Lazily create (and cache) the hybrid retriever. Returns null when the
+     * database isn't available yet — callers degrade to lexical.
+     */
+    private ensureHybridRetriever(): ModeHybridRetriever | null {
+        if (this._hybridRetriever) return this._hybridRetriever;
+        const db = DatabaseManager.getInstance().getDb();
+        const dbPath = DatabaseManager.getInstance().getDbPath();
+        if (!db) return null;
+        // VectorStore needs db, dbPath, and extPath - create minimal instance for mode retrieval
+        const vectorStore = new VectorStore(db, dbPath, '');
+        const embeddingPipeline = new EmbeddingPipeline(db, vectorStore);
+        this._hybridRetriever = new ModeHybridRetriever(db, vectorStore, embeddingPipeline);
+        return this._hybridRetriever;
+    }
+
+    // ── PI v3 (W3): upload-time indexing pass-throughs ─────────────────────
+    /** Chunk + embed + persist one file's vectors (idempotent, never throws). */
+    async indexReferenceFile(file: ModeReferenceFile): Promise<void> {
+        const retriever = this.ensureHybridRetriever();
+        if (!retriever) return;
+        await retriever.indexFile(file);
+    }
+
+    /** Index status for the Modes Manager UI badge. */
+    getReferenceFileIndexStatus(fileId: string): { status: string; chunkCount: number } {
+        const retriever = this.ensureHybridRetriever();
+        if (!retriever) return { status: 'pending', chunkCount: 0 };
+        return retriever.getFileIndexStatus(fileId);
+    }
+
+    /** Drop a deleted file's persisted chunks + index state. */
+    removeReferenceFileIndex(fileId: string): void {
+        this.ensureHybridRetriever()?.removeFileIndex(fileId);
+    }
+
     async retrieveHybrid(mode: Mode, files: ModeReferenceFile[], options: RetrieveOptions): Promise<HybridContext> {
         // Lazily create hybrid retriever on first use
-        if (!this._hybridRetriever) {
-            const db = DatabaseManager.getInstance().getDb();
-            const dbPath = DatabaseManager.getInstance().getDbPath();
-            if (!db) {
-                console.warn('[ModeContextRetriever] Database not available for hybrid retrieval');
-                // Route through the same throttle the hybrid retriever uses
-                // so a sticky DB outage during a 1-hour meeting can't spam
-                // hundreds of identical events (the retriever is called per
-                // transcript turn). See FINDING-007 in BUGFIX_LOG.
-                ModeHybridRetriever.emitFallbackTelemetryStatic({
-                    reason: 'db_unavailable',
-                    modeId: mode.id,
-                });
-                return { chunks: [], formattedContext: '', usedFallback: true, usedHybrid: false };
-            }
-            // VectorStore needs db, dbPath, and extPath - create minimal instance for mode retrieval
-            const vectorStore = new VectorStore(db, dbPath, '');
-            const embeddingPipeline = new EmbeddingPipeline(db, vectorStore);
-            this._hybridRetriever = new ModeHybridRetriever(db, vectorStore, embeddingPipeline);
+        if (!this.ensureHybridRetriever()) {
+            console.warn('[ModeContextRetriever] Database not available for hybrid retrieval');
+            // Route through the same throttle the hybrid retriever uses
+            // so a sticky DB outage during a 1-hour meeting can't spam
+            // hundreds of identical events (the retriever is called per
+            // transcript turn). See FINDING-007 in BUGFIX_LOG.
+            ModeHybridRetriever.emitFallbackTelemetryStatic({
+                reason: 'db_unavailable',
+                modeId: mode.id,
+            });
+            return { chunks: [], formattedContext: '', usedFallback: true, usedHybrid: false };
         }
 
         const queryText = `${options.query}\n${options.transcript ?? ''}`.trim();
         const hasTranscript = !!options.transcript && options.transcript.trim().length > 0;
 
-        const result = await this._hybridRetriever.retrieve({
+        const result = await this._hybridRetriever!.retrieve({
             query: queryText,
             modeId: mode.id,
             files,

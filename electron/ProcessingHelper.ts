@@ -86,6 +86,12 @@ export class ProcessingHelper {
       this.llmHelper.setDeepseekApiKey(deepseekKey);
     }
 
+    const litellmBaseURL = credManager.getLitellmBaseURL();
+    if (litellmBaseURL) {
+      console.log("[ProcessingHelper] Loading stored LiteLLM config from CredentialsManager");
+      this.llmHelper.setLitellmConfig(credManager.getLitellmApiKey() || '', litellmBaseURL, credManager.getLitellmMaxTokens());
+    }
+
     const nativelyKey = credManager.getNativelyApiKey();
     if (nativelyKey) {
       console.log("[ProcessingHelper] Loading stored Natively API Key from CredentialsManager");

@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Natively Companion",
+  "version": "0.1.0",
+  "description": "Official companion extension for Natively. Securely sends active tab content to your local workspace on demand.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvXiNEU3gKhfDitCs6yRT5YYNfe2j+AEUsKPbO9igNHCvvpgXAjNXqL8U+tCgZNoOflFduXMN27EhV5WsYtrGiBM4Be6DO8bxjmmNHkmsnFOsW5NeLMpwdOfUtV9peOv+J0Oztys/YuMBT8SHOKmBUK2/B4vxiWxEyuPKGkfAQ5a/6MQZnygDwTaVtQSiP0H58aOcZxsKjSKceplSM1MdgmXL/VKOsp+mtTdxWO29zC61RwEn/mupx7Srh/JDU6F9dICkviL3Sahltoer3xRkBls1exR66vOBLqqbedDLcQBuGX8p8UXxbH7e7zs1QzJhGSol/E1qmyg1SJ8uhzgAnQIDAQAB",
+  "minimum_chrome_version": "114",
+  "permissions": ["activeTab", "scripting", "storage", "alarms", "tabs"],
+  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*", "ws://127.0.0.1/*"],
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Natively — capture this page",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon_16x16.png",
+      "32": "icons/icon_32x32.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon_16x16.png",
+    "32": "icons/icon_32x32.png",
+    "48": "icons/icon_64x64.png",
+    "128": "icons/icon_128x128.png"
+  }
+}

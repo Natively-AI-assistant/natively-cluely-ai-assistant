@@ -28,8 +28,9 @@ export interface VisionProviderBuildInputs {
 
 /**
  * Produce the ordered list of vision providers for the given mode. Order is:
- *   vision_first / vision_only: Natively → OpenAI → Gemini Flash → Claude →
- *                                Gemini Pro → Groq Scout → Ollama → Codex → Custom
+ *   vision_first / vision_only: Natively → OpenAI → Gemini Flash-Lite →
+ *                                Gemini Flash → Claude → Gemini Pro → Groq Scout
+ *                                → Ollama → Codex → Custom
  *   private_vision: Ollama → Codex → local Custom only
  */
 export function buildVisionProviders(inputs: VisionProviderBuildInputs): VisionProviderConfig[] {
@@ -41,6 +42,8 @@ export function buildVisionProviders(inputs: VisionProviderBuildInputs): VisionP
   if (cloudAllowed) {
     providers.push(natively(credentials, inputs));
     providers.push(openai(credentials, inputs));
+    // Gemini cascade leads with flash-lite (cheapest/fastest), then flash.
+    providers.push(geminiFlashLite(credentials, inputs));
     providers.push(geminiFlash(credentials, inputs));
     providers.push(claude(credentials, inputs));
     providers.push(geminiPro(credentials, inputs));
@@ -84,6 +87,21 @@ function openai(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): 
     scopeAllowsScreenshots: true,
     hint: 'openai',
     invoke: async (p) => callLLMHelperVision('openai', p),
+  };
+}
+
+function geminiFlashLite(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  const apiKey = creds.getGeminiApiKey();
+  return {
+    id: 'gemini_flash_lite',
+    displayName: 'Gemini Flash-Lite',
+    modelId: 'gemini-3.1-flash-lite',
+    isLocal: false,
+    isConfigured: !!apiKey,
+    supportsVision: !!apiKey,
+    scopeAllowsScreenshots: true,
+    hint: 'gemini',
+    invoke: async (p) => callLLMHelperVision('gemini_flash_lite', p),
   };
 }
 

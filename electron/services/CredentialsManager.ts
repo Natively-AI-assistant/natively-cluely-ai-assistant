@@ -37,6 +37,10 @@ export interface StoredCredentials {
     openaiApiKey?: string;
     claudeApiKey?: string;
     deepseekApiKey?: string;
+    litellmApiKey?: string;
+    litellmBaseURL?: string;
+    /** Manual output ceiling for LiteLLM-proxied models. Unset → Auto (per-model via /model/info). */
+    litellmMaxTokens?: number;
     googleServiceAccountPath?: string;
     customProviders?: CustomProvider[];
     curlProviders?: CurlProvider[];
@@ -120,6 +124,18 @@ export class CredentialsManager {
 
     public getDeepseekApiKey(): string | undefined {
         return this.credentials.deepseekApiKey;
+    }
+
+    public getLitellmApiKey(): string | undefined {
+        return this.credentials.litellmApiKey;
+    }
+
+    public getLitellmBaseURL(): string | undefined {
+        return this.credentials.litellmBaseURL;
+    }
+
+    public getLitellmMaxTokens(): number | undefined {
+        return this.credentials.litellmMaxTokens;
     }
 
     public getGoogleServiceAccountPath(): string | undefined {
@@ -284,6 +300,34 @@ export class CredentialsManager {
         this.credentials.deepseekApiKey = trimmed || undefined;
         this.saveCredentials();
         console.log('[CredentialsManager] DeepSeek API Key updated');
+    }
+
+    /**
+     * Persist LiteLLM proxy config. baseURL is the proxy location (required to
+     * enable the provider); apiKey is the optional virtual/master key;
+     * maxTokens is the optional user-set output ceiling (0/undefined → default).
+     * Passing an empty baseURL clears everything, disabling the provider.
+     */
+    public setLitellmConfig(apiKey: string, baseURL: string, maxTokens?: number): void {
+        const trimmedURL = (baseURL || '').trim();
+        const trimmedKey = (apiKey || '').trim();
+        if (!trimmedURL) {
+            this.credentials.litellmApiKey = undefined;
+            this.credentials.litellmBaseURL = undefined;
+            this.credentials.litellmMaxTokens = undefined;
+            this.saveCredentials();
+            console.log('[CredentialsManager] LiteLLM config cleared');
+            return;
+        }
+        // Empty key + existing stored key = keep it (the Settings field is masked
+        // and left blank when re-saving e.g. just the max-tokens). Clearing the
+        // key entirely is done via Remove (empty baseURL clears everything).
+        this.credentials.litellmApiKey = trimmedKey || this.credentials.litellmApiKey || undefined;
+        this.credentials.litellmBaseURL = trimmedURL;
+        const mt = Number(maxTokens);
+        this.credentials.litellmMaxTokens = Number.isFinite(mt) && mt > 0 ? Math.floor(mt) : undefined;
+        this.saveCredentials();
+        console.log('[CredentialsManager] LiteLLM config updated');
     }
 
     public setGoogleServiceAccountPath(filePath: string): void {
