@@ -28,9 +28,9 @@ export interface VisionProviderBuildInputs {
 
 /**
  * Produce the ordered list of vision providers for the given mode. Order is:
- *   vision_first / vision_only: Natively → OpenAI → Gemini Flash-Lite →
- *                                Gemini Flash → Claude → Gemini Pro → Groq Scout
- *                                → Ollama → Codex → Custom
+ *   vision_first / vision_only: OpenAI → Gemini Flash-Lite → Gemini Flash →
+ *                                Claude → Gemini Pro → Groq Scout → Ollama →
+ *                                Codex → Custom
  *   private_vision: Ollama → Codex → local Custom only
  */
 export function buildVisionProviders(inputs: VisionProviderBuildInputs): VisionProviderConfig[] {
@@ -40,7 +40,6 @@ export function buildVisionProviders(inputs: VisionProviderBuildInputs): VisionP
   const cloudAllowed = inputs.mode !== 'private_vision';
 
   if (cloudAllowed) {
-    providers.push(natively(credentials, inputs));
     providers.push(openai(credentials, inputs));
     // Gemini cascade leads with flash-lite (cheapest/fastest), then flash.
     providers.push(geminiFlashLite(credentials, inputs));
@@ -59,21 +58,6 @@ export function buildVisionProviders(inputs: VisionProviderBuildInputs): VisionP
 }
 
 // ─── Provider builders ────────────────────────────────────────────────────
-
-function natively(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
-  const apiKey = creds.getNativelyApiKey();
-  return {
-    id: 'natively',
-    displayName: 'Natively API',
-    modelId: 'natively',
-    isLocal: false,
-    isConfigured: !!apiKey,
-    supportsVision: !!apiKey,
-    scopeAllowsScreenshots: true,
-    hint: 'natively',
-    invoke: async (p) => callLLMHelperVision('natively', p),
-  };
-}
 
 function openai(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
   const apiKey = creds.getOpenaiApiKey();

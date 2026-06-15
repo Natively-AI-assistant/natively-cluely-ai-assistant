@@ -195,12 +195,14 @@ public class Main {
 
   ${code}
 
+  static Main __natMain(){ return new Main(); }
+
   static void __natEmitStr(StringBuilder sb, String s){ sb.append('"'); for(char c: s.toCharArray()){ if(c=='"'||c=='\\\\') sb.append('\\\\'); sb.append(c);} sb.append('"'); }
 
   public static void main(String[] args) {
     try {
 ${decls.join('\n')}
-      ${JAVA_DECL[sig.returnType] === 'void' ? '' : ''}var __res = new Solution().${entry}(${callArgs.join(', ')});
+      ${JAVA_DECL[sig.returnType] === 'void' ? '' : ''}var __res = __natMain().new Solution().${entry}(${callArgs.join(', ')});
       StringBuilder sb = new StringBuilder();
       ${javaSerialize(sig.returnType, '__res')}
       System.out.print("${RESULT_SENTINEL_START}" + sb.toString() + "${RESULT_SENTINEL_END}");

@@ -3,7 +3,7 @@
  * Configuration for STT providers (Google gRPC, REST, WebSocket)
  */
 
-export type SttProviderId = 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'natively' | 'gigastt';
+export type SttProviderId = 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'gigastt';
 
 export interface SttProviderConfig {
     id: SttProviderId;
@@ -112,16 +112,6 @@ export const STT_PROVIDERS: Record<SttProviderId, SttProviderConfig> = {
             Authorization: `Basic ${btoa(`apikey:${apiKey}`)}`,
         }),
         responseContentPath: 'results[0].alternatives[0].transcript',
-    },
-    natively: {
-        id: 'natively',
-        name: 'Natively Pro (Managed)',
-        description: 'All-in-one managed STT via Natively API',
-        endpoint: '', 
-        model: '',
-        uploadType: 'websocket',
-        authHeader: () => ({}),
-        responseContentPath: '',
     },
     gigastt: {
         id: 'gigastt',

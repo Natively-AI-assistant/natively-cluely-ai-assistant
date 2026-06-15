@@ -20,7 +20,6 @@ test('routeLLMProviders returns deterministic text fallback order with availabil
     capability: 'chat',
     multimodal: false,
     availability: {
-      hasNatively: true,
       hasGroq: true,
       hasCodex: true,
       hasGemini: true,
@@ -40,7 +39,6 @@ test('routeLLMProviders returns deterministic text fallback order with availabil
   });
 
   assert.deepEqual(attempts.map(attempt => attempt.provider), [
-    'natively',
     'groq',
     'codex',
     'gemini_flash',
@@ -58,7 +56,6 @@ test('routeLLMProviders omits DeepSeek from multimodal fallback (text-only provi
     capability: 'chat',
     multimodal: true,
     availability: {
-      hasNatively: true,
       hasGroq: true,
       hasCodex: true,
       hasGemini: true,
@@ -90,7 +87,6 @@ test('routeLLMProviders returns multimodal fallback order', async () => {
     capability: 'chat',
     multimodal: true,
     availability: {
-      hasNatively: true,
       hasGroq: true,
       hasCodex: true,
       hasGemini: true,
@@ -100,7 +96,6 @@ test('routeLLMProviders returns multimodal fallback order', async () => {
   });
 
   assert.deepEqual(attempts.map(attempt => attempt.provider), [
-    'natively',
     'codex',
     'openai',
     'gemini_flash',
@@ -115,7 +110,6 @@ test('routeLLMProviders marks missing providers unavailable with reasons', async
     capability: 'chat',
     multimodal: false,
     availability: {
-      hasNatively: false,
       hasGroq: false,
       hasCodex: false,
       hasGemini: false,
@@ -124,8 +118,8 @@ test('routeLLMProviders marks missing providers unavailable with reasons', async
     },
   });
 
-  // 7 prior providers + deepseek
-  assert.equal(attempts.length, 8);
+  // 6 prior providers + deepseek
+  assert.equal(attempts.length, 7);
   assert.equal(attempts.every(attempt => attempt.status === 'unavailable'), true);
   assert.equal(attempts.find(attempt => attempt.provider === 'codex').unavailableReason, 'missing_config');
   assert.equal(attempts.find(attempt => attempt.provider === 'openai').unavailableReason, 'missing_api_key');
@@ -150,21 +144,19 @@ test('routeLLMProviders marks unsupported capabilities without dropping attempts
   const attempts = await route({
     capability: 'structured',
     availability: {
-      hasNatively: true,
       hasGemini: true,
       hasOpenAI: true,
       hasClaude: true,
     },
   });
 
-  assert.equal(attempts.find(attempt => attempt.provider === 'natively').unavailableReason, 'unsupported_capability');
   assert.equal(attempts.find(attempt => attempt.provider === 'gemini_flash').unavailableReason, 'unsupported_capability');
   assert.equal(attempts.find(attempt => attempt.provider === 'gemini_pro').status, 'available');
   assert.equal(attempts.find(attempt => attempt.provider === 'openai').status, 'available');
 });
 
 test('routeLLMProviders does not mutate input objects', async () => {
-  const availability = { hasNatively: true, hasGroq: false };
+  const availability = { hasGroq: false };
   const models = { groq: 'groq-text' };
   const before = JSON.stringify({ availability, models });
 

@@ -5237,12 +5237,15 @@ Provide only the answer, nothing else.`;
                       const wantsMicrophonePane =
                         systemAudioWarning.kind === 'audio-capture-failure' &&
                         systemAudioWarning.channel === 'mic';
+                      const macPrivacyPane = wantsScreenCapturePane
+                        ? 'ScreenCapture'
+                        : wantsMicrophonePane
+                        ? 'Microphone'
+                        : null;
                       const deepLinkUrl = !isMac
                         ? null
-                        : wantsScreenCapturePane
-                        ? 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'
-                        : wantsMicrophonePane
-                        ? 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'
+                        : macPrivacyPane
+                        ? `x-apple.systempreferences:com.apple.preference.security?Privacy_${macPrivacyPane}`
                         : null;
                       return (
                         <>

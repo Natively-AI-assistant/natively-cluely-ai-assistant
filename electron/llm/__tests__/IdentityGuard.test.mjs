@@ -1,7 +1,7 @@
 // electron/llm/__tests__/IdentityGuard.test.mjs
 //
 // Regression tests for S454 sub-issue 2: creator-identity leakage in voice
-// modes (model outputs "I'm Evin John..." as the speaker's self-introduction).
+// modes (model outputs "I'm OpenOffer..." as the speaker's self-introduction).
 //
 // The guard lives in two places:
 //   1. tinyPrompts.ts → TINY_CORE (composed into every tiny mode)
@@ -25,8 +25,8 @@ const full = await import(pathToFileURL(fullPath).href);
 
 const GUARD_MARKERS = [
   'IDENTITY GUARD',
-  '"Natively"',
-  '"Evin John"',
+  '"OpenOffer"',
+  '"OpenOffer contributors"',
   'NEVER',
 ];
 
@@ -50,14 +50,10 @@ describe('IdentityGuard — TINY_CORE carries the name-claim guard', () => {
     });
   }
 
-  test('TINY_CORE explicitly forbids "I\'m Evin John" / "I\'m Natively"', () => {
+  test('TINY_CORE explicitly forbids "I\'m OpenOffer"', () => {
     assert.ok(
-      /I'm Evin John/i.test(tiny.TINY_CORE),
-      'TINY_CORE must call out the literal "I\'m Evin John" anti-pattern',
-    );
-    assert.ok(
-      /I'm Natively/i.test(tiny.TINY_CORE),
-      'TINY_CORE must call out the literal "I\'m Natively" anti-pattern',
+      /I'm OpenOffer/i.test(tiny.TINY_CORE),
+      'TINY_CORE must call out the literal "I\'m OpenOffer" anti-pattern',
     );
   });
 });
@@ -78,7 +74,7 @@ describe('IdentityGuard — every first-person tiny prompt inherits the guard', 
 describe('IdentityGuard — full-tier prompts.ts retains the rule', () => {
   test('UNIVERSAL_WHAT_TO_ANSWER_PROMPT contains the name-confusion rule', () => {
     assert.ok(
-      /names "Natively" and "Evin John" describe ONLY this assistant/.test(
+      /names "OpenOffer" and "OpenOffer contributors" describe ONLY this assistant/.test(
         full.UNIVERSAL_WHAT_TO_ANSWER_PROMPT,
       ),
       'full-tier prompt must retain explicit name-confusion rule',
@@ -87,7 +83,7 @@ describe('IdentityGuard — full-tier prompts.ts retains the rule', () => {
 
   test('CUSTOM_ANSWER_PROMPT keeps the creator-question response phrasing', () => {
     assert.ok(
-      /"I was developed by Evin John\."/.test(full.CUSTOM_ANSWER_PROMPT),
+      /"I was developed by OpenOffer contributors\."/.test(full.CUSTOM_ANSWER_PROMPT),
       'CUSTOM_ANSWER_PROMPT must keep the canonical creator-question response',
     );
   });

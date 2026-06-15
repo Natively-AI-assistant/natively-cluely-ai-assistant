@@ -41,8 +41,8 @@ describe('ProfileOutputValidator: clean answers pass', () => {
 });
 
 describe('ProfileOutputValidator: catches the spec §7 failure modes', () => {
-  test('1. assistant-identity leak ("I am Natively") on an identity question', () => {
-    const r = validate("I am Natively, an AI assistant.", 'What is your name?');
+  test('1. assistant-identity leak ("I am OpenOffer") on an identity question', () => {
+    const r = validate("I am OpenOffer, an AI assistant.", 'What is your name?');
     assert.equal(r.ok, false);
     assert.ok(r.errorCodes.includes('assistant_identity_leak'));
   });
@@ -103,10 +103,10 @@ describe('ProfileOutputValidator: repair instructions', () => {
     assert.equal(buildProfileRepairInstruction(r), '');
   });
   test('identity leak yields a first-person correction', () => {
-    const r = validate('I am Natively, an AI assistant.', 'What is your name?');
+    const r = validate('I am OpenOffer, an AI assistant.', 'What is your name?');
     const instr = buildProfileRepairInstruction(r);
     assert.match(instr, /first person/i);
-    assert.match(instr, /Never say you are Natively/i);
+    assert.match(instr, /Never say you are OpenOffer/i);
   });
   test('coding leak yields a remove-profile correction', () => {
     const r = validate("Based on the candidate's resume, here is the code.", 'Write two sum', { candidateDirected: false });

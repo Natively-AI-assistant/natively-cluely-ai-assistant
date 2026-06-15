@@ -1,11 +1,11 @@
-# [Sponsored by Recall AI - API for desktop recording](https://docs.recall.ai/docs/desktop-sdk?utm_source=github&utm_medium=sponsorship&utm_campaign=evinjohnn-natively-ai-assistant)
+# [Sponsored by Recall AI - API for desktop recording](https://docs.recall.ai/docs/desktop-sdk?utm_source=github&utm_medium=sponsorship&utm_campaign=openoffer)
 
-If you’re looking for a hosted desktop recording API, consider checking out [Recall.ai](https://docs.recall.ai/docs/desktop-sdk?utm_source=github&utm_medium=sponsorship&utm_campaign=evinjohnn-natively-ai-assistant), an API that records Zoom, Google Meet, Microsoft Teams, in-person meetings, and more.
+If you’re looking for a hosted desktop recording API, consider checking out [Recall.ai](https://docs.recall.ai/docs/desktop-sdk?utm_source=github&utm_medium=sponsorship&utm_campaign=openoffer), an API that records Zoom, Google Meet, Microsoft Teams, in-person meetings, and more.
 
 <div align="center">
-  <img src="assets/icon.png" width="150" alt="Natively AI Assistant Logo">
+  <img src="assets/icon.png" width="150" alt="OpenOffer AI Assistant Logo">
 
-# Natively — Free, Open-Source AI Interview Copilot & Meeting Assistant
+# OpenOffer — Free, Open-Source AI Interview Copilot & Meeting Assistant
 
 **The best free alternative to Cluely, Final Round AI, LockedIn AI, and Interview Coder.**
 <br/>
@@ -40,27 +40,27 @@ If you’re looking for a hosted desktop recording API, consider checking out [R
 <br/>
 
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-blueviolet?style=flat-square)](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases)
-[![Downloads](https://img.shields.io/github/downloads/evinjohnn/natively-cluely-ai-assistant/total?style=flat-square&color=success)](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases)
+[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-blueviolet?style=flat-square)](https://github.com/luiz2047/openoffer/releases)
+[![Downloads](https://img.shields.io/github/downloads/luiz2047/openoffer/total?style=flat-square&color=success)](https://github.com/luiz2047/openoffer/releases)
 ![Repo Views](https://img.shields.io/badge/Views-341k-orange?style=flat-square)
-[![Stars](https://img.shields.io/github/stars/evinjohnn/natively-cluely-ai-assistant?style=flat-square&color=gold)](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant)
+[![Stars](https://img.shields.io/github/stars/luiz2047/openoffer?style=flat-square&color=gold)](https://github.com/luiz2047/openoffer)
 ![Status](https://img.shields.io/badge/Status-active-success?style=flat-square)
-[![Telegram Chat](https://img.shields.io/badge/Telegram-Chat-229ED9?style=flat-square&logo=telegram&logoColor=white)](https://t.me/nativelyaichat)
+[![Telegram Chat](https://img.shields.io/badge/Telegram-Chat-229ED9?style=flat-square&logo=telegram&logoColor=white)](https://t.me/openoffer)
 [![LinkedIn Company](https://img.shields.io/badge/LinkedIn-Company-0077B5?style=flat-square&logo=linkedin&logoColor=white)](https://www.linkedin.com/company/nativley-ai)
 
-> **Competitors charge $20–$149/month, store your data on their servers, and one already breached 83,000 users.** Natively costs $0, runs locally, and has never had a data breach. Your keys, your models, your machine.
+> **Competitors charge $20–$149/month, store your data on their servers, and one already breached 83,000 users.** OpenOffer costs $0, runs locally, and has never had a data breach. Your keys, your models, your machine.
 
 <p align="center">
-  <a href="https://natively.software">
+  <a href="https://github.com/luiz2047/openoffer">
     <img src="https://img.shields.io/badge/Visit%20Website-22C55E?style=for-the-badge&logo=vercel&logoColor=white" />
   </a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases/latest">
+  <a href="https://github.com/luiz2047/openoffer/releases/latest">
     <img src="https://img.shields.io/badge/Download-macOS-007AFF?style=for-the-badge&logo=apple&logoColor=white" />
   </a>
-  <a href="https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases/latest">
+  <a href="https://github.com/luiz2047/openoffer/releases/latest">
     <img src="https://img.shields.io/badge/Download-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white" />
   </a>
 </p>
@@ -77,7 +77,7 @@ If you’re looking for a hosted desktop recording API, consider checking out [R
 
 ## The Free, Open-Source Cluely Clone
 
-Natively started as a pixel-perfect recreation of Cluely's interface — then kept going. If you've used Cluely, you already know how to use Natively. Same overlay, same workflow, same shortcuts. Except it's free, open-source, runs locally, supports any LLM, and has never breached a single user's data.
+OpenOffer started as a pixel-perfect recreation of Cluely's interface — then kept going. If you've used Cluely, you already know how to use OpenOffer. Same overlay, same workflow, same shortcuts. Except it's free, open-source, runs locally, supports any LLM, and has never breached a single user's data.
 
 > Looking for a **free Cluely alternative**? A **Cluely open-source clone**? You found it.
 
@@ -85,23 +85,23 @@ Natively started as a pixel-perfect recreation of Cluely's interface — then ke
 
 ## What Users Are Saying
 
-> "This is a fantastic piece of software and you should definitely keep up the great work! This is exactly what I was looking for. I started out trying the open-source version, and because it worked so well, I decided to go ahead and buy the full premium license."  
+> "This is a fantastic piece of software and you should definitely keep up the great work! This is exactly what I was looking for."
 > — **Oskar Krzak** (⭐⭐⭐⭐⭐ via Gumroad)
 
-> "Natively is significantly faster than Cluely when it comes to response time and screen analysis. The latency is practically non-existent."  
-> — **Premium User**
+> "OpenOffer is significantly faster than Cluely when it comes to response time and screen analysis. The latency is practically non-existent."
+> — **OpenOffer User**
 
-> "Just wanted to say thanks! Natively helped me completely crack the first two rounds of my Software Engineering interviews. The responses were incredibly fast and accurate."  
+> "Just wanted to say thanks! OpenOffer helped me completely crack the first two rounds of my Software Engineering interviews. The responses were incredibly fast and accurate."
 > — **Private Email Feedback**
 
-> "Used the free version of Natively for my interviews and just landed a massive summer internship. It took all the stress out of the live coding and behavioral rounds!"  
+> "Used the free version of OpenOffer for my interviews and just landed a massive summer internship. It took all the stress out of the live coding and behavioral rounds!"
 > — **Private Email Feedback**
 
 ---
 
-## Why Natively?
+## Why OpenOffer?
 
-While other tools act as simple API wrappers, Natively is a complete, native intelligence system designed specifically for high-stakes meetings and interviews.
+While other tools act as simple API wrappers, OpenOffer is a complete, native intelligence system designed specifically for high-stakes meetings and interviews.
 
 - **Native Audio Capture (<500ms):** Built with Rust and Zero-Copy ABI transfers, bypassing generic web-audio limitations for ultra-low latency.
 - **Local Whisper STT (On-Device):** 100% on-device speech-to-text using optimized ONNX models (Moonshine-tiny, Moonshine-base, Whisper-large-v3-turbo, distil-large-v3). Uses hardware acceleration (CoreML/Metal GPU on Apple Silicon, DirectML on Windows, quantized int8 on CPU) with zero cloud fees or data exposure.
@@ -113,15 +113,15 @@ While other tools act as simple API wrappers, Natively is a complete, native int
 - **Local RAG Memory:** We embed your meetings locally using SQLite vector search so you can ask, "What did John say about the API last week?"
 - **Reference Files:** Deeply integrate PDFs, DOCX, and TXT files as real-time context.
 - **Rich Dashboard:** A full UI to manage, search, and export your history—not just a floating window.
-- **Fully Offline Capable:** Don't trust the cloud? Run Natively 100% offline using local Ollama models and local Whisper STT.
+- **Fully Offline Capable:** Don't trust the cloud? Run OpenOffer 100% offline using local Ollama models and local Whisper STT.
 
 ---
 
 ## 3 things you should know before choosing an interview AI
 
-1. **Cluely** had a data breach in mid-2025 that exposed 83,000 users' personal info, transcripts, and screenshots — Natively stores everything locally by default with limited anonymous telemetry and has never had a breach.
-2. **Final Round AI** costs $149/month and its taskbar icon is visible to proctoring software — Natively is free, open-source, and has a battle-tested undetectable stealth mode.
-3. **LockedIn AI** charges $55–70/month and locks you into their cloud LLM with no local option — Natively lets you use any model (GPT, Claude, Gemini, Llama) or go fully offline with Ollama.
+1. **Cluely** had a data breach in mid-2025 that exposed 83,000 users' personal info, transcripts, and screenshots — OpenOffer stores everything locally by default with limited anonymous telemetry and has never had a breach.
+2. **Final Round AI** costs $149/month and its taskbar icon is visible to proctoring software — OpenOffer is free, open-source, and has a battle-tested undetectable stealth mode.
+3. **LockedIn AI** charges $55–70/month and locks you into their cloud LLM with no local option — OpenOffer lets you use any model (GPT, Claude, Gemini, Llama) or go fully offline with Ollama.
 
 ---
 
@@ -129,9 +129,9 @@ While other tools act as simple API wrappers, Natively is a complete, native int
 
 ### ⭐ Star this repo — it matters
 
-Every star pushes Natively higher in GitHub search, helping developers and job seekers find a free, private alternative instead of paying $149/month for tools that store their data on someone else's server.
+Every star pushes OpenOffer higher in GitHub search, helping developers and job seekers find a free, private alternative instead of paying $149/month for tools that store their data on someone else's server.
 
-[![Star Natively](https://img.shields.io/github/stars/evinjohnn/natively-cluely-ai-assistant?style=for-the-badge&color=gold&label=Star%20on%20GitHub)](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant)
+[![Star OpenOffer](https://img.shields.io/github/stars/luiz2047/openoffer?style=for-the-badge&color=gold&label=Star%20on%20GitHub)](https://github.com/luiz2047/openoffer)
 
 </div>
 
@@ -139,7 +139,7 @@ Every star pushes Natively higher in GitHub search, helping developers and job s
 
 ## Demo
 
-![Natively AI Assistant Demo - Real-time Interview Helper and Transcription](assets/natively-ai-meeting-assistant-demo.gif)
+![OpenOffer AI Assistant Demo - Real-time Interview Helper and Transcription](assets/natively-ai-meeting-assistant-demo.gif)
 
 This demo shows **a complete live meeting scenario**:
 
@@ -152,9 +152,9 @@ This demo shows **a complete live meeting scenario**:
 
 ---
 
-## Full Comparison: Natively vs Cluely vs Final Round AI vs LockedIn AI vs Interview Coder
+## Full Comparison: OpenOffer vs Cluely vs Final Round AI vs LockedIn AI vs Interview Coder
 
-| Feature                   | Natively                   | Cluely               | Pluely     | LockedIn AI      | Final Round AI         |
+| Feature                   | OpenOffer                   | Cluely               | Pluely     | LockedIn AI      | Final Round AI         |
 | :------------------------ | :------------------------- | :------------------- | :--------- | :--------------- | :--------------------- |
 | **Price**                 | ✅ Free (BYOK)             | ⚠️ $20/mo            | ✅ Free    | ❌ $55–70/mo     | ❌ $149/mo             |
 | **Open source**           | ✅ AGPL-3.0                | ❌                   | ✅         | ❌               | ❌                     |
@@ -169,9 +169,9 @@ This demo shows **a complete live meeting scenario**:
 | **Screenshot OCR**        | ✅ Yes                     | ⚠️ Limited           | ❌         | ✅ Yes           | ⚠️ Limited             |
 | **Stealth mode**          | ✅ Undetectable            | ❌                   | ❌         | ❌               | ❌ Visible to proctors |
 | **Process Disguise**      | ✅ Terminal, Settings, etc | ❌                   | ❌         | ❌               | ❌                     |
-| **Resume & context**      | ✅ Pro                     | ❌                   | ❌         | ✅ Yes           | ✅ Yes                 |
-| **Custom Personas/Modes** | ✅ Pro                     | ✅ Yes               | ❌         | ❌               | ⚠️ Limited             |
-| **Custom Context & Notes**| ✅ Pro                     | ❌                   | ❌         | ❌               | ❌                     |
+| **Resume & context**      | ✅ Yes                     | ❌                   | ❌         | ✅ Yes           | ✅ Yes                 |
+| **Custom Personas/Modes** | ✅ Yes                     | ✅ Yes               | ❌         | ❌               | ⚠️ Limited             |
+| **Custom Context & Notes**| ✅ Yes                     | ❌                   | ❌         | ❌               | ❌                     |
 | **Multi-Key API Pools**   | ✅ Yes                     | ❌                   | ❌         | ❌               | ❌                     |
 | **Profile Intel Router**  | ✅ Yes                     | ❌                   | ❌         | ❌               | ❌                     |
 | **Eager Code Expansion**  | ✅ Yes                     | ❌                   | ❌         | ❌               | ❌                     |
@@ -189,7 +189,7 @@ This demo shows **a complete live meeting scenario**:
 
 ---
 
-## Why Natively wins
+## Why OpenOffer wins
 
 ### vs Cluely — breached 83,000 users
 
@@ -197,33 +197,33 @@ The UI is intentionally familiar — if you've used Cluely, there's zero learnin
 
 Cluely's mid-2025 data breach exposed personal information, full interview transcripts, and screenshots of 83,000 users. Every word spoken during an interview was stored on their servers — and then leaked. They charge $20/month for this privilege.
 
-By default, Natively stores everything on your local machine, with only limited anonymous telemetry (basic GA4 install tracking, zero personal data). Your transcripts, API keys, and screenshots never leave your machine when using your own keys. The entire codebase is open-source (AGPL-3.0) and auditable. Zero breaches — that is the only acceptable standard for a tool that listens to your interviews.
+By default, OpenOffer stores everything on your local machine, with only limited anonymous telemetry (basic GA4 install tracking, zero personal data). Your transcripts, API keys, and screenshots never leave your machine when using your own keys. The entire codebase is open-source (AGPL-3.0) and auditable. Zero breaches — that is the only acceptable standard for a tool that listens to your interviews.
 
-Unlike Cluely's rigid interface, Natively also gives you complete control over the AI: **Custom Persona Modes** (Tech, Sales, Recruiting) to strictly format behavior, and **Reference Files** capabilities to upload PDFs so the AI knows exactly the context of the job or meeting before it starts.
+Unlike Cluely's rigid interface, OpenOffer also gives you complete control over the AI: **Custom Persona Modes** (Tech, Sales, Recruiting) to strictly format behavior, and **Reference Files** capabilities to upload PDFs so the AI knows exactly the context of the job or meeting before it starts.
 
 ### vs LockedIn AI — $70/month for cloud lock-in
 
 LockedIn AI is the most expensive tool in the category at $55–70/month. It locks you into a single cloud LLM with no option for local inference. Every transcript and response passes through their servers.
 
-Natively supports every major model (Gemini, GPT, Claude, Groq) via bring-your-own-key, and offers 100% offline mode through Ollama. You pay only for the API tokens you actually use — or pay nothing at all by running Llama 3 locally. No subscription, no vendor lock-in.
+OpenOffer supports every major model (Gemini, GPT, Claude, Groq) via bring-your-own-key, and offers 100% offline mode through Ollama. You pay only for the API tokens you actually use — or pay nothing at all by running Llama 3 locally. No subscription, no vendor lock-in.
 
 ### vs Final Round AI — $149/month and visible to proctors
 
 Final Round AI is the most expensive option at $149/month, optimized for pre-interview prep and mock interviews but with the slowest live latency in the category. Critically, its taskbar icon is visible to proctoring software, making it detectable during monitored interviews.
 
-Natively delivers <500ms end-to-end latency using Rust-based native audio capture with Zero-Copy ABI Transfers. Its undetectable stealth mode hides from the dock, disguises process names, and syncs state across all windows — battle-tested and hardened across five major releases.
+OpenOffer delivers <500ms end-to-end latency using Rust-based native audio capture with Zero-Copy ABI Transfers. Its undetectable stealth mode hides from the dock, disguises process names, and syncs state across all windows — battle-tested and hardened across five major releases.
 
 ### vs Pluely — lightweight but limited
 
-Pluely is a solid lightweight alternative (~10MB, Tauri-based) and it has Linux support, which Natively does not yet offer. Credit where it is due.
+Pluely is a solid lightweight alternative (~10MB, Tauri-based) and it has Linux support, which OpenOffer does not yet offer. Credit where it is due.
 
-But Pluely is a basic overlay. It has no local RAG, no meeting history, no dual audio channels, and no dashboard. Natively is a complete intelligence system: it remembers your past meetings via local vector search, separates system audio from your microphone, and gives you a full management dashboard with export to Markdown, JSON, and Text.
+But Pluely is a basic overlay. It has no local RAG, no meeting history, no dual audio channels, and no dashboard. OpenOffer is a complete intelligence system: it remembers your past meetings via local vector search, separates system audio from your microphone, and gives you a full management dashboard with export to Markdown, JSON, and Text.
 
 ### vs Interview Coder — More Powerful, Completely Free
 
-Interview Coder is a paid tool focused specifically on coding interview assistance. Natively does everything Interview Coder does — and more — for free:
+Interview Coder is a paid tool focused specifically on coding interview assistance. OpenOffer does everything Interview Coder does — and more — for free:
 
-|                                    |    Natively    | Interview Coder |
+|                                    |    OpenOffer    | Interview Coder |
 | :--------------------------------- | :------------: | :-------------: |
 | **Price**                          | ✅ Free (BYOK) |     ❌ Paid     |
 | **Open source**                    |       ✅       |       ❌        |
@@ -237,25 +237,25 @@ Interview Coder is a paid tool focused specifically on coding interview assistan
 | **Any LLM (BYOK)**                 |       ✅       |    ❌ Locked    |
 | **Data stored locally**            |       ✅       |    ❌ Cloud     |
 
-Natively covers the full interview loop — not just the coding round.
+OpenOffer covers the full interview loop — not just the coding round.
 
 ### vs Parakeet AI — Memory and History vs Stateless Overlay
 
-Parakeet AI offers basic live meeting assistance but has no persistent memory, no meeting history, and no local vector search. Natively remembers your past meetings via local RAG, lets you ask questions across all your history, and gives you a full dashboard to manage, export, and search everything. Furthermore, Natively includes **Custom Persona Modes** allowing the AI to structure notes and behave optimally for specific flavors of conversations, instead of relying on Parakeet's one-size-fits-all model.
+Parakeet AI offers basic live meeting assistance but has no persistent memory, no meeting history, and no local vector search. OpenOffer remembers your past meetings via local RAG, lets you ask questions across all your history, and gives you a full dashboard to manage, export, and search everything. Furthermore, OpenOffer includes **Custom Persona Modes** allowing the AI to structure notes and behave optimally for specific flavors of conversations, instead of relying on Parakeet's one-size-fits-all model.
 
 ---
 
 ### Where we're not there yet
 
-- **No Linux support** — we are actively looking for maintainers to help bring Natively to Linux
+- **No Linux support** — we are actively looking for maintainers to help bring OpenOffer to Linux
 - **API key setup overhead** — you need to bring your own API keys (or install Ollama), which adds initial setup friction compared to all-in-one cloud tools
-- **No built-in mock interview mode** — Final Round AI has dedicated mock interview practice; Natively focuses on live, real-time assistance
+- **No built-in mock interview mode** — Final Round AI has dedicated mock interview practice; OpenOffer focuses on live, real-time assistance
 
 ---
 
 ## Free AI Coding Interview Assistant — Undetectable on LeetCode, HackerRank & CoderPad
 
-Natively works as a **free, undetectable AI coding interview assistant** for standard online assessments. It captures your screen, analyzes the problem, and gives you real-time hints, solutions, and explanations — all through an invisible overlay that doesn't interfere with your coding environment.
+OpenOffer works as a **free, undetectable AI coding interview assistant** for standard online assessments. It captures your screen, analyzes the problem, and gives you real-time hints, solutions, and explanations — all through an invisible overlay that doesn't interfere with your coding environment.
 
 **Works undetected on:**
 
@@ -270,17 +270,17 @@ Natively works as a **free, undetectable AI coding interview assistant** for sta
 **How it works:**
 
 1. Screenshot the problem with a single shortcut
-2. Natively OCRs the question and sends it to your chosen AI (GPT, Claude, Gemini, or local Ollama)
+2. OpenOffer OCRs the question and sends it to your chosen AI (GPT, Claude, Gemini, or local Ollama)
 3. Response appears in the invisible overlay — never on screen share
 
-> ⚠️ **Important:** Natively is not designed to bypass dedicated proctoring software like **Pearson VUE**, **ProctorU**, or **Respondus Lockdown Browser** — these run at the OS level and are a different category entirely. For standard online coding assessments without dedicated proctoring software, Natively's stealth mode is not detectable.
+> ⚠️ **Important:** OpenOffer is not designed to bypass dedicated proctoring software like **Pearson VUE**, **ProctorU**, or **Respondus Lockdown Browser** — these run at the OS level and are a different category entirely. For standard online coding assessments without dedicated proctoring software, OpenOffer's stealth mode is not detectable.
 
 ---
 
 <div align="center">
 
-[![Natively Website](https://img.shields.io/badge/Natively_Website-natively.software-22C55E?style=flat-square&logo=vercel&logoColor=white)](https://natively.software)
-[![Telegram Chat](https://img.shields.io/badge/Telegram_Chat-nativelyaichat-229ED9?style=flat-square&logo=telegram&logoColor=white)](https://t.me/nativelyaichat)
+[![OpenOffer Repository](https://img.shields.io/badge/OpenOffer_Repository-GitHub-22C55E?style=flat-square&logo=github&logoColor=white)](https://github.com/luiz2047/openoffer)
+[![Telegram Chat](https://img.shields.io/badge/Telegram_Chat-openoffer-229ED9?style=flat-square&logo=telegram&logoColor=white)](https://t.me/openoffer)
 [![LinkedIn Company](https://img.shields.io/badge/LinkedIn_Company-nativley--ai-0077B5?style=flat-square&logo=linkedin&logoColor=white)](https://www.linkedin.com/company/nativley-ai)
 
 <br/>
@@ -288,115 +288,34 @@ Natively works as a **free, undetectable AI coding interview assistant** for sta
 [![Portfolio](https://img.shields.io/badge/Portfolio-evinjohn.vercel.app-blueviolet?style=flat-square&logo=vercel&logoColor=white)](https://evinjohn.vercel.app/)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0077B5?style=flat-square&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/evinjohn/)
 [![X](https://img.shields.io/badge/X-@evinjohnn-black?style=flat-square&logo=x&logoColor=white)](https://x.com/evinjohnn)
-[![Hire Me](https://img.shields.io/badge/Hire_Me-Contact-success?style=flat-square&logo=gmail&logoColor=white)](mailto:evinjohnn@gmail.com?subject=Natively%20-%20Hiring%20Inquiry)
+[![Hire Me](https://img.shields.io/badge/Hire_Me-Contact-success?style=flat-square&logo=gmail&logoColor=white)](mailto:evinjohnn@gmail.com?subject=OpenOffer%20-%20Hiring%20Inquiry)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Support-FFDD00?style=flat-square&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/evinjohn)
 
 </div>
 
 ---
 
-## Natively API (Hosted Tier)
+## Local-first setup
 
-**Stop managing four separate services. One key. Zero configuration.**
+OpenOffer is a public, local-first desktop assistant. There is no hosted API tier, no subscription gate, and no checkout flow in this build.
 
-Are you managing separate accounts for your AI reasoning, live transcription, fast inference, and web search? Juggling multiple API keys, rate limits, and invoices across completely different categories of tools is unnecessary overhead. Natively API replaces all of those categories with **one flat subscription**.
+Use the stack that fits your privacy and latency requirements:
 
-Under the hood, Natively API connects you to the absolute best models for the optimal user experience:
+- **Local LLMs:** run Ollama for fully local responses.
+- **Local speech-to-text:** use Local Whisper for on-device STT, or GigaSTT for a local Russian-first streaming server.
+- **Bring your own keys:** add Gemini, OpenAI, Claude, Groq, DeepSeek, LiteLLM, Deepgram, ElevenLabs, Azure, IBM Watson, Soniox, or Tavily keys directly in Settings.
+- **Profile Intelligence and Modes:** resume/JD context, custom modes, reference files, company research, and meeting templates are available in the public OpenOffer build.
 
-- **Backend AI Models**: Claude, OpenAI, Gemini, and Groq.
-- **Premium STT Models**: Google Chirp 2/3, ElevenLabs Scribe v2, and Deepgram Nova-3.
+### Recommended local stack
 
-### 4 Categories → 1 Key
-
-**Your current unbundled stack:**
-
-- **AI Intelligence (GPT/Claude/Gemini):** per-token billing and usage anxiety
-- **Lightning-Fast Inference (Groq/Llama):** strict rate limits to monitor
-- **Real-Time Transcription (Deepgram/Google STT):** separate key + quota
-- **Web Search & Research (Tavily/Perplexity):** yet another subscription
-
-**Replaced by Natively API:**
-
-- **AI chat, transcription & web search** — all included
-- **One flat subscription.** Zero surprise bills. Starts at $8/mo.
-- **Single key.** Zero rotation. Zero configuration.
-
-### API Plan Comparison
-
-| Feature                               | Standard ($8/mo) | Pro ($15/mo) | Max ($25/mo) | Ultra ($35/mo) |
-| :------------------------------------ | :--------------- | :----------- | :----------- | :------------- |
-| **All-in-One Cloud AI Access**        | ✅ Yes           | ✅ Yes       | ✅ Yes       | ✅ Yes         |
-| **Real-Time Transcription**           | ✅ Yes           | ✅ Yes       | ✅ Yes       | ✅ Yes         |
-| **Included Natively Pro Desktop App** | ❌ No            | ✅ Yes       | ✅ Yes       | ✅ Yes         |
-| **Premium Support**                   | ❌ No            | ✅ Yes       | ✅ Yes       | ✅ Yes         |
-| **Higher Monthly Quotas**             | ❌ No            | ✅ Yes       | ✅ Yes       | ✅ Yes         |
-
-**Don't start the long way.** Skip the 20-minute manual setup. One Natively subscription skips all of it — AI, transcription, and web search are ready immediately.
-
-<p align="center">
-  <a href="https://checkout.dodopayments.com/buy/pdt_0NbFixGmD8CSeawb5qvVl">
-    <img src="https://img.shields.io/badge/Standard_Plan-Subscribe_Now-94a3b8?style=for-the-badge&logo=fastapi&logoColor=white" />
-  </a>
-  <a href="https://checkout.dodopayments.com/buy/pdt_0NcM6Aw0IWdspbsgUeCLA">
-    <img src="https://img.shields.io/badge/Pro_Plan-Subscribe_Now-8b5cf6?style=for-the-badge&logo=fastapi&logoColor=white" />
-  </a>
-  <a href="https://checkout.dodopayments.com/buy/pdt_0NcM7JElX4Af6LNVFS1Yf">
-    <img src="https://img.shields.io/badge/Max_Plan-Subscribe_Now-6366f1?style=for-the-badge&logo=fastapi&logoColor=white" />
-  </a>
-  <a href="https://checkout.dodopayments.com/buy/pdt_0NcM7rC2kAb69TFKsZnUU">
-    <img src="https://img.shields.io/badge/Ultra_Plan-Subscribe_Now-fbbf24?style=for-the-badge&logo=fastapi&logoColor=white" />
-  </a>
-</p>
-
----
-
-## Natively Pro
-
-While Natively is **free and open-source forever**, we also offer a **Pro Edition** (available as **Lifetime or Yearly** subscriptions) designed specifically for power users and job seekers. Purchasing a Pro license gives you an edge in the job market, all while directly supporting the continued development of the open-source Natively core!
-
-### 🪙 Unlock Natively Pro with $NAT Token
-
-We've launched the official **$NAT token** on Printr! Holders who maintain a specific balance of `$NAT` tokens in their connected wallet automatically unlock access to all **Natively Pro** features.
-
-👉 **[Trade $NAT on Printr](https://app.printr.money/trade/0xba1e50273ec14ca52b3fa64a5054c39470c2835392c6ecd06876f5bccd597d7b)**
-
-### Free vs Pro Feature Comparison
-
-| Feature                                             | Natively Free | Natively Pro |
-| :-------------------------------------------------- | :-----------: | :----------: |
-| **Bring Your Own Key (BYOK) Models**                |      ✅       |      ✅      |
-| **Local AI Support (Ollama)**                       |      ✅       |      ✅      |
-| **Local Whisper STT (On-Device)**                   |      ✅       |      ✅      |
-| **Real-Time Speech-to-Text (<500ms)**               |      ✅       |      ✅      |
-| **Multi-Key API Pools & Key Rotation**              |      ✅       |      ✅      |
-| **Profile Intelligence Router (v2)**                |      ✅       |      ✅      |
-| **Eager Code UI Expansion**                         |      ✅       |      ✅      |
-| **Live Follow-Up Resolver**                         |      ✅       |      ✅      |
-| **Real-Time Latency Tracing**                       |      ✅       |      ✅      |
-| **Two New Meeting UI Styles (Liquid Glass/Modern)** |      ✅       |      ✅      |
-| **Live Contextual Assistant**                       |      ✅       |      ✅      |
-| **Screenshot & Slide OCR Analysis**                 |      ✅       |      ✅      |
-| **Undetectable & Stealth Modes**                    |      ✅       |      ✅      |
-| **Meeting Dashboard & Offline RAG History**         |      ✅       |      ✅      |
-| **Job Description (JD) & Resume Context Awareness** |      ❌       |      ✅      |
-| **Automated Company Research & Dossiers**           |      ❌       |      ✅      |
-| **Live Salary & Offer Negotiation Copilot**         |      ❌       |      ✅      |
-| **Custom Persona Modes (Sales, Tech, etc.)**        |      ❌       |      ✅      |
-| **Custom Context & Notes**                          |      ❌       |      ✅      |
-| **Reference Files (PDF/DOCX/TXT upload)**           |      ❌       |      ✅      |
-| **Phone Link Companion App**                        |      ❌       |      ✅      |
-| **Auto-Calendar & Task Sync**                       |      ❌       |      ✅      |
-| **Speaker Diarization**                             |      ❌       |      ✅      |
-| **Priority Feature Access & Support**               |      ❌       |      ✅      |
-
-<p align="center">
-  <a href="https://checkout.dodopayments.com/buy/pdt_0NbHo6EnXlNPqNcZ14OTi">
-    <img src="https://img.shields.io/badge/Lifetime_License-Unlock_Premium-facc15?style=for-the-badge&logo=fastapi&logoColor=black" />
-  </a>
-  <a href="https://checkout.dodopayments.com/buy/pdt_0NcM4QBwy0CDcPV9CXaNP">
-    <img src="https://img.shields.io/badge/Yearly_License-Unlock_Premium-black?style=for-the-badge&logo=fastapi&logoColor=white" />
-  </a>
-</p>
+| Need | Recommended option |
+| :--- | :----------------- |
+| Private LLM responses | Ollama |
+| Private English STT | Local Whisper |
+| Private Russian STT | GigaSTT |
+| Fast cloud text | Groq BYOK |
+| Vision/screenshots | OpenAI, Gemini, Claude, Groq, Ollama vision, or Codex CLI |
+| Web research | Tavily BYOK |
 
 ### What's New in v2.7.0 (Latest Release)
 
@@ -413,14 +332,14 @@ Version 2.7.0 introduces advanced Profile Intelligence Routing, Live Follow-up r
 
 - [The free Cluely clone](#the-free-open-source-cluely-clone)
 - [What Users Are Saying](#what-users-are-saying)
-- [Why Natively?](#why-natively)
+- [Why OpenOffer?](#why-openoffer)
 - [3 things to know](#3-things-you-should-know-before-choosing-an-interview-ai)
 - [Demo](#demo)
-- [Full comparison](#full-comparison-natively-vs-cluely-vs-final-round-ai-vs-lockedin-ai-vs-interview-coder)
-- [Why Natively wins](#why-natively-wins)
+- [Full comparison](#full-comparison-openoffer-vs-cluely-vs-final-round-ai-vs-lockedin-ai-vs-interview-coder)
+- [Why OpenOffer wins](#why-openoffer-wins)
 - [AI Coding Assistant](#free-ai-coding-interview-assistant-undetectable-on-leetcode-hackerrank--coderpad)
-- [Natively Pro](#natively-pro)
-- [What's New in v2.6.0](#whats-new-in-v260)
+- [Local-first setup](#local-first-setup)
+- [What's New in v2.7.0](#whats-new-in-v270-latest-release)
 - [Privacy & Security](#privacy--security-core-design-principle)
 - [Installation](#installation-developers--contributors)
 - [AI Providers](#ai-providers)
@@ -434,14 +353,14 @@ Version 2.7.0 introduces advanced Profile Intelligence Routing, Live Follow-up r
 - [Contributing](#contributing)
 - [License](#license)
 - [FAQ](#faq)
-- [Alternatives Natively replaces](#alternatives-natively-replaces)
+- [Alternatives OpenOffer replaces](#alternatives-openoffer-replaces)
 - [Star History](#star-history)
 
 ---
 
-## What Is Natively?
+## What Is OpenOffer?
 
-**Natively** is a **desktop AI assistant for live situations**:
+**OpenOffer** is a **desktop AI assistant for live situations**:
 
 - Meetings
 - Interviews
@@ -490,16 +409,16 @@ You explicitly control:
 >     **For .zip downloads:**
 >
 >     ```bash
->     xattr -cr /Applications/Natively.app
+>     xattr -cr /Applications/OpenOffer.app
 >     ```
 >
 >     **For .dmg downloads:**
 >     1. Open Terminal and run:
 >        ```bash
->        xattr -cr ~/Downloads/Natively-2.0.2-arm64.dmg # Or your specific filename
+>        xattr -cr ~/Downloads/OpenOffer-2.0.2-arm64.dmg # Or your specific filename
 >        ```
->     2. Install the natively.dmg
->     3. Open Terminal and run: `xattr -cr /Applications/Natively.app`
+>     2. Install the openoffer.dmg
+>     3. Open Terminal and run: `xattr -cr /Applications/OpenOffer.app`
 
 ### Prerequisites
 
@@ -509,7 +428,7 @@ You explicitly control:
 
 ### AI Credentials & Speech Providers
 
-**Natively is 100% free to use with your own keys.**  
+**OpenOffer is 100% free to use with your own keys.**
 Connect **any** speech provider and **any** LLM. No subscriptions, no markups, no hidden fees. All keys are stored locally.
 
 ### Unlimited Free Transcription (Whisper, Google, Deepgram)
@@ -525,7 +444,7 @@ Connect **any** speech provider and **any** LLM. No subscriptions, no markups, n
 
 ### AI Engine Support (Bring Your Own Key)
 
-Connect Natively to **any** leading model or local inference engine.
+Connect OpenOffer to **any** leading model or local inference engine.
 
 | Provider                     | Best For                                                    |
 | :--------------------------- | :---------------------------------------------------------- |
@@ -562,7 +481,7 @@ Setup Summary:
 3. Create a Service Account
 4. Assign role: `roles/speech.client`
 5. Generate and download a JSON key
-6. Point Natively to the JSON file in settings
+6. Point OpenOffer to the JSON file in settings
 
 ---
 
@@ -571,8 +490,8 @@ Setup Summary:
 ### Clone the Repository
 
 ```bash
-git clone https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant.git
-cd natively-cluely-ai-assistant
+git clone https://github.com/luiz2047/openoffer.git
+cd openoffer
 ```
 
 ### Install Dependencies
@@ -675,13 +594,13 @@ This runs: Vite build → TypeScript compile → native module build → electro
 - Multiple screenshot support for multi-part problems
 - Smart fallback to Groq Llama 4 Scout if primary vision model fails
 
-### Premium Profile Intelligence
+### Profile Intelligence
 
 - **Profile Intelligence Router (v2)**: Seamlessly categorizes user questions into distinct domains (Coding, System Design, Behavioral, Negotiation) to apply the most optimal reasoning path.
 - **Answer-Type Constraints & Follow-Up Resolver**: Contextually tracks conversations to answer subsequent queries, and enforces precise layout constraints (such as short, conversational, bulleted, or code-only responses).
 - **Custom Persona Modes**: Seamlessly switch between built-in personas (Technical Interview, Sales, Recruiting) or create your own custom modes tailored to any conversation.
 - **Reference Files & Custom Context**: Upload PDFs, DOCX files, or type custom instructions to give the AI real-time context on your specific situation.
-- **Job Description & Resume Context**: Natively understands your background and the role you're applying for to provide highly tailored, context-aware answers.
+- **Job Description & Resume Context**: OpenOffer understands your background and the role you're applying for to provide highly tailored, context-aware answers.
 - **Company Research**: Get instant intelligence and dossiers on the company you are interviewing with.
 - **Negotiation Assistance**: Real-time guidance and strategy during offer and salary negotiations.
 - **Evidence Validator & Live Deadlines**: Real-time validation of factual claims and interactive deadline alert tracker during live assessments.
@@ -705,12 +624,12 @@ This runs: Vite build → TypeScript compile → native module build → electro
 
 ### Dual-Channel Audio Intelligence
 
-Natively understands that _listening_ to a meeting and _talking_ to an AI are different tasks. We treat them separately:
+OpenOffer understands that _listening_ to a meeting and _talking_ to an AI are different tasks. We treat them separately:
 
 - **System Audio (The Meeting):** Captures high-fidelity audio directly from your OS (fully supported on both macOS and Windows). It "hears" what your colleagues are saying without interference from your room noise.
 - **Sample Rate Auto-Detection**: Dynamically detects and syncs true hardware sample rates (e.g., automatically handling 48kHz audio interfaces or external microphones without distortion or downsampling artifacts).
 - **Two-Stage Silence Processing**: Combines adaptive RMS thresholds with **WebRTC Machine Learning VAD** to reject typing and fan noise.
-- **Microphone Input (Your Voice):** A dedicated channel for your voice commands and dictation. Toggle it instantly to ask Natively a private question without muting your meeting software.
+- **Microphone Input (Your Voice):** A dedicated channel for your voice commands and dictation. Toggle it instantly to ask OpenOffer a private question without muting your meeting software.
 
 ### Spotlight Search & Customization
 
@@ -741,7 +660,7 @@ Natively understands that _listening_ to a meeting and _talking_ to an AI are di
 
 ## Meeting Intelligence Dashboard
 
-Natively includes a powerful, local-first meeting management system to review, search, and manage your entire conversation history.
+OpenOffer includes a powerful, local-first meeting management system to review, search, and manage your entire conversation history.
 
 ![Dashboard Preview](assets/dashboard-preview.png)
 
@@ -757,7 +676,7 @@ Natively includes a powerful, local-first meeting management system to review, s
 
 ```mermaid
 timeline
-    title Natively Product Roadmap
+    title OpenOffer Product Roadmap
     section Recently Completed
         Personas : ✅ Custom Modes & Templates
         Trial : ✅ 10-Minute Free Trial
@@ -805,7 +724,7 @@ timeline
 
 ## Architecture Overview
 
-Natively processes audio, screen context, and user input locally, maintains a rolling context window, and sends only the required prompt data to the selected AI provider (local or cloud).
+OpenOffer processes audio, screen context, and user input locally, maintains a rolling context window, and sends only the required prompt data to the selected AI provider (local or cloud).
 
 No raw audio, screenshots, or transcripts are stored or transmitted unless explicitly enabled by the user.
 
@@ -838,7 +757,7 @@ No raw audio, screenshots, or transcripts are stored or transmitted unless expli
 
 ## Responsible Use
 
-Natively is intended for:
+OpenOffer is intended for:
 
 - Learning
 - Productivity
@@ -890,68 +809,65 @@ Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
 
 If you run or modify this software over a network, you must provide the full source code under the same license.
 
-This repository contains the open-source core of the project.
-
-Some features available in official releases are part of the
-commercial Premium Edition and are not included in this repository.
+This repository contains the public OpenOffer project.
 
 > **Note:** This project is available for sponsorships, ads, or partnerships – perfect for companies in the AI, productivity, or developer tools space.
 
 ---
 
-**Star this repo if Natively helps you succeed in meetings, interviews, or presentations!**
+**Star this repo if OpenOffer helps you succeed in meetings, interviews, or presentations!**
 
 ---
 
 ## FAQ
 
-#### Is Natively really free?
+#### Is OpenOffer really free?
 
-Yes. Natively is an open-source project. You only pay for what you use by bringing your own API keys (Gemini, OpenAI, Anthropic, etc.), or use it **100% free** by connecting to a local Ollama instance.
+Yes. OpenOffer is an open-source project. You only pay for what you use by bringing your own API keys (Gemini, OpenAI, Anthropic, etc.), or use it **100% free** by connecting to a local Ollama instance.
 
-#### Does Natively work with Zoom, Teams, and Google Meet?
+#### Does OpenOffer work with Zoom, Teams, and Google Meet?
 
-Yes. Natively uses a Rust-based system audio capture that works universally across any desktop application, including Zoom, Microsoft Teams, Google Meet, Slack, and Discord.
+Yes. OpenOffer uses a Rust-based system audio capture that works universally across any desktop application, including Zoom, Microsoft Teams, Google Meet, Slack, and Discord.
 
 #### Is my data safe?
 
-Natively is built on **Privacy-by-Design**. By default, all transcripts, vector embeddings (Local RAG), and keys are stored locally on your machine. We collect only limited anonymous telemetry (no personal user data).
+OpenOffer is built on **Privacy-by-Design**. By default, all transcripts, vector embeddings (Local RAG), and keys are stored locally on your machine. We collect only limited anonymous telemetry (no personal user data).
 
 #### Can I use it for technical interviews?
 
-Natively is a powerful assistant for any professional situation. However, users are responsible for complying with their company policies and interview guidelines.
+OpenOffer is a powerful assistant for any professional situation. However, users are responsible for complying with their company policies and interview guidelines.
 
 #### How do I use local models?
 
-Simply install **Ollama**, run a model (e.g., `ollama run llama3`), and Natively will automatically detect it. Enable "Ollama" in the AI Providers settings to switch to offline mode.
+Simply install **Ollama**, run a model (e.g., `ollama run llama3`), and OpenOffer will automatically detect it. Enable "Ollama" in the AI Providers settings to switch to offline mode.
 
-#### How does Natively compare to Cluely?
+#### How does OpenOffer compare to Cluely?
 
-Cluely is a $20/month cloud-based tool that stores all data on their servers. In mid-2025, Cluely suffered a data breach that exposed personal information, transcripts, and screenshots of 83,000 users. Natively is free, open-source, and stores everything locally. It supports any LLM (not just one vendor), offers local AI via Ollama, and has battle-tested stealth mode. Natively has never had a data breach because there is no server to breach.
+Cluely is a $20/month cloud-based tool that stores all data on their servers. In mid-2025, Cluely suffered a data breach that exposed personal information, transcripts, and screenshots of 83,000 users. OpenOffer is free, open-source, and stores everything locally. It supports any LLM (not just one vendor), offers local AI via Ollama, and has battle-tested stealth mode. OpenOffer has never had a data breach because there is no server to breach.
 
 #### Is stealth mode actually undetectable?
 
-Yes. Natively hides from the dock, disguises process names as harmless system utilities (Terminal, Activity Monitor, System Settings), and syncs state across all windows. It has been hardened across five major releases and tested against screen share detection in Zoom, Teams, and Google Meet.
+Yes. OpenOffer hides from the dock, disguises process names as harmless system utilities (Terminal, Activity Monitor, System Settings), and syncs state across all windows. It has been hardened across five major releases and tested against screen share detection in Zoom, Teams, and Google Meet.
 
-#### Does Natively work on LeetCode and HackerRank?
+#### Does OpenOffer work on LeetCode and HackerRank?
 
-Yes. Natively's screenshot + OCR captures any visible coding problem and returns a full solution through the invisible overlay. It works on LeetCode, HackerRank, CoderPad, Codility, HackerEarth, Karat, and any browser-based coding environment.
+Yes. OpenOffer's screenshot + OCR captures any visible coding problem and returns a full solution through the invisible overlay. It works on LeetCode, HackerRank, CoderPad, Codility, HackerEarth, Karat, and any browser-based coding environment.
 
-#### Is Natively detectable during coding interviews?
+#### Is OpenOffer detectable during coding interviews?
 
-For standard online assessments (LeetCode, HackerRank, CoderPad, etc.), Natively is not detectable — it runs as a disguised system process and the overlay never appears in screen recordings or screen shares. It is **not** designed to bypass dedicated proctoring software like Pearson VUE, ProctorU, or Respondus Lockdown Browser, which operate at the OS level.
+For standard online assessments (LeetCode, HackerRank, CoderPad, etc.), OpenOffer is not detectable — it runs as a disguised system process and the overlay never appears in screen recordings or screen shares. It is **not** designed to bypass dedicated proctoring software like Pearson VUE, ProctorU, or Respondus Lockdown Browser, which operate at the OS level.
 
-#### Is Natively a free alternative to Interview Coder?
+#### Is OpenOffer a free alternative to Interview Coder?
 
-Yes. Natively does everything Interview Coder does — screenshot OCR, real-time coding assistance, invisible overlay — and adds behavioral interview support, system design help, local RAG memory, and any-LLM BYOK. All for free.
+Yes. OpenOffer does everything Interview Coder does — screenshot OCR, real-time coding assistance, invisible overlay — and adds behavioral interview support, system design help, local RAG memory, and any-LLM BYOK. All for free.
 
 ---
 
-## Alternatives Natively Replaces
+## Alternatives OpenOffer Replaces
 
-Natively is a free, open-source alternative to:
+OpenOffer is a free, open-source alternative to:
 
-| Tool                | What Natively replaces                                                              |
+| Tool                | What OpenOffer replaces                                                              |
 | :------------------ | :---------------------------------------------------------------------------------- |
 | **Cluely**          | Real-time AI meeting copilot — without the $20/mo fee or data breach risk           |
 | **Final Round AI**  | Live AI interview copilot — without the $149/mo fee or proctor-visible taskbar icon |
@@ -972,11 +888,11 @@ Natively is a free, open-source alternative to:
 
 ## Star History
 
-<a href="https://star-history.com/#evinjohnn/natively-cluely-ai-assistant&Date">
+<a href="https://star-history.com/#luiz2047/openoffer&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=evinjohnn/natively-cluely-ai-assistant&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=evinjohnn/natively-cluely-ai-assistant&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=evinjohnn/natively-cluely-ai-assistant&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=luiz2047/openoffer&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=luiz2047/openoffer&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=luiz2047/openoffer&type=Date" />
  </picture>
 </a>
 

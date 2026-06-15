@@ -49,7 +49,7 @@ test('runWhatShouldISay passes screenContext and preserves imagePaths', async ()
 
   session.addTranscript({
     speaker: 'interviewer',
-    text: 'What should we do here?',
+    text: 'Can you explain the visible error on screen?',
     timestamp: Date.now(),
     final: true,
   });
@@ -78,7 +78,7 @@ test('runWhatShouldISay forwards dynamic action promptInstruction to WhatToAnswe
 
   session.addTranscript({
     speaker: 'interviewer',
-    text: 'How should we respond to this objection?',
+    text: 'Can you explain how to respond to this objection?',
     timestamp: Date.now(),
     final: true,
   });
@@ -106,7 +106,7 @@ test('runWhatShouldISay works without screenContext', async () => {
 
   session.addTranscript({
     speaker: 'interviewer',
-    text: 'What should I answer?',
+    text: 'Can you explain what I should answer?',
     timestamp: Date.now(),
     final: true,
   });

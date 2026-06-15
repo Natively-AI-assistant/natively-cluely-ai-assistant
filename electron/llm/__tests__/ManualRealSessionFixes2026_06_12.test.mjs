@@ -13,7 +13,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -46,17 +46,17 @@ describe('P2: identity probe routing', () => {
         for (const q of ['who are you?', 'introduce yourself']) {
             const d = resolveIdentityProbe(q, false);
             assert.equal(d.kind, 'assistant_reply', q);
-            assert.match(d.reply, /I'm Natively/);
+            assert.match(d.reply, /I'm OpenOffer/);
         }
     });
     test('assistant-meta probes stay canned even WITH a profile', () => {
         const cases = [
-            ['are you an AI?', /I'm Natively/],
-            ['are you chatgpt?', /I'm Natively/],
-            ['what is natively?', /I'm Natively/],
-            ['what model are you?', /I'm Natively/],
-            ['who built natively?', /developed by Evin John/],
-            ['who made you', /developed by Evin John/],
+            ['are you an AI?', /I'm OpenOffer/],
+            ['are you chatgpt?', /I'm OpenOffer/],
+            ['what is openoffer?', /I'm OpenOffer/],
+            ['what model are you?', /I'm OpenOffer/],
+            ['who built openoffer?', /developed by OpenOffer contributors/],
+            ['who made you', /developed by OpenOffer contributors/],
         ];
         for (const [q, re] of cases) {
             const d = resolveIdentityProbe(q, true);
@@ -172,7 +172,7 @@ describe('P6: sales template voice', () => {
             assert.ok(['sales_answer', 'product_candidate_mix_answer'].includes(p.answerType), `${q} → ${p.answerType}`);
             const c = formatAnswerPlanForPrompt(p, false);
             assert.match(c, /SELLER'S spoken voice|seller\/representative/i, q);
-            assert.match(c, /NEVER say "I'm Natively"|Never identify as an AI assistant/, q);
+            assert.match(c, /NEVER say "I'm OpenOffer"|Never identify as an AI assistant/, q);
             assert.ok(p.forbiddenContextLayers.includes('resume'), q);
         }
     });
@@ -261,7 +261,8 @@ describe('intro variants + grammar', () => {
 describe('wiring pins', () => {
     const ipcSrc = readFileSync(path.resolve(__dirname, '../../ipcHandlers.ts'), 'utf8');
     const llmHelperSrc = readFileSync(path.resolve(__dirname, '../../LLMHelper.ts'), 'utf8');
-    const orchSrc = readFileSync(path.resolve(__dirname, '../../../premium/electron/knowledge/KnowledgeOrchestrator.ts'), 'utf8');
+    const orchPath = path.resolve(__dirname, '../../../premium/electron/knowledge/KnowledgeOrchestrator.ts');
+    const orchSrc = existsSync(orchPath) ? readFileSync(orchPath, 'utf8') : '';
 
     test('ipcHandlers uses resolveIdentityProbe (old inline regex gone)', () => {
         assert.doesNotMatch(ipcSrc, /const IDENTITY_PROBE_RE\s*=/);
@@ -278,10 +279,10 @@ describe('wiring pins', () => {
         assert.match(ipcSrc, /!context && !autoContextSnapshot && isBareFollowUp\(message\)/);
         assert.match(ipcSrc, /buildContextFreeClarification\(clarSurface\)/);
     });
-    test('gap pivots gated on fit/gap/behavioral answer types', () => {
+    test('gap pivots gated on fit/gap/behavioral answer types', { skip: !orchSrc && 'premium KnowledgeOrchestrator source is absent in this public checkout' }, () => {
         assert.match(orchSrc, /gapRelevantTypes = new Set\(\['jd_fit_answer', 'gap_analysis_answer', 'behavioral_interview_answer'\]\)/);
     });
-    test('live company research is budget-bounded in the hot path', () => {
+    test('live company research is budget-bounded in the hot path', { skip: !orchSrc && 'premium KnowledgeOrchestrator source is absent in this public checkout' }, () => {
         assert.match(orchSrc, /Promise\.race\(\[\s*researchPromise/);
     });
     test('foreground gate wired: manual begin/end + embedding queue + live indexer yield', () => {

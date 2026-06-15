@@ -32,7 +32,7 @@ Download the correct architecture `.dmg` or `.zip` file for your device (Apple S
 - **For Apple Silicon (M1/M2/M3/M4):** Download the `arm64` build.
 - **For Intel Macs:** Download the `x64` build.
 
-Open the downloaded file, drag **Natively** to your **Applications** folder, and launch it.
+Open the downloaded file, drag **OpenOffer** to your **Applications** folder, and launch it.
 
 ## ⚠️Windows Installation (Unsigned Build)
 

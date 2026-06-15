@@ -8,7 +8,7 @@
 // telemetry. The first provider that returns non-empty output wins.
 //
 // Provider order (vision_first / vision_only):
-//   1. Natively API (if configured)
+//   1. First configured vision-capable provider
 //   2. OpenAI vision (if configured)
 //   3. Gemini Flash vision (if configured)
 //   4. Claude vision (if configured)
@@ -83,7 +83,7 @@ export interface VisionFallbackResult {
 // substitute fake providers without bringing up the whole LLM stack.
 export interface VisionProviderConfig {
   id: string;                                     // unique provider id, used in telemetry
-  displayName: string;                            // e.g. "Natively API"
+  displayName: string;                            // e.g. "OpenAI"
   modelId?: string;                               // resolved model id for telemetry
   isLocal: boolean;                               // true for ollama / codex local / approved-local-custom
   isConfigured: boolean;                          // API key / runtime available

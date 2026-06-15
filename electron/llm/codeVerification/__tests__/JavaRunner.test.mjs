@@ -39,7 +39,7 @@ describe('buildJavaProgram (pure)', () => {
     assert.match(p, /public class Main/);
     assert.match(p, /int a0 = 2;/);
     assert.match(p, /int a1 = 3;/);
-    assert.match(p, /new Solution\(\)\.add\(a0, a1\)/);
+    assert.match(p, /__natMain\(\)\.new Solution\(\)\.add\(a0, a1\)/);
     assert.match(p, /__NATIVELY_RESULT_START__/);
   });
   test('emits ListNode build/serialize helpers when the signature uses them', () => {

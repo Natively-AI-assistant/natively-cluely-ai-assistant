@@ -112,15 +112,15 @@ describe('Residual regression run: additional route gaps closed', () => {
 describe('Forbidden-answer leak strip covers non-coding types (sales/meeting)', () => {
   const SALES_PLAN = { answerType: 'sales_answer', outputPerspective: 'assistant_explanation', forbiddenContextLayers: ['resume', 'jd', 'negotiation'], profileContextPolicy: 'forbidden' };
   const MEETING_PLAN = { answerType: 'general_meeting_answer', outputPerspective: 'assistant_explanation', forbiddenContextLayers: ['resume', 'jd', 'negotiation'], profileContextPolicy: 'forbidden' };
-  test('"I\'m Natively, an AI assistant…" identity leak in a SALES answer is flagged', () => {
-    const leak = "I'm Natively, an AI assistant. I don't have pricing info.";
+  test('"I\'m OpenOffer, an AI assistant..." identity leak in a SALES answer is flagged', () => {
+    const leak = "I'm OpenOffer, an AI assistant. I don't have pricing info.";
     const r = validateProfileOutput({ answer: leak, plan: SALES_PLAN, profileAvailable: true, candidateDirected: false, profileTokens: TOKENS });
     assert.ok(r.violations.some(v => v.code === 'profile_token_in_coding_answer'));
   });
   test('the identity-leak preamble strips out of a meeting answer', () => {
-    const leak = "I'm Natively, an AI assistant developed by Evin John. The next step is owned by Sarah.";
-    const s = stripProfileTokensFromCoding(leak, ['Evin', 'Natively']);
-    assert.doesNotMatch(s, /natively|AI assistant|Evin/i);
+    const leak = "I'm OpenOffer, an AI assistant developed by OpenOffer contributors. The next step is owned by Sarah.";
+    const s = stripProfileTokensFromCoding(leak, ['OpenOffer']);
+    assert.doesNotMatch(s, /openoffer|AI assistant/i);
     assert.match(s, /owned by Sarah/);
     assert.ok(validateProfileOutput({ answer: s, plan: MEETING_PLAN, profileAvailable: true, candidateDirected: false, profileTokens: TOKENS }).ok);
   });
@@ -145,7 +145,7 @@ describe('Code-review hardening: strip preserves code fences + collision tokens'
     assert.match(s, /SELECT MAX\(salary\)/, 'executable SQL must be preserved');
     assert.ok(validateProfileOutput({ answer: s, plan: CODING_PLAN, profileAvailable: true, candidateDirected: false, profileTokens: TOKENS }).ok);
   });
-  test('the English adverb "natively" is NOT flagged; the product "Natively" IS', () => {
+  test('the English adverb "natively" is NOT flagged; the product "OpenOffer" IS', () => {
     for (const clean of [
       'Python natively supports the heapq module for this.',
       'The heap runs natively on the JVM, no extra deps.',
@@ -154,9 +154,9 @@ describe('Code-review hardening: strip preserves code fences + collision tokens'
       assert.ok(validateProfileOutput({ answer: clean, plan: CODING_PLAN, profileAvailable: true, candidateDirected: false, profileTokens: TOKENS }).ok, `adverb falsely flagged: ${clean}`);
     }
     for (const leak of [
-      'I built this exact pattern in Natively.',
-      'The `Natively` ranker does this.',
-      'As used in natively for ranking results.',
+      'I built this exact pattern in OpenOffer.',
+      'The `OpenOffer` ranker does this.',
+      'As used in OpenOffer for ranking results.',
     ]) {
       assert.ok(validateProfileOutput({ answer: leak, plan: CODING_PLAN, profileAvailable: true, candidateDirected: false, profileTokens: TOKENS }).violations.some(v => v.code === 'profile_token_in_coding_answer'), `product mention missed: ${leak}`);
     }
@@ -186,9 +186,9 @@ describe('Code-review hardening: strip preserves code fences + collision tokens'
     assert.ok(r.ok, `flagged: ${r.violations.map(v => v.code).join(',')}`);
   });
   test('strip removes a full identity-leak preamble from a profile-forbidden (meeting) answer', () => {
-    const leak = "I'm Natively, an AI assistant. I was developed by Evin John. The next step is owned by Sarah.";
-    const s = stripProfileTokensFromCoding(leak, ['Evin', 'Natively']);
-    assert.doesNotMatch(s, /natively|AI assistant|Evin/i);
+    const leak = "I'm OpenOffer, an AI assistant. I was developed by OpenOffer contributors. The next step is owned by Sarah.";
+    const s = stripProfileTokensFromCoding(leak, ['OpenOffer']);
+    assert.doesNotMatch(s, /openoffer|AI assistant/i);
     assert.match(s, /owned by Sarah/);
   });
 });

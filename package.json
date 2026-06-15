@@ -1,8 +1,8 @@
 {
-  "name": "natively",
-  "version": "2.7.0",
+  "name": "openoffer",
+  "version": "1.0.0",
   "main": "dist-electron/electron/main.js",
-  "description": "Natively is a meeting notes app that uses AI to generate notes from your meetings.",
+  "description": "OpenOffer is a local-first AI assistant for live interviews, meetings, and offer conversations.",
   "scripts": {
     "clean": "rimraf dist dist-electron",
     "dev": "vite",
@@ -24,10 +24,10 @@
     "dist:signed": "npm run app:build:signed",
     "build:native": "node scripts/build-native.js",
     "test": "npm run build:electron && node --test 'electron/services/__tests__/**/*.test.mjs' 'electron/llm/__tests__/**/*.test.mjs' 'electron/llm/codeVerification/__tests__/**/*.test.mjs' 'electron/audio/__tests__/**/*.test.mjs' 'electron/update/**/*.test.mjs'",
-    "test:modes": "npm run build:electron && node --test electron/services/__tests__/Mode*.test.mjs electron/services/__tests__/ProfileIntelligenceGate.test.mjs electron/services/__tests__/NativelyApiE2E.test.mjs",
-    "test:modes:no-build": "node --test electron/services/__tests__/Mode*.test.mjs electron/services/__tests__/ProfileIntelligenceGate.test.mjs electron/services/__tests__/NativelyApiE2E.test.mjs",
+    "test:modes": "npm run build:electron && node --test electron/services/__tests__/Mode*.test.mjs electron/services/__tests__/OpenOfferCommercialRemoval.test.mjs",
+    "test:modes:no-build": "node --test electron/services/__tests__/Mode*.test.mjs electron/services/__tests__/OpenOfferCommercialRemoval.test.mjs",
     "test:modes:collect-fixtures": "RUN_INTERNET_FIXTURE_COLLECTION=1 node --test electron/services/__tests__/ModeFixtureIntegrity.test.mjs",
-    "test:modes:e2e": "RUN_NATIVELY_API_E2E=1 npm run test:modes",
+    "test:modes:e2e": "npm run test:modes",
     "test:modes:long": "node --test electron/services/__tests__/ModeLongSession.test.mjs",
     "test:e2e": "npx playwright test",
     "test:e2e:headed": "npx playwright test --headed",
@@ -71,9 +71,9 @@
   },
   "build": {
     "generateUpdatesFilesForAllChannels": true,
-    "appId": "com.electron.meeting-notes",
+    "appId": "com.openoffer.assistant",
     "afterPack": "./scripts/ad-hoc-sign.js",
-    "productName": "Natively",
+    "productName": "OpenOffer",
     "files": [
       "dist",
       "dist-electron",
@@ -131,9 +131,9 @@
       "identity": null,
       "hardenedRuntime": false,
       "extendInfo": {
-        "NSScreenCaptureUsageDescription": "Natively needs Screen Recording permission to capture system audio for meeting transcription.",
-        "NSMicrophoneUsageDescription": "Natively needs microphone access to transcribe your voice during meetings.",
-        "NSAudioCaptureUsageDescription": "Natively needs system audio access to transcribe meeting audio."
+        "NSScreenCaptureUsageDescription": "OpenOffer needs Screen Recording permission to capture system audio for meeting transcription.",
+        "NSMicrophoneUsageDescription": "OpenOffer needs microphone access to transcribe your voice during meetings.",
+        "NSAudioCaptureUsageDescription": "OpenOffer needs system audio access to transcribe meeting audio."
       }
     },
     "win": {
@@ -183,8 +183,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "Natively-AI-assistant",
-        "repo": "natively-cluely-ai-assistant",
+        "owner": "luiz2047",
+        "repo": "openoffer",
         "releaseType": "release"
       }
     ]

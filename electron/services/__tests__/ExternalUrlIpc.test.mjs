@@ -12,14 +12,14 @@ function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), 'utf8');
 }
 
-test('open-external IPC only allows known external destinations', () => {
+test('open-external IPC allows safe web URLs and platform-gated system settings URLs', () => {
   const source = read('electron/ipcHandlers.ts');
   const start = findSafeHandle(source, 'open-external');
   const end = source.indexOf('// ==========================================', start);
   const handler = source.slice(start, end);
 
   assert.ok(start >= 0, 'open-external handler should exist');
-  assert.match(handler, /parsed\.protocol === 'https:'[\s\S]{0,80}parsed\.hostname === 'mail\.google\.com'[\s\S]{0,80}parsed\.pathname === '\/mail\/'/);
+  assert.match(handler, /const allowedWebUrl = parsed\.protocol === 'https:';/);
   assert.match(handler, /parsed\.protocol === 'x-apple\.systempreferences:' && process\.platform === 'darwin'/);
   assert.doesNotMatch(handler, /\['http:', 'https:', 'mailto:'\]\.includes\(parsed\.protocol\)/);
   assert.doesNotMatch(handler, /url\.startsWith\('x-apple\.systempreferences:'\)/);

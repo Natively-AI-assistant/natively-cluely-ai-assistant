@@ -35,10 +35,10 @@ describe('Phase 4 — Hybrid RAG default in WhatToAnswerLLM', () => {
     // Type slot for the new method (so callers can detect it).
     assert.match(src, /buildRetrievedActiveModeContextBlockHybrid\?:/, 'type alias must declare optional hybrid method');
     // Runtime branch: prefer hybrid, await it.
-    assert.match(src, /typeof this\.modesManager\.buildRetrievedActiveModeContextBlockHybrid\s*===\s*['"]function['"]/);
-    assert.match(src, /await this\.modesManager\.buildRetrievedActiveModeContextBlockHybrid\(/);
+    assert.match(src, /typeof modesManager\.buildRetrievedActiveModeContextBlockHybrid\s*===\s*['"]function['"]/);
+    assert.match(src, /await\s+raceWithBudget\(\s*modesManager\.buildRetrievedActiveModeContextBlockHybrid\(/);
     // Lexical fallback path remains.
-    assert.match(src, /this\.modesManager\.buildRetrievedActiveModeContextBlock\(/);
+    assert.match(src, /modesManager\.buildRetrievedActiveModeContextBlock\(/);
   });
 });
 

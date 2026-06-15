@@ -31,6 +31,8 @@ export interface CurlProvider {
     responsePath: string; // e.g. "choices[0].message.content"
 }
 
+export type SttProviderId = 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'local-whisper' | 'gigastt';
+
 export interface StoredCredentials {
     geminiApiKey?: string;
     groqApiKey?: string;
@@ -47,7 +49,7 @@ export interface StoredCredentials {
     defaultModel?: string;
     nativelyApiKey?: string;
     // STT Provider settings
-    sttProvider?: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper' | 'gigastt';
+    sttProvider?: SttProviderId | 'natively';
     groqSttApiKey?: string;
     groqSttModel?: string;
     openAiSttApiKey?: string;
@@ -146,16 +148,13 @@ export class CredentialsManager {
         return this.credentials.customProviders || [];
     }
 
-    public getSttProvider(): 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper' | 'gigastt' {
+    public getSttProvider(): SttProviderId {
         const provider = this.credentials.sttProvider || 'none';
-        // Self-heal: if provider is 'none' but a Natively key exists, the user is in a
-        // broken state (key cleared then re-entered via a path that skipped auto-promote,
-        // or credentials restored from backup). Silently restore to 'natively' so STT works.
-        if (provider === 'none' && this.credentials.nativelyApiKey) {
-            this.credentials.sttProvider = 'natively';
+        if (provider === 'natively') {
+            this.credentials.sttProvider = 'none';
             this.saveCredentials();
-            console.log('[CredentialsManager] Self-healed sttProvider: none→natively (Natively key present)');
-            return 'natively';
+            console.log('[CredentialsManager] Sanitized removed STT provider to none');
+            return 'none';
         }
         return provider;
     }
@@ -224,7 +223,7 @@ export class CredentialsManager {
     }
 
     public getNativelyApiKey(): string | undefined {
-        return this.credentials.nativelyApiKey;
+        return undefined;
     }
 
     public getAllCredentials(): StoredCredentials {
@@ -240,7 +239,6 @@ export class CredentialsManager {
      * Used by ScreenUnderstandingService to gate vision_only / decide fallback.
      */
     public anyVisionProviderConfigured(): boolean {
-        if (this.credentials.nativelyApiKey) return true;       // Natively API supports vision
         if (this.credentials.openaiApiKey) return true;          // gpt-4o / gpt-5 vision
         if (this.credentials.claudeApiKey) return true;          // Claude vision
         if (this.credentials.geminiApiKey) return true;          // Gemini vision
@@ -336,7 +334,7 @@ export class CredentialsManager {
         console.log('[CredentialsManager] Google Service Account path updated');
     }
 
-    public setSttProvider(provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper' | 'gigastt'): void {
+    public setSttProvider(provider: SttProviderId): void {
         this.credentials.sttProvider = provider;
         this.saveCredentials();
         console.log(`[CredentialsManager] STT Provider set to: ${provider}`);
@@ -436,43 +434,15 @@ export class CredentialsManager {
     }
 
     public setNativelyApiKey(key: string): void {
-        const trimmed = key.trim();
-        this.credentials.nativelyApiKey = trimmed || undefined;
-
-        if (trimmed) {
-            // Auto-promote natively to default model unless user already chose a non-Gemini/Groq model
-            const current = this.credentials.defaultModel || '';
-            const isAutoDefault = !current
-                || current.startsWith('gemini-')
-                || current.startsWith('llama-')
-                || current.startsWith('mixtral-')
-                || current.startsWith('gemma-')
-                || current === 'gemini'
-                || current === 'llama';
-            if (isAutoDefault) {
-                this.credentials.defaultModel = 'natively';
-                console.log('[CredentialsManager] Auto-set default model to natively');
-            }
-
-            // Auto-promote natively STT if still on 'none' or the default Google STT
-            if (!this.credentials.sttProvider || this.credentials.sttProvider === 'none' || this.credentials.sttProvider === 'google') {
-                this.credentials.sttProvider = 'natively';
-                console.log('[CredentialsManager] Auto-set STT provider to natively');
-            }
-        } else {
-            // Key cleared — revert natively-auto-set defaults back to safe fallbacks
-            if (this.credentials.defaultModel === 'natively') {
-                this.credentials.defaultModel = 'gemini-3.1-flash-lite';
-                console.log('[CredentialsManager] Natively key cleared — reset default model to Gemini Flash-Lite');
-            }
-            if (this.credentials.sttProvider === 'natively') {
-                this.credentials.sttProvider = 'none';
-                console.log('[CredentialsManager] Natively key cleared — reset STT provider to none');
-            }
+        delete this.credentials.nativelyApiKey;
+        if (this.credentials.defaultModel === 'natively') {
+            this.credentials.defaultModel = 'gemini-3.1-flash-lite';
         }
-
+        if (this.credentials.sttProvider === 'natively') {
+            this.credentials.sttProvider = 'none';
+        }
         this.saveCredentials();
-        console.log('[CredentialsManager] Natively API Key updated');
+        console.log('[CredentialsManager] Removed hosted API key ignored and cleared');
     }
 
     public getPreferredModel(provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek'): string | undefined {
@@ -633,6 +603,23 @@ export class CredentialsManager {
                     const parsed = JSON.parse(decrypted);
                     if (typeof parsed === 'object' && parsed !== null) {
                         this.credentials = parsed;
+                        let sanitized = false;
+                        if (this.credentials.defaultModel === 'natively') {
+                            this.credentials.defaultModel = 'gemini-3.1-flash-lite';
+                            sanitized = true;
+                        }
+                        if (this.credentials.sttProvider === 'natively') {
+                            this.credentials.sttProvider = 'none';
+                            sanitized = true;
+                        }
+                        if (this.credentials.nativelyApiKey) {
+                            delete this.credentials.nativelyApiKey;
+                            sanitized = true;
+                        }
+                        if (sanitized) {
+                            this.saveCredentials();
+                            console.log('[CredentialsManager] Sanitized legacy Natively credentials');
+                        }
                         console.log('[CredentialsManager] Loaded encrypted credentials');
                     } else {
                         throw new Error('Decrypted credentials is not a valid object');

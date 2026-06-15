@@ -600,7 +600,7 @@ const MockProviderSelectionAnim = () => {
     }, []);
 
     const options = [
-        { id: 'natively', label: 'Natively API', badge: '', recommended: true, desc: 'Ultra-fast low latency transcription', color: 'indigo', icon: <img src={nativelyIcon} className={`w-[14px] h-[14px] object-contain opacity-80 ${isLight ? '' : 'filter brightness-0 invert'}`} alt="Natively" /> },
+        { id: 'local-whisper', label: 'Local Whisper', badge: '', recommended: true, desc: 'On-device private transcription', color: 'green', icon: <Cpu size={14} /> },
         { id: 'deepgram', label: 'Deepgram Nova-3', badge: 'Saved', recommended: false, desc: 'High-accuracy REST transcription', color: 'purple', icon: <Mic size={14} /> },
         { id: 'google', label: 'Google Cloud', badge: 'Saved', recommended: false, desc: 'gRPC streaming via Service Account', color: 'blue', icon: <Mic size={14} /> },
         { id: 'groq', label: 'Groq Whisper', badge: '', recommended: false, desc: 'Fast LPU whisper transcription', color: 'orange', icon: <Mic size={14} /> },
@@ -817,7 +817,7 @@ const SetupGuide = () => {
         },
         {
             title: 'Set Up Audio',
-            desc: 'Open Settings → Audio and select Natively API, or paste a Deepgram or Google key.',
+            desc: 'Open Settings → Audio and select Local Whisper, GigaSTT, or paste a Deepgram or Google key.',
         },
         {
             title: 'Connect an AI Model',
@@ -888,7 +888,7 @@ const SetupGuide = () => {
         </div>
     );
 };
-export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({ onNavigate }) => {
+export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = () => {
     const { shortcuts } = useShortcuts();
     const isLight = useResolvedTheme() === 'light';
 
@@ -903,34 +903,11 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     Help & Setup Guide
                 </h2>
                 <p className={`text-sm text-text-secondary mt-3 max-w-2xl`}>
-                    Learn how to deeply configure Natively. Everything from providing the right API scopes to executing conversational interviews seamlessly is covered below.
+                    Learn how to deeply configure OpenOffer. Everything from local audio setup to provider scopes and conversational interviews is covered below.
                 </p>
             </div>
 
             <div className="flex-1 space-y-2">
-
-                {onNavigate && (
-                    <div
-                        onClick={() => onNavigate('natively-api')}
-                        className="mb-8 group cursor-pointer bg-bg-card hover:bg-bg-item-surface border border-border-subtle hover:border-white transition-all rounded-2xl flex items-center justify-between p-4 px-5 shadow-sm hover:shadow-md"
-                    >
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 flex-1">
-                            <div className="w-10 h-10 shrink-0 rounded-xl bg-bg-item-surface border border-border-subtle flex items-center justify-center group-hover:bg-bg-elevated transition-colors">
-                                <Zap className="w-5 h-5 text-text-primary group-hover:text-white transition-colors" fill="currentColor" />
-                            </div>
-                            <div className="flex-1">
-                                <h4 className="text-[14px] font-bold text-text-primary mb-0.5">Want to skip the manual setup?</h4>
-                                <p className="text-[13px] text-text-secondary">
-                                    Use the <span className="font-semibold text-text-primary">Natively API</span> for an out-of-the-box experience. One-click zero-configuration usage.
-                                </p>
-                            </div>
-                        </div>
-                        <div className="hidden sm:flex self-center ml-4 px-3 py-1.5 rounded-lg bg-text-primary text-bg-main text-[11px] font-bold items-center gap-1.5 opacity-90 group-hover:opacity-100 transition-opacity whitespace-nowrap shrink-0">
-                            Enable Now <ArrowRight size={12} />
-                        </div>
-                    </div>
-                )}
-
                 <SetupGuide />
 
                 <div className="h-10" />
@@ -1512,14 +1489,14 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                                 <div className="p-4 rounded-xl border bg-accent-primary/5 border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <CreditCard className="w-4 h-4 text-accent-primary" /> Pro Requirement
+                                        <CreditCard className="w-4 h-4 text-accent-primary" /> Local Profile Context
                                     </h4>
                                     <p className="text-[11px] text-text-secondary mb-2">
-                                        This is a Natively Pro feature.
+                                        Profile Intelligence is included in OpenOffer and runs from your local files and configured providers.
                                     </p>
                                     <ol className="text-[11px] text-text-secondary space-y-1 list-decimal pl-4 mb-0">
-                                        <li>Get a License at <button onClick={() => { (window as any).electronAPI?.openExternal('https://natively.software/') }} className="text-accent-primary hover:underline font-semibold">natively.software</button></li>
                                         <li>Drop your Resume PDF in the UI to activate injection.</li>
+                                        <li>Add a JD or custom context when a session needs role-specific answers.</li>
                                     </ol>
                                 </div>
                             </div>
@@ -1531,7 +1508,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     <Briefcase size={14} /> Job Description Targeting
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                    Drop a target <strong>JD PDF</strong> alongside your resume. Natively extracts the role title, level, company, and required technologies, then biases every prompt to align your responses with that exact spec — perfect for staying on-message during a final loop.
+                                    Drop a target <strong>JD PDF</strong> alongside your resume. OpenOffer extracts the role title, level, company, and required technologies, then biases every prompt to align your responses with that exact spec — perfect for staying on-message during a final loop.
                                 </p>
                             </div>
 
@@ -1592,7 +1569,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                 <AccordionSection title="8. Modes Manager" icon={<LayoutGrid className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        <p className="text-[13px]">Modes let you assign a specialized AI persona to your session. Each mode has a tailored system prompt, a personal context area, reference files, and smart note template sections — so Natively behaves differently depending on whether you're in a sales call, a coding interview, or a team standup.</p>
+                        <p className="text-[13px]">Modes let you assign a specialized AI persona to your session. Each mode has a tailored system prompt, a personal context area, reference files, and smart note template sections — so OpenOffer behaves differently depending on whether you're in a sales call, a coding interview, or a team standup.</p>
 
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                             {([
@@ -1618,7 +1595,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
                                         <li>Click the <strong>grid icon</strong> in the Launcher header</li>
                                         <li>Or click the grid icon in the main interface toolbar</li>
-                                        <li>Requires a Natively Pro license</li>
+                                        <li>Available in this open-source build</li>
                                     </ul>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
@@ -1653,10 +1630,10 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                         <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
                             <h4 className="text-[13px] font-semibold text-indigo-400 flex items-center gap-2 mb-1">
-                                <Star size={14} /> Pro Feature
+                                <Star size={14} /> Included Feature
                             </h4>
                             <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                Modes are locked behind Natively Pro. Free and trial users see only the General mode. Activate a license via <strong>Settings → Natively API</strong> to unlock all seven modes.
+                                Modes are available without a license gate. Use built-in personas or create your own for repeatable meeting workflows.
                             </p>
                         </div>
                     </div>

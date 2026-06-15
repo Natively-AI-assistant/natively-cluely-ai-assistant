@@ -3,7 +3,7 @@
 // Issue 2 (P0): the what-to-answer candidate-voice contract. For source
 // 'what_to_answer', every profile/identity/JD-fit/behavioral/negotiation answer
 // type must route to first_person_candidate voice, and the ProfileOutputValidator
-// must FLAG (so the live path repairs) a Natively-identity leak, a false refusal
+// must FLAG (so the live path repairs) an OpenOffer-identity leak, a false refusal
 // when the profile is loaded, and second/third-person voice for a candidate answer.
 
 import { test, describe } from 'node:test';
@@ -43,8 +43,8 @@ describe('Issue 2: ProfileOutputValidator flags WTA contract violations', () => 
   const validate = (answer) => validateProfileOutput({ answer, plan, profileAvailable: true, candidateDirected: true });
   const errs = (answer) => validate(answer).violations.filter((v) => v.severity === 'error').map((v) => v.code);
 
-  test('"I am Natively, an AI assistant." → assistant_identity_leak', () => {
-    assert.ok(errs('I am Natively, an AI assistant.').includes('assistant_identity_leak'));
+  test('"I am OpenOffer, an AI assistant." → assistant_identity_leak', () => {
+    assert.ok(errs('I am OpenOffer, an AI assistant.').includes('assistant_identity_leak'));
   });
   test('"I can\'t share that information." → false_no_access_refusal', () => {
     assert.ok(errs("I can't share that information.").includes('false_no_access_refusal'));
@@ -53,13 +53,13 @@ describe('Issue 2: ProfileOutputValidator flags WTA contract violations', () => 
     const codes = errs("I don't have specific past experience loaded right now.");
     assert.ok(codes.includes('false_no_experience_refusal') || codes.includes('false_no_access_refusal'));
   });
-  test('"You are Evin John." (second/third person) → wrong_perspective', () => {
-    assert.ok(errs('Your name is Evin John and your experience includes engineering.').includes('wrong_perspective_not_first_person'));
+  test('"You are Test Candidate." (second/third person) → wrong_perspective', () => {
+    assert.ok(errs('Your name is Test Candidate and your experience includes engineering.').includes('wrong_perspective_not_first_person'));
   });
-  test('"My name is Evin John." (correct first-person) → no error', () => {
-    assert.equal(errs('My name is Evin John.').length, 0);
+  test('"My name is Test Candidate." (correct first-person) → no error', () => {
+    assert.equal(errs('My name is Test Candidate.').length, 0);
   });
-  test('a legitimate job title "I\'m an AI Engineer" is NOT flagged as a Natively leak', () => {
+  test('a legitimate job title "I\'m an AI Engineer" is NOT flagged as an OpenOffer leak', () => {
     assert.ok(!errs("I'm an AI & Full Stack Engineer with experience in data systems.").includes('assistant_identity_leak'));
   });
 });

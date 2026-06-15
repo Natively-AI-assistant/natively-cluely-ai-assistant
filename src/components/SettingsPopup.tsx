@@ -14,7 +14,6 @@ const SettingsPopup = () => {
     });
     const [profileMode, setProfileMode] = useState(false);
     const [hasProfile, setHasProfile] = useState(false);
-    const [isPremium, setIsPremium] = useState(false);
 
     const isFirstRender = React.useRef(true);
 
@@ -34,8 +33,7 @@ const SettingsPopup = () => {
                     groq: !!creds.hasGroqKey,
                     openai: !!creds.hasOpenaiKey,
                     claude: !!creds.hasClaudeKey,
-                    deepseek: !!creds.hasDeepseekKey,
-                    natively: !!creds.hasNativelyKey
+                    deepseek: !!creds.hasDeepseekKey
                 });
             }
         } catch (e) {
@@ -58,10 +56,7 @@ const SettingsPopup = () => {
                     setHasProfile(status.hasProfile);
                     setProfileMode(status.profileMode);
                 }
-                // Check premium status
-                const premium = await window.electronAPI?.licenseCheckPremium?.();
-                setIsPremium(!!premium);
-            } catch (e) { console.warn('[SettingsPopup] Failed to load profile/premium status:', e); }
+            } catch (e) { console.warn('[SettingsPopup] Failed to load profile status:', e); }
 
         };
         loadProfile();
@@ -252,8 +247,8 @@ const SettingsPopup = () => {
                 </div>
 
 
-                {/* Groq (Fast Text) Toggle — enabled with Groq key OR Natively API key */}
-                <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group ${!(hasStoredKey.groq || hasStoredKey.natively) ? 'opacity-50 grayscale cursor-not-allowed' : `${itemHoverClass} ${glassRowClass} cursor-default`}`} title={!(hasStoredKey.groq || hasStoredKey.natively) ? "Requires Groq or Natively API key" : ""}>
+                {/* Groq (Fast Text) Toggle — enabled with a Groq key */}
+                <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group ${!hasStoredKey.groq ? 'opacity-50 grayscale cursor-not-allowed' : `${itemHoverClass} ${glassRowClass} cursor-default`}`} title={!hasStoredKey.groq ? "Requires Groq key" : ""}>
                     <div className="flex items-center gap-2.5">
                         <Zap
                             className={`w-4 h-4 transition-colors ${useGroqFastText ? 'text-orange-500' : inactiveIconColorClass}`}
@@ -333,17 +328,16 @@ const SettingsPopup = () => {
 
                 {/* Profile Mode Toggle */}
                 {hasProfile && (
-                    <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group ${!isPremium ? 'opacity-50 grayscale cursor-not-allowed' : `${itemHoverClass} ${glassRowClass} cursor-default`}`} title={!isPremium ? 'Requires Pro license to be active' : ''}>
+                    <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group ${itemHoverClass} ${glassRowClass} cursor-default`}>
                         <div className="flex items-center gap-2.5">
                             <User
-                                className={`w-3.5 h-3.5 transition-colors ${profileMode && isPremium ? 'text-accent-primary' : inactiveIconColorClass}`}
-                                fill={profileMode && isPremium ? "currentColor" : "none"}
+                                className={`w-3.5 h-3.5 transition-colors ${profileMode ? 'text-accent-primary' : inactiveIconColorClass}`}
+                                fill={profileMode ? "currentColor" : "none"}
                             />
                             <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>Profile Mode</span>
                         </div>
                         <button
                             onClick={async () => {
-                                if (!isPremium) return;
                                 const newState = !profileMode;
                                 setProfileMode(newState);
                                 try {
@@ -351,10 +345,9 @@ const SettingsPopup = () => {
                                     await window.electronAPI?.profileSetMode?.(newState);
                                 } catch (e) { console.error(e); }
                             }}
-                            className={`w-[30px] h-[18px] rounded-full p-[1.5px] transition-all duration-300 ease-spring active:scale-[0.92] ${profileMode && isPremium ? 'bg-accent-primary shadow-[0_2px_10px_rgba(var(--color-accent-primary),0.3)]' : defaultToggleTrackClass}`}
-                            disabled={!isPremium}
+                            className={`w-[30px] h-[18px] rounded-full p-[1.5px] transition-all duration-300 ease-spring active:scale-[0.92] ${profileMode ? 'bg-accent-primary shadow-[0_2px_10px_rgba(var(--color-accent-primary),0.3)]' : defaultToggleTrackClass}`}
                         >
-                            <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${profileMode && isPremium ? 'translate-x-[12px]' : 'translate-x-0'}`} />
+                            <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${profileMode ? 'translate-x-[12px]' : 'translate-x-0'}`} />
                         </button>
                     </div>
                 )}

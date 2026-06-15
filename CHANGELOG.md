@@ -6,6 +6,25 @@
 
     - **LiteLLM AI Gateway**: Added LiteLLM as a built-in provider, giving access to 100+ LLM providers (AWS Bedrock, Google Vertex AI, Azure, Cohere, and more) through a single OpenAI-compatible proxy. Configure the proxy URL and optional virtual key under Settings → AI Providers → LiteLLM Proxy; models are auto-discovered from the proxy and listed with a `litellm/` prefix. Max output tokens default to **Auto** — each model's real output budget is read from the proxy's `/model/info` registry (fallback 8,192) — with a manual dropdown override (4K–1M). Routes through the same data-scope gating, rate-limiting, and abort-aware streaming as every other cloud provider.
 
+    ## [1.0.0] - 2026-06-15
+
+    ### Added
+
+    - **OpenOffer public identity**: Rebranded the public package, README, release metadata, and app-facing copy for the OpenOffer fork.
+    - **GigaSTT local runtime support**: Added managed GigaSTT status checks, runtime wiring, and settings feedback for stable Russian local transcription.
+
+    ### Changed
+
+    - **Commercial paths removed**: Removed hosted Natively API, Pro, license, trial, quota, paywall, and upgrade flows from the public build.
+    - **Public build tests refreshed**: Replaced obsolete premium/Natively tests with coverage for the public OpenOffer contracts that still exist.
+
+    ### Fixed
+
+    - **OpenAI realtime STT**: Updated transcription setup to the GA `transcription_session.update` schema.
+    - **Streaming finalization**: Prevented queued token batches from landing after a final answer.
+    - **Java code verification**: Fixed generated wrappers for non-static inner `Solution` classes.
+    - **External links**: Kept macOS system-settings links platform-gated while allowing safe HTTPS help/provider URLs.
+
     ## [2.7.0] - 2026-06-05
 
     ### What's New

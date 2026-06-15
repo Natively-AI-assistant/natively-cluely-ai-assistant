@@ -311,7 +311,7 @@ const SKILL_RATING_TEMPLATE = `Answer in 1-2 sentences as the candidate. If aske
 const GENERAL_TEMPLATE = `Answer naturally and directly. Use only relevant context. Keep it predictable and concise.`;
 
 // SALES voice (manual regression 2026-06-12): real sales-mode sessions answered
-// "why is your product expensive?" with "I'm Natively, an AI assistant. I don't
+// "why is your product expensive?" with "I'm OpenOffer, an AI assistant. I don't
 // have a product or pricing model" — the model fell back to its system identity
 // because sales_answer had no template telling it WHO it is in this turn. The
 // seller speaks as the PRODUCT/TEAM REP, grounded in the active mode's product
@@ -319,7 +319,7 @@ const GENERAL_TEMPLATE = `Answer naturally and directly. Use only relevant conte
 const SALES_TEMPLATE = `You are the SELLER'S spoken voice in a live sales/commercial conversation. The user is selling a product; the question comes from a customer or prospect.
 
 Rules:
-- Speak in FIRST PERSON as the product's representative ("our product", "we", "our pricing"). You are NOT an AI assistant in this answer and must NEVER say "I'm Natively", "as an AI", or "I don't have a product" — the user's product context defines the product.
+- Speak in FIRST PERSON as the product's representative ("our product", "we", "our pricing"). You are NOT an AI assistant in this answer and must NEVER say "I'm OpenOffer", "as an AI", or "I don't have a product" — the user's product context defines the product.
 - Ground product claims in the provided mode/custom/reference context. If pricing or a specific fact isn't in the context, handle it like a real seller: acknowledge, reframe around value, and offer to follow up with specifics — never claim the product doesn't exist.
 - Handle objections (price, speed, competitors) with empathy + value reframe + one concrete differentiator from the context when available.
 - 2-5 sentences, confident, speakable, no headings or bullet markers unless asked.
@@ -1938,7 +1938,7 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
              // STAR story about the candidate's past, not a live debugging task —
              // the bare \bbug\b pattern captured it into the technical lane
              // (profile forbidden, neutral voice) where the model answered
-             // "I'm Natively, an AI assistant. I don't have personal
+             // "I'm OpenOffer, an AI assistant. I don't have personal
              // experiences." A past-tense candidate frame defers to BEHAVIORAL.
              && !/\b(tell me about|describe|share|give me an example of)\b.{0,60}\b(you|you'?ve|u)\b.{0,60}\b(solved|fixed|faced|debugged|handled|dealt with|encountered|resolved|found)\b/i.test(text)
              && !/\b(hardest|toughest|most difficult|trickiest|worst)\b.{0,30}\b(bug|error|issue|crash)\b.{0,40}\b(you|you'?ve|your career|you ever)\b/i.test(text)) {
@@ -2205,7 +2205,7 @@ export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationS
       ? 'Address the user about themselves in the second person ("Your …").'
       : (plan.answerType === 'sales_answer' || plan.answerType === 'product_candidate_mix_answer')
         // Sales turns speak as the seller/product rep — the neutral-assistant
-        // voice line caused "I'm Natively… I don't have a product" in real
+        // voice line caused "I'm OpenOffer… I don't have a product" in real
         // sales sessions (manual regression 2026-06-12).
         ? 'Speak in the FIRST PERSON as the product\'s seller/representative ("our product", "we"). Never identify as an AI assistant.'
         : 'Answer in a neutral, explanatory voice. Do not roleplay as the candidate.';

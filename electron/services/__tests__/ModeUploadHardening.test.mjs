@@ -7,7 +7,7 @@
 // empty-result handling were also absent.
 //
 // We test the handler at the source level — same pattern as
-// ModeBleeding.test.mjs and ProfileIntelligenceGate.test.mjs — because the
+// ModeBleeding.test.mjs and OpenOfferCommercialRemoval.test.mjs — because the
 // safeHandle wrapper requires an Electron runtime to invoke directly.
 
 import { test, describe } from 'node:test';

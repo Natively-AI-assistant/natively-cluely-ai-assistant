@@ -67,7 +67,7 @@ export function isBareFollowUp(question: string): boolean {
 
 /**
  * A safe, mode-appropriate clarification for a bare follow-up with NO resolvable
- * prior context. NEVER says "I'm Natively / an AI assistant", never dumps profile,
+ * prior context. NEVER says "I'm OpenOffer / an AI assistant", never dumps profile,
  * never refuses — it asks for the missing topic. Deterministic; no LLM.
  */
 export function buildContextFreeClarification(surface?: FollowUpSurface): string {

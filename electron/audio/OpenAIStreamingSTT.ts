@@ -443,26 +443,18 @@ export class OpenAIStreamingSTT extends EventEmitter {
             if (lang) transcription.language = lang;
 
             this.ws!.send(JSON.stringify({
-                type: 'session.update',
+                type: 'transcription_session.update',
                 session: {
-                    type: 'transcription',
-                    audio: {
-                        input: {
-                            format: {
-                                type: 'audio/pcm',
-                                rate: WS_SAMPLE_RATE,
-                            },
-                            transcription,
-                            noise_reduction: { type: 'near_field' },
-                            turn_detection: {
-                                type:                'server_vad',
-                                threshold:           0.5,
-                                prefix_padding_ms:   300,
-                                // 1000ms reduces micro-turns that fragment one sentence into
-                                // many word-sized completed events (overlay queue rows).
-                                silence_duration_ms: 1000,
-                            },
-                        },
+                    input_audio_format: 'pcm16',
+                    input_audio_transcription: transcription,
+                    input_audio_noise_reduction: { type: 'near_field' },
+                    turn_detection: {
+                        type:                'server_vad',
+                        threshold:           0.5,
+                        prefix_padding_ms:   300,
+                        // 1000ms reduces micro-turns that fragment one sentence into
+                        // many word-sized completed events (overlay queue rows).
+                        silence_duration_ms: 1000,
                     },
                 },
             }));
@@ -549,6 +541,8 @@ export class OpenAIStreamingSTT extends EventEmitter {
         if (!this.isActive) return;
         switch (msg.type) {
             case 'session.created':
+                console.warn('[OpenAIStreaming] Ignoring beta session.created event on GA transcription socket');
+                break;
             case 'transcription_session.created':
                 if (this.sessionSetupTimer) {
                     clearTimeout(this.sessionSetupTimer);
@@ -611,9 +605,11 @@ export class OpenAIStreamingSTT extends EventEmitter {
                 break;
             }
 
-            // Server's ACK of our session.update. Useful for confirming the server
+            // Server's ACK of our session update. Useful for confirming the server
             // applied our requested config — log only, no behavior change required.
             case 'session.updated':
+                console.warn('[OpenAIStreaming] Ignoring beta session.updated event on GA transcription socket');
+                break;
             case 'transcription_session.updated':
                 console.log('[OpenAIStreaming] Session config applied by server');
                 break;

@@ -14,7 +14,7 @@
 //   1. Wrong perspective: a profile answer that should be first-person ("My name
 //      is...") but speaks in third person or as the assistant.
 //   2. Assistant-identity leak: a profile/identity answer that says "I am
-//      Natively" / "I'm an AI assistant" when the interviewer asked the CANDIDATE.
+//      OpenOffer" / "I'm an AI assistant" when the interviewer asked the CANDIDATE.
 //   3. False "no access" / "no experience" refusal when the profile EXISTS.
 //   4. Sensitive/salary leak in a non-salary answer.
 //   5. Resume/JD leak in a generic coding/technical answer.
@@ -29,9 +29,9 @@ export type ProfileViolationCode =
   | 'sensitive_salary_leak'
   | 'profile_in_generic_answer'
   // Release 2026-06-07: a pure coding/technical/system-design answer (profile
-  // FORBIDDEN) that leaked "Natively", the candidate name, a loaded project/company
+  // FORBIDDEN) that leaked "OpenOffer", the candidate name, a loaded project/company
   // name, or profile/JD/salary references. Flash-lite intermittently appends a
-  // stray "Natively" mention to clean coding answers; this is the deterministic
+  // stray "OpenOffer" mention to clean coding answers; this is the deterministic
   // catch + repair, not just a prompt instruction.
   | 'profile_token_in_coding_answer';
 
@@ -55,7 +55,7 @@ export interface ProfileValidationInput {
    * model must NOT mention in a profile-forbidden coding/technical answer. Optional
    * and content-free at rest — the caller passes only the bare proper nouns it
    * already has loaded; nothing is persisted. When absent, only the static
-   * "Natively"/profile-marker check runs (release 2026-06-07).
+   * "OpenOffer"/profile-marker check runs (release 2026-06-07).
    */
   profileTokens?: {
     firstName?: string;
@@ -64,8 +64,8 @@ export interface ProfileValidationInput {
   };
   /**
    * When true, the user EXPLICITLY invited the project/profile into a technical
-   * answer ("use my Natively project as an example", "how did you implement this in
-   * Natively?"). Suppresses the coding-leak check so an intentional reference is
+   * answer ("use my OpenOffer project as an example", "how did you implement this in
+   * OpenOffer?"). Suppresses the coding-leak check so an intentional reference is
    * allowed (release 2026-06-07 exception).
    */
   profileExplicitlyInvited?: boolean;
@@ -87,14 +87,14 @@ const PROFILE_ANSWER_TYPES: ReadonlySet<AnswerType> = new Set<AnswerType>([
 
 const isProfileAnswerType = (t: AnswerType): boolean => PROFILE_ANSWER_TYPES.has(t);
 
-// "I am Natively" / "I'm an AI assistant" — the assistant identity leaking into a
+// "I am OpenOffer" / "I'm an AI assistant" — the assistant identity leaking into a
 // candidate answer. Distinct from the candidate legitimately saying "I" or stating
 // a real job title ("I'm an AI Engineer", "I'm an AI & Full Stack Engineer"): the
 // "an AI" clause requires it NOT be followed by an engineering/role word, so a job
 // title is not a false positive (Issue 2).
 const ASSISTANT_IDENTITY_RE =
-  /\bI(?:'m| am)\s+Natively\b|\bI(?:'m| am)\s+an?\s+(?:AI\s+)?(?:assistant|language model|chat\s?bot)\b|\bI(?:'m| am)\s+an\s+AI\b(?!\s*(?:and|engineer|developer|intern|specialist|enthusiast)\b)(?![\s]*[&/,])|\bas\s+an\s+AI(?:\s+(?:language\s+)?model)?,?\s+I\b/i;
-const NATIVELY_SELF_RE = /\b(?:I am|I'm|as)\s+Natively\b/i;
+  /\bI(?:'m| am)\s+OpenOffer\b|\bI(?:'m| am)\s+an?\s+(?:AI\s+)?(?:assistant|language model|chat\s?bot)\b|\bI(?:'m| am)\s+an\s+AI\b(?!\s*(?:and|engineer|developer|intern|specialist|enthusiast)\b)(?![\s]*[&/,])|\bas\s+an\s+AI(?:\s+(?:language\s+)?model)?,?\s+I\b/i;
+const OPENOFFER_SELF_RE = /\b(?:I am|I'm|as)\s+OpenOffer\b/i;
 
 // "I don't have access to your..." / "I don't know your name" / "I can't share
 // that information" / "I don't have your resume/profile/JD loaded" — false-refusal
@@ -118,7 +118,7 @@ const PROFILE_LEAK_RE = /\b(my resume|the candidate'?s resume|job description|th
 
 // Answer types where the profile is FORBIDDEN and the answer is a pure technical /
 // coding / design / lecture / sales output — these must never name the product
-// (Natively), the candidate, a loaded project/company, or reference the
+// (OpenOffer), the candidate, a loaded project/company, or reference the
 // profile/JD/salary (release 2026-06-07: residual patterns #3/#4).
 const PROFILE_FORBIDDEN_OUTPUT_TYPES: ReadonlySet<AnswerType> = new Set<AnswerType>([
   'coding_question_answer', 'dsa_question_answer', 'technical_concept_answer',
@@ -126,17 +126,17 @@ const PROFILE_FORBIDDEN_OUTPUT_TYPES: ReadonlySet<AnswerType> = new Set<AnswerTy
   'product_candidate_mix_answer', 'lecture_answer', 'general_meeting_answer',
   'ethical_usage_answer',
 ]);
-// The PRODUCT "Natively" vs the English ADVERB "natively" ("Python natively
+// The PRODUCT "OpenOffer" vs the English ADVERB "natively" ("Python natively
 // supports heapq", "runs natively on the GPU"). The product is a CAPITALIZED proper
 // noun OR a lowercase mention preceded by a reference cue (in/the/a/using/built/
 // from/my/your natively). The bare lowercase adverb is NOT a leak (release
 // 2026-06-07: "X natively supports Y" in coding answers was a false positive). This
 // is CASE-SENSITIVE — do not add the /i flag.
-const PRODUCT_NATIVELY_RE = /\bNativel?y\b|\b(?:[Ii]n|[Tt]he|[Aa]|[Aa]n|[Uu]sing|[Uu]sed?|[Bb]uilt?|[Ff]rom|[Vv]ia|[Ww]ith|[Mm]y|[Yy]our)\s+nativel?y\b|\bnativly\b/;
+const PRODUCT_OPENOFFER_RE = /\bOpenOffer\b|\b(?:[Ii]n|[Tt]he|[Aa]|[Aa]n|[Uu]sing|[Uu]sed?|[Bb]uilt?|[Ff]rom|[Vv]ia|[Ww]ith|[Mm]y|[Yy]our)\s+openoffer\b|\bopenoffer\b/;
 // Helper: does the text reference the PRODUCT (not the adverb) or any case-
 // insensitive profile/comp marker?
 const PROFILE_MARKER_NON_PRODUCT_RE = /\b(my|your|the candidate'?s) (resume|profile|cv|background|experience)\b|\bbased on (my|your) (experience|profile|resume|background)\b|\b(my|your) JD\b|\bjob description\b|\b(salary|compensation|ctc|lpa)\b/i;
-const codingProfileMarkerHit = (s: string): boolean => PRODUCT_NATIVELY_RE.test(s) || PROFILE_MARKER_NON_PRODUCT_RE.test(s);
+const codingProfileMarkerHit = (s: string): boolean => PRODUCT_OPENOFFER_RE.test(s) || PROFILE_MARKER_NON_PRODUCT_RE.test(s);
 // The user explicitly invited the project/profile into a technical answer.
 const PROFILE_INVITE_RE = /\b(use|using|with|in|from)\s+(my|your|the)\s+(natively|project|portfolio|own (project|code))\b|\bhow (did|do) you (implement|build|use)\s+(this|that|it)\s+in\s+(natively|your project)\b|\bin natively\b|\b(my|your) natively project\b|\bas an example from\b/i;
 
@@ -193,11 +193,11 @@ export function validateProfileOutput(input: ProfileValidationInput): ProfileVal
 
   // 2: assistant-identity leak — only an error when the candidate is being asked
   // (interviewer-directed identity/profile). A normal assistant chat saying "I'm
-  // Natively" is fine, so gate on candidateDirected + profile answer type.
-  if (isProfile && candidateDirected && (ASSISTANT_IDENTITY_RE.test(text) || NATIVELY_SELF_RE.test(text))) {
+  // OpenOffer" is fine, so gate on candidateDirected + profile answer type.
+  if (isProfile && candidateDirected && (ASSISTANT_IDENTITY_RE.test(text) || OPENOFFER_SELF_RE.test(text))) {
     violations.push({
       code: 'assistant_identity_leak',
-      detail: `${plan.answerType} answered as the assistant ("I am Natively / an AI") instead of the candidate`,
+      detail: `${plan.answerType} answered as the assistant ("I am OpenOffer / an AI") instead of the candidate`,
       severity: 'error',
     });
   }
@@ -248,7 +248,7 @@ export function validateProfileOutput(input: ProfileValidationInput): ProfileVal
   }
 
   // 6 (release 2026-06-07): a pure coding/technical/design/lecture/sales answer
-  // must not name the product (Natively), the candidate, a loaded project/company,
+  // must not name the product (OpenOffer), the candidate, a loaded project/company,
   // or reference the profile/JD/salary — UNLESS the user explicitly invited it.
   if (PROFILE_FORBIDDEN_OUTPUT_TYPES.has(plan.answerType) && !input.profileExplicitlyInvited) {
     const dynamicTokens = [
@@ -261,11 +261,11 @@ export function validateProfileOutput(input: ProfileValidationInput): ProfileVal
     ].filter((t): t is string => typeof t === 'string' && t.trim().length >= 3 && !isCommonTechWord(t));
     // A profile leak lives in PROSE, not in EXECUTABLE code. Two extraction levels:
     //  • `prose` keeps inline-code spans — a product/project NAME formatted as
-    //    `Natively` is still a reference/leak, just styled as code.
+    //    `OpenOffer` is still a reference/leak, just styled as code.
     //  • `proseNoInlineCode` also drops inline spans — used ONLY for the generic
     //    comp-word marker (salary/ctc), so a SQL `salary` COLUMN or a `salary`
     //    variable isn't a false leak.
-    // Both drop FENCED code blocks but KEEP code COMMENTS ("-- as used in Natively"),
+    // Both drop FENCED code blocks but KEEP code COMMENTS ("-- as used in OpenOffer"),
     // the one place prose hides in a block (release 2026-06-07: SQL-salary column,
     // code-comment leak, AND inline-code project name).
     const dropFenced = (s: string) => s.replace(/```[\s\S]*?```/g, (block) =>
@@ -273,10 +273,10 @@ export function validateProfileOutput(input: ProfileValidationInput): ProfileVal
     const prose = dropFenced(text);
     const proseNoInlineCode = prose.replace(/`[^`]*`/g, ' ');
     const tokenHit = dynamicTokens.find(tok => {
-      // "Natively" the product is handled case-sensitively by PRODUCT_NATIVELY_RE
+      // "OpenOffer" the product is handled case-sensitively by PRODUCT_OPENOFFER_RE
       // below — skip it here so the dynamic (case-insensitive) check doesn't match
       // the English adverb "natively".
-      if (/^nativel?y$/i.test(tok)) return false;
+      if (/^openoffer$/i.test(tok)) return false;
       // A token whose lowercase form is a real English word (e.g. a project literally
       // named "Apex"/"Vertex") must match CASE-SENSITIVELY so the common word isn't a
       // false leak; CamelCase/multi-word/unusual tokens stay case-insensitive.
@@ -286,14 +286,14 @@ export function validateProfileOutput(input: ProfileValidationInput): ProfileVal
       catch { return prose.includes(tok); }
     });
     // Proper-noun / profile-reference markers: test on prose WITH inline code (a
-    // `Natively` reference counts). Comp words: test WITHOUT inline code (a `salary`
+    // `OpenOffer` reference counts). Comp words: test WITHOUT inline code (a `salary`
     // identifier doesn't).
     // Proper-noun / profile-reference markers (product name is case-sensitive via
-    // PRODUCT_NATIVELY_RE so the adverb "natively" is not a false leak): test on
-    // prose WITH inline code (a `Natively` reference counts).
+    // PRODUCT_OPENOFFER_RE so the adverb "natively" is not a false leak): test on
+    // prose WITH inline code (a `OpenOffer` reference counts).
     const NAME_MARKER_RE = /\b(my|your|the candidate'?s) (resume|profile|cv|background|experience)\b|\bbased on (my|your) (experience|profile|resume|background)\b|\b(my|your) JD\b|\bjob description\b/i;
     const COMP_MARKER_RE = /\b(salary|compensation|ctc|lpa)\b/i;
-    if (PRODUCT_NATIVELY_RE.test(prose) || NAME_MARKER_RE.test(prose) || COMP_MARKER_RE.test(proseNoInlineCode) || tokenHit) {
+    if (PRODUCT_OPENOFFER_RE.test(prose) || NAME_MARKER_RE.test(prose) || COMP_MARKER_RE.test(proseNoInlineCode) || tokenHit) {
       violations.push({
         code: 'profile_token_in_coding_answer',
         detail: `${plan.answerType} leaked a profile/product token (${tokenHit ? 'loaded-name' : 'static-marker'}) into a profile-forbidden answer`,
@@ -309,22 +309,22 @@ export function validateProfileOutput(input: ProfileValidationInput): ProfileVal
 /**
  * Deterministic repair for a `profile_token_in_coding_answer` leak: remove the
  * sentence(s) / line(s) that mention the forbidden token, preserving fenced code
- * blocks verbatim (a stray "Natively" almost always lands in prose, not code).
+ * blocks verbatim (a stray "OpenOffer" almost always lands in prose, not code).
  * Returns the cleaned answer; the caller decides whether the result is still
  * usable or whether to regenerate. Content-free of profile data beyond the tokens
  * the caller already supplied.
  */
 export function stripProfileTokensFromCoding(answer: string, tokens: string[]): string {
   if (!answer) return answer;
-  const markers = [PRODUCT_NATIVELY_RE, /\b(my|your) (resume|profile|cv|JD)\b/i,
+  const markers = [PRODUCT_OPENOFFER_RE, /\b(my|your) (resume|profile|cv|JD)\b/i,
     /\bbased on (my|your) (experience|profile|resume|background)\b/i, /\bjob description\b/i,
     // Loaded project/company tokens — but exclude single-word names that collide
     // with common technical vocabulary (a project literally named "Search"/"Stack"/
     // "Node" must NOT delete legitimate algorithm prose). code-review 2026-06-07.
-    // "Natively" is handled case-sensitively by PRODUCT_NATIVELY_RE above; a token
+    // "OpenOffer" is handled case-sensitively by PRODUCT_OPENOFFER_RE above; a token
     // whose lowercase form is a real English word matches case-sensitively so the
     // adverb / common word isn't stripped from legitimate prose.
-    ...tokens.filter(t => typeof t === 'string' && t.trim().length >= 3 && !isCommonTechWord(t) && !/^nativel?y$/i.test(t))
+    ...tokens.filter(t => typeof t === 'string' && t.trim().length >= 3 && !isCommonTechWord(t) && !/^openoffer$/i.test(t))
       .map(t => { const flags = /^[A-Z][a-z]+$/.test(t.trim()) ? '' : 'i'; try { return new RegExp(`\\b${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, flags); } catch { return /$^/; } })];
   const hits = (s: string) => markers.some(re => re.test(s));
   // Split into fenced-code vs prose segments; only scrub prose. Preserve newlines
@@ -334,7 +334,7 @@ export function stripProfileTokensFromCoding(answer: string, tokens: string[]): 
   const cleaned = parts.map(seg => {
     if (seg.startsWith('```')) {
       // Keep CODE intact, but a profile token can still leak via a COMMENT line
-      // inside the block ("-- as used in Natively", "// from my resume"). Scrub
+      // inside the block ("-- as used in OpenOffer", "// from my resume"). Scrub
       // comment lines that hit a marker; leave executable code untouched (release
       // 2026-06-07: SQL/JS comment leak the prose-only strip missed).
       return seg.split('\n').map(line => {
@@ -355,7 +355,7 @@ export function stripProfileTokensFromCoding(answer: string, tokens: string[]): 
 // ── Final candidate-answer sanitizer (release 2026-06-07c) ──────────────────
 // A candidate-facing answer (identity/experience/project/skills/jd-fit/behavioral/
 // negotiation, delivered in candidate/interview/WTA voice) must NOT contain
-// assistant-meta — "as an AI assistant", "I'm Natively", "I can't share", "I don't
+// assistant-meta — "as an AI assistant", "I'm OpenOffer", "I can't share", "I don't
 // have your resume". Flash-lite occasionally TAIL-APPENDS such a sentence to an
 // otherwise-valid answer. This deterministically strips the offending sentence(s)
 // while preserving the valid content before it. Pure; no LLM; content-free of profile
@@ -393,8 +393,8 @@ const CANDIDATE_META_MARKERS: RegExp[] = [
   // noun after "AI" must be a model/assistant word.
   /\bI(?:'m| am)\s+an?\s+(?:AI\s+)?(?:assistant|language model|chat\s?bot)\b/i,
   /\bI(?:'m| am)\s+an\s+AI\s+(?:model|assistant|language model|chatbot)\b/i,
-  /\bI(?:'m| am)\s+Natively\b/i,
-  /\bNatively\s+(?:assistant|AI)\b/i,
+  /\bI(?:'m| am)\s+OpenOffer\b/i,
+  /\bOpenOffer\s+(?:assistant|AI)\b/i,
   // Refusal that names the PROFILE/PERSONAL data, OR the bare assistant-stock phrase
   // "I can't share that information" (a non-answer). But NOT "I can't share the exact
   // revenue figure / the specific number" — those name a concrete business object
@@ -543,7 +543,7 @@ export function buildProfileRepairInstruction(result: ProfileValidationResult): 
         lines.push('- The user\'s real experience is in the profile. Answer from it; never claim you have no personal experience.');
         break;
       case 'assistant_identity_leak':
-        lines.push('- Answer AS the candidate in first person ("My name is ...", "I worked on ..."). Never say you are Natively or an AI.');
+        lines.push('- Answer AS the candidate in first person ("My name is ...", "I worked on ..."). Never say you are OpenOffer or an AI.');
         break;
       case 'wrong_perspective_not_first_person':
         lines.push('- Use first person ("I", "my"). Do not describe the user in third person.');
@@ -555,7 +555,7 @@ export function buildProfileRepairInstruction(result: ProfileValidationResult): 
         lines.push('- This is a technical answer. Remove any mention of the resume, job description, or personal profile.');
         break;
       case 'profile_token_in_coding_answer':
-        lines.push('- This is a PURE technical/coding answer. Do NOT mention Natively, the candidate, any project or company name, the resume/profile/JD, or salary. Answer the algorithm/concept only, from general knowledge.');
+        lines.push('- This is a PURE technical/coding answer. Do NOT mention OpenOffer, the candidate, any project or company name, the resume/profile/JD, or salary. Answer the algorithm/concept only, from general knowledge.');
         break;
     }
   }

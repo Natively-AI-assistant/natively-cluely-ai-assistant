@@ -4,7 +4,7 @@
 // what-to-answer safety net (test-engineer review 2026-06-05, Gaps 1-3): the
 // intro builder, the live latency fallback, and the first-person rewrites. These
 // run in CI without a provider and catch the exact regressions (dropped .replace
-// → second-person voice; missing intro → "I'm Natively" leak; empty fallback →
+// → second-person voice; missing intro → "I'm OpenOffer" leak; empty fallback →
 // blank live answer) that otherwise only the provider-gated benchmark would find.
 
 import { test, describe } from 'node:test';
@@ -33,14 +33,14 @@ const PROFILE = {
   education: [{ institution: 'Test University', degree: 'BTech CSE' }],
 };
 const JD = { title: 'Data Analyst', role: 'Data Analyst' };
-const NATIVELY = /\b(i am|i'?m)\s+(natively|an? (ai )?assistant|a language model)\b/i;
+const OPENOFFER = /\b(i am|i'?m)\s+(openoffer|an? (ai )?assistant|a language model)\b/i;
 const SECOND_PERSON = /^(your |you are)\b/i;
 
 const fp = (q, profile = PROFILE, jd = null) =>
   tryBuildManualProfileFastPathAnswer({ question: q, profile, jobDescription: jd, source: 'what_to_answer' });
 
 // ── Gap 2: formatIntro / INTRO branch ────────────────────────────────────────
-describe('WTA intro: deterministic first-person, never Natively', () => {
+describe('WTA intro: deterministic first-person, never OpenOffer', () => {
   const introPhrasings = [
     'Tell me about yourself.',
     'Give me a quick introduction.',
@@ -56,7 +56,7 @@ describe('WTA intro: deterministic first-person, never Natively', () => {
       const r = fp(q);
       assert.ok(r && r.answer, `expected a deterministic answer for "${q}"`);
       assert.match(r.answer, /^I'm Test Candidate/, 'must open first-person with the name');
-      assert.doesNotMatch(r.answer, NATIVELY, 'must not leak Natively/AI-assistant identity');
+      assert.doesNotMatch(r.answer, OPENOFFER, 'must not leak OpenOffer/AI-assistant identity');
       assert.doesNotMatch(r.answer, SECOND_PERSON, 'must not be second-person');
       assert.doesNotMatch(r.answer, /\bEvin is\b|\bThe candidate\b/i, 'must not be third-person');
     });
@@ -71,14 +71,14 @@ describe('WTA intro: deterministic first-person, never Natively', () => {
   test('manual mode NOW uses the deterministic first-person intro (2026-06-06b)', () => {
     // Release 2026-06-06b: the real manual-chat log showed plain "introduce
     // yourself" / "introduce yourseld" reaching the LLM and answering "I'm
-    // Natively, an AI assistant". With a profile loaded, manual intro now uses the
+    // OpenOffer, an AI assistant". With a profile loaded, manual intro now uses the
     // same deterministic first-person intro as WTA — it can never leak the
     // assistant identity or refuse.
     for (const q of ['Tell me about yourself.', 'introduce yourself', 'introduce yourseld', 'hey man introduce yourself']) {
       const r = tryBuildManualProfileFastPathAnswer({ question: q, profile: PROFILE, jobDescription: null, source: 'manual_input' });
       assert.ok(r && r.answer, `manual "${q}" should fast-path to the deterministic intro`);
       assert.match(r.answer, /^I'm Test Candidate/, `manual "${q}" must be the first-person candidate intro`);
-      assert.doesNotMatch(r.answer, NATIVELY, `manual "${q}" must not leak Natively/AI-assistant`);
+      assert.doesNotMatch(r.answer, OPENOFFER, `manual "${q}" must not leak OpenOffer/AI-assistant`);
     }
   });
 });
@@ -129,7 +129,7 @@ describe('buildLiveFallbackAnswer: latency fallback contract', () => {
       'experience_answer', 'jd_fit_answer', 'behavioral_interview_answer']) {
       const a = callFb(at);
       assert.ok(a && a.trim().length > 0, `${at} must yield a non-empty fallback`);
-      assert.doesNotMatch(a, NATIVELY, `${at} fallback must not leak Natively`);
+      assert.doesNotMatch(a, OPENOFFER, `${at} fallback must not leak OpenOffer`);
       assert.doesNotMatch(a, /^Your |\bYou are\b/i, `${at} fallback must be first-person, got: ${a}`);
     }
   });

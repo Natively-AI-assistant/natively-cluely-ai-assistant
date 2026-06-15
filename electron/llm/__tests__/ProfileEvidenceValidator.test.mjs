@@ -98,7 +98,7 @@ describe('Phase 6: evidence validator — fabricated companies', () => {
 
 describe('Phase 6: evidence validator — composes perspective/identity/refusal checks', () => {
   test('assistant-identity leak still caught', () => {
-    const r = run("I am Natively, an AI assistant.", { answerType: 'identity_answer' });
+    const r = run("I am OpenOffer, an AI assistant.", { answerType: 'identity_answer' });
     assert.ok(r.errorCodes.includes('assistant_identity_leak'));
   });
 

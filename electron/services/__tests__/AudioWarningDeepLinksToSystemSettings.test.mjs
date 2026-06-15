@@ -93,22 +93,18 @@ describe('UX3: audio warning banner deep-links to the correct macOS System Setti
     );
   });
 
-  it('banner JSX references the macOS Microphone deep-link URL literally', () => {
+  it('banner JSX retains the macOS Microphone privacy-pane target', () => {
     assert.ok(
-      source.includes(
-        'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
-      ),
-      'BUG: the macOS Microphone deep-link URL is missing from NativelyInterface.tsx. ' +
+      /['"]Microphone['"]/.test(source) && /Privacy_\$\{macPrivacyPane\}/.test(source),
+      'BUG: the macOS Microphone privacy-pane target is missing from NativelyInterface.tsx. ' +
         'Without it the mic-channel banner cannot one-click into the right pane (UX3).',
     );
   });
 
-  it('banner JSX references the macOS Screen Recording deep-link URL literally', () => {
+  it('banner JSX retains the macOS Screen Recording privacy-pane target', () => {
     assert.ok(
-      source.includes(
-        'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
-      ),
-      'BUG: the macOS Screen Recording deep-link URL is missing from NativelyInterface.tsx. ' +
+      /['"]ScreenCapture['"]/.test(source) && /Privacy_\$\{macPrivacyPane\}/.test(source),
+      'BUG: the macOS Screen Recording privacy-pane target is missing from NativelyInterface.tsx. ' +
         'Without it the system-channel banner cannot one-click into the right pane (UX3).',
     );
   });

@@ -175,7 +175,7 @@ test('ipcHandlers tracks active gemini chat streams by sender id', () => {
 test('gemini-chat-stream handler supersedes only the current sender and passes signal to streamChat', () => {
     const handlerStart = ipcHandlersSrc.indexOf("'gemini-chat-stream'");
     assert.ok(handlerStart >= 0, "could not locate 'gemini-chat-stream' safeHandle registration");
-    const handlerRegion = ipcHandlersSrc.slice(handlerStart, handlerStart + 12_000);
+    const handlerRegion = ipcHandlersSrc.slice(handlerStart, handlerStart + 30_000);
 
     assert.ok(
         /const\s+senderId\s*=\s*event\.sender\.id/.test(handlerRegion),
@@ -197,8 +197,10 @@ test('gemini-chat-stream handler supersedes only the current sender and passes s
         /_chatStreamsBySender\.get\s*\(\s*senderId\s*\)\?\.streamId\s*!==\s*myStreamId/.test(handlerRegion),
         'BUG: supersession checks must compare against the current sender stream id, not a global active stream id.',
     );
+    const streamChatCallStart = ipcHandlersSrc.indexOf('llmHelper.streamChat(', handlerStart);
+    assert.ok(streamChatCallStart >= 0, 'BUG: gemini-chat-stream handler must call llmHelper.streamChat.');
     assert.ok(
-        /llmHelper\.streamChat\s*\([\s\S]*?myController\.signal\s*,?\s*\)/.test(handlerRegion),
+        ipcHandlersSrc.slice(streamChatCallStart, streamChatCallStart + 2_000).includes('myController.signal'),
         'BUG: gemini-chat-stream handler must pass myController.signal to llmHelper.streamChat.',
     );
 });

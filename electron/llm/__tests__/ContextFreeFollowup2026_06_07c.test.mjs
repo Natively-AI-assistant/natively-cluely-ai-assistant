@@ -1,7 +1,7 @@
 // electron/llm/__tests__/ContextFreeFollowup2026_06_07c.test.mjs
 //
 // Release 2026-06-07c — context-free bare follow-ups must produce a safe,
-// mode-appropriate clarification (never "I'm Natively"/profile dump/false refusal)
+// mode-appropriate clarification (never "I'm OpenOffer"/profile dump/false refusal)
 // when there is NO resolvable prior context; and must resolve normally when there is.
 
 import { test, describe } from 'node:test';

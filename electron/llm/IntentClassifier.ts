@@ -207,7 +207,7 @@ class ZeroShotClassifier {
         }
     }
 
-    private mapWorkerResult(result: { labels?: string[]; scores?: number[] }, textLength: number): IntentResult | null {
+    private mapWorkerResult(result: { labels?: string[]; scores?: number[] }, text: string): IntentResult | null {
         const topLabel = result.labels?.[0];
         const topScore = result.scores?.[0];
 
@@ -216,7 +216,7 @@ class ZeroShotClassifier {
         }
 
         const intent = ZERO_SHOT_LABELS[topLabel] || 'general';
-        console.log(`[IntentClassifier] SLM classified`, { intent, confidence: topScore, textLength });
+        console.log(`[IntentClassifier] SLM classified`, { intent, confidence: topScore, textLength: text.length });
 
         return {
             intent,
@@ -240,7 +240,7 @@ class ZeroShotClassifier {
                 labels: ZERO_SHOT_LABEL_KEYS,
                 ...this.workerConfig(),
             });
-            return this.mapWorkerResult(result, text.length);
+            return this.mapWorkerResult(result, text);
         } catch (e) {
             console.warn('[IntentClassifier] SLM classification error:', e);
             return null;

@@ -11,7 +11,7 @@ const {
 } = require('../../../dist-electron/electron/llm/manualProfileIntelligence.js');
 
 const PROFILE = {
-  identity: { name: 'Evin John' },
+  identity: { name: 'Test Candidate' },
   skills: ['Python', 'SQL', 'Tableau'],
   experience: [
     { company: 'Acme Analytics', role: 'Data Analyst', bullets: ['Built KPI dashboards'] },
@@ -46,7 +46,7 @@ describe('manual Profile Intelligence deterministic fast path', () => {
     const result = fast('what is my name?');
     assert.ok(result);
     assert.equal(result.providerUsed, false);
-    assert.equal(result.answer, 'Your name is Evin John.');
+    assert.equal(result.answer, 'Your name is Test Candidate.');
     assert.deepEqual(result.selectedContextLayers, ['stable_identity', 'resume']);
     assert.ok(result.excludedContextLayers.includes('assistant_identity'));
   });
@@ -61,7 +61,7 @@ describe('manual Profile Intelligence deterministic fast path', () => {
     assert.match(result.answer, /Acme Analytics/);
     assert.match(result.answer, /Data Analyst/);
     assert.match(result.answer, /Northstar Labs/);
-    assert.doesNotMatch(result.answer, /Natively|AI assistant/i);
+    assert.doesNotMatch(result.answer, /OpenOffer|AI assistant/i);
     assert.equal(result.providerUsed, false);
   });
 
@@ -71,7 +71,7 @@ describe('manual Profile Intelligence deterministic fast path', () => {
     assert.match(result.answer, /My projects include/i);
     assert.match(result.answer, /Revenue Forecasting/);
     assert.match(result.answer, /Churn Dashboard/);
-    assert.doesNotMatch(result.answer, /Natively|AI assistant/i);
+    assert.doesNotMatch(result.answer, /OpenOffer|AI assistant/i);
   });
 
   test('MANUAL-PI-SKILLS-001: answers skills from structured resume', () => {
@@ -129,13 +129,13 @@ describe('manual Profile Intelligence deterministic fast path', () => {
       source: 'what_to_answer',
     });
     assert.ok(result);
-    assert.equal(result.answer, 'My name is Evin John.');
+    assert.equal(result.answer, 'My name is Test Candidate.');
   });
 
   test('GENUINE assistant-meta still bails to the assistant (not hijacked by profile)', () => {
-    // Release 2026-06-06b: narrowed to TRUE assistant-meta — what-is-Natively,
+    // Release 2026-06-06b: narrowed to TRUE assistant-meta — what-is-OpenOffer,
     // who-built-you, are-you-an-AI/model. These legitimately address the app.
-    for (const question of ['what is Natively?', 'who made you?', 'are you an AI?', 'what model do you use?', 'are you a bot?']) {
+    for (const question of ['what is OpenOffer?', 'who made you?', 'are you an AI?', 'what model do you use?', 'are you a bot?']) {
       assert.equal(isAssistantIdentityQuestion(question), true, `${question} should be assistant identity`);
       assert.equal(fast(question), null, `${question} must not use candidate profile facts`);
     }
@@ -144,13 +144,13 @@ describe('manual Profile Intelligence deterministic fast path', () => {
   test('identity asks ("who are you", "what is your name") now answer AS the candidate (2026-06-06b)', () => {
     // In an interview-prep product with a loaded profile, "who are you" / "what is
     // your name" are the candidate's identity questions and must be answered as the
-    // candidate (real manual-chat log: they leaked "I'm Natively, an AI assistant").
+    // candidate (real manual-chat log: they leaked "I'm OpenOffer, an AI assistant").
     for (const question of ['who are you?', 'what is your name?', "what's your name?"]) {
       assert.equal(isAssistantIdentityQuestion(question), false, `${question} is now a candidate identity ask`);
       const r = fast(question);
       assert.ok(r, `${question} should fast-path to a candidate answer`);
-      assert.match(r.answer, /Evin John/, `${question} answers with the loaded candidate name`);
-      assert.doesNotMatch(r.answer, /Natively|AI assistant/i, `${question} must NOT leak the assistant identity`);
+      assert.match(r.answer, /Test Candidate/, `${question} answers with the loaded candidate name`);
+      assert.doesNotMatch(r.answer, /OpenOffer|AI assistant/i, `${question} must NOT leak the assistant identity`);
     }
   });
 
@@ -179,7 +179,7 @@ describe('manual Profile Intelligence deterministic fast path', () => {
     assert.equal(log.profileFactsReady, true);
     assert.equal(log.usedDeterministicFastPath, true);
     assert.equal(log.providerUsed, false);
-    assert.doesNotMatch(JSON.stringify(log), /Evin John|Acme Analytics|Revenue Forecasting/);
+    assert.doesNotMatch(JSON.stringify(log), /Test Candidate|Acme Analytics|Revenue Forecasting/);
   });
 });
 

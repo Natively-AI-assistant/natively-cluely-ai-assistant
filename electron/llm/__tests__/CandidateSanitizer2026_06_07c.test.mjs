@@ -14,12 +14,12 @@ const { sanitizeCandidateAnswer, CANDIDATE_VOICE_ANSWER_TYPES } = await import(
   pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/llm/index.js')).href
 );
 
-const META = /\bas an AI\b|\bI(?:'m| am)\s+(?:an?\s+)?(?:AI|Natively)\b|\bcan(?:not| ?not|'?t)\s+share\b|\bdo(?:n'?t| not)\s+have\s+(?:access|your resume|your profile)\b|\bdo(?:n'?t| not)\s+(?:have|assign)\s+(?:numerical\s+)?ratings?\b/i;
+const META = /\bas an AI\b|\bI(?:'m| am)\s+(?:an?\s+)?(?:AI|OpenOffer)\b|\bcan(?:not| ?not|'?t)\s+share\b|\bdo(?:n'?t| not)\s+have\s+(?:access|your resume|your profile)\b|\bdo(?:n'?t| not)\s+(?:have|assign)\s+(?:numerical\s+)?ratings?\b/i;
 
 describe('sanitizeCandidateAnswer — strips meta tail, keeps valid content', () => {
   const cases = [
     ['tail "as an AI assistant"', 'I have 3 years of Python experience building FastAPI backends. As an AI assistant, I cannot assign ratings.', /Python experience/],
-    ['tail "I\'m Natively"', 'My strongest skill is backend engineering with Python and SQL. I am Natively, an AI assistant.', /backend engineering/],
+    ['tail "I\'m OpenOffer"', 'My strongest skill is backend engineering with Python and SQL. I am OpenOffer, an AI assistant.', /backend engineering/],
     ['tail "I can\'t share"', 'I bring strong data analysis skills and system design experience. I can\'t share that information.', /data analysis/],
     ['tail "I can not share" (spaced)', 'I bring strong data analysis skills. I can not share that information.', /data analysis/],
     ['jd-fit + "no resume" tail', 'I am a strong fit because I built high-performance data pipelines. As an AI, I do not have your resume loaded.', /data pipelines/],
@@ -117,7 +117,7 @@ describe('sanitizeCandidateAnswer — "AI assistant" self-reference stripped, pr
 
 describe('sanitizeCandidateAnswer — all-meta answer flags needsFallback', () => {
   for (const allMeta of [
-    'I am Natively, an AI assistant. I cannot share that information.',
+    'I am OpenOffer, an AI assistant. I cannot share that information.',
     'As an AI assistant, I do not assign numerical ratings.',
     "I'm an AI language model and I don't have access to your resume.",
   ]) {

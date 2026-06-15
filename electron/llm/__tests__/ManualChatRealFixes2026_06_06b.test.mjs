@@ -1,7 +1,7 @@
 // electron/llm/__tests__/ManualChatRealFixes2026_06_06b.test.mjs
 //
 // Release 2026-06-06b — fixes for REAL manual-chat failures from the user log:
-//   1. typo/greeting-tolerant intro routing (no "I'm Natively")
+//   1. typo/greeting-tolerant intro routing (no "I'm OpenOffer")
 //   2. open-source / link shareability (no false refusal, no invented URL)
 //   3. exact-source-code hallucination guard
 //   4. stealth / undetectability safety guardrail (CRITICAL — no evasion advice)
@@ -35,7 +35,7 @@ describe('Phase 1: typo / greeting-tolerant intro routing', () => {
     });
   }
   test('genuine assistant-meta is NOT hijacked to candidate identity', () => {
-    for (const q of ['what is natively', 'who made you', 'are you an AI', 'what model do you use']) {
+    for (const q of ['what is openoffer', 'who made you', 'are you an AI', 'what model do you use']) {
       // These route via the unknown/general path (or stay non-identity) — the key
       // invariant is they are NOT forced to identity_answer with profile required.
       const p = plan(q);

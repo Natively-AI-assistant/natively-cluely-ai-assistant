@@ -1,10 +1,9 @@
 import React from 'react';
 import { Monitor, Cpu, Info } from 'lucide-react';
-import { NativelyLogoMark } from '../NativelyLogoMark';
 
 interface SidebarProps {
-    activeTab: 'general' | 'natively-api' | 'ai-providers' | 'about';
-    setActiveTab: (tab: 'general' | 'natively-api' | 'ai-providers' | 'about') => void;
+    activeTab: 'general' | 'ai-providers' | 'about';
+    setActiveTab: (tab: 'general' | 'ai-providers' | 'about') => void;
     onClose: () => void;
 }
 
@@ -19,12 +18,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onClo
                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'general' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                     >
                         <Monitor size={16} /> General
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('natively-api')}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'natively-api' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
-                    >
-                        <NativelyLogoMark size={16} className="text-blue-500" /> Natively API
                     </button>
                     <button
                         onClick={() => setActiveTab('ai-providers')}

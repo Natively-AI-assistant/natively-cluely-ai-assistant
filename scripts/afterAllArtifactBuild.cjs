@@ -6,7 +6,7 @@
  *
  *  (1) electron-builder's own DMG-creation CORRUPTS the embedded app signature.
  *      Apple's notary log on the eb-built DMG reported:
- *        "The signature of the binary is invalid" @ Natively.app/Contents/MacOS/Natively
+ *        "The signature of the binary is invalid" @ OpenOffer.app/Contents/MacOS/OpenOffer
  *      Verified: the standalone .app and the .app inside the ZIP pass
  *      `codesign --verify --deep --strict`, but the .app inside the eb DMG does NOT
  *      (even after ditto-copying it back out) — so eb's DMG layout step breaks it.
@@ -29,7 +29,7 @@
  *
  * Credentials (no plaintext secrets in source): prefers App Store Connect API key
  * (CI), then Apple ID + app-specific password, then the local keychain profile
- * (APPLE_KEYCHAIN_PROFILE, e.g. `natively-notary`). No-op if none are present.
+ * (APPLE_KEYCHAIN_PROFILE, e.g. `openoffer-notary`). No-op if none are present.
  */
 
 const { execFileSync, execSync } = require('child_process');
@@ -38,7 +38,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 
-const VOLNAME = 'Natively';
+const VOLNAME = 'OpenOffer';
 const BACKGROUND = path.resolve(__dirname, '..', 'assets', 'dmg-background.png');
 const VOLICON = path.resolve(__dirname, '..', 'assets', 'natively.icns');
 
@@ -184,8 +184,8 @@ function verifyZipManifest(outDir) {
  */
 function buildStyledDmg({ appPath, outDmg, identity }) {
   // Stage ONLY the .app in an isolated temp dir so create-dmg's window contains
-  // exactly [Natively.app, Applications-droplink] and nothing stray.
-  const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-dmg-'));
+  // exactly [OpenOffer.app, Applications-droplink] and nothing stray.
+  const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'openoffer-dmg-'));
   const stagedApp = path.join(stage, path.basename(appPath));
   execFileSync('ditto', [appPath, stagedApp], { stdio: 'inherit' }); // ditto preserves signatures
 

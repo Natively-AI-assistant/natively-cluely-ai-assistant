@@ -2,34 +2,9 @@ import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPref
 import * as crypto from "crypto"
 import path from "path"
 import fs from "fs"
-import dns from "dns"
 import { SystemAudioHealthClassifier } from "./audio/systemAudioHealthClassifier.mjs"
 import { autoUpdater } from "electron-updater"
-
-// Override global dns.lookup to resolve macOS system resolver issues with api.natively.software
-const originalLookup = dns.lookup;
-dns.lookup = function(hostname: any, options: any, callback: any) {
-  if (typeof options === 'function') {
-    callback = options;
-    options = {};
-  }
-  if (hostname === 'api.natively.software') {
-    dns.resolve4(hostname, (err, addresses) => {
-      if (err || !addresses.length) {
-        originalLookup(hostname, options, callback);
-      } else {
-        const addr = addresses[0];
-        if (options && (options as any).all) {
-          callback(null, [{ address: addr, family: 4 }] as any);
-        } else {
-          callback(null, addr, 4);
-        }
-      }
-    });
-  } else {
-    originalLookup(hostname, options, callback);
-  }
-} as any;
+import { ensureNativeModuleAbi } from "./utils/nativeModuleGuard"
 
 if (!app.isPackaged) {
   require('dotenv').config();
@@ -87,6 +62,14 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason, promise) => {
   logToFile('[CRITICAL] Unhandled Rejection: ' + redactArgsForLog([reason]));
 });
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  console.log('[Main] Another instance is already running. Exiting this instance.');
+  process.exit(0);
+}
+
+ensureNativeModuleAbi();
 
 // CQ-04 fix: do NOT call app.getPath() at module load time.
 // app.getPath('documents') is not guaranteed to be available before app.whenReady().
@@ -418,7 +401,6 @@ import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
 import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
 import { ElevenLabsStreamingSTT } from "./audio/ElevenLabsStreamingSTT"
 import { OpenAIStreamingSTT } from "./audio/OpenAIStreamingSTT"
-import { NativelyProSTT } from "./audio/NativelyProSTT"
 import { GigaSTTStreamingSTT } from "./audio/GigaSTTStreamingSTT"
 import { ThemeManager } from "./ThemeManager"
 import { RAGManager } from "./rag/RAGManager"
@@ -426,7 +408,7 @@ import { DatabaseManager } from "./db/DatabaseManager"
 import { warmupIntentClassifier } from "./llm"
 
 /** Unified type for all STT providers with optional extended capabilities */
-type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | ElevenLabsStreamingSTT | OpenAIStreamingSTT | NativelyProSTT | GigaSTTStreamingSTT) & {
+type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | ElevenLabsStreamingSTT | OpenAIStreamingSTT | GigaSTTStreamingSTT) & {
   finalize?: () => void;
   setAudioChannelCount?: (count: number) => void;
   notifySpeechEnded?: () => void;
@@ -945,6 +927,16 @@ export class AppState {
 
   public sendSystemAudioPermissionDenied(message: string): void {
     this.sendToMeetingSurfaces('system-audio-permission-denied', message);
+  }
+
+  public sendModelChanged(modelId: string): void {
+    const sent = new Set<number>();
+    const sendOnce = (win: BrowserWindow | null | undefined) => {
+      if (!win || sent.has(win.id)) return;
+      if (this.sendToWindow(win, 'model-changed', modelId)) sent.add(win.id);
+    };
+    sendOnce(this.windowHelper.getOverlayWindow());
+    sendOnce(this.modelSelectorWindowHelper.getWindow());
   }
 
   public broadcast(channel: string, ...args: any[]): void {
@@ -1517,34 +1509,7 @@ export class AppState {
 
     let stt: STTProvider;
 
-    if (sttProvider === 'natively') {
-      const nativelyKey = CredentialsManager.getInstance().getNativelyApiKey();
-      if (!nativelyKey) {
-        // Natively is Coming Soon — no key means degrade gracefully like every other provider
-        console.warn(`[Main] No Natively API Key configured for ${speaker}, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
-      } else {
-        // 'system' for interviewer (system audio), 'mic' for user (microphone).
-        // The server uses ${key}:${channel} as the session key so both streams
-        // can coexist without triggering concurrent_session_blocked.
-        //
-        // Phase 7/8: pass appVersion + platform for the regional-relay
-        // session-create body. The class reads the relay feature flags from
-        // SettingsManager itself and derives the control-plane base URL from
-        // its own host, so the construction site stays tiny. The relay path is
-        // flag-gated OFF by default — this is inert until regionalSttRelayEnabled.
-        stt = new NativelyProSTT(
-          nativelyKey,
-          speaker === 'interviewer' ? 'system' : 'mic',
-          {
-            appVersion: app.getVersion(),
-            platform: process.platform === 'darwin' ? 'mac'
-              : process.platform === 'win32' ? 'windows'
-              : 'linux',
-          },
-        );
-      }
-    } else if (sttProvider === 'deepgram') {
+    if (sttProvider === 'deepgram') {
       const apiKey = CredentialsManager.getInstance().getDeepgramApiKey();
       if (apiKey) {
         console.log(`[Main] Using DeepgramStreamingSTT for ${speaker}`);
@@ -1807,46 +1772,6 @@ export class AppState {
         { provider: sttProvider, message: w?.message, droppedBytes: w?.droppedBytes });
     });
 
-    // Auto language detection: NativelyProSTT emits 'languageDetected' when the
-    // backend resolves the language from the first audio batch. Notify the renderer
-    // so the settings UI can show what was detected.
-    if (stt instanceof NativelyProSTT) {
-      stt.on('connected', () => {
-        _consecutiveErrors = 0;
-        if (_lastState !== 'connected') {
-          _lastState = 'awaiting-audio';
-          this.sendSttStatus({
-            state: 'awaiting-audio',
-            provider: sttProvider,
-            channel: speaker,
-          } as SttStatusPayload);
-        }
-      });
-
-      stt.on('languageDetected', (bcp47: string) => {
-        console.log(`[Main] STT language auto-detected (${speaker}): ${bcp47}`);
-        const helper = this.getWindowHelper();
-        helper.getMainWindow()?.webContents.send('stt-language-auto-detected', bcp47);
-        helper.getLauncherWindow()?.webContents.send('stt-language-auto-detected', bcp47);
-      });
-
-      // Persistent-reconnect signal: NativelyProSTT now retries indefinitely
-      // with a 30s backoff cap, but we want the user to know after ~5 attempts
-      // (~30–90s of dead transcript) that the issue is sustained, not a blip.
-      // Reuse the stt-status channel with state='reconnecting' and a higher
-      // attempts count so the renderer's existing banner picks it up.
-      stt.on('persistent-reconnect', (info: { attempts: number }) => {
-        console.warn(`[Main] STT persistent reconnect (${speaker}): ${info.attempts} consecutive attempts.`);
-        this.sendSttStatus( {
-          state: 'reconnecting',
-          provider: sttProvider,
-          error: `Reconnecting to transcription service — ${info.attempts} consecutive attempts. Check your network connection.`,
-          channel: speaker,
-          reconnectAttempts: info.attempts,
-        } as SttStatusPayload);
-      });
-    }
-
     // B2: Emit 'awaiting-audio' once the STT provider is wired up but before
     // any audio has flowed. Renderers that joined mid-session sync to this
     // unverified state and display "Listening for audio…" until the first
@@ -1901,7 +1826,10 @@ export class AppState {
         return;
       }
       if (decision.type === 'warn-user' && decision.reason === 'same-device-input-output') {
-        const msg = formatPermissionMessage('mac-same-device-input-output', { device: decision.device });
+        const isMac = process.platform === 'darwin';
+        const msg = isMac
+          ? formatPermissionMessage('mac-same-device-input-output', { device: decision.device })
+          : formatPermissionMessage('system-audio-stuck');
         console.warn(`${prefix}SystemAudioCapture ${msg}`);
         this.sendAudioCaptureFailed( {
           channel: 'system',
@@ -2978,11 +2906,8 @@ export class AppState {
   /**
    * Serialization mutex for reconfigureSttProvider.
    *
-   * Crash/hang fix (2026-06-05): a single "save Natively API key" action can
-   * fire up to TWO reconfigure calls back-to-back — one from the
-   * `set-natively-api-key` handler (which auto-promotes the STT provider to
-   * 'natively' and reconfigures), and one from the renderer's follow-up
-   * `set-stt-provider('natively')` call. Each call tears down and rebuilds the
+   * Crash/hang fix (2026-06-05): provider changes can fire overlapping
+   * reconfigure calls from Settings and renderer follow-up events. Each call tears down and rebuilds the
    * native captures (SystemAudioCapture / MicrophoneCapture → CoreAudio /
    * ScreenCaptureKit / WASAPI). Two interleaved teardown+construct sequences
    * against the same native device handles is a native-resource race that
@@ -4159,9 +4084,7 @@ export class AppState {
           const all = [...(cm.getCurlProviders() || []), ...(cm.getCustomProviders() || [])];
           console.log(`[Main] Reverting model to default: ${defaultModel}`);
           this.processingHelper.getLLMHelper().setModel(defaultModel, all);
-          BrowserWindow.getAllWindows().forEach(win => {
-            if (!win.isDestroyed()) win.webContents.send('model-changed', defaultModel);
-          });
+          this.sendModelChanged(defaultModel);
         } catch (e) {
           console.error('[Main] Failed to revert model:', e);
         }
@@ -4276,8 +4199,14 @@ export class AppState {
     // names + preload bridges are kept (defense-in-depth, no callers).
     type BatchKind = 'suggested_answer' | 'refined_answer' | 'recap' | 'clarify' | 'follow_up_questions';
     const tokenBatches = new Map<BatchKind, any[]>();
+    let pendingFlushHandle: NodeJS.Immediate | null = null;
     let batchFlushScheduled = false;
     const flushBatchesNow = () => {
+      if (pendingFlushHandle) {
+        clearImmediate(pendingFlushHandle);
+        pendingFlushHandle = null;
+      }
+      batchFlushScheduled = false;
       const win = mainWindow();
       if (!win) { tokenBatches.clear(); return; }
       for (const [kind, items] of tokenBatches.entries()) {
@@ -4290,7 +4219,8 @@ export class AppState {
     const scheduleBatchFlush = () => {
       if (batchFlushScheduled) return;
       batchFlushScheduled = true;
-      setImmediate(() => {
+      pendingFlushHandle = setImmediate(() => {
+        pendingFlushHandle = null;
         batchFlushScheduled = false;
         flushBatchesNow();
       });
@@ -4501,9 +4431,7 @@ export class AppState {
     const { CredentialsManager } = require('./services/CredentialsManager');
     CredentialsManager.getInstance().setSttLanguage(key);
 
-    // 'auto' is only meaningful for NativelyProSTT — other providers fall back to en-US.
-    const sttProvider = CredentialsManager.getInstance().getSttProvider();
-    const effectiveKey = (key === 'auto' && sttProvider !== 'natively') ? 'english-us' : key;
+    const effectiveKey = key === 'auto' ? 'english-us' : key;
 
     this.googleSTT?.setRecognitionLanguage(effectiveKey);
     this.googleSTT_User?.setRecognitionLanguage(effectiveKey);
@@ -5447,21 +5375,6 @@ export class AppState {
 // Application initialization
 
 async function initializeApp() {
-  // 1. Enforce single instance — prevent duplicate dock icons from leftover processes.
-  // In development mode with hot-reload this is still safe because electron is restarted
-  // by the build step, not re-launched by concurrently while the old process is alive.
-  const gotLock = app.requestSingleInstanceLock();
-  if (!gotLock) {
-    console.log('[Main] Another instance is already running. Exiting this instance.');
-    // Use app.exit(0) — app.quit() before whenReady can be deferred or no-op'd
-    // (it tries to close all windows first, but none exist yet), leaving the
-    // duplicate process alive long enough to register a second tray icon on
-    // macOS Tahoe + Spotlight launches. exit() terminates immediately and
-    // cannot be intercepted by before-quit handlers.
-    app.exit(0);
-    return;
-  }
-
   // When a duplicate launch is attempted (e.g. user invokes Spotlight again
   // while Natively is running), focus and recenter the existing window so the
   // launch is visibly handled instead of silently absorbed.
@@ -5551,7 +5464,9 @@ async function initializeApp() {
     });
     const remote = sinks.filter(s => s.name !== 'local-jsonl').map(s => s.name);
     console.log(`[Telemetry] sinks: local-jsonl${remote.length ? ' + ' + remote.join(' + ') : ' (remote unconfigured)'} release=${release}`);
-    telemetryService.track({ name: 'app_start', properties: { platform: process.platform, release } });
+    try {
+      telemetryService.track({ name: 'app_start', properties: { platform: process.platform, release } });
+    } catch { /* non-fatal */ }
   } catch (err) {
     console.warn('[Init] TelemetryService configure threw (non-fatal):', err);
   }

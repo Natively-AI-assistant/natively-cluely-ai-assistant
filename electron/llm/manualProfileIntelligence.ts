@@ -108,13 +108,13 @@ const asArray = (value: unknown): unknown[] => Array.isArray(value) ? value.filt
 const clean = (value: unknown): string => typeof value === 'string' ? value.trim() : '';
 const firstNonEmpty = (...values: unknown[]): string => values.map(clean).find(Boolean) || '';
 
-// GENUINE assistant-meta questions — these legitimately address Natively (the
+// GENUINE assistant-meta questions — these legitimately address OpenOffer (the
 // app), so the fast path bails to the LLM/assistant identity. Release 2026-06-06b:
 // narrowed so "who are you" / "what is your name" NO LONGER count as assistant-meta
 // when a candidate profile is loaded — in an interview-prep product those are the
 // candidate's identity questions and must be answered AS the candidate (the real
-// manual-chat log showed them leaking "I'm Natively, an AI assistant"). Only
-// explicit AI/bot/model/who-built-you/what-is-Natively asks remain assistant-meta.
+// manual-chat log showed them leaking "I'm OpenOffer, an AI assistant"). Only
+// explicit AI/bot/model/who-built-you/what-is-OpenOffer asks remain assistant-meta.
 // Leading discourse fillers ("so", "wait", "ok", "hey", "um", "but") tolerated so
 // "so are you an AI" / "wait, are you a bot" still classify as assistant-meta
 // (code-review 2026-06-06b MEDIUM — the ^ anchors broke on prefixes).
@@ -122,11 +122,11 @@ const FILLER = '(?:so|wait|ok(?:ay)?|um|hmm|hey|but|and|actually|just|like)?[\\s
 const ASSISTANT_IDENTITY_PATTERNS = [
   new RegExp(`^${FILLER}are\\s+you\\s+(an?\\s+)?(actually\\s+)?(ai|assistant|bot|llm|model|chatbot|language model)\\b`),
   /\bare\s+you\s+(an?\s+)?(actually\s+)?(human|real|robot|machine|program)\b/,
-  new RegExp(`^${FILLER}what\\s+(is|s)\\s+natively\\b`),
+  new RegExp(`^${FILLER}what\\s+(is|s)\\s+openoffer\\b`),
   /\bwhat\s+(is|s)\s+this\s+(app|tool|product|assistant)\b/,
-  new RegExp(`^${FILLER}who\\s+(made|built|created|developed|trained|designed)\\s+(you|this|natively|the app)\\b`),
+  new RegExp(`^${FILLER}who\\s+(made|built|created|developed|trained|designed)\\s+(you|this|openoffer|the app)\\b`),
   /\bwhat\s+(ai\s+)?model\s+(are\s+you|do\s+you\s+(use|run))\b|\bwhich\s+(llm|model)\b/,
-  /\bare\s+you\s+(chatgpt|gpt|claude|gemini|natively)\b/,
+  /\bare\s+you\s+(chatgpt|gpt|claude|gemini|openoffer)\b/,
 ];
 
 const NAME_PATTERNS = [
@@ -137,7 +137,7 @@ const NAME_PATTERNS = [
   // Interviewer→candidate identity asks (benchmark 2026-06-05). These are a
   // single deterministic fact (the loaded name) and MUST be answered by the
   // fast path in every mode so they can never reach the LLM and leak "I'm
-  // Natively, an AI assistant" / a false refusal.
+  // OpenOffer, an AI assistant" / a false refusal.
   /\bwhat\s+(is|s)\s+your\s+(full\s+)?name\b/,
   /\bwhats\s+your\s+name\b/,
   /\bwhat\s+should\s+(i|we)\s+call\s+you\b/,
@@ -171,7 +171,7 @@ const EXPERIENCE_PATTERNS = [
 // INTRO ("tell me about yourself", "give me a quick introduction", "describe
 // yourself professionally", "introduce yourself") — answered deterministically
 // with a grounded first-person intro so it never reaches the LLM (which was
-// leaking "I'm Natively" / refusing). Distinct from a bare NAME ask.
+// leaking "I'm OpenOffer" / refusing). Distinct from a bare NAME ask.
 const INTRO_PATTERNS = [
   /\btell\s+me\s+about\s+(yourself|your\s*self)\b/,
   /\b(give|tell)\s+(me\s+)?(a\s+)?(quick|brief|short)?\s*(introduction|intro|overview of yourself|rundown)\b/,
@@ -179,7 +179,7 @@ const INTRO_PATTERNS = [
   // "introduce yourseld", "introduce urself", "hey man introduce yourself"). The
   // verb "introduc(e)" followed by an optional self-pronoun token (yourself /
   // yourselD / yoursef / urself / urslf) — greetings and trailing typos no longer
-  // drop it to the LLM (which leaked "I'm Natively").
+  // drop it to the LLM (which leaked "I'm OpenOffer").
   // Self-pronoun REQUIRED (code-review 2026-06-06b HIGH): "introduce a bug" / "how
   // would you introduce DI" must NOT fast-path to the candidate intro.
   /\bintroduce\s+(yo?u?r?se?l?[fd]|u?r?se?l?[fd]|me to (?:you|the team))\b/,
@@ -281,7 +281,7 @@ const profileSkills = (profile: MaybeStructured<StructuredProfileFacts>): SkillI
 // <role>. ..." with current role/company + a couple of grounded highlights.
 // This is the safe fallback for "tell me about yourself" / "give me a quick
 // introduction" so an intro NEVER has to reach the LLM (where it was leaking
-// "I'm Natively" / refusing). Returns '' when the name is missing.
+// "I'm OpenOffer" / refusing). Returns '' when the name is missing.
 //
 // VARIANT-AWARE (manual regression 2026-06-12): one fixed intro was reused for
 // intro/background/style questions across a whole session — users read it as a
@@ -656,15 +656,15 @@ export const tryBuildManualProfileFastPathAnswer = ({
   const qNorm = normalize(question);
   // ── CANDIDATE VOICE (release 2026-06-08 manual regression fix) ──────────────
   // The manual-send path must answer candidate identity/profile questions in FIRST
-  // PERSON AS the candidate ("I'm Evin John, …" / "My name is …"), NOT in second
-  // person ("Your name is …") and NOT as the assistant ("I'm Natively, an AI
+  // PERSON AS the candidate ("I'm [Name], …" / "My name is …"), NOT in second
+  // person ("Your name is …") and NOT as the assistant ("I'm OpenOffer, an AI
   // assistant"). The prior code keyed first-person voice off `source` alone, so
   // manual_input answered everything 2nd-person — the real bug the user hit.
   //
   // Voice is now CANDIDATE first-person whenever a candidate PROFILE is loaded and
   // the question is NOT an explicit assistant-meta ask. WTA/transcript stay
   // first-person as before. An assistant-meta question ("are you an AI?", "what is
-  // Natively?", "who made you?") always bails to the assistant path (returns null),
+  // OpenOffer?", "who made you?") always bails to the assistant path (returns null),
   // in every mode, so those still answer about the app — never as the candidate.
   if (isAssistantIdentityQuestion(question)) return null;
   const profileLoaded = profileFactsReady(profile);
@@ -674,8 +674,8 @@ export const tryBuildManualProfileFastPathAnswer = ({
   // you?", "rate YOUR Python"). SECOND PERSON ("Your name is…") only when the user
   // asks about THEMSELVES in first person ("what is MY name?", "what are MY skills?")
   // — there the user wants to be told their own fact. This is the manual regression
-  // fix (release 2026-06-08): "who are you?" in profile mode → "My name is Evin John",
-  // never "Your name is…" or "I'm Natively".
+  // fix (release 2026-06-08): "who are you?" in profile mode → "My name is [Name]",
+  // never "Your name is…" or "I'm OpenOffer".
   const lc = qNorm;
   // SELF-query (user asking about THEMSELVES → second-person "Your name is…"): a
   // first-person "my"/"I" signal AND no second-person ADDRESS of the candidate. The
@@ -733,10 +733,10 @@ export const tryBuildManualProfileFastPathAnswer = ({
   // INTRO: a grounded first-person introduction built from structured facts.
   // Release 2026-06-06b: this now fires in MANUAL mode too (not just WTA). The
   // real manual-chat log showed plain "introduce yourself" / "introduce yourseld"
-  // reaching the LLM and answering "I'm Natively, an AI assistant" — wrong when a
+  // reaching the LLM and answering "I'm OpenOffer, an AI assistant" — wrong when a
   // candidate profile is loaded. An intro ask is an INTERVIEW-style question
   // ("introduce yourself", "tell me about yourself"), distinct from the
-  // assistant-meta "who are you / what is Natively" (those still bail above via
+  // assistant-meta "who are you / what is OpenOffer" (those still bail above via
   // isAssistantIdentityQuestion). With a profile loaded, the deterministic
   // first-person candidate intro is always the right answer — it can never leak
   // the assistant identity or refuse. NOTE: does NOT gate on `qualified` —

@@ -1,4 +1,4 @@
-export type LLMProviderId = 'natively' | 'groq' | 'codex' | 'gemini_flash' | 'gemini_pro' | 'openai' | 'claude' | 'deepseek' | 'ollama';
+export type LLMProviderId = 'groq' | 'codex' | 'gemini_flash' | 'gemini_pro' | 'openai' | 'claude' | 'deepseek' | 'ollama';
 export type ProviderCapability = 'chat' | 'stream_chat' | 'structured' | 'vision';
 export type ProviderAttemptStatus = 'available' | 'unavailable';
 export type ProviderUnavailableReason = 'missing_api_key' | 'missing_config' | 'unsupported_capability' | 'disabled';
@@ -27,7 +27,6 @@ export function assertProviderDataScopes(provider: string, scopes: ProviderDataS
 }
 
 export interface ProviderAvailabilityState {
-    hasNatively?: boolean;
     hasGroq?: boolean;
     groqDisabled?: boolean;
     hasCodex?: boolean;
@@ -39,7 +38,6 @@ export interface ProviderAvailabilityState {
 }
 
 export interface ProviderModelState {
-    natively?: string;
     groq?: string;
     codex?: string;
     geminiFlash?: string;
@@ -97,14 +95,6 @@ export function routeLLMProviders(options: ProviderRouteOptions): ProviderAttemp
     const models = { ...options.models };
     const capability = options.capability;
 
-    const natively: ProviderSpec = {
-        provider: 'natively',
-        name: 'Natively API',
-        model: models.natively,
-        available: Boolean(availability.hasNatively),
-        unavailableReason: 'missing_api_key',
-        supports: ['chat', 'stream_chat', 'vision'],
-    };
     const groq: ProviderSpec = {
         provider: 'groq',
         name: `Groq (${models.groq ?? 'default'})`,
@@ -176,8 +166,8 @@ export function routeLLMProviders(options: ProviderRouteOptions): ProviderAttemp
     // cloud chat providers and the local Ollama fallback) and is omitted from the
     // multimodal chain since no DeepSeek vision model is supported.
     const orderedSpecs: ProviderSpec[] = options.multimodal
-        ? [natively, codex, openai, geminiFlash, claude, geminiPro, groq]
-        : [natively, groq, codex, geminiFlash, geminiPro, openai, claude, deepseek];
+        ? [codex, openai, geminiFlash, claude, geminiPro, groq]
+        : [groq, codex, geminiFlash, geminiPro, openai, claude, deepseek];
 
     if (availability.hasOllama) {
         orderedSpecs.push(ollama);

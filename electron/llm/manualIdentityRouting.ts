@@ -2,7 +2,7 @@
 //
 // REAL-APP FIX (manual regression 2026-06-12, P2): the manual chat handler's
 // identity-probe short-circuit answered "who are you?", "what is your name?",
-// and "introduce yourself" with the canned "I'm Natively, an AI assistant."
+// and "introduce yourself" with the canned "I'm OpenOffer, an AI assistant."
 // BEFORE the candidate-profile fast path could run — the exact assistant-
 // identity leak users hit in real sessions. Benchmarks missed it because the
 // eval harness never replayed the probe.
@@ -10,7 +10,7 @@
 // This module is THE single decision point both the IPC handler and the evals
 // share. The rule:
 //   - ASSISTANT-META probes (are you an AI / ChatGPT? what model? who built
-//     Natively? what is Natively?) → canned assistant reply, always.
+//     OpenOffer? what is OpenOffer?) → canned assistant reply, always.
 //   - CANDIDATE-AMBIGUOUS probes (who are you? introduce yourself, what's
 //     your name?) → when a candidate profile is LOADED, these are interview
 //     rehearsal questions about the CANDIDATE → route to the profile fast
@@ -23,11 +23,11 @@
  *  candidate, regardless of profile state. Kept byte-compatible with the prior
  *  ipcHandlers regexes for these intents. */
 const ASSISTANT_META_PROBE_RE =
-  /^\s*(?:so|wait|ok(?:ay)?|um|hey|but|and|actually)?[\s,]*(what\s+(are|r)\s+(you|u)|are\s+you\s+(chatgpt|gpt[-\s]?\d?|claude|gemini|llama|an?\s+(ai|bot|llm|model|assistant)|human|real|a\s+robot)|what('?s|\s+is)\s+your\s+model|which\s+(ai|model|llm)\s+are\s+you|who\s+(made|built|created|developed|trained)\s+(you|this|natively)|what\s+model\s+(are\s+you|do\s+you\s+use)|what\s+(is|'?s)\s+natively)\s*\??\s*$/i;
+  /^\s*(?:so|wait|ok(?:ay)?|um|hey|but|and|actually)?[\s,]*(what\s+(are|r)\s+(you|u)|are\s+you\s+(chatgpt|gpt[-\s]?\d?|claude|gemini|llama|an?\s+(ai|bot|llm|model|assistant)|human|real|a\s+robot)|what('?s|\s+is)\s+your\s+model|which\s+(ai|model|llm)\s+are\s+you|who\s+(made|built|created|developed|trained)\s+(you|this|openoffer)|what\s+model\s+(are\s+you|do\s+you\s+use)|what\s+(is|'?s)\s+openoffer)\s*\??\s*$/i;
 
 /** Creator probes — always the assistant's creator. */
 const CREATOR_PROBE_RE =
-  /^\s*(who\s+(made|built|created|developed|trained)\s+(you|this|natively))\s*\??\s*$/i;
+  /^\s*(who\s+(made|built|created|developed|trained)\s+(you|this|openoffer))\s*\??\s*$/i;
 
 /** Probes that read as CANDIDATE identity when a profile is loaded (interview
  *  rehearsal: "who are you?" → the candidate introduces themselves), and as
@@ -50,10 +50,10 @@ export function resolveIdentityProbe(message: string, profileReady: boolean): Id
   if (typeof message !== 'string' || !message.trim()) return { kind: 'none' };
 
   if (CREATOR_PROBE_RE.test(message)) {
-    return { kind: 'assistant_reply', reply: 'I was developed by Evin John.' };
+    return { kind: 'assistant_reply', reply: 'I was developed by OpenOffer contributors.' };
   }
   if (ASSISTANT_META_PROBE_RE.test(message)) {
-    return { kind: 'assistant_reply', reply: "I'm Natively, an AI assistant." };
+    return { kind: 'assistant_reply', reply: "I'm OpenOffer, an AI assistant." };
   }
   if (CANDIDATE_AMBIGUOUS_PROBE_RE.test(message)) {
     // Profile loaded → the user is rehearsing as the candidate; the profile
@@ -61,7 +61,7 @@ export function resolveIdentityProbe(message: string, profileReady: boolean): Id
     // → the canned assistant reply stands (general-chat identity ask).
     return profileReady
       ? { kind: 'candidate_fast_path' }
-      : { kind: 'assistant_reply', reply: "I'm Natively, an AI assistant." };
+      : { kind: 'assistant_reply', reply: "I'm OpenOffer, an AI assistant." };
   }
   return { kind: 'none' };
 }

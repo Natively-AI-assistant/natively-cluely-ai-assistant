@@ -1,7 +1,7 @@
 // electron/llm/__tests__/ManualRegression2026_06_08.test.mjs
 //
 // Release 2026-06-08 — the REAL manual-send regression the user hit:
-//   "who are you?" / "what is your name?" → "I'm Natively, an AI assistant." (WRONG)
+//   "who are you?" / "what is your name?" -> "I'm OpenOffer, an AI assistant." (WRONG)
 //   skill questions → "Yes, X is one of the skills I work with." (too weak)
 //   non-fast-path candidate questions → the generic self-intro (collapse)
 // These tests pin the fixed deterministic manual fast-path behavior (profile-loaded).
@@ -49,7 +49,7 @@ describe('Manual identity — candidate first-person, never "I\'m Natively"', ()
 });
 
 describe('Manual assistant-meta — answers about the app, NOT the candidate', () => {
-  for (const q of ['are you an AI?', 'what is Natively?', 'who made Natively?', 'what model are you?']) {
+  for (const q of ['are you an AI?', 'what is OpenOffer?', 'who made you?', 'what model are you?']) {
     test(`"${q}" → bails to assistant path (fast-path returns null)`, () => {
       assert.equal(isAssistantIdentityQuestion(q), true);
       assert.equal(fast(q), null, 'assistant-meta must NOT be answered as the candidate');

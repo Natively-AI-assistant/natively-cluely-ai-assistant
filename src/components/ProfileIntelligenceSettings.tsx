@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
     X, RefreshCw, Upload, Briefcase, Trash2, Pencil, Check, Globe,
-    Building2, Search, AlertCircle, Gift, Info, Star, Sparkles, User, CheckCircle, ArrowUpRight
+    Building2, Search, AlertCircle, Gift, Info, Star, Sparkles, User, ArrowUpRight
 } from 'lucide-react';
-import { ProfileVisualizer, PremiumUpgradeModal } from '../premium';
+import { ProfileVisualizer } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -85,7 +85,7 @@ const PI_CSS = `
     }
     .pi-bento-content { position: relative; z-index: 1; height: 100%; }
 
-    /* ── Button-in-Button CTA (Manage Pro / Unlock Pro) ── */
+    /* ── Button-in-Button CTA ── */
     .pi-cta-group {
         padding: 5px 5px 5px 18px;
         height: 40px;
@@ -502,48 +502,7 @@ const StarRating = ({ value, size = 11 }: { value: number; size?: number }) => {
     );
 };
 
-// Cache premium state in localStorage so the CTA renders in its correct
-// state on first paint — avoids the "Unlock Pro" → "Manage Pro" flash for
-// activated users while the async licenseGetDetails() call is in flight.
-// Cleared whenever the canonical check returns non-premium (or on deactivate).
-const PI_PREMIUM_CACHE_KEY = 'pi:isPremium';
-const PI_PREMIUM_PLAN_CACHE_KEY = 'pi:premiumPlan';
-
-const readPremiumCache = (): { isPremium: boolean; plan: string } => {
-    if (typeof window === 'undefined') return { isPremium: false, plan: '' };
-    try {
-        return {
-            isPremium: window.localStorage.getItem(PI_PREMIUM_CACHE_KEY) === '1',
-            plan: window.localStorage.getItem(PI_PREMIUM_PLAN_CACHE_KEY) ?? '',
-        };
-    } catch {
-        return { isPremium: false, plan: '' };
-    }
-};
-
-const writePremiumCache = (isPremium: boolean, plan: string) => {
-    if (typeof window === 'undefined') return;
-    try {
-        if (isPremium) {
-            window.localStorage.setItem(PI_PREMIUM_CACHE_KEY, '1');
-            if (plan) window.localStorage.setItem(PI_PREMIUM_PLAN_CACHE_KEY, plan);
-            else window.localStorage.removeItem(PI_PREMIUM_PLAN_CACHE_KEY);
-        } else {
-            window.localStorage.removeItem(PI_PREMIUM_CACHE_KEY);
-            window.localStorage.removeItem(PI_PREMIUM_PLAN_CACHE_KEY);
-        }
-    } catch { /* localStorage disabled — fall back to live check */ }
-};
-
 export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }) {
-    // Premium Status — seed from cache so the header CTA paints correctly
-    // before licenseGetDetails() resolves.
-    const cachedPremium = readPremiumCache();
-    const [isPremium, setIsPremium] = useState(cachedPremium.isPremium);
-    const [premiumPlan, setPremiumPlan] = useState<string>(cachedPremium.plan);
-    const [isTrialActive, setIsTrialActive] = useState(false);
-    const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
-    const hasProfileAccess = isPremium || isTrialActive;
     const isLight = useResolvedTheme() === 'light';
 
     // Profile Engine State
@@ -585,24 +544,6 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
     const personaDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
-        // Fetch premium details — canonical source of truth. Sync the
-        // localStorage cache so the next mount paints with the correct state.
-        if (window.electronAPI?.licenseGetDetails) {
-            window.electronAPI.licenseGetDetails().then((details: any) => {
-                const live = !!details?.isPremium;
-                const plan = details?.plan ?? '';
-                setIsPremium(live);
-                if (plan) setPremiumPlan(plan);
-                else if (!live) setPremiumPlan('');
-                writePremiumCache(live, plan);
-            }).catch(() => { });
-        } else {
-            window.electronAPI?.licenseCheckPremium?.().then((live: boolean) => {
-                setIsPremium(!!live);
-                writePremiumCache(!!live, premiumPlan);
-            }).catch(() => { });
-        }
-
         // Proactively load profile data
         window.electronAPI?.profileGetStatus?.().then(setProfileStatus).catch(() => { });
         window.electronAPI?.profileGetProfile?.().then((data: any) => {
@@ -622,15 +563,10 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
     }, []);
 
     useEffect(() => {
-        if (!hasProfileAccess) {
-            setPersona('');
-            if (personaDebounceRef.current) clearTimeout(personaDebounceRef.current);
-            return;
-        }
         window.electronAPI?.profileGetPersona?.().then((res: any) => {
             if (res?.success) setPersona(res.content ?? '');
         }).catch(() => { });
-    }, [hasProfileAccess]);
+    }, []);
 
     const handleRemoveTavilyKey = async () => {
         if (!confirm('Are you sure you want to remove your Tavily API key?')) return;
@@ -668,12 +604,6 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                         <div className="flex items-center gap-2.5 mb-1.5">
                             <h2 className="text-[22px] font-bold text-text-primary leading-none" style={{ letterSpacing: '-0.025em' }}>Profile Intelligence</h2>
                             <span className="pi-beta-badge">BETA</span>
-                            {isPremium && premiumPlan && (
-                                <span className="pi-meta-badge pi-meta-badge--plan">{premiumPlan} Plan</span>
-                            )}
-                            {isTrialActive && !isPremium && (
-                                <span className="pi-meta-badge pi-meta-badge--trial">Free Trial</span>
-                            )}
                         </div>
                         <p className="text-[13px] text-text-secondary" style={{ letterSpacing: '-0.005em' }}>
                             Manage your persona, career history, and active job description
@@ -681,20 +611,6 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
-                    <button
-                        onClick={() => setIsPremiumModalOpen(true)}
-                        className={`pi-cta-group${isTrialActive && !isPremium ? ' pi-cta-group--trial' : ''}`}
-                        aria-label={isPremium ? 'Manage Pro' : isTrialActive ? 'Upgrade trial' : 'Unlock Pro'}
-                    >
-                        <span>{isPremium ? 'Manage Pro' : isTrialActive ? 'Upgrade' : 'Unlock Pro'}</span>
-                        <span className="pi-cta-icon-ring">
-                            {isPremium
-                                ? <CheckCircle size={14} strokeWidth={2.5} />
-                                : isTrialActive
-                                ? <Sparkles size={14} strokeWidth={2.5} />
-                                : <ArrowUpRight size={14} strokeWidth={2.5} />}
-                        </span>
-                    </button>
                     <button
                         onClick={onClose}
                         className="pi-close-btn"
@@ -756,11 +672,11 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         )}
 
                                                         {/* High-fidelity Toggle */}
-                                                        <div className={`flex items-center gap-2 bg-bg-input px-3 py-1.5 rounded-full border border-border-subtle ${!hasProfileAccess ? 'opacity-40 cursor-not-allowed' : ''}`} title={!hasProfileAccess ? 'Requires Pro license' : ''}>
+                                                        <div className="flex items-center gap-2 bg-bg-input px-3 py-1.5 rounded-full border border-border-subtle">
                                                             <span className="text-xs font-medium text-text-secondary">Persona Engine</span>
                                                             <div
                                                                 onClick={async () => {
-                                                                    if (!profileStatus.hasProfile || !hasProfileAccess) return;
+                                                                    if (!profileStatus.hasProfile) return;
                                                                     const newState = !profileStatus.profileMode;
                                                                     try {
                                                                         await window.electronAPI?.profileSetMode?.(newState);
@@ -769,9 +685,9 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                         console.error('Failed to toggle profile mode:', e);
                                                                     }
                                                                 }}
-                                                                className={`w-9 h-5 rounded-full relative transition-colors ${(!profileStatus.hasProfile || !hasProfileAccess) ? 'opacity-40 cursor-not-allowed bg-bg-toggle-switch' : profileStatus.profileMode ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                                className={`w-9 h-5 rounded-full relative transition-colors ${!profileStatus.hasProfile ? 'opacity-40 cursor-not-allowed bg-bg-toggle-switch' : profileStatus.profileMode ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                             >
-                                                                <div className={`absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform ${profileStatus.profileMode && hasProfileAccess ? 'translate-x-4' : 'translate-x-0'}`} />
+                                                                <div className={`absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform ${profileStatus.profileMode ? 'translate-x-4' : 'translate-x-0'}`} />
                                                             </div>
                                                         </div>
                                                     </div>
@@ -873,14 +789,9 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                     <div className="min-w-0 flex-1">
                                                         <h4 className="text-[15px] font-bold text-text-primary mb-1 tracking-tight flex items-center flex-wrap gap-1.5">
                                                             <span>{profileStatus.hasProfile ? 'Overwrite Source Document' : 'Initialize Knowledge Base'}</span>
-                                                            {!hasProfileAccess && (
-                                                                <span className="pi-upload-pill__pro-badge !ml-0" aria-label="Pro feature">Pro</span>
-                                                            )}
                                                         </h4>
                                                         <p className="text-xs text-text-secondary leading-relaxed pr-2">
-                                                            {!hasProfileAccess
-                                                                ? 'Resume ingestion is a Natively Pro feature. The Custom Context box below stays free.'
-                                                                : 'Provide a resume file to seed the intelligence engine.'}
+                                                            Provide a resume file to seed the intelligence engine.
                                                         </p>
                                                     </div>
                                                 </div>
@@ -888,10 +799,6 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                 <button
                                                     style={{ marginTop: 'auto' }}
                                                     onClick={async () => {
-                                                        if (!hasProfileAccess) {
-                                                            setIsPremiumModalOpen(true);
-                                                            return;
-                                                        }
                                                         setProfileError('');
                                                         try {
                                                             const fileResult = await window.electronAPI?.profileSelectFile?.();
@@ -955,9 +862,6 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                     <div className="min-w-0 flex-1">
                                                         <h4 className="text-[15px] font-bold text-text-primary mb-1 tracking-tight flex items-center flex-wrap gap-1.5">
                                                             <span>{profileData?.hasActiveJD ? `${profileData.activeJD?.title} @ ${profileData.activeJD?.company}` : 'Upload Job Description'}</span>
-                                                            {!hasProfileAccess && (
-                                                                <span className="pi-upload-pill__pro-badge !ml-0" aria-label="Pro feature">Pro</span>
-                                                            )}
                                                         </h4>
                                                         {profileData?.hasActiveJD ? (
                                                             <div className="flex items-center gap-3 mt-1 flex-wrap">
@@ -972,9 +876,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                             </div>
                                                         ) : (
                                                             <p className="text-xs text-text-secondary leading-relaxed pr-2">
-                                                                {!hasProfileAccess
-                                                                    ? 'Job description parsing is a Natively Pro feature. The Custom Context box below stays free.'
-                                                                    : 'Upload a JD to enable persona tuning and company research.'}
+                                                                Upload a JD to enable persona tuning and company research.
                                                             </p>
                                                         )}
                                                     </div>
@@ -997,10 +899,6 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                 <button
                                                     style={{ marginTop: 'auto' }}
                                                     onClick={async () => {
-                                                        if (!hasProfileAccess) {
-                                                            setIsPremiumModalOpen(true);
-                                                            return;
-                                                        }
                                                         setJdError('');
                                                         try {
                                                             const fileResult = await window.electronAPI?.profileSelectFile?.();
@@ -1116,7 +1014,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                     <div className="flex-1 min-w-0">
                                                         <div className="flex items-center gap-2">
                                                             <h4 className="text-sm font-bold text-text-primary">AI Persona</h4>
-                                                            {personaSaved && hasProfileAccess && (
+                                                            {personaSaved && (
                                                                 <span className="text-[9px] font-bold text-emerald-500 px-1.5 py-0.5 bg-emerald-500/10 rounded-full border border-emerald-500/20 uppercase tracking-wide flex items-center gap-1">
                                                                     <Check size={8} /> Updated
                                                                 </span>
@@ -1130,10 +1028,6 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                 <textarea
                                                     value={persona}
                                                     onChange={(e) => {
-                                                        if (!hasProfileAccess) {
-                                                            setIsPremiumModalOpen(true);
-                                                            return;
-                                                        }
                                                         const val = e.target.value;
                                                         if (val.length > 4000) return;
                                                         setPersona(val);
@@ -1145,24 +1039,17 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                 if (res?.success) {
                                                                     setPersonaSaved(true);
                                                                     setTimeout(() => setPersonaSaved(false), 2000);
-                                                                } else if (res?.error === 'pro_required') {
-                                                                    setPersona('');
-                                                                    setIsPremiumModalOpen(true);
                                                                 }
                                                             } catch (_) {}
                                                         }, 800);
                                                     }}
-                                                    onFocus={() => {
-                                                        if (!hasProfileAccess) setIsPremiumModalOpen(true);
-                                                    }}
                                                     placeholder="Example: You are a senior hiring manager. Keep answers concise and ask one focused follow-up when needed."
                                                     rows={5}
-                                                    disabled={!hasProfileAccess}
-                                                    className={`w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2.5 text-xs text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/20 transition-all resize-none leading-relaxed ${!hasProfileAccess ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                                    className="w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2.5 text-xs text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/20 transition-all resize-none leading-relaxed"
                                                 />
                                                 <div className="flex items-center justify-between px-0.5 mt-3">
                                                     <p className="text-[10px] text-text-tertiary">
-                                                        {hasProfileAccess ? 'Auto-saved · Treated as user-provided context' : 'Upgrade to Pro to personalize AI persona'}
+                                                        Auto-saved · Treated as user-provided context
                                                     </p>
                                                     <span className={`text-[10px] tabular-nums ${persona.length > 3600 ? 'text-amber-500' : 'text-text-tertiary'}`}>
                                                         {persona.length}/4000
@@ -1302,8 +1189,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                     <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-amber-500/8 border border-amber-500/20 text-[11px] text-amber-400 leading-relaxed">
                                                         <span className="shrink-0 mt-[1px]">⚠</span>
                                                         <span>
-                                                            Web search credits exhausted for this month — showing AI-only research instead.
-                                                            Resets next billing cycle or <span className="underline cursor-pointer" onClick={() => (window.electronAPI as any)?.openExternal?.('https://checkout.dodopayments.com/buy/pdt_0NbFixGmD8CSeawb5qvVl')}>upgrade your plan</span>.
+                                                            Web search credits exhausted — showing AI-only research instead. Add a Tavily key in settings to re-enable live search.
                                                         </span>
                                                     </div>
                                                 )}
@@ -1735,34 +1621,6 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                     </div>
                 </div>
             </div>
-
-            <PremiumUpgradeModal
-                isOpen={isPremiumModalOpen}
-                onClose={() => setIsPremiumModalOpen(false)}
-                isPremium={isPremium}
-                onActivated={async () => {
-                    setIsPremium(true);
-                    // Refresh plan + cache from the canonical source so the
-                    // header reflects the new state on every subsequent mount.
-                    try {
-                        const details = await window.electronAPI?.licenseGetDetails?.();
-                        const plan = details?.plan ?? '';
-                        if (plan) setPremiumPlan(plan);
-                        writePremiumCache(true, plan);
-                    } catch {
-                        writePremiumCache(true, premiumPlan);
-                    }
-                    const status = await window.electronAPI?.profileGetStatus?.();
-                    if (status) setProfileStatus(status);
-                }}
-                onDeactivated={() => {
-                    setIsPremium(false);
-                    setPremiumPlan('');
-                    writePremiumCache(false, '');
-                    // Auto-disable profile mode in UI when license is removed
-                    setProfileStatus(prev => ({ ...prev, profileMode: false }));
-                }}
-            />
         </div>
     );
 }

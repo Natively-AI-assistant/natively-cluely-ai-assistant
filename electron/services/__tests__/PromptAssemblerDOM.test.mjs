@@ -29,7 +29,7 @@ const makeTrustLevels = async () => {
   return loadTrustLevels();
 };
 
-const SAMPLE_SYSTEM_PROMPT = 'You are Natively. Answer questions directly.';
+const SAMPLE_SYSTEM_PROMPT = 'You are OpenOffer. Answer questions directly.';
 
 const defaultParams = {
   transcript: 'Interviewer: Solve this problem. Candidate: Okay, let me try.',

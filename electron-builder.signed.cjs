@@ -28,7 +28,7 @@
  *   afterAllArtifactBuild hook rebuilds the styled DMGs from the pristine signed
  *   .app via create-dmg, then notarizes + staples them. See scripts/afterAllArtifactBuild.cjs.
  *
- *   Notarization credentials use the macOS keychain profile `natively-notary`
+ *   Notarization credentials use the macOS keychain profile `openoffer-notary`
  *   (created via `xcrun notarytool store-credentials`). No plaintext Apple password
  *   lives in source — the secret is in the keychain; only the profile NAME and the
  *   (non-secret) Team ID are referenced here. electron-builder's getNotarizeOptions
@@ -44,7 +44,7 @@ process.env.NATIVELY_PRODUCTION_SIGN = '1';
 // Default to the user's stored notarytool keychain profile + Team ID. These are NOT
 // secrets (the profile name is a label; the Team ID is embedded in every signed binary).
 // The actual Apple credential lives only in the macOS keychain. Both are overridable.
-process.env.APPLE_KEYCHAIN_PROFILE = process.env.APPLE_KEYCHAIN_PROFILE || 'natively-notary';
+process.env.APPLE_KEYCHAIN_PROFILE = process.env.APPLE_KEYCHAIN_PROFILE || 'openoffer-notary';
 process.env.APPLE_TEAM_ID = process.env.APPLE_TEAM_ID || 'BJM29W3UQ6';
 
 const base = require('./package.json').build;

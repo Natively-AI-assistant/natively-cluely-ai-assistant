@@ -561,8 +561,8 @@ export class LLMHelper {
   }
 
   public setNativelyKey(key: string | null): void {
-    this.nativelyKey = key || null;
-    console.log(`[LLMHelper] Natively key ${key ? 'set' : 'cleared'}`);
+    this.nativelyKey = null;
+    if (key) console.log('[LLMHelper] Removed hosted API key ignored');
   }
 
   /**
@@ -580,7 +580,7 @@ export class LLMHelper {
   }
 
   private hasNatively(): boolean {
-    return !!this.nativelyKey;
+    return false;
   }
 
   /**
@@ -2040,7 +2040,6 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         capability: 'chat',
         multimodal: cloudIsMultimodal,
         availability: {
-          hasNatively: this.hasNatively(),
           hasGroq: Boolean(this.groqClient),
           groqDisabled: this._groqLocalDisabled,
           hasCodex: this.codexCliConfig.enabled,
@@ -2067,9 +2066,6 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       for (const routedProvider of routedProviders) {
         if (routedProvider.status !== 'available') continue;
         switch (routedProvider.provider) {
-          case 'natively':
-            providers.push({ name: routedProvider.name, execute: () => this.generateWithNatively(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined) });
-            break;
           case 'groq':
             if (cloudIsMultimodal) {
               providers.push({ name: `Groq (meta-llama/llama-4-scout-17b-16e-instruct)`, execute: () => this.generateWithGroqMultimodal(cloudUserContent, cloudImagePaths!, openaiSystemPrompt) });
@@ -3754,9 +3750,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     // `.aborted` is ambiguous because future params (extraDataScopes, options
     // objects) could accidentally satisfy the shape. instanceof is exact and
     // requires Node ≥17 (Electron's runtime is well past that).
-    // Find the AbortSignal anywhere in args (position-independent) so adding a
-    // trailing `thinkingBudget` arg below doesn't hide it from the abort check.
-    const abortSignal = args.find((a): a is AbortSignal => a instanceof AbortSignal);
+    const trailingArg = args[args.length - 1];
+    // Prefer the historical trailing-arg contract, but tolerate newer optional
+    // metadata appended after the signal so cancellation survives signature growth.
+    const abortSignal = trailingArg instanceof AbortSignal
+      ? trailingArg
+      : args.find((a): a is AbortSignal => a instanceof AbortSignal);
     for await (const chunk of this._streamChatInner(...args)) {
       if (abortSignal?.aborted) return;
       yield dashReducer.reduce(chunk);
