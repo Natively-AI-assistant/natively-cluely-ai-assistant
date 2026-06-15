@@ -390,13 +390,14 @@ import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
 import { ElevenLabsStreamingSTT } from "./audio/ElevenLabsStreamingSTT"
 import { OpenAIStreamingSTT } from "./audio/OpenAIStreamingSTT"
 import { NativelyProSTT } from "./audio/NativelyProSTT"
+import { GigaSTTStreamingSTT } from "./audio/GigaSTTStreamingSTT"
 import { ThemeManager } from "./ThemeManager"
 import { RAGManager } from "./rag/RAGManager"
 import { DatabaseManager } from "./db/DatabaseManager"
 import { warmupIntentClassifier } from "./llm"
 
 /** Unified type for all STT providers with optional extended capabilities */
-type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | ElevenLabsStreamingSTT | OpenAIStreamingSTT | NativelyProSTT) & {
+type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | ElevenLabsStreamingSTT | OpenAIStreamingSTT | NativelyProSTT | GigaSTTStreamingSTT) & {
   finalize?: () => void;
   setAudioChannelCount?: (count: number) => void;
   notifySpeechEnded?: () => void;
@@ -516,6 +517,7 @@ export class AppState {
   private _ragProcessingInFlight: Set<string> = new Set();
   private _isQuitting: boolean = false;
   private _verboseLogging: boolean = false;
+  private _lastSttStatusByChannel: Partial<Record<'user' | 'interviewer', SttStatusPayload>> = {};
   // Tracks whether STT sample-rate has been applied for the current capture
   // session. Reset on every reconfigureAudio / new pipeline build so the next
   // first-chunk handler reads the freshly-detected native rate.
@@ -584,7 +586,7 @@ export class AppState {
           const { isModelCached } = require('./audio/whisper/modelManager');
           const { modelPreloader } = require('./audio/whisper/modelPreloader');
           const { resolveInferenceConfig } = require('./audio/whisper/inferenceConfig');
-          const modelId = settingsManager.get('localWhisperModel') ?? 'Xenova/whisper-tiny.en';
+          const modelId = settingsManager.get('localWhisperModel') ?? 'Xenova/whisper-tiny';
           const { dtype } = resolveInferenceConfig();
           if (isModelCached(modelId, dtype)) {
             console.log(`[AppState] Preloading local Whisper model: ${modelId}`);
@@ -889,6 +891,10 @@ export class AppState {
   }
 
   private sendSttStatus(payload: any): void {
+    const channel = payload?.channel as unknown;
+    if (channel === 'user' || channel === 'interviewer') {
+      this._lastSttStatusByChannel[channel] = payload as SttStatusPayload;
+    }
     this.sendToMeetingSurfaces('stt-status', payload);
   }
 
@@ -911,6 +917,16 @@ export class AppState {
 
   public getIsMeetingActive(): boolean {
     return this.isMeetingActive;
+  }
+
+  public getSttStatusSnapshot(): {
+    user: SttStatusPayload | null;
+    interviewer: SttStatusPayload | null;
+  } {
+    return {
+      user: this._lastSttStatusByChannel.user ?? null,
+      interviewer: this._lastSttStatusByChannel.interviewer ?? null,
+    };
   }
 
   public isQuitting(): boolean {
@@ -1502,7 +1518,7 @@ export class AppState {
     } else if (sttProvider === 'local-whisper') {
       const { LocalWhisperSTT } = require('./audio/LocalWhisperSTT');
       const sm = SettingsManager.getInstance();
-      const globalModel = sm.get('localWhisperModel') ?? 'Xenova/whisper-tiny.en';
+      const globalModel = sm.get('localWhisperModel') ?? 'Xenova/whisper-tiny';
       // Per-channel override: when enabled the two STT instances may load
       // different models (e.g. Moonshine Tiny for mic, Moonshine Base for
       // system audio). Falls back to globalModel if the per-channel slot is
@@ -1519,6 +1535,9 @@ export class AppState {
       // Channel label disambiguates the two concurrent instances in latency logs.
       lws.setChannel(speaker === 'interviewer' ? 'system' : 'mic');
       stt = lws as any;
+    } else if (sttProvider === 'gigastt') {
+      console.log(`[Main] Using GigaSTTStreamingSTT for ${speaker}`);
+      stt = new GigaSTTStreamingSTT(speaker === 'interviewer' ? 'system' : 'mic');
     } else {
       stt = new GoogleSTT(speaker);
     }
@@ -2973,8 +2992,8 @@ export class AppState {
     // Keep the chain alive regardless of this run's outcome so a failure never
     // wedges all future reconfigures.
     this._sttReconfigureChain = run.then(
-      () => undefined,
-      () => undefined,
+      (): void => undefined,
+      (): void => undefined,
     );
     return run;
   }

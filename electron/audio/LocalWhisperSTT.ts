@@ -36,10 +36,11 @@ import { Worker } from 'worker_threads';
 import { resampleToF32 } from './whisper/audioResampler';
 import { VadProcessor } from './whisper/vadProcessor';
 import { filterHallucination } from './whisper/hallucinationFilter';
-import { configureTransformersCache } from './whisper/modelManager';
+import { configureTransformersCache, normalizeWhisperModelId } from './whisper/modelManager';
 import { modelPreloader } from './whisper/modelPreloader';
 import { buildWorkerInitMessage } from './whisper/inferenceConfig';
 import { resolveWhisperWorkerPath } from './whisper/workerPathResolver';
+import { normalizeLocalWhisperLanguage } from './whisper/language';
 import type { WorkerOutMessage } from './whisper/types';
 
 export class LocalWhisperSTT extends EventEmitter {
@@ -129,7 +130,7 @@ export class LocalWhisperSTT extends EventEmitter {
 
     constructor(modelId: string) {
         super();
-        this.modelId = modelId;
+        this.modelId = normalizeWhisperModelId(modelId);
         configureTransformersCache();
 
         // Tune the streaming loop for this specific model's characteristics.
@@ -139,12 +140,12 @@ export class LocalWhisperSTT extends EventEmitter {
         // entire tick of latency).
         // Whisper / Distil-Whisper: ~500ms-5s inference, conservative
         // params, LA-2 needed for stability.
-        const profile = LocalWhisperSTT.resolveStreamingProfile(modelId);
+        const profile = LocalWhisperSTT.resolveStreamingProfile(this.modelId);
         this.streamingIntervalBaseMs = profile.intervalMs;
         this.streamingMinAudioMs = profile.minAudioMs;
         this.skipAgreement = profile.skipAgreement;
         this.streamingNextDelayMs = this.streamingIntervalBaseMs;
-        console.log(`[LocalWhisperSTT] streaming profile for ${modelId}: interval=${profile.intervalMs}ms minAudio=${profile.minAudioMs}ms skipAgreement=${profile.skipAgreement}`);
+        console.log(`[LocalWhisperSTT] streaming profile for ${this.modelId}: interval=${profile.intervalMs}ms minAudio=${profile.minAudioMs}ms skipAgreement=${profile.skipAgreement}`);
     }
 
     /**
@@ -167,7 +168,7 @@ export class LocalWhisperSTT extends EventEmitter {
 
     setSampleRate(rate: number): void { this.inputSampleRate = rate; }
     setAudioChannelCount(_count: number): void {}
-    setRecognitionLanguage(key: string): void { this.language = key || 'auto'; }
+    setRecognitionLanguage(key: string): void { this.language = normalizeLocalWhisperLanguage(key); }
     setCredentials(_credPath: string): void {}
 
     /**

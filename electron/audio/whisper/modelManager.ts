@@ -5,6 +5,14 @@ import type { WhisperModelId, WhisperModelInfo } from './types';
 // env is configured lazily via configureTransformersCache()
 // We import the type only here; the actual require() happens at runtime.
 
+const MODEL_ID_ALIASES: Record<string, WhisperModelId> = {
+  'onnx-community/whisper-large-v3-turbo-ONNX': 'onnx-community/whisper-large-v3-turbo',
+};
+
+export function normalizeWhisperModelId(modelId: string): WhisperModelId {
+  return (MODEL_ID_ALIASES[modelId] ?? modelId) as WhisperModelId;
+}
+
 const MODEL_CATALOG: WhisperModelInfo[] = [
   // ── Moonshine — streaming-native ASR. ~100× lower latency than Whisper Large v3.
   //     Encoder caching + decoder state reuse. English-only. Best choice for live use.
@@ -18,8 +26,11 @@ const MODEL_CATALOG: WhisperModelInfo[] = [
   { id: 'distil-whisper/distil-large-v3',    name: 'Distil Large v3',  sizeMb: 731,  speed: 'medium',    accuracy: 'very-high', multilingual: false, status: 'missing', distilled: true },
   { id: 'distil-whisper/distil-large-v2',    name: 'Distil Large v2',  sizeMb: 731,  speed: 'medium',    accuracy: 'very-high', multilingual: false, status: 'missing', distilled: true },
 
-  // ── Whisper Large v3 Turbo — 6× faster than Large v3, multilingual.
-  { id: 'onnx-community/whisper-large-v3-turbo-ONNX', name: 'Whisper Large v3 Turbo', sizeMb: 1031, speed: 'medium', accuracy: 'very-high', multilingual: true, status: 'missing' },
+  // ── Whisper Large v3 / Turbo — multilingual, best in the current
+  // Transformers.js-compatible Whisper family for Russian. Turbo is the
+  // practical live option; full Large v3 is quality-first and much heavier.
+  { id: 'onnx-community/whisper-large-v3-turbo', name: 'Whisper Large v3 Turbo', sizeMb: 1031, speed: 'medium', accuracy: 'very-high', multilingual: true, status: 'missing' },
+  { id: 'Xenova/whisper-large-v3', name: 'Whisper Large v3', sizeMb: 3100, speed: 'slow', accuracy: 'very-high', multilingual: true, status: 'missing', requiresAppleSilicon: true },
 
   // ── Standard Whisper
   { id: 'Xenova/whisper-tiny.en',    name: 'Tiny English',    sizeMb: 39,   speed: 'very-fast', accuracy: 'decent',   multilingual: false, status: 'missing' },
@@ -70,7 +81,7 @@ export function configureTransformersCache(): void {
  * on this check (it reads files directly via env.cacheDir).
  */
 function modelIdToCacheDir(modelId: WhisperModelId): string {
-  return modelId; // already in `<org>/<name>` shape
+  return normalizeWhisperModelId(modelId); // already in `<org>/<name>` shape
 }
 
 // Maps `dtype` keyword to the ONNX filename suffix the loader will look for.
@@ -124,7 +135,7 @@ function expectedOnnxFiles(dtype: string | Record<string, string>) {
  */
 export function isModelCached(modelId: WhisperModelId, dtype?: string | Record<string, string>): boolean {
   const cacheDir = getModelsDir();
-  const modelDir = path.join(cacheDir, modelIdToCacheDir(modelId));
+  const modelDir = path.join(cacheDir, modelIdToCacheDir(normalizeWhisperModelId(modelId)));
   if (!fs.existsSync(modelDir)) return false;
 
   if (!dtype) {
@@ -166,9 +177,10 @@ export function getAvailableModels(): WhisperModelInfo[] {
  */
 export function deleteModel(modelId: WhisperModelId): void {
   const cacheDir = getModelsDir();
-  const modelDir = path.join(cacheDir, modelIdToCacheDir(modelId));
+  const normalizedModelId = normalizeWhisperModelId(modelId);
+  const modelDir = path.join(cacheDir, modelIdToCacheDir(normalizedModelId));
   if (fs.existsSync(modelDir)) {
     fs.rmSync(modelDir, { recursive: true, force: true });
-    console.log(`[modelManager] Deleted model: ${modelId}`);
+    console.log(`[modelManager] Deleted model: ${normalizedModelId}`);
   }
 }

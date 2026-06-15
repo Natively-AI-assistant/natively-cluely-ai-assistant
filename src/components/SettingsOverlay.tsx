@@ -353,6 +353,49 @@ interface SettingsOverlayProps {
     initialTab?: string;
 }
 
+type SttRuntimeChannelStatus = {
+    state: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio';
+    provider: string;
+    error?: string;
+    channel: 'user' | 'interviewer';
+    reconnectAttempts?: number;
+};
+
+type SttRuntimeStatus = {
+    success: boolean;
+    provider?: string;
+    language?: string;
+    configured?: boolean;
+    meetingActive?: boolean;
+    lastStatus?: {
+        user: SttRuntimeChannelStatus | null;
+        interviewer: SttRuntimeChannelStatus | null;
+    };
+    providerHealth?: {
+        kind?: string;
+        ok?: boolean;
+        state?: string;
+        label?: string;
+        message?: string;
+        modelId?: string;
+        modelName?: string;
+        modelStatus?: string;
+        logPath?: string;
+        server?: {
+            poolAvailable?: number;
+            poolTotal?: number;
+            reason?: string;
+            baseUrl?: string;
+        };
+        binary?: {
+            found?: boolean;
+            path?: string | null;
+        };
+    };
+    checkedAt?: string;
+    error?: string;
+};
+
 const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, initialTab = 'general' }) => {
     const isLight = useResolvedTheme() === 'light';
     const [activeTab, setActiveTab] = useState(initialTab);
@@ -833,7 +876,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     } | null>(null);
 
     // STT Provider settings
-    const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper'>('none');
+    const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper' | 'gigastt'>('none');
     const [groqSttModel, setGroqSttModel] = useState('whisper-large-v3-turbo');
     const [sttGroqKey, setSttGroqKey] = useState('');
     const [sttOpenaiKey, setSttOpenaiKey] = useState('');
@@ -858,6 +901,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     const [sttSonioxKey, setSttSonioxKey] = useState('');
     const [hasStoredSonioxKey, setHasStoredSonioxKey] = useState(false);
     const [isSttDropdownOpen, setIsSttDropdownOpen] = useState(false);
+    const [sttRuntimeStatus, setSttRuntimeStatus] = useState<SttRuntimeStatus | null>(null);
+    const [sttRuntimeLoading, setSttRuntimeLoading] = useState(false);
     const sttDropdownRef = React.useRef<HTMLDivElement>(null);
 
     // Close STT dropdown when clicking outside
@@ -936,7 +981,46 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         return () => unsubscribe();
     }, []); // mount-once: isOpen is checked inside the callback
 
-    const handleSttProviderChange = async (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper') => {
+    const refreshSttRuntimeStatus = React.useCallback(async () => {
+        if (!window.electronAPI?.getSttRuntimeStatus) return;
+        setSttRuntimeLoading(true);
+        try {
+            const status = await window.electronAPI.getSttRuntimeStatus();
+            setSttRuntimeStatus(status);
+        } catch (e: any) {
+            setSttRuntimeStatus({
+                success: false,
+                error: e?.message || 'Failed to read STT runtime status',
+            });
+        } finally {
+            setSttRuntimeLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!isOpen || activeTab !== 'audio') return;
+        refreshSttRuntimeStatus();
+        const timer = window.setInterval(refreshSttRuntimeStatus, 3500);
+        return () => window.clearInterval(timer);
+    }, [isOpen, activeTab, sttProvider, refreshSttRuntimeStatus]);
+
+    useEffect(() => {
+        if (!window.electronAPI?.onSttStatusChanged) return;
+        const unsubscribe = window.electronAPI.onSttStatusChanged((data) => {
+            setSttRuntimeStatus((prev) => {
+                const next: SttRuntimeStatus = prev ?? { success: true, lastStatus: { user: null, interviewer: null } };
+                const lastStatus = {
+                    user: next.lastStatus?.user ?? null,
+                    interviewer: next.lastStatus?.interviewer ?? null,
+                };
+                lastStatus[data.channel] = data as SttRuntimeChannelStatus;
+                return { ...next, lastStatus, provider: data.provider };
+            });
+        });
+        return () => unsubscribe();
+    }, []);
+
+    const handleSttProviderChange = async (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper' | 'gigastt') => {
         setSttProvider(provider);
         setIsSttDropdownOpen(false);
         setSttTestStatus('idle');
@@ -944,6 +1028,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         try {
             // @ts-ignore
             await window.electronAPI?.setSttProvider?.(provider);
+            refreshSttRuntimeStatus();
         } catch (e) {
             console.error('Failed to set STT provider:', e);
         }
@@ -1075,7 +1160,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     };
 
     const handleTestSttConnection = async () => {
-        if (sttProvider === 'none' || sttProvider === 'google' || sttProvider === 'natively' || sttProvider === 'local-whisper') return;
+        if (sttProvider === 'none' || sttProvider === 'google' || sttProvider === 'natively' || sttProvider === 'local-whisper' || sttProvider === 'gigastt') return;
         const keyMap: Record<string, string> = {
             groq: sttGroqKey, openai: sttOpenaiKey, deepgram: sttDeepgramKey,
             elevenlabs: sttElevenLabsKey, azure: sttAzureKey, ibmwatson: sttIbmKey,
@@ -1299,6 +1384,37 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         // Reset meter but do NOT call stopAudioTest — cleanup above handles it when test was running.
         setMicLevel(0);
     }, [isOpen, activeTab, selectedInput]);
+
+    const getSttStateClass = (state?: string) => {
+        if (state === 'connected' || state === 'ready' || state === 'busy') {
+            return 'text-green-500 bg-green-500/10 border-green-500/20';
+        }
+        if (state === 'awaiting-audio' || state === 'starting' || state === 'unknown') {
+            return 'text-amber-500 bg-amber-500/10 border-amber-500/20';
+        }
+        if (state === 'reconnecting') {
+            return 'text-orange-500 bg-orange-500/10 border-orange-500/20';
+        }
+        if (state === 'failed' || state === 'error' || state === 'missing' || state === 'not-running' || state === 'not-configured') {
+            return 'text-red-500 bg-red-500/10 border-red-500/20';
+        }
+        return 'text-text-tertiary bg-bg-input border-border-subtle';
+    };
+
+    const renderRuntimePill = (label: string, state?: string, detail?: string) => (
+        <div className={`rounded-lg border px-3 py-2 min-h-[58px] ${getSttStateClass(state)}`}>
+            <div className="text-[10px] uppercase font-semibold tracking-wide opacity-75">{label}</div>
+            <div className="text-xs font-semibold mt-1 capitalize">{state ? state.replace(/-/g, ' ') : 'No data'}</div>
+            {detail && <div className="text-[10px] mt-0.5 opacity-75 truncate">{detail}</div>}
+        </div>
+    );
+
+    const runtimeHealth = sttRuntimeStatus?.providerHealth;
+    const runtimePool =
+        typeof runtimeHealth?.server?.poolAvailable === 'number' &&
+        typeof runtimeHealth?.server?.poolTotal === 'number'
+            ? `${runtimeHealth.server.poolAvailable}/${runtimeHealth.server.poolTotal}`
+            : null;
 
     return (
         <AnimatePresence>
@@ -2252,9 +2368,83 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             { id: 'ibmwatson', label: 'IBM Watson', badge: hasStoredIbmWatsonKey ? 'Saved' : null, desc: 'IBM Watson cloud STT service', color: 'indigo', icon: <Mic size={14} /> },
                                                             { id: 'soniox', label: 'Soniox', badge: hasStoredSonioxKey ? 'Saved' : null, recommended: true, desc: '60+ languages, multilingual, domain context', color: 'cyan', icon: <Mic size={14} /> },
                                                             { id: 'local-whisper', label: 'Local Whisper', badge: null, desc: 'Privacy-first: runs 100% on your device', color: 'green', icon: <Cpu size={14} /> },
+                                                            { id: 'gigastt', label: 'GigaSTT', badge: null, recommended: true, desc: 'Local Russian-first STT server', color: 'green', icon: <Cpu size={14} /> },
                                                         ]}
                                                     />
                                                 </div>
+                                            </div>
+
+                                            <div className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3">
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        <Activity size={15} className="text-text-secondary shrink-0" />
+                                                        <div className="min-w-0">
+                                                            <h4 className="text-sm font-semibold text-text-primary">Runtime status</h4>
+                                                            <p className="text-[11px] text-text-tertiary truncate">
+                                                                {runtimeHealth?.message || sttRuntimeStatus?.error || 'Checking STT backend'}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        onClick={refreshSttRuntimeStatus}
+                                                        disabled={sttRuntimeLoading}
+                                                        className="w-8 h-8 rounded-lg bg-bg-input hover:bg-bg-elevated border border-border-subtle text-text-secondary hover:text-text-primary transition-colors flex items-center justify-center disabled:opacity-50"
+                                                        title="Refresh runtime status"
+                                                    >
+                                                        <RefreshCw size={14} className={sttRuntimeLoading ? 'animate-spin' : ''} />
+                                                    </button>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                                    {renderRuntimePill(
+                                                        'Backend',
+                                                        runtimeHealth?.state,
+                                                        runtimeHealth?.label || sttRuntimeStatus?.provider || sttProvider
+                                                    )}
+                                                    {renderRuntimePill(
+                                                        'Mic',
+                                                        sttRuntimeStatus?.lastStatus?.user?.state,
+                                                        sttRuntimeStatus?.lastStatus?.user?.error
+                                                    )}
+                                                    {renderRuntimePill(
+                                                        'System',
+                                                        sttRuntimeStatus?.lastStatus?.interviewer?.state,
+                                                        sttRuntimeStatus?.lastStatus?.interviewer?.error
+                                                    )}
+                                                </div>
+
+                                                {sttProvider === 'gigastt' && (
+                                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] text-text-secondary">
+                                                        <div className="bg-bg-input rounded-lg px-3 py-2 border border-border-subtle min-w-0">
+                                                            <span className="text-text-tertiary block mb-0.5">Pool</span>
+                                                            <span className="text-text-primary font-medium">{runtimePool || 'unknown'}</span>
+                                                        </div>
+                                                        <div className="bg-bg-input rounded-lg px-3 py-2 border border-border-subtle min-w-0">
+                                                            <span className="text-text-tertiary block mb-0.5">Binary</span>
+                                                            <span className="text-text-primary font-medium truncate block">
+                                                                {runtimeHealth?.binary?.path || 'missing'}
+                                                            </span>
+                                                        </div>
+                                                        <div className="bg-bg-input rounded-lg px-3 py-2 border border-border-subtle min-w-0">
+                                                            <span className="text-text-tertiary block mb-0.5">Log</span>
+                                                            <span className="text-text-primary font-medium truncate block">
+                                                                {runtimeHealth?.logPath || '~/.gigastt/natively-gigastt.log'}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {sttProvider === 'local-whisper' && (
+                                                    <div className="bg-bg-input rounded-lg px-3 py-2 border border-border-subtle text-[11px] text-text-secondary">
+                                                        <span className="text-text-tertiary block mb-0.5">Model</span>
+                                                        <span className="text-text-primary font-medium">
+                                                            {runtimeHealth?.modelName || runtimeHealth?.modelId || 'No model selected'}
+                                                        </span>
+                                                        {runtimeHealth?.modelStatus && (
+                                                            <span className="ml-2 text-text-tertiary">({runtimeHealth.modelStatus})</span>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
 
                                             {/* Groq Model Selector */}
@@ -2321,7 +2511,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                             )}
 
                                             {/* API Key Input (non-Google providers) */}
-                                            {sttProvider !== 'google' && sttProvider !== 'local-whisper' && sttProvider !== 'natively' && sttProvider !== 'none' && (
+                                            {sttProvider !== 'google' && sttProvider !== 'local-whisper' && sttProvider !== 'gigastt' && sttProvider !== 'natively' && sttProvider !== 'none' && (
                                                 <div className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3">
                                                     <label className="text-xs font-medium text-text-secondary block">
                                                         {sttProvider === 'groq' ? 'Groq' : sttProvider === 'openai' ? 'OpenAI STT' : sttProvider === 'elevenlabs' ? 'ElevenLabs' : sttProvider === 'azure' ? 'Azure' : sttProvider === 'ibmwatson' ? 'IBM Watson' : sttProvider === 'soniox' ? 'Soniox' : 'Deepgram'} API Key

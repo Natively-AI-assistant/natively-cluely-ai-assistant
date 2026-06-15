@@ -59,11 +59,11 @@ export function buildWorkerInitMessage(modelId: string): {
 } {
     // Late require — modelManager imports electron, which isn't available
     // when this module is first loaded in some contexts (test harnesses).
-    const { getModelsDir } = require('./modelManager');
+    const { getModelsDir, normalizeWhisperModelId } = require('./modelManager');
     const { executionProviders, dtype } = resolveInferenceConfig();
     return {
         type: 'init',
-        modelId,
+        modelId: normalizeWhisperModelId(modelId),
         cacheDir: getModelsDir(),
         executionProviders,
         dtype,

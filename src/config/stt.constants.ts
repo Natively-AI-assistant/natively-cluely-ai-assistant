@@ -3,7 +3,7 @@
  * Configuration for STT providers (Google gRPC, REST, WebSocket)
  */
 
-export type SttProviderId = 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'natively';
+export type SttProviderId = 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'natively' | 'gigastt';
 
 export interface SttProviderConfig {
     id: SttProviderId;
@@ -123,9 +123,18 @@ export const STT_PROVIDERS: Record<SttProviderId, SttProviderConfig> = {
         authHeader: () => ({}),
         responseContentPath: '',
     },
+    gigastt: {
+        id: 'gigastt',
+        name: 'GigaSTT (Local Russian)',
+        description: 'Russian-first local streaming STT server via ws://127.0.0.1:9876/v1/ws',
+        endpoint: 'ws://127.0.0.1:9876/v1/ws',
+        model: 'gigaam-v3-e2e-rnnt',
+        uploadType: 'websocket',
+        authHeader: () => ({}),
+        responseContentPath: 'text',
+    },
 };
 
 export const STT_PROVIDER_OPTIONS = Object.values(STT_PROVIDERS);
 
 export const DEFAULT_STT_PROVIDER: SttProviderId = 'google';
-

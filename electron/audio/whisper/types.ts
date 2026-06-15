@@ -7,8 +7,12 @@ export type WhisperModelId =
   | 'Xenova/whisper-small.en'
   | 'Xenova/whisper-medium'
   | 'Xenova/whisper-medium.en'
+  | 'Xenova/whisper-large-v3'
   // Whisper Large v3 Turbo — 6× faster than Large v3, ~equivalent WER,
   // multilingual. ONNX-converted by the onnx-community.
+  | 'onnx-community/whisper-large-v3-turbo'
+  // Legacy catalog id kept so old settings can be migrated to the canonical
+  // Transformers.js repo id above.
   | 'onnx-community/whisper-large-v3-turbo-ONNX'
   // Distil-Whisper — same architecture, distilled to 1/2 layers, ~6× faster
   // CPU/GPU inference at near-equivalent WER. English-only.

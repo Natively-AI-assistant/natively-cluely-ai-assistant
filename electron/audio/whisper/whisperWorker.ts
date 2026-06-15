@@ -15,24 +15,7 @@
  * natively as a true dynamic ESM import at runtime.
  */
 import { parentPort } from 'worker_threads';
-
-const LANG_MAP: Record<string, string | null> = {
-  'auto': null,
-  'en-US': 'english',
-  'en-GB': 'english',
-  'fr-FR': 'french',
-  'de-DE': 'german',
-  'es-ES': 'spanish',
-  'ja-JP': 'japanese',
-  'ko-KR': 'korean',
-  'zh-CN': 'chinese',
-  'zh-TW': 'chinese',
-  'pt-BR': 'portuguese',
-  'it-IT': 'italian',
-  'ru-RU': 'russian',
-  'ar': 'arabic',
-  'hi-IN': 'hindi',
-};
+import { isEnglishOnlyModel, resolveWhisperLanguage } from './language';
 
 let pipe: any = null;
 let loadedModelId = '';
@@ -99,25 +82,7 @@ async function updatePromptCache(promptText: string): Promise<void> {
   }
 }
 
-// Distil-Whisper checkpoints have NO multilingual decoder. If the user picks
-// 'auto' or any non-English language, the worker will silently transcribe
-// non-English audio as phonetic English. Force language='english' so the
-// behaviour is at least documented and consistent.
-const ENGLISH_ONLY_MODELS = new Set([
-  // Moonshine — English-only by design
-  'onnx-community/moonshine-tiny-ONNX',
-  'onnx-community/moonshine-base-ONNX',
-  // Distil-Whisper — English-only checkpoints
-  'distil-whisper/distil-small.en',
-  'distil-whisper/distil-medium.en',
-  'distil-whisper/distil-large-v2',
-  'distil-whisper/distil-large-v3',
-  // Whisper .en variants
-  'Xenova/whisper-tiny.en',
-  'Xenova/whisper-base.en',
-  'Xenova/whisper-small.en',
-  'Xenova/whisper-medium.en',
-]);
+const warnedEnglishOnlyLanguageOverrides = new Set<string>();
 
 if (!parentPort) throw new Error('whisperWorker must be run as a Worker thread');
 
@@ -217,6 +182,7 @@ parentPort.on('message', async (msg: any) => {
       // New model = stale prompt cache (different tokenizer vocab)
       cachedPromptText = '';
       cachedPromptIds = null;
+      warnedEnglishOnlyLanguageOverrides.clear();
 
       parentPort!.postMessage({ type: 'ready' });
     } catch (e: any) {
@@ -233,14 +199,24 @@ parentPort.on('message', async (msg: any) => {
       return;
     }
     try {
-      let language: string | null = LANG_MAP[msg.language] ?? null;
+      let language = resolveWhisperLanguage(msg.language);
       const streaming: boolean = !!msg.streaming;
 
       // English-only checkpoints (Distil-Whisper + .en variants) have no
       // multilingual decoder. Force language='english' regardless of the
       // user's auto/non-English setting so the model isn't asked to
       // transcribe phonetically into the wrong language.
-      if (ENGLISH_ONLY_MODELS.has(loadedModelId)) {
+      if (isEnglishOnlyModel(loadedModelId)) {
+        if (language && language !== 'english') {
+          const warningKey = `${loadedModelId}:${msg.language}`;
+          if (!warnedEnglishOnlyLanguageOverrides.has(warningKey)) {
+            console.warn(
+              `[WhisperWorker] ${loadedModelId} is English-only; overriding requested language "${msg.language}" (${language}) to english. ` +
+              'Select a multilingual Whisper model for Russian transcription.',
+            );
+            warnedEnglishOnlyLanguageOverrides.add(warningKey);
+          }
+        }
         language = 'english';
       }
 

@@ -172,7 +172,8 @@ interface ElectronAPI {
       | 'ibmwatson'
       | 'soniox'
       | 'natively'
-      | 'local-whisper',
+      | 'local-whisper'
+      | 'gigastt',
   ) => Promise<{ success: boolean; error?: string }>;
   localWhisperGetModels: () => Promise<{ models: any[]; activeModelId: string }>;
   localWhisperSetModel: (modelId: string) => Promise<{ success: boolean }>;
@@ -244,6 +245,7 @@ interface ElectronAPI {
   setAiResponseLanguage: (language: string) => Promise<{ success: boolean; error?: string }>;
   getSttLanguage: () => Promise<string>;
   getAiResponseLanguage: () => Promise<string>;
+  getSttRuntimeStatus: () => Promise<any>;
   onSttLanguageAutoDetected: (callback: (bcp47: string) => void) => () => void;
   onSystemAudioPermissionDenied: (callback: (message: string) => void) => () => void;
   getSystemAudioPermissionWarning: () => Promise<string | null>;
@@ -1137,7 +1139,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       | 'ibmwatson'
       | 'soniox'
       | 'natively'
-      | 'local-whisper',
+      | 'local-whisper'
+      | 'gigastt',
   ) => ipcRenderer.invoke('set-stt-provider', provider),
   getSttProvider: () => ipcRenderer.invoke('get-stt-provider'),
   setGroqSttApiKey: (apiKey: string) => ipcRenderer.invoke('set-groq-stt-api-key', apiKey),
@@ -1156,6 +1159,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     apiKey: string,
     region?: string,
   ) => ipcRenderer.invoke('test-stt-connection', provider, apiKey, region),
+  getSttRuntimeStatus: () => ipcRenderer.invoke('stt-runtime-status'),
   localWhisperGetModels: () => ipcRenderer.invoke('local-whisper-get-models'),
   localWhisperSetModel: (modelId: string) => ipcRenderer.invoke('local-whisper-set-model', modelId),
   localWhisperDeleteModel: (modelId: string) =>
@@ -1323,7 +1327,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // STT Status Events
   onSttStatusChanged: (
     callback: (data: {
-      state: 'connected' | 'reconnecting' | 'failed';
+      state: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio';
       provider: string;
       error?: string;
       channel: 'user' | 'interviewer';

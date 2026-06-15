@@ -3,9 +3,11 @@
 import * as crypto from 'crypto';
 import { app, BrowserWindow, dialog, ipcMain, shell, systemPreferences } from 'electron';
 import * as fs from 'fs';
+import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
 import { AudioDevices } from './audio/AudioDevices';
+import { ensureManagedGigaSTTServer, getGigaSTTBinaryStatus } from './audio/GigaSTTStreamingSTT';
 import { DatabaseManager } from './db/DatabaseManager'; // Import Database Manager
 import { AppState } from './main';
 import { CodexCliService } from './services/CodexCliService';
@@ -23,6 +25,173 @@ import { PiLatencyTrace } from './services/telemetry/PiLatencyTracer';
 import { CHAT_MODE_PROMPT } from './llm/prompts';
 import { isAssistantIdentityQuestion, profileFactsReady } from './llm/manualProfileIntelligence';
 import { buildManualProfileBackendAnswer } from './llm/profileAnswerBackend';
+
+type SttRuntimeProviderState =
+  | 'ready'
+  | 'busy'
+  | 'starting'
+  | 'not-running'
+  | 'not-configured'
+  | 'missing'
+  | 'outdated'
+  | 'unknown'
+  | 'error';
+
+type LocalHttpCheckResult = {
+  ok: boolean;
+  statusCode: number;
+  data: any;
+  error?: string;
+  code?: string;
+};
+
+const GIGASTT_HTTP_BASE_URL = 'http://127.0.0.1:9876';
+const GIGASTT_LOG_PATH = path.join(os.homedir(), '.gigastt', 'natively-gigastt.log');
+
+function requestLocalJson(url: string, timeoutMs = 1200): Promise<LocalHttpCheckResult> {
+  return new Promise(resolve => {
+    const req = http.get(url, res => {
+      const chunks: Buffer[] = [];
+      res.on('data', chunk => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+      res.on('end', () => {
+        const raw = Buffer.concat(chunks).toString('utf8');
+        let data: any = raw;
+        try {
+          data = raw ? JSON.parse(raw) : null;
+        } catch {
+          data = raw;
+        }
+        const statusCode = res.statusCode ?? 0;
+        resolve({ ok: statusCode >= 200 && statusCode < 300, statusCode, data });
+      });
+    });
+    req.on('error', (err: NodeJS.ErrnoException) => {
+      resolve({
+        ok: false,
+        statusCode: 0,
+        data: null,
+        error: err.message,
+        code: err.code,
+      });
+    });
+    req.setTimeout(timeoutMs, () => {
+      req.destroy();
+      resolve({
+        ok: false,
+        statusCode: 0,
+        data: null,
+        error: `Timed out after ${timeoutMs}ms`,
+        code: 'ETIMEDOUT',
+      });
+    });
+  });
+}
+
+async function checkGigaSTTRuntime(): Promise<{
+  kind: 'gigastt';
+  ok: boolean;
+  state: SttRuntimeProviderState;
+  label: string;
+  message: string;
+  binary: ReturnType<typeof getGigaSTTBinaryStatus>;
+  server: {
+    baseUrl: string;
+    health: LocalHttpCheckResult;
+    ready: LocalHttpCheckResult;
+    poolAvailable?: number;
+    poolTotal?: number;
+    reason?: string;
+  };
+  logPath: string;
+}> {
+  const binary = getGigaSTTBinaryStatus();
+  let [health, ready] = await Promise.all([
+    requestLocalJson(`${GIGASTT_HTTP_BASE_URL}/health`),
+    requestLocalJson(`${GIGASTT_HTTP_BASE_URL}/ready`),
+  ]);
+
+  if (binary.found && binary.meetsMinimum && health.code === 'ECONNREFUSED' && ready.code === 'ECONNREFUSED') {
+    try {
+      await ensureManagedGigaSTTServer();
+      [health, ready] = await Promise.all([
+        requestLocalJson(`${GIGASTT_HTTP_BASE_URL}/health`),
+        requestLocalJson(`${GIGASTT_HTTP_BASE_URL}/ready`),
+      ]);
+    } catch (error: any) {
+      health = {
+        ok: false,
+        statusCode: 0,
+        data: null,
+        error: error?.message || 'Failed to start GigaSTT server',
+        code: 'START_FAILED',
+      };
+      ready = health;
+    }
+  }
+
+  const readyData = ready.data && typeof ready.data === 'object' ? ready.data : {};
+  const poolAvailable =
+    typeof readyData.pool_available === 'number' ? readyData.pool_available : undefined;
+  const poolTotal = typeof readyData.pool_total === 'number' ? readyData.pool_total : undefined;
+  const reason = typeof readyData.reason === 'string' ? readyData.reason : undefined;
+
+  let state: SttRuntimeProviderState = 'unknown';
+  let label = 'Unknown';
+  let message = 'GigaSTT runtime status is unknown.';
+  let ok = false;
+
+  if (!binary.found) {
+    state = 'missing';
+    label = 'Binary missing';
+    message = 'GigaSTT binary was not found.';
+  } else if (!binary.meetsMinimum) {
+    state = 'outdated';
+    label = 'Update required';
+    message = binary.version
+      ? `GigaSTT ${binary.version} is installed, but ${binary.minVersion}+ is required for stable Russian STT.`
+      : `GigaSTT version could not be verified. Install ${binary.minVersion}+ for stable Russian STT.`;
+  } else if (health.code === 'ECONNREFUSED' && ready.code === 'ECONNREFUSED') {
+    state = 'not-running';
+    label = 'Not running';
+    message = 'GigaSTT server is not running. Natively will retry starting it when a meeting starts.';
+  } else if (ready.ok) {
+    state = 'ready';
+    label = 'Ready';
+    message = 'GigaSTT server is ready.';
+    ok = true;
+  } else if (health.ok && reason === 'pool_exhausted') {
+    state = 'busy';
+    label = 'In use';
+    message = 'GigaSTT server is running and all streaming slots are currently in use.';
+    ok = true;
+  } else if (health.ok) {
+    state = 'starting';
+    label = 'Starting';
+    message = reason ? `GigaSTT server is running but not ready: ${reason}` : 'GigaSTT server is starting.';
+  } else if (health.error || ready.error) {
+    state = 'error';
+    label = 'Error';
+    message = health.error || ready.error || 'GigaSTT health check failed.';
+  }
+
+  return {
+    kind: 'gigastt',
+    ok,
+    state,
+    label,
+    message,
+    binary,
+    server: {
+      baseUrl: GIGASTT_HTTP_BASE_URL,
+      health,
+      ready,
+      poolAvailable,
+      poolTotal,
+      reason,
+    },
+    logPath: GIGASTT_LOG_PATH,
+  };
+}
 
 export function initializeIpcHandlers(appState: AppState): void {
   const safeHandle = (
@@ -3000,7 +3169,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const id =
         modelId ||
         SettingsManager.getInstance().get('localWhisperModel') ||
-        'Xenova/whisper-tiny.en';
+        'Xenova/whisper-tiny';
       // Pass active dtype so the cache check verifies the SPECIFIC ONNX
       // files (e.g. encoder_model.onnx for fp32) are present — not just
       // "directory non-empty". Otherwise a v2-cached _quantized.onnx-only
@@ -3321,6 +3490,93 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('native-audio-status', async () => {
     // Always return true or pseudo-status since it's "driverless"
     return { connected: true };
+  });
+
+  safeHandle('stt-runtime-status', async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      const provider = cm.getSttProvider();
+      const language = cm.getSttLanguage();
+      const lastStatus = appState.getSttStatusSnapshot();
+      const meetingActive = appState.getIsMeetingActive();
+
+      const apiKeyConfiguredByProvider: Record<string, boolean> = {
+        none: false,
+        google: !!cm.getGoogleServiceAccountPath?.(),
+        groq: !!cm.getGroqSttApiKey?.(),
+        openai: !!cm.getOpenAiSttApiKey?.(),
+        deepgram: !!cm.getDeepgramApiKey?.(),
+        elevenlabs: !!cm.getElevenLabsApiKey?.(),
+        azure: !!cm.getAzureApiKey?.(),
+        ibmwatson: !!cm.getIbmWatsonApiKey?.(),
+        soniox: !!cm.getSonioxApiKey?.(),
+        natively: !!cm.getNativelyApiKey?.(),
+        'local-whisper': true,
+        gigastt: true,
+      };
+
+      let providerHealth: any = {
+        kind: provider,
+        ok: apiKeyConfiguredByProvider[provider] ?? false,
+        state: apiKeyConfiguredByProvider[provider] ? 'ready' : 'not-configured',
+        label: apiKeyConfiguredByProvider[provider] ? 'Configured' : 'Not configured',
+        message: apiKeyConfiguredByProvider[provider]
+          ? 'Provider credentials are configured.'
+          : 'Provider is missing required credentials.',
+      };
+
+      if (provider === 'gigastt') {
+        providerHealth = await checkGigaSTTRuntime();
+      } else if (provider === 'local-whisper') {
+        const { getAvailableModels } = require('./audio/whisper/modelManager');
+        const { resolveInferenceConfig } = require('./audio/whisper/inferenceConfig');
+        const sm = SettingsManager.getInstance();
+        const modelId = sm.get('localWhisperModel') ?? 'Xenova/whisper-tiny';
+        const models = getAvailableModels();
+        const model = models.find((m: any) => m.id === modelId);
+        const cached = model?.status === 'available';
+        const inference = resolveInferenceConfig();
+        providerHealth = {
+          kind: 'local-whisper',
+          ok: cached,
+          state: cached ? 'ready' : 'not-configured',
+          label: cached ? 'Model cached' : 'Model missing',
+          message: cached
+            ? 'Local Whisper model is cached and can be loaded.'
+            : 'Download the selected Local Whisper model before starting a meeting.',
+          modelId,
+          modelName: model?.name ?? modelId,
+          modelStatus: model?.status ?? 'missing',
+          dtype: inference.dtype,
+        };
+      } else if (provider === 'none') {
+        providerHealth = {
+          kind: 'none',
+          ok: false,
+          state: 'not-configured',
+          label: 'Disabled',
+          message: 'STT provider is disabled.',
+        };
+      }
+
+      return {
+        success: true,
+        provider,
+        language,
+        configured: !!apiKeyConfiguredByProvider[provider],
+        meetingActive,
+        lastStatus,
+        providerHealth,
+        checkedAt: new Date().toISOString(),
+      };
+    } catch (error: any) {
+      console.error('[IPC] stt-runtime-status failed:', error?.message || error);
+      return {
+        success: false,
+        error: error?.message || 'Failed to read STT runtime status',
+      };
+    }
   });
 
   safeHandle('get-input-devices', async () => {
