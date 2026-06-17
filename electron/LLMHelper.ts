@@ -772,9 +772,9 @@ export class LLMHelper {
    * turn. Returns size in CHARS (≈4 chars/token) so we can cheaply check
    * `text.length` without a tokenizer round-trip.
    *
-   *   Opus 4.7 / 4.6 / 4.5     → 4,096 tokens
+   *   Opus 4.8 / 4.7 / 4.6 / 4.5 → 4,096 tokens
    *   Sonnet 4.6                → 2,048 tokens
-   *   Sonnet 4.5 / 4 + Opus 4.1 → 1,024 tokens
+   *   Sonnet 4.5 / 4 + Opus 4.1 / 4.0 → 1,024 tokens
    *   Haiku 4.5                 → 4,096 tokens
    *   Haiku 3.5                 → 2,048 tokens
    *
@@ -782,7 +782,13 @@ export class LLMHelper {
    */
   private getClaudeCacheMinChars(modelId: string): number {
     const id = modelId.toLowerCase();
-    if (id.startsWith("claude-opus-4-7") || id.startsWith("claude-opus-4-6") || id.startsWith("claude-opus-4-5") || id.startsWith("claude-haiku-4-5")) return 4096 * 4;
+    // Opus 4.0 / 4.1 predate the 4.5 cache-min bump and stay at 1,024 tokens
+    // (they fall through to the generic claude- branch below). Every Opus 4.5
+    // and later — 4.5/4.6/4.7/4.8 — needs 4,096 tokens; match on the family
+    // prefix so new point releases don't silently regress to the wrong floor.
+    // Mirrors the prefix used in getClaudeMaxOutput.
+    if (id.startsWith("claude-opus-4-0") || id.startsWith("claude-opus-4-1")) return 1024 * 4;
+    if (id.startsWith("claude-opus-4-") || id.startsWith("claude-haiku-4-5")) return 4096 * 4;
     if (id.startsWith("claude-sonnet-4-6")) return 2048 * 4;
     if (id.startsWith("claude-3-5-haiku") || id.startsWith("claude-haiku-3-5")) return 2048 * 4;
     if (id.startsWith("claude-")) return 1024 * 4;
