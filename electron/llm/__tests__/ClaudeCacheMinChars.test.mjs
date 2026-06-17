@@ -54,6 +54,16 @@ describe('getClaudeCacheMinChars per-model prompt-cache floor', () => {
   test('Opus 4.0 / 4.1 stay at the 1,024-token floor (predate the bump)', () => {
     assert.equal(minChars('claude-opus-4-0'), 1024 * K);
     assert.equal(minChars('claude-opus-4-1'), 1024 * K);
+    // Dated snapshot ids must still hit the carve-out.
+    assert.equal(minChars('claude-opus-4-1-20250805'), 1024 * K);
+    assert.equal(minChars('claude-opus-4-0-20250514'), 1024 * K);
+  });
+
+  test('a hypothetical claude-opus-4-10 is not captured by the 4.1 carve-out', () => {
+    // The 4.0/4.1 guard anchors on a terminal version digit, so a future
+    // two-digit point release still gets the 4,096-token Opus floor.
+    assert.equal(minChars('claude-opus-4-10'), 4096 * K);
+    assert.equal(minChars('claude-opus-4-11'), 4096 * K);
   });
 
   test('Sonnet 4.6 uses the 2,048-token floor', () => {

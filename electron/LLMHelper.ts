@@ -786,8 +786,10 @@ export class LLMHelper {
     // (they fall through to the generic claude- branch below). Every Opus 4.5
     // and later — 4.5/4.6/4.7/4.8 — needs 4,096 tokens; match on the family
     // prefix so new point releases don't silently regress to the wrong floor.
-    // Mirrors the prefix used in getClaudeMaxOutput.
-    if (id.startsWith("claude-opus-4-0") || id.startsWith("claude-opus-4-1")) return 1024 * 4;
+    // Anchor the 4.0/4.1 carve-out on a terminal version digit (followed by a
+    // hyphen or end-of-string) so a future "claude-opus-4-10" isn't captured by
+    // the "claude-opus-4-1" prefix.
+    if (/^claude-opus-4-[01](-|$)/.test(id)) return 1024 * 4;
     if (id.startsWith("claude-opus-4-") || id.startsWith("claude-haiku-4-5")) return 4096 * 4;
     if (id.startsWith("claude-sonnet-4-6")) return 2048 * 4;
     if (id.startsWith("claude-3-5-haiku") || id.startsWith("claude-haiku-3-5")) return 2048 * 4;
