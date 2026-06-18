@@ -420,7 +420,7 @@ export class WindowHelper {
       // in the dock / menu bar / screen-share, so the user's foreground app
       // stays "in front." Required for the chat:focusInput stealth-typing path.
       // Windows/Linux fall back to a regular focusable window.
-      ...(isMac ? { type: 'panel' as const } : {}),
+      ...(isMac ? { type: 'panel' as const } : (process.platform === 'win32' ? { type: 'toolbar' as const } : {})),
     };
 
     this.overlayWindow = new BrowserWindow(overlaySettings);
