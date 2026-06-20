@@ -539,13 +539,27 @@ export class WindowHelper {
       // auto-fall-back to XWayland — that would surprise users who chose
       // Wayland — but we tell them how to opt in.
       if (process.env.XDG_SESSION_TYPE === 'wayland') {
-        // Fire-and-forget one-time notice at overlay creation; we only show
-        // it if the user hasn't dismissed it before (checked via simple env).
-        if (!process.env.NATIVELY_WAYLAND_NOTICE_DISMISSED) {
+        // Fire-and-forget one-time notice at overlay creation. We only show
+        // it if the user hasn't dismissed it before. The "Don't show again"
+        // choice is persisted via SettingsManager so it survives restarts.
+        // We also respect the env var for headless/CI environments that want
+        // to skip the dialog entirely.
+        const envDismissed = !!process.env.NATIVELY_WAYLAND_NOTICE_DISMISSED;
+        let settingsDismissed = false;
+        try {
+          // SettingsManager requires app.whenReady(); the overlay is created
+          // post-ready so this is safe.
+          const { SettingsManager } = require('./services/SettingsManager');
+          settingsDismissed = !!SettingsManager.getInstance().get('waylandNoticeDismissed');
+        } catch (_e) {
+          // SettingsManager unavailable (very early init) — fall through and
+          // show the dialog.
+        }
+        if (!envDismissed && !settingsDismissed) {
           setTimeout(() => {
             try {
               const { dialog } = require('electron');
-              dialog.showMessageBoxSync(this.launcherWindow!, {
+              const choice = dialog.showMessageBoxSync(this.launcherWindow!, {
                 type: 'info',
                 buttons: ['Got it', "Don't show again"],
                 defaultId: 0,
@@ -559,9 +573,17 @@ export class WindowHelper {
                   'For the full "stays-above-Zoom" UX, relaunch with ' +
                   '--ozone-platform=x11 or set NATIVELY_USE_XWAYLAND=1 in your environment.',
               });
-              // We can't easily persist the "don't show again" state here without
-              // touching SettingsManager; the env-var read at next launch is
-              // sufficient for now (cheap heuristic).
+              // choice === 1 → "Don't show again" button. Persist via
+              // SettingsManager so the user isn't re-prompted on every launch.
+              if (choice === 1) {
+                try {
+                  const { SettingsManager } = require('./services/SettingsManager');
+                  SettingsManager.getInstance().set('waylandNoticeDismissed', true);
+                } catch (_e) {
+                  // Best-effort. If SettingsManager fails, the user will
+                  // see the dialog again next launch.
+                }
+              }
             } catch (_e) {
               // dialog may not be available; swallow.
             }

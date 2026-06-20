@@ -330,16 +330,22 @@ context
                     }
                 };
 
-                // Reinterpret F32le bytes as f32 frames. The slice length
-                // should always be a multiple of 4 (frame_size) because
-                // we declared channels=2 and Format::F32le. We slice to the
-                // largest multiple to be safe.
+                // Decode F32le bytes into f32 frames. We do NOT cast via
+                // `slice.as_ptr() as *const f32` because the underlying
+                // PA buffer has alignment 1 (it's a u8 slice), and casting
+                // an unaligned pointer to *const f32 is UB even though it
+                // works in practice on x86_64. Instead, copy via
+                // `f32::from_le_bytes` for each 4-byte chunk. PA gives us
+                // F32le format so this is a straight byte-to-f32 decode.
                 let frame_size = std::mem::size_of::<f32>();
-                let n_full_frames = slice.len() / frame_size;
-                let bytes_to_use = n_full_frames * frame_size;
-                let frames = unsafe {
-                    std::slice::from_raw_parts(slice.as_ptr() as *const f32, n_full_frames)
-                };
+                let usable_len = (slice.len() / frame_size) * frame_size;
+                let mut frames: Vec<f32> = Vec::with_capacity(usable_len / frame_size);
+                let mut i = 0;
+                while i + frame_size <= usable_len {
+                    let b = &slice[i..i + frame_size];
+                    frames.push(f32::from_le_bytes([b[0], b[1], b[2], b[3]]));
+                    i += frame_size;
+                }
 
                 // Push into the ringbuf. If the ringbuf is full we drop
                 // remaining samples (better than blocking the capture thread).
@@ -353,7 +359,6 @@ context
                 }
 
                 // Advance PA's read pointer.
-                let _ = bytes_to_use;
                 if let Err(e) = stream.discard() {
                     error!("[LinuxSpeaker] discard error: {}", e);
                     return Ok(());
@@ -433,7 +438,7 @@ fn wait_for_op<C: ?Sized>(
     op: &pulse::operation::Operation<C>,
 ) {
     let mut tries = 0;
-    while !matches!(op.get_state(), OpState::Done) {
+    while !matches!(op.get_state(), OpState::Done | OpState::Cancelled) {
         mainloop.iterate(false);
         tries += 1;
         if tries > 1000 {
