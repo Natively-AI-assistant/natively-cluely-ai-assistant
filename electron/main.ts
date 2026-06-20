@@ -11,11 +11,24 @@ import { autoUpdater } from "electron-updater"
 // honored if they're set before the underlying platform integration is
 // initialized. See https://www.electronjs.org/docs/latest/api/command-line-switches
 if (process.platform === "linux") {
+  // XWayland auto-fallback: if the user wants the "above fullscreen Zoom" UX
+  // (which Wayland cannot provide because of the compositor security model),
+  // they can set NATIVELY_USE_XWAYLAND=1 in their environment. This forces
+  // Electron to run under XWayland, which fully supports alwaysOnTop. The
+  // same flag can be passed via CLI: `./natively --ozone-platform=x11`.
+  const forceXWayland =
+    process.env.NATIVELY_USE_XWAYLAND === "1" ||
+    process.env.NATIVELY_USE_XWAYLAND === "true";
+
   // Use Ozone (Chromium's Linux platform abstraction). With ozone-platform-hint
   // set to "auto", Electron picks Wayland when WAYLAND_DISPLAY is set and X11
-  // otherwise. Setting ozone-platform explicitly would override this.
+  // otherwise. Setting ozone-platform explicitly overrides this.
+  if (forceXWayland) {
+    app.commandLine.appendSwitch("ozone-platform", "x11")
+  } else {
+    app.commandLine.appendSwitch("ozone-platform-hint", "auto")
+  }
   app.commandLine.appendSwitch("enable-features", "UseOzonePlatform,WaylandWindowDecorations,WebRTCPipeWireCapturer")
-  app.commandLine.appendSwitch("ozone-platform-hint", "auto")
   // PipeWire screen capture is required for getDisplayMedia on Wayland. The
   // WebRTCPipeWireCapturer feature flag enables that path. Without it,
   // desktopCapturer returns nothing on Wayland sessions.
