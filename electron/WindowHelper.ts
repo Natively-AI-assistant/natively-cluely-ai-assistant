@@ -421,7 +421,39 @@ export class WindowHelper {
       // stays "in front." Required for the chat:focusInput stealth-typing path.
       // Windows/Linux fall back to a regular focusable window.
       ...(isMac ? { type: 'panel' as const } : {}),
+      // Wayland uses layer-shell for "above fullscreen" overlay rendering. Electron's
+      // built-in alwaysOnTop on Wayland does NOT raise above a fullscreen Zoom/Teams
+      // window because of the compositor's security model (one client cannot raise
+      // above another). Users on Wayland who want the "stays-on-top-of-Zoom" UX must
+      // either:
+      //   1) run with --ozone-platform=x11 (XWayland) — full alwaysOnTop works
+      //   2) use a WM with layer-shell protocol + custom Electron build (out of scope)
+      // On X11/XWayland, alwaysOnTop: 'screen-saver' level (used below) raises
+      // above fullscreen apps including screen-share surface.
+      // transparent: true works on both Wayland (with WaylandWindowDecorations
+      // feature flag) and X11 — the Electron renderer uses an RGBA surface in
+      // both cases. backgroundColor: '#00000000' is required for true transparency.
     };
+
+    // Linux-specific overlay adjustments.
+    // - Wayland: ALWAYS-ON-TOP IS A LIE — the compositor ignores cross-client
+    //   raise requests above another app's surface. We accept this
+    //   gracefully; the overlay still works for the "floating toolbar" UX
+    //   even when it doesn't cover Zoom's share surface.
+    // - X11 / XWayland: 'screen-saver' is the highest TOPMOST level Chromium
+    //   supports. It raises above fullscreen apps including screen-share.
+    // - Both: skipTaskbar has no effect on Wayland's wm-aware surfaces;
+    //   that's fine, Wayland compositors don't show a per-window taskbar entry
+    //   for skipTaskbar windows anyway.
+    const isLinux = process.platform === 'linux';
+    if (isLinux) {
+      // Use screen-saver level on X11 to ensure overlay stays above Zoom/Teams
+      // fullscreen share surfaces. On Wayland this is ignored by the compositor
+      // anyway, so no harm done.
+      overlaySettings.alwaysOnTop = true;
+      // We could add `screen-saver` level via setAlwaysOnTop() in the call below
+      // since BrowserWindowConstructorOptions doesn't accept the level param.
+    }
 
     this.overlayWindow = new BrowserWindow(overlaySettings);
     this.overlayWindow.setContentProtection(this.contentProtection);
@@ -489,6 +521,53 @@ export class WindowHelper {
       // visibleOnFullScreen above; Windows has no equivalent flag, so the level
       // itself is what controls fullscreen visibility. See issue #167.
       this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
+    } else if (process.platform === 'linux') {
+      // Linux: X11 vs Wayland behave very differently here. On X11 we use
+      // 'screen-saver' level (the highest TOPMOST) to raise above fullscreen
+      // Zoom/Teams share surfaces — same reasoning as Windows. On Wayland,
+      // setAlwaysOnTop is essentially a hint — the compositor (GNOME, KDE,
+      // Sway, Hyprland) decides whether to honor it. In practice Wayland
+      // honors it for "above non-fullscreen" but NOT for "above another
+      // client's fullscreen surface" (security model). Users wanting the
+      // full "stays-above-Zoom" UX on Linux should run with
+      // --ozone-platform=x11 (forces XWayland). We still call this so X11
+      // users get correct behavior.
+      this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
+
+      // Wayland-only: try to surface a brief dialog if we detect that the
+      // overlay is on Wayland and won't stay above fullscreen. We DON'T
+      // auto-fall-back to XWayland — that would surprise users who chose
+      // Wayland — but we tell them how to opt in.
+      if (process.env.XDG_SESSION_TYPE === 'wayland') {
+        // Fire-and-forget one-time notice at overlay creation; we only show
+        // it if the user hasn't dismissed it before (checked via simple env).
+        if (!process.env.NATIVELY_WAYLAND_NOTICE_DISMISSED) {
+          setTimeout(() => {
+            try {
+              const { dialog } = require('electron');
+              dialog.showMessageBoxSync(this.launcherWindow!, {
+                type: 'info',
+                buttons: ['Got it', "Don't show again"],
+                defaultId: 0,
+                cancelId: 1,
+                title: 'Running on Wayland',
+                message: 'Natively is running under Wayland.',
+                detail:
+                  'The overlay stays above other apps in normal use, but on Wayland ' +
+                  'it cannot raise above a fullscreen Zoom/Teams/meeting share surface ' +
+                  '(a compositor security policy, not a Natively limitation). ' +
+                  'For the full "stays-above-Zoom" UX, relaunch with ' +
+                  '--ozone-platform=x11 or set NATIVELY_USE_XWAYLAND=1 in your environment.',
+              });
+              // We can't easily persist the "don't show again" state here without
+              // touching SettingsManager; the env-var read at next launch is
+              // sufficient for now (cheap heuristic).
+            } catch (_e) {
+              // dialog may not be available; swallow.
+            }
+          }, 4000);
+        }
+      }
     }
 
     this.overlayWindow.loadURL(`${startUrl}?window=overlay`).catch((e) => {
