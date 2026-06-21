@@ -862,6 +862,13 @@ interface ElectronAPI {
   // response to drain through the supersession check.
   cancelChatStream: () => void;
   onDomContextReceived: (callback: (dom: string) => void) => () => void;
+  getBackgroundSettings: () => Promise<{
+    hideFromTaskbar: boolean;
+    minimizeToTray: boolean;
+    startHidden: boolean;
+    backgroundMode: boolean;
+  }>;
+  setBackgroundSetting: (key: string, value: boolean) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const PROCESSING_EVENTS = {
@@ -1077,6 +1084,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Skills — local SKILL.md instructions surfaced in Settings and the overlay.
   skillsRefresh: () => ipcRenderer.invoke('skills:list'),
   skillsOpenFolder: () => ipcRenderer.invoke('skills:open-folder'),
+  getBackgroundSettings: () => ipcRenderer.invoke('get-background-settings'),
+  setBackgroundSetting: (key: string, value: boolean) => ipcRenderer.invoke('set-background-setting', key, value),
 
   // Phone Mirror — stream live AI responses to a paired phone over the LAN.
   phoneMirrorGetInfo: () => ipcRenderer.invoke('phone-mirror:get-info'),

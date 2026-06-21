@@ -151,7 +151,7 @@ export class ModelSelectorWindowHelper {
             // capture handler (NativelyInterface.tsx) dispatching the
             // `model-selector:close-if-open` IPC, guarded against the
             // toggle button via `data-model-selector-toggle`.
-            ...(isMac ? { type: 'panel' as const } : {}),
+            ...(isMac ? { type: 'panel' as const } : process.platform === 'win32' ? { type: 'toolbar' as const } : {}),
         }
 
         if (x !== undefined && y !== undefined) {
@@ -160,6 +160,25 @@ export class ModelSelectorWindowHelper {
         }
 
         this.window = new BrowserWindow(windowSettings)
+
+        // Ensure model selector window consistently skips the taskbar on Windows/other platforms
+        const applyModelSelectorSkipTaskbar = () => {
+            if (this.window && !this.window.isDestroyed()) {
+                this.window.setSkipTaskbar(true);
+                if (process.platform === 'win32') {
+                    setTimeout(() => {
+                        if (this.window && !this.window.isDestroyed()) {
+                            this.window.setSkipTaskbar(true);
+                        }
+                    }, 100);
+                }
+            }
+        };
+        this.window.on('restore', applyModelSelectorSkipTaskbar);
+        this.window.on('show', applyModelSelectorSkipTaskbar);
+        this.window.on('focus', applyModelSelectorSkipTaskbar);
+        this.window.on('resize', applyModelSelectorSkipTaskbar);
+        this.window.on('move', applyModelSelectorSkipTaskbar);
 
         if (process.platform === "darwin") {
             // Initial defaults - will be updated in showWindow

@@ -106,6 +106,13 @@ export interface ElectronAPI {
   onDisguiseChanged: (callback: (mode: 'terminal' | 'settings' | 'activity' | 'none') => void) => () => void
   setOpenAtLogin: (open: boolean) => Promise<{ success: boolean; error?: string }>
   getOpenAtLogin: () => Promise<boolean>
+  getBackgroundSettings: () => Promise<{
+    hideFromTaskbar: boolean;
+    minimizeToTray: boolean;
+    startHidden: boolean;
+    backgroundMode: boolean;
+  }>;
+  setBackgroundSetting: (key: string, value: boolean) => Promise<{ success: boolean; error?: string }>;
   onSettingsVisibilityChange: (callback: (isVisible: boolean) => void) => () => void
   toggleSettingsWindow: (coords?: { x: number; y: number }) => Promise<void>
   closeSettingsWindow: () => Promise<void>

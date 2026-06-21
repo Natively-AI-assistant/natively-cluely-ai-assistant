@@ -182,7 +182,7 @@ export class SettingsWindowHelper {
             // applyStealthToWindow without the underlying panel type, which is
             // why focus theft persisted. NSPanel + type:'panel' = the same
             // Spotlight/Alfred mechanism the overlay uses.
-            ...(isMac ? { type: 'panel' as const } : {}),
+            ...(isMac ? { type: 'panel' as const } : process.platform === 'win32' ? { type: 'toolbar' as const } : {}),
         }
 
         if (x !== undefined && y !== undefined) {
@@ -191,6 +191,25 @@ export class SettingsWindowHelper {
         }
 
         this.settingsWindow = new BrowserWindow(windowSettings)
+
+        // Ensure settings window consistently skips the taskbar on Windows/other platforms
+        const applySettingsSkipTaskbar = () => {
+            if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
+                this.settingsWindow.setSkipTaskbar(true);
+                if (process.platform === 'win32') {
+                    setTimeout(() => {
+                        if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
+                            this.settingsWindow.setSkipTaskbar(true);
+                        }
+                    }, 100);
+                }
+            }
+        };
+        this.settingsWindow.on('restore', applySettingsSkipTaskbar);
+        this.settingsWindow.on('show', applySettingsSkipTaskbar);
+        this.settingsWindow.on('focus', applySettingsSkipTaskbar);
+        this.settingsWindow.on('resize', applySettingsSkipTaskbar);
+        this.settingsWindow.on('move', applySettingsSkipTaskbar);
 
         if (process.platform === "darwin") {
             this.settingsWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })

@@ -388,6 +388,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     const [showVerboseToast, setShowVerboseToast] = useState(false);
     const verboseToastTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    const [hideFromTaskbar, setHideFromTaskbar] = useState(false);
+    const [minimizeToTray, setMinimizeToTray] = useState(false);
+    const [startHidden, setStartHidden] = useState(false);
+    const [backgroundMode, setBackgroundMode] = useState(true);
+
     // Close dropdown when clicking outside
     // Sync with global state changes
     useEffect(() => {
@@ -1176,6 +1181,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
             if (window.electronAPI?.getOpenAtLogin) {
                 window.electronAPI.getOpenAtLogin().then(setOpenOnLogin);
             }
+            if (window.electronAPI?.getBackgroundSettings) {
+                window.electronAPI.getBackgroundSettings().then((settings: any) => {
+                    setHideFromTaskbar(settings.hideFromTaskbar);
+                    setMinimizeToTray(settings.minimizeToTray);
+                    setStartHidden(settings.startHidden);
+                    setBackgroundMode(settings.backgroundMode);
+                }).catch(() => { });
+            }
             if (window.electronAPI?.getThemeMode) {
                 window.electronAPI.getThemeMode().then(({ mode }) => setThemeMode(mode));
             }
@@ -1537,6 +1550,122 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         className={`w-11 h-6 rounded-full relative transition-colors ${openOnLogin ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                     >
                                                         <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${openOnLogin ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                    </div>
+                                                </div>
+
+                                                {/* Hide Natively from taskbar */}
+                                                <div className="flex items-center justify-between px-4 py-3">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
+                                                            hideFromTaskbar
+                                                                ? isLight
+                                                                    ? 'border-indigo-500/30 text-indigo-600 bg-indigo-50/50'
+                                                                    : 'border-indigo-500/40 text-indigo-400 bg-indigo-500/5'
+                                                                : 'border-border-subtle text-text-tertiary'
+                                                        }`}>
+                                                            <Monitor size={20} />
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="text-sm font-bold text-text-primary">Hide Natively from taskbar</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">Hide the main window from the Windows/macOS/Linux taskbar when enabled</p>
+                                                        </div>
+                                                    </div>
+                                                    <div
+                                                        onClick={() => {
+                                                            const newState = !hideFromTaskbar;
+                                                            setHideFromTaskbar(newState);
+                                                            window.electronAPI?.setBackgroundSetting?.('hideFromTaskbar', newState);
+                                                        }}
+                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer ${hideFromTaskbar ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                    >
+                                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${hideFromTaskbar ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                    </div>
+                                                </div>
+
+                                                {/* Minimize to system tray */}
+                                                <div className="flex items-center justify-between px-4 py-3">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
+                                                            minimizeToTray
+                                                                ? isLight
+                                                                    ? 'border-indigo-500/30 text-indigo-600 bg-indigo-50/50'
+                                                                    : 'border-indigo-500/40 text-indigo-400 bg-indigo-500/5'
+                                                                : 'border-border-subtle text-text-tertiary'
+                                                        }`}>
+                                                            <ArrowDown size={20} />
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="text-sm font-bold text-text-primary">Minimize to system tray</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">Hide window to system tray instead of taskbar when minimized</p>
+                                                        </div>
+                                                    </div>
+                                                    <div
+                                                        onClick={() => {
+                                                            const newState = !minimizeToTray;
+                                                            setMinimizeToTray(newState);
+                                                            window.electronAPI?.setBackgroundSetting?.('minimizeToTray', newState);
+                                                        }}
+                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer ${minimizeToTray ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                    >
+                                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${minimizeToTray ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                    </div>
+                                                </div>
+
+                                                {/* Start hidden in system tray */}
+                                                <div className="flex items-center justify-between px-4 py-3">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
+                                                            startHidden
+                                                                ? isLight
+                                                                    ? 'border-indigo-500/30 text-indigo-600 bg-indigo-50/50'
+                                                                    : 'border-indigo-500/40 text-indigo-400 bg-indigo-500/5'
+                                                                : 'border-border-subtle text-text-tertiary'
+                                                        }`}>
+                                                            <Ghost size={20} />
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="text-sm font-bold text-text-primary">Start hidden in system tray</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">Launch the app hidden in the system tray when starting</p>
+                                                        </div>
+                                                    </div>
+                                                    <div
+                                                        onClick={() => {
+                                                            const newState = !startHidden;
+                                                            setStartHidden(newState);
+                                                            window.electronAPI?.setBackgroundSetting?.('startHidden', newState);
+                                                        }}
+                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer ${startHidden ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                    >
+                                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${startHidden ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                    </div>
+                                                </div>
+
+                                                {/* Run in background when closed */}
+                                                <div className="flex items-center justify-between px-4 py-3">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
+                                                            backgroundMode
+                                                                ? isLight
+                                                                    ? 'border-indigo-500/30 text-indigo-600 bg-indigo-50/50'
+                                                                    : 'border-indigo-500/40 text-indigo-400 bg-indigo-500/5'
+                                                                : 'border-border-subtle text-text-tertiary'
+                                                        }`}>
+                                                            <Settings size={20} />
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="text-sm font-bold text-text-primary">Run in background when closed</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">Closing the window will keep the app running in the background</p>
+                                                        </div>
+                                                    </div>
+                                                    <div
+                                                        onClick={() => {
+                                                            const newState = !backgroundMode;
+                                                            setBackgroundMode(newState);
+                                                            window.electronAPI?.setBackgroundSetting?.('backgroundMode', newState);
+                                                        }}
+                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer ${backgroundMode ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                    >
+                                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${backgroundMode ? 'translate-x-5' : 'translate-x-0'}`} />
                                                     </div>
                                                 </div>
 

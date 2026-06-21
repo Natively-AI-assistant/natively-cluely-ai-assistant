@@ -8,6 +8,10 @@ export interface AppSettings {
     // can be moved here from CredentialsManager to allow early boot access.
     isUndetectable?: boolean;
     disguiseMode?: 'terminal' | 'settings' | 'activity' | 'none';
+    hideFromTaskbar?: boolean;
+    minimizeToTray?: boolean;
+    startHidden?: boolean;
+    backgroundMode?: boolean;
     verboseLogging?: boolean;
     actionButtonMode?: 'recap' | 'brainstorm';
     groqFastTextMode?: boolean;

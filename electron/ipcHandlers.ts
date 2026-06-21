@@ -2463,6 +2463,43 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: false, error: 'invalid_key' };
   });
 
+  safeHandle('get-background-settings', async () => {
+    const sm = SettingsManager.getInstance();
+    return {
+      hideFromTaskbar: sm.get('hideFromTaskbar') ?? false,
+      minimizeToTray: sm.get('minimizeToTray') ?? false,
+      startHidden: sm.get('startHidden') ?? false,
+      backgroundMode: sm.get('backgroundMode') ?? true,
+    };
+  });
+
+  safeHandle('set-background-setting', async (_, key: string, value: boolean) => {
+    if (['hideFromTaskbar', 'minimizeToTray', 'startHidden', 'backgroundMode'].includes(key)) {
+      if (typeof value !== 'boolean') {
+        return { success: false, error: 'invalid_value_type' };
+      }
+      SettingsManager.getInstance().set(key as any, value);
+      
+      if (key === 'hideFromTaskbar') {
+        const launcher = appState.getWindowHelper().getLauncherWindow();
+        if (launcher && !launcher.isDestroyed()) {
+          launcher.setSkipTaskbar(value);
+          // On Windows, dynamically changing skipTaskbar while the window is visible
+          // does not immediately refresh the taskbar unless the window visibility status flips.
+          if (process.platform === 'win32') {
+            const isVisible = launcher.isVisible();
+            if (isVisible) {
+              launcher.hide();
+              launcher.show();
+            }
+          }
+        }
+      }
+      return { success: true };
+    }
+    return { success: false, error: 'invalid_key' };
+  });
+
   safeHandle('get-log-file-path', async () => {
     try {
       return path.join(app.getPath('documents'), 'natively_debug.log');

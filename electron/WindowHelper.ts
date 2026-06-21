@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppState } from './main';
 import { KeybindManager } from './services/KeybindManager';
+import { SettingsManager } from './services/SettingsManager';
 
 const isEnvDev = process.env.NODE_ENV === 'development';
 const isPackaged = app.isPackaged;
@@ -285,6 +286,7 @@ export class WindowHelper {
 
     // --- 1. Create Launcher Window ---
     const isMac = process.platform === 'darwin';
+    const isWin = process.platform === 'win32';
 
     const launcherSettings: Electron.BrowserWindowConstructorOptions = {
       width: width,
@@ -293,6 +295,8 @@ export class WindowHelper {
       y: y,
       minWidth: 600,
       minHeight: 400,
+      skipTaskbar: (SettingsManager.getInstance().get('hideFromTaskbar') ?? false) || (SettingsManager.getInstance().get('isUndetectable') ?? false),
+      ...(isWin && ((SettingsManager.getInstance().get('hideFromTaskbar') ?? false) || (SettingsManager.getInstance().get('isUndetectable') ?? false)) ? { type: 'toolbar' as const } : {}),
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -420,11 +424,30 @@ export class WindowHelper {
       // in the dock / menu bar / screen-share, so the user's foreground app
       // stays "in front." Required for the chat:focusInput stealth-typing path.
       // Windows/Linux fall back to a regular focusable window.
-      ...(isMac ? { type: 'panel' as const } : {}),
+      ...(isMac ? { type: 'panel' as const } : isWin ? { type: 'toolbar' as const } : {}),
     };
 
     this.overlayWindow = new BrowserWindow(overlaySettings);
     this.overlayWindow.setContentProtection(this.contentProtection);
+
+    // Ensure overlay window consistently skips the taskbar on Windows/other platforms
+    const applyOverlaySkipTaskbar = () => {
+      if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+        this.overlayWindow.setSkipTaskbar(true);
+        if (process.platform === 'win32') {
+          setTimeout(() => {
+            if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+              this.overlayWindow.setSkipTaskbar(true);
+            }
+          }, 100);
+        }
+      }
+    };
+    this.overlayWindow.on('restore', applyOverlaySkipTaskbar);
+    this.overlayWindow.on('show', applyOverlaySkipTaskbar);
+    this.overlayWindow.on('focus', applyOverlaySkipTaskbar);
+    this.overlayWindow.on('resize', applyOverlaySkipTaskbar);
+    this.overlayWindow.on('move', applyOverlaySkipTaskbar);
 
     // Register the overlay as the sole recipient of CGEventTap captured-key
     // broadcasts. Without this, captured keystrokes fan out to ALL windows
@@ -497,8 +520,17 @@ export class WindowHelper {
 
     // --- 3. Startup Sequence ---
     this.launcherWindow.once('ready-to-show', () => {
-      this.switchToLauncher();
-      this.isWindowVisible = true;
+      const startHidden = SettingsManager.getInstance().get('startHidden') ?? false;
+      if (startHidden) {
+        console.log('[WindowHelper] startHidden is true. Keeping launcher hidden.');
+        this.isWindowVisible = false;
+        if (!this.appState.getUndetectable()) {
+          this.appState.showTray();
+        }
+      } else {
+        this.switchToLauncher();
+        this.isWindowVisible = true;
+      }
     });
 
     this.setupWindowListeners();
@@ -506,6 +538,31 @@ export class WindowHelper {
 
   private setupWindowListeners(): void {
     if (!this.launcherWindow) return;
+
+    // Ensure skipTaskbar state is consistently applied on Windows/other platforms
+    // during state transitions (e.g., when the window is restored, shown, or focused).
+    const applySkipTaskbar = () => {
+      if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
+        const skip = (SettingsManager.getInstance().get('hideFromTaskbar') ?? false) || this.appState.getUndetectable();
+        this.launcherWindow.setSkipTaskbar(skip);
+        
+        // On Windows, taskbar registration can happen asynchronously during show/restore/focus transitions.
+        // Deferring the call ensures the OS has completed its re-evaluation and respects skipTaskbar.
+        if (process.platform === 'win32') {
+          setTimeout(() => {
+            if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
+              this.launcherWindow.setSkipTaskbar(skip);
+            }
+          }, 100);
+        }
+      }
+    };
+
+    this.launcherWindow.on('restore', applySkipTaskbar);
+    this.launcherWindow.on('show', applySkipTaskbar);
+    this.launcherWindow.on('focus', applySkipTaskbar);
+    this.launcherWindow.on('resize', applySkipTaskbar);
+    this.launcherWindow.on('move', applySkipTaskbar);
 
     // Suppress Windows system context menu on right-click (title bar)
     this.launcherWindow.on('system-context-menu', (e, point) => {
@@ -531,17 +588,32 @@ export class WindowHelper {
       }
     });
 
-    // On Windows/Linux: intercept close and hide to tray instead of quitting,
-    // unless the app is actually quitting (e.g. from tray "Quit" menu).
-    if (process.platform !== 'darwin') {
-      this.launcherWindow.on('close', (e) => {
+    this.launcherWindow.on('minimize', () => {
+      const minimizeToTray = SettingsManager.getInstance().get('minimizeToTray') ?? false;
+      if (minimizeToTray) {
+        this.launcherWindow?.hide();
+        this.isWindowVisible = false;
+      }
+    });
+
+    // Intercept close behavior based on backgroundMode preference
+    this.launcherWindow.on('close', (e) => {
+      const backgroundMode = SettingsManager.getInstance().get('backgroundMode') ?? true;
+      if (backgroundMode) {
         if (!this.appState.isQuitting()) {
           e.preventDefault();
           this.launcherWindow?.hide();
           this.isWindowVisible = false;
         }
-      });
+      } else {
+        if (!this.appState.isQuitting()) {
+          this.appState.setQuitting(true);
+          app.quit();
+        }
+      }
+    });
 
+    if (process.platform !== 'darwin') {
       // Sync maximize state to renderer so WindowControls stays in sync (Windows/Linux only)
       this.launcherWindow.on('maximize', () => {
         this.launcherWindow?.webContents.send('window-maximized-changed', true);
@@ -795,6 +867,9 @@ export class WindowHelper {
       // In undetectable mode, show without stealing focus from the foreground app.
       this.switchToOverlay(stealthShow ? true : undefined);
     } else {
+      if (this.launcherWindow && !this.launcherWindow.isDestroyed() && this.launcherWindow.isMinimized()) {
+        this.launcherWindow.restore();
+      }
       this.switchToLauncher(stealthShow ? true : undefined);
       this.launcherWindow?.center();
     }
@@ -925,6 +1000,9 @@ export class WindowHelper {
 
     // Show Launcher FIRST
     if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
+      if (this.launcherWindow.isMinimized()) {
+        this.launcherWindow.restore();
+      }
       if (process.platform === 'win32' && this.contentProtection) {
         // Opacity Shield: Show at 0 opacity first
         this.launcherWindow.setOpacity(0);

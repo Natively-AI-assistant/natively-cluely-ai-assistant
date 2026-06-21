@@ -32,12 +32,12 @@ const CROPPER_CONFIG = {
  * Type guard to validate IPC message data as Electron.Rectangle
  */
 function isRectangle(obj: unknown): obj is Electron.Rectangle {
-    return typeof obj === 'object' && 
-           obj !== null && 
-           'x' in obj && 
-           'y' in obj && 
-           'width' in obj && 
-           'height' in obj;
+    return typeof obj === 'object' &&
+        obj !== null &&
+        'x' in obj &&
+        'y' in obj &&
+        'width' in obj &&
+        'height' in obj;
 }
 
 /**
@@ -49,18 +49,18 @@ function isRectangle(obj: unknown): obj is Electron.Rectangle {
  */
 function getCombinedDisplayBounds(): Electron.Rectangle {
     const displays = screen.getAllDisplays();
-    
+
     if (displays.length === 0) {
         // Fallback to primary if no displays found
         const primary = screen.getPrimaryDisplay();
         return primary.bounds;
     }
-    
+
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
     let maxY = -Infinity;
-    
+
     for (const display of displays) {
         const { x, y, width, height } = display.bounds;
         minX = Math.min(minX, x);
@@ -68,7 +68,7 @@ function getCombinedDisplayBounds(): Electron.Rectangle {
         maxX = Math.max(maxX, x + width);
         maxY = Math.max(maxY, y + height);
     }
-    
+
     return {
         x: minX,
         y: minY,
@@ -183,14 +183,14 @@ export class CropperWindowHelper {
         const combinedBounds = getCombinedDisplayBounds();
         const combinedRight = combinedBounds.x + combinedBounds.width;
         const combinedBottom = combinedBounds.y + combinedBounds.height;
-        
+
         // Also check that at least part of selection is on a visible display
         const selectionRight = x + width;
         const selectionBottom = y + height;
-        
-        if (x < combinedBounds.x || y < combinedBounds.y || 
+
+        if (x < combinedBounds.x || y < combinedBounds.y ||
             selectionRight > combinedRight || selectionBottom > combinedBottom) {
-            console.warn('[CropperWindowHelper] Bounds exceed combined multi-monitor viewport', { 
+            console.warn('[CropperWindowHelper] Bounds exceed combined multi-monitor viewport', {
                 selection: { x, y, width, height },
                 combinedViewport: combinedBounds
             });
@@ -317,7 +317,7 @@ export class CropperWindowHelper {
                 // Get cursor position and display info at the moment cropper is shown
                 const cursorPosition = screen.getCursorScreenPoint();
                 const displays = screen.getAllDisplays();
-                
+
                 // Find which display contains the cursor
                 let targetDisplay: Electron.Display | null = null;
                 for (const display of displays) {
@@ -328,7 +328,7 @@ export class CropperWindowHelper {
                         break;
                     }
                 }
-                
+
                 // Calculate HUD position: center top of the display where cursor was
                 const hudPosition = targetDisplay ? {
                     x: targetDisplay.bounds.x + Math.round(targetDisplay.bounds.width / 2),
@@ -337,10 +337,10 @@ export class CropperWindowHelper {
                     x: cursorPosition.x,
                     y: cursorPosition.y
                 };
-                
+
                 console.log(`[CropperWindowHelper] Cursor at ${JSON.stringify(cursorPosition)}, display bounds: ${targetDisplay ? JSON.stringify(targetDisplay.bounds) : 'unknown'}`);
                 console.log(`[CropperWindowHelper] HUD position: ${JSON.stringify(hudPosition)}`);
-                
+
                 // Send reset with HUD position
                 this.cropperWindow.webContents.send('reset-cropper', { hudPosition });
                 this.applyOpacityShield();
@@ -429,11 +429,31 @@ export class CropperWindowHelper {
         // macOS uses fullscreenable + visibleOnAllWorkspaces instead
         if (process.platform === 'win32') {
             (windowSettings as any).enableLargerThanScreen = true;
+            windowSettings.type = 'toolbar';
         } else {
             windowSettings.type = CROPPER_CONFIG.WINDOW_TYPE;
         }
 
         this.cropperWindow = new BrowserWindow(windowSettings)
+
+        // Ensure cropper window consistently skips the taskbar on Windows/other platforms
+        const applyCropperSkipTaskbar = () => {
+            if (this.cropperWindow && !this.cropperWindow.isDestroyed()) {
+                this.cropperWindow.setSkipTaskbar(true);
+                if (process.platform === 'win32') {
+                    setTimeout(() => {
+                        if (this.cropperWindow && !this.cropperWindow.isDestroyed()) {
+                            this.cropperWindow.setSkipTaskbar(true);
+                        }
+                    }, 100);
+                }
+            }
+        };
+        this.cropperWindow.on('restore', applyCropperSkipTaskbar);
+        this.cropperWindow.on('show', applyCropperSkipTaskbar);
+        this.cropperWindow.on('focus', applyCropperSkipTaskbar);
+        this.cropperWindow.on('resize', applyCropperSkipTaskbar);
+        this.cropperWindow.on('move', applyCropperSkipTaskbar);
 
         // Apply NSPanel stealth attributes (becomesKeyOnlyIfNeeded +
         // _setPreventsActivation: SPI + sharingType=None + collectionBehavior).
@@ -537,7 +557,7 @@ export class CropperWindowHelper {
      */
     private async loadCropperUrlWithRetry(): Promise<void> {
         const cropperUrl = `${startUrl}?window=cropper`;
-        
+
         for (let attempt = 1; attempt <= CROPPER_CONFIG.MAX_LOAD_RETRIES; attempt++) {
             try {
                 await this.cropperWindow!.loadURL(cropperUrl);
@@ -545,14 +565,14 @@ export class CropperWindowHelper {
                 return;
             } catch (error) {
                 console.error(`[CropperWindowHelper] Failed to load URL (attempt ${attempt}/${CROPPER_CONFIG.MAX_LOAD_RETRIES}):`, error);
-                
+
                 if (attempt === CROPPER_CONFIG.MAX_LOAD_RETRIES) {
                     console.error('[CropperWindowHelper] All load attempts failed');
                     this.rejectCurrentSelection(new Error('Failed to load cropper UI after multiple attempts'));
                     this.hideOrClose();
                     throw error;
                 }
-                
+
                 // Wait before retry with exponential backoff
                 const delay = CROPPER_CONFIG.LOAD_RETRY_DELAY_MS * attempt;
                 console.log(`[CropperWindowHelper] Retrying in ${delay}ms...`);
