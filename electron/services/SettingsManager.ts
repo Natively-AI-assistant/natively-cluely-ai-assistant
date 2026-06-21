@@ -28,6 +28,11 @@ export interface AppSettings {
     hindsightAutoStart?: boolean;
     hindsightServerCommand?: string;
     hindsightLlmProvider?: string;
+    // Linux-only: set when the user dismisses the "Running on Wayland"
+    // notice dialog (selecting "Don't show again"). Persisted across
+    // launches so we don't pester users who've already acknowledged the
+    // Wayland limitation.
+    waylandNoticeDismissed?: boolean;
     knowledgeMode?: boolean;
     phoneMirrorEnabled?: boolean;
     phoneMirrorExposeOnLan?: boolean;

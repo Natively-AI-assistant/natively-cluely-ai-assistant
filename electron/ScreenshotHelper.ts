@@ -609,6 +609,35 @@ export class ScreenshotHelper {
     throw new Error(`Unsupported platform for screenshots: ${platform}`);
   }
 
+  /**
+   * Linux screenshot backend selector.
+   *
+   * On Wayland, `desktopCapturer` (enabled via `WebRTCPipeWireCapturer` feature
+   * flag in main.ts) pops up the xdg-desktop-portal dialog and returns the
+   * screen content. This is the only correct screenshot path for non-GNOME
+   * Wayland compositors (KDE, Sway, Hyprland, COSMIC, etc.) — shell tools like
+   * `gnome-screenshot`/`scrot`/`import` fail silently or return black frames.
+   *
+   * On X11, shell tools (`gnome-screenshot -f`/`scrot`/`import`) are preferred
+   * because they're faster (no dialog) and produce clean full-screen captures.
+   *
+   * Users can override the auto-detection via NATIVELY_SCREENSHOT_TOOL env var:
+   *   - `desktopCapturer` — force Electron desktopCapturer (Wayland style)
+   *   - `shell`           — force gnome-screenshot/scrot/import
+   *   - `auto` (default)  — desktopCapturer on Wayland, shell on X11
+   */
+  private shouldUseDesktopCapturerOnLinux(): boolean {
+    if (process.platform !== "linux") return false;
+    const override = (process.env.NATIVELY_SCREENSHOT_TOOL ?? "auto").toLowerCase();
+    if (override === "desktopcapturer" || override === "capturer") return true;
+    if (override === "shell") return false;
+    // Auto: desktopCapturer on Wayland, shell on X11
+    return (
+      process.env.XDG_SESSION_TYPE === "wayland" ||
+      (!!process.env.WAYLAND_DISPLAY && !process.env.DISPLAY)
+    );
+  }
+
   public async takeScreenshot(preferredDisplay?: Electron.Display): Promise<string> {
     try {
       console.log('[ScreenshotHelper] Taking screenshot...');
@@ -622,7 +651,12 @@ export class ScreenshotHelper {
           await this.captureWithDesktopCapturer(screenshotPath, undefined, preferredDisplay);
         } else if (process.platform === 'win32') {
           await this.captureWithDesktopCapturer(screenshotPath);
+        } else if (this.shouldUseDesktopCapturerOnLinux()) {
+          // Wayland: desktopCapturer uses PipeWire (enabled via WebRTCPipeWireCapturer
+          // feature flag in main.ts). Pops up the portal dialog for screen selection.
+          await this.captureWithDesktopCapturer(screenshotPath, undefined, preferredDisplay);
         } else {
+          // X11: shell tools are faster (no dialog, direct X11 capture)
           await shellExecAsync(this.getScreenshotCommand(screenshotPath, false))
         }
 
@@ -690,13 +724,22 @@ export class ScreenshotHelper {
           await this.captureWithDesktopCapturer(screenshotPath, captureArea);
         }
       } else if (process.platform === 'linux') {
-        // Linux: use interactive selection command
+        // Linux: prefer desktopCapturer on Wayland (uses PipeWire portal for
+        // interactive screen selection), shell tools on X11 (gnome-screenshot
+        // -a gives interactive crop selection directly).
         console.log('[ScreenshotHelper] Using interactive selection');
-        try {
-          await shellExecAsync(this.getScreenshotCommand(screenshotPath, true))
-        } catch (e: any) {
-          console.warn('[ScreenshotHelper] User cancelled selection or error occurred:', e);
-          throw new Error("Selection cancelled")
+        if (this.shouldUseDesktopCapturerOnLinux()) {
+          // Wayland: desktopCapturer via PipeWire. User picks a screen in the
+          // portal dialog; we capture the full screen and let the cropper
+          // window handle the selection.
+          await this.captureWithDesktopCapturer(screenshotPath);
+        } else {
+          try {
+            await shellExecAsync(this.getScreenshotCommand(screenshotPath, true))
+          } catch (e: any) {
+            console.warn('[ScreenshotHelper] User cancelled selection or error occurred:', e);
+            throw new Error("Selection cancelled")
+          }
         }
       } else {
         throw new Error('Selection bounds are required for this platform');

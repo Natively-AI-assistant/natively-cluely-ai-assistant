@@ -6,6 +6,40 @@ import dns from "dns"
 import { SystemAudioHealthClassifier } from "./audio/systemAudioHealthClassifier.mjs"
 import { autoUpdater } from "electron-updater"
 
+// Linux / Wayland runtime configuration.
+// These MUST run before app.whenReady() — command-line switches are only
+// honored if they're set before the underlying platform integration is
+// initialized. See https://www.electronjs.org/docs/latest/api/command-line-switches
+if (process.platform === "linux") {
+  // XWayland auto-fallback: if the user wants the "above fullscreen Zoom" UX
+  // (which Wayland cannot provide because of the compositor security model),
+  // they can set NATIVELY_USE_XWAYLAND=1 in their environment. This forces
+  // Electron to run under XWayland, which fully supports alwaysOnTop. The
+  // same flag can be passed via CLI: `./natively --ozone-platform=x11`.
+  const forceXWayland =
+    process.env.NATIVELY_USE_XWAYLAND === "1" ||
+    process.env.NATIVELY_USE_XWAYLAND === "true";
+
+  // Use Ozone (Chromium's Linux platform abstraction). With ozone-platform-hint
+  // set to "auto", Electron picks Wayland when WAYLAND_DISPLAY is set and X11
+  // otherwise. Setting ozone-platform explicitly overrides this.
+  if (forceXWayland) {
+    app.commandLine.appendSwitch("ozone-platform", "x11")
+  } else {
+    app.commandLine.appendSwitch("ozone-platform-hint", "auto")
+  }
+  app.commandLine.appendSwitch("enable-features", "UseOzonePlatform,WaylandWindowDecorations,WebRTCPipeWireCapturer")
+  // PipeWire screen capture is required for getDisplayMedia on Wayland. The
+  // WebRTCPipeWireCapturer feature flag enables that path. Without it,
+  // desktopCapturer returns nothing on Wayland sessions.
+  // Keep GPU acceleration on but disable the GPU sandbox under XWayland —
+  // it's flaky in some nested setups (X11-in-Wayland) and adds 200ms latency
+  // for the first window paint.
+  if (process.env.NATIVELY_DISABLE_GPU_SANDBOX === "1") {
+    app.commandLine.appendSwitch("disable-gpu-sandbox")
+  }
+}
+
 // Override global dns.lookup to resolve macOS system resolver issues with api.natively.software
 const originalLookup = dns.lookup;
 dns.lookup = function(hostname: any, options: any, callback: any) {
@@ -517,6 +551,26 @@ export class AppState {
   private isMeetingActive: boolean = false; // Guard for session state leaks
   private _meetingGeneration = 0;
   private _audioInitPromise: Promise<void> | null = null;
+
+  // Platform info (Linux session detection — see SessionTypeResolver below).
+  // Exposed as readonly so consumers can branch on isLinux/isWayland without
+  // re-querying the env on every frame.
+  public readonly platform: NodeJS.Platform = process.platform;
+  public readonly isLinux: boolean = process.platform === "linux";
+  public readonly sessionType: "wayland" | "x11" | "unsupported" = (() => {
+    if (process.platform !== "linux") return "unsupported" as const;
+    const t = (process.env.XDG_SESSION_TYPE ?? "").toLowerCase();
+    if (t === "wayland") return "wayland" as const;
+    if (t === "x11") return "x11" as const;
+    // No XDG_SESSION_TYPE (rare: e.g. TTY-only Linux session) — fall back to
+    // checking WAYLAND_DISPLAY/DISPLAY env vars as a last resort.
+    if (process.env.WAYLAND_DISPLAY) return "wayland" as const;
+    if (process.env.DISPLAY) return "x11" as const;
+    return "unsupported" as const;
+  })();
+  public readonly isWayland: boolean = this.sessionType === "wayland";
+  public readonly isX11: boolean = this.sessionType === "x11";
+
   // AbortController handle for the in-flight startMeeting() audio init, so endMeeting()
   // can cancel it (signal.aborted short-circuits the init's isCurrentMeeting() guards)
   // and await its completion before tearing down captures — preventing a fresh capture

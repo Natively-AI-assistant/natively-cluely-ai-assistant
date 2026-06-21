@@ -24,6 +24,10 @@ webrtc-vad = "0.4"
 # Zero-copy reinterpret of &[i16] as &[u8] for napi Buffer hand-off.
 # Replaces a per-chunk per-sample to_le_bytes loop in the DSP hot path.
 bytemuck = "1"
+# tracing is used by all platforms (macos, windows, linux) for structured
+# logging of capture thread lifecycle events. Was previously scoped to the
+# Windows target cfg, which silently broke when linux.rs was added.
+tracing = "0.1.44"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cidre = { version = "0.11.10", features = ["ca", "cm", "av", "cat", "dispatch", "ns", "sc", "cf", "blocks", "objc"] }
@@ -46,4 +50,12 @@ core-foundation = "0.10"
 [target.'cfg(target_os = "windows")'.dependencies]
 wasapi = "0.13.0"
 windows = { version = "0.52.0", features = ["Win32_Media_Audio", "Win32_System_Com", "Win32_System_Threading"] }
-tracing = "0.1.44"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# PulseAudio bindings (libpulse-sys is pulled in transitively for the FFI).
+# Works with both native PulseAudio and PipeWire's pipewire-pulse compatibility
+# layer, so the same code covers Ubuntu 22.04+, Fedora Workstation, and any
+# legacy PulseAudio install. System audio is captured via a monitor source
+# stream on the default sink (the same trick WASAPI uses with loopback on
+# Windows). Requires libpulse-dev (libpulse.so + headers) at build time.
+libpulse-binding = "2.30"
