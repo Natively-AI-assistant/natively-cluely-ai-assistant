@@ -228,9 +228,10 @@ export function validateUrlForSsrf(urlString: string): { isValid: boolean; reaso
         return { isValid: false, reason: 'Path traversal sequences are not allowed' };
     }
 
-    // Require HTTPS for external URLs (allow http://localhost for dev testing only)
-    if (url.protocol !== 'https:' && !hostname.startsWith('127.')) {
-        return { isValid: false, reason: 'Only HTTPS URLs are allowed (except localhost)' };
+    // Require HTTPS for external URLs. All loopback/localhost hosts are already
+    // rejected above, so no http exemption is needed here.
+    if (url.protocol !== 'https:') {
+        return { isValid: false, reason: 'Only HTTPS URLs are allowed' };
     }
 
     return { isValid: true };
