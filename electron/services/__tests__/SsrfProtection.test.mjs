@@ -132,3 +132,20 @@ test('blocked SSRF hosts are explicitly rejected', () => {
 
   assert.ok(hasBlockedHosts || hasIPRangeValidation, 'Should block SSRF targets: localhost, private ranges, link-local');
 });
+
+test('loopback guard covers the full 127.0.0.0/8 range, not just 127.0.0.1', () => {
+  const curlUtils = read('electron/utils/curlUtils.ts');
+
+  // Locate the branch that rejects loopback addresses.
+  const loopbackIdx = curlUtils.indexOf("'Loopback addresses are not allowed'");
+  assert.ok(loopbackIdx >= 0, 'loopback rejection should exist');
+
+  // The guard preceding it must match the whole 127.0.0.0/8 range (e.g. via
+  // hostname.startsWith('127.')). A check limited to the literal '127.0.0.1'
+  // would let 127.0.0.2 and other in-range loopback addresses through.
+  const guard = curlUtils.slice(curlUtils.lastIndexOf('if (', loopbackIdx), loopbackIdx);
+  assert.ok(
+    /startsWith\(\s*['"]127\.['"]\s*\)/.test(guard),
+    'loopback guard should match the entire 127.0.0.0/8 range (e.g. hostname.startsWith("127."))'
+  );
+});

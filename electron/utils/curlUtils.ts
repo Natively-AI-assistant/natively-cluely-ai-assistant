@@ -193,8 +193,9 @@ export function validateUrlForSsrf(urlString: string): { isValid: boolean; reaso
 
     const hostname = url.hostname.toLowerCase();
 
-    // Block localhost variants
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '0.0.0.0') {
+    // Block localhost variants (the entire 127.0.0.0/8 range is loopback, not
+    // just 127.0.0.1 — e.g. 127.0.0.2 also routes to the local machine).
+    if (hostname === 'localhost' || hostname.startsWith('127.') || hostname === '::1' || hostname === '0.0.0.0') {
         return { isValid: false, reason: 'Loopback addresses are not allowed' };
     }
 
