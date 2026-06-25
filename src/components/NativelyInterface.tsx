@@ -3340,17 +3340,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // Optional: Trigger a small toast or state change for visual feedback
   }, []);
 
-  const handleWhatToSay = async (promptInstruction?: string | React.MouseEvent) => {
-    if (!tryBeginOverlayAction('what_to_say')) {
-      // The press was blocked because a prior 'what_to_say' is still streaming.
-      // Surface a brief hint instead of silently doing nothing, so a blocked
-      // press is never indistinguishable from a crash / dead hotkey.
-      setMessages((prev) => [
-        ...prev,
-        { id: genMessageId(), role: 'system', text: 'Still finishing the previous answer — one moment…' },
-      ]);
-      return;
-    }
+  const showWhatToSayBusyMessage = () => {
+    // The press was blocked because a prior 'what_to_say' is still streaming.
+    // Surface a brief hint instead of silently doing nothing, so a blocked
+    // press is never indistinguishable from a crash / dead hotkey.
+    setMessages((prev) => [
+      ...prev,
+      { id: genMessageId(), role: 'system', text: 'Still finishing the previous answer — one moment…' },
+    ]);
+  };
+
+  const runWhatToSay = async (promptInstruction?: string | React.MouseEvent) => {
     const dynamicPromptInstruction =
       typeof promptInstruction === 'string' ? promptInstruction : undefined;
     setIsExpanded(true);
@@ -3506,6 +3506,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     }
   };
 
+  const handleWhatToSay = async (promptInstruction?: string | React.MouseEvent) => {
+    if (!tryBeginOverlayAction('what_to_say')) {
+      showWhatToSayBusyMessage();
+      return;
+    }
+    await runWhatToSay(promptInstruction);
+  };
+
   const captureScreenshotForDynamicAction = async (): Promise<boolean> => {
     const data = await window.electronAPI.takeScreenshot();
     if (!data?.path) return false;
@@ -3516,8 +3524,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const handleDynamicActionAccept = async (action: DynamicActionPayload) => {
     if (dynamicActionAcceptInFlightRef.current) return;
     dynamicActionAcceptInFlightRef.current = true;
+    let shouldReleaseWhatToSay = false;
 
     try {
+      if (!tryBeginOverlayAction('what_to_say')) {
+        showWhatToSayBusyMessage();
+        return;
+      }
+      shouldReleaseWhatToSay = true;
+
       if (actionNeedsScreenCapture(action)) {
         try {
           const captured = await captureScreenshotForDynamicAction();
@@ -3548,8 +3563,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         }
       }
 
-      await handleWhatToSay(action.promptInstruction);
+      shouldReleaseWhatToSay = false;
+      await runWhatToSay(action.promptInstruction);
     } finally {
+      if (shouldReleaseWhatToSay) endOverlayAction('what_to_say');
       dynamicActionAcceptInFlightRef.current = false;
     }
   };

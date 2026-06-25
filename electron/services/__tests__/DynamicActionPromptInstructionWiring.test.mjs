@@ -16,7 +16,7 @@ test('dynamic action accept uses promptInstruction instead of display label/manu
   const mountSource = source.slice(mountStart, source.indexOf('/>', mountStart) + 2);
 
   assert.match(mountSource, /handleDynamicActionAccept\(action\)/);
-  assert.match(source, /await handleWhatToSay\(action\.promptInstruction\)/);
+  assert.match(source, /await runWhatToSay\(action\.promptInstruction\)/);
   assert.doesNotMatch(mountSource, /setInputValue\(action\.label\)/);
   assert.doesNotMatch(mountSource, /handleManualSubmitRef\.current/);
 });
@@ -33,7 +33,15 @@ test('screen-backed dynamic action captures and stages a screenshot before askin
   assert.match(handlerSource, /dynamicActionAcceptInFlightRef\.current = false/);
   assert.match(handlerSource, /actionNeedsScreenCapture\(action\)/);
   assert.match(handlerSource, /captureScreenshotForDynamicAction\(\)/);
-  assert.match(handlerSource, /await handleWhatToSay\(action\.promptInstruction\)/);
+  assert.match(handlerSource, /let shouldReleaseWhatToSay = false/);
+  assert.match(handlerSource, /tryBeginOverlayAction\('what_to_say'\)/);
+  assert.match(handlerSource, /if \(shouldReleaseWhatToSay\) endOverlayAction\('what_to_say'\)/);
+  assert.match(handlerSource, /await runWhatToSay\(action\.promptInstruction\)/);
+
+  const slotStart = handlerSource.indexOf("tryBeginOverlayAction('what_to_say')");
+  const captureCall = handlerSource.indexOf('captureScreenshotForDynamicAction()');
+  assert.ok(slotStart >= 0, 'dynamic action should claim the what_to_say slot');
+  assert.ok(captureCall > slotStart, 'screen capture should run only after the what_to_say slot is claimed');
 
   const captureStart = source.indexOf('const captureScreenshotForDynamicAction');
   assert.ok(captureStart >= 0, 'captureScreenshotForDynamicAction should exist');
@@ -50,13 +58,19 @@ test('screenshot attach stages pending ref so immediate What To Say forwards ima
   assert.match(attachSource, /pendingCaptureRef\.current = data/);
   assert.match(attachSource, /appendScreenshotAttachment\(prev, data\)/);
 
-  const wtaStart = source.indexOf('const handleWhatToSay');
-  assert.ok(wtaStart >= 0, 'handleWhatToSay should exist');
-  const wtaSource = source.slice(wtaStart, source.indexOf('const captureScreenshotForDynamicAction', wtaStart));
+  const runStart = source.indexOf('const runWhatToSay');
+  assert.ok(runStart >= 0, 'runWhatToSay should exist');
+  const wtaSource = source.slice(runStart, source.indexOf('const handleWhatToSay', runStart));
   assert.match(wtaSource, /const pending = pendingCaptureRef\.current/);
   assert.match(wtaSource, /mergePendingScreenshotAttachment\(attachedContext, pending\)/);
   assert.match(wtaSource, /if \(pending\) pendingCaptureRef\.current = null/);
   assert.match(wtaSource, /currentAttachments\.map\(\(s\) => s\.path\)/);
+
+  const handleStart = source.indexOf('const handleWhatToSay');
+  assert.ok(handleStart >= 0, 'handleWhatToSay should exist');
+  const handleSource = source.slice(handleStart, source.indexOf('const captureScreenshotForDynamicAction', handleStart));
+  assert.match(handleSource, /tryBeginOverlayAction\('what_to_say'\)/);
+  assert.match(handleSource, /await runWhatToSay\(promptInstruction\)/);
 
   const captureShortcutStart = source.indexOf('window.electronAPI.onCaptureAndProcess');
   assert.ok(captureShortcutStart >= 0, 'Capture & Process handler should exist');
