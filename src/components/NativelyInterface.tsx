@@ -1202,12 +1202,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const input = textInputRef.current;
     if (!input) return;
     input.style.height = 'auto';
+    const scrollHeight = input.scrollHeight;
     const nextHeight = Math.min(
-      Math.max(input.scrollHeight, CHAT_INPUT_MIN_HEIGHT_PX),
+      Math.max(scrollHeight, CHAT_INPUT_MIN_HEIGHT_PX),
       CHAT_INPUT_MAX_HEIGHT_PX,
     );
     input.style.height = `${nextHeight}px`;
-    input.style.overflowY = input.scrollHeight > CHAT_INPUT_MAX_HEIGHT_PX ? 'auto' : 'hidden';
+    input.style.overflowY = scrollHeight > CHAT_INPUT_MAX_HEIGHT_PX ? 'auto' : 'hidden';
   }, [inputValue]);
 
   // PERF: hoist ReactMarkdown `components` maps for every streaming intent
@@ -6275,7 +6276,7 @@ Provide only the answer, nothing else.`;
                     // the CGEventTap, so typing routes through that path.
                     onMouseDown={blockInputFocus}
                     readOnly={stealthTapActive}
-                    className={`w-full border focus:ring-1 rounded-xl pl-3 pr-10 py-2.5 min-h-[42px] max-h-28 resize-none whitespace-pre-wrap break-words focus:outline-none transition-all duration-200 ease-sculpted text-[13px] leading-relaxed ${inputClass} ${stealthTapActive ? 'ring-2 ring-emerald-400/30 border-emerald-400/40 shadow-[0_0_12px_rgba(52,211,153,0.15)]' : ''}`}
+                    className={`w-full border focus:ring-1 rounded-xl pl-3 pr-10 py-2.5 min-h-[42px] max-h-[112px] resize-none whitespace-pre-wrap break-words focus:outline-none transition-all duration-200 ease-sculpted text-[13px] leading-relaxed ${inputClass} ${stealthTapActive ? 'ring-2 ring-emerald-400/30 border-emerald-400/40 shadow-[0_0_12px_rgba(52,211,153,0.15)]' : ''}`}
                     style={appearance.inputStyle}
                   />
 

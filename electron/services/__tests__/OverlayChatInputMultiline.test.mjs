@@ -37,6 +37,8 @@ describe('overlay chat input multiline behavior', () => {
     assert.match(region, /\bresize-none\b/, 'textarea should not expose a manual resize handle');
     assert.match(region, /\bwhitespace-pre-wrap\b/, 'textarea should preserve explicit newlines');
     assert.match(region, /\bbreak-words\b/, 'long words should wrap inside the fixed overlay width');
+    assert.match(region, /(^|\s)max-h-\[112px\](\s|$)/, 'CSS max height should match the JS pixel cap');
+    assert.doesNotMatch(region, /(^|\s)max-h-28(\s|$)/, 'CSS max height must not use a rem-based cap');
   });
 
   test('auto-sizes from content with a bounded height', () => {
@@ -44,8 +46,8 @@ describe('overlay chat input multiline behavior', () => {
     assert.match(source, /const CHAT_INPUT_MAX_HEIGHT_PX = 112;/, 'maximum input height must be explicit');
     assert.match(
       source,
-      /useLayoutEffect\(\(\) => \{[\s\S]*input\.style\.height = 'auto';[\s\S]*input\.scrollHeight[\s\S]*CHAT_INPUT_MAX_HEIGHT_PX[\s\S]*input\.style\.overflowY/s,
-      'input should resize from scrollHeight and enable vertical overflow only past the cap',
+      /useLayoutEffect\(\(\) => \{[\s\S]*input\.style\.height = 'auto';[\s\S]*const scrollHeight = input\.scrollHeight;[\s\S]*Math\.max\(scrollHeight, CHAT_INPUT_MIN_HEIGHT_PX\)[\s\S]*scrollHeight > CHAT_INPUT_MAX_HEIGHT_PX/s,
+      'input should resize from one cached scrollHeight read and enable vertical overflow only past the cap',
     );
   });
 
