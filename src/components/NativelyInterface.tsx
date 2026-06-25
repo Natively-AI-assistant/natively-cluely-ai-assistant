@@ -73,6 +73,9 @@ const ANSWER_PANEL_INTENTS = new Set([
   'shorten',
 ]);
 
+const CHAT_INPUT_MIN_HEIGHT_PX = 42;
+const CHAT_INPUT_MAX_HEIGHT_PX = 112;
+
 const CardCopyButton = ({
   text,
   onCopy,
@@ -968,7 +971,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const pinAnswerPanelRef = useRef<() => void>(() => {});
   const [voiceInput, setVoiceInput] = useState(''); // Accumulated user voice input
   const voiceInputRef = useRef<string>(''); // Ref for capturing in async handlers
-  const textInputRef = useRef<HTMLInputElement>(null); // Ref for input focus
+  const textInputRef = useRef<HTMLTextAreaElement>(null); // Ref for input focus
   const isStealthRef = useRef<boolean>(false); // Tracks if the next expansion should be stealthy
   // Startup-flicker guards (restored from 2de1b62, reverted by 18b139b):
   //  - isExpandedEffectInitializedRef: skip the FIRST run of the visibility-sync
@@ -1194,6 +1197,18 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const quickActionClass = 'overlay-chip-surface overlay-text-interactive';
   const inputClass = `${isLightTheme ? 'focus:ring-black/10' : 'focus:ring-white/10'} overlay-input-surface overlay-input-text`;
   const controlSurfaceClass = 'overlay-control-surface overlay-text-interactive';
+
+  useLayoutEffect(() => {
+    const input = textInputRef.current;
+    if (!input) return;
+    input.style.height = 'auto';
+    const nextHeight = Math.min(
+      Math.max(input.scrollHeight, CHAT_INPUT_MIN_HEIGHT_PX),
+      CHAT_INPUT_MAX_HEIGHT_PX,
+    );
+    input.style.height = `${nextHeight}px`;
+    input.style.overflowY = input.scrollHeight > CHAT_INPUT_MAX_HEIGHT_PX ? 'auto' : 'hidden';
+  }, [inputValue]);
 
   // PERF: hoist ReactMarkdown `components` maps for every streaming intent
   // into a single useMemo so their identity is stable across renders. Each
@@ -5399,7 +5414,7 @@ Provide only the answer, nothing else.`;
   // attempt entirely. The above mousedown listener has already fired
   // stealthTapStart() in capture phase, so by the time we get here, the
   // tap is engaging and DOM focus is no longer the typing path.
-  const blockInputFocus = useCallback((e: React.MouseEvent<HTMLInputElement>) => {
+  const blockInputFocus = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
     if (
       !shouldBlockStealthFocus({
         stealthAutoEngageOk: stealthAutoEngageOkRef.current,
@@ -6220,10 +6235,10 @@ Provide only the answer, nothing else.`;
                                     tap and break inputs in Settings/Model
                                     Selector windows. */}
                 <div className="relative group" data-stealth-engage="true">
-                  <input
+                  <textarea
                     ref={textInputRef}
                     data-testid="overlay-chat-input"
-                    type="text"
+                    rows={1}
                     value={inputValue}
                     onChange={(e) => { setInputValue(e.target.value); setSkillPickerIndex(0); }}
                     onKeyDown={(e) => {
@@ -6249,7 +6264,7 @@ Provide only the answer, nothing else.`;
                           return;
                         }
                       }
-                      if (e.key !== 'Enter' || e.repeat) return;
+                      if (e.key !== 'Enter' || e.repeat || e.shiftKey || e.nativeEvent.isComposing) return;
                       e.preventDefault();
                       handleManualSubmit();
                     }}
@@ -6260,7 +6275,7 @@ Provide only the answer, nothing else.`;
                     // the CGEventTap, so typing routes through that path.
                     onMouseDown={blockInputFocus}
                     readOnly={stealthTapActive}
-                    className={`w-full border focus:ring-1 rounded-xl pl-3 pr-10 py-2.5 focus:outline-none transition-all duration-200 ease-sculpted text-[13px] leading-relaxed ${inputClass} ${stealthTapActive ? 'ring-2 ring-emerald-400/30 border-emerald-400/40 shadow-[0_0_12px_rgba(52,211,153,0.15)]' : ''}`}
+                    className={`w-full border focus:ring-1 rounded-xl pl-3 pr-10 py-2.5 min-h-[42px] max-h-28 resize-none whitespace-pre-wrap break-words focus:outline-none transition-all duration-200 ease-sculpted text-[13px] leading-relaxed ${inputClass} ${stealthTapActive ? 'ring-2 ring-emerald-400/30 border-emerald-400/40 shadow-[0_0_12px_rgba(52,211,153,0.15)]' : ''}`}
                     style={appearance.inputStyle}
                   />
 
