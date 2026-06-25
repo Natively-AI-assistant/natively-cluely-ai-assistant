@@ -34,6 +34,7 @@ import { SearchOrchestrator, type SearchCandidate } from './intelligence/SearchO
 import { CHAT_MODE_PROMPT } from './llm/prompts';
 import { isAssistantIdentityQuestion, profileFactsReady } from './llm/manualProfileIntelligence';
 import { buildManualProfileBackendAnswer } from './llm/profileAnswerBackend';
+import { shouldAutoAttachManualTranscriptContext } from './llm/manualTranscriptContextPolicy';
 
 // Module-scope: pdfjs-dist's legacy build defaults GlobalWorkerOptions.workerSrc
 // to `new URL("./pdf.worker.mjs", import.meta.url)`. Inside esbuild's bundle
@@ -1264,11 +1265,23 @@ export function initializeIpcHandlers(appState: AppState): void {
           console.log('[IPC] Answer-contract enforced; rolling context excluded', {
             answerType: answerPlan.answerType,
           });
-        } else if (!context && autoContextSnapshot) {
+        } else if (!context && autoContextSnapshot && shouldAutoAttachManualTranscriptContext(message, answerPlan)) {
           context = autoContextSnapshot;
           console.log(
             `[IPC] Auto-injected 100s context for gemini-chat-stream (${context.length} chars)`,
           );
+        } else if (!context && autoContextSnapshot) {
+          console.log('[IPC] Skipped 100s transcript context for standalone manual chat', {
+            answerType: answerPlan.answerType,
+          });
+          iTrace.noteContext({
+            source: 'live_transcript',
+            trustLevel: 'medium',
+            requested: answerPlan.requiredContextLayers.includes('live_transcript'),
+            retrieved: true,
+            included: false,
+            reason: 'manual_standalone_question',
+          });
         }
         // MANUAL REGRESSION FIX (release 2026-06-08): for ANY profile-required
         // candidate answer type (jd_fit / skill / behavioral / project / experience /
@@ -7519,12 +7532,22 @@ export function initializeIpcHandlers(appState: AppState): void {
       const phoneMirror = PhoneMirrorService.getInstance();
       const intelligenceManager = appState.getIntelligenceManager();
 
+      const phoneAnswerPlan = planAnswer({
+        question: message,
+        source: 'manual_input',
+        speakerPerspective: 'user',
+      });
+
       // Capture rolling context BEFORE adding the new user message — same ordering
       // as gemini-chat-stream so Recap / Follow Up / What to Answer see phone turns.
+      // Keep it off standalone phone chat questions for the same isolation reason
+      // as desktop manual chat.
       let context: string | undefined;
       try {
         const snap = intelligenceManager.getFormattedContext(100);
-        if (snap && snap.trim().length > 0) context = snap;
+        if (snap && snap.trim().length > 0 && shouldAutoAttachManualTranscriptContext(message, phoneAnswerPlan)) {
+          context = snap;
+        }
       } catch (ctxErr) {
         console.warn('[PhoneMirror] Failed to capture pre-turn context:', ctxErr);
       }
