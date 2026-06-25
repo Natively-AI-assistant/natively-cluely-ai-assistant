@@ -9,6 +9,7 @@ export interface ScreenCaptureEvidenceRef {
 
 export interface ScreenCaptureAction {
   type?: string;
+  requiresScreen?: boolean;
   evidenceRefs?: ScreenCaptureEvidenceRef[];
 }
 

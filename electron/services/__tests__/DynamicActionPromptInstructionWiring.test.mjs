@@ -27,6 +27,10 @@ test('screen-backed dynamic action captures and stages a screenshot before askin
   assert.ok(handlerStart >= 0, 'handleDynamicActionAccept should exist');
   const handlerSource = source.slice(handlerStart, source.indexOf('const handleFollowUp', handlerStart));
 
+  assert.match(source, /const dynamicActionAcceptInFlightRef = useRef\(false\)/);
+  assert.match(handlerSource, /if \(dynamicActionAcceptInFlightRef\.current\) return/);
+  assert.match(handlerSource, /dynamicActionAcceptInFlightRef\.current = true/);
+  assert.match(handlerSource, /dynamicActionAcceptInFlightRef\.current = false/);
   assert.match(handlerSource, /actionNeedsScreenCapture\(action\)/);
   assert.match(handlerSource, /captureScreenshotForDynamicAction\(\)/);
   assert.match(handlerSource, /await handleWhatToSay\(action\.promptInstruction\)/);
@@ -53,6 +57,34 @@ test('screenshot attach stages pending ref so immediate What To Say forwards ima
   assert.match(wtaSource, /mergePendingScreenshotAttachment\(attachedContext, pending\)/);
   assert.match(wtaSource, /if \(pending\) pendingCaptureRef\.current = null/);
   assert.match(wtaSource, /currentAttachments\.map\(\(s\) => s\.path\)/);
+
+  const captureShortcutStart = source.indexOf('window.electronAPI.onCaptureAndProcess');
+  assert.ok(captureShortcutStart >= 0, 'Capture & Process handler should exist');
+  const captureShortcutSource = source.slice(captureShortcutStart, source.indexOf('// Inertial-scroll engine', captureShortcutStart));
+  assert.match(captureShortcutSource, /pendingCaptureRef\.current = data/);
+  assert.match(captureShortcutSource, /appendScreenshotAttachment\(prev, data\)/);
+  assert.doesNotMatch(captureShortcutSource, /prev\.some\(\(s\) => s\.path === data\.path\)/);
+});
+
+test('screen-backed action routing uses trigger requiresScreen instead of hardcoded type checks', () => {
+  const detector = read('electron/services/dynamic-actions/DynamicActionDetector.ts');
+  const engine = read('electron/services/dynamic-actions/DynamicActionEngine.ts');
+  const helper = read('src/lib/screenshotAttachment.mjs');
+  const actionTypes = read('electron/services/dynamic-actions/DynamicAction.ts');
+  const rendererTypes = read('src/types/electron.d.ts');
+
+  const screenTriggerStart = detector.indexOf("type: 'screen_coding_problem'");
+  assert.ok(screenTriggerStart >= 0, 'screen coding trigger should exist');
+  const screenTriggerSource = detector.slice(screenTriggerStart, detector.indexOf('},', screenTriggerStart) + 2);
+  assert.match(screenTriggerSource, /requiresScreen: true/);
+
+  assert.match(engine, /const requiresScreen = Boolean\(trigger\.requiresScreen\)/);
+  assert.match(engine, /source: requiresScreen \? 'screen' : 'transcript'/);
+  assert.doesNotMatch(engine, /screen_coding_problem/);
+  assert.match(helper, /action\.requiresScreen === true/);
+  assert.doesNotMatch(helper, /screen_coding_problem/);
+  assert.match(actionTypes, /requiresScreen\?: boolean/);
+  assert.match(rendererTypes, /requiresScreen\?: boolean/);
 });
 
 test('generate-what-to-say IPC forwards promptInstruction option to IntelligenceManager', () => {

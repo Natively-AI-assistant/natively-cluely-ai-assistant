@@ -30,10 +30,9 @@ export class DynamicActionEngine {
         const matchedTriggers = this.detector.detectTriggers({ transcript, modeTemplateType });
 
         for (const { trigger, match, index } of matchedTriggers) {
-            // Screen-triggered actions are detected from transcript text, but
-            // their answer path must include a fresh screenshot.
+            const requiresScreen = Boolean(trigger.requiresScreen);
             const evidenceRef: EvidenceRef = {
-                source: trigger.type === 'screen_coding_problem' ? 'screen' : 'transcript',
+                source: requiresScreen ? 'screen' : 'transcript',
                 text: transcript,
                 timestamp: now,
                 speaker,
@@ -54,6 +53,7 @@ export class DynamicActionEngine {
                 description: `Triggered by: "${match}"`,
                 confidence: trigger.priority,
                 priority: trigger.priority,
+                requiresScreen: requiresScreen || undefined,
                 evidenceRefs: [evidenceRef],
                 status: 'candidate',
                 createdAt: now,

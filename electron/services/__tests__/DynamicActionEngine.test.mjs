@@ -296,6 +296,7 @@ test('screen coding actions carry screen evidence so renderer captures a fresh s
 
   const screenAction = actions.find(action => action.type === 'screen_coding_problem');
   assert.ok(screenAction, 'Expected a screen_coding_problem dynamic action');
+  assert.equal(screenAction.requiresScreen, true);
   assert.equal(screenAction.evidenceRefs[0].source, 'screen');
 });
 

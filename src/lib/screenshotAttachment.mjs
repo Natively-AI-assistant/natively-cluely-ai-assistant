@@ -15,6 +15,6 @@ export function mergePendingScreenshotAttachment(existing, pending, max = MAX_SC
 
 export function actionNeedsScreenCapture(action) {
   if (!action || typeof action !== 'object') return false;
-  if (action.type === 'screen_coding_problem') return true;
+  if (action.requiresScreen === true) return true;
   return Array.isArray(action.evidenceRefs) && action.evidenceRefs.some(ref => ref?.source === 'screen');
 }

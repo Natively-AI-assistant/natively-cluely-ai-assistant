@@ -20,6 +20,7 @@ export interface DynamicActionPayload {
   description?: string
   confidence: number
   priority: number
+  requiresScreen?: boolean
   evidenceRefs: DynamicActionEvidenceRef[]
   status: 'candidate' | 'shown' | 'accepted' | 'dismissed' | 'completed' | 'expired'
   createdAt: number

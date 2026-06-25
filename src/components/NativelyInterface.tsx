@@ -1081,6 +1081,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // handleWhatToSay() can access it even in React 18 concurrent mode (where
   // a plain setTimeout(0) may fire before setAttachedContext flushes).
   const pendingCaptureRef = useRef<{ path: string; preview: string } | null>(null);
+  const dynamicActionAcceptInFlightRef = useRef(false);
 
   // Latent Context State (Screenshots attached but not sent)
   const [attachedContext, setAttachedContext] = useState<Array<{ path: string; preview: string }>>(
@@ -3513,10 +3514,27 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   };
 
   const handleDynamicActionAccept = async (action: DynamicActionPayload) => {
-    if (actionNeedsScreenCapture(action)) {
-      try {
-        const captured = await captureScreenshotForDynamicAction();
-        if (!captured && attachedContext.length === 0 && !pendingCaptureRef.current) {
+    if (dynamicActionAcceptInFlightRef.current) return;
+    dynamicActionAcceptInFlightRef.current = true;
+
+    try {
+      if (actionNeedsScreenCapture(action)) {
+        try {
+          const captured = await captureScreenshotForDynamicAction();
+          if (!captured && attachedContext.length === 0 && !pendingCaptureRef.current) {
+            setScreenContextStatus('failed');
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: genMessageId(),
+                role: 'system',
+                text: 'Could not capture the screen for this action. Check Screen Recording permission and try again.',
+              },
+            ]);
+            return;
+          }
+        } catch (err) {
+          console.error('Error capturing screen for dynamic action:', err);
           setScreenContextStatus('failed');
           setMessages((prev) => [
             ...prev,
@@ -3528,22 +3546,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           ]);
           return;
         }
-      } catch (err) {
-        console.error('Error capturing screen for dynamic action:', err);
-        setScreenContextStatus('failed');
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: genMessageId(),
-            role: 'system',
-            text: 'Could not capture the screen for this action. Check Screen Recording permission and try again.',
-          },
-        ]);
-        return;
       }
-    }
 
-    await handleWhatToSay(action.promptInstruction);
+      await handleWhatToSay(action.promptInstruction);
+    } finally {
+      dynamicActionAcceptInFlightRef.current = false;
+    }
   };
 
   const handleFollowUp = async (intent: string = 'rephrase') => {
@@ -5001,10 +5009,7 @@ Provide only the answer, nothing else.`;
       // with an empty attachedContext and causing silent failures.
       pendingCaptureRef.current = data;
 
-      setAttachedContext((prev) => {
-        if (prev.some((s) => s.path === data.path)) return prev;
-        return [...prev, data].slice(-5);
-      });
+      setAttachedContext((prev) => appendScreenshotAttachment(prev, data));
 
       // Use requestAnimationFrame so we wait for at least one paint cycle —
       // more reliable than setTimeout(0) under React 18 concurrent scheduling.

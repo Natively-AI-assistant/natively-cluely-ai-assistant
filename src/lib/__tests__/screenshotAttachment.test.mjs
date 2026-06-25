@@ -50,8 +50,9 @@ describe('screenshotAttachment', () => {
     ]);
   });
 
-  test('actionNeedsScreenCapture recognizes screen action type and screen evidence', () => {
-    assert.equal(actionNeedsScreenCapture({ type: 'screen_coding_problem' }), true);
+  test('actionNeedsScreenCapture recognizes requiresScreen flag and screen evidence', () => {
+    assert.equal(actionNeedsScreenCapture({ type: 'screen_coding_problem' }), false);
+    assert.equal(actionNeedsScreenCapture({ requiresScreen: true }), true);
     assert.equal(
       actionNeedsScreenCapture({
         type: 'coding_problem',
