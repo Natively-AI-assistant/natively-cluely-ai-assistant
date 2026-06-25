@@ -128,6 +128,11 @@ import {
 } from '../lib/overlayActionDedup.mjs';
 import { shouldDedupeManualSubmit } from '../lib/overlaySubmitDedup.mjs';
 import {
+  actionNeedsScreenCapture,
+  appendScreenshotAttachment,
+  mergePendingScreenshotAttachment,
+} from '../lib/screenshotAttachment.mjs';
+import {
   applyWhatToAnswerNullFeedbackMessages,
   finalizeStreamingByIntentMessages,
   prepareIntelligenceStreamPlaceholderMessages,
@@ -2395,12 +2400,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   const handleScreenshotAttach = (data: { path: string; preview: string }) => {
     setIsExpanded(true);
-    setAttachedContext((prev) => {
-      // Prevent duplicates and cap at 5
-      if (prev.some((s) => s.path === data.path)) return prev;
-      const updated = [...prev, data];
-      return updated.slice(-5); // Keep last 5
-    });
+    pendingCaptureRef.current = data;
+    setAttachedContext((prev) => appendScreenshotAttachment(prev, data));
   };
 
   // STT Status listener — must survive isExpanded changes.
@@ -3357,10 +3358,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // Also merge in any screenshot from the capture-and-process shortcut that
     // arrived via pendingCaptureRef before the React state flush (React 18 fix).
     const pending = pendingCaptureRef.current;
-    let currentAttachments = attachedContext;
-    if (pending && !currentAttachments.some((s) => s.path === pending.path)) {
-      currentAttachments = [...currentAttachments, pending].slice(-5);
-    }
+    const currentAttachments = mergePendingScreenshotAttachment(attachedContext, pending);
+    if (pending) pendingCaptureRef.current = null;
 
     if (currentAttachments.length > 0) {
       setAttachedContext([]);
@@ -3504,6 +3503,47 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       endOverlayAction('what_to_say');
       setIsProcessing(false);
     }
+  };
+
+  const captureScreenshotForDynamicAction = async (): Promise<boolean> => {
+    const data = await window.electronAPI.takeScreenshot();
+    if (!data?.path) return false;
+    handleScreenshotAttach(data as { path: string; preview: string });
+    return true;
+  };
+
+  const handleDynamicActionAccept = async (action: DynamicActionPayload) => {
+    if (actionNeedsScreenCapture(action)) {
+      try {
+        const captured = await captureScreenshotForDynamicAction();
+        if (!captured && attachedContext.length === 0 && !pendingCaptureRef.current) {
+          setScreenContextStatus('failed');
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: genMessageId(),
+              role: 'system',
+              text: 'Could not capture the screen for this action. Check Screen Recording permission and try again.',
+            },
+          ]);
+          return;
+        }
+      } catch (err) {
+        console.error('Error capturing screen for dynamic action:', err);
+        setScreenContextStatus('failed');
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: genMessageId(),
+            role: 'system',
+            text: 'Could not capture the screen for this action. Check Screen Recording permission and try again.',
+          },
+        ]);
+        return;
+      }
+    }
+
+    await handleWhatToSay(action.promptInstruction);
   };
 
   const handleFollowUp = async (intent: string = 'rephrase') => {
@@ -5899,7 +5939,7 @@ Provide only the answer, nothing else.`;
                                 when no actions are present. */}
               <DynamicActionBar
                 onAcceptAction={(action: DynamicActionPayload) => {
-                  void handleWhatToSay(action.promptInstruction);
+                  void handleDynamicActionAccept(action);
                 }}
               />
 

@@ -30,9 +30,10 @@ export class DynamicActionEngine {
         const matchedTriggers = this.detector.detectTriggers({ transcript, modeTemplateType });
 
         for (const { trigger, match, index } of matchedTriggers) {
-            // Build evidence ref from transcript
+            // Screen-triggered actions are detected from transcript text, but
+            // their answer path must include a fresh screenshot.
             const evidenceRef: EvidenceRef = {
-                source: 'transcript',
+                source: trigger.type === 'screen_coding_problem' ? 'screen' : 'transcript',
                 text: transcript,
                 timestamp: now,
                 speaker,
