@@ -425,7 +425,7 @@ import { ModelSelectorLabel } from './ui/ModelSelectorLabel';
 import { MODEL_SELECTOR_WIDTH } from './ui/modelSelectorLabelText';
 import { modelSelectorGroupLabel } from './ui/modelSelectorGroups';
 import { ChatHintLine, ChatNoteLine, DirectAssistNotice } from './ui/DirectAssistNotice';
-import RollingTranscript from './ui/RollingTranscript';
+import RollingTranscript, { type RollingTranscriptHandle } from './ui/RollingTranscript';
 import SwapText from './ui/SwapText';
 import ScreenshotTray from './overlay/ScreenshotTray';
 import ChromeFold from './overlay/ChromeFold';
@@ -2046,6 +2046,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const rollingTranscriptRef = useRef<RollingTranscriptHandle>(null);
+  const showAnswerPanelRef = useRef(false);
   const rafDimUpdateRef = useRef<number | null>(null);
   const codeExpandedRef = useRef(false);
   // Set when token streaming has proven the current row is code before React has
@@ -3537,6 +3539,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // `heightPinned`: a user-chosen height needs the viewport mounted to fill it,
   // messages or not — otherwise the window is that tall and the panel is not.
   const showAnswerPanel = hasChatContent || heightPinned;
+  showAnswerPanelRef.current = showAnswerPanel;
 
   // ── AUTO EXPAND / CONTRACT: the height channel ────────────────────────────
   //
@@ -10327,6 +10330,11 @@ Provide only the answer, nothing else.`;
     handleBrainstorm,
   };
 
+  const tryScrollRollingTranscript = useCallback((direction: -1 | 1) => {
+    if (showAnswerPanelRef.current) return false;
+    return rollingTranscriptRef.current?.scrollByLines(direction) ?? false;
+  }, []);
+
   useEffect(() => {
     // ── Continuous, frame-rate-independent scroll with momentum ──
     // Velocity is integrated against real elapsed time so 60Hz, 120Hz, and
@@ -10459,6 +10467,7 @@ Provide only the answer, nothing else.`;
         handleBrainstorm();
       } else if (isShortcutPressed(e, 'scrollUp')) {
         e.preventDefault();
+        if (tryScrollRollingTranscript(-1)) return;
         // Detach from the bottom now, not after the scroll listener notices —
         // but only if the chat can actually scroll up.
         const chat = scrollContainerRef.current;
@@ -10468,6 +10477,7 @@ Provide only the answer, nothing else.`;
         startScrollLoop();
       } else if (isShortcutPressed(e, 'scrollDown')) {
         e.preventDefault();
+        if (tryScrollRollingTranscript(1)) return;
         downHeld = true;
         recomputeDirection();
         startScrollLoop();
@@ -10503,7 +10513,7 @@ Provide only the answer, nothing else.`;
       window.removeEventListener('blur', handleBlur);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [isShortcutPressed, armAutoScrollInterrupt]);
+  }, [isShortcutPressed, armAutoScrollInterrupt, tryScrollRollingTranscript]);
 
   // General Global Shortcuts (Rebindable)
   // We listen here to handle them when the window is focused (renderer side)
@@ -10825,9 +10835,11 @@ Provide only the answer, nothing else.`;
       else if (action === 'clarify') handlers.handleClarify();
       else if (action === 'codeHint') handlers.handleCodeHint();
       else if (action === 'brainstorm') handlers.handleBrainstorm();
-      else if (action === 'scrollUp') inertialScrollRef.current?.kick('vert', -1);
-      else if (action === 'scrollDown') inertialScrollRef.current?.kick('vert', 1);
-      else if (action === 'scrollLeft') inertialScrollRef.current?.kick('horiz', -1);
+      else if (action === 'scrollUp') {
+        if (!tryScrollRollingTranscript(-1)) inertialScrollRef.current?.kick('vert', -1);
+      } else if (action === 'scrollDown') {
+        if (!tryScrollRollingTranscript(1)) inertialScrollRef.current?.kick('vert', 1);
+      } else if (action === 'scrollLeft') inertialScrollRef.current?.kick('horiz', -1);
       else if (action === 'scrollRight') inertialScrollRef.current?.kick('horiz', 1);
       else if (action === 'focusInput') {
         // Stealth-focus the chat input: the panel-type overlay (macOS) is
@@ -11940,6 +11952,7 @@ Provide only the answer, nothing else.`;
                   also avoids an empty bar / duplicated status text). */}
               <ChromeFold show={!!(showTranscript && rollingTranscript)} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} testId="fold-transcript">
                 <RollingTranscript
+                  ref={rollingTranscriptRef}
                   text={rollingTranscript}
                   isActive={isInterviewerSpeaking}
                   surfaceStyle={appearance.transcriptStyle}
