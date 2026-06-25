@@ -577,6 +577,8 @@ Setup Summary:
 
 ## Development Setup
 
+For a fuller contributor setup guide with native rebuild troubleshooting and verification commands, see [docs/dev-setup.md](docs/dev-setup.md).
+
 ### Clone the Repository
 
 ```bash

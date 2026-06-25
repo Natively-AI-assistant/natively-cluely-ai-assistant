@@ -370,7 +370,8 @@ PHASE_STATUS.md
 meetily.md
 testengineer.prompt
 cluely/
-docs/
+docs/*
+!docs/dev-setup.md
 
 # Large model binary files
 *.onnx
