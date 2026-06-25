@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 
 interface ChannelStatus {
     status: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio';
@@ -14,11 +14,27 @@ interface RollingTranscriptProps {
     microphoneChannel?: ChannelStatus;
 }
 
-const RollingTranscript: React.FC<RollingTranscriptProps> = ({
+export interface RollingTranscriptHandle {
+    scrollByLines: (direction: -1 | 1) => boolean;
+    scrollToBottom: () => void;
+    isScrollable: () => boolean;
+}
+
+const TRANSCRIPT_SCROLL_LINES = 3;
+
+const isNearBottom = (el: HTMLElement) => el.scrollHeight - el.clientHeight - el.scrollTop <= 4;
+
+const getTranscriptLineHeight = (el: HTMLElement) => {
+    const textEl = el.firstElementChild instanceof HTMLElement ? el.firstElementChild : el;
+    return Number.parseFloat(window.getComputedStyle(textEl).lineHeight) || 28;
+};
+
+const RollingTranscript = forwardRef<RollingTranscriptHandle, RollingTranscriptProps>(({
     text, isActive = true, surfaceStyle,
     interviewerChannel, microphoneChannel,
-}) => {
+}, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
+    const [autoScroll, setAutoScroll] = useState(true);
 
     const intStatus = interviewerChannel?.status ?? 'connected';
     const micStatus = microphoneChannel?.status ?? 'connected';
@@ -27,10 +43,48 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({
     const showTranscriptText = intStatus !== 'failed' && micStatus !== 'failed';
 
     useEffect(() => {
-        if (containerRef.current && showTranscriptText && text) {
-            containerRef.current.scrollLeft = containerRef.current.scrollWidth;
+        if (containerRef.current && showTranscriptText && text && autoScroll) {
+            containerRef.current.scrollTop = containerRef.current.scrollHeight;
         }
-    }, [text, showTranscriptText]);
+    }, [text, showTranscriptText, autoScroll]);
+
+    const scrollToBottom = useCallback(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        el.scrollTop = el.scrollHeight;
+        setAutoScroll(true);
+    }, []);
+
+    const isScrollable = useCallback(() => {
+        const el = containerRef.current;
+        return Boolean(el && el.scrollHeight > el.clientHeight + 1);
+    }, []);
+
+    const scrollByLines = useCallback((direction: -1 | 1) => {
+        const el = containerRef.current;
+        if (!el || !isScrollable()) return false;
+
+        const lineHeight = getTranscriptLineHeight(el);
+        const delta = direction * lineHeight * TRANSCRIPT_SCROLL_LINES;
+        const maxTop = el.scrollHeight - el.clientHeight;
+        const nextTop = Math.max(0, Math.min(maxTop, el.scrollTop + delta));
+
+        el.scrollTo({ top: nextTop, behavior: 'smooth' });
+        setAutoScroll(maxTop - nextTop <= 4);
+        return true;
+    }, [isScrollable]);
+
+    useImperativeHandle(ref, () => ({
+        scrollByLines,
+        scrollToBottom,
+        isScrollable,
+    }), [isScrollable, scrollByLines, scrollToBottom]);
+
+    const handleScroll = useCallback(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        setAutoScroll(isNearBottom(el));
+    }, []);
 
     return (
         <div className="relative w-full">
@@ -44,27 +98,30 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({
                 <div className="w-[90%] mx-auto pt-2">
                     <div
                         ref={containerRef}
-                        className="overflow-hidden whitespace-nowrap scroll-smooth overlay-transcript-surface transition-all duration-500 text-right"
+                        onScroll={handleScroll}
+                        className="max-h-[84px] overflow-y-auto overscroll-contain whitespace-pre-wrap break-words scroll-smooth overlay-transcript-surface transition-all duration-500 text-left"
                         style={{
                             ...surfaceStyle,
-                            maskImage: 'linear-gradient(to right, transparent, black 10%, black 90%, transparent)',
+                            scrollbarWidth: 'none',
                         }}
                     >
                         {showTranscriptText && (
-                            <span className="inline-flex items-center text-[13px] italic leading-7 text-[var(--overlay-text-muted)] transition-all duration-300">
+                            <div className="text-[13px] italic leading-7 text-[var(--overlay-text-muted)] transition-all duration-300">
                                 {text || 'Listening…'}
                                 {isActive && isNormal && (
                                     <span className="inline-flex items-center ml-2">
                                         <span className="w-[3px] h-[3px] bg-emerald-400/70 rounded-full animate-pulse" />
                                     </span>
                                 )}
-                            </span>
+                            </div>
                         )}
                     </div>
                 </div>
             </div>
         </div>
     );
-};
+});
+
+RollingTranscript.displayName = 'RollingTranscript';
 
 export default RollingTranscript;
