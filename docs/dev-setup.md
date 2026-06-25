@@ -16,7 +16,7 @@ This guide is for contributors who want a repeatable local setup for the Electro
 ## Clone And Install
 
 ```bash
-git clone https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant.git
+git clone https://github.com/natively-ai-assistant/natively-cluely-ai-assistant.git
 cd natively-cluely-ai-assistant
 npm ci
 ```
