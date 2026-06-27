@@ -4647,10 +4647,14 @@ Provide only the answer, nothing else.`;
     handleBrainstorm,
   };
 
-  const tryScrollRollingTranscript = useCallback((direction: -1 | 1) => {
-    if (showAnswerPanelRef.current) return false;
+  const scrollRollingTranscript = useCallback((direction: -1 | 1) => {
     return rollingTranscriptRef.current?.scrollByLines(direction) ?? false;
   }, []);
+
+  const tryScrollRollingTranscript = useCallback((direction: -1 | 1) => {
+    if (showAnswerPanelRef.current) return false;
+    return scrollRollingTranscript(direction);
+  }, [scrollRollingTranscript]);
 
   useEffect(() => {
     // ── Continuous, frame-rate-independent scroll with momentum ──
@@ -4782,6 +4786,12 @@ Provide only the answer, nothing else.`;
       } else if (isShortcutPressed(e, 'brainstorm')) {
         e.preventDefault();
         handleBrainstorm();
+      } else if (isShortcutPressed(e, 'transcriptScrollUp')) {
+        e.preventDefault();
+        scrollRollingTranscript(-1);
+      } else if (isShortcutPressed(e, 'transcriptScrollDown')) {
+        e.preventDefault();
+        scrollRollingTranscript(1);
       } else if (isShortcutPressed(e, 'scrollUp')) {
         e.preventDefault();
         if (tryScrollRollingTranscript(-1)) return;
@@ -4826,7 +4836,7 @@ Provide only the answer, nothing else.`;
       window.removeEventListener('blur', handleBlur);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [isShortcutPressed, tryScrollRollingTranscript]);
+  }, [isShortcutPressed, scrollRollingTranscript, tryScrollRollingTranscript]);
 
   // General Global Shortcuts (Rebindable)
   // We listen here to handle them when the window is focused (renderer side)
@@ -5141,7 +5151,8 @@ Provide only the answer, nothing else.`;
         if (!tryScrollRollingTranscript(-1)) inertialScrollRef.current?.kick('vert', -1);
       } else if (action === 'scrollDown') {
         if (!tryScrollRollingTranscript(1)) inertialScrollRef.current?.kick('vert', 1);
-      }
+      } else if (action === 'transcriptScrollUp') scrollRollingTranscript(-1);
+      else if (action === 'transcriptScrollDown') scrollRollingTranscript(1);
       else if (action === 'scrollLeft') inertialScrollRef.current?.kick('horiz', -1);
       else if (action === 'scrollRight') inertialScrollRef.current?.kick('horiz', 1);
       else if (action === 'focusInput') {

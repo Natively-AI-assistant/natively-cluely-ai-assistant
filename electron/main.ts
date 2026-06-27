@@ -892,6 +892,8 @@ export class AppState {
           actionId === 'chat:dynamicAction4' ||
           actionId === 'chat:scrollUp' ||
           actionId === 'chat:scrollDown' ||
+          actionId === 'chat:transcriptScrollUp' ||
+          actionId === 'chat:transcriptScrollDown' ||
           actionId === 'chat:scrollLeft' ||
           actionId === 'chat:scrollRight'
         ) {
@@ -905,6 +907,8 @@ export class AppState {
             'chat:dynamicAction4': 'dynamicAction4',
             'chat:scrollUp': 'scrollUp',
             'chat:scrollDown': 'scrollDown',
+            'chat:transcriptScrollUp': 'transcriptScrollUp',
+            'chat:transcriptScrollDown': 'transcriptScrollDown',
             'chat:scrollLeft': 'scrollLeft',
             'chat:scrollRight': 'scrollRight',
           };

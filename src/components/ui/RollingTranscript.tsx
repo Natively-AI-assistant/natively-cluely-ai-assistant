@@ -69,6 +69,8 @@ const RollingTranscript = forwardRef<RollingTranscriptHandle, RollingTranscriptP
         const maxTop = el.scrollHeight - el.clientHeight;
         const nextTop = Math.max(0, Math.min(maxTop, el.scrollTop + delta));
 
+        if (Math.abs(nextTop - el.scrollTop) < 1) return false;
+
         el.scrollTo({ top: nextTop, behavior: 'smooth' });
         setAutoScroll(maxTop - nextTop <= 4);
         return true;
