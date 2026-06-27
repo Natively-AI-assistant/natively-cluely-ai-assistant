@@ -36,25 +36,38 @@ describe('RollingTranscript vertical scrolling', () => {
     assert.match(transcriptSource, /export interface RollingTranscriptHandle/, 'component should expose an imperative handle type');
     assert.match(transcriptSource, /scrollByLines: \(direction: -1 \| 1\) => boolean;/, 'handle should expose scrollByLines');
     assert.match(transcriptSource, /useImperativeHandle\(ref/, 'component should wire the imperative handle');
-    assert.match(transcriptSource, /Math\.abs\(nextTop - el\.scrollTop\) < 1\) return false;/, 'scroll shortcuts should fall through when transcript cannot move further');
-    assert.match(transcriptSource, /const shouldAutoScroll = maxTop - nextTop <= 4;/, 'scrolling down to bottom should compute sticky-bottom intent');
-    assert.match(transcriptSource, /setAutoScroll\(shouldAutoScroll\)/, 'scrolling down to bottom should re-enable auto-scroll');
+    assert.match(transcriptSource, /direction < 0 && el\.scrollTop <= 1/, 'scroll shortcuts should fall through at the transcript top edge');
+    assert.match(transcriptSource, /direction > 0 && maxTop - el\.scrollTop <= 1/, 'scroll shortcuts should fall through at the transcript bottom edge');
   });
 
   test('programmatic scroll-to-bottom stays pinned while smooth scrolling', () => {
     assert.match(transcriptSource, /const programmaticAutoScrollRef = useRef\(false\);/, 'component should track programmatic auto-scroll');
     assert.match(transcriptSource, /const programmaticAutoScrollTimerRef = useRef<number \| null>\(null\);/, 'component should clear stale programmatic scroll state');
-    assert.match(transcriptSource, /const programmaticManualScrollTargetRef = useRef<number \| null>\(null\);/, 'component should track smooth scrolls away from the bottom');
-    assert.match(transcriptSource, /const programmaticManualScrollTimerRef = useRef<number \| null>\(null\);/, 'component should clear stale manual-scroll target state');
+    assert.match(transcriptSource, /const lastAutoScrolledTextRef = useRef<string \| null>\(null\);/, 'component should remember the last text it auto-scrolled for');
+    assert.match(transcriptSource, /lastAutoScrolledTextRef\.current === text/, 'auto-scroll effect should not re-run for the same transcript text');
     assert.match(transcriptSource, /setProgrammaticAutoScroll\(true\);[\s\S]*el\.scrollTo\(\{ top: el\.scrollHeight, behavior: 'smooth' \}\);/, 'auto-scroll effect should use guarded smooth scrolling instead of snapping');
     assert.doesNotMatch(transcriptSource, /scrollTop\s*=\s*el\.scrollHeight/, 'auto-scroll should not jump directly to the bottom');
-    assert.match(transcriptSource, /setProgrammaticManualScrollTarget\(shouldAutoScroll \? null : nextTop\);/, 'scrolling away from the bottom should suppress sticky auto-scroll until the target is reached');
-    assert.match(transcriptSource, /setProgrammaticAutoScroll\(shouldAutoScroll\);[\s\S]*el\.scrollTo\(\{ top: nextTop, behavior: 'smooth' \}\);/, 'smooth scroll should mark sticky-bottom programmatic intent before animating');
-    assert.match(transcriptSource, /if \(programmaticManualScrollTargetRef\.current !== null\) \{[\s\S]*setAutoScroll\(false\);[\s\S]*return;/, 'smooth upward scrolls from the bottom should not re-enable auto-scroll on the first near-bottom frame');
     assert.match(transcriptSource, /if \(programmaticAutoScrollRef\.current\) \{[\s\S]*setAutoScroll\(true\);[\s\S]*return;/, 'intermediate programmatic scroll events should not disable auto-scroll');
     assert.match(transcriptSource, /window\.setTimeout\(\(\) => \{[\s\S]*programmaticAutoScrollRef\.current = false;[\s\S]*\}, 500\);/, 'programmatic scroll state should time out');
     assert.match(transcriptSource, /window\.clearTimeout\(programmaticAutoScrollTimerRef\.current\);/, 'programmatic scroll timeout should be cleaned up');
-    assert.match(transcriptSource, /window\.clearTimeout\(programmaticManualScrollTimerRef\.current\);/, 'manual-scroll target timeout should be cleaned up');
+  });
+
+  test('held transcript scroll shortcuts use momentum, not repeated smooth animations', () => {
+    assert.match(transcriptSource, /const transcriptScrollMomentumRef = useRef\(\{/, 'component should keep transcript scroll momentum state');
+    assert.match(transcriptSource, /const startTranscriptMomentum = useCallback/, 'component should have a dedicated transcript momentum loop');
+    assert.match(transcriptSource, /window\.requestAnimationFrame\(tick\)/, 'manual transcript scrolling should run on requestAnimationFrame');
+    assert.match(transcriptSource, /momentum\.velocity \*= Math\.pow\(0\.5, dt \/ TRANSCRIPT_SCROLL_FRICTION_HALF_LIFE\)/, 'manual transcript scrolling should decay smoothly');
+    assert.match(transcriptSource, /el\.scrollTop = nextTop/, 'manual transcript scrolling should write scrollTop directly');
+    assert.match(transcriptSource, /lineHeight \* TRANSCRIPT_SCROLL_LINES \* \(Math\.LN2 \/ TRANSCRIPT_SCROLL_FRICTION_HALF_LIFE\)/, 'one key press should still map to roughly three rendered lines');
+    assert.match(transcriptSource, /lineHeight \* TRANSCRIPT_SCROLL_TERMINAL_LINES_PER_SECOND/, 'held key repeats should clamp to a steady terminal speed');
+
+    const scrollByLinesBody = transcriptSource.slice(
+      transcriptSource.indexOf('const scrollByLines = useCallback'),
+      transcriptSource.indexOf('useImperativeHandle', transcriptSource.indexOf('const scrollByLines = useCallback')),
+    );
+    assert.doesNotMatch(scrollByLinesBody, /behavior: 'smooth'/, 'manual key repeats must not restart smooth-scroll animations');
+    assert.match(scrollByLinesBody, /setProgrammaticAutoScroll\(false\)/, 'manual transcript scroll should cancel in-progress auto-scroll guards');
+    assert.match(scrollByLinesBody, /startTranscriptMomentum\(\)/, 'manual transcript scroll should kick the momentum loop');
   });
 
   test('overlay scroll shortcuts try transcript before chat history only when chat panel is hidden', () => {
