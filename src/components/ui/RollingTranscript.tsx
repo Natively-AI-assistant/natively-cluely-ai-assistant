@@ -36,6 +36,8 @@ const RollingTranscript = forwardRef<RollingTranscriptHandle, RollingTranscriptP
     const containerRef = useRef<HTMLDivElement>(null);
     const programmaticAutoScrollRef = useRef(false);
     const programmaticAutoScrollTimerRef = useRef<number | null>(null);
+    const programmaticManualScrollTargetRef = useRef<number | null>(null);
+    const programmaticManualScrollTimerRef = useRef<number | null>(null);
     const [autoScroll, setAutoScroll] = useState(true);
 
     const intStatus = interviewerChannel?.status ?? 'connected';
@@ -59,10 +61,28 @@ const RollingTranscript = forwardRef<RollingTranscriptHandle, RollingTranscriptP
         }
     }, []);
 
+    const setProgrammaticManualScrollTarget = useCallback((targetTop: number | null) => {
+        if (programmaticManualScrollTimerRef.current !== null) {
+            window.clearTimeout(programmaticManualScrollTimerRef.current);
+            programmaticManualScrollTimerRef.current = null;
+        }
+
+        programmaticManualScrollTargetRef.current = targetTop;
+        if (targetTop !== null) {
+            programmaticManualScrollTimerRef.current = window.setTimeout(() => {
+                programmaticManualScrollTargetRef.current = null;
+                programmaticManualScrollTimerRef.current = null;
+            }, 500);
+        }
+    }, []);
+
     useEffect(() => {
         return () => {
             if (programmaticAutoScrollTimerRef.current !== null) {
                 window.clearTimeout(programmaticAutoScrollTimerRef.current);
+            }
+            if (programmaticManualScrollTimerRef.current !== null) {
+                window.clearTimeout(programmaticManualScrollTimerRef.current);
             }
         };
     }, []);
@@ -72,16 +92,18 @@ const RollingTranscript = forwardRef<RollingTranscriptHandle, RollingTranscriptP
         if (!el || !showTranscriptText || !text || !autoScroll) return;
 
         setProgrammaticAutoScroll(true);
+        setProgrammaticManualScrollTarget(null);
         el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-    }, [text, showTranscriptText, autoScroll, setProgrammaticAutoScroll]);
+    }, [text, showTranscriptText, autoScroll, setProgrammaticAutoScroll, setProgrammaticManualScrollTarget]);
 
     const scrollToBottom = useCallback(() => {
         const el = containerRef.current;
         if (!el) return;
         el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
         setProgrammaticAutoScroll(false);
+        setProgrammaticManualScrollTarget(null);
         setAutoScroll(true);
-    }, [setProgrammaticAutoScroll]);
+    }, [setProgrammaticAutoScroll, setProgrammaticManualScrollTarget]);
 
     const isScrollable = useCallback(() => {
         const el = containerRef.current;
@@ -101,10 +123,11 @@ const RollingTranscript = forwardRef<RollingTranscriptHandle, RollingTranscriptP
 
         const shouldAutoScroll = maxTop - nextTop <= 4;
         setProgrammaticAutoScroll(shouldAutoScroll);
+        setProgrammaticManualScrollTarget(shouldAutoScroll ? null : nextTop);
         el.scrollTo({ top: nextTop, behavior: 'smooth' });
         setAutoScroll(shouldAutoScroll);
         return true;
-    }, [isScrollable, setProgrammaticAutoScroll]);
+    }, [isScrollable, setProgrammaticAutoScroll, setProgrammaticManualScrollTarget]);
 
     useImperativeHandle(ref, () => ({
         scrollByLines,
@@ -115,13 +138,20 @@ const RollingTranscript = forwardRef<RollingTranscriptHandle, RollingTranscriptP
     const handleScroll = useCallback(() => {
         const el = containerRef.current;
         if (!el) return;
+        if (programmaticManualScrollTargetRef.current !== null) {
+            if (Math.abs(el.scrollTop - programmaticManualScrollTargetRef.current) < 1) {
+                setProgrammaticManualScrollTarget(null);
+            }
+            setAutoScroll(false);
+            return;
+        }
         if (programmaticAutoScrollRef.current) {
             if (isNearBottom(el)) setProgrammaticAutoScroll(false);
             setAutoScroll(true);
             return;
         }
         setAutoScroll(isNearBottom(el));
-    }, [setProgrammaticAutoScroll]);
+    }, [setProgrammaticAutoScroll, setProgrammaticManualScrollTarget]);
 
     return (
         <div className="relative w-full">

@@ -44,12 +44,17 @@ describe('RollingTranscript vertical scrolling', () => {
   test('programmatic scroll-to-bottom stays pinned while smooth scrolling', () => {
     assert.match(transcriptSource, /const programmaticAutoScrollRef = useRef\(false\);/, 'component should track programmatic auto-scroll');
     assert.match(transcriptSource, /const programmaticAutoScrollTimerRef = useRef<number \| null>\(null\);/, 'component should clear stale programmatic scroll state');
+    assert.match(transcriptSource, /const programmaticManualScrollTargetRef = useRef<number \| null>\(null\);/, 'component should track smooth scrolls away from the bottom');
+    assert.match(transcriptSource, /const programmaticManualScrollTimerRef = useRef<number \| null>\(null\);/, 'component should clear stale manual-scroll target state');
     assert.match(transcriptSource, /setProgrammaticAutoScroll\(true\);[\s\S]*el\.scrollTo\(\{ top: el\.scrollHeight, behavior: 'smooth' \}\);/, 'auto-scroll effect should use guarded smooth scrolling instead of snapping');
     assert.doesNotMatch(transcriptSource, /scrollTop\s*=\s*el\.scrollHeight/, 'auto-scroll should not jump directly to the bottom');
+    assert.match(transcriptSource, /setProgrammaticManualScrollTarget\(shouldAutoScroll \? null : nextTop\);/, 'scrolling away from the bottom should suppress sticky auto-scroll until the target is reached');
     assert.match(transcriptSource, /setProgrammaticAutoScroll\(shouldAutoScroll\);[\s\S]*el\.scrollTo\(\{ top: nextTop, behavior: 'smooth' \}\);/, 'smooth scroll should mark sticky-bottom programmatic intent before animating');
+    assert.match(transcriptSource, /if \(programmaticManualScrollTargetRef\.current !== null\) \{[\s\S]*setAutoScroll\(false\);[\s\S]*return;/, 'smooth upward scrolls from the bottom should not re-enable auto-scroll on the first near-bottom frame');
     assert.match(transcriptSource, /if \(programmaticAutoScrollRef\.current\) \{[\s\S]*setAutoScroll\(true\);[\s\S]*return;/, 'intermediate programmatic scroll events should not disable auto-scroll');
     assert.match(transcriptSource, /window\.setTimeout\(\(\) => \{[\s\S]*programmaticAutoScrollRef\.current = false;[\s\S]*\}, 500\);/, 'programmatic scroll state should time out');
     assert.match(transcriptSource, /window\.clearTimeout\(programmaticAutoScrollTimerRef\.current\);/, 'programmatic scroll timeout should be cleaned up');
+    assert.match(transcriptSource, /window\.clearTimeout\(programmaticManualScrollTimerRef\.current\);/, 'manual-scroll target timeout should be cleaned up');
   });
 
   test('overlay scroll shortcuts try transcript before chat history only when chat panel is hidden', () => {
