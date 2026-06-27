@@ -16,11 +16,13 @@ function read(relativePath) {
     return fs.readFileSync(path.join(root, relativePath), 'utf8');
 }
 
-test('calendar connect error formatter gives Google test-user guidance', () => {
+test('calendar connect error formatter separates user denial from Google test-user blocking', () => {
     const source = read('src/lib/calendarConnectError.ts');
 
     assert.match(source, /access_denied/, 'formatter must recognize Google OAuth access_denied failures');
-    assert.match(source, /test user/, 'formatter must mention the current Google test-user limitation');
+    assert.match(source, /authorization was cancelled/, 'access_denied must be shown as a declined consent prompt');
+    assert.match(source, /status=403/, 'formatter must recognize blocked Google OAuth exchange failures');
+    assert.match(source, /test user/, 'blocked Google OAuth exchange failures must mention the current test-user limitation');
     assert.match(source, /Could not connect Google Calendar/, 'formatter must provide a fallback connection failure message');
 });
 
