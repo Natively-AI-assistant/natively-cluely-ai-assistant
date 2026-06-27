@@ -26,6 +26,8 @@ describe('RollingTranscript vertical scrolling', () => {
     assert.match(transcriptSource, /break-words/, 'long transcript words should not force horizontal scroll');
     assert.doesNotMatch(transcriptSource, /whitespace-nowrap/, 'must not regress to horizontal ticker wrapping');
     assert.doesNotMatch(transcriptSource, /scrollLeft/, 'auto-scroll should be vertical, not horizontal');
+    assert.match(transcriptSource, /transparent 0px, black 8px, black 100%/, 'mask should fade only the top edge so newest bottom text remains readable');
+    assert.doesNotMatch(transcriptSource, /black 60%, transparent 100%/, 'bottom fade must not obscure the newest auto-scrolled text');
   });
 
   test('exposes a three-line scroll handle for shortcut routing', () => {
