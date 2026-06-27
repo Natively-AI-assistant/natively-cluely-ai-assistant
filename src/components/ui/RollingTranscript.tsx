@@ -34,6 +34,8 @@ const RollingTranscript = forwardRef<RollingTranscriptHandle, RollingTranscriptP
     interviewerChannel, microphoneChannel,
 }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
+    const programmaticAutoScrollRef = useRef(false);
+    const programmaticAutoScrollTimerRef = useRef<number | null>(null);
     const [autoScroll, setAutoScroll] = useState(true);
 
     const intStatus = interviewerChannel?.status ?? 'connected';
@@ -48,12 +50,36 @@ const RollingTranscript = forwardRef<RollingTranscriptHandle, RollingTranscriptP
         }
     }, [text, showTranscriptText, autoScroll]);
 
+    const setProgrammaticAutoScroll = useCallback((enabled: boolean) => {
+        if (programmaticAutoScrollTimerRef.current !== null) {
+            window.clearTimeout(programmaticAutoScrollTimerRef.current);
+            programmaticAutoScrollTimerRef.current = null;
+        }
+
+        programmaticAutoScrollRef.current = enabled;
+        if (enabled) {
+            programmaticAutoScrollTimerRef.current = window.setTimeout(() => {
+                programmaticAutoScrollRef.current = false;
+                programmaticAutoScrollTimerRef.current = null;
+            }, 500);
+        }
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            if (programmaticAutoScrollTimerRef.current !== null) {
+                window.clearTimeout(programmaticAutoScrollTimerRef.current);
+            }
+        };
+    }, []);
+
     const scrollToBottom = useCallback(() => {
         const el = containerRef.current;
         if (!el) return;
         el.scrollTop = el.scrollHeight;
+        setProgrammaticAutoScroll(false);
         setAutoScroll(true);
-    }, []);
+    }, [setProgrammaticAutoScroll]);
 
     const isScrollable = useCallback(() => {
         const el = containerRef.current;
@@ -71,10 +97,12 @@ const RollingTranscript = forwardRef<RollingTranscriptHandle, RollingTranscriptP
 
         if (Math.abs(nextTop - el.scrollTop) < 1) return false;
 
+        const shouldAutoScroll = maxTop - nextTop <= 4;
+        setProgrammaticAutoScroll(shouldAutoScroll);
         el.scrollTo({ top: nextTop, behavior: 'smooth' });
-        setAutoScroll(maxTop - nextTop <= 4);
+        setAutoScroll(shouldAutoScroll);
         return true;
-    }, [isScrollable]);
+    }, [isScrollable, setProgrammaticAutoScroll]);
 
     useImperativeHandle(ref, () => ({
         scrollByLines,
@@ -85,8 +113,13 @@ const RollingTranscript = forwardRef<RollingTranscriptHandle, RollingTranscriptP
     const handleScroll = useCallback(() => {
         const el = containerRef.current;
         if (!el) return;
+        if (programmaticAutoScrollRef.current) {
+            if (isNearBottom(el)) setProgrammaticAutoScroll(false);
+            setAutoScroll(true);
+            return;
+        }
         setAutoScroll(isNearBottom(el));
-    }, []);
+    }, [setProgrammaticAutoScroll]);
 
     return (
         <div className="relative w-full">

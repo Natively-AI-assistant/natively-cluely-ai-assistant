@@ -35,7 +35,17 @@ describe('RollingTranscript vertical scrolling', () => {
     assert.match(transcriptSource, /scrollByLines: \(direction: -1 \| 1\) => boolean;/, 'handle should expose scrollByLines');
     assert.match(transcriptSource, /useImperativeHandle\(ref/, 'component should wire the imperative handle');
     assert.match(transcriptSource, /Math\.abs\(nextTop - el\.scrollTop\) < 1\) return false;/, 'scroll shortcuts should fall through when transcript cannot move further');
-    assert.match(transcriptSource, /setAutoScroll\(maxTop - nextTop <= 4\)/, 'scrolling down to bottom should re-enable auto-scroll');
+    assert.match(transcriptSource, /const shouldAutoScroll = maxTop - nextTop <= 4;/, 'scrolling down to bottom should compute sticky-bottom intent');
+    assert.match(transcriptSource, /setAutoScroll\(shouldAutoScroll\)/, 'scrolling down to bottom should re-enable auto-scroll');
+  });
+
+  test('programmatic scroll-to-bottom stays pinned while smooth scrolling', () => {
+    assert.match(transcriptSource, /const programmaticAutoScrollRef = useRef\(false\);/, 'component should track programmatic auto-scroll');
+    assert.match(transcriptSource, /const programmaticAutoScrollTimerRef = useRef<number \| null>\(null\);/, 'component should clear stale programmatic scroll state');
+    assert.match(transcriptSource, /setProgrammaticAutoScroll\(shouldAutoScroll\);[\s\S]*el\.scrollTo\(\{ top: nextTop, behavior: 'smooth' \}\);/, 'smooth scroll should mark sticky-bottom programmatic intent before animating');
+    assert.match(transcriptSource, /if \(programmaticAutoScrollRef\.current\) \{[\s\S]*setAutoScroll\(true\);[\s\S]*return;/, 'intermediate programmatic scroll events should not disable auto-scroll');
+    assert.match(transcriptSource, /window\.setTimeout\(\(\) => \{[\s\S]*programmaticAutoScrollRef\.current = false;[\s\S]*\}, 500\);/, 'programmatic scroll state should time out');
+    assert.match(transcriptSource, /window\.clearTimeout\(programmaticAutoScrollTimerRef\.current\);/, 'programmatic scroll timeout should be cleaned up');
   });
 
   test('overlay scroll shortcuts try transcript before chat history only when chat panel is hidden', () => {
