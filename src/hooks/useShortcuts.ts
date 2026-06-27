@@ -17,6 +17,8 @@ export interface ShortcutConfig {
     recap: string[];
     scrollUp: string[];
     scrollDown: string[];
+    transcriptScrollUp: string[];
+    transcriptScrollDown: string[];
     scrollLeft: string[];
     scrollRight: string[];
     focusInput: string[];
@@ -55,6 +57,8 @@ function buildDefaultShortcuts(): ShortcutConfig {
         recap: [],
         scrollUp: [mod, '↑'],
         scrollDown: [mod, '↓'],
+        transcriptScrollUp: [mod, isMac ? '⌥' : 'Alt', '↑'],
+        transcriptScrollDown: [mod, isMac ? '⌥' : 'Alt', '↓'],
         scrollLeft: [mod, isMac ? '⌥' : 'Alt', '←'],
         scrollRight: [mod, isMac ? '⌥' : 'Alt', '→'],
         focusInput: [mod, shift, 'Space'],
@@ -105,6 +109,8 @@ const BACKEND_ID_TO_ACTION: Partial<Record<string, keyof ShortcutConfig>> = {
     'chat:recap': 'recap',
     'chat:scrollUp': 'scrollUp',
     'chat:scrollDown': 'scrollDown',
+    'chat:transcriptScrollUp': 'transcriptScrollUp',
+    'chat:transcriptScrollDown': 'transcriptScrollDown',
     'chat:scrollLeft': 'scrollLeft',
     'chat:scrollRight': 'scrollRight',
     'chat:focusInput': 'focusInput',
@@ -305,6 +311,8 @@ export const useShortcuts = () => {
             case 'recap': backendId = 'chat:recap'; break;
             case 'scrollUp': backendId = 'chat:scrollUp'; break;
             case 'scrollDown': backendId = 'chat:scrollDown'; break;
+            case 'transcriptScrollUp': backendId = 'chat:transcriptScrollUp'; break;
+            case 'transcriptScrollDown': backendId = 'chat:transcriptScrollDown'; break;
             case 'scrollLeft': backendId = 'chat:scrollLeft'; break;
             case 'scrollRight': backendId = 'chat:scrollRight'; break;
             case 'focusInput': backendId = 'chat:focusInput'; break;
