@@ -126,8 +126,8 @@ const RollingTranscript = forwardRef<RollingTranscriptHandle, RollingTranscriptP
             <div
                 className="relative w-full overflow-hidden"
                 style={{
-                    maskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)',
-                    WebkitMaskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)',
+                    maskImage: 'linear-gradient(to bottom, transparent 0px, black 8px, black 100%)',
+                    WebkitMaskImage: 'linear-gradient(to bottom, transparent 0px, black 8px, black 100%)',
                 }}
             >
                 <div className="w-[90%] mx-auto pt-2">
