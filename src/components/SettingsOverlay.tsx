@@ -31,6 +31,7 @@ import {
     getDefaultOverlayOpacity,
 } from '../lib/overlayAppearance';
 import { getMeetingInterfaceTheme, setMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
+import { getCalendarConnectErrorMessage } from '../lib/calendarConnectError';
 import { KeyRecorder } from './ui/KeyRecorder';
 import { ProfileVisualizer, PremiumUpgradeModal } from '../premium';
 import icon from './icon.png';
@@ -1168,6 +1169,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
     const [calendarStatus, setCalendarStatus] = useState<{ connected: boolean; email?: string }>({ connected: false });
     const [isCalendarsLoading, setIsCalendarsLoading] = useState(false);
+    const [calendarError, setCalendarError] = useState('');
     const [calendarEvents, setCalendarEvents] = useState<Array<{ id: string; title: string; startTime: string; endTime: string; link?: string }>>([]);
     const [isCalendarRefreshing, setIsCalendarRefreshing] = useState(false);
 
@@ -3058,14 +3060,18 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 <button
                                                     onClick={async () => {
                                                         setIsCalendarsLoading(true);
+                                                        setCalendarError('');
                                                         try {
                                                             const res = await window.electronAPI.calendarConnect();
                                                             if (res.success) {
                                                                 const status = await window.electronAPI.getCalendarStatus();
                                                                 setCalendarStatus(status);
+                                                            } else {
+                                                                setCalendarError(getCalendarConnectErrorMessage(res.error));
                                                             }
                                                         } catch (e) {
                                                             console.error(e);
+                                                            setCalendarError(getCalendarConnectErrorMessage(e));
                                                         } finally {
                                                             setIsCalendarsLoading(false);
                                                         }
@@ -3083,6 +3089,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     </svg>
                                                     {isCalendarsLoading ? 'Connecting...' : 'Connect Google'}
                                                 </button>
+                                                {calendarError && (
+                                                    <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs leading-relaxed text-red-400">
+                                                        <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                                                        <span>{calendarError}</span>
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                     </div>
