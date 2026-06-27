@@ -1158,21 +1158,23 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [actionButtonMode, setActionButtonMode] = useState<'recap' | 'brainstorm'>('recap');
 
   useEffect(() => {
+    let mounted = true;
     // Load persisted mode
     window.electronAPI
       ?.getActionButtonMode?.()
       ?.then((mode: 'recap' | 'brainstorm') => {
-        if (mode) setActionButtonMode(mode);
+        if (mounted && mode) setActionButtonMode(mode);
       })
       .catch(() => {});
 
     // Listen for live changes from SettingsPopup / IPC
     const unsubscribe = window.electronAPI?.onActionButtonModeChanged?.(
       (mode: 'recap' | 'brainstorm') => {
-        setActionButtonMode(mode);
+        if (mounted) setActionButtonMode(mode);
       },
     );
     return () => {
+      mounted = false;
       unsubscribe?.();
     };
   }, []);
@@ -1516,13 +1518,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [isShellWide, setIsShellWide] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
     // Load the persisted default model (not the runtime model)
     // Each new meeting starts with the default from settings
     if (window.electronAPI?.getDefaultModel) {
       window.electronAPI
         .getDefaultModel()
         .then((result: any) => {
-          if (result && result.model) {
+          if (mounted && result && result.model) {
             setCurrentModel(result.model);
             // Also set the runtime model to the default
             window.electronAPI.setModel(result.model).catch(() => {});
@@ -1530,6 +1533,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         })
         .catch((err: any) => console.error('Failed to fetch default model:', err));
     }
+    return () => { mounted = false; };
   }, []);
 
   const handleModelSelect = (modelId: string) => {
@@ -5365,10 +5369,11 @@ Provide only the answer, nothing else.`;
     // stealthAutoEngageOkRef from its safe-true default; we do NOT
     // need to re-check CGEventTap availability here — the synchronous
     // window.electronAPI.platform guard above already covers that.
+    let mounted = true;
     if (stealthTapShouldAutoEngage) {
       stealthTapShouldAutoEngage()
         .then((ok) => {
-          stealthAutoEngageOkRef.current = !!ok;
+          if (mounted) stealthAutoEngageOkRef.current = !!ok;
         })
         .catch(() => {
           /* fail open — keep default */
@@ -5400,6 +5405,7 @@ Provide only the answer, nothing else.`;
     document.addEventListener('mousedown', onMouseDown, true); // capture phase
     window.addEventListener('focus', onFocusRefresh);
     return () => {
+      mounted = false;
       document.removeEventListener('mousedown', onMouseDown, true);
       window.removeEventListener('focus', onFocusRefresh);
     };

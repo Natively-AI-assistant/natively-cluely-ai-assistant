@@ -1256,4 +1256,4 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     );
 };
 
-export default Launcher;
+export default React.memo(Launcher);

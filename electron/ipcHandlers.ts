@@ -109,7 +109,14 @@ export function initializeIpcHandlers(appState: AppState): void {
     listener: (event: any, ...args: any[]) => Promise<any> | any,
   ) => {
     ipcMain.removeHandler(channel);
-    ipcMain.handle(channel, listener);
+    ipcMain.handle(channel, async (event, ...args) => {
+      try {
+        return await listener(event, ...args);
+      } catch (error) {
+        console.error(`[IPC Error] Unhandled exception in handler for ${channel}:`, error);
+        throw error;
+      }
+    });
   };
 
   const safeOn = (
@@ -117,7 +124,13 @@ export function initializeIpcHandlers(appState: AppState): void {
     listener: (event: any, ...args: any[]) => void,
   ) => {
     ipcMain.removeAllListeners(channel);
-    ipcMain.on(channel, listener);
+    ipcMain.on(channel, async (event, ...args) => {
+      try {
+        await listener(event, ...args);
+      } catch (error) {
+        console.error(`[IPC Error] Unhandled exception in listener for ${channel}:`, error);
+      }
+    });
   };
 
   const escapeXmlText = (text: string): string =>

@@ -2368,8 +2368,8 @@ export const UNIVERSAL_WHAT_TO_ANSWER_PROMPT = `${CORE_IDENTITY}
    If <active_mode_custom_instructions> is present, it is the highest-priority behavior contract. Follow its role, language, format, and interview style over the generic candidate rules below.
    If a <current_turn> block is present, it is the newest live turn. Respond to it first and use older transcript content only as background. Do not continue an older topic unless the current turn asks for it.
    For custom discovery/interviewer modes, every follow-up question must be grounded in a concrete noun, role, system, document, pain point, or requested next step from <current_turn>. Do not ask about older transcript details unless they directly connect to the newest client answer.
-   If <current_turn> lists goals, improvements, priorities, recommendations, or closing needs, move the meeting forward: ask about priority, owner, success criteria, workshop order, go-live risk, or next step. Do not restart detailed discovery from an older area.
-   If the newest client answer mentions improvement goals like one place for orders, stock accuracy, fewer Excel files, tracking numbers, responsibility, late delivery, or the new system, ask only about those improvement goals. Do not ask about picking lists, barcode scanners, urgent orders, packing, or other older warehouse details unless the newest answer mentions them.
+   If <current_turn> lists goals, improvements, priorities, recommendations, or closing needs, move the meeting forward: ask about priority, owner, success criteria, timeline, risk, or next step. Do not restart detailed discovery from an older area.
+   If the newest client answer mentions specific improvement goals, ask only about those goals. Do not ask about older or unrelated details unless the newest answer mentions them.
 
    Generate EXACTLY what the active mode should say next. In interview/job modes, this is what the user should say as the candidate. In custom discovery, meeting, analyst, interviewer, or facilitator modes, use the role defined by the active mode instructions instead.
 

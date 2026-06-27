@@ -106,6 +106,10 @@ const App: React.FC = () => {
     setIsSettingsOpen(false);
     setIsModesOpen(true);
   }, []);
+  const closeSettingsExclusive = useCallback(() => setIsSettingsOpen(false), []);
+  const closeModesExclusive = useCallback(() => setIsModesOpen(false), []);
+  const closeProfileExclusive = useCallback(() => setIsProfileOpen(false), []);
+  const openSettingsNativelyApi = useCallback(() => openSettingsExclusive('natively-api'), [openSettingsExclusive]);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [isPremiumActive, setIsPremiumActive] = useState(false);
   const [hasLoadedLicense, setHasLoadedLicense] = useState(false);
@@ -680,9 +684,9 @@ const App: React.FC = () => {
                 <div id="launcher-container" className="h-full w-full relative">
                   <Launcher
                     onStartMeeting={handleStartMeeting}
-                    onOpenSettings={(tab = 'general') => openSettingsExclusive(tab)}
-                    onOpenProfile={() => openProfileExclusive()}
-                    onOpenModes={() => openModesExclusive()}
+                    onOpenSettings={openSettingsExclusive}
+                    onOpenProfile={openProfileExclusive}
+                    onOpenModes={openModesExclusive}
                     onPageChange={setIsLauncherMainView}
                     ollamaPullStatus={ollamaPullStatus}
                     ollamaPullPercent={ollamaPullPercent}
@@ -691,9 +695,7 @@ const App: React.FC = () => {
                 </div>
                 <SettingsOverlay
                   isOpen={isSettingsOpen}
-                  onClose={() => {
-                    setIsSettingsOpen(false);
-                  }}
+                  onClose={closeSettingsExclusive}
                   initialTab={settingsInitialTab}
                   initialIsPremium={hasLoadedLicense ? isPremiumActive : null}
                   initialHasNativelyKey={hasNativelyApi}
@@ -707,7 +709,7 @@ const App: React.FC = () => {
                       exit={{ opacity: 0 }}
                       transition={{ duration: 0.15 }}
                       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-                      onClick={(e) => { if (e.target === e.currentTarget) setIsModesOpen(false); }}
+                      onClick={(e) => { if (e.target === e.currentTarget) closeModesExclusive(); }}
                     >
                       <motion.div
                         initial={{ opacity: 0, scale: 0.92, y: 18, filter: 'blur(12px)' }}
@@ -726,7 +728,7 @@ const App: React.FC = () => {
                         }}
                         className="w-[820px] h-[600px] max-w-[95vw] max-h-[90vh] rounded-2xl overflow-hidden border border-white/10 bg-[#141414]"
                       >
-                        <ModesSettings onClose={() => setIsModesOpen(false)} isPremium={isPremiumActive} isLoaded={hasLoadedLicense} isTrialActive={!!activeTrial} onOpenNativelyAPI={() => openSettingsExclusive('natively-api')} />
+                        <ModesSettings onClose={closeModesExclusive} isPremium={isPremiumActive} isLoaded={hasLoadedLicense} isTrialActive={!!activeTrial} onOpenNativelyAPI={openSettingsNativelyApi} />
                       </motion.div>
                     </motion.div>
                   )}
@@ -740,7 +742,7 @@ const App: React.FC = () => {
                       exit={{ opacity: 0 }}
                       transition={{ duration: 0.15 }}
                       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-                      onClick={(e) => { if (e.target === e.currentTarget) setIsProfileOpen(false); }}
+                      onClick={(e) => { if (e.target === e.currentTarget) closeProfileExclusive(); }}
                     >
                       <motion.div
                         initial={{ opacity: 0, scale: 0.92, y: 18, filter: 'blur(12px)' }}
@@ -760,7 +762,7 @@ const App: React.FC = () => {
                         className="w-[820px] h-[600px] max-w-[95vw] max-h-[90vh] rounded-2xl overflow-hidden border border-white/10 bg-[#141414]"
                       >
                         <ProfileIntelligenceSettings
-                          onClose={() => setIsProfileOpen(false)}
+                          onClose={closeProfileExclusive}
                         />
                       </motion.div>
                     </motion.div>
