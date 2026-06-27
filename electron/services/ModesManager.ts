@@ -1,6 +1,7 @@
 import * as crypto from 'crypto';
 import { DatabaseManager } from '../db/DatabaseManager';
-import { ModeContextRetriever } from './ModeContextRetriever';
+import type { EmbeddingPipeline } from '../rag/EmbeddingPipeline';
+import { ModeContextRetriever, type ModeRetrievalOptions } from './ModeContextRetriever';
 import type { AnswerType } from '../llm/AnswerPlanner';
 import type { ActiveModeInfo } from '../llm/modeProfiles';
 import { classifyCustomContext, selectCustomContextForAnswer } from '../llm/customContextClassifier';
@@ -54,6 +55,12 @@ export interface ModeReferenceFile {
     fileName: string;
     content: string;
     createdAt: string;
+    /** Real page count reported by the PDF parser (pdf-parse@2.x `data.total`).
+     *  Only set for `.pdf` uploads; undefined for txt/md/docx. */
+    pageCount?: number;
+    /** Number of pages from which text was actually extracted (a subset of
+     *  `pageCount` when some pages are image-only / blank). Only set for PDFs. */
+    extractedPageCount?: number;
 }
 
 export interface ModeNoteSection {
@@ -180,6 +187,34 @@ export function encodeModeContextPayload(value: unknown): string {
     return JSON.stringify(value).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
 }
 
+const DOCUMENT_SOURCE_RE = /\b(uploaded|attached|provided|reference|source material|course material|seminar material|lecture material|presentation|slides?|deck|papers?|pdfs?|files?|documents?|docs?|notes?|attached material|uploaded content|provided material)\b/i;
+const DOCUMENT_CONSTRAINT_RE = /\b(source[-\s]?of[-\s]?truth|from the files?|from the documents?|from the uploaded|answer(?:s|ing)?\s+from\s+(?:the\s+)?(?:uploaded|attached|provided|reference|files?|documents?)|based on (?:uploaded|provided|attached|the\s+(?:uploaded|attached|provided|reference)|my\s+(?:uploaded|attached|provided|reference|files?|documents?|docs?|notes?|papers?|slides?|presentation))|use only|only use|rely only|use\s+the\s+(?:uploaded|attached|provided|reference|files?|documents?|docs?|notes?|papers?|slides?|presentation)|(?:stick to|restrict to|limit to|draw from)\s+the\s+(?:uploaded|attached|provided|reference|files?|documents?|docs?|notes?|papers?|slides?|presentation|material)|do not use knowledge outside|(?:don['’]?t|do not)\s+(?:use|rely on|draw on)\s+(?:anything\s+)?(?:outside|beyond|other than)|ground(?:ed)? (?:your )?answers? in|ground(?:ed)? in)\b/i;
+
+export interface ActiveModeDocumentGroundingInfo {
+    isCustom: boolean;
+    hasReferenceFiles: boolean;
+    documentGrounded: boolean;
+    /**
+     * Authoritative runtime guard for user-created custom modes whose own prompt
+     * makes uploaded/reference files the source of truth. This is intentionally
+     * stricter than `documentGrounded` so callers can key source precedence and
+     * profile suppression off one flag instead of re-deriving the four conditions.
+     */
+    documentGroundedCustomModeActive: boolean;
+    modeId?: string;
+    modeName?: string;
+    hasCustomPrompt: boolean;
+}
+
+export function isCustomMode(mode: Pick<Mode, 'templateType' | 'name'> | null | undefined): boolean {
+    return !!mode && mode.templateType === 'general' && mode.name !== 'General';
+}
+
+export function detectCustomModeDocumentGrounding(customPrompt: string): boolean {
+    const prompt = customPrompt || '';
+    return DOCUMENT_SOURCE_RE.test(prompt) && DOCUMENT_CONSTRAINT_RE.test(prompt);
+}
+
 function rowToMode(row: any): Mode {
     return {
         id: row.id,
@@ -198,6 +233,11 @@ function rowToFile(row: any): ModeReferenceFile {
         fileName: row.file_name,
         content: row.content ?? '',
         createdAt: row.created_at,
+        // Round-trip PDF page counts (DB stores snake_case columns; the
+        // 2026-06-27 v18→v19 migration adds these columns and the
+        // IPC handler fills them in for .pdf uploads only).
+        pageCount: typeof row.page_count === 'number' ? row.page_count : undefined,
+        extractedPageCount: typeof row.extracted_page_count === 'number' ? row.extracted_page_count : undefined,
     };
 }
 
@@ -298,12 +338,21 @@ export class ModesManager {
     public getActiveModeInfo(): ActiveModeInfo | null {
         if (this._activeModeInfoCacheValid) return this._activeModeInfoCache;
         const mode = this.getActiveMode();
-        this._activeModeInfoCache = mode ? {
-            id: mode.id,
-            templateType: mode.templateType,
-            name: mode.name,
-            isCustom: mode.templateType === 'general' && mode.name !== 'General',
-        } : null;
+        if (mode) {
+            const grounding = this.getActiveModeDocumentGroundingInfo(mode.id);
+            this._activeModeInfoCache = {
+                id: mode.id,
+                templateType: mode.templateType,
+                name: mode.name,
+                isCustom: isCustomMode(mode),
+                hasReferenceFiles: grounding.hasReferenceFiles,
+                hasCustomPrompt: grounding.hasCustomPrompt,
+                documentGrounded: grounding.documentGrounded,
+                documentGroundedCustomModeActive: grounding.documentGroundedCustomModeActive,
+            };
+        } else {
+            this._activeModeInfoCache = null;
+        }
         this._activeModeInfoCacheValid = true;
         return this._activeModeInfoCache;
     }
@@ -400,7 +449,13 @@ export class ModesManager {
         return DatabaseManager.getInstance().getReferenceFiles(modeId).map(rowToFile);
     }
 
-    public addReferenceFile(params: { modeId: string; fileName: string; content: string }): ModeReferenceFile {
+    public addReferenceFile(params: {
+        modeId: string;
+        fileName: string;
+        content: string;
+        pageCount?: number;
+        extractedPageCount?: number;
+    }): ModeReferenceFile {
         const id = `ref_${crypto.randomUUID()}`;
         DatabaseManager.getInstance().addReferenceFile({
             id,
@@ -408,17 +463,21 @@ export class ModesManager {
             fileName: params.fileName,
             content: params.content,
         });
+        this.invalidateActiveModeCache();
         return {
             id,
             modeId: params.modeId,
             fileName: params.fileName,
             content: params.content,
             createdAt: new Date().toISOString(),
+            pageCount: params.pageCount,
+            extractedPageCount: params.extractedPageCount,
         };
     }
 
     public deleteReferenceFile(id: string): void {
         DatabaseManager.getInstance().deleteReferenceFile(id);
+        this.invalidateActiveModeCache();
         // PI v3 (W3): drop the persisted chunk vectors + index state too.
         try { this.modeContextRetriever.removeReferenceFileIndex(id); } catch { /* non-fatal */ }
     }
@@ -431,6 +490,21 @@ export class ModesManager {
     /** Index one reference file (idempotent — re-embeds only on content/space change). */
     public async indexReferenceFile(file: ModeReferenceFile): Promise<void> {
         await this.modeContextRetriever.indexReferenceFile(file);
+    }
+
+    /** Wire the RAGManager EmbeddingPipeline into the mode hybrid retriever. */
+    public setSharedEmbeddingPipeline(pipeline: EmbeddingPipeline): void {
+        this.modeContextRetriever.setSharedEmbeddingPipeline(pipeline);
+    }
+
+    /** Re-index files that fell back before the embedding provider became ready. */
+    public async retryAllLexicalOnlyFiles(): Promise<void> {
+        for (const mode of this.getModes()) {
+            const files = this.getReferenceFiles(mode.id);
+            if (files.length > 0) {
+                await this.modeContextRetriever.retryLexicalOnlyFiles(files).catch(() => { /* logged inside */ });
+            }
+        }
     }
 
     /** Kick indexing for every not-yet-ready file of a mode (mode activation prewarm). */
@@ -464,6 +538,12 @@ export class ModesManager {
             fileName: file.fileName,
             ...this.modeContextRetriever.getReferenceFileIndexStatus(file.id),
         }));
+    }
+
+    /** Single-file index status lookup — used by IPC handlers to decide whether to
+     *  schedule a retry when a freshly-uploaded file lands in 'failed'/'lexical_only'. */
+    public getReferenceFileIndexStatus(fileId: string): { status: string; chunkCount: number } {
+        return this.modeContextRetriever.getReferenceFileIndexStatus(fileId);
     }
 
     // ── Note Sections ─────────────────────────────────────────────
@@ -602,6 +682,7 @@ export class ModesManager {
     public getActiveModeSystemPromptSuffix(pinnedModeId?: string): string {
         const mode = this.resolveMode(pinnedModeId);
         if (!mode) return '';
+        if (isCustomMode(mode)) return '';
         const full = TEMPLATE_SYSTEM_PROMPTS[mode.templateType] ?? '';
         // Strip the shared prefix that's already in HARD_SYSTEM_PROMPT, otherwise
         // CORE_IDENTITY + EXECUTION_CONTRACT + CONTEXT_INTELLIGENCE_LAYER (+
@@ -645,7 +726,8 @@ export class ModesManager {
         if (!mode) return '';
         const raw = (mode.customContext || '').trim();
         if (!raw) return '';
-        const scoped = answerType
+        const grounding = this.getActiveModeDocumentGroundingInfo(pinnedModeId);
+        const scoped = (answerType && !grounding.documentGroundedCustomModeActive)
             ? selectCustomContextForAnswer(classifyCustomContext(raw), answerType).included.map(c => c.text).join('\n')
             : raw;
         if (!scoped.trim()) return '';
@@ -656,8 +738,8 @@ export class ModesManager {
         // isCustom is a pure function of (templateType, name) on the resolved
         // mode — derive it directly so a pinned mode reports correctly even when
         // it differs from the (possibly switched) live active mode.
-        const isCustom = mode.templateType === 'general' && mode.name !== 'General';
-        return isCustom ? `Mode: ${mode.name}\n${text}` : text;
+        const custom = isCustomMode(mode);
+        return custom ? `Mode: ${mode.name}\n${text}` : text;
     }
 
     /**
@@ -670,7 +752,27 @@ export class ModesManager {
     private static readonly MAX_FILE_CHARS = 12_000;
     private static readonly MAX_TOTAL_CHARS = 40_000;
 
-    public buildRetrievedActiveModeContextBlock(query: string, transcript?: string, tokenBudget?: number, answerType?: AnswerType, excludeCustomContext?: boolean, pinnedModeId?: string): string {
+    public getActiveModeDocumentGroundingInfo(pinnedModeId?: string): ActiveModeDocumentGroundingInfo {
+        const mode = this.resolveMode(pinnedModeId);
+        if (!mode) return { isCustom: false, hasReferenceFiles: false, documentGrounded: false, documentGroundedCustomModeActive: false, hasCustomPrompt: false };
+        const files = this.getReferenceFiles(mode.id);
+        const custom = isCustomMode(mode);
+        const hasReferenceFiles = files.some(file => file.content.trim());
+        const hasCustomPrompt = mode.customContext.trim().length > 0;
+        const documentGrounded = custom && hasReferenceFiles && detectCustomModeDocumentGrounding(mode.customContext);
+        const documentGroundedCustomModeActive = custom && hasCustomPrompt && documentGrounded && hasReferenceFiles;
+        return {
+            isCustom: custom,
+            hasReferenceFiles,
+            documentGrounded,
+            documentGroundedCustomModeActive,
+            modeId: mode.id,
+            modeName: mode.name,
+            hasCustomPrompt,
+        };
+    }
+
+    public buildRetrievedActiveModeContextBlock(query: string, transcript?: string, tokenBudget?: number, answerType?: AnswerType, excludeCustomContext?: boolean, pinnedModeId?: string, retrievalOptions?: ModeRetrievalOptions): string {
         const mode = this.resolveMode(pinnedModeId);
         if (!mode) return '';
 
@@ -680,6 +782,7 @@ export class ModesManager {
             tokenBudget,
             answerType,
             excludeCustomContext,
+            ...retrievalOptions,
         });
 
         return result.formattedContext;
@@ -692,10 +795,48 @@ export class ModesManager {
      * we fall back to the existing sync lexical path so the answer flow
      * never breaks. Telemetry distinguishes hybrid hits from lexical fallback.
      */
-    public async buildRetrievedActiveModeContextBlockHybrid(query: string, transcript?: string, tokenBudget?: number, answerType?: AnswerType, excludeCustomContext?: boolean, pinnedModeId?: string, allowRerank?: boolean): Promise<string> {
+    public async buildRetrievedActiveModeContextBlockHybrid(query: string, transcript?: string, tokenBudget?: number, answerType?: AnswerType, excludeCustomContext?: boolean, pinnedModeId?: string, allowRerank?: boolean, retrievalOptions?: ModeRetrievalOptions): Promise<string> {
         const mode = this.resolveMode(pinnedModeId);
         if (!mode) return '';
         const files = this.getReferenceFiles(mode.id);
+
+        // Forced document grounding (audit 2026-06-27): run HYBRID retrieval
+        // first (semantic + lexical with cross-encoder rerank), and if the
+        // hybrid path returns nothing usable (no embedder, no chunks, used
+        // fallback), merge the lexical document-identity block on top. This
+        // gives document-grounded custom modes the precision of semantic
+        // retrieval while preserving the compact identity block for broad
+        // questions like "what is this about?" — the previous code
+        // unconditionally routed to the sync path here, missing the entire
+        // semantic ranking benefit.
+        if (retrievalOptions?.forceDocumentGrounding) {
+            try {
+                const hybridResult = await this.modeContextRetriever.retrieveHybrid(
+                    mode, files, {
+                        query,
+                        transcript,
+                        tokenBudget,
+                        answerType,
+                        excludeCustomContext,
+                        allowRerank,
+                        forceDocumentGrounding: true,
+                    },
+                );
+                if (hybridResult && !hybridResult.usedFallback && hybridResult.formattedContext) {
+                    return hybridResult.formattedContext;
+                }
+                // Hybrid unavailable — fall back to lexical + identity block.
+                return this.buildRetrievedActiveModeContextBlock(
+                    query, transcript, tokenBudget, answerType, excludeCustomContext, pinnedModeId, retrievalOptions,
+                );
+            } catch (err) {
+                // Don't let a hybrid outage block a document-grounded answer.
+                console.warn('[ModesManager] hybrid forceDocumentGrounding failed, falling back to lexical:', err?.message);
+                return this.buildRetrievedActiveModeContextBlock(
+                    query, transcript, tokenBudget, answerType, excludeCustomContext, pinnedModeId, retrievalOptions,
+                );
+            }
+        }
 
         // Telemetry: rag_query / rag_hit / rag_miss / rag_lexical_fallback.
         let usedHybrid = false;
@@ -717,6 +858,7 @@ export class ModesManager {
                 tokenBudget,
                 answerType,
                 allowRerank,
+                ...retrievalOptions,
             });
             usedHybrid = result.usedHybrid;
             usedFallback = result.usedFallback;
@@ -737,7 +879,7 @@ export class ModesManager {
             console.warn('[ModesManager] hybrid retrieval failed, falling back to lexical:', (err as Error)?.message);
         }
 
-        const lexical = this.buildRetrievedActiveModeContextBlock(query, transcript, tokenBudget, answerType, excludeCustomContext, pinnedModeId);
+        const lexical = this.buildRetrievedActiveModeContextBlock(query, transcript, tokenBudget, answerType, excludeCustomContext, pinnedModeId, retrievalOptions);
         try {
             const { telemetryService } = require('./telemetry/TelemetryService');
             telemetryService.track({

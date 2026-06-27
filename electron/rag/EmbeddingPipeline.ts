@@ -504,23 +504,74 @@ export class EmbeddingPipeline {
         });
     }
 
+    async getEmbeddingsWithFallback(texts: string[]): Promise<{ embeddings: number[][]; space: string }> {
+        try {
+            const embeddings = await this.getEmbeddings(texts);
+            const space = this.getActiveSpaceKey();
+            if (!space) throw new Error('Embedding provider has no active space');
+            return { embeddings, space };
+        } catch (primaryError) {
+            const fallback = this.fallbackProvider;
+            // If no fallback is configured, or the primary IS already the fallback
+            // (local-only mode where `this.provider === this.fallbackProvider`),
+            // re-running the same call would silently double-embed and re-trigger
+            // the same timeout. Surface the original failure instead.
+            if (!fallback || fallback === this.provider) throw primaryError;
+            console.warn(
+                `[EmbeddingPipeline] Primary batch embedding failed via ${this.provider?.name ?? 'unknown'}; ` +
+                `falling back to ${fallback.name}:`,
+                primaryError instanceof Error ? primaryError.message : primaryError
+            );
+            const embeddings = await new Promise<number[][]>((resolve, reject) => {
+                const timer = setTimeout(() => {
+                    reject(new Error(
+                        `[EmbeddingPipeline] fallback embedBatch() timed out after ${EMBED_TIMEOUT_MS}ms for ${texts.length} chunks via ${fallback.name}`
+                    ));
+                }, EMBED_TIMEOUT_MS);
+                fallback.embedBatch(texts).then(
+                    (results) => { clearTimeout(timer); resolve(results); },
+                    (err)     => { clearTimeout(timer); reject(err); }
+                );
+            });
+            // Promote fallback for subsequent mode query embeddings. Persisted mode
+            // vectors are only comparable within one active space; keeping the
+            // exhausted cloud provider active would make freshly-local vectors look
+            // perpetually pending and unusable. The promotion guard is a no-op when
+            // already promoted (idempotent under concurrent indexFile callers).
+            if (this.provider !== fallback) {
+                this.provider = fallback;
+                try {
+                    this.db.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES ('last_embedding_space', ?)").run(fallback.space);
+                } catch (dbErr: any) {
+                    console.warn('[EmbeddingPipeline] Failed to persist fallback space:', dbErr?.message || dbErr);
+                }
+            }
+            return { embeddings, space: fallback.space };
+        }
+    }
+
     /**
      * Get embedding for a search query (may use different prefix for asymmetric models).
      * Routes through embedWithTimeout() so a frozen API cannot stall the query path.
      */
     async getEmbeddingForQuery(text: string): Promise<number[]> {
-        if (!this.provider) {
+        const provider = this.provider;
+        if (!provider) {
             throw new Error('Embedding provider not initialized');
         }
+        // Capture `provider` before the await boundary — if a concurrent
+        // getEmbeddingsWithFallback() promotes the fallback while this call is
+        // pending, the captured reference still points to the provider that was
+        // active at the start of the query and matches its space.
         // embedQuery() uses a query-specific prefix for asymmetric models (e.g. Nomic).
         // Wrap with a manual timeout since embedQuery is not covered by embedWithTimeout directly.
         return new Promise<number[]>((resolve, reject) => {
             const timer = setTimeout(() => {
                 reject(new Error(
-                    `[EmbeddingPipeline] embedQuery() timed out after ${EMBED_TIMEOUT_MS}ms for live-query via ${this.provider!.name}`
+                    `[EmbeddingPipeline] embedQuery() timed out after ${EMBED_TIMEOUT_MS}ms for live-query via ${provider.name}`
                 ));
             }, EMBED_TIMEOUT_MS);
-            this.provider!.embedQuery(text).then(
+            provider.embedQuery(text).then(
                 (result) => { clearTimeout(timer); resolve(result); },
                 (err)    => { clearTimeout(timer); reject(err); }
             );

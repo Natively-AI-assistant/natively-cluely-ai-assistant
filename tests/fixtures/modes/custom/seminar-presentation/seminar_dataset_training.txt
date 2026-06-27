@@ -1,0 +1,9 @@
+Dataset structure: dual-arm manipulation demonstrations collected from Mercury X1 teleoperation.
+Dataset tasks include manipulating fruits and objects such as banana and grapes.
+The dataset is formatted into observations, language instructions, and robot action trajectories for VLA training.
+Preprocessing before finetuning aligns camera frames, action chunks, and language commands.
+OpenVLA-OFT finetuning uses LoRA adapters with the collected robot demonstration dataset.
+Hyperparameters are present in the thesis for fine-tuning runs, including learning rate, batch size, training steps, and LoRA rank.
+Compared models are OpenVLA, finetuned OpenVLA-OFT, and AgenticVLA.
+Experiments and results compare standard VLA behavior against AgenticVLA on semantic relationship, prompt complexity, and self-awareness benchmarks.
+Limitations include sim-to-real transfer, dataset scale, hardware constraints, and robustness in open environments.

@@ -44,8 +44,19 @@ function providerTable(env) {
       ],
     },
     {
+      // OpenAI-compatible: real OpenAI OR a LiteLLM gateway (any base URL passed via
+      // OPENAI_API_BASE / LITELLM_BASE_URL). The shell launcher forwards OPENAI_API_BASE
+      // (and also LITELLM_BASE_URL as a fallback); litellm reads OPENAI_API_BASE and
+      // routes calls to the gateway instead of api.openai.com. Without this entry the
+      // LiteLLM gateway user gets retain/reflect calls silently routed to api.openai.com
+      // — the most surprising failure mode for a user who set up a gateway to AVOID
+      // talking to OpenAI.
       provider: 'openai', key: 'OPENAI_API_KEY',
       models: [ov('HINDSIGHT_LLM_OPENAI', 'openai/gpt-5.4')],
+      // OPENAI_API_BASE is the litellm-canonical env var. LITELLM_BASE_URL is a
+      // convenience alias some users set in their own shell — we honor it as a
+      // fallback so the UI-documented `export LITELLM_BASE_URL=...` actually works.
+      apiBase: ov('OPENAI_API_BASE', '') || ov('LITELLM_BASE_URL', '') || undefined,
     },
     {
       provider: 'anthropic', key: 'ANTHROPIC_API_KEY',

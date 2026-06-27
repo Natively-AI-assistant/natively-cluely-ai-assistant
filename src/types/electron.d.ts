@@ -148,7 +148,7 @@ export interface ElectronAPI {
   onTrialEnded:   (cb: (data: { choice: string }) => void) => () => void
 
   // STT Provider Management
-  setSttProvider: (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively') => Promise<{ success: boolean; error?: string }>
+  setSttProvider: (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper') => Promise<{ success: boolean; error?: string }>
   getSttProvider: () => Promise<string>
   setGroqSttApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setOpenAiSttApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
@@ -166,6 +166,16 @@ export interface ElectronAPI {
   // STT Config Events (fired when STT provider/key changes during a meeting)
   onSttConfigChanged: (callback: (data: { configured: boolean; provider: string }) => void) => () => void
   onCredentialsChanged: (callback: () => void) => () => void
+  // Hindsight: app-managed companion server needs restart to pick up new AI-provider key.
+  onHindsightRestartNeeded: (callback: (data: { provider: string }) => void) => () => void
+  // Hindsight: lifecycle state broadcasts from the main process. Persistent top-of-overlay
+  // banner subscribes once and surfaces "View log" on failure states.
+  onHindsightStatus: (callback: (data: { state: 'spawning' | 'ready' | 'unreachable' | 'spawn-failed'; reason?: string; logPath?: string; at?: number }) => void) => () => void
+  // Hindsight: open the server's log file in the OS default viewer. Path is resolved
+  // server-side; renderer never supplies a path.
+  openHindsightLog: () => Promise<{ ok: boolean; logPath?: string; error?: string }>
+  // Hindsight: user-initiated opt-out. Sets the explicit-disable sentinel.
+  disableHindsight: () => Promise<{ success: boolean; error?: string }>
 
   // Native Audio Service Events
   onNativeAudioTranscript: (callback: (transcript: { speaker: string; text: string; final: boolean }) => void) => () => void
@@ -235,6 +245,8 @@ export interface ElectronAPI {
   modesGetReferenceFiles: (modeId: string) => Promise<Array<{ id: string; modeId: string; fileName: string; content: string; createdAt: string }>>
   modesUploadReferenceFile: (modeId: string) => Promise<{ success: boolean; file?: any; cancelled?: boolean; error?: string }>
   modesDeleteReferenceFile: (id: string) => Promise<{ success: boolean; error?: string }>
+  modesGetReferenceFileStatus: (modeId: string) => Promise<{ success: boolean; statuses?: Array<{ fileId: string; fileName: string; status: string; chunkCount: number }>; error?: string }>
+  onModeFileIndexStatus: (callback: (data: { modeId: string; fileId?: string }) => void) => () => void
   modesGetNoteSections: (modeId: string) => Promise<Array<{ id: string; modeId: string; title: string; description: string; sortOrder: number }>>
   modesAddNoteSection: (modeId: string, title: string, description: string) => Promise<{ success: boolean; section?: any; error?: string }>
   modesUpdateNoteSection: (id: string, updates: { title?: string; description?: string }) => Promise<{ success: boolean; error?: string }>
@@ -549,6 +561,14 @@ export interface ElectronAPI {
   // Skills
   skillsRefresh: () => Promise<SkillSummary[]>;
   skillsOpenFolder: () => Promise<{ success: boolean; path: string; error?: string }>;
+  // Skill upload — step-3 wiring. `skillsUpload(payload, { autoInstall: true })`
+  // is a one-shot validate+install; `skillsPreview(payload)` always sets
+  // `autoInstall: false` so the renderer can show a confirm card first.
+  skillsUpload: (
+    payload: SkillUploadPayload,
+    opts?: { autoInstall?: boolean }
+  ) => Promise<UploadSkillOutcome>;
+  skillsPreview: (payload: SkillUploadPayload) => Promise<UploadSkillOutcome>;
 
   // Phone Mirror
   phoneMirrorGetInfo: () => Promise<PhoneMirrorInfo>;
@@ -724,6 +744,59 @@ export interface SkillSummary {
   description: string;
   source: 'builtin' | 'userData';
 }
+
+// ---------------------------------------------------------------------------
+// Skill upload — step-3 wiring. Mirrors electron/services/skills/SkillValidator.ts
+// and electron/services/skills/SkillUploader.ts exactly. Renderers MUST only
+// consume these through the IPC bridge (no direct imports from electron/*).
+// ---------------------------------------------------------------------------
+
+export type SkillValidationField =
+  | 'name'
+  | 'description'
+  | 'instructions'
+  | 'structure'
+  | 'yaml'
+  | 'name_collision'
+  | 'size';
+
+export interface SkillValidationError {
+  field: SkillValidationField;
+  code: string;
+  message: string;
+  conflictingId?: string;
+}
+
+export interface SkillUploadFile {
+  path: string;
+  contentBase64: string;
+}
+
+export interface SkillUploadPreview {
+  id: string;
+  name: string;
+  description: string;
+  instructionsPreview: string;
+  referenceCount: number;
+  assetCount: number;
+  scriptCount: number;
+  otherCount: number;
+  totalBytes: number;
+  fileTree: string[];
+  sourceFolderName?: string;
+}
+
+export type SkillUploadPayload =
+  | { kind: 'file'; filename: string; contentBase64: string }
+  | { kind: 'folder'; files: SkillUploadFile[] };
+
+export type UploadSkillOutcome =
+  | { stage: 'validated'; preview: SkillUploadPreview }
+  | { stage: 'installed'; preview: SkillUploadPreview; skill: SkillSummary; installedPath: string }
+  | { stage: 'failed'; errors: SkillValidationError[]; preview?: SkillUploadPreview };
+// (The `failed` branch carries an optional `preview` when validation
+// succeeded but install failed, so the renderer can keep showing the
+// preview card alongside the install-time error message.)
 
 export interface PhoneMirrorInfo {
   running: boolean;

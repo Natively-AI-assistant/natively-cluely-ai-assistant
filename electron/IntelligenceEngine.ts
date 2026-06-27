@@ -746,6 +746,7 @@ export class IntelligenceEngine extends EventEmitter {
         // two modes (mismatched contract vs. prompt). generationId is stamped onto
         // every live token (#3) so the renderer can drop stale-generation batches.
         const snapshotModeInfo = this.getActiveModeInfo();
+        const documentGroundedCustomModeActive = snapshotModeInfo?.documentGroundedCustomModeActive === true;
         const snapshotModeId = this.getActiveModeId();
         const meetingMarker = this.currentSessionId
             ?? (this.session.getMeetingMetadata?.()?.calendarEventId)
@@ -909,6 +910,7 @@ export class IntelligenceEngine extends EventEmitter {
                             } catch { /* flag module unavailable → no rerank */ }
                             return await mm.buildRetrievedActiveModeContextBlockHybrid(
                                 preparedTranscript, preparedTranscript, 1800, undefined, true, snapshotModeInfo?.id, allowRerank,
+                                documentGroundedCustomModeActive ? { forceDocumentGrounding: true } : undefined,
                             );
                         }
                         return '';
@@ -1065,7 +1067,7 @@ export class IntelligenceEngine extends EventEmitter {
             let candidateProfile = '';
             try {
                 const orchestrator = this.llmHelper.getKnowledgeOrchestrator?.();
-                if (orchestrator?.isKnowledgeMode?.()) {
+                if (orchestrator?.isKnowledgeMode?.() && !documentGroundedCustomModeActive) {
                     const extracted = extractedQuestion;
                     // Only ground question types that resolve to the candidate's
                     // own plain facts. jd_alignment/company questions are
@@ -1167,7 +1169,7 @@ export class IntelligenceEngine extends EventEmitter {
             // assistant" or "I can't share that" — the exact benchmark failures.
             // This supplies FACTS only; the first-person VOICE is owned by the
             // WhatToAnswer prompt. Best-effort and fully guarded.
-            if (!candidateProfile) {
+            if (!candidateProfile && !documentGroundedCustomModeActive) {
                 try {
                     const orch = this.llmHelper.getKnowledgeOrchestrator?.();
                     const resume = (orch as any)?.activeResume?.structured_data ?? null;
@@ -2136,13 +2138,14 @@ export class IntelligenceEngine extends EventEmitter {
                 return null;
             }
 
+            const activeModeInfo = this.getActiveModeInfo();
             const answerPlan = planAnswer({
                 question,
                 source: 'manual_input',
                 speakerPerspective: 'user',
-                activeMode: this.getActiveModeInfo(),
+                activeMode: activeModeInfo,
             });
-            const context = isCodingAnswerType(answerPlan.answerType)
+            const context = activeModeInfo?.documentGroundedCustomModeActive === true || isCodingAnswerType(answerPlan.answerType)
                 ? undefined
                 : this.session.getFormattedContext(120);
             let answer = await this.answerLLM.generate(question, context, answerPlan);

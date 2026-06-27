@@ -5,6 +5,8 @@ export type ProviderUnavailableReason = 'missing_api_key' | 'missing_config' | '
 export type ProviderDataScope = 'transcript' | 'screenshots' | 'reference_files' | 'profile_history' | 'embeddings' | 'post_call_summary';
 export type ProviderDataScopePolicy = Partial<Record<ProviderDataScope, boolean>>;
 
+export const DOCUMENT_GROUNDING_SCOPE_DENIED_MESSAGE = "I can't answer that from the uploaded reference files because the selected provider is not allowed to receive reference-file context. Enable reference-file access for this provider or switch to a local provider, then ask again.";
+
 export class ProviderScopeError extends Error {
     constructor(
         public readonly provider: string,

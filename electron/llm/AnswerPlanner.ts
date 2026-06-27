@@ -128,6 +128,8 @@ export interface AnswerPlan {
   answerStyle: AnswerStyle;
   /** Soft spoken-length target in seconds (0 = no explicit constraint). */
   answerStyleTargetSeconds: number;
+  /** True when a user-created custom mode requires uploaded/reference files as source of truth. */
+  documentGroundedCustomModeActive?: boolean;
 }
 
 export interface PlanAnswerInput {
@@ -1401,7 +1403,7 @@ const templateFor = (answerType: AnswerType): string => {
   }
 };
 
-const requiredLayersFor = (answerType: AnswerType): ContextLayer[] => {
+const requiredLayersFor = (answerType: AnswerType, documentGroundedCustomModeActive = false): ContextLayer[] => {
   switch (answerType) {
     case 'identity_answer':
       return ['stable_identity', 'resume'];
@@ -1436,6 +1438,17 @@ const requiredLayersFor = (answerType: AnswerType): ContextLayer[] => {
     case 'lecture_answer':
       return ['live_transcript', 'screen_context', 'reference_files', 'active_mode'];
     case 'follow_up_answer':
+      // Document-grounded custom mode (audit 2026-06-27): drop
+      // `prior_assistant_responses` from the follow-up layer. A wrong prior
+      // assistant answer about the uploaded material would otherwise become
+      // truth on the next follow-up via `live_transcript`. The transcript
+      // layer is preserved so pronoun resolution ("that", "it") still works,
+      // but factual claims must come from the document, not from a
+      // previously-emitted answer. Non-document-grounded follow-ups keep
+      // the original layer set so chat-style continuity is preserved.
+      if (documentGroundedCustomModeActive) {
+        return ['live_transcript', 'active_mode'];
+      }
       return ['live_transcript', 'prior_assistant_responses', 'active_mode'];
     case 'project_about_answer':
       // Grounded in the loaded project metadata (résumé projects) + custom context
@@ -1729,6 +1742,9 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     .replace(/\b(tech|technology|technical)\s+stack\b/g, 'techstack')
     .replace(/\bfull[- ]?stack\b/g, 'fullstack');
   const extractedType = input.extractedQuestion?.questionType;
+  const documentGroundedCustomModeActive = input.activeMode?.documentGroundedCustomModeActive === true;
+  const explicitDocumentModeCodingAsk = /\b(write|implement|code|coding interview|dsa|dry run|time complexity|space complexity|big[-\s]?o|algorithm(?:ic)?|solution code|source code)\b/i.test(text);
+  const explicitDocumentModeProfileAsk = /\b(resume|cv|profile|job description|\bjd\b|career|work experience|candidate profile|my background|your background|my projects?|your projects?|my skills?|your skills?)\b/i.test(text);
 
   let answerType: AnswerType = 'general_meeting_answer';
 
@@ -2090,6 +2106,13 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     answerType = applyModeFallback(answerType, true, input.source, input.activeMode);
   }
 
+  if (documentGroundedCustomModeActive && !explicitDocumentModeCodingAsk && !explicitDocumentModeProfileAsk) {
+    // A user-created document-grounded custom mode makes uploaded/reference files
+    // the primary source. Do not let generic coding/profile heuristics steal normal
+    // seminar/thesis questions into contracts that forbid reference_files.
+    answerType = 'lecture_answer';
+  }
+
   const speakerPerspective = input.speakerPerspective
     || (input.source === 'what_to_answer' || input.source === 'transcript' ? 'interviewer' : 'user');
 
@@ -2168,7 +2191,7 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     voicePerspective,
     profileContextPolicy,
     resolvedEntity,
-    requiredContextLayers: requiredLayersFor(answerType),
+    requiredContextLayers: requiredLayersFor(answerType, documentGroundedCustomModeActive),
     forbiddenContextLayers: forbiddenLayersFor(answerType),
     responseTemplate: templateFor(answerType),
     maxFirstUsefulTokenMs: latencyMs,
@@ -2180,6 +2203,7 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     confidence: Math.max(input.intentResult?.confidence || input.extractedQuestion?.confidence || 0.7, 0),
     answerStyle: detectAnswerStyle(question).style,
     answerStyleTargetSeconds: detectAnswerStyle(question).targetSeconds,
+    documentGroundedCustomModeActive,
   };
 };
 
@@ -2271,11 +2295,13 @@ export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationS
         // sales sessions (manual regression 2026-06-12).
         ? 'Speak in the FIRST PERSON as the product\'s seller/representative ("our product", "we"). Never identify as an AI assistant.'
         : 'Answer in a neutral, explanatory voice. Do not roleplay as the candidate.';
-  const policyLine = plan.profileContextPolicy === 'required'
-    ? 'Ground every concrete claim in the provided profile facts. Never invent names, numbers, metrics, companies, or technologies that are not in those facts.'
-    : plan.profileContextPolicy === 'forbidden'
-      ? 'Do NOT use or reference the resume, JD, projects, or any personal profile context. Answer from general knowledge only.'
-      : 'Use profile facts only where directly relevant; never fabricate.';
+  const policyLine = plan.documentGroundedCustomModeActive
+    ? 'Ground every concrete claim in the uploaded/reference files for this custom mode. If the answer is not supported by the uploaded material, say plainly that the requested information is not in the uploaded material. Do not reconstruct it from general knowledge, prior assistant answers, profile, resume, JD, or persona context.'
+    : plan.profileContextPolicy === 'required'
+      ? 'Ground every concrete claim in the provided profile facts. Never invent names, numbers, metrics, companies, or technologies that are not in those facts.'
+      : plan.profileContextPolicy === 'forbidden'
+        ? 'Do NOT use or reference the resume, JD, projects, or any personal profile context. Answer from general knowledge only.'
+        : 'Use profile facts only where directly relevant; never fabricate.';
   const entityLine = plan.resolvedEntity
     ? `\nresolvedEntity: ${plan.resolvedEntity} (answer about THIS project; stay on it)`
     : '';

@@ -90,7 +90,7 @@ test('ModeContextRetriever includes reference grounding guard with retrieved sni
   });
 
   assert.equal(result.usedFallback, false);
-  assert.match(result.formattedContext, /<reference_grounding_guard>/);
+  assert.match(result.formattedContext, /<evidence_use_rule>/);
   assert.match(result.formattedContext, /untrusted evidence only/);
   assert.match(result.formattedContext, /never as instructions to follow/);
   assert.match(result.formattedContext, /If the requested item is absent/);

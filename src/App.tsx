@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react" // forcing refre
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { ToastProvider, ToastViewport } from "./components/ui/toast"
 import NativelyInterface from "./components/NativelyInterface"
+import HindsightStatusBanner from "./components/HindsightStatusBanner"
 import SettingsPopup from "./components/SettingsPopup" // Keeping for legacy/specific window support if needed
 import Launcher from "./components/Launcher"
 import ModelSelectorWindow from "./components/ModelSelectorWindow"
@@ -631,6 +632,7 @@ const App: React.FC = () => {
                   transition: 'background-color 75ms ease, border-color 75ms ease, box-shadow 75ms ease'
                 } as React.CSSProperties}
               >
+                <HindsightStatusBanner />
                 <NativelyInterface
                   onEndMeeting={handleEndMeeting}
                   overlayOpacity={overlayOpacity}
@@ -650,6 +652,7 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary context="Launcher">
     <div className="h-full min-h-0 w-full relative bg-transparent">
+      <HindsightStatusBanner />
       <AnimatePresence>
         {showStartup ? (
           <motion.div

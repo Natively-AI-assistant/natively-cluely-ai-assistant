@@ -189,12 +189,13 @@ test('MicrophoneCapture restart after stop must not reuse a torn-down native mon
 
     const cap = new MicrophoneCapture('same-mic-id');
 
-    // Note: MicrophoneCapture uses EAGER init — the constructor already
-    // created a native instance.
-    assert.equal(created.microphone.length, 1, 'constructor should eagerly create a native instance');
-    const first = created.microphone[0];
+    // Note: MicrophoneCapture uses LAZY init — the constructor does NOT create
+    // a native instance. The first construction happens inside start().
+    assert.equal(created.microphone.length, 0, 'constructor (lazy init) must not create a native instance');
 
     cap.start();
+    assert.equal(created.microphone.length, 1, 'start() must construct the first native instance');
+    const first = created.microphone[0];
     assert.equal(first.startCalls, 1, 'first native instance should have been started exactly once');
 
     await cap.stop();

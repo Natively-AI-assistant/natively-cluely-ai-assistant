@@ -45,6 +45,14 @@ export interface ActiveModeInfo {
     /** A user-created mode (custom name/content on the 'general' template, or a
      *  renamed template mode) — surfaced so prompt builders can name it. */
     isCustom: boolean;
+    hasReferenceFiles?: boolean;
+    hasCustomPrompt?: boolean;
+    documentGrounded?: boolean;
+    /**
+     * True only when the active custom mode's own prompt makes uploaded/reference
+     * files authoritative and at least one reference file is available.
+     */
+    documentGroundedCustomModeActive?: boolean;
 }
 
 export interface ModeContextProfile {

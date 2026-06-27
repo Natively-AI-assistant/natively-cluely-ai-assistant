@@ -107,7 +107,7 @@ describe('Reference file format coverage — each format yields retrievable chun
         'Malicious content must be wrapped in <active_mode_retrieved_context> envelope'
       );
       assert.ok(
-        result.formattedContext.includes('<reference_grounding_guard>'),
+        result.formattedContext.includes('<evidence_use_rule>'),
         'Grounding guard must accompany retrieved chunks'
       );
     } else {

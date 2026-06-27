@@ -14,9 +14,9 @@
 // Strategy: mirror CaptureRestartRegression.test.mjs — patch Module._load to
 // inject a fake native module. Track `micInstanceCount` and throw from the
 // MicrophoneCapture native constructor ONLY on the SECOND invocation, so:
-//   1. eager init in the wrapper constructor succeeds  (instance #1)
-//   2. start() works                                    (uses instance #1)
-//   3. stop()'s deferred pre-warm throws                (instance #2 attempt)
+//   1. lazy init: ctor does not construct  (instance count = 0)
+//   2. start() works                       (instance #1 succeeds)
+//   3. stop()'s deferred pre-warm throws   (instance #2 attempt)
 // We then assert the 'pre_warm_failed' listener fired with the simulated error.
 
 import { test } from 'node:test';
@@ -103,9 +103,10 @@ function flushSetImmediate() {
 test('MicrophoneCapture emits pre_warm_failed when deferred pre-warm constructor throws', async () => {
     micInstanceCount = 0;
 
-    // Construction (eager init): consumes mic instance #1, succeeds.
+    // Construction (lazy init): does NOT consume a native instance. The
+    // native monitor is constructed lazily in start() (consumes instance #1).
     const cap = new MicrophoneCapture('mic-device-id');
-    assert.equal(micInstanceCount, 1, 'eager init should have constructed the first native instance');
+    assert.equal(micInstanceCount, 0, 'lazy init must not construct the native monitor in the constructor');
 
     // Collect any 'pre_warm_failed' emissions.
     const preWarmFailures = [];
@@ -117,9 +118,10 @@ test('MicrophoneCapture emits pre_warm_failed when deferred pre-warm constructor
     // test runner via EventEmitter's unhandled-error semantics).
     cap.on('error', () => {});
 
-    // start() uses the already-constructed monitor — no new instance.
+    // start() constructs the monitor (instance #1, succeeds). It does NOT
+    // construct a second one — start() reuses the monitor it just built.
     cap.start();
-    assert.equal(micInstanceCount, 1, 'start() must not construct a new native instance');
+    assert.equal(micInstanceCount, 1, 'start() must construct exactly one native instance');
 
     // stop() defers monitor.stop() + pre-warm `new RustMicCapture(...)` via
     // setImmediate. The pre-warm is the SECOND constructor call, which our

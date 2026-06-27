@@ -14,6 +14,10 @@ const DEFAULT_MODEL = 'gemini-embedding-2';
 // 768 keeps us on the existing vec_chunks_768 table (already in KNOWN_DIMS) —
 // lowest-risk dimension choice for the migration.
 const DEFAULT_DIMS = 768;
+// Gemini rejects batchEmbedContents requests with >100 items. Chunk locally so a
+// large PDF doesn't fall back to hundreds of serial embedContent calls and blow
+// through per-minute quota.
+const MAX_BATCH_REQUESTS = 100;
 
 export class GeminiEmbeddingProvider implements IEmbeddingProvider {
   readonly name = 'gemini';
@@ -105,38 +109,58 @@ export class GeminiEmbeddingProvider implements IEmbeddingProvider {
   // multi-part Content (that would aggregate into one vector).
   async embedBatch(texts: string[], opts: EmbedOptions = {}): Promise<number[][]> {
     if (texts.length === 0) return [];
-    const requests = texts.map(t => ({
-      model: `models/${this.model}`,
-      content: { parts: [{ text: this.formatDocument(t, opts.title) }] },
-      outputDimensionality: this.dimensions,
-    }));
-    let res: Response;
-    try {
-      res = await fetch(this.url('batchEmbedContents'), {
-        method: 'POST',
-        headers: this.headers,
-        body: JSON.stringify({ requests })
-      });
-    } catch (e: any) {
-      console.warn(`[GeminiEmbeddingProvider] batchEmbedContents network error, falling back to serial: ${e?.message || e}`);
-      return this.embedSerial(texts, opts);
+    const out: number[][] = [];
+
+    for (let start = 0; start < texts.length; start += MAX_BATCH_REQUESTS) {
+      const batch = texts.slice(start, start + MAX_BATCH_REQUESTS);
+      const requests = batch.map(t => ({
+        model: `models/${this.model}`,
+        content: { parts: [{ text: this.formatDocument(t, opts.title) }] },
+        outputDimensionality: this.dimensions,
+      }));
+      let res: Response;
+      try {
+        res = await fetch(this.url('batchEmbedContents'), {
+          method: 'POST',
+          headers: this.headers,
+          body: JSON.stringify({ requests })
+        });
+      } catch (e: any) {
+        console.warn(`[GeminiEmbeddingProvider] batchEmbedContents network error, falling back to serial for batch ${start}-${start + batch.length - 1}: ${e?.message || e}`);
+        out.push(...await this.embedSerial(batch, opts));
+        continue;
+      }
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        // 429: rate-limited on this sub-batch only. Treat it like any other batch-
+        // endpoint failure: serial-embed the rate-limited slice, continue with the
+        // rest of the batches. Throwing here would discard successfully-embedded
+        // prior sub-batches and force the caller to re-embed them via fallback.
+        if (res.status === 429) {
+          console.warn(`[GeminiEmbeddingProvider] batchEmbedContents 429 for batch ${start}-${start + batch.length - 1}: ${body}. Falling back to serial for this sub-batch.`);
+          out.push(...await this.embedSerial(batch, opts));
+          continue;
+        }
+        // Resilient fallback: serial single-embed preserves order and survives a
+        // partial batch-endpoint outage (re-index must be error-tolerant). Log the
+        // body so a schema error isn't silently masked as a "batch outage".
+        console.warn(`[GeminiEmbeddingProvider] batchEmbedContents failed (${res.status} ${res.statusText}) for batch ${start}-${start + batch.length - 1}: ${body}. Falling back to serial.`);
+        out.push(...await this.embedSerial(batch, opts));
+        continue;
+      }
+      const data = await res.json();
+      const embeddings = data?.embeddings;
+      // Guard against a short/misaligned batch response — positional mapping to chunk
+      // ids means a length mismatch silently corrupts which vector belongs to which chunk.
+      if (!Array.isArray(embeddings) || embeddings.length !== batch.length) {
+        console.warn(`[GeminiEmbeddingProvider] batch returned ${Array.isArray(embeddings) ? embeddings.length : typeof embeddings} vectors for ${batch.length} inputs. Falling back to serial.`);
+        out.push(...await this.embedSerial(batch, opts));
+        continue;
+      }
+      out.push(...embeddings.map((e: { values: unknown }, i: number) => this.validateVector(e?.values, `embedBatch[${start + i}]`)));
     }
-    if (!res.ok) {
-      // Resilient fallback: serial single-embed preserves order and survives a
-      // partial batch-endpoint outage (re-index must be error-tolerant). Log the
-      // body so a schema/quota error isn't silently masked as a "batch outage".
-      console.warn(`[GeminiEmbeddingProvider] batchEmbedContents failed (${res.status} ${res.statusText}): ${await res.text().catch(() => '')}. Falling back to serial.`);
-      return this.embedSerial(texts, opts);
-    }
-    const data = await res.json();
-    const embeddings = data?.embeddings;
-    // Guard against a short/misaligned batch response — positional mapping to chunk
-    // ids means a length mismatch silently corrupts which vector belongs to which chunk.
-    if (!Array.isArray(embeddings) || embeddings.length !== texts.length) {
-      console.warn(`[GeminiEmbeddingProvider] batch returned ${Array.isArray(embeddings) ? embeddings.length : typeof embeddings} vectors for ${texts.length} inputs. Falling back to serial.`);
-      return this.embedSerial(texts, opts);
-    }
-    return embeddings.map((e: { values: unknown }, i: number) => this.validateVector(e?.values, `embedBatch[${i}]`));
+
+    return out;
   }
 
   private async embedSerial(texts: string[], opts: EmbedOptions): Promise<number[][]> {

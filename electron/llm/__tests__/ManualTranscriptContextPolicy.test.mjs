@@ -14,7 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distRoot = path.resolve(__dirname, '../../../dist-electron/electron');
 
 const { planAnswer } = await import(pathToFileURL(path.join(distRoot, 'llm/AnswerPlanner.js')).href);
-const { shouldAutoAttachManualTranscriptContext } = await import(
+const { isTranscriptBoundManualQuestion, shouldAutoAttachManualTranscriptContext } = await import(
   pathToFileURL(path.join(distRoot, 'llm/manualTranscriptContextPolicy.js')).href
 );
 
@@ -42,6 +42,8 @@ describe('manual transcript context policy', () => {
   test('explicit meeting and lecture questions keep transcript context', () => {
     assert.equal(attaches('what did we decide about UI policy?'), true);
     assert.equal(attaches('summarize the meeting'), true);
+    assert.equal(isTranscriptBoundManualQuestion('summarize the meeting'), true);
+    assert.equal(isTranscriptBoundManualQuestion('summarise the call'), true);
     assert.equal(attaches('what did they say about client state?'), true);
     assert.equal(attaches('what did the professor mean by this slide?'), true);
     assert.equal(attaches('from the transcript, what did Alex say?'), true);
@@ -78,13 +80,16 @@ describe('manual transcript context policy wiring', () => {
   test('desktop manual chat gates autoContextSnapshot through the policy helper', () => {
     assert.match(
       ipcSrc,
-      /else if \(!context && autoContextSnapshot && shouldAutoAttachManualTranscriptContext\(message, answerPlan\)\) \{\s*context = autoContextSnapshot;/,
+      /else if \(!context && autoContextSnapshot && shouldAutoAttachManualTranscriptContext\(message, answerPlan\)\) \{[\s\S]*let snapshotForContext = autoContextSnapshot;[\s\S]*stripPriorAssistantTurns\(autoContextSnapshot\);[\s\S]*context = snapshotForContext;/,
     );
     assert.match(ipcSrc, /Skipped 100s transcript context for standalone manual chat/);
   });
 
   test('phone chat uses the same policy before attaching rolling transcript', () => {
+    assert.match(ipcSrc, /let phoneActiveMode: import\('\.\/llm\/modeProfiles'\)\.ActiveModeInfo \| null = null;/);
     assert.match(ipcSrc, /const phoneAnswerPlan = planAnswer\(/);
+    assert.match(ipcSrc, /activeMode: phoneActiveMode/);
     assert.match(ipcSrc, /shouldAutoAttachManualTranscriptContext\(message, phoneAnswerPlan\)/);
+    assert.match(ipcSrc, /\[PhoneMirror\] Skipped 100s transcript context for standalone manual chat/);
   });
 });

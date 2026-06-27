@@ -508,6 +508,7 @@ export class AppState {
   private intelligenceManager: IntelligenceManager
   private themeManager: ThemeManager
   private ragManager: RAGManager | null = null
+  private modeReferenceRetryPromise: Promise<void> | null = null
   private knowledgeOrchestrator: any = null
   private tray: Tray | null = null
   private updateAvailable: boolean = false
@@ -1130,6 +1131,22 @@ export class AppState {
     this.broadcast('meeting-state-changed', { isActive: this.isMeetingActive });
   }
 
+  private scheduleModeReferenceIndexRetry(): void {
+    if (this.modeReferenceRetryPromise) return;
+    const pipeline = this.ragManager?.getEmbeddingPipeline();
+    if (!pipeline) return;
+
+    this.modeReferenceRetryPromise = pipeline.waitForReady(15000).then(async () => {
+      const { ModesManager } = require('./services/ModesManager');
+      const modesManager = ModesManager.getInstance();
+      await modesManager.retryAllLexicalOnlyFiles().catch(() => { /* logged inside */ });
+      for (const mode of modesManager.getModes()) {
+        this.broadcast('mode-file-index-status', { modeId: mode.id, phase: 'done' });
+      }
+    }).catch(() => { /* provider unavailable — lexical fallback remains valid */ })
+      .finally(() => { this.modeReferenceRetryPromise = null; });
+  }
+
   private async bootstrapOllamaEmbeddings() {
     this._ollamaBootstrapPromise = (async () => {
       try {
@@ -1155,6 +1172,7 @@ export class AppState {
                 ollamaUrl: process.env.OLLAMA_URL || "http://localhost:11434",
                 providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })()
              });
+             this.scheduleModeReferenceIndexRetry();
           }
         }
       } catch (err) {
@@ -1185,6 +1203,15 @@ export class AppState {
             providerDataScopes
         });
         this.ragManager.setLLMHelper(this.processingHelper.getLLMHelper());
+
+        // Modes reference files must use the same initialized EmbeddingPipeline as
+        // the main RAG stack. A private, never-initialized pipeline marks every
+        // upload as lexical_only even after Gemini/Ollama embeddings are ready.
+        const { ModesManager } = require('./services/ModesManager');
+        const modeEmbeddingPipeline = this.ragManager.getEmbeddingPipeline();
+        ModesManager.getInstance().setSharedEmbeddingPipeline(modeEmbeddingPipeline);
+        this.scheduleModeReferenceIndexRetry();
+
         console.log('[AppState] RAGManager initialized');
       }
     } catch (error) {
@@ -2604,10 +2631,42 @@ export class AppState {
       this.googleSTT_User = null;
     }
 
+    // Mic first. MicrophoneCapture is lazy-init: start() constructs the cpal
+    // input stream. Do this before starting the CoreAudio system tap so cpal
+    // does not negotiate input while the aggregate device IO proc is active.
+    // Mic usually survives sleep, but recreate to be safe; cpal exclusive mode
+    // on Windows can silently drop the stream.
+    if (this.microphoneCapture) {
+      try {
+        await this.microphoneCapture.destroy();
+      } catch (e) {
+        console.warn('[Main] Resume: mic capture destroy threw:', e);
+      }
+      this.microphoneCapture = null;
+    }
+    try {
+      this.microphoneCapture = new MicrophoneCapture(this._lastRequestedInputDeviceId);
+      this._micSttRateApplied = false;
+      this.wireMicCapture(this.microphoneCapture, '(Resume)');
+      this.microphoneCapture.start();
+    } catch (err) {
+      console.error('[Main] Resume: failed to restart mic capture:', err);
+      this.sendAudioCaptureFailed( {
+        channel: 'mic',
+        message: 'Microphone failed to restart after wake. Check that no other app holds the mic, then end and restart the meeting.',
+        attempt: 0,
+        maxAttempts: 0,
+        terminal: true,
+        stuck: false,
+      });
+    }
+
     // System audio (CoreAudio Tap is the most fragile across sleep cycles).
+    // Start it after the mic stream has been constructed to avoid CoreAudio HAL
+    // contention during resume as well as initial meeting start.
     if (this.systemAudioCapture) {
       try {
-        this.systemAudioCapture.destroy();
+        await this.systemAudioCapture.destroy();
       } catch (e) {
         console.warn('[Main] Resume: system capture destroy threw:', e);
       }
@@ -2635,33 +2694,6 @@ export class AppState {
       this.sendAudioCaptureFailed( {
         channel: 'system',
         message: 'System audio capture failed to restart after wake. End and restart the meeting to recover.',
-        attempt: 0,
-        maxAttempts: 0,
-        terminal: true,
-        stuck: false,
-      });
-    }
-
-    // Mic — usually survives sleep but recreate to be safe; cpal exclusive
-    // mode on Windows can silently drop the stream.
-    if (this.microphoneCapture) {
-      try {
-        this.microphoneCapture.destroy();
-      } catch (e) {
-        console.warn('[Main] Resume: mic capture destroy threw:', e);
-      }
-      this.microphoneCapture = null;
-    }
-    try {
-      this.microphoneCapture = new MicrophoneCapture(this._lastRequestedInputDeviceId);
-      this._micSttRateApplied = false;
-      this.wireMicCapture(this.microphoneCapture, '(Resume)');
-      this.microphoneCapture.start();
-    } catch (err) {
-      console.error('[Main] Resume: failed to restart mic capture:', err);
-      this.sendAudioCaptureFailed( {
-        channel: 'mic',
-        message: 'Microphone failed to restart after wake. Check that no other app holds the mic, then end and restart the meeting.',
         attempt: 0,
         maxAttempts: 0,
         terminal: true,
@@ -3170,10 +3202,12 @@ export class AppState {
     }
 
     if (this.isMeetingActive) {
-      this.systemAudioCapture?.start();
+      // Mic first: lazy mic start constructs the cpal input stream; do it
+      // before starting the CoreAudio system tap to avoid HAL contention.
       this.microphoneCapture?.start();
-      this.googleSTT?.start();
       this.googleSTT_User?.start();
+      this.systemAudioCapture?.start();
+      this.googleSTT?.start();
     }
   }
 
@@ -3234,8 +3268,23 @@ export class AppState {
     // before we null-out the STT instances. Without this, buffered 'data' events
     // still in-flight call this.googleSTT?.write() while googleSTT is already null.
     if (this.isMeetingActive) {
-      this.systemAudioCapture?.stop();
-      this.microphoneCapture?.stop();
+      // Wait for native teardown before restarting below. This keeps the lazy
+      // mic start from constructing a new cpal stream while the previous
+      // CoreAudio tap / mic handle is still releasing on setImmediate.
+      await Promise.all([
+        Promise.resolve(this.systemAudioCapture?.stop()).catch((e) => {
+          console.warn('[Main] Reconfigure STT: system capture stop threw:', e);
+        }),
+        (async () => {
+          // This path immediately restarts the same wrapper below. Disable the
+          // asynchronous pre-warm so stop() cannot race a freshly-started instance
+          // by constructing an extra cpal stream in its post-teardown .then().
+          this.microphoneCapture?.disablePreWarm();
+          await this.microphoneCapture?.stop();
+        })().catch((e) => {
+          console.warn('[Main] Reconfigure STT: mic capture stop threw:', e);
+        }),
+      ]);
     }
 
     // Now safe to destroy STT instances — no more audio events incoming
@@ -3256,10 +3305,12 @@ export class AppState {
     // macOS and immediately triggers the orange mic indicator even without .play()).
     if (this.isMeetingActive) {
       await this.setupSystemAudioPipeline();
-      this.systemAudioCapture?.start();
+      // Mic first: lazy mic start constructs the cpal input stream; do it
+      // before starting the CoreAudio system tap to avoid HAL contention.
       this.microphoneCapture?.start();
-      this.googleSTT?.start();
       this.googleSTT_User?.start();
+      this.systemAudioCapture?.start();
+      this.googleSTT?.start();
     }
 
     console.log('[Main] STT Provider reconfigured');
@@ -3605,31 +3656,74 @@ export class AppState {
           return;
         }
 
-        // Tear down + recreate the mic only (don't touch the system-audio
-        // capture; cpal needs a fresh device handle after error).
-        if (this.microphoneCapture) {
-          this.microphoneCapture.destroy();
-          this.microphoneCapture = null;
+        // Tear down + recreate the mic. Because MicrophoneCapture is lazy-init,
+        // mic.start() constructs the cpal input stream. Pause system audio first
+        // so cpal does not negotiate the mic stream while the CoreAudio aggregate
+        // device IO proc is active — same HAL ordering invariant as startMeeting.
+        const systemCapturePausedForMicRecovery = !!this.systemAudioCapture;
+        const systemCapturePausedByMicRecovery = this.systemAudioCapture;
+        if (systemCapturePausedByMicRecovery) {
+          (systemCapturePausedByMicRecovery as any)?.__disarmStuckWatchdog?.();
+          await systemCapturePausedByMicRecovery.stop();
         }
-        this._micSttRateApplied = false;
 
+        let micRecoveryErr: any = null;
         try {
-          this.microphoneCapture = new MicrophoneCapture(this._lastRequestedInputDeviceId);
-        } catch (createErr) {
-          console.warn('[MicRecovery] Saved device unavailable on recovery, falling back to default.', createErr);
-          this.microphoneCapture = new MicrophoneCapture();
+          if (this.microphoneCapture) {
+            await this.microphoneCapture.destroy();
+            this.microphoneCapture = null;
+          }
+          this._micSttRateApplied = false;
+
+          try {
+            this.microphoneCapture = new MicrophoneCapture(this._lastRequestedInputDeviceId);
+          } catch (createErr) {
+            console.warn('[MicRecovery] Saved device unavailable on recovery, falling back to default.', createErr);
+            this.microphoneCapture = new MicrophoneCapture();
+          }
+
+          // Use the canonical wiring path (wireMicCapture) instead of hand-rolling
+          // data/sample_rate_changed/speech_ended. Hand-rolled wiring drifts: this
+          // recovery path used to omit the stuck-watchdog and zero-fill detector
+          // (lines 1612-1693 of wireMicCapture), so after a mic recovery the user
+          // would silently get zero-filled audio with no UI signal — exactly the
+          // failure mode the watchdog was built to surface. setupMicRecoveryHandler
+          // is invoked at the tail of wireMicCapture so we don't need a separate
+          // call here either. Mirrors the system-audio recovery pattern at L2413.
+          this.wireMicCapture(this.microphoneCapture, '(Recovery)');
+          this.microphoneCapture.start();
+        } catch (err) {
+          micRecoveryErr = err;
+        } finally {
+          // Only restart the exact system wrapper WE paused. If a route-change
+          // watcher or system-audio recovery rebuilt/restarted system audio while
+          // mic recovery was in flight, that owner should keep control; starting
+          // whatever happens to be in this.systemAudioCapture could resurrect a
+          // stale wrapper or double-start a freshly-owned one.
+          if (
+            systemCapturePausedForMicRecovery &&
+            systemCapturePausedByMicRecovery &&
+            this.systemAudioCapture === systemCapturePausedByMicRecovery &&
+            !this._defaultOutputSwitchInProgress &&
+            !this._systemAudioRecoveryInProgress &&
+            isMicRecoveryCurrentMeeting()
+          ) {
+            try {
+              systemCapturePausedByMicRecovery.start();
+            } catch (restartErr) {
+              console.error('[MicRecovery] Failed to restart system audio after mic recovery pause:', restartErr);
+              this.sendAudioCaptureFailed({
+                channel: 'system',
+                message: `System audio failed to restart after microphone recovery: ${(restartErr as Error)?.message || 'unknown error'}`,
+                attempt: 0,
+                maxAttempts: 0,
+                terminal: false,
+              });
+            }
+          }
         }
 
-        // Use the canonical wiring path (wireMicCapture) instead of hand-rolling
-        // data/sample_rate_changed/speech_ended. Hand-rolled wiring drifts: this
-        // recovery path used to omit the stuck-watchdog and zero-fill detector
-        // (lines 1612-1693 of wireMicCapture), so after a mic recovery the user
-        // would silently get zero-filled audio with no UI signal — exactly the
-        // failure mode the watchdog was built to surface. setupMicRecoveryHandler
-        // is invoked at the tail of wireMicCapture so we don't need a separate
-        // call here either. Mirrors the system-audio recovery pattern at L2413.
-        this.wireMicCapture(this.microphoneCapture, '(Recovery)');
-        this.microphoneCapture.start();
+        if (micRecoveryErr) throw micRecoveryErr;
 
         this._micRecoveryAttempts = 0;
         console.log('[MicRecovery] MicrophoneCapture restarted successfully.');
@@ -3784,7 +3878,10 @@ export class AppState {
       console.warn('[Main] Failed to start audio test on preferred device. Falling back to default.', err);
       // RC-02 fix: explicitly stop and null the failed capture before creating
       // the fallback to prevent a brief double-microphone-capture window.
-      try { this.audioTestCapture?.stop(); } catch { /* ignore errors on already-failed capture */ }
+      try {
+        this.audioTestCapture?.disablePreWarm();
+        this.audioTestCapture?.stop();
+      } catch { /* ignore errors on already-failed capture */ }
       this.audioTestCapture = null;
       try {
         this.audioTestCapture = new MicrophoneCapture();
@@ -4127,15 +4224,20 @@ export class AppState {
         userSttOwnedByInit = this.googleSTT_User;
         ragManagerOwnedByInit = this.ragManager;
 
-        // Start System Audio
-        this.systemAudioCapture?.start();
-        this.googleSTT?.start();
-        systemSttStartedByInit = true;
-
-        // Start Microphone
+        // Start Microphone FIRST. MicrophoneCapture is lazy-init: start()
+        // constructs the cpal input stream. If we start the CoreAudio system
+        // tap first, cpal can hang inside build_input_stream while the aggregate
+        // device IO proc is already active (observed: logs stop after
+        // `[Microphone] Device: ...`). Keep launch-time mic discipline by
+        // staying lazy, but restore the pre-fix HAL ordering inside meetings.
         this.microphoneCapture?.start();
         this.googleSTT_User?.start();
         userSttStartedByInit = true;
+
+        // Start System Audio after the mic stream has been constructed.
+        this.systemAudioCapture?.start();
+        this.googleSTT?.start();
+        systemSttStartedByInit = true;
 
         // Start JIT RAG live indexing
         if (this.ragManager) {
@@ -5908,6 +6010,38 @@ if (process.env.THINKING_MATRIX === '1') {
     console.warn('[Init] STT pre-warm threw (non-fatal):', err);
   }
 
+  // Mic-indicator discipline: at this point in the launch path we MUST NOT
+  // have any live MicrophoneCapture instances. microphoneCapture is the
+  // meeting-time capture (constructed in setupSystemAudioPipeline, gated on
+  // isMeetingActive). audioTestCapture is the Settings > Audio test capture
+  // (constructed in startAudioTest, user-initiated). If either is non-null
+  // at app launch — before any user has started a meeting or opened Audio
+  // settings — the macOS CoreAudio HAL is being touched prematurely, and the
+  // orange menu-bar mic-in-use indicator will be on for the lifetime of the
+  // process. This is a regression guard; log and continue (don't crash).
+  if (process.platform === 'darwin') {
+    try {
+      const mc = (appState as unknown as { microphoneCapture: unknown }).microphoneCapture;
+      const at = (appState as unknown as { audioTestCapture: unknown }).audioTestCapture;
+      if (mc !== null && mc !== undefined) {
+        console.warn(
+          '[INVARIANT] MicrophoneCapture exists at app launch (pre-meeting). ' +
+          'This will keep the macOS mic-in-use indicator on. Investigate the ' +
+          'construction site — setupSystemAudioPipeline must remain LAZY.'
+        );
+      }
+      if (at !== null && at !== undefined) {
+        console.warn(
+          '[INVARIANT] audioTestCapture exists at app launch. This means ' +
+          'Settings > Audio test was started without user action — investigate.'
+        );
+      }
+    } catch (e) {
+      // Non-fatal: this is a debug aid, not a safety check.
+      console.error('[INVARIANT] mic-capture invariant check threw:', e);
+    }
+  }
+
   appState.createWindow()
 
   // Defer the zero-shot intent classifier warmup until after the launcher has
@@ -6216,6 +6350,18 @@ if (process.env.THINKING_MATRIX === '1') {
 
     // Kill Ollama if we started it
     OllamaManager.getInstance().stop();
+
+    // Stop any in-flight Settings > Audio test so the OS mic indicator turns
+    // off cleanly on quit. Without this, a user who quits while on the Audio
+    // tab leaves `audioTestCapture` running on the deferred setImmediate path,
+    // and the CoreAudio HAL handle can outlive V8 teardown — keeping the
+    // orange mic-in-use indicator briefly visible in the macOS menu bar after
+    // the process exits. Idempotent (no-op if no test is running).
+    try {
+      appState.stopAudioTest();
+    } catch (e) {
+      console.error('[main] Failed to stop audio test during shutdown:', e);
+    }
 
     // Tear down the Phone Mirror service so the OS port is freed cleanly.
     PhoneMirrorService.getInstance().dispose().catch((err) =>

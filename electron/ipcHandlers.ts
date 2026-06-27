@@ -17,6 +17,7 @@ import { BrowserMetadataClassifierService } from './services/browser-context/Bro
 import type { BrowserContextCategory, SafeWebsiteMetadata } from './services/browser-context/types';
 import { SettingsManager } from './services/SettingsManager';
 import { SkillsManager } from './services/SkillsManager';
+import { DEFAULT_BUILTIN_SKILL_IDS, type SkillUploadPayload } from './services/skills/SkillValidator';
 
 import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
@@ -101,6 +102,38 @@ async function pinPdfjsWorkerSrcOnce(): Promise<void> {
     // it to the user-facing message.
     console.warn('[IPC] pdfjs-dist workerSrc pin failed (PDF parse may fail):', (pinErr as Error)?.message);
   }
+}
+
+/**
+ * Strip prior ASSISTANT turns from a SessionTracker formatted-context snapshot
+ * (audit 2026-06-27, document-grounded real-path fix). The snapshot format is
+ * line-prefixed blocks: `[ME]: ...`, `[INTERVIEWER]: ...`,
+ * `[ASSISTANT (PREVIOUS SUGGESTION)]: ...` joined by '\n' (see
+ * SessionTracker.formatContextItems). An assistant block's text may itself span
+ * multiple lines, so once we see the ASSISTANT label we drop every following
+ * line until the next `[ME]:` / `[INTERVIEWER]:` label (or end of input).
+ *
+ * Keeping `[ME]:` / `[INTERVIEWER]:` turns preserves follow-up pronoun
+ * resolution; dropping the assistant turns prevents a previously-emitted answer
+ * from anchoring the next document-grounded answer (the observed topic collapse).
+ */
+function stripPriorAssistantTurns(snapshot: string): string {
+  const lines = snapshot.split('\n');
+  const kept: string[] = [];
+  let skipping = false;
+  for (const line of lines) {
+    if (/^\[ASSISTANT \(PREVIOUS SUGGESTION\)\]:/.test(line)) {
+      skipping = true;
+      continue;
+    }
+    if (/^\[(ME|INTERVIEWER)\]:/.test(line)) {
+      skipping = false;
+      kept.push(line);
+      continue;
+    }
+    if (!skipping) kept.push(line);
+  }
+  return kept.join('\n').trim();
 }
 
 export function initializeIpcHandlers(appState: AppState): void {
@@ -1140,7 +1173,17 @@ export function initializeIpcHandlers(appState: AppState): void {
           && answerPlan.answerType !== 'ethical_usage_answer'
           && answerPlan.answerType !== 'project_link_answer'
           && answerPlan.answerType !== 'source_code_evidence_answer'
-          && answerPlan.answerType !== 'project_about_answer';
+          && answerPlan.answerType !== 'project_about_answer'
+          // Document-grounded custom mode (audit 2026-06-27, real-path fix):
+          // when the planner rewrote the type to lecture_answer (because the
+          // active mode is document-grounded and the ask is NOT an explicit
+          // profile request — see AnswerPlanner explicitDocumentModeProfileAsk),
+          // the deterministic profile fast-path MUST be skipped so it cannot
+          // emit a resume/project answer (TalentScope etc.) over the uploaded
+          // material. We gate on the ANSWER TYPE, not the mode flag, so a
+          // legitimate "how does my thesis relate to my work experience"
+          // (which the planner leaves as a profile type) still gets the fast path.
+          && answerPlan.answerType !== 'lecture_answer';
         if (fastPathEligible) {
           try {
             const orchestrator = llmHelper.getKnowledgeOrchestrator?.();
@@ -1266,10 +1309,26 @@ export function initializeIpcHandlers(appState: AppState): void {
             answerType: answerPlan.answerType,
           });
         } else if (!context && autoContextSnapshot && shouldAutoAttachManualTranscriptContext(message, answerPlan)) {
-          context = autoContextSnapshot;
-          console.log(
-            `[IPC] Auto-injected 100s context for gemini-chat-stream (${context.length} chars)`,
-          );
+          // Document-grounded custom mode (audit 2026-06-27, real-path fix):
+          // strip prior ASSISTANT turns from the rolling snapshot before it
+          // becomes the prompt context. A previously-emitted answer (e.g.
+          // "AgenticVLA improves because the agentic framework acts as an
+          // intelligent wrapper…") was being fed into EVERY subsequent
+          // question, anchoring the weak model to one answer regardless of the
+          // actual question (the observed "topic collapse"). We strip only the
+          // `[ASSISTANT (PREVIOUS SUGGESTION)]:` blocks — `[ME]:` / `[INTERVIEWER]:`
+          // turns are kept so follow-up pronoun resolution ("tell me more about
+          // that") still works. Non-document-grounded chat keeps the full snapshot.
+          let snapshotForContext = autoContextSnapshot;
+          if (answerPlan.answerType === 'lecture_answer' && manualActiveMode?.documentGroundedCustomModeActive) {
+            snapshotForContext = stripPriorAssistantTurns(autoContextSnapshot);
+          }
+          if (snapshotForContext.trim().length > 0) {
+            context = snapshotForContext;
+            console.log(
+              `[IPC] Auto-injected 100s context for gemini-chat-stream (${context.length} chars${snapshotForContext !== autoContextSnapshot ? ', prior-assistant turns stripped for document-grounded mode' : ''})`,
+            );
+          }
         } else if (!context && autoContextSnapshot) {
           console.log('[IPC] Skipped 100s transcript context for standalone manual chat', {
             answerType: answerPlan.answerType,
@@ -1404,9 +1463,22 @@ export function initializeIpcHandlers(appState: AppState): void {
         // framing in HARD_SYSTEM_PROMPT/ASSIST_MODE_PROMPT that was causing coding
         // questions to be answered with "At Aetherbot AI, I was responsible for..."
         // (resume hijack via CONTEXT_INTELLIGENCE_LAYER's "you ARE the user").
-        const systemPromptOverride: string | undefined = options?.skipSystemPrompt
+        let systemPromptOverride: string | undefined = options?.skipSystemPrompt
           ? ''
           : CHAT_MODE_PROMPT;
+        // Document-grounded custom mode (audit 2026-06-27, real-path fix):
+        // CHAT_MODE_PROMPT instructs the model to reply only "Hey! What would
+        // you like help with?" for a bare greeting. A weak model (production
+        // serverModel = gemini-3.1-flash-lite) misfires that greeting for real
+        // document questions ("How was OpenVLA-OFT finetuned?"). Override the
+        // greeting instruction at the SOURCE for document-grounded answers so
+        // the model never falls back to it — far more robust on a weak model
+        // than a post-hoc regex. The post-stream validator (below) is a backstop.
+        if (systemPromptOverride
+          && answerPlan.answerType === 'lecture_answer'
+          && manualActiveMode?.documentGroundedCustomModeActive) {
+          systemPromptOverride += '\n\n## DOCUMENT-GROUNDED OVERRIDE\nNever reply with a greeting such as "Hey! What would you like help with?". Every question is about the uploaded material. Answer it directly from the uploaded material. If the uploaded material does not contain the answer, say so plainly in one sentence — do not greet, and do not ask what the user wants.';
+        }
 
         try {
           // USE streamChat which handles routing. Pass the abort signal as
@@ -2482,19 +2554,31 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Fresh probe (not the cached isAvailable): the settings panel polls this while open, and
       // the local server takes ~15-20s to load embedding models before /health answers. A cached
       // value would leave the chip stuck on "Can't connect" even after the server comes up.
+      // Use the RESOLVED config (synthetic default OR persisted OR null) so health probing
+      // works for the no-save flow.
       const hm = HindsightManager.getInstance();
-      const available = (sm.get('hindsightBaseUrl') ? await hm.healthCheck() : false) || hm.isAvailable();
+      const cfg = hm.getHindsightConfig();
+      const available = cfg ? ((await hm.healthCheck()) || hm.isAvailable()) : false;
+      const authFailed = Boolean(hm.isAuthFailed?.());
+      // `synthetic` is true when getHindsightConfig synthesized the default — the renderer
+      // uses it to label the URL as "(using local default)". We mirror it from the resolved
+      // config so the renderer never has to re-derive isLocalTarget itself.
+      const storedUrl = String(sm.get('hindsightBaseUrl') || '');
       return {
-        baseUrl: String(sm.get('hindsightBaseUrl') || ''),
+        baseUrl: cfg?.baseUrl || 'http://localhost:8888',
         hasApiKey: Boolean(sm.get('hindsightApiKey')),
         autoStart: sm.get('hindsightAutoStart') !== false, // default on
         serverCommand: String(sm.get('hindsightServerCommand') || ''),
         llmProvider: String(sm.get('hindsightLlmProvider') || ''),
+        mode: cfg?.mode || 'local',
+        synthetic: Boolean(cfg?.synthetic),
+        explicitlyDisabled: sm.get('hindsightExplicitlyDisabled') === true,
         available,
+        authFailed,
       };
     } catch (e: any) {
       console.warn('[HindsightConfig] get failed:', e?.message);
-      return { baseUrl: '', hasApiKey: false, autoStart: true, serverCommand: '', llmProvider: '', available: false };
+      return { baseUrl: 'http://localhost:8888', hasApiKey: false, autoStart: true, serverCommand: '', llmProvider: '', mode: 'local' as const, synthetic: true, explicitlyDisabled: false, available: false, authFailed: false };
     }
   });
 
@@ -2508,9 +2592,17 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (typeof cfg?.autoStart === 'boolean') sm.set('hindsightAutoStart', cfg.autoStart);
       if (typeof cfg?.serverCommand === 'string') sm.set('hindsightServerCommand', cfg.serverCommand.trim());
       if (typeof cfg?.llmProvider === 'string') sm.set('hindsightLlmProvider', cfg.llmProvider.trim());
-      // Re-probe so the caller gets fresh availability.
+      // Saving ANY config reverses the explicit-opt-out sentinel. The user is engaging
+      // with Hindsight again — the override should not silently re-apply.
+      if (sm.get('hindsightExplicitlyDisabled') === true) sm.set('hindsightExplicitlyDisabled', false);
+      // Re-run start() so the auto-spawn fires IN-SESSION — previously the user had to restart
+      // the app for the boot-time start() to see the new config. start() is idempotent and a
+      // no-op when nothing changed (e.g. user just saved the same baseUrl).
       const { HindsightManager } = require('./services/HindsightManager') as typeof import('./services/HindsightManager');
-      const healthy = await HindsightManager.getInstance().healthCheck();
+      const hm = HindsightManager.getInstance();
+      void hm.start().catch((e: any) => console.warn('[HindsightConfig] post-save start() failed (non-fatal):', e?.message));
+      // Probe health so the caller gets a fresh read (the auto-spawn itself is async).
+      const healthy = await hm.healthCheck();
       return { success: true, healthy };
     } catch (e: any) {
       console.warn('[HindsightConfig] set failed:', e?.message);
@@ -2521,16 +2613,79 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('hindsight-config:test', async () => {
     try {
       const { HindsightManager } = require('./services/HindsightManager') as typeof import('./services/HindsightManager');
-      const healthy = await HindsightManager.getInstance().healthCheck();
+      const hm = HindsightManager.getInstance();
+      const healthy = await hm.healthCheck();
+      // If the probe saw 401/403, broadcast an auth-failed status so the top-of-overlay
+      // banner can render Cloud-key-specific copy (different from the generic "Can't connect").
+      // isAuthFailed() reads the cached lastAuthFailedAt timestamp.
+      if (hm.isAuthFailed?.()) {
+        try {
+          const { BrowserWindow } = require('electron') as typeof import('electron');
+          BrowserWindow.getAllWindows().forEach((win) => {
+            if (!win.isDestroyed()) {
+              win.webContents.send('hindsight-status', { state: 'auth-failed', reason: 'Cloud key rejected (401/403) — check your Hindsight Cloud account key', at: Date.now() });
+            }
+          });
+        } catch { /* headless */ }
+        return { healthy: false, authFailed: true };
+      }
       return { healthy };
     } catch (e: any) {
       return { healthy: false, error: e?.message };
     }
   });
 
+  // Opens the Hindsight server's stdout/stderr log file in the OS default viewer. Path
+  // is resolved server-side from HindsightManager.resolveServerLogPath() so the renderer
+  // cannot pass an arbitrary file path. Uses shell.openPath (NOT open-external) which
+  // works with absolute file paths and never triggers a security dialog.
+  safeHandle('open-hindsight-log', async () => {
+    try {
+      const { HindsightManager } = require('./services/HindsightManager') as typeof import('./services/HindsightManager');
+      const logPath = HindsightManager.getInstance().getServerLogPath?.() ?? null;
+      if (!logPath) return { ok: false, error: 'no_log_path' };
+      const fs = require('fs') as typeof import('fs');
+      // Touch the file so it exists (resolveServerLogPath returns the path even if spawn
+      // never ran; openPath on a missing file fails silently on some platforms).
+      if (!fs.existsSync(logPath)) {
+        try { fs.writeFileSync(logPath, ''); } catch { /* read-only fs — openPath will surface */ }
+      }
+      const { shell } = require('electron') as typeof import('electron');
+      const errMsg = await shell.openPath(logPath);
+      return errMsg ? { ok: false, error: errMsg } : { ok: true, logPath };
+    } catch (e: any) {
+      return { ok: false, error: e?.message };
+    }
+  });
+
+  // User-initiated Hindsight opt-out. Sets the explicit-disable sentinel so the synthetic
+  // default doesn't silently re-enable Hindsight on next launch. Idempotent; broadcasts a
+  // 'hindsight-status' with state:'ready' so the failure banner (if shown) clears — the
+  // user has made an active choice to turn the feature off, not a "server crashed" state.
+  safeHandle('hindsight:disable', async () => {
+    try {
+      const sm = SettingsManager.getInstance();
+      sm.set('hindsightExplicitlyDisabled', true);
+      const { HindsightManager } = require('./services/HindsightManager') as typeof import('./services/HindsightManager');
+      // If we spawned an app-managed server, kill it. Cloud / user-managed servers stay up.
+      try { HindsightManager.getInstance().stopSync(); } catch { /* nothing to stop */ }
+      // Broadcast so any open banner clears with the "you're in control" state.
+      try {
+        const { BrowserWindow } = require('electron') as typeof import('electron');
+        BrowserWindow.getAllWindows().forEach((win) => {
+          if (!win.isDestroyed()) {
+            win.webContents.send('hindsight-status', { state: 'ready', reason: 'disabled by user', at: Date.now() });
+          }
+        });
+      } catch { /* headless */ }
+      return { success: true };
+    } catch (e: any) {
+      console.warn('[HindsightConfig] disable failed:', e?.message);
+      return { success: false, error: e?.message };
+    }
+  });
+
   // Legacy alias for renderer builds that still call the old IPC name.
-  // Maps the deprecated technicalInterviewDirectVision channel onto the new
-  // technicalInterviewVisionFirst getter/setter so old renderer builds keep working.
   safeHandle('get-technical-interview-direct-vision', async () => {
     return SettingsManager.getInstance().getTechnicalInterviewVisionFirst();
   });
@@ -2811,6 +2966,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Re-init IntelligenceManager
       appState.getIntelligenceManager().initializeLLMs();
 
+      // Hindsight: an app-managed companion server inherited the OLD key in its env at
+      // spawn — it won't pick up the new one until restart. Surface the hint (log + IPC).
+      try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('Gemini'); } catch { /* optional */ }
+
       return { success: true };
     } catch (error: any) {
       console.error('Error saving Gemini API key:', error);
@@ -2831,6 +2990,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       appState.getIntelligenceManager().resetEngine();
       // Re-init IntelligenceManager
       appState.getIntelligenceManager().initializeLLMs();
+
+      // Hindsight: see set-gemini-api-key for rationale.
+      try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('Groq'); } catch { /* optional */ }
 
       return { success: true };
     } catch (error: any) {
@@ -2853,6 +3015,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Re-init IntelligenceManager
       appState.getIntelligenceManager().initializeLLMs();
 
+      // Hindsight: see set-gemini-api-key for rationale.
+      try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('OpenAI'); } catch { /* optional */ }
+
       return { success: true };
     } catch (error: any) {
       console.error('Error saving OpenAI API key:', error);
@@ -2874,6 +3039,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Re-init IntelligenceManager
       appState.getIntelligenceManager().initializeLLMs();
 
+      // Hindsight: see set-gemini-api-key for rationale.
+      try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('Claude'); } catch { /* optional */ }
+
       return { success: true };
     } catch (error: any) {
       console.error('Error saving Claude API key:', error);
@@ -2894,6 +3062,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       appState.getIntelligenceManager().resetEngine();
       // Re-init IntelligenceManager
       appState.getIntelligenceManager().initializeLLMs();
+
+      // Hindsight: see set-gemini-api-key for rationale.
+      try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('DeepSeek'); } catch { /* optional */ }
 
       return { success: true };
     } catch (error: any) {
@@ -2918,6 +3089,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       appState.getIntelligenceManager().resetEngine();
       // Re-init IntelligenceManager
       appState.getIntelligenceManager().initializeLLMs();
+
+      // Hindsight: see set-gemini-api-key for rationale. LiteLLM URL/key changes also
+      // require the app-managed server to be restarted to pick up the new env — without
+      // this nudge the new config silently doesn't apply until manual relaunch.
+      try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('LiteLLM'); } catch { /* optional */ }
 
       return { success: true };
     } catch (error: any) {
@@ -3251,6 +3427,170 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { ok: true };
     } catch {
       return { ok: true };
+    }
+  });
+
+  // End trial via BYOK path: wipe Pro-ingested data, clear trial token + natively key.
+  safeHandle('review:get-prompt-state', async () => {
+    try {
+      const { ReviewService, getReviewApiKey, getReviewHardwareId } = require('./services/ReviewService');
+      const svc = ReviewService.getInstance();
+      const apiKey = getReviewApiKey();
+      const hwid = await getReviewHardwareId();
+      const remote = await svc.getPromptState(apiKey, hwid);
+      const local = svc.getLocalState();
+      // Local is the optimistic truth for snappy UX; backend wins on
+      // has_reviewed / dont_show_again because those are global across installs.
+      return {
+        ok: true,
+        local,
+        backend: remote.ok ? remote : null,
+        eligible: svc.shouldShowPrompt(),
+      };
+    } catch (error: any) {
+      console.error('[IPC] review:get-prompt-state failed:', error);
+      return { ok: false, error: error?.message || 'unknown' };
+    }
+  });
+
+  safeHandle('review:record-session', async () => {
+    try {
+      const { ReviewService, getReviewApiKey, getReviewHardwareId } = require('./services/ReviewService');
+      const svc = ReviewService.getInstance();
+      svc.recordSessionStart();
+      return { ok: true };
+    } catch (error: any) {
+      console.error('[IPC] review:record-session failed:', error);
+      return { ok: false, error: error?.message || 'unknown' };
+    }
+  });
+
+  safeHandle('review:flush-session', async () => {
+    try {
+      const { ReviewService, getReviewApiKey, getReviewHardwareId } = require('./services/ReviewService');
+      const svc = ReviewService.getInstance();
+      const totals = svc.recordSessionEnd();
+      const apiKey = getReviewApiKey();
+      const hwid = await getReviewHardwareId();
+      // Fire-and-forget: don't block the caller on the network round trip.
+      svc.reportUsage(apiKey, hwid, totals.session_count, totals.total_usage_ms).catch(() => {});
+      return { ok: true, totals };
+    } catch (error: any) {
+      console.error('[IPC] review:flush-session failed:', error);
+      return { ok: false, error: error?.message || 'unknown' };
+    }
+  });
+
+  safeHandle('review:mark-shown', async () => {
+    try {
+      const { ReviewService } = require('./services/ReviewService');
+      const svc = ReviewService.getInstance();
+      svc.markShown();
+      return { ok: true };
+    } catch (error: any) {
+      return { ok: false, error: error?.message || 'unknown' };
+    }
+  });
+
+  safeHandle('review:dismiss-later', async () => {
+    try {
+      const { ReviewService, getReviewApiKey, getReviewHardwareId } = require('./services/ReviewService');
+      const svc = ReviewService.getInstance();
+      svc.markDismissLater();
+      const apiKey = getReviewApiKey();
+      const hwid = await getReviewHardwareId();
+      svc.reportEvent(apiKey, hwid, { type: 'dismiss_later' }).catch(() => {});
+      return { ok: true };
+    } catch (error: any) {
+      return { ok: false, error: error?.message || 'unknown' };
+    }
+  });
+
+  safeHandle('review:dismiss-forever', async () => {
+    try {
+      const { ReviewService, getReviewApiKey, getReviewHardwareId } = require('./services/ReviewService');
+      const svc = ReviewService.getInstance();
+      svc.markDontShowAgain();
+      const apiKey = getReviewApiKey();
+      const hwid = await getReviewHardwareId();
+      svc.reportEvent(apiKey, hwid, { type: 'dont_show_again' }).catch(() => {});
+      return { ok: true };
+    } catch (error: any) {
+      return { ok: false, error: error?.message || 'unknown' };
+    }
+  });
+
+  safeHandle('review:submit', async (_event, payload: {
+    rating: number
+    review_text: string | null
+  }) => {
+    try {
+      const { ReviewService, getReviewApiKey, getReviewHardwareId, getReviewAppVersion, getReviewPlatform } = require('./services/ReviewService');
+      const svc = ReviewService.getInstance();
+      const apiKey = getReviewApiKey();
+      const hwid = await getReviewHardwareId();
+      // Server-side enforcement: rating 1-5, text <= 300 chars. Local re-check
+      // happens in the modal, but we still defend here against renderer bugs.
+      if (!Number.isInteger(payload?.rating) || payload.rating < 1 || payload.rating > 5) {
+        return { ok: false, error: 'rating_required_1_to_5' };
+      }
+      let reviewText: string | null = payload?.review_text ?? null
+      if (typeof reviewText === 'string') {
+        // eslint-disable-next-line no-control-regex
+        reviewText = reviewText.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '').replace(/[<>]/g, '').trim().slice(0, 300)
+        if (reviewText.length === 0) reviewText = null
+      }
+      const result = await svc.submitReview(apiKey, hwid, {
+        rating: payload.rating,
+        review_text: reviewText,
+        app_version: getReviewAppVersion(),
+        platform: getReviewPlatform(),
+        build_channel: '',
+        email: null,
+      });
+      if (result.ok && result.id) {
+        svc.markReviewed(result.id);
+        // Backend already records this server-side; the local call is redundant
+        // but keeps the file in sync if the network blip happens after submit.
+      }
+      return result;
+    } catch (error: any) {
+      console.error('[IPC] review:submit failed:', error);
+      return { ok: false, error: error?.message || 'unknown' };
+    }
+  });
+
+  safeHandle('review:update-testimonial', async (_event, payload: {
+    review_id: string
+    name: string | null
+    role: string | null
+    company: string | null
+    can_use_publicly: boolean
+    display_name_publicly: boolean
+  }) => {
+    try {
+      const { ReviewService, getReviewApiKey, getReviewHardwareId } = require('./services/ReviewService');
+      const svc = ReviewService.getInstance();
+      const apiKey = getReviewApiKey();
+      const hwid = await getReviewHardwareId();
+      const id = String(payload?.review_id || '').slice(0, 64)
+      if (!id) return { ok: false, error: 'invalid_review_id' }
+      const name = (typeof payload?.name === 'string') ? payload.name.replace(/[<>]/g, '').trim().slice(0, 80) : null
+      const role = (typeof payload?.role === 'string') ? payload.role.replace(/[<>]/g, '').trim().slice(0, 80) : null
+      const company = (typeof payload?.company === 'string') ? payload.company.replace(/[<>]/g, '').trim().slice(0, 80) : null
+      const can_use_publicly = !!payload?.can_use_publicly
+      const display_name_publicly = !!payload?.display_name_publicly
+      const result = await svc.updateTestimonial(apiKey, hwid, id, {
+        name: name || null,
+        role: role || null,
+        company: company || null,
+        can_use_publicly,
+        display_name_publicly,
+      });
+      return result;
+    } catch (error: any) {
+      console.error('[IPC] review:update-testimonial failed:', error);
+      return { ok: false, error: error?.message || 'unknown' };
     }
   });
 
@@ -3691,11 +4031,21 @@ export function initializeIpcHandlers(appState: AppState): void {
         | 'azure'
         | 'ibmwatson'
         | 'soniox'
-        | 'natively',
+        | 'natively'
+        | 'local-whisper',
     ) => {
       try {
         const { CredentialsManager } = require('./services/CredentialsManager');
-        CredentialsManager.getInstance().setSttProvider(provider);
+        const persisted = CredentialsManager.getInstance().setSttProvider(provider);
+
+        // Branch on the real write result (mirrors the STT-key pattern at
+        // sttKeyPersistenceWarning). Without this, a disk-full/EACCES on the
+        // provider-save would silently leave the user on the previous provider
+        // after restart — same false-Saved bug class f2dc18c closed for keys.
+        if (!persisted) {
+          CredentialsManager.getInstance().emitStorageStatusDiagnostic('stt_save_failed');
+          return { success: false, error: sttPersistError };
+        }
 
         // Reconfigure the audio pipeline to use the new STT provider
         await appState.reconfigureSttProvider();
@@ -3917,6 +4267,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     return msg.replace(/:\s*[a-zA-Z0-9*]+\*+[a-zA-Z0-9*]+\.?$/g, '').trim();
   };
 
+  // Sentinel the renderer sends when the input field is empty post-restart (after
+  // the #318 fix intentionally stopped pre-populating masked values). Resolving
+  // here — NOT in the renderer — means the raw key never round-trips back into
+  // renderer state, so the masked-key regression cannot recur.
+  const { USE_STORED_KEY_SENTINEL, resolveSttTestKey } = require('./services/CredentialsManager');
+
   safeHandle(
     'test-stt-connection',
     async (
@@ -3927,6 +4283,16 @@ export function initializeIpcHandlers(appState: AppState): void {
     ) => {
       console.log(`[IPC] Received test - stt - connection request for provider: ${provider} `);
       try {
+        // Resolve the sentinel to the persisted key at call time. Pure helper —
+        // unit-tested independently. If no key is on disk (or the renderer
+        // mistakenly sent the sentinel for a provider that doesn't store a
+        // key), the helper returns the clean error to forward to the renderer.
+        const resolved = resolveSttTestKey(provider, apiKey);
+        if (!resolved.ok) {
+          return { success: false, error: resolved.error };
+        }
+        apiKey = resolved.apiKey;
+
         if (provider === 'deepgram') {
           const WebSocket = require('ws');
           const token = apiKey.trim();
@@ -7028,6 +7394,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
 
       let content = '';
+      let pdfReportedPageCount: number | undefined;
+      let pdfExtractedPageCount: number | undefined;
       try {
         if (ext === '.pdf') {
           // pdf-parse@2.x is a thin wrapper over pdfjs-dist's legacy build.
@@ -7040,7 +7408,32 @@ export function initializeIpcHandlers(appState: AppState): void {
           const buffer = await fs.promises.readFile(filePath);
           const parser = new PDFParse({ data: buffer });
           const data: any = await withTimeout<any>(parser.getText(), PARSE_TIMEOUT_MS, 'PDF parse');
-          content = data.text;
+          // pdf-parse@2.x's `getText()` returns a TextResult with:
+          //   { text: string, total: number, pages: Array<{ num, text }> }
+          // Previously we stored ONLY `data.text` — concatenated, with no
+          // page boundaries — and the retriever inferred page count from a
+          // 3000-char heuristic, which on a 66-page image-heavy PDF reported
+          // ~47. Preserve the per-page structure so the retriever can boost
+          // exact section / page matches and surface real page metadata.
+          pdfReportedPageCount =
+            typeof data?.total === 'number' && data.total > 0
+              ? data.total
+              : Array.isArray(data?.pages)
+                ? data.pages.length
+                : undefined;
+          if (Array.isArray(data?.pages) && data.pages.length > 0) {
+            pdfExtractedPageCount = data.pages.filter(
+              (p: any) => p && typeof p.text === 'string' && p.text.trim().length > 0,
+            ).length;
+            content = data.pages
+              .map(
+                (p: any) =>
+                  `[Page ${p.num}]\n${typeof p.text === 'string' ? p.text : ''}`,
+              )
+              .join('\n\n');
+          } else {
+            content = data.text;
+          }
         } else if (ext === '.docx') {
           // mammoth@1.x only handles .docx (modern Office Open XML, a ZIP
           // container). Legacy .doc (binary CFB) is rejected upstream in
@@ -7118,7 +7511,13 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
 
       const { ModesManager } = require('./services/ModesManager');
-      const file = ModesManager.getInstance().addReferenceFile({ modeId, fileName, content });
+      const file = ModesManager.getInstance().addReferenceFile({
+        modeId,
+        fileName,
+        content,
+        pageCount: pdfReportedPageCount,
+        extractedPageCount: pdfExtractedPageCount,
+      });
       // PI v3 (W3) — index at UPLOAD time (fire-and-forget): chunk + embed +
       // persist vectors now so live retrieval never pays the embedding cost.
       // Status events let the UI show pending → ready.
@@ -7305,6 +7704,55 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: false, path: '', error: e?.message || 'failed to open skills folder' };
     }
   });
+
+  // Step 3 of the Skill Upload feature — validate (and optionally install)
+  // an uploaded skill payload. Errors are NEVER thrown across the IPC
+  // boundary; they're surfaced as { stage: 'failed', errors: [...] } so the
+  // preload bridge doesn't need a try/catch.
+  safeHandle('skills:upload', async (_evt, payload: SkillUploadPayload, opts?: { autoInstall?: boolean }) => {
+    try {
+      const { SkillsManager: Manager } = require('./services/SkillsManager');
+      const { uploadSkill } = require('./services/skills/SkillUploader');
+      const existingIds = new Set(
+        Manager.getInstance().listSkills().map((s: { id: string }) => s.id),
+      );
+      const outcome = await uploadSkill(payload, {
+        existingIds,
+        builtinIds: DEFAULT_BUILTIN_SKILL_IDS,
+        skillsRoot: path.join(app.getPath('userData'), 'skills'),
+        stagingRoot: os.tmpdir(),
+        autoInstall: opts?.autoInstall ?? false,
+      });
+      return outcome;
+    } catch (e: any) {
+      console.warn('[IPC] skills:upload error:', e?.message || e);
+      return { stage: 'failed', errors: [{ field: 'structure', code: 'ipc_failed', message: e?.message || 'Skill upload failed' }] };
+    }
+  });
+
+  // Step 3 helper — sweep leftover staging directories from prior installs
+  // (e.g. app crashed mid-write). Safe to call any time; idempotent.
+  safeHandle('skills:reap-stages', async () => {
+    try {
+      const { reapStaleUploadStages } = require('./services/skills/SkillInstaller');
+      return reapStaleUploadStages({ stagingRoot: os.tmpdir() });
+    } catch (e: any) {
+      console.warn('[IPC] skills:reap-stages error:', e?.message || e);
+      return { removed: [], errors: [e?.message || 'reap failed'] };
+    }
+  });
+
+  // One-shot stale-stage cleanup. If the app crashed mid-install last
+  // session, remove any leftover `natively-skill-upload-*` dirs in
+  // os.tmpdir(). `app.whenReady()` has already fired by the time this
+  // initializeIpcHandlers() runs (see main.ts), so we don't need to
+  // re-wrap in .then(). Best-effort; never blocks startup.
+  try {
+    const { reapStaleUploadStages } = require('./services/skills/SkillInstaller');
+    reapStaleUploadStages({ stagingRoot: os.tmpdir() });
+  } catch (e: any) {
+    console.warn('[IPC] skills:reap-stages startup hook error:', e?.message || e);
+  }
 
   safeHandle('phone-mirror:get-info', async () => {
     return PhoneMirrorService.getInstance().snapshot();
@@ -7532,10 +7980,19 @@ export function initializeIpcHandlers(appState: AppState): void {
       const phoneMirror = PhoneMirrorService.getInstance();
       const intelligenceManager = appState.getIntelligenceManager();
 
+      let phoneActiveMode: import('./llm/modeProfiles').ActiveModeInfo | null = null;
+      try {
+        const { ModesManager } = require('./services/ModesManager');
+        phoneActiveMode = ModesManager.getInstance().getActiveModeInfo();
+      } catch {
+        /* mode prior unavailable; keep phone planning mode-blind */
+      }
+
       const phoneAnswerPlan = planAnswer({
         question: message,
         source: 'manual_input',
         speakerPerspective: 'user',
+        activeMode: phoneActiveMode,
       });
 
       // Capture rolling context BEFORE adding the new user message — same ordering
@@ -7547,6 +8004,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         const snap = intelligenceManager.getFormattedContext(100);
         if (snap && snap.trim().length > 0 && shouldAutoAttachManualTranscriptContext(message, phoneAnswerPlan)) {
           context = snap;
+        } else if (snap && snap.trim().length > 0) {
+          console.log('[PhoneMirror] Skipped 100s transcript context for standalone manual chat', {
+            answerType: phoneAnswerPlan.answerType,
+          });
         }
       } catch (ctxErr) {
         console.warn('[PhoneMirror] Failed to capture pre-turn context:', ctxErr);

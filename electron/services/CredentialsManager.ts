@@ -406,25 +406,29 @@ export class CredentialsManager {
     // =========================================================================
 
     public setGeminiApiKey(key: string): void {
-        this.credentials.geminiApiKey = key;
+        const trimmed = (key || '').trim();
+        this.credentials.geminiApiKey = trimmed || undefined;
         this.saveCredentials();
         console.log('[CredentialsManager] Gemini API Key updated');
     }
 
     public setGroqApiKey(key: string): void {
-        this.credentials.groqApiKey = key;
+        const trimmed = (key || '').trim();
+        this.credentials.groqApiKey = trimmed || undefined;
         this.saveCredentials();
         console.log('[CredentialsManager] Groq API Key updated');
     }
 
     public setOpenaiApiKey(key: string): void {
-        this.credentials.openaiApiKey = key;
+        const trimmed = (key || '').trim();
+        this.credentials.openaiApiKey = trimmed || undefined;
         this.saveCredentials();
         console.log('[CredentialsManager] OpenAI API Key updated');
     }
 
     public setClaudeApiKey(key: string): void {
-        this.credentials.claudeApiKey = key;
+        const trimmed = (key || '').trim();
+        this.credentials.claudeApiKey = trimmed || undefined;
         this.saveCredentials();
         console.log('[CredentialsManager] Claude API Key updated');
     }
@@ -482,31 +486,40 @@ export class CredentialsManager {
         console.log('[CredentialsManager] Google Service Account path updated');
     }
 
-    public setSttProvider(provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper'): void {
+    public setSttProvider(provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper'): boolean {
         this.credentials.sttProvider = provider;
-        this.saveCredentials();
+        const persisted = this.saveCredentials();
         console.log(`[CredentialsManager] STT Provider set to: ${provider}`);
+        return persisted;
     }
 
     // NOTE: the STT key setters return saveCredentials()'s boolean (true = the write
     // actually reached disk) so the IPC layer can surface a REAL error instead of a
     // false "Saved" when a write fails. Do not change these back to void.
+    //
+    // Empty/whitespace input is normalized to `undefined` (not `''`) so the canonical
+    // `hasKey = (k?: string) => !!(k && k.trim().length > 0)` check returns false on
+    // reload — matching `setNativelyApiKey` / `setDeepseekApiKey`. The Remove button
+    // (which calls these with `''`) still correctly clears the stored key.
     public setDeepgramApiKey(key: string): boolean {
-        this.credentials.deepgramApiKey = key;
+        const trimmed = (key || '').trim();
+        this.credentials.deepgramApiKey = trimmed || undefined;
         const persisted = this.saveCredentials();
         console.log('[CredentialsManager] Deepgram API Key updated');
         return persisted;
     }
 
     public setGroqSttApiKey(key: string): boolean {
-        this.credentials.groqSttApiKey = key;
+        const trimmed = (key || '').trim();
+        this.credentials.groqSttApiKey = trimmed || undefined;
         const persisted = this.saveCredentials();
         console.log('[CredentialsManager] Groq STT API Key updated');
         return persisted;
     }
 
     public setOpenAiSttApiKey(key: string): boolean {
-        this.credentials.openAiSttApiKey = key;
+        const trimmed = (key || '').trim();
+        this.credentials.openAiSttApiKey = trimmed || undefined;
         const persisted = this.saveCredentials();
         console.log('[CredentialsManager] OpenAI STT API Key updated');
         return persisted;
@@ -528,14 +541,16 @@ export class CredentialsManager {
     }
 
     public setElevenLabsApiKey(key: string): boolean {
-        this.credentials.elevenLabsApiKey = key;
+        const trimmed = (key || '').trim();
+        this.credentials.elevenLabsApiKey = trimmed || undefined;
         const persisted = this.saveCredentials();
         console.log('[CredentialsManager] ElevenLabs API Key updated');
         return persisted;
     }
 
     public setAzureApiKey(key: string): boolean {
-        this.credentials.azureApiKey = key;
+        const trimmed = (key || '').trim();
+        this.credentials.azureApiKey = trimmed || undefined;
         const persisted = this.saveCredentials();
         console.log('[CredentialsManager] Azure API Key updated');
         return persisted;
@@ -548,7 +563,8 @@ export class CredentialsManager {
     }
 
     public setIbmWatsonApiKey(key: string): boolean {
-        this.credentials.ibmWatsonApiKey = key;
+        const trimmed = (key || '').trim();
+        this.credentials.ibmWatsonApiKey = trimmed || undefined;
         const persisted = this.saveCredentials();
         console.log('[CredentialsManager] IBM Watson API Key updated');
         return persisted;
@@ -561,7 +577,8 @@ export class CredentialsManager {
     }
 
     public setSonioxApiKey(key: string): boolean {
-        this.credentials.sonioxApiKey = key;
+        const trimmed = (key || '').trim();
+        this.credentials.sonioxApiKey = trimmed || undefined;
         const persisted = this.saveCredentials();
         console.log('[CredentialsManager] Soniox API Key updated');
         return persisted;
@@ -578,6 +595,30 @@ export class CredentialsManager {
         this.credentials.sttLanguage = language;
         this.saveCredentials();
         console.log(`[CredentialsManager] STT Language set to: ${language}`);
+    }
+
+    /**
+     * Dispatch the persisted STT key for a given provider. Used by the
+     * `test-stt-connection` IPC when the renderer sends the `__USE_STORED__`
+     * sentinel (e.g. post-restart, when the input field is empty but the key is
+     * on disk). Returns `undefined` for unsupported providers or when no key is
+     * stored — caller should branch on the result and surface a clean error to
+     * the renderer.
+     *
+     * NEVER call from a code path that would round-trip the key back into
+     * renderer state — the masked pre-population regression from #318 was
+     * caused by exactly that pattern. This getter is test-time only.
+     */
+    public getStoredSttKeyForProvider(provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox'): string | undefined {
+        switch (provider) {
+            case 'groq':       return this.credentials.groqSttApiKey;
+            case 'openai':     return this.credentials.openAiSttApiKey;
+            case 'deepgram':   return this.credentials.deepgramApiKey;
+            case 'elevenlabs': return this.credentials.elevenLabsApiKey;
+            case 'azure':      return this.credentials.azureApiKey;
+            case 'ibmwatson':  return this.credentials.ibmWatsonApiKey;
+            case 'soniox':     return this.credentials.sonioxApiKey;
+        }
     }
 
     public setAiResponseLanguage(language: string): void {
@@ -822,24 +863,30 @@ export class CredentialsManager {
     /**
      * Derive (once) and memoize the AES key for the app-managed fallback.
      *
-     * IMPORTANT — key-material stability: the key is derived from the per-install
-     * RANDOM salt only, with `process.platform` as a cheap constant tag. We
-     * deliberately do NOT mix in os.hostname(), os.userInfo().username, or
-     * app.getPath('userData'): all three legitimately CHANGE on the same machine
-     * (hostname flips with Wi-Fi/DHCP/mDNS `.lan`↔`.local` and machine renames;
-     * userData moves when the disguise feature calls app.setName()). Any change
-     * would alter the derived key and render the existing fallback permanently
-     * undecryptable — silently reintroducing the very "STT key reset to none" bug
-     * this fallback exists to fix. The random, file-bound salt already provides the
-     * machine/install binding (it never leaves this box and differs per install),
-     * so a copied/cloud-synced fallback file is still useless elsewhere.
+     * Key-material composition:
+     *   - Stable domain/version tag (`'natively-credential-fallback-v1'`) so a
+     *     future KDF migration can rotate without colliding with old keys.
+     *   - The per-install RANDOM 32-byte salt from SALT_PATH — this is the SOLE
+     *     machine/install binding. It never leaves this box and differs per
+     *     install, so a copied or cloud-synced fallback file is still useless
+     *     elsewhere.
+     *
+     * Deliberately omitted (would only add fragility):
+     *   - `process.platform` — is a constant on a given machine; adds no
+     *     entropy. Including it would risk breaking the fallback if Electron's
+     *     platform reporting ever drifts (e.g. Linux container reporting a
+     *     different `process.platform` than the host).
+     *   - `os.hostname()` — flips with Wi-Fi/DHCP/mDNS `.lan`↔`.local` and
+     *     machine renames. Would silently orphan the fallback on a rename.
+     *   - `os.userInfo().username` — can change with admin/SSH contexts.
+     *   - `app.getPath('userData')` — moves when the disguise feature calls
+     *     `app.setName()`.
      */
     private getFallbackKey(): Buffer {
         if (this.fallbackKey) return this.fallbackKey;
         const salt = this.getOrCreateDeviceSalt();
         const materialParts = [
             'natively-credential-fallback-v1', // stable domain/version tag
-            process.platform,
         ];
         this.fallbackKey = deriveFallbackKey(materialParts, salt);
         return this.fallbackKey;
@@ -974,4 +1021,51 @@ export class CredentialsManager {
             this.credentials = {};
         }
     }
+}
+
+/**
+ * Sentinel string the renderer sends when the input field is empty post-restart
+ * (the #318 fix intentionally does NOT pre-populate masked values) but the key
+ * IS on disk. Resolved at call time in main — the raw key never round-trips
+ * back into renderer state, so the masked-key regression cannot recur.
+ *
+ * Centralized here so the renderer can `require` it from the SAME module that
+ * resolves it (ipcHandlers.ts) without duplicating the magic string in two
+ * places. The renderer pulls the value via preload.ts if needed in the future;
+ * for now both sides hard-code the literal and a source-text guard test pins
+ * them against drift.
+ */
+export const USE_STORED_KEY_SENTINEL = '__USE_STORED__';
+
+/**
+ * Resolve an STT API key coming from the renderer side, applying the
+ * `__USE_STORED__` sentinel → persisted-key substitution and validating that
+ * the result is non-empty.
+ *
+ * Return shape is the IPC contract used by `test-stt-connection`:
+ *   - `{ ok: true,  apiKey }`       → caller should use `apiKey` against the provider
+ *   - `{ ok: false, error }`       → caller should return this directly to the renderer
+ *
+ * Pure function (no I/O), so it is unit-testable without spinning up Electron.
+ * Refactored out of the inline handler in ipcHandlers.ts to make the sentinel
+ * resolution contract independently verifiable (M-1 from the pre-release review).
+ */
+export function resolveSttTestKey(
+    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox',
+    apiKey: string | undefined | null,
+): { ok: true; apiKey: string } | { ok: false; error: string } {
+    if (apiKey === USE_STORED_KEY_SENTINEL) {
+        const stored = CredentialsManager.getInstance().getStoredSttKeyForProvider(provider);
+        if (!stored || !stored.trim()) {
+            return {
+                ok: false,
+                error: 'No API key saved for this provider. Please add one in Settings.',
+            };
+        }
+        apiKey = stored;
+    }
+    if (!apiKey || !apiKey.trim()) {
+        return { ok: false, error: 'No API key provided.' };
+    }
+    return { ok: true, apiKey: apiKey.trim() };
 }

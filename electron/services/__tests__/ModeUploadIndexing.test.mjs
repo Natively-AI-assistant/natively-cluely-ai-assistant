@@ -41,6 +41,11 @@ function makePipeline({ space = SPACE_A, ready = true } = {}) {
             // Deterministic per-text vectors: similar to query iff text mentions 'enterprise'.
             return texts.map(t => (t.includes('enterprise') ? [0.95, 0.05, 0, 0] : [0, 1, 0, 0]));
         },
+        getEmbeddingsWithFallback: async (texts) => {
+            calls.batch.push(texts.length);
+            const embeddings = texts.map(t => (t.includes('enterprise') ? [0.95, 0.05, 0, 0] : [0, 1, 0, 0]));
+            return { embeddings, space };
+        },
         getEmbedding: async (t) => (t.includes('enterprise') ? [0.95, 0.05, 0, 0] : [0, 1, 0, 0]),
     };
 }

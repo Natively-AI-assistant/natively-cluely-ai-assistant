@@ -11,7 +11,7 @@ const TRANSCRIPT_BOUND_ANSWER_TYPES = new Set<AnswerPlan['answerType']>([
 const TRANSCRIPT_REFERENCE_PATTERNS = [
   /\b(?:in|during|from|based on|according to) (?:the |this |that |our )?(meeting|call|conversation|discussion|transcript|lecture|class)\b/i,
   /\b(?:meeting|call|conversation|discussion|transcript|lecture|class) (?:said|asked|discussed|decided|mentioned|covered|agreed|concluded)\b/i,
-  /\b(action items?|next steps?|takeaways?|recap|catch me up)\b/i,
+  /\b(action items?|next steps?|takeaways?|recap|catch me up|summari[sz]e)\b/i,
   /\bwhat did (we|they|the (?:interviewer|client|customer|participant|speaker|professor))\b/i,
   /\bwhat (?:was|were|is|are) (?:the )?(?:interviewer|client|customer|participant|speaker|professor)\b/i,
   /\b(?:we|they|the (?:interviewer|client|customer|participant|speaker|professor)) (?:said|asked|discussed|decided|mentioned|covered|agreed|concluded|meant|raised)\b/i,

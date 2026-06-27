@@ -3743,10 +3743,24 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           streamingCodeRafRef.current = null;
         }
         streamingNodeRef.current = null;
-        streamingTextRef.current = '';
-        streamingMsgIdRef.current = null;
-        streamingIntentRef.current = null;
-        streamingRenderModeRef.current = 'imperative';
+        // Capture pending text BEFORE clearing the ref. The capture happens
+        // synchronously here, but the setMessages callback below uses
+        // streamingTextRef.current — which a late-arriving token between this
+        // line and the React flush could clobber. We snapshot it locally so
+        // even a racing token can't drop the last few chars. The ref is
+        // cleared AFTER setMessages is scheduled (see flushSync below).
+        const pendingTextSnapshot = streamingTextRef.current;
+        const pendingMsgIdSnapshot = streamingMsgIdRef.current;
+        // Clear in the next microtask so any token already in the IPC queue
+        // before this done arrived is still visible to setMessages. The setMessages
+        // callback above reads `pendingText` from the closure variable, so this
+        // ref clear only affects subsequent question turns.
+        queueMicrotask(() => {
+          streamingTextRef.current = '';
+          streamingMsgIdRef.current = null;
+          streamingIntentRef.current = null;
+          streamingRenderModeRef.current = 'imperative';
+        });
         setIsProcessing(false);
 
         // Calculate latency if we have a start time
@@ -3765,10 +3779,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
         setMessages((prev) => {
           const idx =
-            pendingMsgId != null ? prev.findLastIndex((m) => m.id === pendingMsgId) : -1;
+            pendingMsgIdSnapshot != null
+              ? prev.findLastIndex((m) => m.id === pendingMsgIdSnapshot)
+              : -1;
           const target = idx !== -1 ? prev[idx] : prev[prev.length - 1];
           if (target && target.role === 'system') {
-            const text = finalText || target.text || pendingText;
+            const text = finalText || target.text || pendingTextSnapshot;
             if (!text) return prev;
             const isCode =
               text.includes('```') || text.includes('def ') || text.includes('function ');
@@ -3779,7 +3795,27 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             }
             return [...prev.slice(0, -1), { ...target, text, isStreaming: false, isCode }];
           }
-          return prev;
+          // Silent no-op fallback (audit 2026-06-27): previously `return prev`
+          // caused streamed answers to be silently blanked whenever the
+          // placeholder bubble's role was not 'system' (e.g. a mid-stream
+          // renderer remount or a superseded chat stream). When the answer is
+          // non-empty, append it as a fresh system message so the user always
+          // sees the response. Empty answers are dropped so we don't emit a
+          // blank bubble.
+          const text = finalText || pendingTextSnapshot;
+          if (!text) return prev;
+          const isCode =
+            text.includes('```') || text.includes('def ') || text.includes('function ');
+          return [
+            ...prev,
+            {
+              id: genMessageId(),
+              role: 'system',
+              text,
+              isStreaming: false,
+              isCode,
+            },
+          ];
         });
       }),
     );

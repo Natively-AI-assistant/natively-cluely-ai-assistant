@@ -173,3 +173,242 @@ test('a decrypt failure does NOT destroy a recoverable fallback (no migrate of e
 });
 
 test.after(() => { Module._load = origLoad; });
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Regression tests for "STT key not saving" user-reported bug.
+ *
+ * Investigation (debugger + code-reviewer agents, 2026-06-26) confirmed the
+ * STT keys ARE persisted correctly and survive a restart. The user-visible
+ * symptom ('Please enter an API key first' after restart) was a renderer-side
+ * UX false alarm — the input fields were correctly empty (per the #318
+ * masked-pre-population fix), but `handleTestSttConnection` only read local
+ * React state. The fixes are:
+ *
+ *   P1: new `__USE_STORED__` sentinel in test-stt-connection IPC + renderer
+ *       `hasStoredXxxKey` gate. The IPC resolves the sentinel to the persisted
+ *       key — the raw key never round-trips back into renderer state, so the
+ *       masked-key regression cannot recur.
+ *   P2 (M1): empty-string normalization across all 7 STT key setters.
+ *   P3 (M2): setSttProvider returns boolean; IPC surfaces save failures.
+ *   P4 (M3): 'local-whisper' added to set-stt-provider IPC + types unions.
+ *   P5 (M5): process.platform dropped from fallback key material (no-op for
+ *       the per-install random salt, eliminates Linux-container drift risk).
+ *
+ * Tests below pin the contract end-to-end against real disk I/O. 18 tests
+ * total: 7 in the per-provider round-trip loop, plus 11 named contracts
+ * (empty-string + whitespace clear, setSttProvider round-trip + write-failure,
+ * dispatcher, source guards x4, plus M-2 LLM key parity x2).
+ *
+ * The IPC integration of the sentinel mechanism is in a separate file:
+ *   electron/services/__tests__/TestSttConnectionSentinel.test.mjs
+ * ────────────────────────────────────────────────────────────────────────── */
+
+const STT_KEY_SETTERS = [
+  { name: 'Groq STT',         setter: 'setGroqSttApiKey',     getter: 'getGroqSttApiKey',     secret: 'sk-groq-STT-LIVE-aaa111' },
+  { name: 'OpenAI STT',       setter: 'setOpenAiSttApiKey',   getter: 'getOpenAiSttApiKey',   secret: 'sk-openai-STT-LIVE-bbb222' },
+  { name: 'Deepgram',         setter: 'setDeepgramApiKey',    getter: 'getDeepgramApiKey',    secret: 'sk-deepgram-LIVE-ccc333' },
+  { name: 'ElevenLabs',       setter: 'setElevenLabsApiKey',  getter: 'getElevenLabsApiKey',  secret: 'sk-elevenlabs-LIVE-ddd444' },
+  { name: 'Azure',            setter: 'setAzureApiKey',       getter: 'getAzureApiKey',       secret: 'sk-azure-LIVE-eee555' },
+  { name: 'IBM Watson',       setter: 'setIbmWatsonApiKey',   getter: 'getIbmWatsonApiKey',   secret: 'sk-ibmwatson-LIVE-fff666' },
+  { name: 'Soniox',           setter: 'setSonioxApiKey',      getter: 'getSonioxApiKey',      secret: 'sk-soniox-LIVE-ggg777' },
+];
+
+for (const { name, setter, getter, secret } of STT_KEY_SETTERS) {
+  test(`${name} key: save → restart → load (keyring unavailable, full round-trip)`, () => {
+    const env = makeEnv();
+    env.state.keyringAvailable = false;
+
+    const cm = freshManager(env);
+    const persisted = cm[setter](secret);
+    assert.equal(persisted, true, `${setter} must return true on successful write`);
+
+    // Cold restart — new module load, fresh singleton, real disk read.
+    const cm2 = freshManager(env);
+    assert.equal(cm2[getter](), secret, `${name} key must survive a restart`);
+  });
+}
+
+test('empty-string resave clears the stored key (M1 contract — matches setNativelyApiKey semantics)', () => {
+  const env = makeEnv();
+  env.state.keyringAvailable = false;
+
+  const cm = freshManager(env);
+  cm.setDeepgramApiKey('sk-real-secret-1234567890');
+  assert.equal(cm.getDeepgramApiKey(), 'sk-real-secret-1234567890');
+
+  // User clicked Remove (empty input) → setter must store `undefined`, NOT `''`.
+  // `''` would survive but `hasKey = (k) => !!(k && k.trim().length > 0)` would
+  // return false anyway — the contract is "stored as undefined so JSON output
+  // doesn't carry an empty-string key".
+  cm.setDeepgramApiKey('');
+  const cm2 = freshManager(env);
+  assert.equal(cm2.getDeepgramApiKey(), undefined, 'empty resave must clear the persisted key');
+});
+
+test('whitespace-only resave is treated as empty (M1 contract)', () => {
+  const env = makeEnv();
+  env.state.keyringAvailable = false;
+
+  const cm = freshManager(env);
+  cm.setSonioxApiKey('sk-real-soniox-LIVE-abc');
+  cm.setSonioxApiKey('   '); // user typed only whitespace
+  const cm2 = freshManager(env);
+  assert.equal(cm2.getSonioxApiKey(), undefined, 'whitespace-only input must clear the stored key');
+});
+
+test('setSttProvider round-trip + persistence status (M2 contract)', () => {
+  const env = makeEnv();
+  env.state.keyringAvailable = false;
+
+  const cm = freshManager(env);
+  const persisted = cm.setSttProvider('soniox');
+  assert.equal(persisted, true, 'setSttProvider must return the persistence boolean');
+  assert.equal(cm.getSttProvider(), 'soniox');
+
+  const cm2 = freshManager(env);
+  assert.equal(cm2.getSttProvider(), 'soniox', 'STT provider selection must survive restart');
+});
+
+test('setSttProvider returns false when the disk write fails (M2 contract — mirrors STT key guard)', () => {
+  const env = makeEnv();
+  env.state.keyringAvailable = false;
+
+  const cm = freshManager(env);
+
+  // Force a real write failure (EACCES) — the setter must report it.
+  fs.chmodSync(env.userData, 0o500);
+  try {
+    const persisted = cm.setSttProvider('deepgram');
+    assert.equal(persisted, false, 'setSttProvider must return false on write failure');
+  } finally {
+    fs.chmodSync(env.userData, 0o700);
+  }
+});
+
+test('getStoredSttKeyForProvider dispatches the persisted key by provider (P1 contract)', () => {
+  const env = makeEnv();
+  env.state.keyringAvailable = false;
+
+  const cm = freshManager(env);
+  cm.setDeepgramApiKey('sk-dg-LIVE-1234');
+  cm.setSonioxApiKey('sk-sn-LIVE-5678');
+
+  assert.equal(cm.getStoredSttKeyForProvider('deepgram'), 'sk-dg-LIVE-1234');
+  assert.equal(cm.getStoredSttKeyForProvider('soniox'), 'sk-sn-LIVE-5678');
+  assert.equal(cm.getStoredSttKeyForProvider('groq'), undefined, 'unset provider must return undefined');
+  assert.equal(cm.getStoredSttKeyForProvider('openai'), undefined);
+});
+
+test('process.platform is NOT in the fallback key material (P5 hardening)', () => {
+  // Source-text guard: grep the compiled output and the source to make sure
+  // process.platform was removed from the fallback key derivation. This pins
+  // the comment block at CredentialsManager.ts:822-847 against future regressions.
+  const src = fs.readFileSync(
+    path.resolve(path.dirname(new URL(import.meta.url).pathname), '../CredentialsManager.ts'),
+    'utf8',
+  );
+  // Locate the getFallbackKey body — everything from "private getFallbackKey"
+  // through the next private/public declaration at the same indent.
+  const start = src.indexOf('private getFallbackKey');
+  assert.ok(start >= 0, 'getFallbackKey method must exist');
+  const end = src.indexOf('\n    private ', start + 1);
+  const body = end > start ? src.slice(start, end) : src.slice(start, start + 1500);
+  assert.doesNotMatch(body, /process\.platform/, 'process.platform must not appear inside getFallbackKey body');
+});
+
+test('STT key setter source normalizes empty string to undefined (P2 source guard)', () => {
+  const src = fs.readFileSync(
+    path.resolve(path.dirname(new URL(import.meta.url).pathname), '../CredentialsManager.ts'),
+    'utf8',
+  );
+  for (const { name, setter } of STT_KEY_SETTERS) {
+    // Find the setter body and confirm it contains `trimmed || undefined`.
+    const idx = src.indexOf(`public ${setter}(`);
+    assert.ok(idx >= 0, `${setter} must exist in source`);
+    const end = src.indexOf('\n    public ', idx + 1);
+    const body = end > idx ? src.slice(idx, end) : src.slice(idx, idx + 500);
+    assert.match(
+      body,
+      /trimmed\s*\|\|\s*undefined/,
+      `${name} setter (${setter}) must normalize empty input to undefined`,
+    );
+  }
+});
+
+test('LLM key setter source normalizes empty string to undefined (M-2 follow-up — matches STT pattern)', () => {
+  const src = fs.readFileSync(
+    path.resolve(path.dirname(new URL(import.meta.url).pathname), '../CredentialsManager.ts'),
+    'utf8',
+  );
+  // The 4 LLM key setters that originally stored `''` verbatim. setNativelyApiKey
+  // and setDeepseekApiKey already had the trim pattern before this work.
+  const LLM_KEY_SETTERS = ['setGeminiApiKey', 'setGroqApiKey', 'setOpenaiApiKey', 'setClaudeApiKey'];
+  for (const setter of LLM_KEY_SETTERS) {
+    const idx = src.indexOf(`public ${setter}(`);
+    assert.ok(idx >= 0, `${setter} must exist in source`);
+    const end = src.indexOf('\n    public ', idx + 1);
+    const body = end > idx ? src.slice(idx, end) : src.slice(idx, idx + 500);
+    assert.match(
+      body,
+      /trimmed\s*\|\|\s*undefined/,
+      `${setter} must normalize empty input to undefined (M-2 follow-up to STT key setters)`,
+    );
+  }
+});
+
+test('LLM key setters: empty-string resave clears the stored key (M-2 behavioral)', () => {
+  const env = makeEnv();
+  env.state.keyringAvailable = false;
+
+  const cm = freshManager(env);
+  cm.setGeminiApiKey('AIza-real-gemini-LIVE-1234567890');
+  assert.equal(cm.getGeminiApiKey(), 'AIza-real-gemini-LIVE-1234567890');
+
+  // User cleared the field (or it was a programmatic '' call from a future IPC).
+  cm.setGeminiApiKey('');
+  const cm2 = freshManager(env);
+  assert.equal(cm2.getGeminiApiKey(), undefined, 'empty resave must clear the persisted LLM key');
+});
+
+test('local-whisper is in the set-stt-provider IPC + preload + types unions (P4 contract)', () => {
+  const ipc = fs.readFileSync(
+    path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../ipcHandlers.ts'),
+    'utf8',
+  );
+  // The handler signature must include 'local-whisper'.
+  const handlerStart = ipc.indexOf("safeHandle(\n    'set-stt-provider'");
+  assert.ok(handlerStart >= 0, 'set-stt-provider IPC handler must exist');
+  const handlerEnd = ipc.indexOf("safeHandle(", handlerStart + 1);
+  const handlerBlock = handlerEnd > handlerStart ? ipc.slice(handlerStart, handlerEnd) : ipc.slice(handlerStart, handlerStart + 1500);
+  assert.match(handlerBlock, /'local-whisper'/, 'set-stt-provider IPC handler union must include local-whisper');
+
+  const preload = fs.readFileSync(
+    path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../preload.ts'),
+    'utf8',
+  );
+  assert.match(preload, /'local-whisper'/, 'preload setSttProvider union must include local-whisper');
+
+  const types = fs.readFileSync(
+    path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../../src/types/electron.d.ts'),
+    'utf8',
+  );
+  assert.match(types, /setSttProvider[^]*'local-whisper'/, 'electron.d.ts setSttProvider union must include local-whisper');
+});
+
+test('SettingsOverlay sends USE_STORED sentinel when input empty but key on disk (P1 renderer guard)', () => {
+  const src = fs.readFileSync(
+    path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../../src/components/SettingsOverlay.tsx'),
+    'utf8',
+  );
+  // The sentinel constant must appear in the renderer (it matches what the IPC resolves).
+  assert.match(src, /__USE_STORED__/, 'SettingsOverlay must reference the USE_STORED sentinel');
+  // The handleTestSttConnection function must branch on the stored-key flags
+  // and prefer the sentinel over the misleading 'Please enter an API key first'.
+  const fnStart = src.indexOf('const handleTestSttConnection');
+  assert.ok(fnStart >= 0, 'handleTestSttConnection must exist');
+  // Capture a generous 4000-char window — the function body is ~50 lines.
+  const fnBody = src.slice(fnStart, fnStart + 4000);
+  assert.match(fnBody, /hasStoredStt[A-Za-z]+Key/, 'handleTestSttConnection must consult hasStored*Key flags');
+  assert.match(fnBody, /apiKeyToSend/, 'handleTestSttConnection must use the apiKeyToSend variable');
+  assert.doesNotMatch(fnBody, /'Please enter an API key first'/, 'misleading "Please enter an API key first" message must be removed');
+});

@@ -742,6 +742,17 @@ export class DatabaseManager {
             this.db.pragma('user_version = 18');
         }
 
+        if (version < 19) {
+            // PDF ingestion now captures real page counts (electron/ipcHandlers.ts
+            // 2026-06-27 fix F1+F2). Persist them on the file row so the
+            // retriever can use real numbers instead of falling back to the
+            // 3000-char text-length heuristic on every app restart.
+            console.log('[DatabaseManager] Applying migration v18 → v19: Add page_count + extracted_page_count to mode_reference_files');
+            try { this.db.exec("ALTER TABLE mode_reference_files ADD COLUMN page_count INTEGER"); } catch (e) { /* column already exists */ }
+            try { this.db.exec("ALTER TABLE mode_reference_files ADD COLUMN extracted_page_count INTEGER"); } catch (e) { /* column already exists */ }
+            this.db.pragma('user_version = 19');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 
@@ -892,13 +903,27 @@ export class DatabaseManager {
         }
     }
 
-    public addReferenceFile(file: { id: string; modeId: string; fileName: string; content: string }): void {
+    public addReferenceFile(file: {
+        id: string;
+        modeId: string;
+        fileName: string;
+        content: string;
+        pageCount?: number;
+        extractedPageCount?: number;
+    }): void {
         if (!this.db) throw new Error('Database not initialized');
         try {
             this.db.prepare(`
-                INSERT INTO mode_reference_files (id, mode_id, file_name, content)
-                VALUES (?, ?, ?, ?)
-            `).run(file.id, file.modeId, file.fileName, file.content);
+                INSERT INTO mode_reference_files (id, mode_id, file_name, content, page_count, extracted_page_count)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `).run(
+                file.id,
+                file.modeId,
+                file.fileName,
+                file.content,
+                file.pageCount ?? null,
+                file.extractedPageCount ?? null,
+            );
         } catch (e) {
             console.error('[DatabaseManager] addReferenceFile failed:', e);
             throw e;

@@ -375,3 +375,6 @@ docs/
 # Large model binary files
 *.onnx
 *.onnx_data
+
+# Live-smoke harness scratch dir (created at runtime by scripts/smoke-document-grounded.js)
+/.smoke-sandbox/

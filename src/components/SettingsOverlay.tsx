@@ -1108,10 +1108,38 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             elevenlabs: sttElevenLabsKey, azure: sttAzureKey, ibmwatson: sttIbmKey,
             soniox: sttSonioxKey,
         };
-        const keyToTest = keyMap[sttProvider] || '';
-        if (!keyToTest.trim()) {
+        const keyToTest = keyMap[sttProvider]?.trim() || '';
+
+        // If the input field is empty post-restart (the #318 fix intentionally
+        // does NOT pre-populate masked values) but a key IS on disk, ask the
+        // backend to test the persisted key directly. The sentinel is resolved
+        // in main — the raw key never round-trips back into renderer state, so
+        // the masked pre-population regression cannot recur. This closes the
+        // "Please enter an API key first" false alarm users reported as
+        // "the STT key was lost on restart."
+        const hasStoredKeyForCurrentProvider = (() => {
+            switch (sttProvider) {
+                case 'groq':       return hasStoredSttGroqKey;
+                case 'openai':     return hasStoredSttOpenaiKey;
+                case 'deepgram':   return hasStoredDeepgramKey;
+                case 'elevenlabs': return hasStoredElevenLabsKey;
+                case 'azure':      return hasStoredAzureKey;
+                case 'ibmwatson':  return hasStoredIbmWatsonKey;
+                case 'soniox':     return hasStoredSonioxKey;
+                default:           return false;
+            }
+        })();
+
+        // Pick the key to send: explicit input if present, otherwise the
+        // sentinel (the IPC will resolve to the persisted key, or fail clean
+        // with a "no key saved" error).
+        const apiKeyToSend = keyToTest
+            ? keyToTest
+            : (hasStoredKeyForCurrentProvider ? '__USE_STORED__' : '');
+
+        if (!apiKeyToSend) {
             setSttTestStatus('error');
-            setSttTestError('Please enter an API key first');
+            setSttTestError('Please add your API key in Settings to test the connection.');
             return;
         }
 
@@ -1121,7 +1149,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             // @ts-ignore
             const result = await window.electronAPI?.testSttConnection?.(
                 sttProvider,
-                keyToTest.trim(),
+                apiKeyToSend,
                 sttProvider === 'azure' ? sttAzureRegion : undefined
             );
             if (result?.success) {
@@ -1300,11 +1328,18 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
     // Use the native mic test path so device IDs stay consistent with the meeting runtime.
     // Guard: only start when selectedInput is populated (loadDevices sets it after device enum).
-    // No else branch: cleanup in the return function handles stopAudioTest when this effect
-    // unmounts (tab switch, settings close, selectedInput change). Avoids redundant stop calls
-    // on every render where activeTab !== 'audio'.
+    //
+    // Mic-indicator discipline: the user expects the orange macOS menu-bar mic
+    // indicator to be OFF outside an active meeting OR an explicit Settings >
+    // Audio session. The cleanup below guarantees that ANY transition out of
+    // the audio-test state (tab switch, settings close, device list cleared,
+    // selectedInput flipping to empty during a device-list refresh) tears the
+    // native capture down — never leaving a dangling mic-test capture that
+    // would keep the indicator lit after the user thinks they left the panel.
     useEffect(() => {
-        if (isOpen && activeTab === 'audio' && selectedInput) {
+        const shouldRun = isOpen && activeTab === 'audio' && !!selectedInput;
+
+        if (shouldRun) {
             const unsubscribe = window.electronAPI?.onAudioTestLevel?.((level) => {
                 setMicLevel(Math.max(0, Math.min(100, level * 100)));
             });
@@ -1322,8 +1357,17 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                 setMicLevel(0);
             };
         }
-        // Effect didn't run (activeTab !== 'audio' or isOpen === false or selectedInput empty).
-        // Reset meter but do NOT call stopAudioTest — cleanup above handles it when test was running.
+
+        // Guard ran false on this pass (tab switch, settings close, or
+        // selectedInput cleared). If a previous render started a test, the
+        // backend audioTestCapture may still be running — explicitly stop it
+        // here so the mic indicator turns off even if React skips the prior
+        // cleanup (StrictMode double-effect, race during device-list refresh,
+        // etc.). This is idempotent on the backend (`stopAudioTest` no-ops on
+        // a null audioTestCapture).
+        window.electronAPI?.stopAudioTest?.().catch((error) => {
+            console.error("Error stopping native microphone test (guard=false):", error);
+        });
         setMicLevel(0);
     }, [isOpen, activeTab, selectedInput]);
 

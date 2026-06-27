@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { SkillUploadPayload } from './services/skills/SkillValidator';
 
 /**
  * Metadata the companion extension sends with a captured page (drives the
@@ -899,6 +900,17 @@ interface ElectronAPI {
   onDomContextReceived: (
     callback: (dom: string, meta?: DomCaptureMeta, envelope?: unknown) => void,
   ) => () => void;
+
+  // Skills — types live in the interface so the IPC contract is type-checked
+  // at preload-build time. The actual upload/outcome types are mirrored
+  // (structurally compatible) in src/types/electron.d.ts.
+  skillsRefresh: () => Promise<unknown[]>;
+  skillsOpenFolder: () => Promise<{ success: boolean; path: string; error?: string }>;
+  skillsUpload: (
+    payload: SkillUploadPayload,
+    opts?: { autoInstall?: boolean }
+  ) => Promise<unknown>;
+  skillsPreview: (payload: SkillUploadPayload) => Promise<unknown>;
 }
 
 export const PROCESSING_EVENTS = {
@@ -1112,6 +1124,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Skills — local SKILL.md instructions surfaced in Settings and the overlay.
   skillsRefresh: () => ipcRenderer.invoke('skills:list'),
   skillsOpenFolder: () => ipcRenderer.invoke('skills:open-folder'),
+  // Skill upload — step-3 wiring. `skillsUpload` is the general call (opts.autoInstall
+  // defaults to false on the renderer side; main process uses ?? false). `skillsPreview`
+  // is sugar for `autoInstall: false` — the renderer's confirm step calls `skillsUpload`
+  // again with `autoInstall: true` to commit.
+  skillsUpload: (payload: SkillUploadPayload, opts?: { autoInstall?: boolean }) =>
+    ipcRenderer.invoke('skills:upload', payload, opts),
+  skillsPreview: (payload: SkillUploadPayload) =>
+    ipcRenderer.invoke('skills:upload', payload, { autoInstall: false }),
 
   // Phone Mirror — stream live AI responses to a paired phone over the LAN.
   phoneMirrorGetInfo: () => ipcRenderer.invoke('phone-mirror:get-info'),
@@ -1288,6 +1308,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('credentials-changed', subscription);
     };
   },
+  // Hindsight: the app-managed companion server inherited the OLD AI-provider env at
+  // spawn and won't pick up new keys until restart. HindsightManager.notifyHindsightOfKeyChange
+  // broadcasts this event after every AI key save; the Intelligence Settings panel surfaces
+  // a small inline nudge so the user knows what to do.
+  onHindsightRestartNeeded: (callback: (data: { provider: string }) => void) => {
+    const subscription = (_: any, data: any) => callback(data);
+    ipcRenderer.on('hindsight-restart-needed', subscription);
+    return () => {
+      ipcRenderer.removeListener('hindsight-restart-needed', subscription);
+    };
+  },
+  // Hindsight: lifecycle state broadcasts from the main process. `state` is one of
+  // 'spawning' | 'ready' | 'unreachable' | 'spawn-failed'. The persistent top-of-overlay
+  // banner subscribes once and surfaces a "View log" affordance on failure states.
+  onHindsightStatus: (callback: (data: { state: string; reason?: string; logPath?: string; at?: number }) => void) => {
+    const subscription = (_: any, data: any) => callback(data);
+    ipcRenderer.on('hindsight-status', subscription);
+    return () => {
+      ipcRenderer.removeListener('hindsight-status', subscription);
+    };
+  },
+  // Hindsight: open the server's log file in the OS default viewer. Restricted to the
+  // Hindsight log path (under app userData); renderer cannot pass arbitrary paths.
+  openHindsightLog: () => ipcRenderer.invoke('open-hindsight-log'),
+  // User-initiated Hindsight opt-out. Sets the explicit-disable sentinel so the synthetic
+  // default can't silently re-enable Hindsight on next launch. Idempotent.
+  disableHindsight: () => ipcRenderer.invoke('hindsight:disable'),
 
   // Native Audio Service Events
   onNativeAudioTranscript: (

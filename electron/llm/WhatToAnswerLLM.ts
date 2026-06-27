@@ -15,7 +15,9 @@ import { checkAnswerForCodeBugs } from "./CodeSanityCheck";
 import { formatAnswerPlanForPrompt, isCodingAnswerType } from "./AnswerPlanner";
 import type { AnswerPlan, AnswerType } from "./AnswerPlanner";
 import { isLayerAllowed } from "./contextRoute";
-import type { ProviderDataScope } from "./ProviderRouter";
+import { DOCUMENT_GROUNDING_SCOPE_DENIED_MESSAGE, type ProviderDataScope } from "./ProviderRouter";
+import type { ActiveModeDocumentGroundingInfo } from "../services/ModesManager";
+import type { ModeRetrievalOptions } from "../services/ModeContextRetriever";
 import { isCodeVerificationEnabled } from "./codeVerification/verificationEnabled";
 import type { WhatToAnswerRequestSnapshot } from "./whatToAnswerRequestSnapshot";
 
@@ -61,15 +63,16 @@ type ModesManagerType = {
         // (older builds / stubs) reads the active mode exactly as before.
         getActiveModeSystemPromptSuffix: (pinnedModeId?: string) => string;
         buildActiveModeContextBlock: () => string;
-        buildRetrievedActiveModeContextBlock: (query: string, transcript?: string, tokenBudget?: number, answerType?: AnswerType, excludeCustomContext?: boolean, pinnedModeId?: string) => string;
+        buildRetrievedActiveModeContextBlock: (query: string, transcript?: string, tokenBudget?: number, answerType?: AnswerType, excludeCustomContext?: boolean, pinnedModeId?: string, retrievalOptions?: ModeRetrievalOptions) => string;
         // Phase 4: optional async hybrid retrieval (FTS + vector). Backwards
         // compatible — older builds without this method still work via the
         // sync lexical fallback. `answerType` (Phase 3) scopes the mode's
         // customContext so sensitive chunks can't leak into the wrong answer.
-        buildRetrievedActiveModeContextBlockHybrid?: (query: string, transcript?: string, tokenBudget?: number, answerType?: AnswerType, excludeCustomContext?: boolean, pinnedModeId?: string, allowRerank?: boolean) => Promise<string>;
+        buildRetrievedActiveModeContextBlockHybrid?: (query: string, transcript?: string, tokenBudget?: number, answerType?: AnswerType, excludeCustomContext?: boolean, pinnedModeId?: string, allowRerank?: boolean, retrievalOptions?: ModeRetrievalOptions) => Promise<string>;
         // PI v3 (W2): the always-pinned "Real-time prompt". Optional for older
         // module shapes (tests/stubs) — absence simply skips pinning.
         getActiveModePinnedInstructions?: (answerType?: AnswerType, pinnedModeId?: string) => string;
+        getActiveModeDocumentGroundingInfo?: (pinnedModeId?: string) => ActiveModeDocumentGroundingInfo;
     };
 };
 
@@ -223,6 +226,23 @@ ANSWER SHAPE: ${intentResult.answerShape}
                     // retrieved block rides in `message`, so omitting-at-source is
                     // what actually prevents the cloud send. (The boundary remains
                     // a second line of defence for other call paths.)
+                    const activeModeGroundingInfo = modesManager.getActiveModeDocumentGroundingInfo?.(requestSnapshot?.modeUniqueId);
+                    const documentGroundedCustomModeActive = activeModeGroundingInfo?.documentGroundedCustomModeActive === true;
+                    const forceDocumentGrounding = documentGroundedCustomModeActive;
+                    const retrievalOptions = forceDocumentGrounding ? { forceDocumentGrounding: true } : undefined;
+                    if (activeModeGroundingInfo?.isCustom) {
+                        console.log('[WhatToAnswerLLM] Active mode grounding', {
+                            selectedModeType: activeModeGroundingInfo.isCustom ? 'custom' : 'default',
+                            customModeId: activeModeGroundingInfo.modeId,
+                            customModeName: activeModeGroundingInfo.modeName,
+                            hasCustomPrompt: activeModeGroundingInfo.hasCustomPrompt === true,
+                            hasReferenceFiles: activeModeGroundingInfo.hasReferenceFiles === true,
+                            documentGrounded: activeModeGroundingInfo.documentGrounded === true,
+                            documentGroundedCustomModeActive,
+                            modeLock: activeModeGroundingInfo.isCustom === true,
+                            modeLockReason: activeModeGroundingInfo.isCustom ? 'user_created_custom_mode' : undefined,
+                        });
+                    }
                     let referenceFilesAllowed = true;
                     try {
                         const { SettingsManager } = require('../services/SettingsManager');
@@ -237,6 +257,15 @@ ANSWER SHAPE: ${intentResult.answerShape}
                     if (answerPlan && !isLayerAllowed(answerPlan, 'reference_files')) {
                         referenceFilesAllowed = false;
                     }
+                    if (documentGroundedCustomModeActive) {
+                        if (!referenceFilesAllowed) {
+                            console.warn('[WhatToAnswerLLM] Generic/reference layer exclusion overridden: document-grounded custom mode active', {
+                                genericBypassDisabledReason: 'document_grounded_custom_mode',
+                                retrievalRequired: true,
+                            });
+                        }
+                        referenceFilesAllowed = true;
+                    }
                     if (referenceFilesAllowed) {
                         // PI v3 (W5): prefer the caller's PREFETCHED retrieval
                         // (kicked in parallel with intent classification +
@@ -245,7 +274,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
                         // race as the inline path so a cold embedder still can't
                         // stall first-token. Falls through to inline retrieval
                         // when no prefetch was supplied (manual path, tests).
-                        if (preFetchedModeContext) {
+                        if (preFetchedModeContext && !forceDocumentGrounding) {
                             const { value, timedOut } = await raceWithBudget(
                                 preFetchedModeContext, HYBRID_RETRIEVAL_BUDGET_MS, '',
                             );
@@ -271,7 +300,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
                             } catch { /* flag module unavailable → no rerank */ }
                             const { value, timedOut } = await raceWithBudget(
                                 modesManager.buildRetrievedActiveModeContextBlockHybrid(
-                                    cleanedTranscript, cleanedTranscript, 1800, answerPlan?.answerType, true, requestSnapshot?.modeUniqueId, allowRerank,
+                                    cleanedTranscript, cleanedTranscript, 1800, answerPlan?.answerType, true, requestSnapshot?.modeUniqueId, allowRerank, retrievalOptions,
                                 ),
                                 HYBRID_RETRIEVAL_BUDGET_MS,
                                 '',
@@ -285,13 +314,17 @@ ANSWER SHAPE: ${intentResult.answerShape}
                             // excludeCustomContext (PI v3 W2): the mode's
                             // customContext is PINNED below — keep retrieval to
                             // reference files only so the text never ships twice.
-                            modeContextBlock = modesManager.buildRetrievedActiveModeContextBlock(cleanedTranscript, cleanedTranscript, 1800, answerPlan?.answerType, true, requestSnapshot?.modeUniqueId);
+                            modeContextBlock = modesManager.buildRetrievedActiveModeContextBlock(cleanedTranscript, cleanedTranscript, 1800, answerPlan?.answerType, true, requestSnapshot?.modeUniqueId, retrievalOptions);
                         }
                     } else if (await this.llmHelper.canUseLocalFallback(false)) {
-                        console.warn('[ScopeFallback] reference_files denied for cloud; routing to Ollama');
-                        modeContextBlock = modesManager.buildRetrievedActiveModeContextBlock(cleanedTranscript, cleanedTranscript, 1800, answerPlan?.answerType, true, requestSnapshot?.modeUniqueId);
+                        console.warn('[ScopeFallback] reference_files denied; local fallback available, routing via streamChat');
+                        modeContextBlock = modesManager.buildRetrievedActiveModeContextBlock(cleanedTranscript, cleanedTranscript, 1800, answerPlan?.answerType, true, requestSnapshot?.modeUniqueId, retrievalOptions);
                     } else {
                         console.warn('[ScopeFallback] reference_files denied; Ollama unavailable, omitting from context');
+                        if (forceDocumentGrounding) {
+                            yield DOCUMENT_GROUNDING_SCOPE_DENIED_MESSAGE;
+                            return;
+                        }
                     }
                 } catch (_err: any) {
                     console.warn('[WhatToAnswerLLM] ModesManager unavailable:', _err?.message);
@@ -317,7 +350,8 @@ ANSWER SHAPE: ${intentResult.answerShape}
 
             // Resume facts (candidateProfile) are dropped when the route forbids
             // the resume layer — e.g. coding/DSA must not see resume context.
-            const effectiveCandidateProfile = (answerPlan && !isLayerAllowed(answerPlan, 'resume'))
+            const documentGroundedCustomModeActiveForPrompt = answerPlan?.documentGroundedCustomModeActive === true;
+            const effectiveCandidateProfile = (documentGroundedCustomModeActiveForPrompt || (answerPlan && !isLayerAllowed(answerPlan, 'resume')))
                 ? undefined
                 : candidateProfile;
 
@@ -389,7 +423,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 modeTemplateType: 'active',
                 screenContext,
                 domContext: processedDomContext,
-                priorResponses: temporalContext?.hasRecentResponses ? temporalContext.previousResponses : undefined,
+                priorResponses: !documentGroundedCustomModeActiveForPrompt && temporalContext?.hasRecentResponses ? temporalContext.previousResponses : undefined,
                 intentContext,
                 retrievedModeContext: modeContextBlock || undefined,
                 pinnedModeInstructions: pinnedModeInstructions || undefined,
@@ -448,8 +482,8 @@ ANSWER SHAPE: ${intentResult.answerShape}
             if (modeContextBlock) packetScopes.push('reference_files');
             // Candidate resume facts AND prior assistant responses both fall under
             // the 'profile_history' data scope; push once if either is present.
-            const hasProfileHistory = Boolean(candidateProfile)
-                || Boolean(temporalContext?.hasRecentResponses && temporalContext.previousResponses.length > 0);
+            const hasProfileHistory = Boolean(effectiveCandidateProfile)
+                || Boolean(!documentGroundedCustomModeActiveForPrompt && temporalContext?.hasRecentResponses && temporalContext.previousResponses.length > 0);
             if (hasProfileHistory) packetScopes.push('profile_history');
             // Coding/DSA answers get a small reasoning budget for correctness;
             // everything else streams with thinking off (fastest TTFT). abortSignal
