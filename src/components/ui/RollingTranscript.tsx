@@ -55,12 +55,6 @@ const RollingTranscript = forwardRef<RollingTranscriptHandle, RollingTranscriptP
         ? microphoneChannel?.error
         : undefined;
 
-    useEffect(() => {
-        if (containerRef.current && showTranscriptText && text && autoScroll) {
-            containerRef.current.scrollTop = containerRef.current.scrollHeight;
-        }
-    }, [text, showTranscriptText, autoScroll]);
-
     const setProgrammaticAutoScroll = useCallback((enabled: boolean) => {
         if (programmaticAutoScrollTimerRef.current !== null) {
             window.clearTimeout(programmaticAutoScrollTimerRef.current);
@@ -84,10 +78,18 @@ const RollingTranscript = forwardRef<RollingTranscriptHandle, RollingTranscriptP
         };
     }, []);
 
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el || !showTranscriptText || !text || !autoScroll) return;
+
+        setProgrammaticAutoScroll(true);
+        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    }, [text, showTranscriptText, autoScroll, setProgrammaticAutoScroll]);
+
     const scrollToBottom = useCallback(() => {
         const el = containerRef.current;
         if (!el) return;
-        el.scrollTop = el.scrollHeight;
+        el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
         setProgrammaticAutoScroll(false);
         setAutoScroll(true);
     }, [setProgrammaticAutoScroll]);
