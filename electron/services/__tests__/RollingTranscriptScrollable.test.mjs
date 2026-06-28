@@ -54,11 +54,16 @@ describe('RollingTranscript vertical scrolling', () => {
 
   test('held transcript scroll shortcuts use momentum, not repeated smooth animations', () => {
     assert.match(transcriptSource, /const transcriptScrollMomentumRef = useRef\(\{/, 'component should keep transcript scroll momentum state');
+    assert.match(transcriptSource, /const lastTranscriptScrollCommandRef = useRef\(\{/, 'component should distinguish taps from held key repeats');
+    assert.match(transcriptSource, /const TRANSCRIPT_SCROLL_REPEAT_WINDOW_MS = 220;/, 'held-key detection should use a bounded repeat window');
     assert.match(transcriptSource, /const startTranscriptMomentum = useCallback/, 'component should have a dedicated transcript momentum loop');
     assert.match(transcriptSource, /window\.requestAnimationFrame\(tick\)/, 'manual transcript scrolling should run on requestAnimationFrame');
     assert.match(transcriptSource, /momentum\.velocity \*= Math\.pow\(0\.5, dt \/ TRANSCRIPT_SCROLL_FRICTION_HALF_LIFE\)/, 'manual transcript scrolling should decay smoothly');
     assert.match(transcriptSource, /el\.scrollTop = nextTop/, 'manual transcript scrolling should write scrollTop directly');
-    assert.match(transcriptSource, /lineHeight \* TRANSCRIPT_SCROLL_LINES \* \(Math\.LN2 \/ TRANSCRIPT_SCROLL_FRICTION_HALF_LIFE\)/, 'one key press should still map to roughly three rendered lines');
+    assert.match(transcriptSource, /el\.scrollTop \+ direction \* lineHeight \* TRANSCRIPT_SCROLL_LINES/, 'one key press should immediately move three rendered lines');
+    assert.match(transcriptSource, /if \(!isHeldRepeat\) \{[\s\S]*el\.scrollTop = nextTop;[\s\S]*return true;/, 'isolated taps should scroll immediately instead of waiting for momentum');
+    assert.match(transcriptSource, /const isHeldRepeat = command\.direction === direction && now - command\.ts <= TRANSCRIPT_SCROLL_REPEAT_WINDOW_MS;/, 'held key repeats should be detected from rapid same-direction calls');
+    assert.match(transcriptSource, /lineHeight \* TRANSCRIPT_SCROLL_REPEAT_START_LINES_PER_SECOND/, 'held key repeats should start at a useful steady speed');
     assert.match(transcriptSource, /lineHeight \* TRANSCRIPT_SCROLL_TERMINAL_LINES_PER_SECOND/, 'held key repeats should clamp to a steady terminal speed');
 
     const scrollByLinesBody = transcriptSource.slice(
