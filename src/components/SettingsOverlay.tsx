@@ -3130,4 +3130,4 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     );
 };
 
-export default SettingsOverlay;
+export default React.memo(SettingsOverlay);

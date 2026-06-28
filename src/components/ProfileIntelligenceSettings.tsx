@@ -535,7 +535,7 @@ const writePremiumCache = (isPremium: boolean, plan: string) => {
     } catch { /* localStorage disabled — fall back to live check */ }
 };
 
-export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }) {
+export const ProfileIntelligenceSettings = React.memo(function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }) {
     // Premium Status — seed from cache so the header CTA paints correctly
     // before licenseGetDetails() resolves.
     const cachedPremium = readPremiumCache();
@@ -1765,4 +1765,4 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
             />
         </div>
     );
-}
+});
