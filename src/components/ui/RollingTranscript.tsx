@@ -21,8 +21,10 @@ export interface RollingTranscriptHandle {
 }
 
 const TRANSCRIPT_SCROLL_LINES = 3;
-const TRANSCRIPT_SCROLL_FRICTION_HALF_LIFE = 0.12;
-const TRANSCRIPT_SCROLL_TERMINAL_LINES_PER_SECOND = 48;
+const TRANSCRIPT_SCROLL_FRICTION_HALF_LIFE = 0.10;
+const TRANSCRIPT_SCROLL_REPEAT_WINDOW_MS = 220;
+const TRANSCRIPT_SCROLL_REPEAT_START_LINES_PER_SECOND = 36;
+const TRANSCRIPT_SCROLL_TERMINAL_LINES_PER_SECOND = 72;
 const TRANSCRIPT_SCROLL_MIN_VELOCITY = 6;
 const TRANSCRIPT_SCROLL_MAX_FRAME_DT = 0.05;
 
@@ -46,6 +48,10 @@ const RollingTranscript = forwardRef<RollingTranscriptHandle, RollingTranscriptP
         lastTs: 0,
         velocity: 0,
         fraction: 0,
+    });
+    const lastTranscriptScrollCommandRef = useRef({
+        ts: 0,
+        direction: 0 as -1 | 0 | 1,
     });
     const [autoScroll, setAutoScroll] = useState(true);
 
@@ -104,6 +110,17 @@ const RollingTranscript = forwardRef<RollingTranscriptHandle, RollingTranscriptP
     const isScrollable = useCallback(() => {
         const el = containerRef.current;
         return Boolean(el && el.scrollHeight > el.clientHeight + 1);
+    }, []);
+
+    const stopTranscriptMomentum = useCallback(() => {
+        const momentum = transcriptScrollMomentumRef.current;
+        if (momentum.raf !== null) {
+            window.cancelAnimationFrame(momentum.raf);
+            momentum.raf = null;
+        }
+        momentum.lastTs = 0;
+        momentum.velocity = 0;
+        momentum.fraction = 0;
     }, []);
 
     const startTranscriptMomentum = useCallback(() => {
@@ -170,23 +187,44 @@ const RollingTranscript = forwardRef<RollingTranscriptHandle, RollingTranscriptP
         if ((direction < 0 && el.scrollTop <= 1) || (direction > 0 && maxTop - el.scrollTop <= 1)) return false;
 
         const momentum = transcriptScrollMomentumRef.current;
+        const command = lastTranscriptScrollCommandRef.current;
+        const now = window.performance?.now?.() ?? Date.now();
+        const isHeldRepeat = command.direction === direction && now - command.ts <= TRANSCRIPT_SCROLL_REPEAT_WINDOW_MS;
+        command.ts = now;
+        command.direction = direction;
+
+        if (!isHeldRepeat) {
+            stopTranscriptMomentum();
+            const nextTop = Math.max(0, Math.min(maxTop, el.scrollTop + direction * lineHeight * TRANSCRIPT_SCROLL_LINES));
+            if (Math.abs(nextTop - el.scrollTop) < 1) return false;
+
+            setProgrammaticAutoScroll(false);
+            el.scrollTop = nextTop;
+            setAutoScroll(isNearBottom(el));
+            return true;
+        }
+
         if (Math.sign(momentum.velocity) === -direction) {
             momentum.velocity = 0;
             momentum.fraction = 0;
         }
 
-        const kickVelocity = lineHeight * TRANSCRIPT_SCROLL_LINES * (Math.LN2 / TRANSCRIPT_SCROLL_FRICTION_HALF_LIFE);
+        const kickVelocity = lineHeight * TRANSCRIPT_SCROLL_REPEAT_START_LINES_PER_SECOND;
+        const minimumHeldVelocity = direction * lineHeight * TRANSCRIPT_SCROLL_REPEAT_START_LINES_PER_SECOND;
         const terminalVelocity = lineHeight * TRANSCRIPT_SCROLL_TERMINAL_LINES_PER_SECOND;
         momentum.velocity = Math.max(
             -terminalVelocity,
             Math.min(terminalVelocity, momentum.velocity + direction * kickVelocity),
         );
+        if (Math.abs(momentum.velocity) < Math.abs(minimumHeldVelocity)) {
+            momentum.velocity = minimumHeldVelocity;
+        }
 
         setProgrammaticAutoScroll(false);
         setAutoScroll(false);
         startTranscriptMomentum();
         return true;
-    }, [isScrollable, setProgrammaticAutoScroll, startTranscriptMomentum]);
+    }, [isScrollable, setProgrammaticAutoScroll, startTranscriptMomentum, stopTranscriptMomentum]);
 
     useImperativeHandle(ref, () => ({
         scrollByLines,
