@@ -38,7 +38,11 @@ export type PiTelemetryEvent =
   | 'pi_scaffold_compressed'
   | 'pi_answer_repeated'
   // Groq-scout E2E sprint 2026-06-14: assistant-voice identity/refusal misfire guard.
-  | 'pi_assistant_voice_misfire_repaired';
+  | 'pi_assistant_voice_misfire_repaired'
+  // Document-grounded validator markers (reason only; no answer or document text).
+  | 'pi_doc_grounded_validation_failed'
+  | 'pi_doc_grounded_regenerated'
+  | 'pi_doc_grounded_safe_failure';
 
 export interface PiTelemetryRecord {
   event: PiTelemetryEvent;

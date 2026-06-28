@@ -199,6 +199,18 @@ export function isIntelligenceFlagEnabled(key: IntelligenceFlagKey): boolean {
   return FLAGS[key].default;
 }
 
+/**
+ * True when the flag's value is FORCED by an environment override (NATIVELY_* var set to
+ * a recognized on/off value). When true, the env is the authoritative source — callers
+ * must NOT persist a contradicting SettingsManager value (e.g. HindsightManager's
+ * auto-flip would otherwise write `hindsightMemoryEnabled=true` to settings while
+ * `NATIVELY_HINDSIGHT_MEMORY=0` is set, silently re-enabling the flag the moment the
+ * user unsets the env). Never throws.
+ */
+export function isIntelligenceFlagEnvForced(key: IntelligenceFlagKey): boolean {
+  return readEnvOverride(key) !== null;
+}
+
 /** True when the observe-only IntelligenceTrace should collect (Phase 12/13). */
 export const isIntelligenceTraceEnabled = (): boolean => isIntelligenceFlagEnabled('trace');
 

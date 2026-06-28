@@ -497,14 +497,51 @@ export class ModesManager {
         this.modeContextRetriever.setSharedEmbeddingPipeline(pipeline);
     }
 
-    /** Re-index files that fell back before the embedding provider became ready. */
+    /** Re-index files that fell back before the embedding provider became ready,
+     *  OR whose stored vectors are in a now-stale embedding space (fallback
+     *  promotion flips the active space; getFileIndexStatus reports those 'ready'
+     *  files as 'pending', which retryLexicalOnlyFiles re-indexes — MEDIUM #3).
+     *
+     *  MEDIUM #2: only descend into a mode when at least one of its files is in a
+     *  retry-eligible state, so a user with many fully-indexed modes doesn't pay
+     *  an O(modes × files) re-scan + per-file indexFile entry on every kick. */
     public async retryAllLexicalOnlyFiles(): Promise<void> {
+        const RETRY_ELIGIBLE = new Set(['lexical_only', 'failed', 'pending']);
         for (const mode of this.getModes()) {
             const files = this.getReferenceFiles(mode.id);
-            if (files.length > 0) {
-                await this.modeContextRetriever.retryLexicalOnlyFiles(files).catch(() => { /* logged inside */ });
-            }
+            if (files.length === 0) continue;
+            // Cheap status read (no embedding work) gates the expensive retry.
+            const hasEligible = files.some(f => {
+                try {
+                    return RETRY_ELIGIBLE.has(this.modeContextRetriever.getReferenceFileIndexStatus(f.id).status);
+                } catch {
+                    return true; // status lookup failed → let the retry decide
+                }
+            });
+            if (!hasEligible) continue;
+            await this.modeContextRetriever.retryLexicalOnlyFiles(files).catch(() => { /* logged inside */ });
         }
+    }
+
+    /** Modes that have at least one retry-eligible reference file. Used by the
+     *  main process to broadcast 'done' only for modes that were actually
+     *  re-indexed (LOW #8), instead of spamming every mode on every kick. */
+    public getModesWithRetryEligibleFiles(): string[] {
+        const RETRY_ELIGIBLE = new Set(['lexical_only', 'failed', 'pending']);
+        const out: string[] = [];
+        for (const mode of this.getModes()) {
+            const files = this.getReferenceFiles(mode.id);
+            if (files.length === 0) continue;
+            const hasEligible = files.some(f => {
+                try {
+                    return RETRY_ELIGIBLE.has(this.modeContextRetriever.getReferenceFileIndexStatus(f.id).status);
+                } catch {
+                    return true;
+                }
+            });
+            if (hasEligible) out.push(mode.id);
+        }
+        return out;
     }
 
     /** Kick indexing for every not-yet-ready file of a mode (mode activation prewarm). */

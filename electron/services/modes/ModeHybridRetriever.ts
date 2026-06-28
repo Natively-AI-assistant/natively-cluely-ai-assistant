@@ -1126,14 +1126,34 @@ export class ModeHybridRetriever {
             const missingTexts = missing.map(c => c.text);
             try {
                 let vecs: number[][];
-                if (typeof (this.embeddingPipeline as any).getEmbeddings === 'function') {
+                // LOW #7: prefer the fallback-aware batch path so a mid-query
+                // provider exhaustion transparently falls back to local instead
+                // of silently degrading these chunks to FTS-only for the turn.
+                // Persistence below is handled by the fire-and-forget indexFile()
+                // re-index, which stamps the chunks with whatever space is active
+                // after the fallback, so the NEXT query is a pure index lookup.
+                let producedSpace: string | null = activeSpace;
+                if (typeof (this.embeddingPipeline as any).getEmbeddingsWithFallback === 'function') {
+                    const r = await (this.embeddingPipeline as any).getEmbeddingsWithFallback(missingTexts);
+                    vecs = r.embeddings;
+                    if (r.space) producedSpace = r.space;
+                } else if (typeof (this.embeddingPipeline as any).getEmbeddings === 'function') {
                     vecs = await (this.embeddingPipeline as any).getEmbeddings(missingTexts);
                 } else {
                     // Backwards compat for older test/mocked pipelines that only
                     // implement getEmbedding — run in parallel (FINDING-003).
                     vecs = await Promise.all(missingTexts.map(text => this.embeddingPipeline.getEmbedding(text)));
                 }
-                if (Array.isArray(vecs) && vecs.length === missingTexts.length) {
+                // Space-identity gate for the ephemeral vectors. The queryEmbedding
+                // was computed in `activeSpace` BEFORE this batch; if a mid-query
+                // fallback promoted a different provider, the chunk vectors are in
+                // `producedSpace` and a cosine against the query vector would be
+                // semantically random. Discard them for THIS turn (FTS-only) — the
+                // fire-and-forget re-index below re-stamps every chunk in the new
+                // space so the NEXT query is a clean index lookup.
+                if (producedSpace && activeSpace && producedSpace !== activeSpace) {
+                    console.warn(`[ModeHybridRetriever] mid-query embedding space flip (${activeSpace} → ${producedSpace}); skipping cross-space ephemeral vectors, re-indexing scheduled.`);
+                } else if (Array.isArray(vecs) && vecs.length === missingTexts.length) {
                     missing.forEach((c, i) => { if (vecs[i]) ephemeral.set(`${c.sourceId}:${c.chunkIndex}`, vecs[i]); });
                 } else {
                     console.warn(`[ModeHybridRetriever] Batch embed returned ${vecs?.length ?? 'undefined'} vectors for ${missingTexts.length} chunks; vector path will be partially lexical-only.`);

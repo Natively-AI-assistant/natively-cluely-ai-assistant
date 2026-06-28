@@ -2066,6 +2066,124 @@ export function initializeIpcHandlers(appState: AppState): void {
             }
           }
 
+          // ── DOCUMENT-GROUNDED GROUNDEDNESS / GREETING VALIDATOR ───────────────
+          // (audit 2026-06-27, real-path fix — backstop to the prompt-source
+          // greeting override above). The production serverModel
+          // (gemini-3.1-flash-lite) is weak and was emitting the canned greeting
+          // ("Hey! What would you like help with?") for real document questions,
+          // and that invalid answer was being SAVED to SessionTracker, then
+          // re-fed into the next question (the contamination loop). Here we hard-
+          // reject only unambiguous failures (greeting / empty / exact repeat of
+          // the immediately-prior answer), regenerate ONCE with a stricter prompt
+          // bound to the retrieved material, and — critically — block an invalid
+          // answer from ever entering SessionTracker. The brittle "answer says
+          // not-mentioned while a chunk contains the entity term" signal is
+          // LOG-ONLY (per review): a chunk often contains the term without
+          // actually answering, so forcing a regen there risks overwriting an
+          // honest "not in the material" with a hallucination.
+          let blockedFromSessionTracker = false;
+          if (answerPlan.answerType === 'lecture_answer'
+            && manualActiveMode?.documentGroundedCustomModeActive
+            && _chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
+            try {
+              const GREETING_RE = /^\s*(?:hey|hi|hello)[!,.]?\s*(?:there)?[!,.]?\s*(?:what would you like help with|how can i help|what can i (?:help|do)(?: you with| for you)?|how may i (?:help|assist))\b/i;
+              const trimmed = fullResponse.trim();
+              const priorAnswer = (intelligenceManager.getLastAssistantMessage() || '').trim();
+              const isGreeting = GREETING_RE.test(trimmed) || /what would you like help with/i.test(trimmed);
+              const isEmpty = trimmed.length < 8;
+              const isExactRepeat = priorAnswer.length > 0 && trimmed === priorAnswer;
+              // Re-retrieve the reference block for the regen prompt + the
+              // log-only groundedness check. The block built inside streamChat is
+              // not in handler scope, so we re-run the (cached) lexical retrieval
+              // here. Cheap: the per-file chunk cache means this re-scores, it
+              // does not re-chunk.
+              let docContextBlock = '';
+              try {
+                const { ModesManager } = require('./services/ModesManager');
+                docContextBlock = ModesManager.getInstance().buildRetrievedActiveModeContextBlock(
+                  message, undefined, 1800, 'lecture_answer', true, undefined, { forceDocumentGrounding: true },
+                ) || '';
+              } catch (reErr: any) {
+                console.warn('[DocGrounded] re-retrieval for validator failed (non-fatal):', reErr?.message);
+              }
+              // LOG-ONLY groundedness signal: does the answer claim "not mentioned"
+              // while a retrieved chunk contains a high-signal term from the question?
+              try {
+                const saysNotMentioned = /not (?:directly )?(?:mentioned|in (?:the|my) (?:uploaded|seminar|thesis) material|found|present)/i.test(trimmed);
+                if (saysNotMentioned && docContextBlock) {
+                  const qTerms: string[] = (message.match(/\b[A-Za-z0-9-]*[A-Z][A-Za-z0-9-]*\b|\b\w*\d\w*\b/g) || [])
+                    .filter((t: string) => t.length >= 2 && t.length <= 40);
+                  const chunkLower = docContextBlock.toLowerCase();
+                  const present = qTerms.filter((t: string) => chunkLower.includes(t.toLowerCase()));
+                  if (present.length > 0) {
+                    console.warn('[DocGrounded] possible false "not mentioned" — retrieved context contains question terms (log-only, not regenerated)', {
+                      questionTerms: present.slice(0, 6),
+                    });
+                  }
+                }
+              } catch { /* log-only, never throws into the answer path */ }
+
+              const reason = isGreeting ? 'greeting'
+                : isEmpty ? 'empty'
+                : isExactRepeat ? 'exact_repeat_of_prior_answer'
+                : null;
+
+              if (reason) {
+                console.warn('[DocGrounded] answer validation failed', { reason, answerType: answerPlan.answerType });
+                piTelemetry.emit('pi_doc_grounded_validation_failed', { reason });
+                // Regenerate ONCE, deadline-guarded, with a stricter prompt that
+                // pins the retrieved material and forbids greetings.
+                let regen = '';
+                try {
+                  const strictPrompt = [
+                    'You are answering a question strictly from the uploaded reference material below.',
+                    'Do NOT greet. Do NOT ask what the user wants. Answer the question directly from the material.',
+                    'If the material does not contain the answer, say so in one sentence and stop.',
+                    '',
+                    docContextBlock || '(no retrieved material)',
+                    '',
+                    `QUESTION: ${message}`,
+                    '',
+                    'ANSWER:',
+                  ].join('\n');
+                  await raceStreamWithDeadline({
+                    stream: llmHelper.streamChat(strictPrompt, undefined, undefined, undefined, true, true) as AsyncGenerator<string>,
+                    firstUsefulDeadlineMs: usingLocalLlm ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
+                    isUsefulYet: () => regen.length >= 8,
+                    shouldAbort: () => regen.length > 2000,
+                    onToken: (tok: string) => { regen += tok; },
+                  });
+                } catch (regenErr: any) {
+                  console.warn('[DocGrounded] regeneration failed (non-fatal):', regenErr?.message || regenErr);
+                }
+                const regenTrim = regen.trim();
+                const regenValid = regenTrim.length >= 8
+                  && !GREETING_RE.test(regenTrim)
+                  && !/what would you like help with/i.test(regenTrim)
+                  && regenTrim !== priorAnswer;
+                if (regenValid) {
+                  fullResponse = regenTrim;
+                  finalText = regenTrim;
+                  _attr.assistant_voice_guard_triggered = true;
+                  piTelemetry.emit('pi_doc_grounded_regenerated', { reason });
+                  console.warn('[DocGrounded] regeneration applied', { reason, chars: regenTrim.length });
+                } else {
+                  // Retry didn't help → ship a SAFE failure line (NOT a greeting),
+                  // referencing the uploaded material (not "the conversation"), and
+                  // BLOCK it from SessionTracker so it cannot poison the next turn.
+                  const safe = "I couldn't find that in the uploaded material. Try rephrasing, or ask about a specific section of the document.";
+                  fullResponse = safe;
+                  finalText = safe;
+                  blockedFromSessionTracker = true;
+                  piTelemetry.emit('pi_doc_grounded_safe_failure', { reason });
+                  console.warn('[DocGrounded] regeneration did not recover — shipping safe failure line, blocked from SessionTracker', { reason });
+                }
+              }
+            } catch (dgErr: any) {
+              console.warn('[DocGrounded] validator skipped (non-fatal):', dgErr?.message || dgErr);
+            }
+          }
+
           // Final check: only send done if we are still the active stream
           if (_chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
             // finalText is set ONLY when repair changed the streamed answer — the
@@ -2084,8 +2202,11 @@ export function initializeIpcHandlers(appState: AppState): void {
               /* noop */
             }
 
-            // Update IntelligenceManager with ASSISTANT message after completion
-            if (fullResponse.trim().length > 0) {
+            // Update IntelligenceManager with ASSISTANT message after completion.
+            // Document-grounded invalid answers (greeting/empty/exact-repeat that
+            // didn't recover on regen) are BLOCKED here so they cannot contaminate
+            // the next question's rolling context (audit 2026-06-27).
+            if (fullResponse.trim().length > 0 && !blockedFromSessionTracker) {
               intelligenceManager.addAssistantMessage(fullResponse);
               // Log Usage for streaming chat
               intelligenceManager.logUsage('chat', message, fullResponse);
@@ -2598,10 +2719,21 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Re-run start() so the auto-spawn fires IN-SESSION — previously the user had to restart
       // the app for the boot-time start() to see the new config. start() is idempotent and a
       // no-op when nothing changed (e.g. user just saved the same baseUrl).
+      //
+      // CHIP-FLICKER FIX (round 7): await start() instead of firing it void. start()
+      // performs its own healthCheck internally before resolving, so a separate
+      // `await hm.healthCheck()` here would race with start's probe — two concurrent
+      // /health probes on the same endpoint, one returning false (server still booting)
+      // and the chip briefly flashing "Can't connect" right after the user clicked
+      // Apply. Awaiting start() ensures start's probe completes first; we re-probe once
+      // more for a fresh read so the renderer's chip reflects current state.
       const { HindsightManager } = require('./services/HindsightManager') as typeof import('./services/HindsightManager');
       const hm = HindsightManager.getInstance();
-      void hm.start().catch((e: any) => console.warn('[HindsightConfig] post-save start() failed (non-fatal):', e?.message));
-      // Probe health so the caller gets a fresh read (the auto-spawn itself is async).
+      try {
+        await hm.start();
+      } catch (e: any) {
+        console.warn('[HindsightConfig] post-save start() failed (non-fatal):', e?.message);
+      }
       const healthy = await hm.healthCheck();
       return { success: true, healthy };
     } catch (e: any) {
@@ -2953,7 +3085,12 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('set-gemini-api-key', async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setGeminiApiKey(apiKey);
+      const cm = CredentialsManager.getInstance();
+      // Detect a genuine change so the Hindsight restart-nudge only fires when the key
+      // actually differs — re-saving the same key (common when the user edits an
+      // unrelated field) shouldn't nag the user to restart the server.
+      const keyChanged = cm.getGeminiApiKey() !== apiKey;
+      cm.setGeminiApiKey(apiKey);
 
       // Also update the LLMHelper immediately
       const llmHelper = appState.processingHelper.getLLMHelper();
@@ -2967,8 +3104,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       appState.getIntelligenceManager().initializeLLMs();
 
       // Hindsight: an app-managed companion server inherited the OLD key in its env at
-      // spawn — it won't pick up the new one until restart. Surface the hint (log + IPC).
-      try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('Gemini'); } catch { /* optional */ }
+      // spawn — it won't pick up the new one until restart. Surface the hint (log + IPC),
+      // but only when the key genuinely changed.
+      if (keyChanged) {
+        try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('Gemini'); } catch { /* optional */ }
+      }
 
       return { success: true };
     } catch (error: any) {
@@ -2980,7 +3120,9 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('set-groq-api-key', async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setGroqApiKey(apiKey);
+      const cm = CredentialsManager.getInstance();
+      const keyChanged = cm.getGroqApiKey() !== apiKey;
+      cm.setGroqApiKey(apiKey);
 
       // Also update the LLMHelper immediately
       const llmHelper = appState.processingHelper.getLLMHelper();
@@ -2991,8 +3133,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Re-init IntelligenceManager
       appState.getIntelligenceManager().initializeLLMs();
 
-      // Hindsight: see set-gemini-api-key for rationale.
-      try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('Groq'); } catch { /* optional */ }
+      // Hindsight: see set-gemini-api-key for rationale (only when the key changed).
+      if (keyChanged) {
+        try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('Groq'); } catch { /* optional */ }
+      }
 
       return { success: true };
     } catch (error: any) {
@@ -3004,7 +3148,9 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('set-openai-api-key', async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setOpenaiApiKey(apiKey);
+      const cm = CredentialsManager.getInstance();
+      const keyChanged = cm.getOpenaiApiKey() !== apiKey;
+      cm.setOpenaiApiKey(apiKey);
 
       // Also update the LLMHelper immediately
       const llmHelper = appState.processingHelper.getLLMHelper();
@@ -3015,8 +3161,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Re-init IntelligenceManager
       appState.getIntelligenceManager().initializeLLMs();
 
-      // Hindsight: see set-gemini-api-key for rationale.
-      try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('OpenAI'); } catch { /* optional */ }
+      // Hindsight: see set-gemini-api-key for rationale (only when the key changed).
+      if (keyChanged) {
+        try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('OpenAI'); } catch { /* optional */ }
+      }
 
       return { success: true };
     } catch (error: any) {
@@ -3028,7 +3176,9 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('set-claude-api-key', async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setClaudeApiKey(apiKey);
+      const cm = CredentialsManager.getInstance();
+      const keyChanged = cm.getClaudeApiKey() !== apiKey;
+      cm.setClaudeApiKey(apiKey);
 
       // Also update the LLMHelper immediately
       const llmHelper = appState.processingHelper.getLLMHelper();
@@ -3039,8 +3189,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Re-init IntelligenceManager
       appState.getIntelligenceManager().initializeLLMs();
 
-      // Hindsight: see set-gemini-api-key for rationale.
-      try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('Claude'); } catch { /* optional */ }
+      // Hindsight: see set-gemini-api-key for rationale (only when the key changed).
+      if (keyChanged) {
+        try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('Claude'); } catch { /* optional */ }
+      }
 
       return { success: true };
     } catch (error: any) {
@@ -3052,7 +3204,9 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('set-deepseek-api-key', async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setDeepseekApiKey(apiKey);
+      const cm = CredentialsManager.getInstance();
+      const keyChanged = cm.getDeepseekApiKey() !== apiKey;
+      cm.setDeepseekApiKey(apiKey);
 
       // Also update the LLMHelper immediately
       const llmHelper = appState.processingHelper.getLLMHelper();
@@ -3063,8 +3217,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Re-init IntelligenceManager
       appState.getIntelligenceManager().initializeLLMs();
 
-      // Hindsight: see set-gemini-api-key for rationale.
-      try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('DeepSeek'); } catch { /* optional */ }
+      // Hindsight: see set-gemini-api-key for rationale (only when the key changed).
+      if (keyChanged) {
+        try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('DeepSeek'); } catch { /* optional */ }
+      }
 
       return { success: true };
     } catch (error: any) {
@@ -3077,23 +3233,34 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
-      cm.setLitellmConfig(config?.apiKey || '', config?.baseURL || '', config?.maxTokens);
+      // Detect a genuine change so the Hindsight restart-nudge only fires when the URL
+      // or key actually differs — mirrors the keyChanged guard on the 5 provider-key
+      // setters (round 6 fix). Without this, re-saving the same LiteLLM config (common
+      // when the user touches an unrelated field) spams a spurious "restart your server"
+      // nudge and erodes trust in the prompt.
+      const prevKey = cm.getLitellmApiKey() || '';
+      const prevUrl = cm.getLitellmBaseURL() || '';
+      const newKey = config?.apiKey || '';
+      const newUrl = config?.baseURL || '';
+      const changed = prevKey !== newKey || prevUrl !== newUrl;
+      cm.setLitellmConfig(newKey, newUrl, config?.maxTokens);
 
       // Update the LLMHelper with the EFFECTIVE stored key — a blank apiKey on
       // re-save means "keep the stored one" (the field is masked in Settings),
       // so read back what CredentialsManager actually persisted.
       const llmHelper = appState.processingHelper.getLLMHelper();
-      llmHelper.setLitellmConfig(cm.getLitellmApiKey() || '', config?.baseURL || '', config?.maxTokens);
+      llmHelper.setLitellmConfig(cm.getLitellmApiKey() || '', newUrl, config?.maxTokens);
 
       // Cancel in-flight stream before re-init (engine only, not session)
       appState.getIntelligenceManager().resetEngine();
       // Re-init IntelligenceManager
       appState.getIntelligenceManager().initializeLLMs();
 
-      // Hindsight: see set-gemini-api-key for rationale. LiteLLM URL/key changes also
-      // require the app-managed server to be restarted to pick up the new env — without
-      // this nudge the new config silently doesn't apply until manual relaunch.
-      try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('LiteLLM'); } catch { /* optional */ }
+      // Hindsight: see set-gemini-api-key for rationale. Only fire when the URL or key
+      // genuinely changed.
+      if (changed) {
+        try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('LiteLLM'); } catch { /* optional */ }
+      }
 
       return { success: true };
     } catch (error: any) {
@@ -7534,6 +7701,20 @@ export function initializeIpcHandlers(appState: AppState): void {
         } catch (idxErr: any) {
           console.warn('[IPC] reference-file indexing failed (lexical fallback remains):', idxErr?.message);
         }
+        // PI v3 (W3) — if the embedding pipeline wasn't ready when this file
+        // was indexed (cold start, no Gemini key yet, Ollama still pulling),
+        // the file lands in 'failed' or 'lexical_only' with no auto-retry.
+        // The boot-time scheduleModeReferenceIndexRetry only sees files that
+        // existed at app start; kick a retry here so uploads during the
+        // waitForReady window aren't silently stuck. Idempotent + deduped
+        // via modeReferenceRetryPromise, so concurrent uploads collapse to
+        // a single retry pass.
+        try {
+          const finalStatus = ModesManager.getInstance().getReferenceFileIndexStatus(file.id);
+          if (finalStatus?.status === 'failed' || finalStatus?.status === 'lexical_only') {
+            appState.scheduleModeReferenceIndexRetry();
+          }
+        } catch { /* status lookup is best-effort */ }
         // Signal "indexing done" — renderer re-fetches final status.
         BrowserWindow.getAllWindows().forEach((win) => {
           if (!win.isDestroyed()) win.webContents.send('mode-file-index-status', { modeId, fileId: file.id, phase: 'done' });
@@ -7987,6 +8168,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       } catch {
         /* mode prior unavailable; keep phone planning mode-blind */
       }
+      const phoneDocGrounded = phoneActiveMode?.documentGroundedCustomModeActive === true;
 
       const phoneAnswerPlan = planAnswer({
         question: message,
@@ -8003,7 +8185,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       try {
         const snap = intelligenceManager.getFormattedContext(100);
         if (snap && snap.trim().length > 0 && shouldAutoAttachManualTranscriptContext(message, phoneAnswerPlan)) {
-          context = snap;
+          context = phoneDocGrounded ? stripPriorAssistantTurns(snap) : snap;
+          if (phoneDocGrounded && context.trim().length === 0) context = undefined;
         } else if (snap && snap.trim().length > 0) {
           console.log('[PhoneMirror] Skipped 100s transcript context for standalone manual chat', {
             answerType: phoneAnswerPlan.answerType,
@@ -8066,7 +8249,19 @@ export function initializeIpcHandlers(appState: AppState): void {
             phoneMirror.publishDone(String(myStreamId), full);
           } catch (_) {}
           win?.webContents.send('gemini-stream-done', { streamId: myStreamId });
-          if (full.trim().length > 0) {
+          // Document-grounded: block a greeting/empty answer from SessionTracker
+          // so it can't contaminate the next turn (same backstop as the desktop
+          // path, minus the regenerate — the phone surface keeps it simple).
+          const phoneTrim = full.trim();
+          const phoneInvalid = phoneDocGrounded && (
+            phoneTrim.length < 8
+            || /what would you like help with/i.test(phoneTrim)
+            || /^\s*(?:hey|hi|hello)[!,.]?\s*(?:there)?[!,.]?\s*(?:what would you like help with|how can i help|what can i (?:help|do))/i.test(phoneTrim)
+          );
+          if (phoneInvalid) {
+            console.warn('[PhoneMirror] document-grounded invalid answer blocked from SessionTracker', { chars: phoneTrim.length });
+          }
+          if (phoneTrim.length > 0 && !phoneInvalid) {
             intelligenceManager.addAssistantMessage(full);
             intelligenceManager.logUsage('chat', message, full);
           }

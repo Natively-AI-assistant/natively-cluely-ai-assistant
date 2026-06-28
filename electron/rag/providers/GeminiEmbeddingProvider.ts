@@ -163,9 +163,35 @@ export class GeminiEmbeddingProvider implements IEmbeddingProvider {
     return out;
   }
 
+  // Serial fallback for the batch endpoint. The batch path only reaches here
+  // AFTER a batch failure (often a 429), so firing 100 un-throttled single-doc
+  // embeds would hammer an already rate-limited endpoint and exhaust quota even
+  // faster (LOW #6). Each embed retries on 429/503 with capped exponential
+  // backoff so a transient rate-limit drains instead of cascading into hard
+  // failures across the whole sub-batch.
   private async embedSerial(texts: string[], opts: EmbedOptions): Promise<number[][]> {
     const out: number[][] = [];
-    for (const t of texts) out.push(await this.embed(t, opts));
+    for (const t of texts) out.push(await this.embedWithBackoff(t, opts));
     return out;
+  }
+
+  private async embedWithBackoff(text: string, opts: EmbedOptions, maxRetries = 4): Promise<number[]> {
+    let attempt = 0;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      try {
+        return await this.embed(text, opts);
+      } catch (e: any) {
+        const msg = String(e?.message || e);
+        const isTransient = / 429 | 503 |RESOURCE_EXHAUSTED|UNAVAILABLE/.test(msg) || /\b(429|503)\b/.test(msg);
+        if (!isTransient || attempt >= maxRetries) throw e;
+        // 0.5s, 1s, 2s, 4s — bounded so the serial drain can't stall the
+        // whole re-index for minutes on a persistent outage.
+        const delayMs = Math.min(4000, 500 * 2 ** attempt);
+        attempt++;
+        console.warn(`[GeminiEmbeddingProvider] serial embed transient failure (attempt ${attempt}/${maxRetries}), backing off ${delayMs}ms: ${msg}`);
+        await new Promise(r => setTimeout(r, delayMs));
+      }
+    }
   }
 }

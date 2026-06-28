@@ -131,6 +131,36 @@ export interface ElectronAPI {
   setLitellmConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number }) => Promise<{ success: boolean; error?: string }>
   getAvailableLiteLLMModels: () => Promise<string[]>
   setNativelyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
+  // ── In-app review / testimonial prompt ─────────────────────────────────
+  reviewGetPromptState: () => Promise<{
+    ok: boolean;
+    local?: {
+      has_reviewed: boolean;
+      dismissed_count: number;
+      dont_show_again: boolean;
+      last_prompted_at: string | null;
+      next_eligible_at: string | null;
+      session_count: number;
+      total_usage_ms: number;
+    };
+    backend?: { ok: boolean; state?: any; eligible?: boolean; reason?: string } | null;
+    eligible?: { eligible: boolean; reason: string };
+    error?: string;
+  }>
+  reviewRecordSession: () => Promise<{ ok: boolean; error?: string }>
+  reviewFlushSession: () => Promise<{ ok: boolean; totals?: { session_count: number; total_usage_ms: number }; error?: string }>
+  reviewMarkShown: () => Promise<{ ok: boolean; error?: string }>
+  reviewDismissLater: () => Promise<{ ok: boolean; error?: string }>
+  reviewDismissForever: () => Promise<{ ok: boolean; error?: string }>
+  reviewSubmit: (payload: { rating: number; review_text: string | null }) => Promise<{ ok: boolean; id?: string; error?: string; status?: number }>
+  reviewUpdateTestimonial: (payload: {
+    review_id: string;
+    name: string | null;
+    role: string | null;
+    company: string | null;
+    can_use_publicly: boolean;
+    display_name_publicly: boolean;
+  }) => Promise<{ ok: boolean; error?: string; status?: number }>
   getNativelyPricing: () => Promise<{ ok: boolean; currency?: string; fetchedAt?: string; stale?: boolean; products?: Record<string, { id: string; dodoProductId: string; name: string; amount: number | null; currency: string; formattedPrice: string | null; interval: 'month' | 'year' | 'lifetime'; checkoutUrl: string; coupon: { code: string; eligible: boolean; discountPercent: number; reason?: string } }>; error?: string; status?: number }>
   getNativelyUsage: () => Promise<{ ok: boolean; error?: string; plan?: string; quota?: { transcription: { used: number; limit: number; remaining: number }; ai: { used: number; limit: number; remaining: number }; search: { used: number; limit: number; remaining: number }; resets_at: string }; member_since?: string }>
   getStoredCredentials: () => Promise<{ hasNativelyKey?: boolean; hasGeminiKey: boolean; hasGroqKey: boolean; hasOpenaiKey: boolean; hasClaudeKey: boolean; hasDeepseekKey: boolean; hasLitellmBaseURL?: boolean; litellmBaseURL?: string | null; litellmMaxTokens?: number | null; googleServiceAccountPath: string | null; sttProvider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively'; hasSttGroqKey: boolean; hasSttOpenaiKey: boolean; hasDeepgramKey: boolean; hasElevenLabsKey: boolean; hasAzureKey: boolean; azureRegion: string; hasIbmWatsonKey: boolean; ibmWatsonRegion: string; groqSttModel?: string; hasSonioxKey?: boolean; hasTavilyKey?: boolean; geminiPreferredModel?: string; groqPreferredModel?: string; openaiPreferredModel?: string; claudePreferredModel?: string; deepseekPreferredModel?: string; sttGroqKey?: string; sttOpenaiKey?: string; sttDeepgramKey?: string; sttElevenLabsKey?: string; sttAzureKey?: string; sttIbmKey?: string; sttSonioxKey?: string; openAiSttBaseUrl?: string }>
@@ -170,7 +200,7 @@ export interface ElectronAPI {
   onHindsightRestartNeeded: (callback: (data: { provider: string }) => void) => () => void
   // Hindsight: lifecycle state broadcasts from the main process. Persistent top-of-overlay
   // banner subscribes once and surfaces "View log" on failure states.
-  onHindsightStatus: (callback: (data: { state: 'spawning' | 'ready' | 'unreachable' | 'spawn-failed'; reason?: string; logPath?: string; at?: number }) => void) => () => void
+  onHindsightStatus: (callback: (data: { state: 'spawning' | 'ready' | 'unreachable' | 'spawn-failed' | 'auth-failed'; reason?: string; logPath?: string; at?: number }) => void) => () => void
   // Hindsight: open the server's log file in the OS default viewer. Path is resolved
   // server-side; renderer never supplies a path.
   openHindsightLog: () => Promise<{ ok: boolean; logPath?: string; error?: string }>
@@ -265,7 +295,7 @@ export interface ElectronAPI {
   generateDiagram: (text?: string) => Promise<{ enabled: boolean; diagram: any }>
   getIntelligenceFlags: () => Promise<Array<{ key: string; enabled: boolean; setting: string; env: string; default: boolean }>>
   setIntelligenceFlag: (key: string, value: boolean | null) => Promise<{ success: boolean; enabled?: boolean; error?: string }>
-  getHindsightConfig: () => Promise<{ baseUrl: string; hasApiKey: boolean; autoStart: boolean; serverCommand: string; llmProvider: string; available: boolean }>
+  getHindsightConfig: () => Promise<{ baseUrl: string; hasApiKey: boolean; autoStart: boolean; serverCommand: string; llmProvider: string; available: boolean; mode: 'local' | 'cloud'; synthetic: boolean; explicitlyDisabled: boolean; authFailed: boolean }>
   setHindsightConfig: (cfg: { baseUrl?: string; apiKey?: string; autoStart?: boolean; serverCommand?: string; llmProvider?: string }) => Promise<{ success: boolean; healthy?: boolean; error?: string }>
   testHindsightConnection: () => Promise<{ healthy: boolean; error?: string }>
   updateMeetingTitle: (id: string, title: string) => Promise<boolean>

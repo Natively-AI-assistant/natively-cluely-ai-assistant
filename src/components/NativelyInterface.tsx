@@ -1,4 +1,4 @@
-import { animate, AnimatePresence, motion, useMotionValue, useTransform } from 'framer-motion';
+import { animate, motion, useMotionValue, useTransform } from 'framer-motion';
 import {
   ArrowRight,
   ChevronDown,
@@ -981,6 +981,19 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   //    would otherwise read as a shake). Re-expansions after mount still animate.
   const isExpandedEffectInitializedRef = useRef(false);
   const hasRenderedExpandedRef = useRef(false);
+  // Owned by the auto-scroll-on-reexpand effect only. Separate from
+  // isExpandedEffectInitializedRef (which the [isExpanded] show/hide effect
+  // sets, and which runs FIRST in the same flush — so piggybacking on it
+  // would never skip this effect's own first run). Skips the mount-time pass.
+  const autoScrollAfterReexpandInitRef = useRef(false);
+  // Snapshotted at the moment of hide (Cmd+B collapse): was the chat pinned
+  // to the bottom, and how tall was the scroll content. On re-expand we only
+  // auto-jump to the bottom when the user WAS at the bottom AND new content
+  // streamed in while hidden (scrollHeight grew). Without these we'd yank a
+  // user who deliberately scrolled up back to the bottom — defeating the
+  // scroll-persistence this whole change delivers.
+  const wasAtBottomBeforeHideRef = useRef(false);
+  const scrollHeightBeforeHideRef = useRef(0);
   // CGEventTap stealth-typing state. Driven by IPC from main; ref shadows
   // the state so the captured-key handler can early-out without depending
   // on React's render cycle for stop signals.
@@ -1726,6 +1739,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // TopPill's horizontal center invariant across resizes.
   const reportShellSize = useCallback(() => {
     if (!contentRef.current) return;
+    // Skip IPC while the shell is hidden (Cmd+B has fired hideWindow and the
+    // OS window is offscreen). ResizeObserver still wakes us on transient
+    // layout shifts; reporting them would burn IPC and could cause the OS
+    // window to re-rasterize in the background. Re-enabled the moment
+    // isExpanded flips back to true.
+    if (!isExpandedRef.current) return;
     // offsetHeight is the LAYOUT (untransformed) border-box height. We must NOT
     // use getBoundingClientRect().height here: that returns the POST-transform
     // box, so the shell's scale 0.95→1 / y 20→0 entry animation would feed a
@@ -2182,8 +2201,21 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     return () => cancelAnimationFrame(raf);
   }, [messages, checkCodeVisibility]);
 
-  // Re-attach scroll listener whenever messages change — the scroll container
-  // is conditionally rendered so scrollContainerRef.current is null at mount.
+  // (Re)attach the scroll listener whenever the scroll container mounts.
+  // The OUTER shell (the always-mounted `data-shell-root` motion.div) now
+  // stays in the DOM across Cmd+B so scrollTop survives, but the scroll
+  // container ITSELF is still gated by `showAnswerPanel` (the
+  // `{showAnswerPanel && <motion.div ref={scrollContainerRef}>}` block): it
+  // unmounts when the chat is empty (no messages, not recording/processing,
+  // panel not pinned) and remounts when content appears. So we re-run this
+  // effect when that gate flips —
+  // without it the listener would bind once to a null/stale node and never
+  // re-attach, silently killing scroll-driven code-width auto-resize. We
+  // inline the gate boolean here (rather than referencing the `showAnswerPanel`
+  // const, which is declared far below this effect) to avoid a temporal-dead-
+  // zone reference. `messages` itself is not a dep: the gate already flips on
+  // the first message and stays true while content exists, so the container
+  // element is stable across message updates within a session.
   //
   // The visibility check does layout reads (querySelectorAll +
   // getBoundingClientRect on every code element). Running it synchronously
@@ -2191,6 +2223,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // shows up as text jitter during fast scrolls. rAF-coalescing it ensures
   // at most one check per frame and lets the read happen at the natural
   // post-scroll layout point in the frame lifecycle.
+  const scrollContainerMounted =
+    messages.length > 0 || isManualRecording || isProcessing || answerPanelPinned;
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -2207,7 +2241,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       container.removeEventListener('scroll', onScroll);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [messages, checkCodeVisibility]);
+  }, [scrollContainerMounted, checkCodeVisibility]);
 
   // Cancel all in-flight async work on unmount.
   useEffect(() => {
@@ -2283,12 +2317,69 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (isExpanded) {
       window.electronAPI.showWindow(isStealthRef.current);
       isStealthRef.current = false; // Reset back to default
+      // Force a re-measure after re-expand. While hidden, reportShellSize is
+      // suppressed (see its !isExpandedRef guard) AND the ResizeObserver does
+      // not fire on opacity/scale/y transforms (they don't change offsetHeight)
+      // — so if the answer streamed more rows during the hide, the OS window
+      // would otherwise reveal at its stale, too-short pre-hide height and clip
+      // the bottom chrome (model selector / input / send). isExpandedRef is
+      // already true here (the L1706 mirror effect runs before this one), so
+      // both calls take effect. rAF lets the show + any layout settle first.
+      requestAnimationFrame(() => {
+        measureVerticalCap();
+        reportShellSize();
+      });
     } else {
-      // Slight delay to allow animation to clean up if needed, though immediate is safer for click-through
-      // Using setTimeout to ensure the render cycle completes first
-      // Increased to 400ms to allow "contract to bottom" exit animation to finish
+      // Snapshot scroll intent at the moment of hide so the re-expand effect
+      // can decide whether to auto-jump to bottom. We capture BOTH whether
+      // the user was pinned to the bottom and the current content height; the
+      // re-expand only jumps when they were at bottom AND content grew while
+      // hidden. Reading here (before the OS window hides) gives correct
+      // layout values; the scroll container's DOM node persists across the
+      // hide so these stay meaningful.
+      const c = scrollContainerRef.current;
+      if (c) {
+        wasAtBottomBeforeHideRef.current =
+          c.scrollHeight - (c.scrollTop + c.clientHeight) <= 8;
+        scrollHeightBeforeHideRef.current = c.scrollHeight;
+      } else {
+        wasAtBottomBeforeHideRef.current = false;
+        scrollHeightBeforeHideRef.current = 0;
+      }
+      // Delay is no longer required for an exit animation (the shell is
+      // always-mounted and only opacity-fades — the OS window hides mid-fade
+      // and that's fine). 400ms is kept as a small grace period so any
+      // user-initiated focus shifts in the same tick settle before the OS
+      // window goes offscreen, avoiding a one-frame click-through glitch
+      // on fast Cmd+B taps.
       setTimeout(() => window.electronAPI.hideWindow(), 400);
     }
+  }, [isExpanded]);
+
+  // On Cmd+B re-expand: jump the chat to the bottom ONLY when the user was
+  // already pinned to the bottom before hiding AND new content streamed in
+  // while hidden (scrollHeight grew vs the pre-hide snapshot). If the user
+  // had deliberately scrolled up, we leave scrollTop exactly where they left
+  // it — that is the scroll-persistence this whole change delivers. Using a
+  // bare "not at bottom" test here would WRONGLY yank a scrolled-up user to
+  // the bottom on every Cmd+B. The first run (mount time, no prior hide) is
+  // skipped via this effect's OWN init ref, not the [isExpanded] effect's,
+  // which runs first and would leave that guard always-true.
+  useEffect(() => {
+    if (!isExpanded) return;
+    if (!autoScrollAfterReexpandInitRef.current) {
+      autoScrollAfterReexpandInitRef.current = true;
+      return;
+    }
+    if (!wasAtBottomBeforeHideRef.current) return;
+    const c = scrollContainerRef.current;
+    if (!c) return;
+    const grewWhileHidden = c.scrollHeight > scrollHeightBeforeHideRef.current + 1;
+    if (!grewWhileHidden) return;
+    const rafId = requestAnimationFrame(() => {
+      c.scrollTop = c.scrollHeight;
+    });
+    return () => cancelAnimationFrame(rafId);
   }, [isExpanded]);
 
   // Keyboard shortcut to toggle expanded state (via Main Process)
@@ -5590,30 +5681,51 @@ Provide only the answer, nothing else.`;
       data-interface-theme={isGlassTheme ? 'liquid-glass' : isModernTheme ? 'modern' : 'default'}
       className="flex flex-col items-center w-fit mx-auto h-fit min-h-0 bg-transparent p-0 rounded-[24px] font-sans gap-2 overlay-text-primary"
     >
-      <AnimatePresence initial={false}>
-        {isExpanded && (
-          <motion.div
-            initial={expandedMotionInitial}
-            animate={{
-              opacity: 1,
-              y: 0,
-              scale: 1,
-              // Enter: slightly longer, pure ease-out so the moment you're
-              // watching (the arrival) decelerates smoothly. easeInOut delayed
-              // the front half and read as sluggish.
-              transition: { duration: 0.34, ease: [0.23, 1, 0.32, 1] },
-            }}
-            exit={{
-              opacity: 0,
-              y: 6,
-              scale: 0.98,
-              // Exit faster than enter (asymmetric timing = responsive feel) with
-              // an ease-in so it accelerates away instead of lingering.
-              transition: { duration: 0.22, ease: [0.32, 0, 0.67, 0] },
-            }}
-            onAnimationComplete={markExpandedRendered}
-            className="flex flex-col items-center gap-2 w-full"
-          >
+      {/*
+       * Always-mounted: isExpanded drives opacity/scale/pointer-events only.
+       * AnimatePresence is removed because the shell must stay in the DOM
+       * across Cmd+B so scrollContainerRef.current survives — Cmd+B
+       * (toggle-expand) was unmounting the entire shell and resetting
+       * scrollTop to 0 on re-show. OS-window show/hide is owned by the
+       * [isExpanded] effect (L2270-2292); the visual fade is just so the
+       * moment of toggle reads smoothly. When hidden, pointer-events:none
+       * lets background apps receive clicks. The `data-shell-root` attribute
+       * is a test selector (see tests/e2e/cmd-b-chat-scroll-persistence).
+       */}
+      <motion.div
+        data-shell-root=""
+        initial={expandedMotionInitial}
+        animate={
+          isExpanded
+            ? {
+                opacity: 1,
+                y: 0,
+                scale: 1,
+                pointerEvents: 'auto',
+                // Enter: slightly longer, pure ease-out so the moment you're
+                // watching (the arrival) decelerates smoothly. easeInOut delayed
+                // the front half and read as sluggish.
+                transition: { duration: 0.34, ease: [0.23, 1, 0.32, 1] },
+              }
+            : {
+                opacity: 0,
+                y: 6,
+                scale: 0.98,
+                pointerEvents: 'none',
+                // Exit faster than enter (asymmetric timing = responsive feel) with
+                // an ease-in so it accelerates away instead of lingering.
+                transition: { duration: 0.22, ease: [0.32, 0, 0.67, 0] },
+              }
+        }
+        onAnimationComplete={markExpandedRendered}
+        // `inert` (React 19 native) removes the hidden shell from the tab
+        // order, hit-testing, AND the accessibility tree in one shot — unlike
+        // aria-hidden, which leaves the chat input still focusable inside an
+        // a11y-hidden subtree (a WCAG focus-trap violation if the input held
+        // focus when Cmd+B fired). Only applied while collapsed.
+        inert={!isExpanded}
+        className="flex flex-col items-center gap-2 w-full"
+      >
             <TopPill
               expanded={isExpanded}
               onToggle={() => setIsExpanded(!isExpanded)}
@@ -5623,6 +5735,7 @@ Provide only the answer, nothing else.`;
             />
             <motion.div
               ref={shellRef}
+              data-shell-card=""
               className={`relative max-w-full backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col draggable-area overlay-shell-surface ${overlayPanelClass}`}
               style={{
                 ...appearance.shellStyle,
@@ -6473,8 +6586,7 @@ Provide only the answer, nothing else.`;
               </div>
             </motion.div>
           </motion.div>
-        )}
-      </AnimatePresence>
+      {/* end always-mounted shell */}
     </div>
     </>
   );

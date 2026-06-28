@@ -76,6 +76,24 @@ describe('validateSkillPayload — frontmatter parsing happy path', () => {
     assert.equal(result.preview.fileTree[0], 'SKILL.md');
   });
 
+  test('single-file payload with a non-SKILL.md filename normalizes fileTree to SKILL.md', () => {
+    // REGRESSION: the preview's fileTree (which the installer iterates to
+    // write files) must show SKILL.md, not the user's original filename, so
+    // the on-disk layout matches SkillsManager.loadUserSkills()'s
+    // <id>/SKILL.md contract. A file written as code_simplifier.md is
+    // invisible to the loader.
+    const result = validateSkillPayload(makeFilePayload({
+      filename: 'code_simplifier.md',
+      name: 'code-simplifier',
+      description: 'Simplifies code.',
+    }));
+    assert.equal(result.ok, true);
+    assert.equal(result.preview.id, 'code-simplifier');
+    assert.deepEqual(result.preview.fileTree, ['SKILL.md'],
+      'fileTree must be normalized to SKILL.md regardless of uploaded filename');
+    assert.equal(result.preview.otherCount, 1);
+  });
+
   test('folder payload classifies references/assets/scripts/other correctly', () => {
     const payload = makeFolderPayload([
       folderFile('SKILL.md', b64(makeSkillMd())),

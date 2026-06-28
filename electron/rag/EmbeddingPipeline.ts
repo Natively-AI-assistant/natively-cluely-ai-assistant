@@ -504,12 +504,12 @@ export class EmbeddingPipeline {
         });
     }
 
-    async getEmbeddingsWithFallback(texts: string[]): Promise<{ embeddings: number[][]; space: string }> {
+    async getEmbeddingsWithFallback(texts: string[]): Promise<{ embeddings: number[][]; space: string; provider?: string; dimensions?: number }> {
         try {
             const embeddings = await this.getEmbeddings(texts);
             const space = this.getActiveSpaceKey();
             if (!space) throw new Error('Embedding provider has no active space');
-            return { embeddings, space };
+            return { embeddings, space, provider: this.provider?.name, dimensions: this.provider?.dimensions };
         } catch (primaryError) {
             const fallback = this.fallbackProvider;
             // If no fallback is configured, or the primary IS already the fallback
@@ -544,9 +544,25 @@ export class EmbeddingPipeline {
                     this.db.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES ('last_embedding_space', ?)").run(fallback.space);
                 } catch (dbErr: any) {
                     console.warn('[EmbeddingPipeline] Failed to persist fallback space:', dbErr?.message || dbErr);
+                    // MEDIUM #4: a swallowed persist failure means next launch can't
+                    // read back the promoted space, leaving freshly-local vectors
+                    // perpetually "pending" with no UI signal. Surface it so the
+                    // renderer can warn the user that a re-index may be required.
+                    try {
+                        const { BrowserWindow } = require('electron');
+                        BrowserWindow.getAllWindows().forEach((win: any) => {
+                            if (!win.isDestroyed()) {
+                                win.webContents.send('embedding:space-persist-failed', {
+                                    fallbackProvider: fallback.name,
+                                    space: fallback.space,
+                                    reason: dbErr?.message || String(dbErr),
+                                });
+                            }
+                        });
+                    } catch { /* non-fatal — best-effort renderer notice */ }
                 }
             }
-            return { embeddings, space: fallback.space };
+            return { embeddings, space: fallback.space, provider: fallback.name, dimensions: fallback.dimensions };
         }
     }
 

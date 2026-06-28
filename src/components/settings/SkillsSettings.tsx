@@ -6,9 +6,7 @@ import {
     FileUp,
     FolderOpen,
     RefreshCw,
-    Upload,
     X,
-    Zap,
 } from 'lucide-react';
 import type {
     SkillSummary,
@@ -283,7 +281,9 @@ export const SkillsSettings: React.FC = () => {
                 </button>
             </div>
 
-            {/* Upload card — drop target. */}
+            {/* Upload card — drop target. Mirrors the Advanced "Skills Folder"
+                card layout for visual consistency: icon + heading on the
+                left, action button on the right, description below. */}
             <div
                 onDragOver={(e) => {
                     e.preventDefault();
@@ -292,25 +292,26 @@ export const SkillsSettings: React.FC = () => {
                 onDragLeave={() => setIsDragging(false)}
                 onDrop={handleDrop}
                 className={[
-                    'bg-bg-card rounded-xl border-2 border-dashed transition-colors p-5',
+                    'rounded-xl border transition-colors p-4 bg-bg-card',
                     isDragging
-                        ? 'border-accent-primary bg-bg-subtle/40'
-                        : 'border-border-subtle',
+                        ? 'border-accent-primary bg-accent-primary/5'
+                        : 'border-dashed border-border-subtle hover:border-accent-primary/40',
                 ].join(' ')}
             >
-                <div className="flex items-start gap-3 mb-3">
-                    <div className="w-9 h-9 rounded-lg bg-bg-input border border-border-subtle flex items-center justify-center shrink-0">
-                        <Upload size={16} className="text-accent-primary" />
-                    </div>
+                <div className="flex items-center justify-between gap-4">
                     <div className="min-w-0">
-                        <h4 className="text-sm font-semibold text-text-primary">Upload a skill</h4>
-                        <p className="text-xs text-text-secondary leading-relaxed mt-0.5">
-                            Drop a <code className="text-[11px] font-mono">SKILL.md</code> file here, or use the button below to pick one. To add a folder of skill files, use the Advanced "open skills folder" option.
+                        <div className="flex items-center gap-2 mb-1">
+                            <FileUp size={15} className="text-text-secondary" />
+                            <h4 className="text-sm font-semibold text-text-primary">Upload skill</h4>
+                        </div>
+                        <p className="text-xs text-text-secondary">
+                            Drop a SKILL.md file here, or click Upload to pick one. For folders, use the Advanced option below.
                         </p>
+                        {uploading && (
+                            <p className="text-[11px] text-text-tertiary animate-pulse mt-2">Uploading…</p>
+                        )}
                     </div>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                    <label className="cursor-pointer">
+                    <label className="cursor-pointer shrink-0">
                         <input
                             type="file"
                             accept=".md,text/markdown"
@@ -324,17 +325,14 @@ export const SkillsSettings: React.FC = () => {
                         />
                         <span
                             className={[
-                                'inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border-subtle bg-bg-input hover:bg-bg-elevated text-xs font-medium text-text-primary transition-colors',
+                                'inline-flex items-center px-4 py-2 rounded-lg text-xs font-semibold transition-colors shrink-0',
+                                'bg-accent-primary hover:bg-accent-primary/90 text-white',
                                 uploading ? 'opacity-60 pointer-events-none' : '',
                             ].join(' ')}
                         >
-                            <FileUp size={13} strokeWidth={2.5} />
-                            Upload SKILL.md
+                            Upload
                         </span>
                     </label>
-                    {uploading && (
-                        <span className="text-[11px] text-text-tertiary">Uploading…</span>
-                    )}
                 </div>
             </div>
 
@@ -451,7 +449,6 @@ export const SkillsSettings: React.FC = () => {
                         >
                             <div className="flex items-center justify-between gap-3">
                                 <div className="flex items-center gap-2 min-w-0">
-                                    <Zap size={13} className="text-accent-primary shrink-0" />
                                     <span className="text-sm font-medium text-text-primary truncate">
                                         {skill.name}
                                     </span>
@@ -459,7 +456,14 @@ export const SkillsSettings: React.FC = () => {
                                         /{skill.id}
                                     </span>
                                 </div>
-                                <span className="text-[10px] uppercase tracking-wider text-text-tertiary shrink-0 px-1.5 py-0.5 rounded bg-bg-input border border-border-subtle">
+                                <span
+                                    className={[
+                                        'shrink-0 text-[11px] font-medium',
+                                        skill.source === 'builtin'
+                                            ? 'text-green-500'
+                                            : 'text-blue-500',
+                                    ].join(' ')}
+                                >
                                     {skill.source === 'builtin' ? 'Built-in' : 'Local'}
                                 </span>
                             </div>
@@ -488,7 +492,7 @@ export const SkillsSettings: React.FC = () => {
             <div className="pt-1">
                 <button
                     onClick={() => setShowAdvanced((s) => !s)}
-                    className="text-[11px] text-text-tertiary hover:text-text-secondary transition-colors"
+                    className="text-xs font-semibold uppercase tracking-wider text-text-tertiary hover:text-text-secondary transition-colors"
                 >
                     {showAdvanced ? '▾' : '▸'} Advanced: open skills folder
                 </button>
@@ -509,7 +513,7 @@ export const SkillsSettings: React.FC = () => {
                             </div>
                             <button
                                 onClick={openFolder}
-                                className="px-4 py-2 rounded-lg bg-bg-input hover:bg-bg-elevated border border-border-subtle text-xs font-medium text-text-primary transition-colors shrink-0"
+                                className="px-4 py-2 rounded-lg bg-accent-primary hover:bg-accent-primary/90 text-white text-xs font-semibold transition-colors shrink-0"
                             >
                                 Open Folder
                             </button>

@@ -753,9 +753,15 @@ export function validateSkillPayload(
   const counts = { reference: 0, asset: 0, script: 0, other: 0 };
   const fileTree: string[] = [];
   for (const f of extracted.files) {
-    fileTree.push(f.relPath);
+    // For a single-file upload the on-disk name is ALWAYS `SKILL.md`
+    // (regardless of the user's original filename), because that is the
+    // exact name SkillsManager.loadUserSkills() reads. Reflect that in the
+    // preview's fileTree so the user sees the real installed name AND the
+    // installer's write loop (which iterates fileTree) targets SKILL.md.
+    const displayPath = payload.kind === 'file' ? 'SKILL.md' : f.relPath;
+    fileTree.push(displayPath);
     // SKILL.md itself is `other` for accounting purposes.
-    const klass = classifyPath(f.relPath);
+    const klass = classifyPath(displayPath);
     counts[klass] += 1;
   }
   // Case-insensitive sort.

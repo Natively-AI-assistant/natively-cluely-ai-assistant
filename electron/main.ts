@@ -1131,7 +1131,10 @@ export class AppState {
     this.broadcast('meeting-state-changed', { isActive: this.isMeetingActive });
   }
 
-  private scheduleModeReferenceIndexRetry(): void {
+  // Public so the reference-file upload IPC handler can kick a retry for a
+  // file that landed in 'failed'/'lexical_only' during the embedder warm-up
+  // window (the boot-time scheduler only sees files that existed at start).
+  public scheduleModeReferenceIndexRetry(): void {
     if (this.modeReferenceRetryPromise) return;
     const pipeline = this.ragManager?.getEmbeddingPipeline();
     if (!pipeline) return;
@@ -1140,8 +1143,12 @@ export class AppState {
       const { ModesManager } = require('./services/ModesManager');
       const modesManager = ModesManager.getInstance();
       await modesManager.retryAllLexicalOnlyFiles().catch(() => { /* logged inside */ });
-      for (const mode of modesManager.getModes()) {
-        this.broadcast('mode-file-index-status', { modeId: mode.id, phase: 'done' });
+      // Capture which modes actually had retry-eligible files BEFORE the retry,
+      // so we only nudge those renderers to re-fetch status (LOW #8) instead of
+      // broadcasting a no-op 'done' to every mode on every pipeline-ready event.
+      const affectedModeIds: string[] = modesManager.getModesWithRetryEligibleFiles();
+      for (const modeId of affectedModeIds) {
+        this.broadcast('mode-file-index-status', { modeId, phase: 'done' });
       }
     }).catch(() => { /* provider unavailable — lexical fallback remains valid */ })
       .finally(() => { this.modeReferenceRetryPromise = null; });
