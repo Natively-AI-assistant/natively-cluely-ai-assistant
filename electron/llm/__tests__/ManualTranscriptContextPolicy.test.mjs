@@ -43,6 +43,9 @@ describe('manual transcript context policy', () => {
     assert.equal(attaches('what did we decide about UI policy?'), true);
     assert.equal(attaches('summarize the meeting'), true);
     assert.equal(isTranscriptBoundManualQuestion('summarize the meeting'), true);
+    assert.equal(isTranscriptBoundManualQuestion('summarize it'), true);
+    assert.equal(isTranscriptBoundManualQuestion('summarize this'), true);
+    assert.equal(isTranscriptBoundManualQuestion('summarize that'), true);
     assert.equal(isTranscriptBoundManualQuestion('summarise the call'), true);
     assert.equal(attaches('what did they say about client state?'), true);
     assert.equal(attaches('what did the professor mean by this slide?'), true);
@@ -66,6 +69,7 @@ describe('manual transcript context policy', () => {
     assert.equal(attaches('remove the exaggeration'), false);
     assert.equal(attaches('shorter please'), false);
     assert.equal(attaches('give me the final version'), false);
+    assert.equal(isTranscriptBoundManualQuestion('summarize BFS'), false);
   });
 
   test('mode-scoped sales prompts do not receive transcript context by default', () => {
