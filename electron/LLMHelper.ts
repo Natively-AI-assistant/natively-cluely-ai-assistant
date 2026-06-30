@@ -115,6 +115,8 @@ const CLAUDE_MODEL = "claude-sonnet-4-6"
 const DEEPSEEK_MODEL = "deepseek-v4-flash"
 const DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 const DEEPSEEK_MAX_OUTPUT_TOKENS = 8192
+const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+const OPENROUTER_MAX_OUTPUT_TOKENS = 8192
 // LiteLLM fronts arbitrary upstream models with widely varying output ceilings.
 // Resolution order per request: (1) user manual override from Settings,
 // (2) per-model budget auto-discovered from the proxy's /model/info
@@ -233,6 +235,10 @@ export class LLMHelper {
   private claudeApiKey: string | null = null
   private deepseekApiKey: string | null = null
   private litellmApiKey: string | null = null
+  // OpenRouter is OpenAI-compatible; reuse the OpenAI SDK with a custom baseURL.
+  // Kept as a separate client so credentials/scope/telemetry stay provider-specific.
+  private openrouterClient: OpenAI | null = null
+  private openrouterApiKey: string | null = null
   private litellmBaseURL: string = "http://localhost:4000/v1"
   // Manual output-ceiling override (Settings → LiteLLM Proxy dropdown).
   // null = Auto: resolve per-model from the proxy's /model/info, falling back
@@ -397,7 +403,7 @@ export class LLMHelper {
     console.warn(`[ScopeFallback] ${scope} denied; Ollama unavailable, omitting from context`);
   }
 
-  constructor(apiKey?: string, useOllama: boolean = false, ollamaModel?: string, ollamaUrl?: string, groqApiKey?: string, openaiApiKey?: string, claudeApiKey?: string, deepseekApiKey?: string) {
+  constructor(apiKey?: string, useOllama: boolean = false, ollamaModel?: string, ollamaUrl?: string, groqApiKey?: string, openaiApiKey?: string, claudeApiKey?: string, deepseekApiKey?: string, openrouterApiKey?: string) {
     this.useOllama = useOllama
 
     // Initialize rate limiters
@@ -435,6 +441,13 @@ export class LLMHelper {
       this.deepseekApiKey = deepseekApiKey
       this.deepseekClient = new OpenAI({ apiKey: deepseekApiKey, baseURL: DEEPSEEK_BASE_URL })
       console.log(`[LLMHelper] DeepSeek client initialized with model: ${DEEPSEEK_MODEL}`)
+    }
+
+    // Initialize OpenRouter client if API key provided (OpenAI-compatible)
+    if (openrouterApiKey) {
+      this.openrouterApiKey = openrouterApiKey
+      this.openrouterClient = new OpenAI({ apiKey: openrouterApiKey, baseURL: OPENROUTER_BASE_URL })
+      console.log(`[LLMHelper] OpenRouter client initialized.`)
     }
 
     if (useOllama) {
@@ -516,6 +529,19 @@ export class LLMHelper {
     this.deepseekApiKey = trimmed;
     this.deepseekClient = new OpenAI({ apiKey: trimmed, baseURL: DEEPSEEK_BASE_URL });
     console.log("[LLMHelper] DeepSeek API Key updated.");
+  }
+
+  public setOpenrouterApiKey(apiKey: string) {
+    const trimmed = (apiKey || '').trim();
+    if (!trimmed) {
+      this.openrouterApiKey = null;
+      this.openrouterClient = null;
+      console.log("[LLMHelper] OpenRouter API Key cleared.");
+      return;
+    }
+    this.openrouterApiKey = trimmed;
+    this.openrouterClient = new OpenAI({ apiKey: trimmed, baseURL: OPENROUTER_BASE_URL });
+    console.log("[LLMHelper] OpenRouter API Key updated.");
   }
 
   /**
@@ -851,6 +877,10 @@ export class LLMHelper {
 
   private isCodexCliModel(modelId: string): boolean {
     return modelId === "codex-cli" || modelId.startsWith("codex-cli:");
+  }
+
+  private isOpenrouterModel(modelId: string): boolean {
+    return !!(modelId && modelId.startsWith("openrouter:"));
   }
   // ---------------------------
 
@@ -3638,6 +3668,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           : this.isGroqModel(this.currentModelId) ? 'Groq'
             : this.isDeepseekModel(this.currentModelId) ? 'DeepSeek'
               : this.isGeminiModel(this.currentModelId) ? 'Gemini'
+              : this.isOpenrouterModel(this.currentModelId) ? 'OpenRouter'
                 : '';
 
     if (currentFamilyLabel) {
@@ -4300,6 +4331,19 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     // first yielded token is the provider TTFT (connect + prefill of a
     // ~${finalSystemPrompt.length}-char system prompt + ${userContent.length}-char user content).
     _stage(`provider dispatch START (sysPrompt=${finalSystemPrompt.length}c, userContent=${userContent.length}c, model=${this.currentModelId})`);
+
+    // OpenRouter: intercept before the unified multimodal path so the user's
+    // explicitly-selected OpenRouter model is used for both text and vision.
+    if (this.isOpenrouterModel(this.currentModelId) && this.openrouterClient) {
+      const orSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
+      const finalOrSystem = this.injectLanguageInstruction(orSystem);
+      if (isMultimodal && imagePaths) {
+        yield* this.streamWithOpenrouterMultimodal(userContent, imagePaths, finalOrSystem, undefined, abortSignal);
+      } else {
+        yield* this.streamWithOpenrouter(userContent, finalOrSystem, undefined, abortSignal);
+      }
+      return;
+    }
 
     // ── UNIFIED MULTIMODAL PATH ────────────────────────────────────────────
     // Every image-bearing request goes through the single streaming vision
@@ -5192,6 +5236,95 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       messages,
       stream: true,
       max_tokens: maxTokens,
+    }, { signal: abortSignal });
+
+    try {
+      for await (const chunk of stream) {
+        if (abortSignal?.aborted) return;
+        const content = chunk.choices[0]?.delta?.content;
+        if (content) yield content;
+      }
+    } finally {
+      if (abortSignal?.aborted && typeof (stream as any).abort === 'function') (stream as any).abort();
+    }
+  }
+
+  private async * streamWithOpenrouter(
+    userMessage: string,
+    systemPrompt?: string,
+    modelId?: string,
+    abortSignal?: AbortSignal
+  ): AsyncGenerator<string, void, unknown> {
+    if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
+    if (!this.openrouterClient) throw new Error("OpenRouter client not initialized");
+    this.assertOutboundScopes('openrouter', userMessage);
+    await this.rateLimiters.openrouter.acquire();
+
+    const wireModel = (modelId || this.currentModelId).replace('openrouter:', '');
+    const messages: any[] = [];
+    if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
+    messages.push({ role: "user", content: userMessage });
+
+    if (abortSignal?.aborted) return;
+    const stream = await this.openrouterClient.chat.completions.create({
+      model: wireModel,
+      messages,
+      stream: true,
+      max_tokens: OPENROUTER_MAX_OUTPUT_TOKENS,
+    }, { signal: abortSignal });
+
+    try {
+      for await (const chunk of stream) {
+        if (abortSignal?.aborted) return;
+        const content = chunk.choices[0]?.delta?.content;
+        if (content) yield content;
+      }
+    } finally {
+      if (abortSignal?.aborted && typeof (stream as any).abort === 'function') (stream as any).abort();
+    }
+  }
+
+  private async * streamWithOpenrouterMultimodal(
+    userMessage: string,
+    imagePaths: string[],
+    systemPrompt?: string,
+    modelId?: string,
+    abortSignal?: AbortSignal
+  ): AsyncGenerator<string, void, unknown> {
+    if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
+    if (!this.openrouterClient) throw new Error("OpenRouter client not initialized");
+    this.assertOutboundScopes('openrouter', userMessage, imagePaths);
+    await this.rateLimiters.openrouter.acquire();
+
+    const wireModel = (modelId || this.currentModelId).replace('openrouter:', '');
+
+    // processImage converts any input format to JPEG via sharp (max 1536 px, 80 % quality)
+    // so the MIME type in the data-URI is always valid, regardless of whether the source
+    // file is PNG (the typical screenshot format) or another format.
+    const contentParts: any[] = [{ type: "text", text: userMessage }];
+    const imageParts = await Promise.all(
+      imagePaths
+        .filter(p => fs.existsSync(p))
+        .map(async p => {
+          const { mimeType, data } = await this.processImage(p);
+          return { type: "image_url" as const, image_url: { url: `data:${mimeType};base64,${data}` } };
+        })
+    );
+    if (imageParts.length === 0) {
+      console.warn('[OpenRouter] streamWithOpenrouterMultimodal: no valid image paths found — sending text-only');
+    }
+    contentParts.push(...imageParts);
+
+    const messages: any[] = [];
+    if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
+    messages.push({ role: "user", content: contentParts });
+
+    if (abortSignal?.aborted) return;
+    const stream = await this.openrouterClient.chat.completions.create({
+      model: wireModel,
+      messages,
+      stream: true,
+      max_tokens: OPENROUTER_MAX_OUTPUT_TOKENS,
     }, { signal: abortSignal });
 
     try {

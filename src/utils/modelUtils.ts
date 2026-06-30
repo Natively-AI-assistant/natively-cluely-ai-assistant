@@ -3,7 +3,7 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
     ids: string[];
     names: string[];
     descs: string[];
-    pmKey: 'geminiPreferredModel' | 'openaiPreferredModel' | 'claudePreferredModel' | 'groqPreferredModel' | 'deepseekPreferredModel';
+    pmKey: 'geminiPreferredModel' | 'openaiPreferredModel' | 'claudePreferredModel' | 'groqPreferredModel' | 'deepseekPreferredModel' | 'openrouterPreferredModel';
 }> = {
     gemini: {
         hasKeyCheck: (creds) => !!creds?.hasGeminiKey,
@@ -39,6 +39,13 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
         names: ['DeepSeek V4 Flash', 'DeepSeek V4 Pro'],
         descs: ['Fast • Text-only', 'Reasoning • Text-only'],
         pmKey: 'deepseekPreferredModel'
+    },
+    openrouter: {
+        hasKeyCheck: (creds) => !!creds?.hasOpenrouterKey,
+        ids: [],
+        names: [],
+        descs: [],
+        pmKey: 'openrouterPreferredModel'
     },
 };
 

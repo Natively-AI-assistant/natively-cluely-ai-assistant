@@ -98,6 +98,12 @@ export class ProcessingHelper {
       this.llmHelper.setNativelyKey(nativelyKey);
     }
 
+    const openrouterKey = credManager.getOpenrouterApiKey();
+    if (openrouterKey) {
+      console.log("[ProcessingHelper] Loading stored OpenRouter API Key from CredentialsManager");
+      this.llmHelper.setOpenrouterApiKey(openrouterKey);
+    }
+
     // CRITICAL: Re-initialize IntelligenceManager now that keys are loaded
     // This fixes the issue where buttons don't work in production because of late key loading
     this.appState.getIntelligenceManager().initializeLLMs();

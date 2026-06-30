@@ -3223,6 +3223,22 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle('set-openrouter-api-key', async (_, apiKey: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      cm.setOpenrouterApiKey(apiKey);
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      llmHelper.setOpenrouterApiKey(apiKey);
+      appState.getIntelligenceManager().resetEngine();
+      appState.getIntelligenceManager().initializeLLMs();
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error saving OpenRouter API key:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   safeHandle('set-litellm-config', async (_, config: { apiKey: string; baseURL: string; maxTokens?: number }) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -4054,6 +4070,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasClaudeKey: hasKey(creds.claudeApiKey),
         hasDeepseekKey: hasKey(creds.deepseekApiKey),
         hasLitellmBaseURL: hasKey(creds.litellmBaseURL),
+        hasOpenrouterKey: hasKey(creds.openrouterApiKey),
         // The base URL is config, not a secret — returned in full so Settings can
         // prefill it (unlike API keys, which are only reported as booleans).
         litellmBaseURL: creds.litellmBaseURL || null,
@@ -4089,6 +4106,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         openaiPreferredModel: creds.openaiPreferredModel || undefined,
         claudePreferredModel: creds.claudePreferredModel || undefined,
         deepseekPreferredModel: creds.deepseekPreferredModel || undefined,
+        openrouterPreferredModel: creds.openrouterPreferredModel || undefined,
       };
     } catch (error: any) {
       // SECURITY FIX (P0): Error fallback returns masked keys, not raw strings
@@ -4098,6 +4116,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasOpenaiKey: false,
         hasClaudeKey: false,
         hasDeepseekKey: false,
+        hasOpenrouterKey: false,
         hasLitellmBaseURL: false,
         litellmBaseURL: null,
         litellmMaxTokens: null,
@@ -4132,7 +4151,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'fetch-provider-models',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', apiKey: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'openrouter', apiKey: string) => {
       try {
         // Fall back to stored key if no key was explicitly provided
         let key = apiKey?.trim();
@@ -4144,6 +4163,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           else if (provider === 'openai') key = cm.getOpenaiApiKey();
           else if (provider === 'claude') key = cm.getClaudeApiKey();
           else if (provider === 'deepseek') key = cm.getDeepseekApiKey();
+          else if (provider === 'openrouter') key = cm.getOpenrouterApiKey();
         }
 
         if (!key) {
@@ -4164,7 +4184,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'set-provider-preferred-model',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', modelId: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'openrouter', modelId: string) => {
       try {
         const { CredentialsManager } = require('./services/CredentialsManager');
         CredentialsManager.getInstance().setPreferredModel(provider, modelId);
@@ -4869,7 +4889,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'test-llm-connection',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', apiKey?: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'openrouter', apiKey?: string) => {
       console.log(`[IPC] Received test-llm-connection request for provider: ${provider}`);
       try {
         if (!apiKey || !apiKey.trim()) {
@@ -4880,6 +4900,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           else if (provider === 'openai') apiKey = creds.getOpenaiApiKey();
           else if (provider === 'claude') apiKey = creds.getClaudeApiKey();
           else if (provider === 'deepseek') apiKey = creds.getDeepseekApiKey();
+          else if (provider === 'openrouter') apiKey = creds.getOpenrouterApiKey();
         }
 
         if (!apiKey || !apiKey.trim()) {
@@ -4947,6 +4968,22 @@ export function initializeIpcHandlers(appState: AppState): void {
             'https://api.deepseek.com/chat/completions',
             {
               model: 'deepseek-v4-flash',
+              max_tokens: 10,
+              messages: [{ role: 'user', content: 'Hello' }],
+            },
+            {
+              headers: {
+                Authorization: `Bearer ${apiKey}`,
+                'content-type': 'application/json',
+              },
+              timeout: 15000,
+            },
+          );
+        } else if (provider === 'openrouter') {
+          response = await axios.post(
+            'https://openrouter.ai/api/v1/chat/completions',
+            {
+              model: 'openai/gpt-4o-mini',
               max_tokens: 10,
               messages: [{ role: 'user', content: 'Hello' }],
             },

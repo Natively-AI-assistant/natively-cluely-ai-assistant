@@ -1,4 +1,4 @@
-export type LLMProviderId = 'natively' | 'groq' | 'codex' | 'gemini_flash' | 'gemini_pro' | 'openai' | 'claude' | 'deepseek' | 'ollama';
+export type LLMProviderId = 'natively' | 'groq' | 'codex' | 'gemini_flash' | 'gemini_pro' | 'openai' | 'claude' | 'deepseek' | 'ollama' | 'openrouter';
 export type ProviderCapability = 'chat' | 'stream_chat' | 'structured' | 'vision';
 export type ProviderAttemptStatus = 'available' | 'unavailable';
 export type ProviderUnavailableReason = 'missing_api_key' | 'missing_config' | 'unsupported_capability' | 'disabled';
@@ -38,6 +38,7 @@ export interface ProviderAvailabilityState {
     hasClaude?: boolean;
     hasDeepseek?: boolean;
     hasOllama?: boolean;
+    hasOpenrouter?: boolean;
 }
 
 export interface ProviderModelState {
@@ -50,6 +51,7 @@ export interface ProviderModelState {
     claude?: string;
     deepseek?: string;
     ollama?: string;
+    openrouter?: string;
 }
 
 export interface ProviderRouteOptions {
@@ -174,12 +176,21 @@ export function routeLLMProviders(options: ProviderRouteOptions): ProviderAttemp
         supports: ['chat', 'stream_chat', 'structured', 'vision'],
     };
 
+    const openrouter: ProviderSpec = {
+        provider: 'openrouter',
+        name: `OpenRouter (${models.openrouter ?? 'default'})`,
+        model: models.openrouter,
+        available: Boolean(availability.hasOpenrouter),
+        unavailableReason: 'missing_api_key',
+        supports: ['chat', 'stream_chat', 'structured', 'vision'],
+    };
+
     // DeepSeek is placed after Claude in the text-only chain (between the existing
     // cloud chat providers and the local Ollama fallback) and is omitted from the
     // multimodal chain since no DeepSeek vision model is supported.
     const orderedSpecs: ProviderSpec[] = options.multimodal
-        ? [natively, codex, openai, geminiFlash, claude, geminiPro, groq]
-        : [natively, groq, codex, geminiFlash, geminiPro, openai, claude, deepseek];
+        ? [natively, codex, openai, geminiFlash, claude, geminiPro, groq, openrouter]
+        : [natively, groq, codex, geminiFlash, geminiPro, openai, claude, deepseek, openrouter];
 
     if (availability.hasOllama) {
         orderedSpecs.push(ollama);
@@ -304,7 +315,7 @@ export class ProviderRouter {
     constructor(circuitConfig?: Partial<CircuitBreakerConfig>) {
         const config = { ...this.defaultCircuitConfig, ...circuitConfig };
         // Initialize circuit breakers for each provider
-        ['gemini', 'groq', 'openai', 'claude', 'deepseek', 'natively', 'codex'].forEach(provider => {
+        ['gemini', 'groq', 'openai', 'claude', 'deepseek', 'natively', 'codex', 'openrouter'].forEach(provider => {
             this.circuitBreakers.set(provider, new CircuitBreaker(provider, config));
         });
     }

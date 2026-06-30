@@ -70,6 +70,7 @@ interface CustomProvider {
 interface ModelOption {
     id: string;
     name: string;
+    group?: string;
 }
 
 interface ModelSelectProps {
@@ -110,22 +111,31 @@ const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, pla
             </button>
 
             {isOpen && (
-                <div className="absolute top-full right-0 mt-1 w-full bg-bg-elevated border border-border-subtle rounded-lg shadow-xl z-50 max-h-60 overflow-y-auto animated fadeIn">
-                    <div className="p-1 space-y-0.5">
-                        {options.map((option) => (
-                            <button
-                                key={option.id}
-                                onClick={() => {
-                                    onChange(option.id);
-                                    setIsOpen(false);
-                                }}
-                                className={`w-full text-left px-3 py-2 text-xs rounded-md flex items-center justify-between group transition-colors ${value === option.id ? 'bg-bg-input hover:bg-bg-elevated text-text-primary' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
-                                type="button"
-                            >
-                                <span className="truncate">{option.name}</span>
-                                {value === option.id && <Check size={14} className="text-accent-primary shrink-0 ml-2" />}
-                            </button>
-                        ))}
+                <div className="absolute top-full right-0 mt-1 w-56 bg-bg-elevated border border-border-subtle rounded-lg shadow-xl z-50 max-h-60 overflow-y-auto animated fadeIn">
+                    <div className="p-1">
+                        {options.map((option, i) => {
+                            const showHeader = option.group && (i === 0 || options[i - 1].group !== option.group);
+                            return (
+                                <React.Fragment key={option.id}>
+                                    {showHeader && (
+                                        <div className={`px-3 pt-2 pb-1 text-[10px] font-semibold text-text-tertiary uppercase tracking-wider select-none ${i > 0 ? 'mt-1 border-t border-border-subtle' : ''}`}>
+                                            {option.group}
+                                        </div>
+                                    )}
+                                    <button
+                                        onClick={() => {
+                                            onChange(option.id);
+                                            setIsOpen(false);
+                                        }}
+                                        className={`w-full text-left px-3 py-2 text-xs rounded-md flex items-center justify-between transition-colors ${value === option.id ? 'bg-bg-input hover:bg-bg-elevated text-text-primary' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
+                                        type="button"
+                                    >
+                                        <span className="truncate">{option.name}</span>
+                                        {value === option.id && <Check size={14} className="text-accent-primary shrink-0 ml-2" />}
+                                    </button>
+                                </React.Fragment>
+                            );
+                        })}
                         {options.length === 0 && (
                             <div className="px-3 py-2 text-xs text-gray-500 italic">No models available</div>
                         )}
@@ -177,6 +187,8 @@ export const AIProvidersSettings: React.FC = () => {
     const [openaiApiKey, setOpenaiApiKey] = useState('');
     const [claudeApiKey, setClaudeApiKey] = useState('');
     const [deepseekApiKey, setDeepseekApiKey] = useState('');
+    const [openrouterApiKey, setOpenrouterApiKey] = useState('');
+    const [providerModels, setProviderModels] = useState<Record<string, Array<{id: string; label: string}>>>({});
 
     // --- LiteLLM proxy (OpenAI-compatible gateway: baseURL + optional virtual key) ---
     const [litellmBaseURL, setLitellmBaseURL] = useState('');
@@ -259,7 +271,8 @@ export const AIProvidersSettings: React.FC = () => {
                         claude: creds.hasClaudeKey,
                         deepseek: creds.hasDeepseekKey || false,
                         litellm: creds.hasLitellmBaseURL || false,
-                        natively: creds.hasNativelyKey || false
+                        natively: creds.hasNativelyKey || false,
+                        openrouter: creds.hasOpenrouterKey || false
                     });
                     // Prefill stored LiteLLM config so re-saving doesn't silently reset it.
                     // (baseURL is config, not a secret; the key stays masked/blank = keep.)
@@ -272,7 +285,23 @@ export const AIProvidersSettings: React.FC = () => {
                     if (creds.openaiPreferredModel) pm.openai = creds.openaiPreferredModel;
                     if (creds.claudePreferredModel) pm.claude = creds.claudePreferredModel;
                     if (creds.deepseekPreferredModel) pm.deepseek = creds.deepseekPreferredModel;
+                    if (creds.openrouterPreferredModel) pm.openrouter = creds.openrouterPreferredModel;
                     setPreferredModels(pm);
+
+                    // Auto-fetch OpenRouter models so the Active Model dropdown is
+                    // populated on open without requiring a manual "Fetch Models" click.
+                    if (creds.hasOpenrouterKey) {
+                        try {
+                            // @ts-ignore
+                            const orResult = await window.electronAPI?.fetchProviderModels('openrouter', '');
+                            if (orResult?.success && orResult.models) {
+                                const models: Array<{ id: string; label: string }> = orResult.models;
+                                setProviderModels(prev => ({ ...prev, openrouter: models }));
+                            }
+                        } catch (e) {
+                            console.error('[Settings] Failed to auto-fetch OpenRouter models:', e);
+                        }
+                    }
                 }
 
                 // Now it's safe to read fast mode — hasStoredKey is already set so
@@ -646,6 +675,8 @@ export const AIProvidersSettings: React.FC = () => {
             if (provider === 'claude') result = await window.electronAPI.setClaudeApiKey(key);
             // @ts-ignore
             if (provider === 'deepseek') result = await window.electronAPI.setDeepseekApiKey(key);
+            // @ts-ignore
+            if (provider === 'openrouter') result = await window.electronAPI.setOpenrouterApiKey(key);
 
             if (result && result.success) {
                 setSavedStatus(prev => ({ ...prev, [provider]: true }));
@@ -716,6 +747,8 @@ export const AIProvidersSettings: React.FC = () => {
             if (provider === 'claude') result = await window.electronAPI.setClaudeApiKey('');
             // @ts-ignore
             if (provider === 'deepseek') result = await window.electronAPI.setDeepseekApiKey('');
+            // @ts-ignore
+            if (provider === 'openrouter') result = await window.electronAPI.setOpenrouterApiKey('');
 
             if (result && result.success) {
                 setHasStoredKey(prev => ({ ...prev, [provider]: false }));
@@ -857,31 +890,50 @@ export const AIProvidersSettings: React.FC = () => {
                     <ModelSelect
                         value={defaultModel}
                         options={(() => {
-                            const opts: { id: string; name: string }[] = [];
+                            const PROV_LABEL: Record<string, string> = {
+                                gemini: 'Gemini', openai: 'OpenAI', claude: 'Claude',
+                                groq: 'Groq', deepseek: 'DeepSeek', openrouter: 'OpenRouter',
+                            };
+                            const opts: ModelOption[] = [];
 
                             if (hasStoredKey.natively) {
-                                opts.push({ id: 'natively', name: 'Natively API' });
+                                opts.push({ id: 'natively', name: 'Natively API', group: 'Natively' });
                             }
 
                             for (const [prov, cfg] of Object.entries(STANDARD_CLOUD_MODELS)) {
                                 if (!hasStoredKey[prov as keyof typeof hasStoredKey]) continue;
-                                cfg.ids.forEach((id, i) => opts.push({ id, name: cfg.names[i] }));
+                                const grp = PROV_LABEL[prov] ?? prov;
+                                cfg.ids.forEach((id, i) => opts.push({ id, name: cfg.names[i], group: grp }));
+                                // For dynamic-only providers (e.g. openrouter, ids=[]), include fetched models.
+                                // Active/preferred model goes first, rest sorted alphabetically.
+                                if (cfg.ids.length === 0 && providerModels[prov]) {
+                                    const activePm = preferredModels[prov as keyof typeof preferredModels];
+                                    const sorted = [...providerModels[prov]].sort((a, b) => {
+                                        if (activePm) {
+                                            if (a.id === activePm) return -1;
+                                            if (b.id === activePm) return 1;
+                                        }
+                                        return a.label.localeCompare(b.label);
+                                    });
+                                    sorted.forEach(m => opts.push({ id: m.id, name: m.label, group: grp }));
+                                }
                                 const pm = preferredModels[prov as keyof typeof preferredModels];
-                                if (pm && !cfg.ids.includes(pm)) {
-                                    opts.push({ id: pm, name: prettifyModelId(pm) });
+                                if (pm && !cfg.ids.includes(pm) && !opts.find(o => o.id === pm)) {
+                                    const wireId = pm.replace(`${prov}:`, '');
+                                    opts.push({ id: pm, name: wireId, group: grp });
                                 }
                             }
-                            if (codexOauthStatus.signedIn || codexCliConfig.enabled) {
-                                opts.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${prettifyModelId(codexCliConfig.model)})` });
+                            if (codexOauthStatus.signedIn && codexCliConfig.enabled) {
+                                opts.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${prettifyModelId(codexCliConfig.model)})`, group: 'Codex' });
                                 CODEX_CLI_MODEL_PRESETS.forEach(model => {
                                     const id = codexCliSelectorId(model.id);
                                     if (!opts.find(o => o.id === id)) {
-                                        opts.push({ id, name: `${CODEX_CLI_MODEL.name}: ${model.name}` });
+                                        opts.push({ id, name: `${CODEX_CLI_MODEL.name}: ${model.name}`, group: 'Codex' });
                                     }
                                 });
                             }
-                            customProviders.forEach(p => opts.push({ id: p.id, name: p.name }));
-                            ollamaModels.forEach(m => opts.push({ id: `ollama-${m}`, name: `${m} (Local)` }));
+                            customProviders.forEach(p => opts.push({ id: p.id, name: p.name, group: 'Custom' }));
+                            ollamaModels.forEach(m => opts.push({ id: `ollama-${m}`, name: `${m} (Local)`, group: 'Ollama' }));
 
                             if (defaultModel && !opts.find(o => o.id === defaultModel)) {
                                 opts.unshift({ id: defaultModel, name: prettifyModelId(defaultModel) });
@@ -1037,6 +1089,28 @@ export const AIProvidersSettings: React.FC = () => {
                         keyPlaceholder="sk-..."
                         keyUrl="https://platform.deepseek.com/api_keys"
                         onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, deepseek: model }))}
+                    />
+
+                    {/* OpenRouter — routes to 100+ models from many providers via a single API key */}
+                    <ProviderCard
+                        providerId="openrouter"
+                        providerName="OpenRouter"
+                        apiKey={openrouterApiKey}
+                        preferredModel={preferredModels.openrouter}
+                        hasStoredKey={!!hasStoredKey.openrouter}
+                        onKeyChange={setOpenrouterApiKey}
+                        onSaveKey={async () => { await handleSaveKey('openrouter', openrouterApiKey, setOpenrouterApiKey); }}
+                        onRemoveKey={() => handleRemoveKey('openrouter', setOpenrouterApiKey)}
+                        onTestConnection={() => handleTestConnection('openrouter', openrouterApiKey)}
+                        testStatus={testStatus.openrouter || 'idle'}
+                        testError={testError.openrouter}
+                        savingStatus={!!savingStatus.openrouter}
+                        savedStatus={!!savedStatus.openrouter}
+                        keyPlaceholder="sk-or-..."
+                        keyUrl="https://openrouter.ai/keys"
+                        onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, openrouter: model }))}
+                        cachedModels={providerModels['openrouter'] || []}
+                        onModelsFetched={(models) => setProviderModels(prev => ({ ...prev, openrouter: models }))}
                     />
 
                     {/* LiteLLM — OpenAI-compatible AI gateway (100+ providers via one proxy).

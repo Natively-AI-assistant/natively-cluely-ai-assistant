@@ -7,7 +7,7 @@ interface FetchedModel {
 }
 
 interface ProviderCardProps {
-    providerId: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek';
+    providerId: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'openrouter';
     providerName: string;
     apiKey: string;
     preferredModel?: string;
@@ -23,6 +23,8 @@ interface ProviderCardProps {
     keyPlaceholder: string;
     keyUrl: string;
     onPreferredModelChange?: (modelId: string) => void;
+    cachedModels?: FetchedModel[];
+    onModelsFetched?: (models: FetchedModel[]) => void;
 }
 
 export const ProviderCard: React.FC<ProviderCardProps> = ({
@@ -42,6 +44,8 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     keyPlaceholder,
     keyUrl,
     onPreferredModelChange,
+    cachedModels,
+    onModelsFetched,
 }) => {
     const [fetchedModels, setFetchedModels] = useState<FetchedModel[]>([]);
     const [isFetching, setIsFetching] = useState(false);
@@ -72,6 +76,11 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         if (preferredModel) setSelectedModel(preferredModel);
     }, [preferredModel]);
 
+    // Seed fetchedModels from cachedModels provided by parent
+    useEffect(() => {
+        if (cachedModels && cachedModels.length > 0) setFetchedModels(cachedModels);
+    }, [cachedModels]);
+
     // Close dropdown on outside click
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -100,6 +109,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
 
             if (result?.success && result.models) {
                 setFetchedModels(result.models);
+                onModelsFetched?.(result.models);
                 // If we have a preferred model that exists in the list, keep it; otherwise auto-select first
                 if (result.models.length > 0) {
                     const existsInList = result.models.some((m: FetchedModel) => m.id === selectedModel);
@@ -138,6 +148,16 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     };
 
     const selectedOption = fetchedModels.find(m => m.id === selectedModel);
+
+    // Selected model first, remaining sorted alphabetically by label.
+    const displayModels = React.useMemo(() => {
+        if (!fetchedModels.length) return fetchedModels;
+        return [...fetchedModels].sort((a, b) => {
+            if (a.id === selectedModel) return -1;
+            if (b.id === selectedModel) return 1;
+            return a.label.localeCompare(b.label);
+        });
+    }, [fetchedModels, selectedModel]);
 
     return (
         <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle">
@@ -205,21 +225,21 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                 </button>
 
                 {/* Inline Model Dropdown */}
-                {fetchedModels.length > 0 || preferredModel ? (
+                {displayModels.length > 0 || preferredModel ? (
                     <div className="relative flex-1 max-w-[200px] mx-4" ref={dropdownRef}>
                         <button
-                            onClick={() => fetchedModels.length > 0 && setIsDropdownOpen(!isDropdownOpen)}
-                            className={`w-full bg-bg-input border border-border-subtle rounded-md px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary flex items-center justify-between transition-colors ${fetchedModels.length > 0 ? 'hover:bg-bg-elevated' : 'opacity-80 cursor-default'}`}
+                            onClick={() => displayModels.length > 0 && setIsDropdownOpen(!isDropdownOpen)}
+                            className={`w-full bg-bg-input border border-border-subtle rounded-md px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary flex items-center justify-between transition-colors ${displayModels.length > 0 ? 'hover:bg-bg-elevated' : 'opacity-80 cursor-default'}`}
                             type="button"
                         >
                             <span className="truncate pr-2">{selectedOption ? selectedOption.label : (preferredModel || 'Select model')}</span>
-                            <ChevronDown size={14} className={`text-text-secondary transition-transform ${isDropdownOpen ? 'rotate-180' : ''} ${fetchedModels.length === 0 ? 'opacity-50' : ''}`} />
+                            <ChevronDown size={14} className={`text-text-secondary transition-transform ${isDropdownOpen ? 'rotate-180' : ''} ${displayModels.length === 0 ? 'opacity-50' : ''}`} />
                         </button>
 
-                        {isDropdownOpen && fetchedModels.length > 0 && (
+                        {isDropdownOpen && displayModels.length > 0 && (
                             <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 w-full min-w-[200px] bg-bg-elevated border border-border-subtle rounded-lg shadow-xl z-50 max-h-60 overflow-y-auto animated fadeIn">
                                 <div className="p-1 space-y-0.5">
-                                    {fetchedModels.map((model) => (
+                                    {displayModels.map((model) => (
                                         <button
                                             key={model.id}
                                             onClick={() => handleSelectModel(model.id)}
