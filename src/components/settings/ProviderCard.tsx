@@ -78,7 +78,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
 
     // Seed fetchedModels from cachedModels provided by parent
     useEffect(() => {
-        if (cachedModels && cachedModels.length > 0) setFetchedModels(cachedModels);
+        if (cachedModels) setFetchedModels(cachedModels);
     }, [cachedModels]);
 
     // Close dropdown on outside click

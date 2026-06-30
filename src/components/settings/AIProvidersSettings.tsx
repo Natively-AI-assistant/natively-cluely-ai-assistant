@@ -923,7 +923,7 @@ export const AIProvidersSettings: React.FC = () => {
                                     opts.push({ id: pm, name: wireId, group: grp });
                                 }
                             }
-                            if (codexOauthStatus.signedIn && codexCliConfig.enabled) {
+                            if (codexOauthStatus.signedIn || codexCliConfig.enabled) {
                                 opts.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${prettifyModelId(codexCliConfig.model)})`, group: 'Codex' });
                                 CODEX_CLI_MODEL_PRESETS.forEach(model => {
                                     const id = codexCliSelectorId(model.id);
