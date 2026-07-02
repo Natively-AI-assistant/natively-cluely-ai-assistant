@@ -69,11 +69,11 @@ const MODE_MAIL_PROFILES: Record<string, ModeMailProfile> = {
   },
   recruiting: {
     recipient: 'the candidate you interviewed (external)',
-    salutation: 'Open with "Hi {first name}," addressed to the candidate.',
-    closing: 'Sign off with "Best," and the interviewer/recruiter voice.',
+    salutation: 'Address the candidate by first name if it appears in the notes, otherwise use "Hi there," — never use literal placeholder syntax like {first name}.',
+    closing: 'Sign off with "Best," then the interviewer/recruiter\'s name.',
     register: 'Warm, respectful, and encouraging regardless of outcome — represents the company well. Never disclose an internal hire/no-hire decision to the candidate.',
     structure: 'Thank them for their time → one genuine specific thing that stood out → the concrete next step and rough timeline for hearing back → an invitation to ask questions. No evaluation verdicts.',
-    followUp: 'Keep a strong candidate warm and set expectations: thank them, reference one genuine strength they showed, state the concrete next stage and rough timeline to hear back, and invite questions. Never reveal an internal hire/no-hire decision or share raw evaluation notes.',
+    followUp: 'Keep a strong candidate warm and set expectations: thank them, reference one genuine strength they showed (cite from the Strengths section only), state the concrete next stage and rough timeline to hear back, and invite questions. Never reveal an internal hire/no-hire decision or cite Concerns/Compensation sections to the candidate.',
     defaultTone: 'warm',
   },
   'team-meet': {
@@ -86,12 +86,12 @@ const MODE_MAIL_PROFILES: Record<string, ModeMailProfile> = {
     defaultTone: 'concise',
   },
   'looking-for-work': {
-    recipient: 'the interviewer / hiring manager who interviewed YOU (you are the candidate)',
-    salutation: 'Open with "Dear {interviewer name}," or "Hi {interviewer name}," — respectful and personal.',
-    closing: 'Close with a forward-looking thank-you, then "Best regards," and the sender\'s name line.',
-    register: 'Appreciative, enthusiastic, and professional — a strong post-interview thank-you that reaffirms genuine interest without sounding desperate.',
+    recipient: 'the interviewer / hiring manager who interviewed YOU (the sender is the candidate)',
+    salutation: 'Address the interviewer by name if it appears in the notes, otherwise use "Dear Hiring Team,". Never emit literal placeholder syntax like {interviewer name}.',
+    closing: 'Close with a forward-looking line, then "Best regards," and the candidate\'s name (the sender).',
+    register: 'Appreciative, enthusiastic, and professional — a strong post-interview thank-you that reaffirms genuine interest without sounding desperate. You are writing AS the candidate, TO the interviewer.',
     structure: 'Thank them for their time → reference one specific topic from the conversation that resonated → briefly reinforce why you\'re a strong fit → express enthusiasm for next steps. Do not restate your whole résumé.',
-    followUp: 'Strengthen your candidacy: thank them, reference a specific topic from the conversation that genuinely resonated, briefly connect one of your strengths to a need they raised, and reaffirm enthusiasm for the next step. If a question was left open that you can now answer, add a one-line answer.',
+    followUp: 'Strengthen your candidacy: thank them, reference a specific topic from the conversation that genuinely resonated, briefly connect one of your strengths to a need they raised, and reaffirm enthusiasm for the next step. If a question was left open in the notes that you can now answer, add a one-line answer.',
     defaultTone: 'warm',
   },
   'technical-interview': {
@@ -230,21 +230,23 @@ AUDIENCE & VOICE:
 - Cover, in order: ${profile.structure}
 
 STRICT RULES:
-- Ground everything in the notes below. Do NOT invent decisions, owners, deadlines, numbers, or promises that aren't there.
+- Ground everything in the notes below. Do NOT invent decisions, owners, deadlines, numbers, pricing, or promises that aren't there.
 - Be specific to THIS meeting — reference the actual topics, names, and outcomes from the notes, not generic filler. A reader should be able to tell exactly which meeting this was about.
 - Write natural prose (or the labelled sections specified above), not a hollow scaffold. It must read like a person who was in the room wrote it.
 - Match the salutation and sign-off to the audience above — do NOT default to "Hi team," unless this is an internal-team message.
-- Keep it tight and copy-paste ready. No bracketed placeholders like [Name]; if a name is unknown, phrase around it naturally.
+- NEVER emit placeholder syntax — neither bracketed placeholders ([Name]) nor curly braces ({first name} / {interviewer name}). If a name is unknown, phrase around it naturally or use "Hi there," / "Dear Hiring Team,".
+- Keep it tight and copy-paste ready.
 - Do not mention transcripts, AI, summaries, or that this was auto-generated.
 - If the notes genuinely contain no real outcomes or next steps, keep it short and honest rather than padding.
+
+${type === 'email' ? 'The "subject" must be grounded in the meeting title or the first takeaway below — a short noun phrase grounded in something in the notes, NOT a list of topics. Example good subject: "Follow-up: Acme Q3 renewal kickoff".' : 'No "subject" key — this draft is not an email.'}
 
 MEETING NOTES:
 ${inputs}`;
 
-    const jsonShapeHint = `{
-  "subject": "${type === 'email' ? 'a short subject line' : ''}",
-  "body": "the follow-up message text"
-}`;
+    const jsonShapeHint = type === 'email'
+      ? `{"subject": "a short noun-phrase subject grounded in the meeting title or first takeaway", "body": "the follow-up email text"}`
+      : `{"body": "the follow-up message text (no subject key)"}`;
 
     const result = await generateStructured<{ subject?: string; body: string }>({
       schemaName: 'FollowUpDraft',
@@ -263,9 +265,46 @@ ${inputs}`;
 
     if (!result.ok || !result.data) return deterministic();
 
+    // Email subjects must be grounded — reject placeholder syntax and subjects that
+    // share zero meaningful words with the notes. Recurring "Mentions of X, Y, and Z"
+    // hallucinated subjects from small models get caught here.
+    const validatedSubject = (() => {
+      if (type !== 'email') return undefined;
+      const raw = (result.data.subject || '').trim();
+      if (!raw) return undefined;
+      // Hard reject anything with placeholders (curly or square brackets around names).
+      if (/[{}\[\]<>]/.test(raw)) return undefined;
+      // Drop a leading "Subject: " prefix the model occasionally writes.
+      const cleaned = raw.replace(/^subject\s*:\s*/i, '');
+      // Tokenise against the note corpus.
+      const subjTokens = new Set(
+        cleaned.toLowerCase().split(/\W+/).filter(w => w.length >= 4)
+      );
+      if (subjTokens.size === 0) return undefined;
+      const corpus = [
+        params.summary.title || '',
+        ...(params.summary.tldr || []),
+        ...(params.summary.whatChanged || []),
+        params.summary.overview || '',
+        ...(params.summary.sections || []).flatMap(s => (s.bullets || []).map(b => b?.text || '')),
+      ].join(' ').toLowerCase().split(/\W+/).filter(w => w.length >= 4);
+      if (corpus.length === 0) {
+        // No usable corpus (sparse summary) — accept the subject rather than drop it;
+        // subjectFromContent has nothing better to fall back to either.
+        return cleaned.slice(0, 160);
+      }
+      const corpusSet = new Set(corpus);
+      let overlap = 0;
+      for (const t of subjTokens) if (corpusSet.has(t)) overlap++;
+      // Require ≥1 overlapping meaningful word. Subjects without ANY overlap with the
+      // notes are hallucinated topics lists ("Mentions of X, Y, and Z"); subjects with
+      // even one shared word are grounded.
+      return overlap >= 1 ? cleaned.slice(0, 160) : undefined;
+    })();
+
     return {
       type,
-      ...(result.data.subject ? { subject: result.data.subject.slice(0, 160) } : (type === 'email' ? { subject: subjectFromContent(params.summary) } : {})),
+      ...(validatedSubject ? { subject: validatedSubject } : (type === 'email' ? { subject: subjectFromContent(params.summary) } : {})),
       body: result.data.body.slice(0, 4000),
       tone,
       ...(actionItems.length ? { basedOnActionItemIds: actionItems.map(a => a.id).filter(Boolean) as string[] } : {}),
@@ -274,13 +313,42 @@ ${inputs}`;
   }
 }
 
+// Titles that look fine but are generic filler (auto-created meetings, default
+// reducers, etc.) — would yield unreadable subjects like "Follow-up: Meeting Notes".
+const GENERIC_TITLES = /^(untitled|meeting notes?|new meeting|notes?)$/i;
+// A subject needs at least one real character — emoji-only or symbol-only titles
+// are rejected. `Array.from(t).length` counts code points, not UTF-16 units.
+function isUsableTitle(t: string | undefined): t is string {
+  if (!t) return false;
+  const norm = t.replace(/\s+/g, ' ').trim();
+  if (norm.length < 3) return false;
+  if (GENERIC_TITLES.test(norm)) return false;
+  const charLen = Array.from(norm).length;
+  if (charLen < 3) return false;
+  // Require at least one letter or digit so emoji/punctuation-only titles are rejected.
+  return /[\p{L}\p{N}]/u.test(norm);
+}
+
+function truncateWithEllipsis(s: string, max: number): string {
+  // Truncate at a word boundary when possible, append an ellipsis if we cut content.
+  if (Array.from(s).length <= max) return s;
+  const cutAt = Array.from(s).slice(0, Math.max(1, max - 1)).join('');
+  const lastSpace = cutAt.lastIndexOf(' ');
+  const safe = lastSpace > 16 ? cutAt.slice(0, lastSpace) : cutAt;
+  return safe + '…';
+}
+
 function subjectFromContent(summary: FollowUpGenerateParams['summary']): string {
   // Prefer the meeting's own title (concrete, recognisable) over a truncated takeaway.
   const title = summary.title?.replace(/\s+/g, ' ').trim();
-  if (title && title.length > 2 && !/^(untitled|meeting|new meeting)$/i.test(title)) {
-    return `Follow-up: ${title.slice(0, 70)}`;
+  if (isUsableTitle(title)) {
+    return `Follow-up: ${truncateWithEllipsis(title, 70)}`;
   }
-  const first = summary.tldr?.[0] || summary.whatChanged?.[0] || summary.overview || 'Meeting follow-up';
-  const trimmed = first.replace(/\s+/g, ' ').trim().slice(0, 70);
-  return `Follow-up: ${trimmed}`;
+  // Prefer a substantive tldr over a chopped title when both exist.
+  const tldrCandidate = (summary.tldr || []).find(t => Array.from(t || '').length >= 20 && t.split(/\s+/).length >= 4);
+  const fallback = tldrCandidate || summary.whatChanged?.[0] || summary.overview;
+  if (fallback && fallback.trim()) {
+    return `Follow-up: ${truncateWithEllipsis(fallback.trim(), 70)}`;
+  }
+  return 'Follow-up: your meeting';
 }
