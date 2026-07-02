@@ -19,22 +19,138 @@ const DEFAULT_DIMS = 768;
 // through per-minute quota.
 const MAX_BATCH_REQUESTS = 100;
 
+// Per-key cooldown after a 429 so a rate-limited key is skipped until its window
+// likely resets, instead of being hammered. Mirrors the backend's key-pool cooldown.
+const KEY_COOLDOWN_MS = Number(process.env.NATIVELY_GEMINI_EMBED_COOLDOWN_MS) || 60_000;
+// When ALL keys are cooling, wait at most this long for the soonest to free up
+// before giving up (so a re-index drains rather than hard-failing on a transient
+// full-pool rate-limit). The per-minute Gemini window is ~60s, so the default
+// budget must exceed that or an all-keys-hot pool never drains — set to 75s.
+// Bounded so a persistent multi-minute outage still eventually degrades gracefully.
+const MAX_COOLDOWN_WAIT_MS = Number(process.env.NATIVELY_GEMINI_EMBED_MAX_WAIT_MS) || 75_000;
+
 export class GeminiEmbeddingProvider implements IEmbeddingProvider {
   readonly name = 'gemini';
   readonly model: string;
   readonly dimensions: number;
   readonly space: string;
 
+  // Key pool + per-key cooldown-until timestamps. Single-key callers pass a string;
+  // it becomes a one-element pool so all the rotation logic is uniform.
+  private readonly apiKeys: string[];
+  private readonly coolingUntil: number[]; // epoch ms; 0 = healthy
+  private keyCursor = 0;
+
   constructor(
-    private apiKey: string,
+    apiKeyOrKeys: string | string[],
     model: string = DEFAULT_MODEL,
     dimensions: number = DEFAULT_DIMS,
   ) {
+    const keys = (Array.isArray(apiKeyOrKeys) ? apiKeyOrKeys : [apiKeyOrKeys])
+      .map((k) => (k || '').trim())
+      .filter(Boolean);
+    // De-dupe while preserving order (the same key twice adds no rotation value).
+    this.apiKeys = [...new Set(keys)];
+    if (this.apiKeys.length === 0) throw new Error('GeminiEmbeddingProvider: no API key(s) provided');
+    this.coolingUntil = this.apiKeys.map(() => 0);
     // Accept a bare id or a 'models/'-prefixed id; store bare for the space key,
     // re-add the prefix on the wire.
     this.model = model.replace(/^models\//, '');
     this.dimensions = dimensions;
     this.space = embeddingSpaceKey({ name: this.name, model: this.model, dimensions: this.dimensions });
+    if (this.apiKeys.length > 1) {
+      console.log(`[GeminiEmbeddingProvider] key pool: ${this.apiKeys.length} keys, per-key cooldown ${KEY_COOLDOWN_MS}ms`);
+    }
+  }
+
+  private nowMs(): number { return Date.now(); }
+
+  /** Index of the next healthy (non-cooling) key, round-robin from the cursor. */
+  private pickHealthyKeyIndex(): number | null {
+    const now = this.nowMs();
+    for (let i = 0; i < this.apiKeys.length; i++) {
+      const idx = (this.keyCursor + i) % this.apiKeys.length;
+      if (this.coolingUntil[idx] <= now) { this.keyCursor = (idx + 1) % this.apiKeys.length; return idx; }
+    }
+    return null; // all keys cooling
+  }
+
+  /** Ms until the soonest key frees up (0 if one is already healthy). */
+  private msUntilSoonestHealthy(): number {
+    const now = this.nowMs();
+    let soonest = Infinity;
+    for (const until of this.coolingUntil) soonest = Math.min(soonest, Math.max(0, until - now));
+    return soonest === Infinity ? 0 : soonest;
+  }
+
+  // Parse a Gemini 429 body for RetryInfo.retryDelay (e.g. "57s" / "1200ms").
+  // Returns ms, or 0 if not present. Capped so a hostile/huge value can't stall us.
+  private parseRetryDelayMs(body: string): number {
+    if (!body) return 0;
+    const m = body.match(/"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)(ms|s)"/i);
+    if (!m) return 0;
+    const n = parseFloat(m[1]);
+    const ms = m[2].toLowerCase() === 's' ? n * 1000 : n;
+    return Math.min(ms, 120_000);
+  }
+
+  private markCooling(idx: number, retryMs = 0): void {
+    // Use the server's retryDelay when it exceeds our default guess (+1s slack),
+    // so waiting for the cooldown actually clears the window.
+    const cool = Math.max(KEY_COOLDOWN_MS, retryMs > 0 ? retryMs + 1000 : 0);
+    this.coolingUntil[idx] = this.nowMs() + cool;
+    if (this.apiKeys.length > 1) {
+      console.warn(`[GeminiEmbeddingProvider] key #${idx} rate-limited (429) — cooling for ${cool}ms; ${this.apiKeys.filter((_, j) => this.coolingUntil[j] <= this.nowMs()).length} keys still healthy`);
+    }
+  }
+
+  /**
+   * POST to a Gemini embedding endpoint, rotating across the key pool. On a 429 for
+   * one key, mark it cooling and try the next healthy key. If ALL keys are cooling,
+   * wait (bounded) for the soonest to free up, then retry. Non-429 errors propagate
+   * (the caller's serial-backoff handles transient 503s). Returns the parsed JSON.
+   */
+  private async postWithKeyRotation(method: 'embedContent' | 'batchEmbedContents', body: unknown): Promise<any> {
+    const url = this.url(method);
+    let waitedForCooldown = false;
+    // Bounded attempts: at most one pass per key, plus one post-wait pass.
+    const maxAttempts = this.apiKeys.length + 1;
+    let lastErr: Error | null = null;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      let idx = this.pickHealthyKeyIndex();
+      if (idx === null) {
+        // All keys cooling. Wait once for the soonest, if within budget.
+        const wait = this.msUntilSoonestHealthy();
+        if (waitedForCooldown || wait <= 0 || wait > MAX_COOLDOWN_WAIT_MS) {
+          throw lastErr || new Error(`Gemini v2 ${method}: all ${this.apiKeys.length} keys rate-limited (429); soonest free in ${wait}ms > budget ${MAX_COOLDOWN_WAIT_MS}ms`);
+        }
+        console.warn(`[GeminiEmbeddingProvider] all keys cooling — waiting ${wait}ms for the soonest to free up`);
+        await new Promise((r) => setTimeout(r, wait + 50));
+        waitedForCooldown = true;
+        idx = this.pickHealthyKeyIndex();
+        if (idx === null) throw lastErr || new Error(`Gemini v2 ${method}: all keys still cooling after wait`);
+      }
+      let res: Response;
+      try {
+        res = await fetch(url, { method: 'POST', headers: this.headersFor(idx), body: JSON.stringify(body) });
+      } catch (e: any) {
+        // Network error is not key-specific — surface it (serial backoff retries).
+        throw new Error(`Gemini v2 ${method} network error: ${e?.message || e}`);
+      }
+      if (res.status === 429) {
+        // Honor the server's RetryInfo.retryDelay when present ("57s"), so the
+        // cooldown matches the actual per-minute window instead of a fixed guess.
+        const bodyText = await res.text().catch(() => '');
+        this.markCooling(idx, this.parseRetryDelayMs(bodyText));
+        lastErr = new Error(`Gemini v2 ${method} 429 on key #${idx}`);
+        continue; // try next healthy key
+      }
+      if (!res.ok) {
+        throw new Error(`Gemini v2 ${method} failed: ${res.status} ${res.statusText} ${await res.text().catch(() => '')}`);
+      }
+      return res.json();
+    }
+    throw lastErr || new Error(`Gemini v2 ${method}: exhausted key rotation`);
   }
 
   async isAvailable(): Promise<boolean> {
@@ -52,9 +168,9 @@ export class GeminiEmbeddingProvider implements IEmbeddingProvider {
   }
 
   // API key goes in a header, NOT the URL query string — URLs leak into logs,
-  // proxies, and crash reports.
-  private get headers(): Record<string, string> {
-    return { 'Content-Type': 'application/json', 'x-goog-api-key': this.apiKey };
+  // proxies, and crash reports. Keyed by pool index for rotation.
+  private headersFor(keyIdx: number): Record<string, string> {
+    return { 'Content-Type': 'application/json', 'x-goog-api-key': this.apiKeys[keyIdx] };
   }
   private url(method: 'embedContent' | 'batchEmbedContents'): string {
     return `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:${method}`;
@@ -71,36 +187,20 @@ export class GeminiEmbeddingProvider implements IEmbeddingProvider {
   // ── Single document embed ───────────────────────────────────────────────────
   async embed(text: string, opts: EmbedOptions = {}): Promise<number[]> {
     const formatted = this.formatDocument(text, opts.title);
-    const res = await fetch(this.url('embedContent'), {
-      method: 'POST',
-      headers: this.headers,
-      body: JSON.stringify({
-        content: { parts: [{ text: formatted }] },
-        outputDimensionality: this.dimensions, // v2 auto-normalizes truncated dims
-      })
+    const data = await this.postWithKeyRotation('embedContent', {
+      content: { parts: [{ text: formatted }] },
+      outputDimensionality: this.dimensions, // v2 auto-normalizes truncated dims
     });
-    if (!res.ok) {
-      throw new Error(`Gemini v2 embed failed: ${res.status} ${res.statusText} ${await res.text().catch(() => '')}`);
-    }
-    const data = await res.json();
     return this.validateVector(data?.embedding?.values, 'embed');
   }
 
   // ── Asymmetric retrieval query ──────────────────────────────────────────────
   async embedQuery(text: string, opts: EmbedOptions = {}): Promise<number[]> {
     const formatted = this.formatQuery(text, opts.taskHint);
-    const res = await fetch(this.url('embedContent'), {
-      method: 'POST',
-      headers: this.headers,
-      body: JSON.stringify({
-        content: { parts: [{ text: formatted }] },
-        outputDimensionality: this.dimensions,
-      })
+    const data = await this.postWithKeyRotation('embedContent', {
+      content: { parts: [{ text: formatted }] },
+      outputDimensionality: this.dimensions,
     });
-    if (!res.ok) {
-      throw new Error(`Gemini v2 query embed failed: ${res.status} ${res.statusText}`);
-    }
-    const data = await res.json();
     return this.validateVector(data?.embedding?.values, 'embedQuery');
   }
 
@@ -118,37 +218,19 @@ export class GeminiEmbeddingProvider implements IEmbeddingProvider {
         content: { parts: [{ text: this.formatDocument(t, opts.title) }] },
         outputDimensionality: this.dimensions,
       }));
-      let res: Response;
+      let data: any;
       try {
-        res = await fetch(this.url('batchEmbedContents'), {
-          method: 'POST',
-          headers: this.headers,
-          body: JSON.stringify({ requests })
-        });
+        // Key-rotating POST: a 429 rotates to the next healthy key (and waits for a
+        // cooldown if the whole pool is hot) BEFORE we drop to the slower serial path.
+        data = await this.postWithKeyRotation('batchEmbedContents', { requests });
       } catch (e: any) {
-        console.warn(`[GeminiEmbeddingProvider] batchEmbedContents network error, falling back to serial for batch ${start}-${start + batch.length - 1}: ${e?.message || e}`);
+        // Only after key rotation is exhausted (or a non-429 error) do we fall back
+        // to serial single-embed, which preserves order and survives a partial
+        // batch-endpoint outage (re-index must be error-tolerant).
+        console.warn(`[GeminiEmbeddingProvider] batchEmbedContents failed for batch ${start}-${start + batch.length - 1} after key rotation: ${e?.message || e}. Falling back to serial.`);
         out.push(...await this.embedSerial(batch, opts));
         continue;
       }
-      if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        // 429: rate-limited on this sub-batch only. Treat it like any other batch-
-        // endpoint failure: serial-embed the rate-limited slice, continue with the
-        // rest of the batches. Throwing here would discard successfully-embedded
-        // prior sub-batches and force the caller to re-embed them via fallback.
-        if (res.status === 429) {
-          console.warn(`[GeminiEmbeddingProvider] batchEmbedContents 429 for batch ${start}-${start + batch.length - 1}: ${body}. Falling back to serial for this sub-batch.`);
-          out.push(...await this.embedSerial(batch, opts));
-          continue;
-        }
-        // Resilient fallback: serial single-embed preserves order and survives a
-        // partial batch-endpoint outage (re-index must be error-tolerant). Log the
-        // body so a schema error isn't silently masked as a "batch outage".
-        console.warn(`[GeminiEmbeddingProvider] batchEmbedContents failed (${res.status} ${res.statusText}) for batch ${start}-${start + batch.length - 1}: ${body}. Falling back to serial.`);
-        out.push(...await this.embedSerial(batch, opts));
-        continue;
-      }
-      const data = await res.json();
       const embeddings = data?.embeddings;
       // Guard against a short/misaligned batch response — positional mapping to chunk
       // ids means a length mismatch silently corrupts which vector belongs to which chunk.

@@ -144,10 +144,18 @@ test('ipcHandlers: false-refusal check uses isFalseRefusal variable (promoted fr
   );
 });
 
-test('ipcHandlers: false-refusal triggers on present.length >= 2', () => {
+test('ipcHandlers: false-refusal repair gated on document entity/title overlap (not raw term count)', () => {
+  // Updated 2026-07-02: the gate moved from a plain ≥2-term overlap (which
+  // leaked on off-topic questions whose generic words matched a chunk) to an
+  // OKF entity/title overlap signal — a whole-name hit or >=2 distinct title
+  // tokens. See OkfPhase0FalseRefusalGuard.test.mjs for the behavioral tests.
   assert.ok(
-    ipcHandlersSrc.includes('present.length >= 2'),
-    'ipcHandlers false-refusal must require ≥2 matching terms to avoid false positives',
+    ipcHandlersSrc.includes('const hasEntityEvidence = wholeNameHit || tokenHits.size >= 2;'),
+    'ipcHandlers false-refusal must gate on whole-name-hit OR >=2 distinct title tokens',
+  );
+  assert.ok(
+    ipcHandlersSrc.includes('const shouldRepair = hasStrongEvidence;'),
+    'shouldRepair must derive from the entity-evidence-based hasStrongEvidence',
   );
 });
 

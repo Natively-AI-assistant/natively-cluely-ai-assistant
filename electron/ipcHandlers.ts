@@ -37,6 +37,19 @@ import { isAssistantIdentityQuestion, profileFactsReady } from './llm/manualProf
 import { buildManualProfileBackendAnswer } from './llm/profileAnswerBackend';
 import { DOC_GROUNDED_TOKEN_BUDGET } from './services/ModeContextRetriever';
 
+// Generic tokens excluded when splitting OKF entity names / card titles into
+// distinctive words for the document-grounded false-refusal gate (2026-07-02).
+// These co-occur in titles across unrelated documents, so on their own they
+// aren't evidence a question is about THIS document's topics. Kept small and
+// domain-agnostic — the gate additionally requires >=2 distinct token hits (or
+// one whole-name hit), so a single borderline token can never authorize a
+// repair by itself.
+const GATE_GENERIC_TOKENS = new Set<string>([
+  'used', 'using', 'work', 'works', 'paper', 'study', 'general', 'related', 'proposed',
+  'various', 'different', 'overview', 'introduction', 'conclusion', 'summary', 'background',
+  'section', 'chapter', 'about', 'towards', 'toward', 'based', 'other', 'these', 'those',
+]);
+
 // Module-scope: pdfjs-dist's legacy build defaults GlobalWorkerOptions.workerSrc
 // to `new URL("./pdf.worker.mjs", import.meta.url)`. Inside esbuild's bundle
 // for the electron main process, `import.meta.url` points at the bundled
@@ -1450,6 +1463,50 @@ export function initializeIpcHandlers(appState: AppState): void {
           }
         }
 
+        // OKF Profile Intelligence — Phase 2 (2026-07-02): additive profile card
+        // evidence. Fail-closed by construction — retrieveProfileEvidence returns
+        // NOTHING unless it is handed an explicit AnswerPlan whose
+        // profileContextPolicy allows profile AND the turn is not a
+        // document-grounded custom mode AND the flag is on. This is the ONLY
+        // manual entry point that has a real AnswerPlan, so `hasExplicitPlan:true`
+        // here is correct; the phone-chat handler and LLMHelper.chat() never call
+        // this. Layered ON TOP of the deterministic fast path + the existing
+        // context_nodes retrieval (both already ran); the post-stream validators
+        // below are unchanged. Never throws into the hot path.
+        // FAIL-CLOSED on unknown mode state: `manualActiveMode` is null when
+        // getActiveModeInfo() threw (line ~951). In that state we CANNOT rule out
+        // a document-grounded custom mode, so we must treat the turn AS
+        // doc-grounded (block profile cards) rather than let `undefined !== true`
+        // pass the guard and leak profile PII into a possibly-doc-grounded answer.
+        // We know the mode is doc-grounded, OR we don't know the mode at all →
+        // either way, docGroundedActive is true and the retriever's gate 4 fires.
+        const docGroundedOrUnknown = manualActiveMode == null
+          || manualActiveMode.documentGroundedCustomModeActive === true;
+        if (!isCodingChat && answerPlan.profileContextPolicy !== 'forbidden' && !docGroundedOrUnknown) {
+          try {
+            const { retrieveProfileEvidence } = require('./services/knowledge/OkfProfileRetriever') as typeof import('./services/knowledge/OkfProfileRetriever');
+            const profileEvidence = retrieveProfileEvidence({
+              question: message,
+              profileContextPolicy: answerPlan.profileContextPolicy,
+              // Pass the REAL doc-grounded state so the retriever's own gate 4 is
+              // live defense-in-depth (not dead code). It is false here only
+              // because the enclosing guard already excluded doc-grounded/unknown.
+              documentGroundedActive: manualActiveMode?.documentGroundedCustomModeActive === true,
+              hasExplicitPlan: true,
+            });
+            if (profileEvidence.allowed && profileEvidence.block) {
+              context = context ? `${profileEvidence.block}\n\n${context}` : profileEvidence.block;
+              iTrace.noteContext({ source: 'okf_profile_cards', trustLevel: 'high', requested: true, retrieved: true, included: true, reason: 'profile_policy_allowed' });
+              piTelemetry.emit('pi_okf_profile_evidence_assembled', {
+                cardCount: profileEvidence.cardCount, profilePolicy: answerPlan.profileContextPolicy,
+                answerType: answerPlan.answerType,
+              });
+            }
+          } catch (okfErr: any) {
+            console.warn('[OkfProfile] profile card retrieval skipped (non-fatal):', okfErr?.message || okfErr);
+          }
+        }
+
         // Prepend active-skill instructions so the model follows them for this
         // turn only. Done after all other context assembly so skill instructions
         // are the first thing the model sees in the user context block.
@@ -1532,6 +1589,45 @@ export function initializeIpcHandlers(appState: AppState): void {
             }
           };
 
+          // DEFERRED FIRST-PAINT (2026-07-02, doc-grounded flash fix). On the
+          // document-grounded lecture path, the first-pass answer is sometimes a
+          // "not mentioned" refusal that the post-stream validator then REPAIRS
+          // via a 2nd generation. Streaming the first pass token-by-token as it
+          // arrives paints that refusal on screen, then the repaired answer
+          // replaces it (via finalText on 'gemini-stream-done') — the user sees a
+          // wrong-answer flash. To avoid it, hold the first ~PAINT_SNIFF chars
+          // buffered: as soon as the buffer is clearly NOT a refusal, flush it and
+          // stream normally (a few hundred ms at most for good answers). If it
+          // DOES look like a refusal, keep buffering to the end — the validator
+          // then either repairs (buffer discarded, only the regen is shown) or
+          // keeps it (sent once via finalText). Only engages for the doc-grounded
+          // lecture turn; every other path streams immediately as before.
+          const REFUSAL_SNIFF_RE = /not (?:directly )?(?:mentioned|in (?:the|my) (?:uploaded|seminar|thesis|retrieved) (?:material|sections?|document)|found in|present in)|^I could not find\b|^this is not directly mentioned/i;
+          const deferFirstPaintEligible = answerPlan.answerType === 'lecture_answer'
+            && manualActiveMode?.documentGroundedCustomModeActive === true
+            && !isCodingChat;
+          const PAINT_SNIFF_CHARS = 48;
+          let deferFirstPaint = deferFirstPaintEligible;
+          let deferredBuffer = '';
+          // sendChunkGated: routes tokens through the defer buffer while deferring,
+          // flushing to the real sendChunk once we've decided the first pass is a
+          // genuine (non-refusal) answer. When still deferring at stream end, the
+          // buffered text is NOT sent here — the post-stream validator decides.
+          const sendChunkGated = (chunk: string) => {
+            if (!deferFirstPaint) { sendChunk(chunk); return; }
+            deferredBuffer += chunk;
+            if (deferredBuffer.length >= PAINT_SNIFF_CHARS) {
+              if (!REFUSAL_SNIFF_RE.test(deferredBuffer.trimStart())) {
+                // Confident it's a real answer — flush and resume live streaming.
+                deferFirstPaint = false;
+                const toFlush = deferredBuffer;
+                deferredBuffer = '';
+                sendChunk(toFlush);
+              }
+              // else: looks like a refusal — keep buffering silently.
+            }
+          };
+
           // LIVE LATENCY GUARD (manual chat) — the centralized deadline driver
           // (electron/llm/liveDeadlines.ts). A `for await` blocks forever on a
           // hung provider and even `await iterator.return()` blocks if the
@@ -1577,7 +1673,10 @@ export function initializeIpcHandlers(appState: AppState): void {
                 const out = codingGate.push(token);
                 if (out) sendChunk(out);
               } else {
-                sendChunk(token);
+                // sendChunkGated defers the first ~48 chars on the doc-grounded
+                // lecture path so a to-be-repaired refusal never paints; a
+                // no-op wrapper around sendChunk on every other path.
+                sendChunkGated(token);
               }
             },
           });
@@ -2198,6 +2297,25 @@ export function initializeIpcHandlers(appState: AppState): void {
               // (matching the old behavior for non-doc-grounded/OKF-off
               // paths) on any failure — never throws into the answer path.
               let highSignalEntities: string[] = [];
+              // Hoisted to gate scope, both derived from the active document's
+              // own OKF-extracted knowledge and used by the false-refusal gate
+              // (2026-07-02, retrieval-score signal replaced after empirically
+              // finding it polluted — the doc-grounded section-boost rescue
+              // inflated off-topic queries so an off-topic "FIFA World Cup?"
+              // scored HIGHER than a genuine "research questions?" — see the
+              // gate comment below):
+              //  - packWholeNames: full entity names + card titles (lowercased),
+              //    e.g. "openvla-oft", "research questions". A question term
+              //    (or a classifier target entity) equal to one of these is a
+              //    strong, unambiguous document-topic match.
+              //  - packNameTokens: individual DISTINCTIVE words (len>=5, not
+              //    generic filler) split out of those names/titles, e.g.
+              //    "research", "questions", "methodology", "openvla". Used only
+              //    via the >=2-distinct-token rule below so a single generic-ish
+              //    token ("research" alone in "the THIRD research question")
+              //    can't authorize a repair.
+              const packWholeNames = new Set<string>();
+              const packNameTokens = new Set<string>();
               try {
                 if (isIntelligenceFlagEnabled('okfHybridRetrieval')) {
                   const { classifyQuestion } = require('./services/knowledge/QuestionClassifier');
@@ -2207,21 +2325,27 @@ export function initializeIpcHandlers(appState: AppState): void {
                     const { KnowledgeManager: _KM2 } = require('./services/knowledge/KnowledgeManager');
                     const targetEntities = classifyQuestion(message).targetEntities || [];
                     const km2 = _KM2.getInstance();
-                    const packEntityNames = new Set<string>();
+                    const addName = (raw: string) => {
+                      const name = raw.toLowerCase();
+                      packWholeNames.add(name);
+                      for (const w of name.split(/[^a-z0-9-]+/)) {
+                        if (w.length >= 5 && !GATE_GENERIC_TOKENS.has(w)) packNameTokens.add(w);
+                      }
+                    };
                     for (const file of _MM2.getInstance().getReferenceFiles?.(activeMode2.id) || []) {
                       const pack = km2.getPackForFile(file.id);
                       if (!pack) continue;
-                      for (const e of pack.entities) packEntityNames.add(e.name.toLowerCase());
-                      for (const c of pack.cards) packEntityNames.add(c.title.toLowerCase());
+                      for (const e of pack.entities) addName(e.name);
+                      for (const c of pack.cards) addName(c.title);
                     }
                     // Only treat a question's target entity as "high-signal"
                     // if the active document's own extracted knowledge
                     // actually contains it — this is the document-derived
                     // equivalent of the old fixed allowlist.
-                    highSignalEntities = targetEntities.filter((e: string) => packEntityNames.has(e.toLowerCase()));
+                    highSignalEntities = targetEntities.filter((e: string) => packWholeNames.has(e.toLowerCase()));
                   }
                 }
-              } catch { /* best effort — falls back to empty list, same as OKF-off behavior */ }
+              } catch { /* best effort — falls back to empty sets, same as OKF-off behavior */ }
               let isFalseRefusal = false;
               const falseRefusalRepairEnabled = isIntelligenceFlagEnabled('docGroundedFalseRefusalRepair');
               try {
@@ -2242,20 +2366,47 @@ export function initializeIpcHandlers(appState: AppState): void {
                   const matchedHighSignalEntity = highSignalEntities.find(
                     (e) => messageLower.includes(e.toLowerCase()) && chunkLower.includes(e.toLowerCase()),
                   );
+                  // OFF-TOPIC GATE (2026-07-02): a repair may only override an
+                  // honest "not mentioned" refusal when the QUESTION is actually
+                  // about this document's own extracted topics — measured by
+                  // overlap with the OKF pack's entity names / card titles, NOT
+                  // by retrieval score. (Retrieval score was tried and rejected:
+                  // the forced-document-grounding section-boost rescue inflates
+                  // off-topic queries, so on the real thesis an off-topic "Who
+                  // won the FIFA World Cup?" scored 0.601 — HIGHER than a genuine
+                  // "What are the research questions?" at 0.502 — and a
+                  // normalized confidence saturated at 1.0 for both. Word-shape
+                  // "salient term" heuristics leak too, because legit topic
+                  // words like "research"/"question" also appear in off-topic
+                  // questions such as "what is the THIRD research question?".)
+                  // Real evidence = the question hits a WHOLE entity/title
+                  // ("openvla-oft", "research questions", or a classifier target
+                  // entity), OR it hits >=2 DISTINCT title/entity tokens
+                  // ("research"+"questions", "thesis"+"objectives"). A single
+                  // shared token is not enough — that is exactly the
+                  // "THIRD research question" off-topic case, which shares only
+                  // "research" and is correctly left as an honest refusal.
+                  const wholeNameHit = present.some((t: string) => packWholeNames.has(t.toLowerCase()))
+                    || highSignalEntities.some((e) => packWholeNames.has(e.toLowerCase()));
+                  const tokenHits = new Set(present.filter((t: string) => packNameTokens.has(t.toLowerCase())).map((t: string) => t.toLowerCase()));
+                  const hasEntityEvidence = wholeNameHit || tokenHits.size >= 2;
+                  const hasRealEvidence = hasEntityEvidence;
                   // isTier1Or2Evidence: EvidenceAssembler.computeTier's
-                  // confident/synthesis-tier verdict for this exact question,
-                  // OR'd in as an additional (never a replacing) strong-
-                  // evidence signal — see the computation above.
-                  const hasStrongEvidence = present.length >= 3 || Boolean(matchedHighSignalEntity) || isTier1Or2Evidence;
-                  // For the system's OWN refusal phrase, only repair on STRONG evidence
-                  // (never on the ≥2-term threshold alone) — that phrase is the model
-                  // correctly following instructions, not an obvious mistake.
-                  const shouldRepair = isSystemOwnRefusalPhrase ? hasStrongEvidence : present.length >= 2;
+                  // confident/synthesis-tier verdict, OR'd in as an additional
+                  // signal. matchedHighSignalEntity is a whole-entity hit that
+                  // is also present in the retrieved context.
+                  const hasStrongEvidence = hasRealEvidence || Boolean(matchedHighSignalEntity) || isTier1Or2Evidence;
+                  // Both the system's own refusal phrase and a model-phrased
+                  // refusal clear the same bar (the question is about a real
+                  // document topic). Off-topic questions match neither a whole
+                  // name nor >=2 distinct tokens, so their honest refusal stands.
+                  const shouldRepair = hasStrongEvidence;
                   if (shouldRepair) {
                     isFalseRefusal = true;
-                    console.warn('[DocGrounded] false-refusal detected — retrieved context contains question terms, triggering regen', {
+                    console.warn('[DocGrounded] false-refusal detected — question matches a real document topic, triggering regen', {
                       questionTerms: present.slice(0, 8),
-                      totalTermsFound: present.length,
+                      wholeNameHit,
+                      tokenHits: [...tokenHits].slice(0, 8),
                       isSystemOwnRefusalPhrase,
                       matchedHighSignalEntity: matchedHighSignalEntity || null,
                     });
@@ -2264,11 +2415,15 @@ export function initializeIpcHandlers(appState: AppState): void {
                       termCount: present.length,
                       matchedHighSignalEntity: Boolean(matchedHighSignalEntity),
                     });
-                  } else if (present.length === 1 || (isSystemOwnRefusalPhrase && present.length === 2)) {
-                    // Below the repair threshold — log but don't regen (could be coincidental,
-                    // or the system's own honest refusal with only weak/partial term overlap)
-                    console.warn('[DocGrounded] possible false "not mentioned" (below regen threshold)', {
-                      questionTerms: present,
+                  } else if (present.length >= 1) {
+                    // Not enough document-topic evidence to override the refusal:
+                    // no whole entity/title hit and <2 distinct title tokens.
+                    // Common for off-topic questions whose only overlap is a
+                    // single generic word — the honest "not mentioned" stands.
+                    console.warn('[DocGrounded] "not mentioned" left as honest refusal (no whole-name hit, <2 title tokens)', {
+                      questionTerms: present.slice(0, 8),
+                      wholeNameHit,
+                      tokenHits: [...tokenHits].slice(0, 8),
                       isSystemOwnRefusalPhrase,
                     });
                   }
@@ -2371,6 +2526,18 @@ export function initializeIpcHandlers(appState: AppState): void {
             } catch (dgErr: any) {
               console.warn('[DocGrounded] validator skipped (non-fatal):', dgErr?.message || dgErr);
             }
+          }
+
+          // DEFERRED FIRST-PAINT flush (2026-07-02): if we held the first pass
+          // buffered (it looked like a refusal) and NO repair fired (finalText
+          // unset), those buffered tokens were never painted — send the answer
+          // now as finalText so the renderer shows it once. If a repair DID fire,
+          // finalText already holds the regen and the buffer is correctly
+          // discarded (the refusal never reaches the screen). Nothing to do when
+          // we weren't deferring (buffer already streamed live) or the buffer is
+          // empty (deferred flag stayed true but no tokens arrived).
+          if (deferFirstPaint && deferredBuffer.length > 0 && !finalText) {
+            finalText = fullResponse;
           }
 
           // Final check: only send done if we are still the active stream
@@ -4017,6 +4184,22 @@ export function initializeIpcHandlers(appState: AppState): void {
         console.warn('[IPC] trial:end-byok: SQLite wipe partial error:', dbErr.message);
       }
 
+      // 6b. PII BACKSTOP (2026-07-02): the profile OKF packs (knowledge_sources/
+      //     packs/cards hanging off the reserved '__profile_okf__' mode) hold the
+      //     candidate's name / companies / education. Step 5's deleteProfilePack
+      //     runs ONLY when the orchestrator is present AND swallows its own
+      //     errors, so on trial-end with an uninitialized orchestrator the PII
+      //     would survive. Delete the profile OKF rows directly as a backstop
+      //     regardless of orchestrator state. Document reference-file packs (any
+      //     OTHER mode_id) are intentionally NOT touched — those are the user's
+      //     own uploaded documents, not Pro profile data.
+      try {
+        const { ProfilePackBuilder } = require('./services/knowledge/ProfilePackBuilder') as typeof import('./services/knowledge/ProfilePackBuilder');
+        ProfilePackBuilder.getInstance().deleteAllProfilePacks();
+      } catch (piiErr: any) {
+        console.warn('[IPC] trial:end-byok: profile OKF pack wipe failed:', piiErr?.message || piiErr);
+      }
+
       // 7. Notify all windows to refresh license + model state
       clearActiveModeOnLicenseLoss();
       BrowserWindow.getAllWindows().forEach((win) => {
@@ -4065,6 +4248,16 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
       } catch (dbErr: any) {
         console.warn('[IPC] trial:wipe-profile-data: SQLite wipe partial error:', dbErr.message);
+      }
+
+      // 2b. PII BACKSTOP (2026-07-02): also wipe the profile OKF packs (name/
+      //     companies/education) — the raw DELETE above does not cover the
+      //     knowledge_sources/packs/cards rows. See the trial:end-byok backstop.
+      try {
+        const { ProfilePackBuilder } = require('./services/knowledge/ProfilePackBuilder') as typeof import('./services/knowledge/ProfilePackBuilder');
+        ProfilePackBuilder.getInstance().deleteAllProfilePacks();
+      } catch (piiErr: any) {
+        console.warn('[IPC] trial:wipe-profile-data: profile OKF pack wipe failed:', piiErr?.message || piiErr);
       }
 
       return { success: true };
@@ -7184,6 +7377,102 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // OKF Profile Intelligence — Phase 3 (2026-07-02): export the candidate
+  // profile OKF Knowledge Pack as a real OKF v0.1 Markdown bundle. EXPLICIT user
+  // action ONLY (never automatic), premium-gated like every other profile:*
+  // handler, and behind okfProfileMarkdownExport. The bundle is written to a
+  // user-visible, timestamped folder under Downloads. OkfConformance runs BEFORE
+  // any file is written — a non-conformant bundle is refused, never shipped.
+  safeHandle('knowledge:export-profile-pack', async () => {
+    try {
+      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      const { isOkfProfileMarkdownExportEnabled } = require('./intelligence/intelligenceFlags') as typeof import('./intelligence/intelligenceFlags');
+      if (!isOkfProfileMarkdownExportEnabled()) return { success: false, error: 'export_flag_off' };
+
+      const { ProfilePackBuilder } = require('./services/knowledge/ProfilePackBuilder') as typeof import('./services/knowledge/ProfilePackBuilder');
+      const { exportProfileBundle } = require('./services/knowledge/ProfileMarkdownExporter') as typeof import('./services/knowledge/ProfileMarkdownExporter');
+      const { checkConformance } = require('./services/knowledge/OkfConformance') as typeof import('./services/knowledge/OkfConformance');
+      const { piTelemetry } = require('./llm/piTelemetry') as typeof import('./llm/piTelemetry');
+
+      piTelemetry.emit('pi_okf_profile_export_requested', {});
+      const builder = ProfilePackBuilder.getInstance();
+      const resumePack = builder.getProfilePack('resume');
+      const jdPack = builder.getProfilePack('jd');
+      if (!resumePack && !jdPack) return { success: false, error: 'no_profile_pack' };
+
+      const files = exportProfileBundle({ resumePack, jdPack, nowIso: new Date().toISOString() });
+      const conformance = checkConformance(files);
+      if (!conformance.conformant) {
+        console.warn('[IPC] knowledge:export-profile-pack: bundle NOT conformant, refusing to write', conformance.violations.slice(0, 5));
+        piTelemetry.emit('pi_okf_profile_export_completed', { conformant: false, fileCount: files.length });
+        return { success: false, error: 'not_conformant', violations: conformance.violations.slice(0, 10) };
+      }
+
+      const fsp = require('node:fs/promises');
+      const nodePath = require('node:path');
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const baseDir = nodePath.join(app.getPath('downloads'), `natively-profile-bundle-${stamp}`);
+      for (const file of files) {
+        const full = nodePath.join(baseDir, file.path);
+        await fsp.mkdir(nodePath.dirname(full), { recursive: true });
+        await fsp.writeFile(full, file.content, 'utf8');
+      }
+      try { await shell.openPath(baseDir); } catch { /* best effort — folder still written */ }
+      piTelemetry.emit('pi_okf_profile_export_completed', { conformant: true, fileCount: files.length });
+      return { success: true, path: baseDir, fileCount: files.length };
+    } catch (error: any) {
+      console.error('[IPC] knowledge:export-profile-pack error:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // OKF Profile Intelligence — Phase 5 (2026-07-02): read-only Knowledge Pack
+  // inspector data for the (flag-gated) UI. Premium + okfProfileKnowledgeUi
+  // gated. Returns pack summaries / a single pack's cards with evidence. No
+  // mutation — regenerate goes through the normal ingest path; export has its
+  // own handler above.
+  safeHandle('knowledge:list-profile-packs', async () => {
+    try {
+      if (!isProOrTrialActive()) return { success: false, error: 'pro_required', packs: [] };
+      const { isOkfProfileKnowledgeUiEnabled } = require('./intelligence/intelligenceFlags') as typeof import('./intelligence/intelligenceFlags');
+      if (!isOkfProfileKnowledgeUiEnabled()) return { success: false, error: 'ui_flag_off', packs: [] };
+      const { ProfilePackBuilder } = require('./services/knowledge/ProfilePackBuilder') as typeof import('./services/knowledge/ProfilePackBuilder');
+      const packs = ProfilePackBuilder.getInstance().getAllProfilePacks().map((p) => ({
+        id: p.id, fileName: p.fileName, cardCount: p.stats.cardCount, entityCount: p.stats.entityCount,
+        packVersion: p.packVersion, updatedAt: p.updatedAt,
+        cardsByType: p.cards.reduce((acc: Record<string, number>, c) => { acc[c.type] = (acc[c.type] || 0) + 1; return acc; }, {}),
+      }));
+      return { success: true, packs };
+    } catch (error: any) {
+      return { success: false, error: error.message, packs: [] };
+    }
+  });
+
+  safeHandle('knowledge:get-profile-pack', async (_, kind: string) => {
+    try {
+      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      const { isOkfProfileKnowledgeUiEnabled } = require('./intelligence/intelligenceFlags') as typeof import('./intelligence/intelligenceFlags');
+      if (!isOkfProfileKnowledgeUiEnabled()) return { success: false, error: 'ui_flag_off' };
+      const { ProfilePackBuilder } = require('./services/knowledge/ProfilePackBuilder') as typeof import('./services/knowledge/ProfilePackBuilder');
+      const wantKind = kind === 'jd' ? 'jd' : 'resume';
+      const pack = ProfilePackBuilder.getInstance().getProfilePack(wantKind);
+      if (!pack) return { success: false, error: 'no_pack' };
+      return {
+        success: true,
+        pack: {
+          id: pack.id, fileName: pack.fileName, packVersion: pack.packVersion, updatedAt: pack.updatedAt,
+          cards: pack.cards.map((c) => ({
+            id: c.id, type: c.type, title: c.title, conceptId: c.conceptId, body: c.body,
+            confidence: c.confidence, tags: c.tags, entities: c.entities,
+            sourceQuotes: c.sourceQuotes.map((q) => q.text), pii: c.pii === true,
+          })),
+        },
+      };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
   safeHandle('profile:research-company', async (_, companyName: string) => {
     try {
       // Premium gate
@@ -7472,6 +7761,74 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: false, error: e.message };
     }
   });
+
+  // AI-generated custom mode from a free-text brief. Turns a user description
+  // ("Senior Backend Eng interview — concise expert answers with tradeoffs")
+  // into a persisted custom mode via the real LLM (MiniMax through the backend),
+  // then saves it through the existing createMode + updateMode(customContext)
+  // path. If persist:false, returns the generated draft WITHOUT saving (used by
+  // the E2E harness to validate the generator in isolation).
+  safeHandle(
+    'modes:generate-from-brief',
+    async (
+      _,
+      params: {
+        brief: string;
+        requiresGrounding?: boolean;
+        templateHint?: string;
+        key?: string;
+        persist?: boolean;
+      },
+    ) => {
+      try {
+        if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+        if (!params?.brief || typeof params.brief !== 'string' || params.brief.trim().length < 8) {
+          return { success: false, error: 'brief_too_short' };
+        }
+        if (params.brief.length > 2000) {
+          return { success: false, error: 'brief_too_long' };
+        }
+        const { generateMode } = require('./services/ModeGenerator');
+        const llmHelper = appState.processingHelper?.getLLMHelper?.();
+        if (!llmHelper) return { success: false, error: 'llm_unavailable' };
+
+        // Injected LLM entry: raw system-prompt override, no active-mode injection,
+        // no knowledge-mode intercept — a clean generation call that routes through
+        // the backend cascade (MiniMax when NATIVELY_FORCE_PRIMARY_GEN=minimax).
+        const complete = async (system: string, user: string): Promise<string> => {
+          return await llmHelper.chat(user, undefined, undefined, system, true /* skipModeInjection */);
+        };
+
+        const brief = {
+          key: params.key || `brief_${Date.now()}`,
+          brief: params.brief.trim(),
+          requiresGrounding: params.requiresGrounding === true,
+          templateHint: params.templateHint as any,
+        };
+        const { draft, attempts, issues } = await generateMode(brief, complete);
+
+        if (params.persist === false) {
+          return { success: true, draft, attempts, issues, persisted: false };
+        }
+
+        const { ModesManager } = require('./services/ModesManager');
+        const mgr = ModesManager.getInstance();
+        const created = mgr.createMode({ name: draft.name, templateType: draft.templateType });
+        mgr.updateMode(created.id, { customContext: draft.customContext });
+        return {
+          success: true,
+          mode: { ...created, customContext: draft.customContext },
+          draft,
+          attempts,
+          issues,
+          persisted: true,
+        };
+      } catch (e: any) {
+        console.error('[IPC] modes:generate-from-brief error:', e);
+        return { success: false, error: e.message };
+      }
+    },
+  );
 
   safeHandle(
     'modes:update',
@@ -8662,4 +9019,271 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
     }
   });
+
+  // ============================================================
+  // E2E TEST HARNESS IPC (gated behind NATIVELY_E2E=1) ─────────
+  // ============================================================
+  // These handlers exist ONLY to let the Modes-Manager E2E harness drive the
+  // REAL pipeline without native side-channels that can't run headlessly:
+  //   - reference-file ingestion normally needs a native file dialog
+  //   - transcript normally arrives from the STT audio stack
+  //   - question detection + answering normally needs a live meeting
+  // They are registered ONLY when NATIVELY_E2E=1, so they never exist in a
+  // shipped app. Each still routes through the REAL ModesManager / real WTA
+  // pipeline (no stubbing of retrieval or generation).
+  if (process.env.NATIVELY_E2E === '1') {
+    console.warn('[E2E] NATIVELY_E2E=1 — registering test-only IPC handlers (must never ship enabled).');
+
+    // Content-based reference-file ingest (bypasses the native open dialog).
+    // Mirrors what modes:upload-reference-file does after parsing: hands raw
+    // text content to the REAL ModesManager.addReferenceFile (which indexes +
+    // builds OKF packs if enabled), so retrieval is exercised for real.
+    safeHandle('__e2e__:add-reference-file', async (
+      _,
+      params: { modeId: string; fileName: string; content: string; pageCount?: number },
+    ) => {
+      try {
+        const { ModesManager } = require('./services/ModesManager');
+        const file = ModesManager.getInstance().addReferenceFile({
+          modeId: params.modeId,
+          fileName: params.fileName,
+          content: params.content,
+          ...(typeof params.pageCount === 'number' ? { pageCount: params.pageCount, extractedPageCount: params.pageCount } : {}),
+        });
+        // Best-effort synchronous index so the first retrieval isn't cold.
+        try { await ModesManager.getInstance().indexReferenceFile?.(file); } catch (idxErr: any) {
+          console.warn('[E2E] indexReferenceFile failed (non-fatal):', idxErr?.message);
+        }
+        return { success: true, file };
+      } catch (e: any) {
+        console.error('[E2E] add-reference-file error:', e);
+        return { success: false, error: e.message };
+      }
+    });
+
+    // Prewarm a mode's reference index (embed all chunks) so retrieval is warm.
+    safeHandle('__e2e__:prewarm-mode', async (_, modeId: string) => {
+      try {
+        const { ModesManager } = require('./services/ModesManager');
+        await ModesManager.getInstance().prewarmModeReferenceIndex?.(modeId);
+        return { success: true };
+      } catch (e: any) {
+        return { success: false, error: e.message };
+      }
+    });
+
+    // Force the shared embedding pipeline ready + retry any lexical_only files so
+    // reference files get REAL vector embeddings (local MiniLM fallback when no
+    // cloud key). Without this, E2E modes index as lexical_only because the async
+    // embedder wasn't ready when the file was first indexed.
+    safeHandle('__e2e__:reindex-embeddings', async (_, modeId: string) => {
+      try {
+        const { ModesManager } = require('./services/ModesManager');
+        const mm = ModesManager.getInstance();
+        // Ensure the shared pipeline is wired (mirrors initializeRAGManager) and ready.
+        try {
+          const pipeline = appState.getRAGManager?.()?.getEmbeddingPipeline?.();
+          if (pipeline) {
+            mm.setSharedEmbeddingPipeline(pipeline);
+            await pipeline.waitForReady?.(20000);
+          }
+        } catch (pErr: any) { console.warn('[E2E] embedding pipeline wire failed:', pErr?.message); }
+        await mm.retryAllLexicalOnlyFiles?.();
+        await mm.prewarmModeReferenceIndex?.(modeId).catch(() => {});
+        return { success: true, statuses: mm.getReferenceFileIndexStatuses?.(modeId) ?? [] };
+      } catch (e: any) {
+        return { success: false, error: e.message };
+      }
+    });
+
+    // Inspect index status + a raw retrieval for a query — diagnostics only.
+    safeHandle('__e2e__:index-status', async (_, modeId: string) => {
+      try {
+        const { ModesManager } = require('./services/ModesManager');
+        return { success: true, statuses: ModesManager.getInstance().getReferenceFileIndexStatuses?.(modeId) ?? [] };
+      } catch (e: any) {
+        return { success: false, error: e.message };
+      }
+    });
+
+    // Run the REAL active-mode retrieval for a query and return the context block
+    // + top score, so the harness can verify the right chunks are retrieved.
+    safeHandle('__e2e__:inspect-retrieval', async (
+      _,
+      params: { modeId: string; query: string; forceDocumentGrounding?: boolean },
+    ) => {
+      try {
+        const { ModesManager } = require('./services/ModesManager');
+        const mm = ModesManager.getInstance();
+        const block = await mm.buildRetrievedActiveModeContextBlockHybrid(
+          params.query,
+          undefined,
+          3600,
+          undefined,
+          false,
+          params.modeId,
+          true,
+          { forceDocumentGrounding: params.forceDocumentGrounding === true },
+        );
+        return { success: true, block: block || '', retrievalConfidence: mm.getLastRetrievalConfidence?.() ?? null, blockLength: (block || '').length };
+      } catch (e: any) {
+        return { success: false, error: e.message };
+      }
+    });
+
+    // Apply the REAL question-detection gate (mirrors IntelligenceEngine.maybeSpeculate:
+    // words>=7 AND confidence>=0.75 AND hasQuestionSignal). Returns whether the
+    // speculative WTA trigger WOULD fire for this segment — used to test detection
+    // PRECISION (questions fire, statements don't) without spinning the LLM.
+    safeHandle('__e2e__:detect-question', async (
+      _,
+      seg: { text: string; confidence?: number },
+    ) => {
+      try {
+        const SPECULATIVE_MIN_WORDS = 7;
+        const SPECULATIVE_MIN_CONFIDENCE = 0.75;
+        const text = String(seg.text || '');
+        const confidence = typeof seg.confidence === 'number' ? seg.confidence : 0.9;
+        const words = text.trim().split(/\s+/).filter(Boolean);
+        const hasSignal = text.trimEnd().endsWith('?') ||
+          /\b(what|how|why|where|when|which|who|can you|could you|tell me|explain|describe|walk me through|talk me through)\b/i.test(text);
+        const wouldFire = confidence >= SPECULATIVE_MIN_CONFIDENCE && words.length >= SPECULATIVE_MIN_WORDS && hasSignal;
+        return { success: true, wouldFire, words: words.length, hasSignal, confidence };
+      } catch (e: any) {
+        return { success: false, error: e.message };
+      }
+    });
+
+    // Inject a transcript segment at the REAL intelligence seam (exactly the
+    // shape main.ts forwards from STT). Used to test question DETECTION: inject
+    // statements + questions and observe whether the speculative trigger fires.
+    safeHandle('__e2e__:inject-transcript', async (
+      _,
+      seg: { speaker: string; text: string; final?: boolean; confidence?: number },
+    ) => {
+      try {
+        appState.getIntelligenceManager().handleTranscript({
+          speaker: seg.speaker,
+          text: seg.text,
+          timestamp: Date.now(),
+          final: seg.final !== false,
+          confidence: typeof seg.confidence === 'number' ? seg.confidence : 0.9,
+        } as any);
+        return { success: true };
+      } catch (e: any) {
+        console.error('[E2E] inject-transcript error:', e);
+        return { success: false, error: e.message };
+      }
+    });
+
+    // Fire the REAL What-To-Answer pipeline for a given interviewer question and
+    // resolve with the full answer. This drives runWhatShouldISay end-to-end
+    // (retrieval + mode prompt + MiniMax generation) and captures the answer via
+    // the same suggested_answer event the renderer consumes — so the harness can
+    // assert at the renderer boundary AND get a return value.
+    safeHandle('__e2e__:ask', async (
+      _,
+      params: { question: string; context?: string; timeoutMs?: number; injectAsTranscript?: boolean; priorTurns?: Array<{ speaker: string; text: string }> },
+    ) => {
+      const im = appState.getIntelligenceManager();
+      const timeoutMs = params.timeoutMs ?? 60_000;
+      // Per-question isolation: clear engine + session state before each independent
+      // ask so a prior question's speculative-answer cache / accumulated transcript
+      // can't leak into this one (handleSuggestionTrigger reuses speculativeText by
+      // Jaccard similarity, and similarly-worded questions in a session would
+      // otherwise reuse a stale/empty prior result). Follow-ups pass priorTurns to
+      // rebuild just their parent's context after the reset.
+      try { im.reset?.(); } catch { /* non-fatal */ }
+      // Build REAL session state: replay any prior turns, then the interviewer's
+      // question as a finalized transcript segment — exactly as the STT path would.
+      // This gives runWhatShouldISay a real transcript so extractLatestQuestion +
+      // retrieval operate on genuine conversation state (not a bare trigger, which
+      // makes the model greet instead of answer).
+      if (params.injectAsTranscript !== false) {
+        for (const t of params.priorTurns ?? []) {
+          im.addTranscript({ speaker: t.speaker, text: t.text, timestamp: Date.now(), final: true, confidence: 0.95 } as any, true);
+        }
+        im.addTranscript({ speaker: 'interviewer', text: params.question, timestamp: Date.now(), final: true, confidence: 0.95 } as any, true);
+      }
+      const builtContext = params.context ?? im.getFormattedContext(180);
+      return await new Promise((resolve) => {
+        let settled = false;
+        let tokens = '';
+        // Prefer the TERMINAL answer: a speculative/early emission may precede the
+        // real one. We debounce — on each suggested_answer we (re)arm a short timer
+        // and only resolve once no newer answer arrives, so a superseding real
+        // answer wins over an early speculative greeting.
+        let latest: { answer: string; question: string; confidence: number } | null = null;
+        let settleTimer: NodeJS.Timeout | null = null;
+        const finalize = () => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          if (latest) resolve({ success: true, answer: latest.answer, question: latest.question, confidence: latest.confidence, streamedTokens: tokens });
+          else resolve({ success: false, timedOut: true, streamedTokens: tokens });
+        };
+        const onToken = (token: string) => { tokens += token; };
+        const onAnswer = (answer: string, question: string, confidence: number) => {
+          if (settled) return;
+          latest = { answer, question, confidence };
+          if (settleTimer) clearTimeout(settleTimer);
+          // Wait 1200ms for a superseding answer; if none, this is terminal.
+          settleTimer = setTimeout(finalize, 1200);
+        };
+        const onDiscard = (reason: string) => {
+          if (settled) return;
+          // A discard of an EARLIER answer may be followed by the real one; only
+          // treat as failure if we have no answer yet AND none arrives soon.
+          if (!latest) {
+            if (settleTimer) clearTimeout(settleTimer);
+            settleTimer = setTimeout(() => {
+              if (settled) return;
+              settled = true;
+              cleanup();
+              resolve({ success: false, discarded: true, reason, streamedTokens: tokens });
+            }, 1500);
+          }
+        };
+        const cleanup = () => {
+          try { im.off?.('suggested_answer', onAnswer as any); } catch {}
+          try { im.off?.('suggested_answer_token', onToken as any); } catch {}
+          try { im.off?.('suggested_answer_discard', onDiscard as any); } catch {}
+          if (settleTimer) clearTimeout(settleTimer);
+          clearTimeout(timer);
+        };
+        const timer = setTimeout(finalize, timeoutMs);
+        im.on?.('suggested_answer', onAnswer as any);
+        im.on?.('suggested_answer_token', onToken as any);
+        im.on?.('suggested_answer_discard', onDiscard as any);
+        // Drive the real pipeline. handleSuggestionTrigger → runWhatShouldISay.
+        Promise.resolve(
+          im.handleSuggestionTrigger({
+            context: builtContext,
+            lastQuestion: params.question,
+            confidence: 0.9,
+          }),
+        ).catch((err: any) => {
+          if (settled || latest) return;
+          settled = true;
+          cleanup();
+          resolve({ success: false, error: err?.message || 'trigger failed', streamedTokens: tokens });
+        });
+      });
+    });
+
+    // Force pro-active state for E2E (modes:* handlers are pro-gated). Uses the
+    // real CredentialsManager trial token so the real isProOrTrialActive() passes.
+    safeHandle('__e2e__:enable-pro', async () => {
+      try {
+        const { CredentialsManager } = require('./services/CredentialsManager');
+        const cm = CredentialsManager.getInstance();
+        const now = new Date();
+        const future = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+        cm.setTrialToken('e2e-trial-token', future, now.toISOString());
+        return { success: true, pro: isProOrTrialActive() };
+      } catch (e: any) {
+        return { success: false, error: e.message };
+      }
+    });
+  }
 }

@@ -63,6 +63,9 @@ function rowToCard(row: any): KnowledgeCard {
     approvalStatus: row.approval_status,
     updatedAt: row.updated_at,
     cardVersion: row.card_version,
+    // OKF Profile Intelligence (2026-07-02): pii column added in migration v23.
+    // Coalesce so a row read before the column existed (or a NULL) is false.
+    pii: Boolean(row.pii),
   };
 }
 
@@ -180,6 +183,7 @@ export class KnowledgePackStore {
       entitiesJson: JSON.stringify(c.entities), tagsJson: JSON.stringify(c.tags),
       relatedCardIdsJson: JSON.stringify(c.relatedCardIds), confidence: c.confidence,
       generatedFrom: c.generatedFrom, sourceChecksum: c.sourceChecksum, cardVersion: c.cardVersion,
+      pii: c.pii === true,
     })), currentSourceChecksum ?? pack.cards[0]?.sourceChecksum);
     this.db.replaceKnowledgeEntities(pack.id, pack.entities.map((e) => ({
       id: e.id, slug: e.slug, name: e.name, type: e.type, aliasesJson: JSON.stringify(e.aliases),

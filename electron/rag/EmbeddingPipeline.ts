@@ -79,9 +79,12 @@ export class EmbeddingPipeline {
     private _isConfigImprovement(prev: AppAPIConfig, next: AppAPIConfig): boolean {
         const hasNew = (prevVal: string | undefined, nextVal: string | undefined) =>
             !prevVal && !!nextVal;
+        // A larger Gemini key pool is also an improvement (more rotation headroom).
+        const poolGrew = (next.geminiKeys?.length || 0) > (prev.geminiKeys?.length || 0);
         return (
             hasNew(prev.openaiKey, next.openaiKey) ||
             hasNew(prev.geminiKey, next.geminiKey) ||
+            poolGrew ||
             hasNew(prev.ollamaUrl, next.ollamaUrl)
         );
     }

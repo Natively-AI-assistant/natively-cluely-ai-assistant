@@ -1198,6 +1198,16 @@ export class AppState {
         const cm = CredentialsManager.getInstance();
         const openaiKey = cm.getOpenaiApiKey() || process.env.OPENAI_API_KEY;
         const geminiKey = cm.getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+        // Gemini embedding key POOL: credential key + all GEMINI_API_KEY(_2.._6)/GOOGLE
+        // env keys, de-duped. Lets the embedding provider rotate off a rate-limited
+        // key (429 → per-key cooldown → next key) instead of failing the index.
+        const geminiKeys = (() => {
+          const pool: string[] = [];
+          const add = (k?: string) => { const v = (k || '').trim(); if (v && !pool.includes(v)) pool.push(v); };
+          add(cm.getGeminiApiKey());
+          for (const n of ['GEMINI_API_KEY', 'GEMINI_API_KEY_2', 'GEMINI_API_KEY_3', 'GEMINI_API_KEY_4', 'GEMINI_API_KEY_5', 'GEMINI_API_KEY_6', 'GOOGLE_API_KEY']) add(process.env[n]);
+          return pool;
+        })();
 
         const providerDataScopes = (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })();
         this.ragManager = new RAGManager({
@@ -1206,6 +1216,7 @@ export class AppState {
             extPath: db.getExtPath(),
             openaiKey,
             geminiKey,
+            geminiKeys,
             ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
             providerDataScopes
         });

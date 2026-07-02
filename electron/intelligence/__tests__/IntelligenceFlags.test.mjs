@@ -21,6 +21,12 @@ const ENV_KEYS = [
   'NATIVELY_GLOBAL_SEARCH_V2', 'NATIVELY_IN_MEETING_SEARCH_V2', 'NATIVELY_CONVERSATION_MEMORY_V2',
   'NATIVELY_LECTURE_INTELLIGENCE_V2', 'NATIVELY_DIAGRAM_INTELLIGENCE', 'NATIVELY_HINDSIGHT_MEMORY',
   'NATIVELY_HINDSIGHT_LIVE_RECALL', 'NATIVELY_HINDSIGHT_POST_MEETING_RETAIN',
+  'NATIVELY_RAG_CONFIDENCE_GATE', 'NATIVELY_RAG_LOCAL_RERANK', 'NATIVELY_RAG_RRF_FUSION', 'NATIVELY_RAG_SPECULATIVE_RERANK',
+  'NATIVELY_OKF_KNOWLEDGE_PACKS', 'NATIVELY_OKF_MARKDOWN_EXPORT', 'NATIVELY_OKF_HYBRID_RETRIEVAL',
+  'NATIVELY_OKF_GRAPH_EXPANSION', 'NATIVELY_OKF_KNOWLEDGE_UI', 'NATIVELY_OKF_USER_EDITABLE_CARDS',
+  'NATIVELY_OKF_PROFILE_PACKS', 'NATIVELY_OKF_PROFILE_HYBRID_RETRIEVAL', 'NATIVELY_OKF_PROFILE_MARKDOWN_EXPORT',
+  'NATIVELY_OKF_PROFILE_GRAPH_EXPANSION', 'NATIVELY_OKF_PROFILE_KNOWLEDGE_UI',
+  'NATIVELY_DOC_GROUNDED_STRICT_ISOLATION', 'NATIVELY_DOC_GROUNDED_FALSE_REFUSAL_REPAIR',
 ];
 
 // The full flag set — Meeting Notes V3 product flags intentionally ship default ON;
@@ -33,6 +39,11 @@ const ALL_FLAG_KEYS = [
   'globalSearchV2', 'inMeetingSearchV2', 'conversationMemoryV2', 'lectureIntelligenceV2', 'diagramIntelligence',
   'hindsightMemory', 'hindsightLiveRecall', 'hindsightPostMeetingRetain',
   'ragConfidenceGate', 'ragLocalRerank', 'ragRrfFusion', 'ragSpeculativeRerank',
+  'okfKnowledgePacks', 'okfMarkdownExport', 'okfHybridRetrieval', 'okfGraphExpansion',
+  'okfKnowledgeUi', 'okfUserEditableCards',
+  'okfProfilePacks', 'okfProfileHybridRetrieval', 'okfProfileMarkdownExport',
+  'okfProfileGraphExpansion', 'okfProfileKnowledgeUi',
+  'docGroundedStrictIsolation', 'docGroundedFalseRefusalRepair',
 ];
 
 const DEFAULT_ON_KEYS = new Set([
@@ -41,6 +52,10 @@ const DEFAULT_ON_KEYS = new Set([
   'followUpDraftV2',
   'speakerLabelsV1',
   'meetingSummaryLlmPolish',
+  // Safety isolation gates default ON. okf*/okfProfile* dev/test-default flags
+  // resolve to isInternalDevTestContext() = FALSE under this bare node harness.
+  'docGroundedStrictIsolation',
+  'docGroundedFalseRefusalRepair',
 ]);
 
 const expectedDefault = (key) => DEFAULT_ON_KEYS.has(key) ? true : false;

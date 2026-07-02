@@ -631,6 +631,10 @@ export class LLMHelper {
   }
 
   private hasNatively(): boolean {
+    // E2E: a locally-run backend with NATIVELY_LOCAL_TEST_AUTH accepts the app
+    // via the x-natively-local-test header, so the natively provider is usable
+    // even without a stored key. Strictly gated behind NATIVELY_E2E=1.
+    if (process.env.NATIVELY_E2E === '1' && process.env.NATIVELY_E2E_LOCAL_TEST_TOKEN) return true;
     return !!this.nativelyKey;
   }
 
@@ -2511,12 +2515,14 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     this.assertOutboundScopes('natively', userMessage, imagePaths);
     // Prefer the in-memory field; fall back to CredentialsManager for the direct-routing path
     // where currentModelId === 'natively' but setNativelyKey() wasn't called yet.
+    const e2eLocalToken =
+      process.env.NATIVELY_E2E === '1' ? (process.env.NATIVELY_E2E_LOCAL_TEST_TOKEN || '') : '';
     let nativelyKey = this.nativelyKey;
     if (!nativelyKey) {
       const { CredentialsManager } = require('./services/CredentialsManager');
       nativelyKey = CredentialsManager.getInstance().getNativelyApiKey() || null;
     }
-    if (!nativelyKey) throw new Error('Natively API key not set');
+    if (!nativelyKey && !e2eLocalToken) throw new Error('Natively API key not set');
 
     const endpointUrl = `${NATIVELY_API_URL}/v1/chat`;
     const requestId = makeRequestId('nat_json');
@@ -2524,7 +2530,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     // When the key is the trial sentinel, authenticate with the real trial token
     // instead — the server validates x-trial-token, not __trial__ as an API key.
     const headers: any = { 'Content-Type': 'application/json', 'X-Request-Id': requestId };
-    if (nativelyKey === TRIAL_SENTINEL_KEY) {
+    if (e2eLocalToken) {
+      headers['x-natively-local-test'] = e2eLocalToken;
+    } else if (nativelyKey === TRIAL_SENTINEL_KEY) {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const trialToken = CredentialsManager.getInstance().getTrialToken();
       if (!trialToken) throw new Error('Trial token not found');
@@ -4785,12 +4793,18 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     // the full response), then drip-fed words with setTimeout delays — pure theater.
     // This version opens a streaming fetch and yields tokens as the server generates
     // them, cutting time-to-first-token from ~3s to ~80ms.
+    // E2E: when driving a locally-run backend with NATIVELY_LOCAL_TEST_AUTH=1, the
+    // app authenticates via the local-test header instead of a real key/trial. Only
+    // active when NATIVELY_E2E=1 AND the token env is set, so it can never affect a
+    // shipped app or a normal run.
+    const e2eLocalToken =
+      process.env.NATIVELY_E2E === '1' ? (process.env.NATIVELY_E2E_LOCAL_TEST_TOKEN || '') : '';
     let nativelyKey = this.nativelyKey;
     if (!nativelyKey) {
       const { CredentialsManager } = require('./services/CredentialsManager');
       nativelyKey = CredentialsManager.getInstance().getNativelyApiKey() || null;
     }
-    if (!nativelyKey) throw new Error('Natively API key not set');
+    if (!nativelyKey && !e2eLocalToken) throw new Error('Natively API key not set');
 
     const body: Record<string, unknown> = {
       messages: [{ role: 'user', content: userContent }],
@@ -4848,7 +4862,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       'Accept': 'text/event-stream',
       'X-Request-Id': requestId,
     };
-    if (nativelyKey === TRIAL_SENTINEL_KEY) {
+    if (e2eLocalToken) {
+      streamHeaders['x-natively-local-test'] = e2eLocalToken;
+    } else if (nativelyKey === TRIAL_SENTINEL_KEY) {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const trialToken = CredentialsManager.getInstance().getTrialToken();
       if (!trialToken) throw new Error('Trial token not found');

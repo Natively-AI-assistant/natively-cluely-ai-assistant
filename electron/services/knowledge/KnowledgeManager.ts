@@ -17,6 +17,7 @@ import { extractGraphRelations } from './GraphExtractor';
 import { DatabaseManager } from '../../db/DatabaseManager';
 import { KnowledgePackStore } from './KnowledgePackStore';
 import { getCachedPack, setCachedPack, invalidatePackCache } from './KnowledgeCache';
+import { PROFILE_OKF_MODE_ID } from './ProfilePackBuilder';
 import type { KnowledgePack, KnowledgeSource } from './types';
 
 function sha256(text: string): string {
@@ -232,6 +233,13 @@ export class KnowledgeManager {
   }
 
   getPacksForMode(modeId: string): KnowledgePack[] {
+    // OKF Profile Intelligence (2026-07-02): the document KnowledgeManager path
+    // (retrieval + the knowledge:list-packs UI channel) must NEVER surface
+    // profile OKF packs. Those hang off the reserved '__profile_okf__' mode
+    // (migration v23); refuse it here so no caller passing the reserved id — even
+    // an ungated UI handler — can read profile pack metadata through the document
+    // channel. Profile packs are reached only via ProfilePackBuilder.
+    if (modeId === PROFILE_OKF_MODE_ID) return [];
     return this.store.getPacksByModeId(modeId);
   }
 

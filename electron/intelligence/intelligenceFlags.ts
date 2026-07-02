@@ -111,6 +111,26 @@ export type IntelligenceFlagKey =
   // Allow users to edit/approve/reject generated cards (Phase 6). Default OFF
   // until the edit/approval flow ships.
   | 'okfUserEditableCards'
+  // ── OKF Profile Intelligence upgrade (2026-07-02 autopilot build) ────────
+  // Generate an OKF-compatible Knowledge Pack (candidate profile + target job +
+  // AOT interview artifacts) from the structured resume/JD on ingest — layered
+  // ON TOP of (never replacing) the deterministic fast path, structured-JSON
+  // grounding, and context_nodes vector store. PROFILE packs are PII and obey
+  // profileContextPolicy; they are FORBIDDEN in document-grounded custom modes.
+  // Default ON in dev/test so the 18-question benchmark exercises the real
+  // path; configurable (default OFF) in production until validated.
+  | 'okfProfilePacks'
+  // Use profile OKF cards (in addition to context_nodes) in answer evidence.
+  // Fail-closed: contributes nothing without an explicit AnswerPlan/route that
+  // allows profile context. Default ON in dev/test, guarded (OFF) in production.
+  | 'okfProfileHybridRetrieval'
+  // Allow a profile Knowledge Pack to be exported as an OKF v0.1 Markdown
+  // bundle (explicit user action only). Default ON in dev/test.
+  | 'okfProfileMarkdownExport'
+  // Typed relation graph derived from profile cards (Phase 4). Default OFF.
+  | 'okfProfileGraphExpansion'
+  // Profile Knowledge Pack inspector UI (Phase 5). Default OFF until UI ships.
+  | 'okfProfileKnowledgeUi'
   // Document-grounded custom modes must NEVER let Hindsight/profile/general
   // knowledge override uploaded document evidence. Default ON everywhere —
   // this is a safety isolation gate, not an experimental feature.
@@ -200,6 +220,15 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   okfGraphExpansion: { env: 'NATIVELY_OKF_GRAPH_EXPANSION', setting: 'okfGraphExpansionEnabled', default: false },
   okfKnowledgeUi: { env: 'NATIVELY_OKF_KNOWLEDGE_UI', setting: 'okfKnowledgeUiEnabled', default: false },
   okfUserEditableCards: { env: 'NATIVELY_OKF_USER_EDITABLE_CARDS', setting: 'okfUserEditableCardsEnabled', default: false },
+  // OKF Profile Intelligence — default ON in dev/test/benchmark contexts so the
+  // 18-question profile benchmark + test suite exercise the real path; default
+  // OFF in production until validated end-to-end. Graph/UI stay OFF everywhere
+  // until their phases ship.
+  okfProfilePacks: { env: 'NATIVELY_OKF_PROFILE_PACKS', setting: 'okfProfilePacksEnabled', default: isInternalDevTestContext() },
+  okfProfileHybridRetrieval: { env: 'NATIVELY_OKF_PROFILE_HYBRID_RETRIEVAL', setting: 'okfProfileHybridRetrievalEnabled', default: isInternalDevTestContext() },
+  okfProfileMarkdownExport: { env: 'NATIVELY_OKF_PROFILE_MARKDOWN_EXPORT', setting: 'okfProfileMarkdownExportEnabled', default: isInternalDevTestContext() },
+  okfProfileGraphExpansion: { env: 'NATIVELY_OKF_PROFILE_GRAPH_EXPANSION', setting: 'okfProfileGraphExpansionEnabled', default: false },
+  okfProfileKnowledgeUi: { env: 'NATIVELY_OKF_PROFILE_KNOWLEDGE_UI', setting: 'okfProfileKnowledgeUiEnabled', default: false },
   // Safety isolation gates — ON everywhere by default.
   docGroundedStrictIsolation: { env: 'NATIVELY_DOC_GROUNDED_STRICT_ISOLATION', setting: 'docGroundedStrictIsolationEnabled', default: true },
   docGroundedFalseRefusalRepair: { env: 'NATIVELY_DOC_GROUNDED_FALSE_REFUSAL_REPAIR', setting: 'docGroundedFalseRefusalRepairEnabled', default: true },
@@ -344,6 +373,26 @@ export const isOkfKnowledgeUiEnabled = (): boolean =>
 /** True when users may edit/approve/reject generated Knowledge Cards (Phase 6). */
 export const isOkfUserEditableCardsEnabled = (): boolean =>
   isIntelligenceFlagEnabled('okfUserEditableCards');
+
+/** True when a profile OKF Knowledge Pack should be generated on resume/JD ingest. */
+export const isOkfProfilePacksEnabled = (): boolean =>
+  isIntelligenceFlagEnabled('okfProfilePacks');
+
+/** True when profile OKF cards may contribute to answer evidence (still fail-closed on route/policy). */
+export const isOkfProfileHybridRetrievalEnabled = (): boolean =>
+  isIntelligenceFlagEnabled('okfProfileHybridRetrieval');
+
+/** True when a profile Knowledge Pack may be exported as an OKF v0.1 Markdown bundle. */
+export const isOkfProfileMarkdownExportEnabled = (): boolean =>
+  isIntelligenceFlagEnabled('okfProfileMarkdownExport');
+
+/** True when the profile entity/relation graph layer may expand retrieval (Phase 4). */
+export const isOkfProfileGraphExpansionEnabled = (): boolean =>
+  isIntelligenceFlagEnabled('okfProfileGraphExpansion');
+
+/** True when the profile Knowledge Pack inspector UI is shown (Phase 5). */
+export const isOkfProfileKnowledgeUiEnabled = (): boolean =>
+  isIntelligenceFlagEnabled('okfProfileKnowledgeUi');
 
 /**
  * True when document-grounded custom modes must positively isolate retrieval

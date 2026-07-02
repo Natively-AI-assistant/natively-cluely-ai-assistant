@@ -26,10 +26,63 @@ const formatDuration = (ms: number) => {
     return `${minutes}:${Number(seconds) < 10 ? '0' : ''}${seconds}`;
 };
 
+// Some stored answers arrive with their list newlines collapsed to spaces, so a
+// bullet list becomes a run-on line ("- a. - b - c"). remark then parses that as
+// ONE list item with literal inline dashes. Re-break mid-line bullet markers onto
+// their own lines so the list renders. Heavily gated to avoid corrupting prose:
+// only fires when the text actually looks like a flattened list, protects code,
+// and never splits number ranges ("3 - 1") or hyphenated words ("state-of-art").
+const reflowFlattenedList = (text: string): string => {
+    // Detect a list whose newlines were collapsed to spaces upstream, e.g.
+    // "Here's the plan: - Build it. - Test it." or "Steps: 1. Do x. 2. Do y.".
+    // remark then parses that run-on as a single paragraph / single list item.
+    // We re-break the inline markers onto their own lines so it renders as a list.
+    //
+    // Gating (to avoid corrupting prose): require at least TWO inline markers of
+    // the same kind. Bullets must be space-surrounded with a non-digit neighbour
+    // (so "3 - 1" ranges and "state-of-art" are untouched); numbered items match
+    // " N. Capital" runs (so "version 2. x" mid-sentence is unlikely to trip).
+    const bulletRun = /(^|\s)[-*\u2022]\s+(?=[^\d\s])/g;
+    const numberRun = /(^|\s)\d{1,2}[.)]\s+(?=[A-Z(`])/g;
+    const bulletCount = (text.match(bulletRun) || []).length;
+    const numberCount = (text.match(numberRun) || []).length;
+    const looksBullet = bulletCount >= 2;
+    const looksNumber = numberCount >= 2;
+    if (!looksBullet && !looksNumber) return text;
+    // If it already has real newlines separating most markers, leave it alone.
+    if (/\n\s*(?:[-*\u2022]|\d{1,2}[.)])\s+/.test(text) && !/\S[ \t]+(?:[-*\u2022]|\d{1,2}[.)])[ \t]+/.test(text)) {
+        return text;
+    }
+
+    // Protect fenced + inline code so a marker inside code is never broken.
+    const stash: string[] = [];
+    const put = (m: string): string => {
+        stash.push(m);
+        return '\u0001' + (stash.length - 1) + '\u0001';
+    };
+    let out = text
+        .replace(/```[\s\S]*?```/g, put)
+        .replace(/`[^`]*`/g, put);
+
+    if (looksBullet) {
+        // Break " <char> <marker> <non-digit>" onto a new bullet line.
+        out = out.replace(/([^\d\s])[ \t]+([-*\u2022])[ \t]+(?=[^\d\s])/g, '$1\n$2 ');
+    }
+    if (looksNumber) {
+        // Break " N. Capital" onto a new numbered line (keep the number).
+        out = out.replace(/([^\s])[ \t]+(\d{1,2}[.)])[ \t]+(?=[A-Z(\u0001])/g, '$1\n$2 ');
+    }
+
+    // Restore code.
+    return out.replace(/\u0001(\d+)\u0001/g, (_m, i) => stash[Number(i)] || '');
+};
+
 const cleanMarkdown = (content: string) => {
     if (!content) return '';
     // Ensure code blocks are on new lines to fix rendering issues
-    return content.replace(/([^\n])```/g, '$1\n\n```');
+    const withCodeBreaks = content.replace(/([^\n])```/g, '$1\n\n```');
+    // Repair lists whose newlines were collapsed to spaces upstream.
+    return reflowFlattenedList(withCodeBreaks);
 };
 
 // ── Coding template renderer ──────────────────────────────────────────────────
@@ -69,6 +122,12 @@ const MOUNT_CHILD_REDUCED = {
     show:   { opacity: 1, transition: { duration: 0.2 } },
 };
 
+// This section is HISTORY — read-mostly, viewed repeatedly. Animation earns its
+// place only the FIRST time a given Q&A is seen this session; on every later view
+// it renders instantly. This module-scope set persists across tab unmount/remount
+// within the session, which is exactly the lifetime we want.
+const seenInteractionIds = new Set<string>();
+
 // Pull the first sentence from the approach so we can lead with a one-line thesis
 // and tuck the full reasoning into a pill. Avoids cutting on common false
 // terminators — decimals (3.4x), abbreviations (e.g., i.e., etc.), and single
@@ -103,11 +162,27 @@ function extractComplexity(body: string): string | null {
     const time  = /time[^\n]*?(O\([^)]*\))/i.exec(body)?.[1];
     const space = /space[^\n]*?(O\([^)]*\))/i.exec(body)?.[1];
     if (time || space) {
-        return [time && `${time} time`, space && `${space} space`].filter(Boolean).join('  ·  ');
+        return [time && `${time} time`, space && `${space} space`].filter(Boolean).join(' · ');
     }
     const bare = body.match(/O\([^)]*\)/g);
-    return bare && bare.length ? Array.from(new Set(bare)).slice(0, 2).join('  ·  ') : null;
+    return bare && bare.length ? Array.from(new Set(bare)).slice(0, 2).join(' · ') : null;
 }
+
+// Render a complexity string with real superscripts: "O(N^2 2^N)" → O(N²2ᴺ) via
+// <sup>, plus the middot separator styled down. The exponent after ^ is the run
+// of alphanumerics that follows (e.g. 2, N, log).
+const renderComplexity = (text: string): React.ReactNode => {
+    const parts = text.split(/(\^[A-Za-z0-9]+|·)/g);
+    return parts.map((part, i) => {
+        if (part === '·') {
+            return <span key={i} className="mx-1 text-white/25">·</span>;
+        }
+        if (part.startsWith('^')) {
+            return <sup key={i} className="text-[0.7em] font-semibold">{part.slice(1)}</sup>;
+        }
+        return <React.Fragment key={i}>{part}</React.Fragment>;
+    });
+};
 
 // Pull out the fenced code from the "Code" section, but ONLY take the single-hero
 // fast-path (custom header + technique chip) when the body is EXACTLY one fenced
@@ -169,6 +244,51 @@ const CopyButton: React.FC<{ text: string }> = ({ text }) => {
                     </motion.span>
                 )}
             </AnimatePresence>
+        </button>
+    );
+};
+
+// Strip markdown to plain text for the "copy whole answer" action — drops
+// heading hashes, list bullets, emphasis, and code fences but keeps the words and
+// code body, so what lands on the clipboard reads like the rendered answer.
+function markdownToPlainText(md: string): string {
+    return md
+        .replace(/```[\w+#-]*\n?/g, '')      // fence openers
+        .replace(/```/g, '')                  // fence closers
+        .replace(/^#{1,6}\s+/gm, '')          // heading hashes
+        .replace(/^\s*[-*+]\s+/gm, '• ')      // list bullets
+        .replace(/^\s*\d+\.\s+/gm, (m) => m.trim() + ' ')
+        .replace(/\*\*([^*]+)\*\*/g, '$1')    // bold
+        .replace(/\*([^*]+)\*/g, '$1')        // italic
+        .replace(/`([^`]+)`/g, '$1')          // inline code
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
+// Text button used in the answer-level hover action bar (copy whole answer).
+// Same copy→check feedback as CopyButton but with a visible label.
+const AnswerCopyButton: React.FC<{ text: string }> = ({ text }) => {
+    const [copied, setCopied] = useState(false);
+    const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+    const handle = () => {
+        const p = navigator.clipboard?.writeText(text);
+        if (!p) return;
+        p.then(() => {
+            setCopied(true);
+            if (timer.current) clearTimeout(timer.current);
+            timer.current = setTimeout(() => setCopied(false), 2000);
+        }).catch(() => {});
+    };
+    return (
+        <button
+            type="button"
+            onClick={handle}
+            aria-label={copied ? 'Copied answer' : 'Copy answer'}
+            className="inline-flex items-center gap-1 h-6 px-1.5 rounded-md cursor-default select-none text-[11px] font-medium text-text-tertiary hover:text-text-secondary hover:bg-white/[0.05] transition-[color,background-color,transform] duration-[120ms] ease-out active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/25"
+        >
+            {copied ? <Check className="w-3 h-3 text-emerald-400" strokeWidth={2.5} /> : <Copy className="w-3 h-3" strokeWidth={2} />}
+            <span>{copied ? 'Copied' : 'Copy'}</span>
         </button>
     );
 };
@@ -240,24 +360,46 @@ const mdComponents = {
 
 // Bespoke code hero: custom header (language label · technique chip · copy button),
 // inner top-edge highlight instead of a drop shadow, line numbers only past 8 lines.
+// FIXED WIDTH: the card is always w-full and never grows with content — a long
+// unbreakable code line scrolls INSIDE the min-w-0 scroll container rather than
+// stretching the card (a flex/grid child's default min-width:auto would otherwise
+// let the <pre> push the whole answer column wider).
 const CodeHero: React.FC<{ lang: string; code: string; technique?: string }> = ({ lang, code, technique }) => {
     const resolved = mapLanguageForPrism(lang, code);
     const lineCount = code.split('\n').length;
+    // Right-edge fade only while there's more code to scroll to — hints "more →"
+    // without a hard cut; absent when the block fits.
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const [overflowRight, setOverflowRight] = useState(false);
+    useEffect(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+        const update = () => setOverflowRight(el.scrollWidth - el.clientWidth - el.scrollLeft > 1);
+        update();
+        el.addEventListener('scroll', update, { passive: true });
+        const ro = new ResizeObserver(update);
+        ro.observe(el);
+        return () => { el.removeEventListener('scroll', update); ro.disconnect(); };
+    }, [code]);
     return (
-        <div className="group relative rounded-xl overflow-hidden border border-white/[0.08] ring-1 ring-inset ring-white/[0.05] bg-zinc-900/80 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]">
+        <div className="group relative w-full min-w-0 rounded-xl overflow-hidden border border-white/[0.08] ring-1 ring-inset ring-white/[0.05] bg-zinc-900/80 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)] transition-colors duration-200 hover:border-white/[0.12]">
             <div className="flex items-center gap-2 h-9 px-3 border-b border-white/[0.05] bg-white/[0.02]">
-                <span className="text-[11px] uppercase tracking-[0.04em] font-medium text-text-tertiary font-mono select-none">
+                <span className="text-[11px] uppercase tracking-[0.04em] font-medium text-text-tertiary font-mono select-none cursor-default">
                     {resolved || 'code'}
                 </span>
                 <div className="flex-1" />
                 {technique && (
-                    <span className="hidden sm:inline-flex items-center max-w-[220px] truncate text-[11px] font-medium text-white/45 select-none">
+                    <span className="hidden sm:inline-flex items-center max-w-[220px] truncate text-[11px] font-medium text-white/45 select-none cursor-default">
                         {technique}
                     </span>
                 )}
                 <CopyButton text={code} />
             </div>
-            <div className="overflow-x-auto">
+            <div
+                ref={scrollRef}
+                className="code-scroll w-full min-w-0 overflow-x-auto"
+                style={overflowRight ? { WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 24px), transparent)', maskImage: 'linear-gradient(to right, #000 calc(100% - 24px), transparent)' } : undefined}
+            >
                 <SyntaxHighlighter
                     language={resolved}
                     style={vscDarkPlus}
@@ -281,15 +423,18 @@ const CodeHero: React.FC<{ lang: string; code: string; technique?: string }> = (
  *   with a sliding highlight and a single continuous-height panel (blur-bridged
  *   crossfade when switching, iOS drawer curve for open/close).
  */
-const CodingAnswerBlock: React.FC<{ sections: CodingSection[] }> = ({ sections }) => {
+const CodingAnswerBlock: React.FC<{ sections: CodingSection[]; firstView?: boolean }> = ({ sections, firstView = false }) => {
     const reduce = useReducedMotion();
     const [activeDetail, setActiveDetail] = useState<DetailKind | null>(null);
     const panelRef = useRef<HTMLDivElement>(null);
+    const pillsRef = useRef<HTMLDivElement>(null);
     const [panelHeight, setPanelHeight] = useState(0);
     // framer-motion resolves layoutId GLOBALLY. The usage tab renders one
     // CodingAnswerBlock per Q&A, so a shared literal id would cross-animate the
     // active-pill highlight between separate answers. Scope it per instance.
     const pillLayoutId = useId();
+    // Only play the mount cascade the first time this answer is seen this session.
+    const animateMount = firstView && !reduce;
 
     const tagged = sections.map(s => ({ ...s, kind: classifySection(s.title) }));
 
@@ -339,27 +484,43 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[] }> = ({ sections }
 
     const childVariant = reduce ? MOUNT_CHILD_REDUCED : MOUNT_CHILD;
 
+    // Arrow-key navigation across the pill strip (macOS segmented-control feel).
+    const onPillKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
+        if (!keys.includes(e.key)) return;
+        const btns = pillsRef.current ? Array.from(pillsRef.current.querySelectorAll<HTMLButtonElement>('[role="tab"]')) : [];
+        if (!btns.length) return;
+        e.preventDefault();
+        const currentIdx = btns.findIndex(b => b === document.activeElement);
+        let next = currentIdx < 0 ? 0 : currentIdx;
+        if (e.key === 'ArrowLeft')  next = (currentIdx - 1 + btns.length) % btns.length;
+        if (e.key === 'ArrowRight') next = (currentIdx + 1) % btns.length;
+        if (e.key === 'Home')       next = 0;
+        if (e.key === 'End')        next = btns.length - 1;
+        btns[next]?.focus();
+    };
+
     return (
         <motion.div
-            className="flex flex-col gap-4"
+            className="flex flex-col gap-4 min-w-0 w-full"
             variants={MOUNT_CONTAINER}
-            initial="hidden"
+            initial={animateMount ? 'hidden' : false}
             animate="show"
         >
             {/* Thesis — one-line claim, the answer at a glance */}
             {thesis && (
-                <motion.p variants={childVariant} className="text-[15px] leading-[1.6] text-text-primary m-0">
+                <motion.p variants={childVariant} className="text-[15px] leading-[1.6] text-text-primary m-0 select-text">
                     {thesis}
                 </motion.p>
             )}
 
             {/* Code — hero block with technique chip + copy button */}
             {parsedCode ? (
-                <motion.div variants={childVariant}>
+                <motion.div variants={childVariant} className="min-w-0 w-full">
                     <CodeHero lang={parsedCode.lang} code={parsedCode.code} technique={techniqueChip} />
                 </motion.div>
             ) : code ? (
-                <motion.div variants={childVariant} className="flex flex-col gap-3">
+                <motion.div variants={childVariant} className="flex flex-col gap-3 min-w-0 w-full">
                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
                         {cleanMarkdown(code.body.trim())}
                     </ReactMarkdown>
@@ -369,15 +530,15 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[] }> = ({ sections }
             {/* Complexity — always-visible chip, never behind a click */}
             {complexityChip && (
                 <motion.div variants={childVariant} className="flex items-center gap-1.5 -mt-1">
-                    <span className="text-[10px] uppercase tracking-[0.1em] font-semibold text-white/25 select-none">cost</span>
-                    <span className="text-[12px] tabular-nums text-text-secondary font-medium">{complexityChip}</span>
+                    <span className="text-[10px] uppercase tracking-[0.1em] font-semibold text-white/25 select-none cursor-default">cost</span>
+                    <span className="text-[12px] tabular-nums text-text-secondary font-medium select-text font-mono">{renderComplexity(complexityChip)}</span>
                 </motion.div>
             )}
 
             {/* Unrecognised sections — graceful fallthrough */}
             {others.map(s => (
                 <motion.div key={s.title} variants={childVariant} className="flex flex-col gap-1.5">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/20 select-none">{s.title}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/20 select-none cursor-default">{s.title}</p>
                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
                         {cleanMarkdown(s.body.trim())}
                     </ReactMarkdown>
@@ -389,30 +550,49 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[] }> = ({ sections }
                 <motion.div variants={childVariant} className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
                         <div className="h-px flex-1 bg-white/[0.06]" />
-                        <div className="flex items-center gap-0.5">
-                            {availablePills.map((pill) => {
+                        {/* Segmented-control semantics: roving tabindex, arrow-key nav */}
+                        <div
+                            ref={pillsRef}
+                            role="tablist"
+                            aria-label="Answer detail"
+                            className="flex items-center gap-0.5"
+                            onKeyDown={onPillKeyDown}
+                        >
+                            {availablePills.map((pill, i) => {
                                 const isActive = activeDetail === pill.kind;
+                                // Roving tabindex: the active pill (or the first, when none
+                                // active) is the single tab stop; arrows move between the rest.
+                                const isTabStop = isActive || (activeDetail == null && i === 0);
                                 return (
                                     <button
                                         key={pill.kind}
-                                        aria-pressed={isActive}
+                                        role="tab"
+                                        aria-selected={isActive}
                                         aria-expanded={isActive}
+                                        tabIndex={isTabStop ? 0 : -1}
                                         onClick={() => setActiveDetail(prev => prev === pill.kind ? null : pill.kind)}
                                         className={[
-                                            'relative px-2.5 py-1 rounded-full text-[12.5px] font-medium select-none',
-                                            'transition-[color,transform] duration-150 ease-out active:scale-[0.97]',
-                                            'focus:outline-none focus-visible:ring-1 focus-visible:ring-white/20',
-                                            isActive ? 'text-text-primary' : 'text-white/35 hover:text-text-tertiary',
+                                            'relative inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[12.5px] font-medium select-none cursor-default',
+                                            'transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.97]',
+                                            'focus:outline-none focus-visible:ring-2 focus-visible:ring-white/25',
+                                            isActive ? 'text-text-primary' : 'text-white/35 hover:text-text-tertiary hover:bg-white/[0.04]',
                                         ].join(' ')}
                                     >
                                         {isActive && (
                                             <motion.span
                                                 layoutId={`codingActivePill-${pillLayoutId}`}
                                                 className="absolute inset-0 rounded-full bg-white/[0.08] ring-1 ring-inset ring-white/[0.06]"
-                                                transition={reduce ? { duration: 0 } : { type: 'spring', duration: 0.4, bounce: 0.15 }}
+                                                transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }}
                                             />
                                         )}
                                         <span className="relative z-10">{pill.label}</span>
+                                        {/* Chevron signals panel OPEN vs closed (not which pill) */}
+                                        {isActive && (
+                                            <ChevronDown
+                                                className="relative z-10 w-3 h-3 text-text-tertiary transition-transform duration-200 ease-out rotate-180"
+                                                strokeWidth={2.5}
+                                            />
+                                        )}
                                     </button>
                                 );
                             })}
@@ -420,10 +600,13 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[] }> = ({ sections }
                         <div className="h-px flex-1 bg-white/[0.06]" />
                     </div>
 
-                    {/* One container; height retargets continuously, content crossfades w/ blur */}
+                    {/* One container; height retargets continuously, content crossfades w/ blur.
+                        Open 260ms / close 200ms — exits are quicker than entrances. */}
                     <motion.div
                         animate={{ height: activeSection ? panelHeight : 0 }}
-                        transition={reduce ? { duration: 0.12 } : { duration: 0.26, ease: DRAWER_EASE }}
+                        transition={reduce
+                            ? { duration: 0.12 }
+                            : { duration: activeSection ? 0.26 : 0.2, ease: DRAWER_EASE }}
                         style={{ overflow: 'hidden' }}
                     >
                         <div ref={panelRef} className="pt-0.5">
@@ -434,7 +617,9 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[] }> = ({ sections }
                                         initial={reduce ? { opacity: 0 } : { opacity: 0, y: 4, filter: 'blur(3px)' }}
                                         animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
                                         exit={reduce ? { opacity: 0 } : { opacity: 0, y: -4, filter: 'blur(3px)' }}
-                                        transition={{ duration: 0.18, ease: CROSSFADE_EASE }}
+                                        // Content settles just after the box starts opening so it
+                                        // never flashes into a not-yet-open panel on switch.
+                                        transition={{ duration: 0.18, ease: CROSSFADE_EASE, delay: reduce ? 0 : 0.04 }}
                                     >
                                         <div className="rounded-xl px-4 py-3.5 bg-white/[0.025] border border-white/[0.05] ring-1 ring-inset ring-white/[0.02]">
                                             <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
@@ -449,6 +634,73 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[] }> = ({ sections }
                 </motion.div>
             )}
         </motion.div>
+    );
+};
+
+// One Q&A pair in the usage/history tab. Owns its first-view entrance (question
+// enters from the right, answer settles just after) and a hover-revealed
+// answer-action bar (copy full answer + timestamp). Entrance plays only the first
+// time this interaction is seen this session — history is read-mostly, so
+// re-viewing must be instant, never a re-cascade.
+const UsageInteraction: React.FC<{
+    interaction: { timestamp: number; question?: string; answer?: string };
+    id: string;
+    staggerDelay: number;
+}> = ({ interaction, id, staggerDelay }) => {
+    const reduce = useReducedMotion();
+    const firstView = !seenInteractionIds.has(id);
+    useEffect(() => { seenInteractionIds.add(id); }, [id]);
+
+    const codingSections = interaction.answer ? parseCodingTemplate(interaction.answer) : null;
+    const answerPlain = interaction.answer ? markdownToPlainText(interaction.answer) : '';
+
+    const enter = (offset: { x?: number; y?: number }, delay: number) => {
+        // Repeat views are always instant. First view: full slide-in normally,
+        // opacity-only under reduced-motion.
+        if (!firstView) return { initial: false as const, animate: { opacity: 1 } };
+        if (reduce) return { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { duration: 0.2 } };
+        return { initial: { opacity: 0, ...offset }, animate: { opacity: 1, x: 0, y: 0 }, transition: { duration: 0.32, ease: CROSSFADE_EASE, delay } };
+    };
+
+    return (
+        <div className="space-y-4">
+            {/* User question — contained bubble, enters from the right, selectable */}
+            {interaction.question && (
+                <div className="group/q flex flex-col items-end">
+                    <motion.div {...enter({ x: 8 }, staggerDelay)} className="bg-accent-primary text-white px-5 py-2.5 rounded-2xl rounded-tr-sm max-w-[80%] text-[15px] leading-relaxed shadow-sm select-text">
+                        {interaction.question}
+                    </motion.div>
+                    <span className="mt-1 pr-1 text-[11px] text-text-tertiary select-none cursor-default opacity-0 translate-y-1 group-hover/q:opacity-100 group-hover/q:translate-y-0 transition-all duration-[160ms] ease-out">
+                        {formatTime(interaction.timestamp)}
+                    </span>
+                </div>
+            )}
+
+            {/* AI answer — open canvas (no bubble), avatar + body + hover action bar */}
+            {interaction.answer && (
+                <motion.div {...enter({ y: 8 }, staggerDelay + 0.08)} className="group/a flex items-start gap-4">
+                    <div className="mt-1 w-6 h-6 rounded-full bg-bg-input flex items-center justify-center border border-border-subtle shrink-0 select-none opacity-40 group-hover/a:opacity-60 transition-opacity duration-[160ms]">
+                        <img src={NativelyLogo} alt="" aria-hidden="true" className="w-4 h-4 object-contain force-black-icon" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <div className="text-text-secondary text-[15px] leading-relaxed max-w-none select-text">
+                            {codingSections
+                                ? <CodingAnswerBlock sections={codingSections} firstView={firstView} />
+                                : (
+                                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+                                        {cleanMarkdown(interaction.answer || '')}
+                                    </ReactMarkdown>
+                                )}
+                        </div>
+                        {/* Answer action bar — bottom-left, revealed on hover/focus-within */}
+                        <div className="flex items-center gap-2 mt-2 opacity-0 translate-y-1 [@media(hover:hover)]:group-hover/a:opacity-100 [@media(hover:hover)]:group-hover/a:translate-y-0 group-focus-within/a:opacity-100 group-focus-within/a:translate-y-0 [@media(hover:none)]:opacity-100 transition-all duration-[160ms] ease-out select-none">
+                            <AnswerCopyButton text={answerPlain} />
+                            <span className="text-[11px] text-text-tertiary cursor-default">{formatTime(interaction.timestamp)}</span>
+                        </div>
+                    </div>
+                </motion.div>
+            )}
+        </div>
     );
 };
 
@@ -1663,49 +1915,28 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                         )}
 
                         {activeTab === 'usage' && (
-                            <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8 pb-10">
-                                {meeting.usage?.map((interaction, i) => (
-                                    <div key={i} className="space-y-4">
-                                        {/* User Question */}
-                                        {interaction.question && (
-                                            <div className="flex justify-end">
-                                                <div className="bg-accent-primary text-white px-5 py-2.5 rounded-2xl rounded-tr-sm max-w-[80%] text-[15px] leading-relaxed shadow-sm">
-                                                    {interaction.question}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* AI Answer */}
-                                        {interaction.answer && (
-                                            <div className="flex items-start gap-4">
-                                                <div className="mt-1 w-6 h-6 rounded-full bg-bg-input flex items-center justify-center border border-border-subtle shrink-0">
-                                                    <img src={NativelyLogo} alt="AI" className="w-4 h-4 opacity-50 object-contain force-black-icon" />
-                                                </div>
-                                                <div>
-                                                    <div className="text-[11px] text-text-tertiary mb-1.5 font-medium">{formatTime(interaction.timestamp)}</div>
-                                                    <div className="text-text-secondary text-[15px] leading-relaxed max-w-none">
-                                                        {(() => {
-                                                            const codingSections = parseCodingTemplate(interaction.answer || '');
-                                                            if (codingSections) {
-                                                                return <CodingAnswerBlock sections={codingSections} />;
-                                                            }
-                                                            return (
-                                                                <ReactMarkdown
-                                                                    remarkPlugins={[remarkGfm]}
-                                                                    components={mdComponents}
-                                                                >
-                                                                    {cleanMarkdown(interaction.answer || '')}
-                                                                </ReactMarkdown>
-                                                            );
-                                                        })()}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
+                            <section className="space-y-8 pb-10">
+                                {(() => {
+                                    const items = meeting.usage ?? [];
+                                    // Stagger only the newest few items on first view — a long
+                                    // history should never cascade top-to-bottom.
+                                    const STAGGER_TAIL = 4;
+                                    const firstStaggered = Math.max(0, items.length - STAGGER_TAIL);
+                                    return items.map((interaction, i) => {
+                                        const id = `${interaction.timestamp}-${i}`;
+                                        const staggerDelay = i >= firstStaggered ? (i - firstStaggered) * 0.06 : 0;
+                                        return (
+                                            <UsageInteraction
+                                                key={id}
+                                                id={id}
+                                                interaction={interaction}
+                                                staggerDelay={staggerDelay}
+                                            />
+                                        );
+                                    });
+                                })()}
                                 {!meeting.usage?.length && <p className="text-text-tertiary">No usage history.</p>}
-                            </motion.section>
+                            </section>
                         )}
                     </div>
                 </motion.div>

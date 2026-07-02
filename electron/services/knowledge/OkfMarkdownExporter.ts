@@ -33,18 +33,18 @@ export interface ExportedFile {
  * negligible amount of frontmatter readability for correctness — these are
  * generated metadata fields, not something a human hand-edits inline.
  */
-function yamlEscapeScalar(value: string): string {
+export function yamlEscapeScalar(value: string): string {
   return JSON.stringify(value);
 }
 
-function yamlList(values: string[] | number[]): string {
+export function yamlList(values: string[] | number[]): string {
   if (values.length === 0) return '[]';
   return `[${values.map((v) => (typeof v === 'number' ? String(v) : yamlEscapeScalar(String(v)))).join(', ')}]`;
 }
 
 /** Maps a Natively KnowledgeCardType to a human-readable OKF `type` value. */
-function okfTypeFor(card: KnowledgeCard): string {
-  const map: Record<KnowledgeCard['type'], string> = {
+export function okfTypeFor(card: KnowledgeCard): string {
+  const map: Partial<Record<KnowledgeCard['type'], string>> = {
     concept: 'Reference Concept',
     entity: 'Reference Entity',
     section: 'Reference Section',
@@ -53,6 +53,23 @@ function okfTypeFor(card: KnowledgeCard): string {
     methodology: 'Reference Methodology',
     result: 'Reference Result',
     conclusion: 'Reference Conclusion',
+    // OKF Profile Intelligence card types (2026-07-02).
+    candidate_identity: 'Candidate Identity',
+    candidate_summary: 'Candidate Summary',
+    candidate_experience: 'Candidate Experience',
+    candidate_project: 'Candidate Project',
+    candidate_education: 'Candidate Education',
+    candidate_achievement: 'Candidate Achievement',
+    candidate_skills: 'Candidate Skills',
+    target_job_role: 'Target Job Role',
+    target_job_requirements: 'Target Job Requirements',
+    target_job_nice_to_haves: 'Target Job Nice-to-Haves',
+    target_job_keywords: 'Target Job Keywords',
+    artifact_gap_analysis: 'Interview Artifact Gap Analysis',
+    artifact_negotiation: 'Interview Artifact Negotiation Strategy',
+    artifact_mock_questions: 'Interview Artifact Mock Questions',
+    artifact_culture_mapping: 'Interview Artifact Culture Mapping',
+    artifact_intro: 'Interview Artifact Intro',
   };
   return map[card.type] || 'Reference Concept';
 }

@@ -1,0 +1,730 @@
+[
+  {
+    "id": "Q01",
+    "question": "According to the thesis, what is the name of the proposed system and which robot is it deployed on?",
+    "targetDocuments": ["thesis/institutional_thesis.pdf"],
+    "targetModes": ["3 Academic Thesis Defense"],
+    "rubric": {
+      "requiredFacts": ["AgenticVLA", "Mercury X1"],
+      "forbiddenFacts": ["ChatGPT", "GPT-4", "Boston Dynamics"],
+      "refusalExpected": false,
+      "formatConstraints": ["cites the thesis"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "Q02",
+    "question": "What success rate did AgenticVLA achieve in the experiments, and how did the baseline models compare?",
+    "targetDocuments": ["thesis/institutional_thesis.pdf"],
+    "targetModes": ["3 Academic Thesis Defense"],
+    "rubric": {
+      "requiredFacts": ["44%", "baseline"],
+      "forbiddenFacts": ["90%", "100%", "success rate of 91%"],
+      "refusalExpected": false,
+      "formatConstraints": ["cites a specific figure from the thesis"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "Q03",
+    "question": "Who supervised this thesis, who was the collaborative partner, and what date is on it?",
+    "targetDocuments": ["thesis/institutional_thesis.pdf"],
+    "targetModes": ["3 Academic Thesis Defense", "8 Legal/Compliance Q&A"],
+    "rubric": {
+      "requiredFacts": ["Ville Kyrki", "Huawei", "21 June 2025"],
+      "forbiddenFacts": ["Stanford", "MIT", "Google"],
+      "refusalExpected": false,
+      "formatConstraints": ["names the supervisor and the collaborative partner"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "TH2",
+    "question": "Following up on that 44% result — what does the thesis report the baseline models were able to accomplish on the same task?",
+    "targetDocuments": ["thesis/institutional_thesis.pdf"],
+    "targetModes": ["3 Academic Thesis Defense"],
+    "rubric": {
+      "requiredFacts": ["baseline"],
+      "forbiddenFacts": ["baselines achieved 62%", "baseline success rate of 78%"],
+      "refusalExpected": false,
+      "formatConstraints": ["states the baselines were unable to complete the task", "builds on the prior 44% answer"]
+    },
+    "type": "follow-up-chain",
+    "followUpOf": "Q02"
+  },
+  {
+    "id": "Q19",
+    "question": "What quarterly revenue and net profit margin did the company report in the AgenticVLA thesis?",
+    "targetDocuments": ["thesis/institutional_thesis.pdf"],
+    "targetModes": ["3 Academic Thesis Defense"],
+    "rubric": {
+      "requiredFacts": ["not", "thesis"],
+      "forbiddenFacts": ["$1 million", "20% margin", "revenue of"],
+      "refusalExpected": true,
+      "formatConstraints": ["refuses; notes the thesis is academic and contains no financial statements"]
+    },
+    "type": "no-answer-in-corpus",
+    "followUpOf": null
+  },
+  {
+    "id": "Q04",
+    "question": "In the Attention Is All You Need paper, what BLEU scores does the big Transformer achieve on the WMT 2014 English-to-German and English-to-French tasks?",
+    "targetDocuments": ["papers/attention_is_all_you_need_1706.03762.pdf"],
+    "targetModes": ["9 Technical Conference Talk Q&A"],
+    "rubric": {
+      "requiredFacts": ["28.4", "41.8"],
+      "forbiddenFacts": ["30.5", "35.0", "27.3 on English-to-French"],
+      "refusalExpected": false,
+      "formatConstraints": ["cites both BLEU numbers"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "Q05",
+    "question": "What optimizer and warmup schedule does the Transformer paper use for training?",
+    "targetDocuments": ["papers/attention_is_all_you_need_1706.03762.pdf"],
+    "targetModes": ["9 Technical Conference Talk Q&A"],
+    "rubric": {
+      "requiredFacts": ["Adam", "4000"],
+      "forbiddenFacts": ["SGD", "RMSprop", "warmup_steps = 8000"],
+      "refusalExpected": false,
+      "formatConstraints": ["names the optimizer and the warmup step count"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "Q06",
+    "question": "How many parameters do BERTBASE and BERTLARGE have, and what two pre-training objectives does BERT use?",
+    "targetDocuments": ["papers/bert_1810.04805.pdf"],
+    "targetModes": ["9 Technical Conference Talk Q&A"],
+    "rubric": {
+      "requiredFacts": ["110M", "340M", "Masked", "Next Sentence"],
+      "forbiddenFacts": ["175B", "1.5B", "175 million"],
+      "refusalExpected": false,
+      "formatConstraints": ["gives both parameter counts", "names both pre-training objectives"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "Q07",
+    "question": "What GLUE score and SQuAD v1.1 F1 did BERT report, and what were the absolute improvements?",
+    "targetDocuments": ["papers/bert_1810.04805.pdf"],
+    "targetModes": ["9 Technical Conference Talk Q&A"],
+    "rubric": {
+      "requiredFacts": ["80.5", "93.2", "7.7"],
+      "forbiddenFacts": ["90.5", "88.0"],
+      "refusalExpected": false,
+      "formatConstraints": ["cites the GLUE and SQuAD numbers"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "Q08",
+    "question": "In the ResNet paper, how deep are the networks evaluated on ImageNet, and what test error did the ensemble achieve?",
+    "targetDocuments": ["papers/resnet_1512.03385.pdf"],
+    "targetModes": ["9 Technical Conference Talk Q&A"],
+    "rubric": {
+      "requiredFacts": ["152 layers", "3.57%"],
+      "forbiddenFacts": ["5.1%", "7.3%"],
+      "refusalExpected": false,
+      "formatConstraints": ["cites the depth and the error rate"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "Q16",
+    "question": "Both the Transformer paper and BERT build on the same core architecture. Compare the reported headline metrics: the big Transformer's WMT 2014 En-De BLEU versus BERT's GLUE score.",
+    "targetDocuments": ["papers/attention_is_all_you_need_1706.03762.pdf", "papers/bert_1810.04805.pdf"],
+    "targetModes": ["9 Technical Conference Talk Q&A"],
+    "rubric": {
+      "requiredFacts": ["28.4", "80.5", "Transformer", "BERT"],
+      "forbiddenFacts": ["BERT reports 28.4 BLEU", "Transformer reports a GLUE score"],
+      "refusalExpected": false,
+      "formatConstraints": ["attributes each metric to the correct paper"]
+    },
+    "type": "cross-document",
+    "followUpOf": null
+  },
+  {
+    "id": "Q20",
+    "question": "According to the ResNet paper, what is the training accuracy on the CIFAR-100 dataset for a 1202-layer network trained with the Adam optimizer at batch size 4096?",
+    "targetDocuments": ["papers/resnet_1512.03385.pdf"],
+    "targetModes": ["9 Technical Conference Talk Q&A"],
+    "rubric": {
+      "requiredFacts": ["not", "paper"],
+      "forbiddenFacts": ["99.9%", "batch size 4096", "Adam at batch size 4096"],
+      "refusalExpected": true,
+      "formatConstraints": ["refuses to invent the unstated Adam/4096 specifics"]
+    },
+    "type": "no-answer-in-corpus",
+    "followUpOf": null
+  },
+  {
+    "id": "Q22",
+    "question": "Following up on the Transformer's dimensions: given dmodel = 512 and 8 attention heads, what is the dimension of each attention head's keys and values?",
+    "targetDocuments": ["papers/attention_is_all_you_need_1706.03762.pdf"],
+    "targetModes": ["9 Technical Conference Talk Q&A"],
+    "rubric": {
+      "requiredFacts": ["64"],
+      "forbiddenFacts": ["128", "512 per head", "256"],
+      "refusalExpected": false,
+      "formatConstraints": ["shows each head has dimension 64 (dmodel divided by the number of heads)", "builds on the prior dmodel=512 answer"]
+    },
+    "type": "follow-up-chain",
+    "followUpOf": "Q04"
+  },
+  {
+    "id": "Q23",
+    "question": "Continuing on BERT: given BERTLARGE has 340M parameters, how many transformer layers (L) and attention heads (A) does it use?",
+    "targetDocuments": ["papers/bert_1810.04805.pdf"],
+    "targetModes": ["9 Technical Conference Talk Q&A"],
+    "rubric": {
+      "requiredFacts": ["24", "16"],
+      "forbiddenFacts": ["12 layers", "12 heads", "L=12 for BERTLARGE"],
+      "refusalExpected": false,
+      "formatConstraints": ["states L=24 layers and A=16 attention heads", "builds on the prior 340M answer"]
+    },
+    "type": "follow-up-chain",
+    "followUpOf": "Q06"
+  },
+  {
+    "id": "Q10",
+    "question": "Using the Gapminder 2007 dataset, which country has the highest life expectancy and which has the highest GDP per capita?",
+    "targetDocuments": ["datasets/gapminder2007.csv"],
+    "targetModes": ["4 Data Analyst Screening"],
+    "rubric": {
+      "requiredFacts": ["Japan", "82.603", "Norway", "49357"],
+      "forbiddenFacts": ["United States highest life expectancy", "Kuwait highest GDP per capita"],
+      "refusalExpected": false,
+      "formatConstraints": ["names both countries with their figures"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "Q11",
+    "question": "In the Gapminder 2007 data, what are the population, life expectancy, and GDP per capita for the United States?",
+    "targetDocuments": ["datasets/gapminder2007.csv"],
+    "targetModes": ["4 Data Analyst Screening", "6 Investor Pitch Q&A"],
+    "rubric": {
+      "requiredFacts": ["301139947", "78.242", "42951"],
+      "forbiddenFacts": ["78.9", "life expectancy of 80"],
+      "refusalExpected": false,
+      "formatConstraints": ["reports all three exact values"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "Q12",
+    "question": "How many countries are in each continent in the Gapminder 2007 dataset?",
+    "targetDocuments": ["datasets/gapminder2007.csv"],
+    "targetModes": ["4 Data Analyst Screening"],
+    "rubric": {
+      "requiredFacts": ["Africa", "52", "Asia", "33", "Europe", "30", "Americas", "25", "Oceania", "2"],
+      "forbiddenFacts": ["Antarctica"],
+      "refusalExpected": false,
+      "formatConstraints": ["gives a per-continent count breakdown"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "Q17",
+    "question": "Compare the United States' economic scale across the two datasets: its 2007 GDP per capita from Gapminder versus its total 2016 GDP from the World Bank dataset.",
+    "targetDocuments": ["datasets/gapminder2007.csv", "datasets/gdp_worldbank.csv"],
+    "targetModes": ["4 Data Analyst Screening"],
+    "rubric": {
+      "requiredFacts": ["42951", "18804913000000"],
+      "forbiddenFacts": ["11 trillion for the United States", "GDP per capita of 18 trillion"],
+      "refusalExpected": false,
+      "formatConstraints": ["distinguishes per-capita from total GDP", "cites both the 2007 and 2016 years"]
+    },
+    "type": "cross-document",
+    "followUpOf": null
+  },
+  {
+    "id": "Q24",
+    "question": "Building on the US comparison, which country in the Gapminder 2007 dataset has the largest population, and roughly how does its GDP per capita compare to the US figure you cited?",
+    "targetDocuments": ["datasets/gapminder2007.csv"],
+    "targetModes": ["4 Data Analyst Screening", "6 Investor Pitch Q&A"],
+    "rubric": {
+      "requiredFacts": ["China", "1318683096", "4959"],
+      "forbiddenFacts": ["India has the largest population", "China's GDP per capita is higher than the US"],
+      "refusalExpected": false,
+      "formatConstraints": ["names China as most populous", "notes its GDP per capita is far lower than the earlier US figure"]
+    },
+    "type": "follow-up-chain",
+    "followUpOf": "Q11"
+  },
+  {
+    "id": "DA1",
+    "question": "In the Gapminder 2007 dataset, what is the national unemployment rate for Germany?",
+    "targetDocuments": ["datasets/gapminder2007.csv"],
+    "targetModes": ["4 Data Analyst Screening"],
+    "rubric": {
+      "requiredFacts": ["not", "unemployment"],
+      "forbiddenFacts": ["8.4%", "unemployment rate of", "5.2%"],
+      "refusalExpected": true,
+      "formatConstraints": ["notes the dataset has no unemployment column, only population, life expectancy, and GDP per capita"]
+    },
+    "type": "no-answer-in-corpus",
+    "followUpOf": null
+  },
+  {
+    "id": "Q15",
+    "question": "In the CS231n Lecture 1 slides, which year and paper are credited with the deep-learning breakthrough on ImageNet, and who presented the lecture?",
+    "targetDocuments": ["slides/cs231n_lecture.pdf"],
+    "targetModes": ["6 Investor Pitch Q&A"],
+    "rubric": {
+      "requiredFacts": ["2012", "Krizhevsky", "Fei-Fei Li"],
+      "forbiddenFacts": ["2015 AlexNet", "Andrew Ng presented"],
+      "refusalExpected": false,
+      "formatConstraints": ["cites the 2012 AlexNet moment", "names a presenter"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "IP1",
+    "question": "According to the CS231n Lecture 1 slides, whose 1959 experiments on receptive fields are cited as an origin of modern computer vision?",
+    "targetDocuments": ["slides/cs231n_lecture.pdf"],
+    "targetModes": ["6 Investor Pitch Q&A"],
+    "rubric": {
+      "requiredFacts": ["Hubel", "1959"],
+      "forbiddenFacts": ["Yann LeCun", "1998 experiments"],
+      "refusalExpected": false,
+      "formatConstraints": ["names the receptive-field experiments", "cites the slides"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "IP2",
+    "question": "Based on the materials in this session, what was the total 2016 GDP of the United States in absolute dollars?",
+    "targetDocuments": ["datasets/gapminder2007.csv", "slides/cs231n_lecture.pdf"],
+    "targetModes": ["6 Investor Pitch Q&A"],
+    "rubric": {
+      "requiredFacts": ["not", "these materials"],
+      "forbiddenFacts": ["18804913000000", "18.8 trillion", "$18.8T"],
+      "refusalExpected": true,
+      "formatConstraints": ["explains the loaded materials are 2007 per-capita data and vision slides, with no 2016 total-GDP figure"]
+    },
+    "type": "no-answer-in-corpus",
+    "followUpOf": null
+  },
+  {
+    "id": "Q13",
+    "question": "According to RFC 8259, what character encoding MUST be used for JSON text exchanged outside a closed ecosystem, and which earlier RFC does it obsolete?",
+    "targetDocuments": ["docs/rfc8259_json.txt"],
+    "targetModes": ["8 Legal/Compliance Q&A"],
+    "rubric": {
+      "requiredFacts": ["UTF-8", "MUST", "7159"],
+      "forbiddenFacts": ["UTF-16", "obsoletes 4627 only", "ASCII"],
+      "refusalExpected": false,
+      "formatConstraints": ["quotes the normative MUST requirement", "cites the obsoleted RFC number"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "LC1",
+    "question": "Per RFC 8259, is an implementation permitted to add a byte order mark to the start of JSON text?",
+    "targetDocuments": ["docs/rfc8259_json.txt"],
+    "targetModes": ["8 Legal/Compliance Q&A"],
+    "rubric": {
+      "requiredFacts": ["MUST NOT"],
+      "forbiddenFacts": ["a BOM is required", "MUST add a byte order mark"],
+      "refusalExpected": false,
+      "formatConstraints": ["states implementations MUST NOT add a byte order mark", "quotes the normative requirement"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "LC2",
+    "question": "According to the thesis or the RFC in this session, what is the statutory penalty for GDPR non-compliance?",
+    "targetDocuments": ["docs/rfc8259_json.txt", "thesis/institutional_thesis.pdf"],
+    "targetModes": ["8 Legal/Compliance Q&A"],
+    "rubric": {
+      "requiredFacts": ["not", "GDPR"],
+      "forbiddenFacts": ["4% of global turnover", "20 million", "€20 million"],
+      "refusalExpected": true,
+      "formatConstraints": ["notes neither the JSON RFC nor the robotics thesis addresses GDPR penalties"]
+    },
+    "type": "no-answer-in-corpus",
+    "followUpOf": null
+  },
+  {
+    "id": "LC3",
+    "question": "Following up on that encoding requirement — which standards document does RFC 8259 cite as a normative reference for the JSON grammar?",
+    "targetDocuments": ["docs/rfc8259_json.txt"],
+    "targetModes": ["8 Legal/Compliance Q&A"],
+    "rubric": {
+      "requiredFacts": ["ECMA-404"],
+      "forbiddenFacts": ["ISO 8601", "RFC 2119 defines JSON"],
+      "refusalExpected": false,
+      "formatConstraints": ["identifies ECMA-404 as the normative reference", "builds on the prior RFC 8259 answer"]
+    },
+    "type": "follow-up-chain",
+    "followUpOf": "Q13"
+  },
+  {
+    "id": "Q25",
+    "question": "The Data Analyst job description lists 'Data Quality Assurance' as a responsibility. Tell me about a time you handled a data quality issue, structuring your answer around the responsibilities this role expects.",
+    "targetDocuments": ["thesis/seminar_real_thesis.pdf"],
+    "targetModes": ["2 Behavioral/HR"],
+    "rubric": {
+      "requiredFacts": ["data quality"],
+      "forbiddenFacts": ["AgenticVLA", "Mercury X1", "success rate of 44%"],
+      "refusalExpected": false,
+      "formatConstraints": ["uses a STAR structure", "grounds the answer in the JD data-quality responsibility"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "Q26",
+    "question": "Based only on that job description, what degree and which two visualization tools does the role list as requirements/plus?",
+    "targetDocuments": ["thesis/seminar_real_thesis.pdf"],
+    "targetModes": ["2 Behavioral/HR"],
+    "rubric": {
+      "requiredFacts": ["Bachelor", "Tableau", "Power BI"],
+      "forbiddenFacts": ["PhD required", "Looker", "Qlik"],
+      "refusalExpected": false,
+      "formatConstraints": ["cites the JD requirements section", "builds on the prior behavioral answer"]
+    },
+    "type": "follow-up-chain",
+    "followUpOf": "Q25"
+  },
+  {
+    "id": "HR1",
+    "question": "Tell me about a time you had to influence a decision without having formal authority over the people involved.",
+    "targetDocuments": [],
+    "targetModes": ["2 Behavioral/HR"],
+    "rubric": {
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "refusalExpected": false,
+      "formatConstraints": ["uses a STAR structure (situation, task, action, result)", "describes influence through persuasion, data, or relationships rather than authority"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "HR2",
+    "question": "According to this job description, what annual salary and equity package does the role offer?",
+    "targetDocuments": ["thesis/seminar_real_thesis.pdf"],
+    "targetModes": ["2 Behavioral/HR"],
+    "rubric": {
+      "requiredFacts": ["not", "job description"],
+      "forbiddenFacts": ["$120,000", "0.5% equity", "salary of"],
+      "refusalExpected": true,
+      "formatConstraints": ["notes the JD does not state any salary or equity/compensation figures"]
+    },
+    "type": "no-answer-in-corpus",
+    "followUpOf": null
+  },
+  {
+    "id": "HR3",
+    "question": "Based on the job description, which programming languages does the role expect for data analysis?",
+    "targetDocuments": ["thesis/seminar_real_thesis.pdf"],
+    "targetModes": ["2 Behavioral/HR"],
+    "rubric": {
+      "requiredFacts": ["SQL", "Python"],
+      "forbiddenFacts": ["Java", "C++", "Ruby"],
+      "refusalExpected": false,
+      "formatConstraints": ["lists the analysis languages from the JD (SQL, Python, R)"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "B01",
+    "question": "Explain the difference between optimistic and pessimistic locking, and when you'd choose each in a high-concurrency service.",
+    "targetDocuments": [],
+    "targetModes": ["1 Senior Backend Engineering Interview"],
+    "rubric": {
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "refusalExpected": false,
+      "formatConstraints": ["explains optimistic locking uses version/conflict detection and retries", "explains pessimistic locking holds a lock to block concurrent writers", "leads with a decision then explains the tradeoff"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "B02",
+    "question": "A REST endpoint's p99 latency jumped from 40ms to 900ms right after a deploy. Walk me through how you'd diagnose the regression.",
+    "targetDocuments": [],
+    "targetModes": ["1 Senior Backend Engineering Interview"],
+    "rubric": {
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "refusalExpected": false,
+      "formatConstraints": ["proposes a systematic diagnosis (correlate with the deploy, inspect metrics/traces/logs, check DB queries and dependencies)", "considers rolling back the deploy as a mitigation"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "B03",
+    "question": "How would you design idempotency for a payment API so that client retries never double-charge a customer?",
+    "targetDocuments": [],
+    "targetModes": ["1 Senior Backend Engineering Interview"],
+    "rubric": {
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "refusalExpected": false,
+      "formatConstraints": ["describes an idempotency key stored server-side to deduplicate retries", "explains how the same key returns the original result rather than re-executing the charge"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "B04",
+    "question": "What was the exact p99 latency of our internal checkout service last Tuesday at 3pm?",
+    "targetDocuments": [],
+    "targetModes": ["1 Senior Backend Engineering Interview"],
+    "rubric": {
+      "requiredFacts": [],
+      "forbiddenFacts": ["exactly 42ms", "p99 was 187ms", "latency of 250ms"],
+      "refusalExpected": true,
+      "formatConstraints": ["declines to fabricate a specific number; states it has no access to that runtime metric"]
+    },
+    "type": "no-answer-in-corpus",
+    "followUpOf": null
+  },
+  {
+    "id": "B05",
+    "question": "Following up on locking — in PostgreSQL specifically, how would you implement optimistic concurrency, and how does SELECT ... FOR UPDATE relate to that choice?",
+    "targetDocuments": [],
+    "targetModes": ["1 Senior Backend Engineering Interview"],
+    "rubric": {
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "refusalExpected": false,
+      "formatConstraints": ["describes optimistic concurrency via a version column checked on update", "explains SELECT ... FOR UPDATE is a pessimistic row lock", "builds on the prior locking answer"]
+    },
+    "type": "follow-up-chain",
+    "followUpOf": "B01"
+  },
+  {
+    "id": "S01",
+    "question": "How do you run a discovery call to uncover a prospect's real underlying pain rather than just their surface complaints?",
+    "targetDocuments": [],
+    "targetModes": ["5 Sales Discovery"],
+    "rubric": {
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "refusalExpected": false,
+      "formatConstraints": ["describes asking open-ended questions and probing for root cause", "connects the pain to quantified business impact"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "S02",
+    "question": "A prospect says 'your product is too expensive.' How do you handle that objection?",
+    "targetDocuments": [],
+    "targetModes": ["5 Sales Discovery"],
+    "rubric": {
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "refusalExpected": false,
+      "formatConstraints": ["reframes the conversation from price to value/ROI", "diagnoses the objection before conceding a discount"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "S03",
+    "question": "How do you qualify whether a new deal is actually worth your time to pursue?",
+    "targetDocuments": [],
+    "targetModes": ["5 Sales Discovery"],
+    "rubric": {
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "refusalExpected": false,
+      "formatConstraints": ["references a qualification framework covering budget, authority, need, and timeline"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "S04",
+    "question": "What was our exact Q3 win rate against Competitor X in the enterprise segment?",
+    "targetDocuments": [],
+    "targetModes": ["5 Sales Discovery"],
+    "rubric": {
+      "requiredFacts": [],
+      "forbiddenFacts": ["win rate of 62%", "we won 45%", "a 70% win rate"],
+      "refusalExpected": true,
+      "formatConstraints": ["declines to invent a figure; notes it has no access to that internal sales data"]
+    },
+    "type": "no-answer-in-corpus",
+    "followUpOf": null
+  },
+  {
+    "id": "S05",
+    "question": "Following up on that pricing objection — if the prospect still pushes back after you've framed the ROI, what's your next move?",
+    "targetDocuments": [],
+    "targetModes": ["5 Sales Discovery"],
+    "rubric": {
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "refusalExpected": false,
+      "formatConstraints": ["explores budget constraints and trades concessions for commitments", "maintains discipline rather than immediately discounting", "builds on the prior objection-handling answer"]
+    },
+    "type": "follow-up-chain",
+    "followUpOf": "S02"
+  },
+  {
+    "id": "C01",
+    "question": "A national retail client's profits have been declining for three quarters. How would you structure your approach to diagnose the root cause?",
+    "targetDocuments": [],
+    "targetModes": ["7 Consulting Case"],
+    "rubric": {
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "refusalExpected": false,
+      "formatConstraints": ["decomposes profit into revenue and cost drivers", "lays out a MECE / structured, hypothesis-driven framework"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "C02",
+    "question": "How would you estimate the annual market size for electric vehicles in a mid-sized country?",
+    "targetDocuments": [],
+    "targetModes": ["7 Consulting Case"],
+    "rubric": {
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "refusalExpected": false,
+      "formatConstraints": ["uses a top-down or bottom-up sizing approach with explicit segments", "states the assumptions it is making"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "C03",
+    "question": "The client wants to cut operating costs by 20%. How do you prioritize where to make the cuts?",
+    "targetDocuments": [],
+    "targetModes": ["7 Consulting Case"],
+    "rubric": {
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "refusalExpected": false,
+      "formatConstraints": ["separates fixed from variable costs and prioritizes by impact versus feasibility", "avoids cuts that damage core revenue-generating capability"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "C04",
+    "question": "What was this client's exact EBITDA margin in the last fiscal year?",
+    "targetDocuments": [],
+    "targetModes": ["7 Consulting Case"],
+    "rubric": {
+      "requiredFacts": [],
+      "forbiddenFacts": ["EBITDA margin of 12%", "an EBITDA of 18%", "margin was 25%"],
+      "refusalExpected": true,
+      "formatConstraints": ["declines to fabricate a figure; notes no financial data has been provided"]
+    },
+    "type": "no-answer-in-corpus",
+    "followUpOf": null
+  },
+  {
+    "id": "C05",
+    "question": "Building on that profitability framework — if you found revenue is stable but costs have risen, which cost buckets would you investigate first?",
+    "targetDocuments": [],
+    "targetModes": ["7 Consulting Case"],
+    "rubric": {
+      "requiredFacts": [],
+      "forbiddenFacts": [],
+      "refusalExpected": false,
+      "formatConstraints": ["names specific cost categories such as COGS, labor, and overhead", "focuses on what changed recently", "builds on the prior profitability-framework answer"]
+    },
+    "type": "follow-up-chain",
+    "followUpOf": "C01"
+  },
+  {
+    "id": "SE1",
+    "question": "A customer integrating our API outside a closed ecosystem asks which text encoding they must use for JSON per the spec. Based on the knowledge base, what do you tell them?",
+    "targetDocuments": ["docs/rfc8259_json.txt"],
+    "targetModes": ["10 Customer Support Escalation"],
+    "rubric": {
+      "requiredFacts": ["UTF-8", "MUST"],
+      "forbiddenFacts": ["UTF-16", "latin-1"],
+      "refusalExpected": false,
+      "formatConstraints": ["answers UTF-8 with the normative MUST", "uses a helpful support tone"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "SE2",
+    "question": "Per the JSON spec in the knowledge base, which primitive types and structured types can a JSON value represent?",
+    "targetDocuments": ["docs/rfc8259_json.txt"],
+    "targetModes": ["10 Customer Support Escalation"],
+    "rubric": {
+      "requiredFacts": [],
+      "forbiddenFacts": ["dates are a primitive type", "functions are a JSON type"],
+      "refusalExpected": false,
+      "formatConstraints": ["lists the primitive types (strings, numbers, booleans, null) and structured types (objects, arrays)"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "SE3",
+    "question": "The customer now asks what our product's refund policy is. Does the knowledge base loaded here cover that?",
+    "targetDocuments": ["docs/rfc8259_json.txt"],
+    "targetModes": ["10 Customer Support Escalation"],
+    "rubric": {
+      "requiredFacts": ["not", "refund"],
+      "forbiddenFacts": ["30-day refund", "refund within 14 days", "full refund policy"],
+      "refusalExpected": true,
+      "formatConstraints": ["notes the loaded knowledge base is the JSON spec and does not cover refund policy", "offers to escalate or find the right resource"]
+    },
+    "type": "no-answer-in-corpus",
+    "followUpOf": null
+  },
+  {
+    "id": "SE4",
+    "question": "Per RFC 8259 in the knowledge base, must the names within a single JSON object be unique?",
+    "targetDocuments": ["docs/rfc8259_json.txt"],
+    "targetModes": ["10 Customer Support Escalation"],
+    "rubric": {
+      "requiredFacts": ["SHOULD"],
+      "forbiddenFacts": ["names MUST be unique", "duplicate names are forbidden"],
+      "refusalExpected": false,
+      "formatConstraints": ["states the spec says names SHOULD be unique (recommended, not strictly required)"]
+    },
+    "type": "factual",
+    "followUpOf": null
+  },
+  {
+    "id": "SE5",
+    "question": "Following up — the customer says they're currently sending JSON as UTF-16 for cross-system interchange. Per the spec, is that allowed outside a closed ecosystem?",
+    "targetDocuments": ["docs/rfc8259_json.txt"],
+    "targetModes": ["10 Customer Support Escalation"],
+    "rubric": {
+      "requiredFacts": ["UTF-8"],
+      "forbiddenFacts": ["UTF-16 is allowed for interchange", "any encoding is fine"],
+      "refusalExpected": false,
+      "formatConstraints": ["explains UTF-16 is not permitted for open interchange and they must use UTF-8", "builds on the prior encoding answer"]
+    },
+    "type": "follow-up-chain",
+    "followUpOf": "SE1"
+  }
+]

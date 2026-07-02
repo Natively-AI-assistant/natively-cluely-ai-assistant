@@ -742,6 +742,10 @@ interface ElectronAPI {
   // JD & Research API
   profileUploadJD: (filePath: string) => Promise<{ success: boolean; error?: string }>;
   profileDeleteJD: () => Promise<{ success: boolean; error?: string }>;
+  // OKF Profile Intelligence (2026-07-02).
+  knowledgeExportProfilePack: () => Promise<{ success: boolean; path?: string; fileCount?: number; error?: string; violations?: Array<{ path: string; reason: string }> }>;
+  knowledgeListProfilePacks: () => Promise<{ success: boolean; error?: string; packs: Array<{ id: string; fileName: string; cardCount: number; entityCount: number; packVersion: number; updatedAt: string; cardsByType: Record<string, number> }> }>;
+  knowledgeGetProfilePack: (kind: string) => Promise<{ success: boolean; error?: string; pack?: { id: string; fileName: string; packVersion: number; updatedAt: string; cards: Array<{ id: string; type: string; title: string; conceptId: string; body: string; confidence: string; tags: string[]; entities: string[]; sourceQuotes: string[]; pii: boolean }> } }>;
   profileResearchCompany: (
     companyName: string,
   ) => Promise<{ success: boolean; dossier?: any; error?: string }>;
@@ -872,6 +876,22 @@ interface ElectronAPI {
     name: string;
     templateType: string;
   }) => Promise<{ success: boolean; mode?: any; error?: string }>;
+  modesGenerateFromBrief: (params: {
+    brief: string;
+    requiresGrounding?: boolean;
+    templateHint?: string;
+    key?: string;
+    persist?: boolean;
+  }) => Promise<{
+    success: boolean;
+    mode?: any;
+    draft?: any;
+    attempts?: number;
+    issues?: any[];
+    persisted?: boolean;
+    error?: string;
+  }>;
+  e2eInvoke: (channel: string, ...args: any[]) => Promise<any>;
   modesUpdate: (
     id: string,
     updates: { name?: string; templateType?: string; customContext?: string },
@@ -2207,6 +2227,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // JD & Research API
   profileUploadJD: (filePath: string) => ipcRenderer.invoke('profile:upload-jd', filePath),
   profileDeleteJD: () => ipcRenderer.invoke('profile:delete-jd'),
+  // OKF Profile Intelligence (2026-07-02): export the profile OKF bundle (explicit
+  // user action, premium + okfProfileMarkdownExport gated) and read pack data for
+  // the (flag-gated) Knowledge inspector UI.
+  knowledgeExportProfilePack: () => ipcRenderer.invoke('knowledge:export-profile-pack'),
+  knowledgeListProfilePacks: () => ipcRenderer.invoke('knowledge:list-profile-packs'),
+  knowledgeGetProfilePack: (kind: string) => ipcRenderer.invoke('knowledge:get-profile-pack', kind),
   profileResearchCompany: (companyName: string) =>
     ipcRenderer.invoke('profile:research-company', companyName),
   profileGenerateNegotiation: (force?: boolean) =>
@@ -2357,6 +2383,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   modesGetActive: () => ipcRenderer.invoke('modes:get-active'),
   modesCreate: (params: { name: string; templateType: string }) =>
     ipcRenderer.invoke('modes:create', params),
+  modesGenerateFromBrief: (params: {
+    brief: string;
+    requiresGrounding?: boolean;
+    templateHint?: string;
+    key?: string;
+    persist?: boolean;
+  }) => ipcRenderer.invoke('modes:generate-from-brief', params),
+  // E2E test bridge — generic invoke for the __e2e__:* handlers, which only exist
+  // when the main process was started with NATIVELY_E2E=1. No-op surface in a
+  // shipped app (the handlers aren't registered, so invoke rejects).
+  e2eInvoke: (channel: string, ...args: any[]) =>
+    ipcRenderer.invoke(channel, ...args),
   modesUpdate: (
     id: string,
     updates: { name?: string; templateType?: string; customContext?: string },

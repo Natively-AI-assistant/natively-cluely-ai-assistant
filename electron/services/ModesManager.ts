@@ -31,6 +31,13 @@ import {
     SHARED_MODE_PREFIX_SHORT,
 } from '../llm/prompts';
 
+/**
+ * OKF Profile Intelligence (migration v23): the reserved mode profile OKF packs
+ * hang off. Never a user mode — filtered from getModes(), rejected by
+ * setActiveMode. Kept in sync with ProfilePackBuilder.PROFILE_OKF_MODE_ID.
+ */
+export const PROFILE_OKF_RESERVED_MODE_ID = '__profile_okf__';
+
 export type ModeTemplateType =
     | 'general'
     | 'looking-for-work'
@@ -266,6 +273,10 @@ function rowToSection(row: any): ModeNoteSection {
 export class ModesManager {
     private static instance: ModesManager;
     private readonly modeContextRetriever = new ModeContextRetriever();
+    /** Normalized [0,1] top-score confidence from the most recent
+     *  buildRetrievedActiveModeContextBlock call. Read by the doc-grounded
+     *  false-refusal gate. See getLastRetrievalConfidence. */
+    private lastRetrievalConfidence = 0;
 
     private constructor() {}
 
@@ -279,7 +290,17 @@ export class ModesManager {
     // ── Modes ─────────────────────────────────────────────────────
 
     public getModes(): Mode[] {
-        const modes = DatabaseManager.getInstance().getModes().map(rowToMode);
+        const modes = DatabaseManager.getInstance().getModes()
+            // OKF Profile Intelligence (2026-07-02): the '__profile_okf__' reserved
+            // mode (template_type '__reserved__', migration v23) exists ONLY to
+            // satisfy the knowledge_packs.mode_id NOT NULL + FK constraint for profile
+            // OKF packs. It is not a user-facing mode and must never appear in the
+            // mode list, be pinnable/activatable, or be matched by document-grounded
+            // retrieval's getPacksByModeId — filter it out at the single read choke
+            // point so every downstream consumer (UI list, resolveMode, retrieval)
+            // is transparently protected.
+            .filter((row: any) => row.template_type !== '__reserved__')
+            .map(rowToMode);
 
         // Always enforce 'general' at the very top of the list.
         // L1: id is the secondary sort key for stable ordering when two modes
@@ -465,6 +486,18 @@ export class ModesManager {
     }
 
     public setActiveMode(id: string | null): void {
+        // OKF Profile Intelligence (2026-07-02): the reserved '__profile_okf__'
+        // mode (migration v23) exists ONLY to satisfy the knowledge_packs.mode_id
+        // FK for profile OKF packs. It is filtered out of getModes(), so a
+        // renderer's modes:set-active would look it up as `undefined` and skip the
+        // pro-gate — but the DB row still exists, so an UPDATE would activate a
+        // phantom mode that no longer appears in the list to switch away from.
+        // Reject it (and any future reserved mode) here at the single write choke
+        // point so it can never become active/pinned.
+        if (id === PROFILE_OKF_RESERVED_MODE_ID) {
+            console.warn('[ModesManager] setActiveMode: refusing to activate the reserved profile OKF mode');
+            return;
+        }
         DatabaseManager.getInstance().setActiveMode(id);
         this.invalidateActiveModeCache();
     }
@@ -911,7 +944,26 @@ export class ModesManager {
             ...retrievalOptions,
         });
 
+        // Side-channel the normalized top-score CONFIDENCE for this call
+        // (2026-07-02) for DIAGNOSTICS only (surfaced by the debug
+        // modes:build-retrieved-context IPC). NOTE: the document-grounded
+        // false-refusal gate deliberately does NOT use this — retrieval score
+        // proved unreliable there because the forced-doc-grounding section
+        // boost inflates off-topic queries (an off-topic "FIFA World Cup?"
+        // out-scored a genuine "research questions?" on the real thesis). The
+        // gate uses OKF entity/title overlap instead (see ipcHandlers). Kept
+        // because it's honest, cheap diagnostic data. Overwritten on every
+        // call; synchronous write (no await), so no cross-question clobber.
+        this.lastRetrievalConfidence = result.topScoreConfidence ?? 0;
+
         return result.formattedContext;
+    }
+
+    /** Normalized [0,1] retrieval confidence from the most recent
+     *  buildRetrievedActiveModeContextBlock call (0 if it retrieved nothing).
+     *  DIAGNOSTICS only — NOT used by the false-refusal gate (see setter). */
+    public getLastRetrievalConfidence(): number {
+        return this.lastRetrievalConfidence;
     }
 
     /**

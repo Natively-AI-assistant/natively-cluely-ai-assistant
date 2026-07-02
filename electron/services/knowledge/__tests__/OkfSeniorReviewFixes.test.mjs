@@ -349,7 +349,9 @@ test('ipcHandlers: assembleEvidence is called and its tier feeds hasStrongEviden
   const src = read('electron/ipcHandlers.ts');
   assert.match(src, /const \{ assembleEvidence \} = require\('\.\/services\/knowledge\/EvidenceAssembler'\);/);
   assert.match(src, /isTier1Or2Evidence = bestTier <= 2;/);
-  assert.match(src, /hasStrongEvidence = present\.length >= 3 \|\| Boolean\(matchedHighSignalEntity\) \|\| isTier1Or2Evidence;/);
+  // Updated 2026-07-02: the gate uses OKF entity/title overlap (hasRealEvidence)
+  // as the primary signal; isTier1Or2Evidence remains an additional OR signal.
+  assert.match(src, /hasStrongEvidence = hasRealEvidence \|\| Boolean\(matchedHighSignalEntity\) \|\| isTier1Or2Evidence;/);
 });
 
 // ---------------------------------------------------------------------------

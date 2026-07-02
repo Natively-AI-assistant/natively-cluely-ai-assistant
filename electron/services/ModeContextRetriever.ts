@@ -43,6 +43,16 @@ export interface ModeRetrievedContext {
     snippets: ModeRetrievedSnippet[];
     formattedContext: string;
     usedFallback: boolean;
+    /** Document-type-agnostic retrieval confidence in [0,1] for this query:
+     *  the top snippet's raw score normalized against this query's OWN
+     *  adaptive relevance floor (which already scales for query size and the
+     *  flat-doc lexical cap). ~1.0 = the top chunk scored well above the floor
+     *  (a confident match); ~0 = nothing cleared the floor. Lets a downstream
+     *  gate (the doc-grounded false-refusal repair in ipcHandlers) compare a
+     *  single threshold across BOTH ToC-structured docs (raw scores 0.5-0.9)
+     *  and flat prose docs (raw scores cap ~0.25) by construction. Absent on
+     *  the empty/fallback returns (treat as 0). */
+    topScoreConfidence?: number;
 }
 
 export interface ModeRetrievalOptions {
@@ -1242,10 +1252,22 @@ export class ModeContextRetriever {
         }
         lines.push('</active_mode_retrieved_context>');
 
+        // Document-type-agnostic confidence: normalize the top selected score
+        // against this query's OWN adaptive floor. A confidently-answering
+        // chunk scores ~2.5x+ the floor on BOTH ToC docs (floor ~0.18, strong
+        // ~0.5-0.9) and flat prose (floor scaled down by query size, strong
+        // ~0.25) — so dividing by (floor * 2.5) maps "clearly strong" → ~1.0
+        // and "barely cleared the floor / off-topic" → ~0.4 or less,
+        // regardless of the raw score's absolute magnitude. Clamped to [0,1].
+        const topRawScore = selected.length > 0 ? Math.max(...selected.map(s => s.score)) : 0;
+        const confidenceReference = Math.max(adaptiveThreshold * 2.5, 1e-6);
+        const topScoreConfidence = Math.max(0, Math.min(1, topRawScore / confidenceReference));
+
         return {
             snippets: selected,
             formattedContext: lines.join('\n'),
             usedFallback: false,
+            topScoreConfidence,
         };
     }
 

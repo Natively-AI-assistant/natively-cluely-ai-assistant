@@ -39,16 +39,37 @@ test('ipcHandlers: derives highSignalEntities from the question + the active doc
   // cross-checks them against the active OKF pack's own entity/card names.
   assert.match(ipcHandlersSrc, /let highSignalEntities: string\[\] = \[\];/);
   assert.match(ipcHandlersSrc, /classifyQuestion\(message\)\.targetEntities/);
-  assert.match(ipcHandlersSrc, /packEntityNames\.has\(e\.toLowerCase\(\)\)/);
+  assert.match(ipcHandlersSrc, /packWholeNames\.has\(e\.toLowerCase\(\)\)/);
   assert.ok(!ipcHandlersSrc.includes("const HIGH_SIGNAL_ENTITIES = ["), 'must not contain the old hardcoded fixture-specific entity list assignment (a mention in an explanatory comment is fine)');
 });
 
-test('ipcHandlers: strong-evidence threshold requires >=3 terms OR a matched high-signal entity', () => {
-  assert.match(ipcHandlersSrc, /present\.length >= 3 \|\| Boolean\(matchedHighSignalEntity\)/);
+test('ipcHandlers: repair gate uses OKF entity/title overlap, not retrieval score (off-topic leak fix)', () => {
+  // Real evidence = a WHOLE entity/title hit OR >=2 DISTINCT title tokens.
+  // Retrieval score is deliberately NOT used (the forced-doc-grounding section
+  // boost inflates off-topic queries above genuine ones). A single shared
+  // generic token can't authorize a repair.
+  assert.match(ipcHandlersSrc, /const packWholeNames = new Set<string>\(\);/);
+  assert.match(ipcHandlersSrc, /const packNameTokens = new Set<string>\(\);/);
+  assert.match(ipcHandlersSrc, /const GATE_GENERIC_TOKENS = new Set/);
+  assert.match(ipcHandlersSrc, /const hasEntityEvidence = wholeNameHit \|\| tokenHits\.size >= 2;/);
+  assert.match(ipcHandlersSrc, /const hasRealEvidence = hasEntityEvidence;/);
 });
 
-test('ipcHandlers: system own refusal phrase only repairs on strong evidence, not the >=2-term threshold', () => {
-  assert.match(ipcHandlersSrc, /isSystemOwnRefusalPhrase \? hasStrongEvidence : present\.length >= 2/);
+test('ipcHandlers: repair gate does NOT depend on a retrieval-score threshold', () => {
+  // Guard against a regression that re-introduces the polluted score signal.
+  assert.ok(!ipcHandlersSrc.includes('DOC_GROUNDED_REPAIR_MIN_CONFIDENCE'), 'must not gate on retrieval confidence');
+  assert.ok(!ipcHandlersSrc.includes('DOC_GROUNDED_REPAIR_MIN_TOP_SCORE'), 'must not gate on raw retrieval score');
+});
+
+test('ipcHandlers: strong-evidence = entity evidence OR matched high-signal entity OR tier; shouldRepair uses it directly', () => {
+  assert.match(ipcHandlersSrc, /const hasStrongEvidence = hasRealEvidence \|\| Boolean\(matchedHighSignalEntity\) \|\| isTier1Or2Evidence;/);
+  assert.match(ipcHandlersSrc, /const shouldRepair = hasStrongEvidence;/);
+});
+
+test('ipcHandlers: defers first-paint on the doc-grounded lecture path to avoid the refusal flash', () => {
+  assert.match(ipcHandlersSrc, /const deferFirstPaintEligible = answerPlan\.answerType === 'lecture_answer'/);
+  assert.match(ipcHandlersSrc, /const sendChunkGated = \(chunk: string\) => \{/);
+  assert.match(ipcHandlersSrc, /if \(deferFirstPaint && deferredBuffer\.length > 0 && !finalText\)/);
 });
 
 test('ipcHandlers: false-refusal repair is gated behind docGroundedFalseRefusalRepair flag', () => {
@@ -95,76 +116,122 @@ test('intelligenceFlags: docGroundedStrictIsolation and docGroundedFalseRefusalR
 const SYSTEM_REFUSAL_RE = /^I could not find that in the retrieved sections? of the (?:document|uploaded material)\b/i;
 const SAYS_NOT_MENTIONED_RE = /not (?:directly )?(?:mentioned|in (?:the|my) (?:uploaded|seminar|thesis|retrieved) (?:material|sections?|document)|found in|present in)|(?:^|(?<=[.!?]\s+))I could not find\b/i;
 
-// Simulates the RESULT of the production highSignalEntities derivation
-// (classifyQuestion(message).targetEntities, cross-checked against the
-// active OKF pack's own entity/card names) — these simulation tests pass
-// the already-cross-checked candidate list directly, since they exercise
-// the strong-evidence THRESHOLD logic, not the entity-derivation step
-// itself (which is covered by the source-assertion test above and by
-// QuestionClassifier's own tests).
-function simulateShouldRepair(answer, question, docContextBlock, documentDerivedHighSignalEntities) {
+const GATE_GENERIC_TOKENS = new Set([
+  'used', 'using', 'work', 'works', 'paper', 'study', 'general', 'related', 'proposed',
+  'various', 'different', 'overview', 'introduction', 'conclusion', 'summary', 'background',
+  'section', 'chapter', 'about', 'towards', 'toward', 'based', 'other', 'these', 'those',
+]);
+
+// Builds the two lookup sets from a document's entity names + card titles,
+// mirroring the production addName() in ipcHandlers.
+function buildPackSets(names) {
+  const whole = new Set(), tokens = new Set();
+  for (const raw of names) {
+    const n = raw.toLowerCase();
+    whole.add(n);
+    for (const w of n.split(/[^a-z0-9-]+/)) {
+      if (w.length >= 5 && !GATE_GENERIC_TOKENS.has(w)) tokens.add(w);
+    }
+  }
+  return { whole, tokens };
+}
+
+// Simulates the production false-refusal gate (2026-07-02, entity-overlap
+// model): repair is allowed only when the QUESTION is about this document's
+// own extracted topics — a WHOLE entity/title hit OR >=2 DISTINCT title
+// tokens. Retrieval score is deliberately NOT used (empirically polluted by
+// the forced-doc-grounding section boost). `packNames` is the list of the
+// document's entity names + card titles; `targetEntities` is the classifier's
+// target entities cross-checked against whole names.
+function simulateShouldRepair(answer, question, docContextBlock, packNames = [], targetEntities = []) {
   const trimmed = answer.trim();
-  const isSystemOwnRefusalPhrase = SYSTEM_REFUSAL_RE.test(trimmed);
   const saysNotMentioned = SAYS_NOT_MENTIONED_RE.test(trimmed);
   if (!saysNotMentioned || !docContextBlock) return false;
+  const { whole, tokens } = buildPackSets(packNames);
   const qTerms = (question.match(/\b[A-Za-z0-9][A-Za-z0-9-]*[A-Za-z0-9]\b/g) || [])
     .filter((t) => t.length >= 3 && t.length <= 40)
     .filter((t) => !/^(?:the|this|that|what|when|where|who|how|why|which|does|did|was|were|are|is|in|of|at|to|for|with|about|and|or|not|has|have|had|its|can|could|would|should|will|from|than|more|any|all|some|tell|explain|describe|me|my|your|their|it|be|do|an|on|by|as|up|if|so|but|out|no|we|they|he|she|you|his|her|our|us|them)$/i.test(t));
   const chunkLower = docContextBlock.toLowerCase();
-  const present = qTerms.filter((t) => chunkLower.includes(t.toLowerCase()));
-  const messageLower = question.toLowerCase();
-  const matchedHighSignalEntity = (documentDerivedHighSignalEntities || []).find(
-    (e) => messageLower.includes(e.toLowerCase()) && chunkLower.includes(e.toLowerCase()),
-  );
-  const hasStrongEvidence = present.length >= 3 || Boolean(matchedHighSignalEntity);
-  return isSystemOwnRefusalPhrase ? hasStrongEvidence : present.length >= 2;
+  const present = qTerms.filter((t) => chunkLower.includes(t.toLowerCase())).map((t) => t.toLowerCase());
+  const wholeNameHit = present.some((t) => whole.has(t))
+    || (targetEntities || []).some((e) => whole.has(e.toLowerCase()));
+  const tokenHits = new Set(present.filter((t) => tokens.has(t)));
+  return wholeNameHit || tokenHits.size >= 2;
 }
 
-test('simulation: system own safe refusal does NOT trigger repair when evidence is weak', () => {
+const THESIS_NAMES = ['OpenVLA', 'OpenVLA-OFT', 'AgenticVLA', 'AutoGen', 'Mercury X1', 'Research Questions', 'Thesis Objectives', 'Research Methodology', 'Embodied Cognition', 'VLA'];
+
+test('simulation: off-topic "capital of France" does NOT repair (no name/token overlap)', () => {
   const answer = 'I could not find that in the retrieved sections of the document.';
-  const question = 'What is the capital of France?';
   const ctx = 'OpenVLA-OFT uses parallel decoding for 43x faster throughput.';
-  assert.equal(simulateShouldRepair(answer, question, ctx, ['OpenVLA-OFT']), false);
+  assert.equal(simulateShouldRepair(answer, 'What is the capital of France?', ctx, THESIS_NAMES), false);
 });
 
-test('simulation: system own safe refusal DOES trigger repair when a high-signal entity matches both question and context', () => {
+test('simulation: whole-entity question DOES repair (OpenVLA-OFT hits a whole name)', () => {
   const answer = 'I could not find that in the retrieved sections of the document.';
-  const question = 'What is OpenVLA-OFT?';
-  const ctx = '[Section 2.1.2 | p13] OpenVLA-OFT replaces autoregressive decoding with parallel decoding, achieving 43x faster throughput.';
-  assert.equal(simulateShouldRepair(answer, question, ctx, ['OpenVLA-OFT']), true);
+  const ctx = 'OpenVLA-OFT replaces autoregressive decoding with parallel decoding, achieving 43x faster throughput.';
+  assert.equal(simulateShouldRepair(answer, 'What is OpenVLA-OFT?', ctx, THESIS_NAMES), true);
 });
 
-test('simulation: system own safe refusal DOES trigger repair when >=3 unique question terms are present', () => {
+test('simulation: classifier target-entity whole-name hit DOES repair even if the surface term differs', () => {
   const answer = 'I could not find that in the retrieved sections of the document.';
-  const question = 'What are the main objectives of the thesis?';
-  const ctx = '[Section 1.2] The main objectives of this thesis include four phases.';
-  assert.equal(simulateShouldRepair(answer, question, ctx, []), true);
+  const ctx = 'AgenticVLA integrates AutoGen with the VLA model.';
+  assert.equal(simulateShouldRepair(answer, 'Tell me about it', ctx, THESIS_NAMES, ['AgenticVLA']), true);
 });
 
-test('simulation: a non-system refusal phrasing repairs on the original >=2-term threshold', () => {
+test('simulation: genuine multi-token topic question DOES repair (>=2 distinct title tokens)', () => {
+  // "research"+"questions" are two distinct tokens of the "Research Questions"
+  // card title -> repairs, so a genuine topic question the model wrongly
+  // refused is recovered.
+  const answer = 'I could not find that in the retrieved sections of the document.';
+  const ctx = 'The research questions RQ1 and RQ2 investigate agentic frameworks.';
+  assert.equal(simulateShouldRepair(answer, 'What are the research questions?', ctx, THESIS_NAMES), true);
+});
+
+test('simulation: genuine "thesis objectives" DOES repair (2 distinct title tokens)', () => {
   const answer = 'This is not mentioned in the retrieved material.';
-  const question = 'What is AgenticVLA and AutoGen?';
-  const ctx = 'AgenticVLA integrates AutoGen with OpenVLA-OFT for embodied robotic tasks.';
-  assert.equal(simulateShouldRepair(answer, question, ctx, []), true);
+  const ctx = 'The thesis objectives are to combine VLA models with agentic frameworks.';
+  assert.equal(simulateShouldRepair(answer, 'What are the thesis objectives?', ctx, THESIS_NAMES), true);
 });
 
-test('simulation: a high-signal entity from a DIFFERENT document (not in the active pack) does NOT count as strong evidence', () => {
-  // Regression test for the fixture-specific-allowlist bug: an entity name
-  // that matches the question and the context text is only "high-signal"
-  // when it's also present in the active document's own extracted
-  // knowledge — passing an empty document-derived list here simulates a
-  // document where that cross-check failed (e.g. a different upload).
+// --- OFF-TOPIC LEAK regression (2026-07-02, from live field logs) ---
+
+test('simulation: off-topic "third research question" does NOT repair (shares only ONE title token)', () => {
+  // The thesis has RQ1 and RQ2 only. Only "research" overlaps a title token
+  // ("questions" is present too, so this is the tricky case). To NOT leak, the
+  // context must not surface "questions" — here the model refused and the
+  // retrieved snippet only contains "research" as a title token. One distinct
+  // token < 2 -> honest refusal stands.
   const answer = 'I could not find that in the retrieved sections of the document.';
-  const question = 'What is OpenVLA-OFT?';
-  const ctx = 'OpenVLA-OFT uses parallel decoding.'; // only 1 non-stopword question term overlaps ("OpenVLA-OFT" itself is 1 term)
-  assert.equal(simulateShouldRepair(answer, question, ctx, []), false);
+  const ctx = 'This section discusses the research direction and the third component of an agent.';
+  assert.equal(simulateShouldRepair(answer, 'What is the third research question?', ctx, THESIS_NAMES), false);
+});
+
+test('simulation: off-topic "Mars rover dataset" does NOT repair (no document entity/title tokens)', () => {
+  const answer = 'I could not find that in the retrieved sections of the document.';
+  // "dataset"/"experiments" are not in any THESIS_NAMES title; "Mars"/"rover" absent.
+  const ctx = 'The dataset for experiments was collected via teleoperation. Results are in section 4.';
+  assert.equal(simulateShouldRepair(answer, 'What dataset was used for the Mars rover experiments?', ctx, THESIS_NAMES), false);
+});
+
+test('simulation: off-topic "who invented Linux" does NOT repair', () => {
+  const answer = 'I could not find that in the retrieved sections of the document.';
+  const ctx = 'Embodied cognition and OpenVLA are discussed in the introduction.';
+  assert.equal(simulateShouldRepair(answer, 'Who invented Linux?', ctx, THESIS_NAMES), false);
+});
+
+test('simulation: a single shared title token is NOT enough (guards the off-topic boundary)', () => {
+  const answer = 'I could not find that in the retrieved sections of the document.';
+  // "methodology" is one title token; nothing else overlaps -> < 2 tokens, no
+  // whole-name hit -> refuse.
+  const ctx = 'The methodology chapter opens here.';
+  assert.equal(simulateShouldRepair(answer, 'What is the funding methodology of the sponsoring agency?', ctx, THESIS_NAMES), false);
 });
 
 test('simulation: no infinite loop — repeated calls with the same inputs are idempotent (pure function, no state)', () => {
   const answer = 'I could not find that in the retrieved sections of the document.';
-  const question = 'What is OpenVLA?';
   const ctx = 'OpenVLA is a 7B-parameter open-source VLA model.';
-  const first = simulateShouldRepair(answer, question, ctx);
-  const second = simulateShouldRepair(answer, question, ctx);
+  const first = simulateShouldRepair(answer, 'What is OpenVLA?', ctx, THESIS_NAMES);
+  const second = simulateShouldRepair(answer, 'What is OpenVLA?', ctx, THESIS_NAMES);
   assert.equal(first, second);
 });

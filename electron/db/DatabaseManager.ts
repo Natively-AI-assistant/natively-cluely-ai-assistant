@@ -1049,6 +1049,46 @@ export class DatabaseManager {
             }
         }
 
+        if (version < 23) {
+            // OKF Profile Intelligence upgrade (2026-07-02): the shared knowledge_*
+            // tables (v19→v20) were built for MODE reference files — knowledge_sources
+            // and knowledge_packs declare `mode_id TEXT NOT NULL` with an FK to
+            // modes(id). Profile packs (candidate resume/JD → OKF cards) have no user
+            // mode. Rather than fork a parallel table family (explicitly forbidden by
+            // the migration brief — "no second OKF stack"), we reserve ONE sentinel
+            // mode row, '__profile_okf__', that profile packs hang off. It satisfies
+            // the NOT NULL + FK constraint AND is filterable so it never surfaces as a
+            // real mode: ModesManager.getModes and every getPacksByModeId caller for
+            // document-grounded retrieval query by a USER mode id, never this reserved
+            // id, so profile cards can never leak into a document-grounded answer via
+            // the mode path. The premium KnowledgeDatabaseManager enables
+            // `PRAGMA foreign_keys = ON` on this same shared connection at boot, so the
+            // FK is genuinely enforced at runtime — the sentinel is required, not
+            // cosmetic. template_type '__reserved__' keeps it out of the general/custom
+            // template universe.
+            //
+            // Also add the `pii` marker column to knowledge_cards: profile cards carry
+            // pii=1 so downstream tooling (export, UI, any future consumer) can filter
+            // PII cards. Reference-file cards keep the default pii=0 — no behavior
+            // change for the existing document OKF path.
+            console.log('[DatabaseManager] Applying migration v22 → v23: profile OKF (reserved mode + knowledge_cards.pii)');
+            const addPiiColumn = () => {
+                try {
+                    this.db!.exec(`ALTER TABLE knowledge_cards ADD COLUMN pii INTEGER NOT NULL DEFAULT 0`);
+                } catch (e) {
+                    // Column already exists (idempotent re-run / older partial migration) — additive ALTER only.
+                    const msg = (e as Error)?.message || '';
+                    if (!/duplicate column name/i.test(msg)) throw e;
+                }
+            };
+            addPiiColumn();
+            this.db.prepare(`
+                INSERT OR IGNORE INTO modes (id, name, template_type, custom_context, is_active, created_at)
+                VALUES ('__profile_okf__', 'Profile Intelligence (reserved)', '__reserved__', '', 0, CURRENT_TIMESTAMP)
+            `).run();
+            this.db.pragma('user_version = 23');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 
@@ -1353,6 +1393,7 @@ export class DatabaseManager {
         body: string; bodyMarkdown?: string; sourcePagesJson: string; sourceSectionsJson: string;
         sourceQuotesJson: string; entitiesJson: string; tagsJson: string; relatedCardIdsJson: string;
         confidence: string; generatedFrom: string; sourceChecksum: string; cardVersion: number;
+        pii?: boolean;
     }>, newSourceChecksum?: string): void {
         if (!this.db) throw new Error('Database not initialized');
         const txn = this.db.transaction(() => {
@@ -1384,21 +1425,21 @@ export class DatabaseManager {
             const ins = this.db!.prepare(`
                 INSERT INTO knowledge_cards (id, pack_id, source_id, type, title, slug, concept_id, body, body_markdown,
                     source_pages_json, source_sections_json, source_quotes_json, entities_json, tags_json, related_card_ids_json,
-                    confidence, generated_from, source_checksum, updated_at, card_version)
+                    confidence, generated_from, source_checksum, updated_at, card_version, pii)
                 VALUES (@id, @packId, @sourceId, @type, @title, @slug, @conceptId, @body, @bodyMarkdown,
                     @sourcePagesJson, @sourceSectionsJson, @sourceQuotesJson, @entitiesJson, @tagsJson, @relatedCardIdsJson,
-                    @confidence, @generatedFrom, @sourceChecksum, CURRENT_TIMESTAMP, @cardVersion)
+                    @confidence, @generatedFrom, @sourceChecksum, CURRENT_TIMESTAMP, @cardVersion, @pii)
                 ON CONFLICT(id) DO UPDATE SET
                     body = excluded.body, body_markdown = excluded.body_markdown,
                     source_pages_json = excluded.source_pages_json, source_sections_json = excluded.source_sections_json,
                     source_quotes_json = excluded.source_quotes_json, entities_json = excluded.entities_json,
                     tags_json = excluded.tags_json, related_card_ids_json = excluded.related_card_ids_json,
                     confidence = excluded.confidence, source_checksum = excluded.source_checksum,
-                    updated_at = CURRENT_TIMESTAMP, card_version = excluded.card_version
+                    updated_at = CURRENT_TIMESTAMP, card_version = excluded.card_version, pii = excluded.pii
                 WHERE knowledge_cards.user_edited = 0
             `);
             for (const c of cards) {
-                ins.run({ ...c, packId, sourceId, bodyMarkdown: c.bodyMarkdown ?? null });
+                ins.run({ ...c, packId, sourceId, bodyMarkdown: c.bodyMarkdown ?? null, pii: c.pii ? 1 : 0 });
             }
         });
         txn();

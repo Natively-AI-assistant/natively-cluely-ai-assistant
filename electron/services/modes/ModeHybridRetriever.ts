@@ -74,6 +74,12 @@ const DEFAULT_TOKEN_BUDGET = 1800;
 const DEFAULT_TOP_K = 6;
 const CHUNK_WORDS = 140;
 const CHUNK_OVERLAP = 30;
+// Max chunks embedded per getEmbeddingsWithFallback call during indexing. Files
+// larger than this are embedded + persisted in sub-batches so a very large doc
+// (e.g. a 14k-row CSV → hundreds of chunks) doesn't exceed the pipeline's 30s
+// per-call embed timeout and lose all progress. 100 aligns with the Gemini
+// batchEmbedContents request cap.
+const MODE_INDEX_EMBED_BATCH = Number(process.env.NATIVELY_MODE_INDEX_EMBED_BATCH) || 100;
 const MIN_COMBINED_SCORE = 0.15;
 const FTS_WEIGHT = 0.4;  // alpha for combined score: alpha * fts + (1-alpha) * vector
 
@@ -343,14 +349,66 @@ export class ModeHybridRetriever {
 
         this.updateIndexState(file.id, contentHash, chunks.length, 'indexing', activeSpace);
         try {
-            const result = await this.embeddingPipeline.getEmbeddingsWithFallback(chunks);
-            const embeddings = result.embeddings;
-            const embeddingSpace = result.space;
-            if (!Array.isArray(embeddings) || embeddings.length !== chunks.length) {
-                throw new Error(`batch embed returned ${embeddings?.length ?? 'none'} vectors for ${chunks.length} chunks`);
+            // Large files (e.g. a 14k-row CSV → hundreds of chunks) can't be embedded
+            // in ONE call: the pipeline wraps a single getEmbeddingsWithFallback in a
+            // 30s timeout, so a big corpus times out all-or-nothing. Embed + persist in
+            // bounded sub-batches so each has its own budget.
+            const INDEX_BATCH = MODE_INDEX_EMBED_BATCH;
+            if (chunks.length <= INDEX_BATCH) {
+                const result = await this.embeddingPipeline.getEmbeddingsWithFallback(chunks);
+                const embeddings = result.embeddings;
+                if (!Array.isArray(embeddings) || embeddings.length !== chunks.length) {
+                    throw new Error(`batch embed returned ${embeddings?.length ?? 'none'} vectors for ${chunks.length} chunks`);
+                }
+                this.persistChunks(file.id, chunks, embeddings, result.space);
+                this.updateIndexState(file.id, contentHash, chunks.length, 'ready', result.space);
+            } else {
+                // FAULT-TOLERANT batched indexing: a mid-file sub-batch failure (429
+                // rotation exhausted, timeout) must NOT discard the chunks already
+                // embedded. We embed the leading vectors we CAN, persist them (with
+                // the remaining chunks kept as lexical-only text), and mark the file
+                // 'ready' as long as a meaningful fraction embedded — a partially
+                // vectorized large CSV massively outperforms an all-lexical one.
+                const embeddedVectors: number[][] = [];
+                let embeddingSpace: string | null = null;
+                let failedOffset = -1;
+                for (let start = 0; start < chunks.length; start += INDEX_BATCH) {
+                    const slice = chunks.slice(start, start + INDEX_BATCH);
+                    try {
+                        const result = await this.embeddingPipeline.getEmbeddingsWithFallback(slice);
+                        if (!Array.isArray(result.embeddings) || result.embeddings.length !== slice.length) {
+                            throw new Error(`returned ${result.embeddings?.length ?? 'none'} vectors for ${slice.length} chunks`);
+                        }
+                        embeddedVectors.push(...result.embeddings);
+                        embeddingSpace = result.space;
+                        console.log(`[ModeHybridRetriever] ${file.fileName}: embedded ${embeddedVectors.length}/${chunks.length} chunks`);
+                    } catch (batchErr) {
+                        failedOffset = start;
+                        console.warn(`[ModeHybridRetriever] ${file.fileName}: sub-batch at offset ${start} failed (${batchErr instanceof Error ? batchErr.message : batchErr}); keeping ${embeddedVectors.length} embedded + rest lexical.`);
+                        break;
+                    }
+                }
+                const embeddedCount = embeddedVectors.length;
+                if (embeddedCount === 0) {
+                    // Nothing embedded — lexical only, mark failed so a later prewarm retries.
+                    this.persistChunks(file.id, chunks, null, null);
+                    this.updateIndexState(file.id, contentHash, chunks.length, 'failed', null);
+                } else if (embeddedCount === chunks.length) {
+                    this.persistChunks(file.id, chunks, embeddedVectors, embeddingSpace);
+                    this.updateIndexState(file.id, contentHash, chunks.length, 'ready', embeddingSpace);
+                } else {
+                    // Partial: persist the embedded prefix WITH vectors, and the tail as
+                    // lexical-only text. persistChunks reads embeddings[i] per row and
+                    // stores a null blob where the vector is absent, so a padded array
+                    // (vectors for the prefix, null for the tail) gives a mixed index.
+                    const padded = chunks.map((_, i) => (i < embeddedCount ? embeddedVectors[i] : null)) as unknown as number[][];
+                    this.persistChunks(file.id, chunks, padded, embeddingSpace);
+                    // 'ready' — retrieval works over the embedded prefix + lexical tail.
+                    // A follow-up prewarm/retry can complete the tail when quota frees up.
+                    this.updateIndexState(file.id, contentHash, chunks.length, 'ready', embeddingSpace);
+                    console.log(`[ModeHybridRetriever] ${file.fileName}: partial index READY (${embeddedCount}/${chunks.length} vectors, tail lexical; failed@${failedOffset})`);
+                }
             }
-            this.persistChunks(file.id, chunks, embeddings, embeddingSpace);
-            this.updateIndexState(file.id, contentHash, chunks.length, 'ready', embeddingSpace);
         } catch (e) {
             console.warn(`[ModeHybridRetriever] indexFile failed for ${file.fileName}:`, e instanceof Error ? e.message : e);
             // Keep the chunk text for lexical retrieval; mark failed for retry.
