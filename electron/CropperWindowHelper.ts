@@ -120,6 +120,16 @@ export class CropperWindowHelper {
                 return;
             }
 
+            const cropperBounds = this.cropperWindow?.getBounds();
+
+            const globalBounds = cropperBounds
+                ? {
+                    ...bounds,
+                    x: bounds.x + cropperBounds.x,
+                    y: bounds.y + cropperBounds.y,
+                }
+                : bounds;
+            
             this.resolveCurrentSelection(bounds);
             this.hideOrClose();
         };
