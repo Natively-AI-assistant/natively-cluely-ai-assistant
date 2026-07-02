@@ -111,15 +111,7 @@ export class CropperWindowHelper {
                 this.hideOrClose();
                 return;
             }
-
-            // Validate input data for security
-            if (!this.validateBounds(bounds)) {
-                console.error('[CropperWindowHelper] Invalid bounds received:', bounds);
-                this.rejectCurrentSelection(null);
-                this.hideOrClose();
-                return;
-            }
-
+            
             const cropperBounds = this.cropperWindow?.getBounds();
 
             const globalBounds = cropperBounds
@@ -129,8 +121,16 @@ export class CropperWindowHelper {
                     y: bounds.y + cropperBounds.y,
                 }
                 : bounds;
+
+            // Validate input data for security using global coordinates to support multi-monitor setups
+            if (!this.validateBounds(globalBounds)) {
+                console.error('[CropperWindowHelper] Invalid bounds received:', globalBounds);
+                this.rejectCurrentSelection(null);
+                this.hideOrClose();
+                return;
+            }
             
-            this.resolveCurrentSelection(bounds);
+            this.resolveCurrentSelection(globalBounds);
             this.hideOrClose();
         };
 
