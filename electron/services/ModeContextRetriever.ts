@@ -6,7 +6,7 @@ import { DatabaseManager } from '../db/DatabaseManager';
 // Imported from the leaf module (not the ../llm barrel) to avoid a require cycle.
 import { classifyCustomContext, selectCustomContextForAnswer } from '../llm/customContextClassifier';
 import type { AnswerType } from '../llm/AnswerPlanner';
-import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, sentenceAwareWindows, type DocumentMap } from './modes/DocumentMap';
+import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, type DocumentMap } from './modes/DocumentMap';
 
 /**
  * Gate the mode's raw customContext blob by answer type (Phase 3). Returns only
@@ -43,15 +43,10 @@ export interface ModeRetrievedContext {
     snippets: ModeRetrievedSnippet[];
     formattedContext: string;
     usedFallback: boolean;
-    /** Document-type-agnostic retrieval confidence in [0,1] for this query:
-     *  the top snippet's raw score normalized against this query's OWN
-     *  adaptive relevance floor (which already scales for query size and the
-     *  flat-doc lexical cap). ~1.0 = the top chunk scored well above the floor
-     *  (a confident match); ~0 = nothing cleared the floor. Lets a downstream
-     *  gate (the doc-grounded false-refusal repair in ipcHandlers) compare a
-     *  single threshold across BOTH ToC-structured docs (raw scores 0.5-0.9)
-     *  and flat prose docs (raw scores cap ~0.25) by construction. Absent on
-     *  the empty/fallback returns (treat as 0). */
+    /** Document-type-agnostic retrieval confidence in [0,1] (diagnostics-only).
+     *  top snippet's raw score normalized against this query's own adaptive
+     *  relevance floor, clamped to [0,1] — works across ToC and flat-prose docs
+     *  by construction. Absent on empty/fallback returns (treat as 0). */
     topScoreConfidence?: number;
 }
 
@@ -237,12 +232,12 @@ function chunkText(content: string, fineChunk: boolean = false): string[] {
                 chunks.push(fullText);
                 continue;
             }
-            // Sentence-aware windowing (mirror of ModeHybridRetriever): never split
-            // a normative clause mid-sentence across a chunk boundary.
-            const bodyForWindows = headingLine ? bodyText : fullText;
-            for (const window of sentenceAwareWindows(bodyForWindows, CHUNK_WORDS, CHUNK_OVERLAP)) {
-                const ct = headingLine ? `${headingLine}\n${window}` : window;
+            for (let i = 0; i < words.length; i += CHUNK_WORDS - CHUNK_OVERLAP) {
+                const window = words.slice(i, i + CHUNK_WORDS);
+                if (window.length === 0) break;
+                const ct = headingLine ? `${headingLine}\n${window.join(' ')}` : window.join(' ');
                 if (ct.trim()) chunks.push(ct);
+                if (i + CHUNK_WORDS >= words.length) break;
             }
             continue;
         }
@@ -1252,13 +1247,10 @@ export class ModeContextRetriever {
         }
         lines.push('</active_mode_retrieved_context>');
 
-        // Document-type-agnostic confidence: normalize the top selected score
-        // against this query's OWN adaptive floor. A confidently-answering
-        // chunk scores ~2.5x+ the floor on BOTH ToC docs (floor ~0.18, strong
-        // ~0.5-0.9) and flat prose (floor scaled down by query size, strong
-        // ~0.25) — so dividing by (floor * 2.5) maps "clearly strong" → ~1.0
-        // and "barely cleared the floor / off-topic" → ~0.4 or less,
-        // regardless of the raw score's absolute magnitude. Clamped to [0,1].
+        // Document-type-agnostic confidence (diagnostics; consumed only by the
+        // modes:build-retrieved-context debug IPC, NOT by the doc-grounded
+        // false-refusal repair gate). Raw top score normalized against this
+        // query's own adaptive floor — works across ToC and flat-prose docs.
         const topRawScore = selected.length > 0 ? Math.max(...selected.map(s => s.score)) : 0;
         const confidenceReference = Math.max(adaptiveThreshold * 2.5, 1e-6);
         const topScoreConfidence = Math.max(0, Math.min(1, topRawScore / confidenceReference));
@@ -1363,12 +1355,6 @@ export class ModeContextRetriever {
             topK: options.topK,
             hasTranscript,
             allowRerank: options.allowRerank,
-            // CRITICAL: forward the document-grounding flag. Without it, the hybrid
-            // retriever never applies the doc-grounded budget/topK upgrade
-            // (DOC_GROUNDED_TOKEN_BUDGET_LOCAL=3600 / TOP_K=12) nor the per-section
-            // dedup + identity block — so grounded answers were retrieving only the
-            // default 1800-token / 6-chunk window, dropping multi-fact evidence.
-            forceDocumentGrounding: options.forceDocumentGrounding,
         });
 
         return result;
