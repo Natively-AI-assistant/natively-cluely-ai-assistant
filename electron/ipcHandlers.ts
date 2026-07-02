@@ -48,6 +48,19 @@ const GATE_GENERIC_TOKENS = new Set<string>([
   'used', 'using', 'work', 'works', 'paper', 'study', 'general', 'related', 'proposed',
   'various', 'different', 'overview', 'introduction', 'conclusion', 'summary', 'background',
   'section', 'chapter', 'about', 'towards', 'toward', 'based', 'other', 'these', 'those',
+  // ML/robotics generic title-words (senior review 2026-07-02): these dominate
+  // card titles across unrelated ML documents (len>=5, so they'd otherwise pass
+  // the token filter) — without them, an off-topic question sharing two of them
+  // ("which machine-learning MODEL won the TRAINING benchmark?") could hit the
+  // >=2-distinct-token rule and wrongly authorize a repair. Genuine multi-word
+  // topics keep their DISTINCTIVE half ("reinforcement learning" -> "reinforcement"
+  // survives), so filtering the generic half doesn't create genuine-misses.
+  'model', 'models', 'framework', 'frameworks', 'system', 'systems', 'result', 'results',
+  'evaluation', 'training', 'learning', 'method', 'methods', 'methodology', 'approach',
+  'approaches', 'analysis', 'network', 'networks', 'dataset', 'datasets', 'data',
+  'algorithm', 'algorithms', 'performance', 'experiment', 'experiments', 'architecture',
+  'architectures', 'application', 'applications', 'process', 'processes', 'design',
+  'implementation', 'component', 'components', 'structure', 'technique', 'techniques',
 ]);
 
 // Module-scope: pdfjs-dist's legacy build defaults GlobalWorkerOptions.workerSrc
@@ -2328,7 +2341,13 @@ export function initializeIpcHandlers(appState: AppState): void {
                     const addName = (raw: string) => {
                       const name = raw.toLowerCase();
                       packWholeNames.add(name);
-                      for (const w of name.split(/[^a-z0-9-]+/)) {
+                      // Split on any non-alphanumeric (INCLUDING hyphen) for
+                      // token emission (senior review 2026-07-02): a card titled
+                      // "OpenVLA-OFT" should make a bare-stem question ("what is
+                      // OpenVLA?") reachable via the "openvla" token, not only via
+                      // a separate "OpenVLA" entity that may or may not exist. The
+                      // whole hyphenated form is still kept in packWholeNames.
+                      for (const w of name.split(/[^a-z0-9]+/)) {
                         if (w.length >= 5 && !GATE_GENERIC_TOKENS.has(w)) packNameTokens.add(w);
                       }
                     };
@@ -9137,18 +9156,37 @@ export function initializeIpcHandlers(appState: AppState): void {
     // PRECISION (questions fire, statements don't) without spinning the LLM.
     safeHandle('__e2e__:detect-question', async (
       _,
-      seg: { text: string; confidence?: number },
+      seg: { text: string; confidence?: number; priorTurns?: Array<{ speaker: string; text: string }> },
     ) => {
       try {
-        const SPECULATIVE_MIN_WORDS = 7;
-        const SPECULATIVE_MIN_CONFIDENCE = 0.75;
         const text = String(seg.text || '');
         const confidence = typeof seg.confidence === 'number' ? seg.confidence : 0.9;
+        // Use the REAL question extractor the live WTA path uses
+        // (transcriptQuestionExtractor.extractLatestQuestion), driven with the
+        // interviewer turn as the latest turn. This is the true detection signal,
+        // not a simplified heuristic.
+        const { extractLatestQuestion } = require('./llm/transcriptQuestionExtractor') as typeof import('./llm/transcriptQuestionExtractor');
+        let ts = Date.now() - (seg.priorTurns?.length || 0) * 1000;
+        const turns = [
+          ...((seg.priorTurns || []).map((p) => ({ role: p.speaker === 'user' ? 'user' : 'interviewer', text: p.text, timestamp: ts++ * 1000 }))),
+          { role: 'interviewer', text, timestamp: Date.now() },
+        ];
+        const extracted = extractLatestQuestion(turns as any, 8);
+        const isQuestion = Boolean(extracted && extracted.latestQuestion && extracted.confidence >= 0.4);
+        // Also expose the simple speculative-fire signal for reference.
         const words = text.trim().split(/\s+/).filter(Boolean);
         const hasSignal = text.trimEnd().endsWith('?') ||
           /\b(what|how|why|where|when|which|who|can you|could you|tell me|explain|describe|walk me through|talk me through)\b/i.test(text);
-        const wouldFire = confidence >= SPECULATIVE_MIN_CONFIDENCE && words.length >= SPECULATIVE_MIN_WORDS && hasSignal;
-        return { success: true, wouldFire, words: words.length, hasSignal, confidence };
+        return {
+          success: true,
+          isQuestion,
+          detected: isQuestion,
+          questionType: extracted?.questionType ?? null,
+          extractedConfidence: extracted?.confidence ?? 0,
+          latestQuestion: extracted?.latestQuestion ?? null,
+          wouldFire: confidence >= 0.75 && words.length >= 7 && hasSignal,
+          hasSignal,
+        };
       } catch (e: any) {
         return { success: false, error: e.message };
       }
@@ -9181,6 +9219,106 @@ export function initializeIpcHandlers(appState: AppState): void {
     // (retrieval + mode prompt + MiniMax generation) and captures the answer via
     // the same suggested_answer event the renderer consumes — so the harness can
     // assert at the renderer boundary AND get a return value.
+    // E2E-only profile ingestion: mirrors profile:upload-resume / profile:upload-jd
+    // EXACTLY (same orchestrator.ingestDocument path, same knowledge-mode enable),
+    // but bypasses the OS file-dialog select-file security gate (untestable
+    // headlessly). Everything downstream — StructuredExtractor (MiniMax via the
+    // Natively backend), DocumentChunker, embeddings, context_nodes, AOT pipeline,
+    // OKF profile pack — is the REAL pipeline. Never registered outside NATIVELY_E2E.
+    safeHandle('__e2e__:ingest-profile-doc', async (
+      _,
+      params: { filePath: string; docType: 'resume' | 'jd' },
+    ) => {
+      try {
+        const orchestrator = appState.getKnowledgeOrchestrator();
+        if (!orchestrator) return { success: false, error: 'orchestrator_not_initialized' };
+        const { DocType } = require('../premium/electron/knowledge/types');
+        const dt = params.docType === 'jd' ? DocType.JD : DocType.RESUME;
+        const result = await orchestrator.ingestDocument(params.filePath, dt);
+        if (result?.success) {
+          try {
+            orchestrator.setKnowledgeMode(true);
+            const { SettingsManager } = require('./services/SettingsManager');
+            SettingsManager.getInstance().set('knowledgeMode', true);
+          } catch { /* non-fatal */ }
+        }
+        const activeResume = (orchestrator as any)?.activeResume?.structured_data ?? null;
+        const activeJD = (orchestrator as any)?.activeJD?.structured_data ?? null;
+        return {
+          ...result,
+          docType: params.docType,
+          hasStructuredResume: Boolean(activeResume),
+          hasStructuredJD: Boolean(activeJD),
+        };
+      } catch (e: any) {
+        return { success: false, error: e?.message || String(e) };
+      }
+    });
+
+    // E2E-only: read back live ingestion state from the orchestrator + DB so the
+    // harness can verify structured_data, node counts, embedding_space, AOT, and
+    // OKF pack conformance against ground truth — all from the REAL live DB.
+    safeHandle('__e2e__:profile-state', async () => {
+      try {
+        const orchestrator = appState.getKnowledgeOrchestrator();
+        if (!orchestrator) return { success: false, error: 'orchestrator_not_initialized' };
+        const o: any = orchestrator;
+        const activeResume = o?.activeResume?.structured_data ?? null;
+        const activeJD = o?.activeJD?.structured_data ?? null;
+        let nodeCount = 0; let embeddingSpaces: string[] = [];
+        try {
+          const kdb = o?.db;
+          if (kdb && typeof kdb.getAllNodes === 'function') {
+            const nodes = kdb.getAllNodes() || [];
+            nodeCount = nodes.length;
+            embeddingSpaces = [...new Set(nodes.map((n: any) => n.embedding_space).filter(Boolean))] as string[];
+          }
+        } catch { /* best effort */ }
+        const aot = {
+          gapAnalysis: (() => { try { return Boolean(o.getGapAnalysis?.()); } catch { return false; } })(),
+          negotiation: (() => { try { return Boolean(o.getNegotiationScript?.()); } catch { return false; } })(),
+          mockQuestions: (() => { try { return Boolean(o.getMockQuestions?.()); } catch { return false; } })(),
+          cultureMappings: (() => { try { return Boolean(o.getCultureMappings?.()); } catch { return false; } })(),
+        };
+        let okfPack: any = null;
+        try {
+          const { ProfilePackBuilder } = require('./services/knowledge/ProfilePackBuilder');
+          const packs = ProfilePackBuilder.getInstance().getAllProfilePacks();
+          okfPack = packs.map((p: any) => ({ modeId: p.modeId, fileName: p.fileName, cardCount: p.cards.length, packVersion: p.packVersion }));
+        } catch { /* okf may be off */ }
+        return {
+          success: true,
+          hasStructuredResume: Boolean(activeResume),
+          hasStructuredJD: Boolean(activeJD),
+          resumeName: activeResume?.identity?.name ?? null,
+          resumeExperienceCount: Array.isArray(activeResume?.experience) ? activeResume.experience.length : 0,
+          resumeProjectCount: Array.isArray(activeResume?.projects) ? activeResume.projects.length : 0,
+          jdCompany: activeJD?.company ?? null,
+          jdTitle: activeJD?.title ?? null,
+          nodeCount,
+          embeddingSpaces,
+          aot,
+          okfPack,
+        };
+      } catch (e: any) {
+        return { success: false, error: e?.message || String(e) };
+      }
+    });
+
+    // E2E-only: clear profile between sequential profiles (prevents cross-profile bleed).
+    safeHandle('__e2e__:clear-profile', async () => {
+      try {
+        const orchestrator = appState.getKnowledgeOrchestrator();
+        if (!orchestrator) return { success: false, error: 'orchestrator_not_initialized' };
+        const { DocType } = require('../premium/electron/knowledge/types');
+        orchestrator.deleteDocumentsByType(DocType.RESUME);
+        orchestrator.deleteDocumentsByType(DocType.JD);
+        return { success: true };
+      } catch (e: any) {
+        return { success: false, error: e?.message || String(e) };
+      }
+    });
+
     safeHandle('__e2e__:ask', async (
       _,
       params: { question: string; context?: string; timeoutMs?: number; injectAsTranscript?: boolean; priorTurns?: Array<{ speaker: string; text: string }> },
@@ -9244,10 +9382,21 @@ export function initializeIpcHandlers(appState: AppState): void {
             }, 1500);
           }
         };
+        // NON-answer planner decisions (clarify / recap / follow-up questions)
+        // surface on their own events. Capture them so the ask settles promptly
+        // instead of waiting the full timeout when the pipeline legitimately chose
+        // not to emit a candidate answer.
+        let nonAnswerDecision: { kind: string; text: string } | null = null;
+        const onClarify = (c: any) => { if (!latest && !nonAnswerDecision) nonAnswerDecision = { kind: 'clarify', text: String(c?.clarification || c || '') }; };
+        const onRecap = (r: any) => { if (!latest && !nonAnswerDecision) nonAnswerDecision = { kind: 'recap', text: String(r?.summary || r || '') }; };
+        const onFollowUps = (f: any) => { if (!latest && !nonAnswerDecision) nonAnswerDecision = { kind: 'follow_up_questions', text: JSON.stringify(f?.questions || f || '') }; };
         const cleanup = () => {
           try { im.off?.('suggested_answer', onAnswer as any); } catch {}
           try { im.off?.('suggested_answer_token', onToken as any); } catch {}
           try { im.off?.('suggested_answer_discard', onDiscard as any); } catch {}
+          try { im.off?.('clarify_ready', onClarify as any); } catch {}
+          try { im.off?.('recap_ready', onRecap as any); } catch {}
+          try { im.off?.('follow_up_questions', onFollowUps as any); } catch {}
           if (settleTimer) clearTimeout(settleTimer);
           clearTimeout(timer);
         };
@@ -9255,6 +9404,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         im.on?.('suggested_answer', onAnswer as any);
         im.on?.('suggested_answer_token', onToken as any);
         im.on?.('suggested_answer_discard', onDiscard as any);
+        try { im.on?.('clarify_ready', onClarify as any); } catch {}
+        try { im.on?.('recap_ready', onRecap as any); } catch {}
+        try { im.on?.('follow_up_questions', onFollowUps as any); } catch {}
         // Drive the real pipeline. handleSuggestionTrigger → runWhatShouldISay.
         Promise.resolve(
           im.handleSuggestionTrigger({
@@ -9262,7 +9414,20 @@ export function initializeIpcHandlers(appState: AppState): void {
             lastQuestion: params.question,
             confidence: 0.9,
           }),
-        ).catch((err: any) => {
+        ).then(() => {
+          // The trigger has fully decided. Give streamed tokens a brief window to
+          // flush into a suggested_answer; if none arrives, settle on whatever we
+          // have (a non-answer decision, or an empty result) instead of hanging.
+          if (settled || latest) return;
+          setTimeout(() => {
+            if (settled || latest) return;
+            settled = true;
+            cleanup();
+            if (nonAnswerDecision) resolve({ success: true, nonAnswer: true, decision: nonAnswerDecision.kind, answer: nonAnswerDecision.text, question: params.question, confidence: 0.9, streamedTokens: tokens });
+            else if (tokens.trim()) resolve({ success: true, answer: tokens, question: params.question, confidence: 0.9, streamedTokens: tokens, partial: true });
+            else resolve({ success: false, noDecision: true, streamedTokens: tokens });
+          }, 2500);
+        }).catch((err: any) => {
           if (settled || latest) return;
           settled = true;
           cleanup();

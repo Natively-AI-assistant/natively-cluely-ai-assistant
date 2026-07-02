@@ -6,7 +6,7 @@ import { DatabaseManager } from '../db/DatabaseManager';
 // Imported from the leaf module (not the ../llm barrel) to avoid a require cycle.
 import { classifyCustomContext, selectCustomContextForAnswer } from '../llm/customContextClassifier';
 import type { AnswerType } from '../llm/AnswerPlanner';
-import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, type DocumentMap } from './modes/DocumentMap';
+import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, sentenceAwareWindows, type DocumentMap } from './modes/DocumentMap';
 
 /**
  * Gate the mode's raw customContext blob by answer type (Phase 3). Returns only
@@ -237,12 +237,12 @@ function chunkText(content: string, fineChunk: boolean = false): string[] {
                 chunks.push(fullText);
                 continue;
             }
-            for (let i = 0; i < words.length; i += CHUNK_WORDS - CHUNK_OVERLAP) {
-                const window = words.slice(i, i + CHUNK_WORDS);
-                if (window.length === 0) break;
-                const ct = headingLine ? `${headingLine}\n${window.join(' ')}` : window.join(' ');
+            // Sentence-aware windowing (mirror of ModeHybridRetriever): never split
+            // a normative clause mid-sentence across a chunk boundary.
+            const bodyForWindows = headingLine ? bodyText : fullText;
+            for (const window of sentenceAwareWindows(bodyForWindows, CHUNK_WORDS, CHUNK_OVERLAP)) {
+                const ct = headingLine ? `${headingLine}\n${window}` : window;
                 if (ct.trim()) chunks.push(ct);
-                if (i + CHUNK_WORDS >= words.length) break;
             }
             continue;
         }
@@ -1363,6 +1363,12 @@ export class ModeContextRetriever {
             topK: options.topK,
             hasTranscript,
             allowRerank: options.allowRerank,
+            // CRITICAL: forward the document-grounding flag. Without it, the hybrid
+            // retriever never applies the doc-grounded budget/topK upgrade
+            // (DOC_GROUNDED_TOKEN_BUDGET_LOCAL=3600 / TOP_K=12) nor the per-section
+            // dedup + identity block — so grounded answers were retrieving only the
+            // default 1800-token / 6-chunk window, dropping multi-fact evidence.
+            forceDocumentGrounding: options.forceDocumentGrounding,
         });
 
         return result;

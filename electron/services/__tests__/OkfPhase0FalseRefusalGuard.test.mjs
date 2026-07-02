@@ -120,16 +120,23 @@ const GATE_GENERIC_TOKENS = new Set([
   'used', 'using', 'work', 'works', 'paper', 'study', 'general', 'related', 'proposed',
   'various', 'different', 'overview', 'introduction', 'conclusion', 'summary', 'background',
   'section', 'chapter', 'about', 'towards', 'toward', 'based', 'other', 'these', 'those',
+  'model', 'models', 'framework', 'frameworks', 'system', 'systems', 'result', 'results',
+  'evaluation', 'training', 'learning', 'method', 'methods', 'methodology', 'approach',
+  'approaches', 'analysis', 'network', 'networks', 'dataset', 'datasets', 'data',
+  'algorithm', 'algorithms', 'performance', 'experiment', 'experiments', 'architecture',
+  'architectures', 'application', 'applications', 'process', 'processes', 'design',
+  'implementation', 'component', 'components', 'structure', 'technique', 'techniques',
 ]);
 
 // Builds the two lookup sets from a document's entity names + card titles,
-// mirroring the production addName() in ipcHandlers.
+// mirroring the production addName() in ipcHandlers (hyphen split for tokens,
+// whole hyphenated form kept in `whole`).
 function buildPackSets(names) {
   const whole = new Set(), tokens = new Set();
   for (const raw of names) {
     const n = raw.toLowerCase();
     whole.add(n);
-    for (const w of n.split(/[^a-z0-9-]+/)) {
+    for (const w of n.split(/[^a-z0-9]+/)) {
       if (w.length >= 5 && !GATE_GENERIC_TOKENS.has(w)) tokens.add(w);
     }
   }
@@ -207,11 +214,32 @@ test('simulation: off-topic "third research question" does NOT repair (shares on
   assert.equal(simulateShouldRepair(answer, 'What is the third research question?', ctx, THESIS_NAMES), false);
 });
 
-test('simulation: off-topic "Mars rover dataset" does NOT repair (no document entity/title tokens)', () => {
+test('simulation: off-topic "Mars rover dataset" does NOT repair (generic tokens stoplisted)', () => {
   const answer = 'I could not find that in the retrieved sections of the document.';
-  // "dataset"/"experiments" are not in any THESIS_NAMES title; "Mars"/"rover" absent.
+  // "dataset"/"experiments"/"results" are all in GATE_GENERIC_TOKENS, so they
+  // never count as distinctive title tokens; "Mars"/"rover" absent. This is the
+  // leak the expanded stoplist closes.
   const ctx = 'The dataset for experiments was collected via teleoperation. Results are in section 4.';
   assert.equal(simulateShouldRepair(answer, 'What dataset was used for the Mars rover experiments?', ctx, THESIS_NAMES), false);
+});
+
+test('simulation: off-topic question sharing TWO generic ML title-words does NOT repair (stoplist closes the 2-token path)', () => {
+  // "model"+"training" are both generic ML title-words now in GATE_GENERIC_TOKENS,
+  // so even though they'd appear in this thesis's titles/chunks, they don't
+  // count toward the >=2-distinct-token rule -> honest refusal (no fabrication).
+  const answer = 'I could not find that in the retrieved sections of the document.';
+  const ctx = 'The model was trained; training used the collected dataset. Various systems were evaluated.';
+  assert.equal(simulateShouldRepair(answer, 'Which machine-learning model won the training benchmark competition?', ctx, THESIS_NAMES), false);
+});
+
+test('simulation: hyphenated card title makes a bare-stem question reachable via a token (OpenVLA-OFT -> openvla)', () => {
+  // Card title "OpenVLA-OFT" now also emits the "openvla" token (hyphen split),
+  // so a question mentioning both "openvla" and another distinctive token
+  // repairs even if no bare "OpenVLA" whole-entity exists.
+  const answer = 'I could not find that in the retrieved sections of the document.';
+  const ctx = 'OpenVLA underpins the AgenticVLA prototype.';
+  // present distinctive tokens: openvla (from OpenVLA-OFT), agenticvla -> 2 -> repair
+  assert.equal(simulateShouldRepair(answer, 'How do OpenVLA and AgenticVLA relate?', ctx, ['OpenVLA-OFT', 'AgenticVLA']), true);
 });
 
 test('simulation: off-topic "who invented Linux" does NOT repair', () => {

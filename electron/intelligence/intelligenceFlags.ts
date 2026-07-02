@@ -231,6 +231,12 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   okfProfileKnowledgeUi: { env: 'NATIVELY_OKF_PROFILE_KNOWLEDGE_UI', setting: 'okfProfileKnowledgeUiEnabled', default: false },
   // Safety isolation gates — ON everywhere by default.
   docGroundedStrictIsolation: { env: 'NATIVELY_DOC_GROUNDED_STRICT_ISOLATION', setting: 'docGroundedStrictIsolationEnabled', default: true },
+  // NOTE (2026-07-02): the false-refusal REPAIR path is INERT unless
+  // `okfHybridRetrieval` is also on — the repair gate keys off the active OKF
+  // pack's entity/card-title overlap, which only exists when OKF packs are
+  // built. With OKF off, a doc-grounded "not mentioned" is always treated as an
+  // honest refusal (the safe fallback) regardless of this flag. Toggling this
+  // flag alone (without okfHybridRetrieval) has no effect.
   docGroundedFalseRefusalRepair: { env: 'NATIVELY_DOC_GROUNDED_FALSE_REFUSAL_REPAIR', setting: 'docGroundedFalseRefusalRepairEnabled', default: true },
 };
 
