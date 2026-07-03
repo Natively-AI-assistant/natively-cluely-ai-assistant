@@ -9,7 +9,7 @@ const THEME_CACHE_KEY = 'natively_resolved_theme';
 // like html[data-platform="win32"] work immediately without a flash on first paint.
 document.documentElement.setAttribute(
   'data-platform',
-  window.electronAPI?.platform ?? process?.platform ?? ''
+  window.electronAPI?.platform ?? (typeof process !== 'undefined' ? process?.platform : '') ?? ''
 );
 
 // Step 1: Apply cached theme synchronously — before React renders.

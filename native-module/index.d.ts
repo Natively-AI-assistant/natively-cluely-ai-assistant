@@ -16,47 +16,6 @@ export declare class MicrophoneCapture {
   stop(): void
 }
 
-export declare class StealthKeyboardTap {
-  constructor()
-  /**
-   * Engage the tap. Every keystroke fires `callback` with the captured
-   * metadata; the foreground app does NOT receive the event.
-   *
-   * Returns:
-   *   - `true` if the tap engaged.
-   *   - `false` if Accessibility permission is missing. Call
-   *     `is_accessibility_granted()` and `request_accessibility_permission()`
-   *     to drive the user through System Settings, then restart the app.
-   *
-   * Idempotent: repeated `start()` calls while active are no-ops.
-   */
-  start(callback: ((err: Error | null, arg: CapturedKey) => any), overlayBounds?: OverlayBoundsInput | undefined | null): boolean
-  /**
-   * Push fresh overlay bounds into the live tap. Required when the
-   * OS window moves or resizes mid-session: without this, the start()
-   * snapshot goes stale and mouse-down classification (inside vs
-   * outside the overlay) drifts against the actual frame. No-op when
-   * the tap is not active so JS can call it unconditionally.
-   *
-   * Concurrency note: a benign TOCTOU exists where this method observes
-   * `active=true`, stop() then clears bounds, and we overwrite with a
-   * stale value. That's safe: the worker is exiting, the per-event reader
-   * short-circuits on `!active`, and the next `start()` re-snapshots
-   * bounds from the provider — so the stale write is invisible.
-   */
-  updateOverlayBounds(overlayBounds?: OverlayBoundsInput | undefined | null): void
-  /**
-   * Disengage the tap. After this returns, the next keystroke will
-   * reach the foreground app normally. Safe to call multiple times.
-   */
-  stop(): void
-  /**
-   * True while the tap is engaged. Use to drive UI state ("stealth
-   * typing" badge, mode indicator, etc.).
-   */
-  get isActive(): boolean
-}
-
 export declare class SystemAudioCapture {
   constructor(deviceId?: string | undefined | null)
   /**
@@ -73,57 +32,9 @@ export declare class SystemAudioCapture {
   stop(): void
 }
 
-/**
- * Apply stealth attributes to the BrowserWindow whose native handle is
- * passed in.
- *
- * `handle` is the buffer returned by `BrowserWindow.getNativeWindowHandle()`.
- * On macOS that buffer contains a single pointer to the BrowserWindow's
- * content `NSView`. We dereference to the parent `NSWindow` and apply the
- * stealth attributes on it.
- *
- * Returns `Ok(())` on success, `Err(...)` if the handle is malformed or the
- * view has no associated window (e.g. window destroyed mid-call).
- */
-export declare function applyStealthToWindow(handle: Buffer): void
-
 export interface AudioDeviceInfo {
   id: string
   name: string
-}
-
-/**
- * Event payload delivered to the JS callback. Crossing the V8 boundary is
- * not free, so we keep this struct flat (no nested objects) and only include
- * fields the renderer actually needs.
- */
-export interface CapturedKey {
-  /**
-   * HID virtual keycode (e.g. 36 = Return, 51 = Delete, 53 = Esc). Stable
-   * across keyboard layouts; use for shortcut detection (Esc → exit mode).
-   */
-  keyCode: number
-  /**
-   * The characters this key would type, given the active keyboard layout
-   * and any held dead keys. Empty string for non-printable keys (Esc,
-   * arrows, modifiers alone). Multi-char for IME composition or
-   * surrogate pairs.
-   */
-  chars: string
-  /**
-   * Raw CGEventFlags bitmask (cmd=1<<20, opt=1<<19, ctrl=1<<18,
-   * shift=1<<17, capsLock=1<<16, fn=1<<23). Renderer can decode without
-   * us pre-splitting into bools.
-   */
-  flags: number
-  /**
-   * True for keyDown, false for keyUp. flagsChanged events are converted
-   * to keyDown=true (modifier press) or keyDown=false (modifier release)
-   * by the worker.
-   */
-  isKeyDown: boolean
-  /** True for a pass-through mouse down outside the overlay bounds. */
-  isOutsideMouseDown: boolean
 }
 
 /**
@@ -160,19 +71,6 @@ export declare function getHardwareId(): string
 export declare function getInputDevices(): Array<AudioDeviceInfo>
 
 export declare function getOutputDevices(): Array<AudioDeviceInfo>
-
-/**
- * True if this process has Accessibility trust (required for CGEventTap).
- * Cheap; safe to poll from JS to drive UI state.
- */
-export declare function isAccessibilityGranted(): boolean
-
-export interface OverlayBoundsInput {
-  x: number
-  y: number
-  width: number
-  height: number
-}
 
 /**
  * Validates an existing Dodo Payments license key against the live API.
