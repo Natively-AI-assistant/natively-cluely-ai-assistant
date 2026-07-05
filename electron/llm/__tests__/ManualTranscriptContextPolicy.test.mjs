@@ -37,6 +37,10 @@ describe('manual transcript context policy', () => {
   test('standalone technical explanations do not pull meeting transcript by default', () => {
     assert.equal(attaches('what is BFS?'), false);
     assert.equal(attaches('explain BFS'), false);
+    assert.equal(shouldAutoAttachManualTranscriptContext('what is BFS?', {
+      answerType: 'technical_concept_answer',
+      requiredContextLayers: ['live_transcript', 'active_mode', 'screen_context', 'preferred_language'],
+    }), false);
   });
 
   test('explicit meeting and lecture questions keep transcript context', () => {

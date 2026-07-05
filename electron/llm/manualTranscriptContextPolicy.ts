@@ -43,8 +43,9 @@ export function shouldAutoAttachManualTranscriptContext(
   }
 
   const isShortFollowUp = isBareFollowUp(message) || isShortTopicShiftFollowUp(message);
+  const requiresLiveTranscript = answerPlan.requiredContextLayers.includes('live_transcript');
 
-  if (!answerPlan.requiredContextLayers.includes('live_transcript') && !isShortFollowUp && !isTranscriptBound) {
+  if (!requiresLiveTranscript && !isShortFollowUp && !isTranscriptBound) {
     return false;
   }
 
@@ -52,6 +53,11 @@ export function shouldAutoAttachManualTranscriptContext(
     return true;
   }
 
+  // requiredContextLayers is deliberately not a standalone allow signal for
+  // manual chat. Technical answer types include live_transcript for live
+  // interview continuity, but standalone typed questions like "what is BFS?"
+  // must stay isolated unless they are explicit transcript references or
+  // short live follow-ups.
   if (isShortFollowUp) {
     return true;
   }
