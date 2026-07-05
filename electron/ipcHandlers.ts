@@ -8998,22 +8998,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Without this, the mode-suffix skip-gate (CHAT_MODE_PROMPT is a "universal
         // override") suppresses injection for non-custom regular modes like
         // lecture/team-meet + a sales question over phone (audit #2, 2026-07-05).
-        let phoneRouteOptions: StreamRouteOptions | undefined;
-        try {
-          const llmMod = require('./llm');
-          if (typeof llmMod.planAnswer === 'function') {
-            const phonePlan = llmMod.planAnswer({
-              question: message,
-              source: 'manual_input',
-              speakerPerspective: 'user',
-              activeMode: (() => { try { return require('./services/ModesManager').ModesManager.getInstance().getActiveModeInfo?.(); } catch { return null; } })(),
-            });
-            phoneRouteOptions = {
-              answerType: phonePlan?.answerType || 'unknown_answer',
-              forbiddenContextLayers: phonePlan?.forbiddenContextLayers,
-            };
-          }
-        } catch { /* plan unavailable — fall back to no routeOptions (legacy behavior) */ }
+        const phoneRouteOptions: StreamRouteOptions = {
+          answerType: phoneAnswerPlan.answerType,
+          forbiddenContextLayers: phoneAnswerPlan.forbiddenContextLayers,
+        };
         const stream = llmHelper.streamChat(message, undefined, context, CHAT_MODE_PROMPT, false, false, [], phoneController.signal, undefined, phoneRouteOptions);
         let full = '';
         let phoneSuperseded = false;
