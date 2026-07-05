@@ -210,25 +210,43 @@ describe('validateSkillPayload — validation errors', () => {
     assert.equal(e.conflictingId, 'humanize-text');
   });
 
-  test('name_not_kebab_case fires before name_collision_builtin (short-circuit on kebab failure)', () => {
+  test('non-kebab name that resolves to a builtin id surfaces BOTH kebab and collision errors', () => {
     // "Humanize Text" has a space + capital — it would slugify to "humanize-text"
-    // (which IS a builtin id), but the kebab round-trip check fails FIRST. This
-    // is intentional: we surface the most specific error rather than masking the
-    // real problem behind a collision.
+    // which is the on-disk folder name of the built-in `humanize-ai-text` skill
+    // (reserved by DEFAULT_BUILTIN_SKILL_IDS). We surface BOTH errors so the
+    // user knows both that the name is malformed AND that even after fixing it,
+    // the id is still reserved.
     const result = validateSkillPayload(makeFilePayload({ name: 'Humanize Text' }));
     assert.equal(result.ok, false);
-    assert.ok(result.errors.some(e => e.code === 'name_not_kebab_case'));
-    assert.ok(!result.errors.some(e => e.code === 'name_collision_builtin'));
+    assert.ok(result.errors.some(e => e.code === 'name_not_kebab_case'),
+      'name_not_kebab_case must be present');
+    assert.ok(result.errors.some(e => e.code === 'name_collision_builtin'),
+      'name_collision_builtin must ALSO be present — even after fixing the kebab, the id is reserved');
   });
 
   test('name_collision_builtin fires for a CLEAN kebab name that resolves to the builtin', () => {
-    // The current builtin's visible id is `humanize-ai-text` (the name-derived
-    // slug, NOT the folder name `humanize-text` — see DEFAULT_BUILTIN_SKILL_IDS).
+    // The builtin's visible id is `humanize-ai-text` (the name-derived slug)
+    // — see DEFAULT_BUILTIN_SKILL_IDS.
     const result = validateSkillPayload(makeFilePayload({ name: 'humanize-ai-text' }));
     assert.equal(result.ok, false);
     const e = result.errors.find(x => x.code === 'name_collision_builtin');
     assert.ok(e, 'name_collision_builtin must be present for clean kebab collision');
     assert.equal(e.conflictingId, 'humanize-ai-text');
+  });
+
+  test('name_collision_builtin fires for the on-disk folder name (REGRESSION for builtin shadow)', () => {
+    // REGRESSION: prior to reserving both visible id + folder name, a user
+    // upload with `name: "humanize-text"` (a clean kebab slug) bypassed
+    // validation because only `humanize-ai-text` was reserved. The install
+    // then landed in <userData>/skills/humanize-text/SKILL.md — the
+    // built-in's folder — and SkillsManager.loadUserSkills() labelled it
+    // `source: 'builtin'`, silently shadowing the seeded built-in.
+    // Both ids MUST now be reserved so the user gets a clean rejection.
+    const result = validateSkillPayload(makeFilePayload({ name: 'humanize-text' }));
+    assert.equal(result.ok, false);
+    const e = result.errors.find(x => x.code === 'name_collision_builtin');
+    assert.ok(e, 'name_collision_builtin must fire for the built-in folder name');
+    assert.equal(e.conflictingId, 'humanize-text');
   });
 
   test('name_collision_existing when slug matches an existing id', () => {

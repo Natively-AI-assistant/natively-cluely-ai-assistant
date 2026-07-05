@@ -1,0 +1,177 @@
+[
+  {
+    "filename": "thesis/institutional_thesis.pdf",
+    "sourceUrl": "Pre-existing in repo root as 'Sample thesis for testing.pdf' (real institutional master's thesis, Aalto University ICT Innovation programme). Copied into corpus.",
+    "format": "pdf",
+    "pageOrSlideOrRowCount": 66,
+    "groundTruthFacts": [
+      "Title: 'Towards Connected Intelligence: Empowering Robotic Applications with Agentic AI Frameworks'",
+      "Author is Alberto Dian; supervisor Prof. Ville Kyrki; dated 21 June 2025; collaborative partner Huawei Munich Research Center",
+      "The proposed system is called AgenticVLA, deployed on the Mercury X1 humanoid robot using a Meta Quest 3 headset for VR teleoperation",
+      "The success rate of AgenticVLA was 44%, while the baseline models were not able to complete the task",
+      "OpenVLA is a 7B-parameter open-source VLA finetuned on 970k robot manipulation trajectories; OpenVLA-OFT achieves 43x faster throughput than base OpenVLA",
+      "Keywords: Embodied AI, Robotics, VLAs, AI Agents, 6G"
+    ],
+    "notes": "PROVENANCE: real 66-page master's thesis already present in the repo (git status shows it as the untracked/large fixture 'Sample thesis for testing.pdf', 25MB, PDF v1.5). Renamed to institutional_thesis.pdf for clarity. This is the PRIMARY thesis for academic-defense questions. Rich source of exact figures (44% SR, 7B params, 43x throughput)."
+  },
+  {
+    "filename": "thesis/seminar_real_thesis.pdf",
+    "sourceUrl": "Pre-existing repo fixture: tests/fixtures/modes/custom/seminar-presentation/seminar_real_thesis.pdf. Copied into corpus.",
+    "format": "pdf",
+    "pageOrSlideOrRowCount": 2,
+    "groundTruthFacts": [
+      "Despite the filename 'thesis', the actual content is a Data Analyst Job Description (2 pages)",
+      "Lists ETL responsibilities: Extract, transform, and load (ETL) data from various sources",
+      "Requires a Bachelor's degree in Statistics, Mathematics, Computer Science, Economics, or related field; Master's preferred",
+      "Names specific tools: SQL, Python, R for analysis; Tableau, Power BI for visualization"
+    ],
+    "notes": "PROVENANCE NOTE / GOTCHA: this repo fixture is NAMED 'seminar_real_thesis.pdf' but its real content is a Data Analyst JD placeholder (confirmed by extraction via pdf-parse). Documented in project MEMORY. Retained because (a) it is a genuine repo artifact and (b) it is a useful negative/mismatch case: questions treating it as a thesis should NOT find thesis content. Used mainly for Data-Analyst mode role-context, not academic-defense facts."
+  },
+  {
+    "filename": "papers/attention_is_all_you_need_1706.03762.pdf",
+    "sourceUrl": "https://arxiv.org/pdf/1706.03762",
+    "format": "pdf",
+    "pageOrSlideOrRowCount": 15,
+    "groundTruthFacts": [
+      "Proposes the Transformer architecture, based solely on attention mechanisms, dispensing with recurrence and convolutions",
+      "Achieves 28.4 BLEU on WMT 2014 English-to-German and 41.8 BLEU on WMT 2014 English-to-French (Transformer big)",
+      "Model dimension dmodel = 512; the big model was trained for 3.5 days on 8 NVIDIA P100 GPUs",
+      "Uses the Adam optimizer with beta1=0.9, beta2=0.98, epsilon=1e-9, and warmup_steps = 4000",
+      "Encoder and decoder each have 6 layers (N=6); multi-head attention uses dk = dv = dmodel/h = 64"
+    ],
+    "notes": "Real arXiv download (2.1MB, PDF v1.5, 15 pages). Chosen for its tables (Table 2 BLEU/FLOPs, Table 3 ablations) and equations (positional encoding, scaled dot-product attention) to stress the parser. Authors: Vaswani et al., Google Brain/Research."
+  },
+  {
+    "filename": "papers/bert_1810.04805.pdf",
+    "sourceUrl": "https://arxiv.org/pdf/1810.04805",
+    "format": "pdf",
+    "pageOrSlideOrRowCount": 16,
+    "groundTruthFacts": [
+      "BERT = Bidirectional Encoder Representations from Transformers; pre-trained with a Masked Language Model (MLM) and Next Sentence Prediction (NSP)",
+      "Pushes the GLUE score to 80.5% (7.7 point absolute improvement)",
+      "BERTBASE: L=12, H=768, A=12, Total Parameters=110M. BERTLARGE: L=24, H=1024, A=16, Total Parameters=340M",
+      "Raises SQuAD v1.1 Test F1 to 93.2 (1.5 point absolute improvement) and MultiNLI accuracy to 86.7%",
+      "The MLM randomly masks tokens (15%) and predicts the original vocabulary id of the masked word"
+    ],
+    "notes": "Real arXiv download (760KB, PDF v1.5). Chosen for parameter-count tables and GLUE/SQuAD result tables. Authors: Devlin, Chang, Lee, Toutanova (Google AI Language)."
+  },
+  {
+    "filename": "papers/resnet_1512.03385.pdf",
+    "sourceUrl": "https://arxiv.org/pdf/1512.03385",
+    "format": "pdf",
+    "pageOrSlideOrRowCount": 12,
+    "groundTruthFacts": [
+      "Title: 'Deep Residual Learning for Image Recognition'; introduces residual learning with reference to layer inputs (identity shortcut connections)",
+      "Evaluates residual nets with a depth of up to 152 layers on ImageNet — 8x deeper than VGG nets but still lower complexity",
+      "An ensemble of these residual nets achieves 3.57% error on the ImageNet test set",
+      "Won 1st place on the ILSVRC 2015 classification task, and 1st on ImageNet detection, ImageNet localization, COCO detection, and COCO segmentation",
+      "Identifies the 'degradation' problem: accuracy saturates then degrades with increased depth, not caused by overfitting"
+    ],
+    "notes": "Real arXiv download (804KB, PDF v1.5). Chosen as the systems/vision paper with result tables and the residual-block equation. Authors: He, Zhang, Ren, Sun (Microsoft Research)."
+  },
+  {
+    "filename": "datasets/gapminder2007.csv",
+    "sourceUrl": "https://raw.githubusercontent.com/plotly/datasets/master/gapminder2007.csv",
+    "format": "csv",
+    "pageOrSlideOrRowCount": 142,
+    "groundTruthFacts": [
+      "142 data rows; columns: country, pop, continent, lifeExp, gdpPercap",
+      "United States 2007: pop 301139947, continent Americas, lifeExp 78.242, gdpPercap 42951.65309",
+      "China has the largest population at 1318683096; Japan has the highest life expectancy at 82.603",
+      "Norway has the highest GDP per capita at 49357.19017; Swaziland has the lowest life expectancy at 39.613",
+      "Continent row counts: Africa 52, Asia 33, Europe 30, Americas 25, Oceania 2"
+    ],
+    "notes": "Real public dataset (Gapminder 2007 snapshot). This is the PRIMARY spreadsheet substitute (app has NO xlsx support; CSV is the real-data spreadsheet analog). Small (8KB) with clean numeric columns ideal for Data-Analyst aggregation questions with exact answer keys."
+  },
+  {
+    "filename": "datasets/gdp_worldbank.csv",
+    "sourceUrl": "https://raw.githubusercontent.com/datasets/gdp/main/data/gdp.csv",
+    "format": "csv",
+    "pageOrSlideOrRowCount": 13978,
+    "groundTruthFacts": [
+      "13978 data rows; columns: Country Name, Country Code, Year, Value (GDP in current US$)",
+      "United States GDP in 2016 = 18804913000000.0 (~18.8 trillion USD)",
+      "China GDP in 2016 = 11233313730348.719 (~11.2 trillion USD)",
+      "India GDP in 2016 = 2294796885663.67; Japan GDP in 2016 = 5003677627544.24",
+      "Year range spans 1960 to 2023; some country names are quoted because they contain commas (e.g. 'Bahamas, The')"
+    ],
+    "notes": "Real World Bank GDP dataset (via datasets/gdp GitHub mirror, 552KB). SECONDARY dataset used for cross-document questions (pairs with gapminder for GDP comparisons) and large-CSV parser stress. Note quoted comma-containing country names is a CSV-parsing edge case."
+  },
+  {
+    "filename": "slides/cs231n_lecture.pdf",
+    "sourceUrl": "https://cs231n.stanford.edu/slides/2017/cs231n_2017_lecture1.pdf",
+    "format": "pdf",
+    "pageOrSlideOrRowCount": 48,
+    "groundTruthFacts": [
+      "Stanford CS231n Lecture 1: Introduction, dated 4/4/2017, by Fei-Fei Li, Justin Johnson & Serena Yeung",
+      "48 slides covering the history of computer vision and the ImageNet/ILSVRC challenge",
+      "References Hubel & Wiesel 1959 receptive-field experiments and Larry Roberts' 'Block World' (1963)",
+      "Cites the 2012 AlexNet breakthrough (Krizhevsky, Sutskever, Hinton, NIPS 2012) and LeNet (1998)",
+      "Mentions the Cambrian explosion (~543 million years B.C.) as motivation for the evolution of vision"
+    ],
+    "notes": "Real Stanford lecture slide deck (16MB PDF, 48 slides). This is the SLIDE-DECK CONTENT deliverable — app has NO pptx ingest, so real slide content is supplied as PDF (the format the parser accepts). Used for Investor-Pitch / Consulting slide-reading and Conference-Talk mode questions."
+  },
+  {
+    "filename": "docs/rfc8259_json.txt",
+    "sourceUrl": "https://www.ietf.org/rfc/rfc8259.txt",
+    "format": "txt",
+    "pageOrSlideOrRowCount": 899,
+    "groundTruthFacts": [
+      "RFC 8259: 'The JavaScript Object Notation (JSON) Data Interchange Format', by T. Bray, Ed. (Textuality), December 2017",
+      "It Obsoletes RFC 7159 and is Standards Track (STD 90), ISSN 2070-1721",
+      "JSON text exchanged between systems that are not part of a closed ecosystem MUST be encoded using UTF-8",
+      "Defines six structural characters and is also described by ECMA-404 (a normative reference)",
+      "899 lines of plain text; acknowledges Douglas Crockford as originator of JSON"
+    ],
+    "notes": "Real IETF RFC as plain text (28KB). The plain-text / structured-standard document. Used for Legal/Compliance-style 'what does the spec mandate' questions with exact normative-language answer keys (MUST/UTF-8)."
+  },
+  {
+    "filename": "docs/sample.docx",
+    "sourceUrl": "https://calibre-ebook.com/downloads/demos/demo.docx",
+    "format": "docx",
+    "pageOrSlideOrRowCount": 1,
+    "groundTruthFacts": [
+      "Title/opening: 'Demonstration of DOCX support in calibre'",
+      "States it demonstrates the calibre DOCX Input plugin converting typographic features in a Microsoft Word (2007 and newer) document",
+      "Lists supported features: images, tables, lists, footnotes, endnotes, links, dropcaps, and text/paragraph-level formatting",
+      "Mentions converting to modern ebook formats such as AZW3 for Kindles or EPUB for other ebook readers"
+    ],
+    "notes": "SUBSTITUTION LOGGED: the first two candidate DOCX URLs (microsoft/presidio raw path, python-docx test files) returned 404/HTML. Fell back to the calibre demo.docx (a real, valid Microsoft Word 2007+ file, PK/OOXML magic verified, 1.3MB). This is a genuine .docx to exercise the mammoth parser path."
+  },
+  {
+    "filename": "nasty/imageonly_scanned.pdf",
+    "sourceUrl": "https://raw.githubusercontent.com/py-pdf/sample-files/main/007-imagemagick-images/imagemagick-images.pdf",
+    "format": "pdf",
+    "pageOrSlideOrRowCount": 6,
+    "groundTruthFacts": [
+      "6-page PDF whose pages are embedded raster images with essentially NO extractable text layer",
+      "pdf-parse extracts only ~96 characters total across all 6 pages (just page-break artifacts)",
+      "Content is a 'smile' image rendered via multiple ImageMagick encodings (ASCII85, LZW, CCITTFax)"
+    ],
+    "notes": "The DELIBERATELY NASTY case: a genuine image-only (scanned-analog) PDF. Any question over this doc MUST refuse or state no text is extractable — it is the robustness / no-usable-content stressor for the ingest pipeline. SUBSTITUTION NOTE: an earlier pdf995 sample turned out to have normal text (not nasty) and was discarded in favor of this true image-only PDF."
+  },
+  {
+    "filename": "nasty/arabic_encoding.pdf",
+    "sourceUrl": "https://raw.githubusercontent.com/py-pdf/sample-files/main/015-arabic/habibi.pdf",
+    "format": "pdf",
+    "pageOrSlideOrRowCount": 1,
+    "groundTruthFacts": [
+      "Single-page PDF containing the Arabic word 'habibi' with right-to-left / CID font encoding",
+      "pdf-parse extracts only ~43 characters, and they are garbled/reordered ('habibi' plus mangled Arabic glyphs)",
+      "Demonstrates unusual-encoding extraction where the visible text does not map cleanly to Unicode"
+    ],
+    "notes": "Second NASTY case: unusual RTL/CID text encoding. Stresses the parser's Unicode handling; correct behavior is to avoid asserting confident facts from the garbled extraction."
+  },
+  {
+    "filename": "rejection/sample.pptx",
+    "sourceUrl": "https://raw.githubusercontent.com/jgm/pandoc/main/test/pptx/reference-depth.pptx",
+    "format": "pptx",
+    "pageOrSlideOrRowCount": null,
+    "groundTruthFacts": [
+      "Valid Microsoft OOXML PowerPoint file (PK/ZIP magic verified, 44KB)",
+      "The app's server-side allow-list (electron/ipcHandlers.ts:7758-7770) does NOT include .pptx",
+      "Uploading this file MUST be rejected by the upload handler (unsupported extension), not parsed"
+    ],
+    "notes": "REJECTION-PATH fixture only. Real .pptx obtained from pandoc's test corpus after two other candidate URLs 404'd; found via the GitHub contents API. Purpose is to verify the allow-list rejects unsupported OOXML presentations. It is NOT part of the answerable knowledge corpus."
+  }
+]

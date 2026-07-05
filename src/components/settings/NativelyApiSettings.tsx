@@ -970,14 +970,12 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   );
 
   return (
-    <div className="space-y-4 animated fadeIn" data-interface-theme={interfaceTheme}>
+    <div className="space-y-6 animated fadeIn" data-interface-theme={interfaceTheme}>
       {/* ── Page title ───────────────────────────────────── */}
-      <div className="flex items-center justify-between">
+      <header className="flex items-center justify-between">
         <div>
-          <h3 className="text-[15px] font-semibold text-text-primary tracking-[-0.01em]">
-            Natively API
-          </h3>
-          <p className="text-[12px] text-text-tertiary mt-0.5 leading-snug">
+          <h3 className="text-lg font-bold text-text-primary mb-1">Natively API</h3>
+          <p className="text-xs text-text-secondary mb-5">
             Managed transcription, AI &amp; search
           </p>
         </div>
@@ -989,7 +987,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
             </span>
           </div>
         )}
-      </div>
+      </header>
 
       {/* ── Free Trial Modal (post-trial) ─────────────── */}
       {showTrialModal && trialState && (

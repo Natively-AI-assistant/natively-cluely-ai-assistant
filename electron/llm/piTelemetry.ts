@@ -39,10 +39,24 @@ export type PiTelemetryEvent =
   | 'pi_answer_repeated'
   // Groq-scout E2E sprint 2026-06-14: assistant-voice identity/refusal misfire guard.
   | 'pi_assistant_voice_misfire_repaired'
-  // Document-grounded validator markers (reason only; no answer or document text).
+  // Document-grounded real-path fix 2026-06-27: groundedness/greeting validator.
   | 'pi_doc_grounded_validation_failed'
   | 'pi_doc_grounded_regenerated'
-  | 'pi_doc_grounded_safe_failure';
+  | 'pi_doc_grounded_safe_failure'
+  // OKF Phase 0 (2026-07-01): false-refusal self-trigger guard + repair markers.
+  | 'pi_doc_grounded_false_refusal_repair_attempted'
+  | 'pi_doc_grounded_retrieval_summary'
+  // OKF Profile Intelligence upgrade (2026-07-02): profile-pack lifecycle +
+  // fail-closed retrieval + evidence composition markers. Marker-only — card
+  // COUNTS and coarse reasons, never card titles / bodies / profile content.
+  | 'pi_okf_profile_pack_generated'
+  | 'pi_okf_profile_pack_stale'
+  | 'pi_okf_profile_pack_invalidated'
+  | 'pi_okf_profile_retrieval_allowed'
+  | 'pi_okf_profile_retrieval_blocked'
+  | 'pi_okf_profile_evidence_assembled'
+  | 'pi_okf_profile_export_requested'
+  | 'pi_okf_profile_export_completed';
 
 export interface PiTelemetryRecord {
   event: PiTelemetryEvent;
@@ -75,6 +89,11 @@ const ALLOWED_KEYS = new Set<string>([
   'sanitizerApplied', 'repaired', 'needsFallback', 'markerCount', 'violationCode',
   // speakability markers (coarse class only — never raw answer text)
   'speakabilityClass',
+  // OKF Profile Intelligence markers (2026-07-02): COUNTS + coarse reasons /
+  // states only — never card titles, bodies, quotes, or any profile content.
+  'cardCount', 'nodeCount', 'entityCount', 'relationCount', 'rejectedCount',
+  'fastPathUsed', 'blockedReason', 'evidenceTier', 'packVersion', 'docType',
+  'conformant', 'fileCount', 'generatedMs',
 ]);
 // Even for an allowed key, a string value is bounded + must look like a marker label
 // (no free-text, no salary/PII numbers). Defense-in-depth on top of the allowlist.

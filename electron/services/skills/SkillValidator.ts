@@ -92,12 +92,19 @@ export interface ValidateSkillOptions {
 const DEFAULT_MAX_FILE_BYTES = 100 * 1024;
 const DEFAULT_MAX_TOTAL_BYTES = 5 * 1024 * 1024;
 const DEFAULT_MAX_INSTRUCTIONS_PREVIEW = 280;
-// IMPORTANT: this is the id the *renderer* sees in `SkillsManager.listSkills()`,
-// which is the slug of the SKILL.md `name:` field (`'humanize-ai-text'`), NOT
-// the on-disk folder name (`'humanize-text'`). See SkillsManager.ts:587 and the
-// SkillsIpcWiring.test.mjs ground-truth test. Reserving the wrong id would let
-// users upload a skill that shadows a built-in.
-export const DEFAULT_BUILTIN_SKILL_IDS: ReadonlySet<string> = new Set(['humanize-ai-text']);
+// IMPORTANT: reserve BOTH the visible id (the slug of the SKILL.md `name:`
+// field, which is what the renderer sees in `SkillsManager.listSkills()`) AND
+// the on-disk folder name. A user upload whose `name:` slugifies to the
+// folder name would land in the built-in's folder slot and silently get
+// relabelled `source: 'builtin'` by `SkillsManager.loadUserSkills()` —
+// shadowing the built-in's content without warning. See:
+//   - SkillsManager.ts:587 (visible id is name-derived slug)
+//   - SkillsManager.ts:678 (`BUILTIN_SKILL_IDS.has(entry.name)` uses folder name)
+//   - SkillsIpcWiring.test.mjs:200 (ground-truth visible id)
+export const DEFAULT_BUILTIN_SKILL_IDS: ReadonlySet<string> = new Set([
+    'humanize-ai-text',  // visible id (slug of `name:` field)
+    'humanize-text',     // on-disk folder name
+]);
 const MAX_ERRORS = 25;
 const SLUG_MAX_LEN = 80;
 
@@ -795,10 +802,15 @@ export function validateSkillPayload(
 
 function finalize(errors: SkillValidationError[], overflow: { tooMany: boolean }): SkillValidationResult {
   if (overflow.tooMany && errors.length >= MAX_ERRORS) {
+    // `addError` caps at MAX_ERRORS by setting overflow.tooMany=true and
+    // dropping subsequent pushes, so we hit this branch once the FIRST
+    // MAX_ERRORS errors have already filled the array. We append a sentinel
+    // so the renderer can show "more errors existed, first 25 shown" rather
+    // than silently truncating.
     errors.push({
       field: 'structure',
       code: 'too_many_errors',
-      message: `More than ${MAX_ERRORS} validation errors; the rest were suppressed.`,
+      message: `Validation produced more than the ${MAX_ERRORS}-error cap; further errors were suppressed.`,
     });
   }
   return { ok: false, errors };

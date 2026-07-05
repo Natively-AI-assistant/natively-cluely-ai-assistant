@@ -1,6 +1,6 @@
 import type { IntentResult } from './IntentClassifier';
 import type { ExtractedQuestion } from './transcriptQuestionExtractor';
-import { CODING_CONTRACT, CODING_VERIFICATION_INSTRUCTION } from './codingContract';
+import { CODING_CONTRACT, CODING_CONTRACT_IMPL, CODING_VERIFICATION_INSTRUCTION } from './codingContract';
 import { detectAnswerStyle, type AnswerStyle } from './answerStyle';
 import { classifyTargetSpeakability, classifyShortBand, shortBandTargetWords } from './speakability';
 import { applyModeFallback, type ActiveModeInfo } from './modeProfiles';
@@ -165,6 +165,18 @@ ${CODING_CONTRACT}
 Additional rules:
 - Do not include resume, JD, salary, negotiation, or unrelated profile context unless explicitly asked.
 - NEVER mention "Natively", the assistant, the product, or the candidate's profile/projects anywhere in the answer — not in the explanation, not in a closing remark, not in an example. This is a pure technical answer about the algorithm only.`;
+
+// General implementation tasks (React components, scripts, utilities) get the
+// IMPL contract: code-first with the correct fence tag, short explanation, NO
+// DSA interview walkthrough. dsa_question_answer keeps CODING_TEMPLATE — named
+// algorithm problems ("reverse a linked list") still want the six sections.
+const CODING_IMPL_TEMPLATE = `You are generating a complete implementation for a coding task.
+
+${CODING_CONTRACT_IMPL}
+
+Additional rules:
+- Do not include resume, JD, salary, negotiation, or unrelated profile context.
+- NEVER mention "Natively", the assistant, the product, or the candidate's profile anywhere in the answer.`;
 
 const BEHAVIORAL_TEMPLATE = `Use exactly these sections:
 
@@ -1354,9 +1366,10 @@ const classifyStandaloneFragment = (text: string): AnswerType | null => {
 
 const templateFor = (answerType: AnswerType): string => {
   switch (answerType) {
-    case 'coding_question_answer':
     case 'dsa_question_answer':
       return CODING_TEMPLATE;
+    case 'coding_question_answer':
+      return CODING_IMPL_TEMPLATE;
     case 'behavioral_interview_answer':
     case 'experience_answer':
       return BEHAVIORAL_TEMPLATE;
@@ -2050,7 +2063,31 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     // Named DSA problem ("two sum", "reverse a linked list", "solve two sum").
     // Kept BEFORE generic CODING so the specific DSA label/template wins.
     answerType = 'dsa_question_answer';
-  } else if (includesAny(text, CODING_PATTERNS) || input.intentResult?.intent === 'coding') {
+  } else if (
+    (includesAny(text, CODING_PATTERNS) || input.intentResult?.intent === 'coding')
+    // Guard: a very short addend phrase like "with code?", "show code?", "include code?",
+    // "add code?", "can you give code?" is a conversational follow-up requesting a code
+    // example from the prior context — NOT a new standalone coding problem. Only suppress
+    // the coding route when ALL three conditions hold:
+    //   (1) the message is short (≤5 words, punctuation stripped)
+    //   (2) the only coding signal is the bare noun "code" (no stronger cue:
+    //       write/implement/program/function/class/method/solve/algorithm/debug/snippet)
+    //   (3) the message starts with a modifier/preposition typical of addends
+    //       (with, show, include, add, give, can you, using, just)
+    // A genuine coding ask like "write code for bubble sort" fails condition (2) and
+    // passes through normally. This guard does NOT touch the DSA_PATTERNS path above.
+    && !((() => {
+      const wordCount = text.replace(/[?.!,]/g, '').split(/\s+/).filter(Boolean).length;
+      if (wordCount > 5) return false; // not short enough to be an addend
+      const hasStrongCodingCue = /\b(write|implement|program|function|class|method|solve|algorithm|debug|snippet|script)\b/i.test(text)
+        || includesAny(text, COMMON_CODING_PROBLEM_PATTERNS)
+        || includesAny(textNoTechStack, DSA_PATTERNS);
+      if (hasStrongCodingCue) return false; // real coding ask — don't suppress
+      // Only the bare word "code" triggered the match. Check for addend preposition.
+      const isAddend = /^(?:with|show|include|add|give|can\s+you|using|just|also|and)\b/i.test(text.trim());
+      return isAddend;
+    })())
+  ) {
     answerType = 'coding_question_answer';
   } else if (includesAny(text, GAP_PATTERNS)) {
     // Honest gap + mitigation for the role (checked BEFORE jd_fit so a gap ask isn't

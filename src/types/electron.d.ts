@@ -139,6 +139,7 @@ export interface ElectronAPI {
       dismissed_count: number;
       dont_show_again: boolean;
       last_prompted_at: string | null;
+      last_dismissed_at: string | null;
       next_eligible_at: string | null;
       session_count: number;
       total_usage_ms: number;
@@ -148,7 +149,7 @@ export interface ElectronAPI {
     error?: string;
   }>
   reviewRecordSession: () => Promise<{ ok: boolean; error?: string }>
-  reviewFlushSession: () => Promise<{ ok: boolean; totals?: { session_count: number; total_usage_ms: number }; error?: string }>
+  reviewFlushSession: () => Promise<{ ok: boolean; totals?: { session_count: number; total_usage_ms: number; usage_ms: number; counted: boolean }; error?: string }>
   reviewMarkShown: () => Promise<{ ok: boolean; error?: string }>
   reviewDismissLater: () => Promise<{ ok: boolean; error?: string }>
   reviewDismissForever: () => Promise<{ ok: boolean; error?: string }>
@@ -269,6 +270,8 @@ export interface ElectronAPI {
   modesGetAll: () => Promise<Array<{ id: string; name: string; templateType: string; customContext: string; isActive: boolean; createdAt: string; referenceFileCount: number }>>
   modesGetActive: () => Promise<{ id: string; name: string; templateType: string; customContext: string; isActive: boolean; createdAt: string } | null>
   modesCreate: (params: { name: string; templateType: string }) => Promise<{ success: boolean; mode?: any; error?: string }>
+  modesGenerateFromBrief: (params: { brief: string; requiresGrounding?: boolean; templateHint?: string; key?: string; persist?: boolean }) => Promise<{ success: boolean; mode?: any; draft?: any; attempts?: number; issues?: any[]; persisted?: boolean; error?: string }>
+  e2eInvoke: (channel: string, ...args: any[]) => Promise<any>
   modesUpdate: (id: string, updates: { name?: string; templateType?: string; customContext?: string }) => Promise<{ success: boolean; error?: string }>
   modesDelete: (id: string) => Promise<{ success: boolean; error?: string }>
   modesSetActive: (id: string | null) => Promise<{ success: boolean; error?: string }>
@@ -277,6 +280,16 @@ export interface ElectronAPI {
   modesDeleteReferenceFile: (id: string) => Promise<{ success: boolean; error?: string }>
   modesGetReferenceFileStatus: (modeId: string) => Promise<{ success: boolean; statuses?: Array<{ fileId: string; fileName: string; status: string; chunkCount: number }>; error?: string }>
   onModeFileIndexStatus: (callback: (data: { modeId: string; fileId?: string }) => void) => () => void
+  onKnowledgeIndexProgress: (callback: (data: { fileId: string; status: string; startedAt?: number; finishedAt?: number; error?: string }) => void) => () => void
+  knowledgeListPacks: (modeId: string) => Promise<{ success: boolean; packs: Array<{ id: string; sourceId: string; fileName: string; cardCount: number; entityCount: number; relationCount: number; packVersion: number; updatedAt: string }>; error?: string }>
+  knowledgeGetPack: (fileId: string) => Promise<{ success: boolean; pack: any | null; error?: string }>
+  knowledgeRegeneratePack: (params: { fileId: string; modeId: string; fileName: string }) => Promise<{ success: boolean; status?: string; pack?: any; error?: string }>
+  knowledgeExportPack: (fileId: string) => Promise<{ success: boolean; cancelled?: boolean; exportedFileCount?: number; destRoot?: string; error?: string }>
+  knowledgeEditCard: (params: { cardId: string; title?: string; body?: string; entities?: string[]; tags?: string[] }) => Promise<{ success: boolean; card?: any; error?: string }>
+  knowledgeApproveCard: (cardId: string) => Promise<{ success: boolean; card?: any; error?: string }>
+  knowledgeRejectCard: (cardId: string) => Promise<{ success: boolean; card?: any; error?: string }>
+  knowledgeRestoreCardVersion: (params: { cardId: string; versionId: string }) => Promise<{ success: boolean; card?: any; error?: string }>
+  knowledgeGetCardHistory: (cardId: string) => Promise<{ success: boolean; versions: any[]; error?: string }>
   modesGetNoteSections: (modeId: string) => Promise<Array<{ id: string; modeId: string; title: string; description: string; sortOrder: number }>>
   modesAddNoteSection: (modeId: string, title: string, description: string) => Promise<{ success: boolean; section?: any; error?: string }>
   modesUpdateNoteSection: (id: string, updates: { title?: string; description?: string }) => Promise<{ success: boolean; error?: string }>

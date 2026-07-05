@@ -23,8 +23,12 @@ const { buildContextRoute } = await import(pathToFileURL(path.join(distRoot, 'll
 
 describe('W4: persona reaches the streaming prompt', () => {
     test('_streamChatInner injects personaPrompt into the combined context', () => {
-        // The persona block must be built from this.personaPrompt...
-        assert.match(llmHelperSrc, /const personaContext = this\.personaPrompt\.trim\(\)/);
+        // The persona block must be built from this.personaPrompt — but since
+        // the 2026-06-27 document-grounded fix it is SUPPRESSED for
+        // document-grounded custom modes (the persona must not leak into an
+        // answer that should come only from the uploaded material). So the
+        // assignment is now gated on !documentGroundedCustomModeActive.
+        assert.match(llmHelperSrc, /const personaContext = !documentGroundedCustomModeActive && this\.personaPrompt\.trim\(\)/);
         // ...and combined into the outbound context used by userContent.
         assert.match(llmHelperSrc, /const combinedContext = \[personaContext, context\]\.filter\(Boolean\)\.join/);
         assert.match(llmHelperSrc, /combinedContext\s*\?\s*`CONTEXT:\\n\$\{combinedContext\}/);

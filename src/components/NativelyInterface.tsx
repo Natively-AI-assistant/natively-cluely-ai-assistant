@@ -162,46 +162,8 @@ import {
 } from '../lib/streamingTokenQueue.mjs';
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism-light';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import python from 'react-syntax-highlighter/dist/esm/languages/prism/python';
-import javascript from 'react-syntax-highlighter/dist/esm/languages/prism/javascript';
-import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript';
-import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash';
-import yaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml';
-import sql from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
-import go from 'react-syntax-highlighter/dist/esm/languages/prism/go';
-import rust from 'react-syntax-highlighter/dist/esm/languages/prism/rust';
-import cpp from 'react-syntax-highlighter/dist/esm/languages/prism/cpp';
-import csharp from 'react-syntax-highlighter/dist/esm/languages/prism/csharp';
-import css from 'react-syntax-highlighter/dist/esm/languages/prism/css';
-import json from 'react-syntax-highlighter/dist/esm/languages/prism/json';
-import markdown from 'react-syntax-highlighter/dist/esm/languages/prism/markdown';
-import markup from 'react-syntax-highlighter/dist/esm/languages/prism/markup';
 
-SyntaxHighlighter.registerLanguage('python', python);
-SyntaxHighlighter.registerLanguage('py', python);
-SyntaxHighlighter.registerLanguage('javascript', javascript);
-SyntaxHighlighter.registerLanguage('js', javascript);
-SyntaxHighlighter.registerLanguage('typescript', typescript);
-SyntaxHighlighter.registerLanguage('ts', typescript);
-SyntaxHighlighter.registerLanguage('bash', bash);
-SyntaxHighlighter.registerLanguage('sh', bash);
-SyntaxHighlighter.registerLanguage('shell', bash);
-SyntaxHighlighter.registerLanguage('yaml', yaml);
-SyntaxHighlighter.registerLanguage('yml', yaml);
-SyntaxHighlighter.registerLanguage('sql', sql);
-SyntaxHighlighter.registerLanguage('go', go);
-SyntaxHighlighter.registerLanguage('rust', rust);
-SyntaxHighlighter.registerLanguage('rs', rust);
-SyntaxHighlighter.registerLanguage('cpp', cpp);
-SyntaxHighlighter.registerLanguage('c++', cpp);
-SyntaxHighlighter.registerLanguage('csharp', csharp);
-SyntaxHighlighter.registerLanguage('cs', csharp);
-SyntaxHighlighter.registerLanguage('css', css);
-SyntaxHighlighter.registerLanguage('json', json);
-SyntaxHighlighter.registerLanguage('markdown', markdown);
-SyntaxHighlighter.registerLanguage('md', markdown);
-SyntaxHighlighter.registerLanguage('markup', markup);
-SyntaxHighlighter.registerLanguage('html', markup);
+registerPrismLanguages();
 // import { ModelSelector } from './ui/ModelSelector'; // REMOVED
 import 'katex/dist/katex.min.css';
 import DOMPurify from 'dompurify';
@@ -212,6 +174,8 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { genMessageId } from '../utils/messageId';
+import { mapLanguageForPrism, isBlockCode } from '../utils/prismLanguage';
+import { registerPrismLanguages } from '../utils/registerPrismLanguages';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { analytics, detectProviderType } from '../lib/analytics/analytics.service';
 import type { MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
@@ -317,55 +281,6 @@ interface HighlightedCodeProps {
   isGlassTheme?: boolean;
 }
 
-const mapLanguageForPrism = (lang: string, code: string): string => {
-  if (!lang) {
-    if (code.includes('def ') || code.includes('import ') || code.includes('elif ') || code.includes('print(') || code.includes(':\n')) {
-      return 'python';
-    }
-    return 'javascript';
-  }
-  const lower = lang.toLowerCase().trim();
-  const mapper: Record<string, string> = {
-    'js': 'javascript',
-    'javascript': 'javascript',
-    'ts': 'typescript',
-    'typescript': 'typescript',
-    'py': 'python',
-    'python': 'python',
-    'rb': 'ruby',
-    'ruby': 'ruby',
-    'sh': 'bash',
-    'bash': 'bash',
-    'shell': 'bash',
-    'zsh': 'bash',
-    'go': 'go',
-    'golang': 'go',
-    'rs': 'rust',
-    'rust': 'rust',
-    'cs': 'csharp',
-    'csharp': 'csharp',
-    'cpp': 'cpp',
-    'c++': 'cpp',
-    'h': 'cpp',
-    'c': 'c',
-    'java': 'java',
-    'kt': 'kotlin',
-    'kotlin': 'kotlin',
-    'swift': 'swift',
-    'yml': 'yaml',
-    'yaml': 'yaml',
-    'xml': 'markup',
-    'html': 'markup',
-    'svg': 'markup',
-    'json': 'json',
-    'css': 'css',
-    'md': 'markdown',
-    'markdown': 'markdown',
-    'sql': 'sql',
-  };
-  return mapper[lower] || lower;
-};
-
 const HighlightedCode = React.memo(
   function HighlightedCode({
     code,
@@ -380,6 +295,7 @@ const HighlightedCode = React.memo(
     isGlassTheme,
   }: HighlightedCodeProps) {
     const isSpecialTheme = isModernTheme || isGlassTheme;
+    const resolved = mapLanguageForPrism(lang, code);
     return (
       <div
         className={`my-3 rounded-xl overflow-hidden border shadow-lg ${codeBlockClass}`}
@@ -393,7 +309,7 @@ const HighlightedCode = React.memo(
           <span
             className={`text-[10px] uppercase tracking-widest font-semibold font-mono ${codeHeaderTextClass}`}
           >
-            {lang || 'CODE'}
+            {resolved || 'CODE'}
           </span>
         </div>
         {/* No-wrap horizontal scroll: code line layout stays stable as the
@@ -401,7 +317,7 @@ const HighlightedCode = React.memo(
                 spring tick, the block height jitters, and content below shifts. */}
         <div className="bg-transparent overflow-x-auto">
           <SyntaxHighlighter
-            language={mapLanguageForPrism(lang, code)}
+            language={resolved}
             style={codeTheme}
             customStyle={HC_CUSTOM_STYLE}
             wrapLongLines={false}
@@ -1247,10 +1163,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           <ol className="list-decimal ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] text-[14px]" {...props} />
         ),
         li: ({ node, ...props }: any) => <li className="pl-1 mb-[2.5px] last:mb-0 leading-[1.45] text-[14px]" {...props} />,
-        code: ({ node, inline, className, children, ...props }: any) => {
-          const match = /language-(\w+)/.exec(className || '');
-          const isInline = inline ?? !match;
-          if (!isInline) {
+        code: ({ node, className, children, ...props }: any) => {
+          const match = /language-([\w+#-]+)/.exec(className || '');
+          const isBlock = isBlockCode(className, String(children));
+          if (isBlock) {
             const lang = match ? match[1] : '';
             const code = String(children).replace(/\n$/, '');
             return (
@@ -4515,12 +4431,13 @@ Provide only the answer, nothing else.`;
             <div className="space-y-2 text-[14.5px] leading-relaxed">
               {parts.map((part, i) => {
                 if (part.startsWith('```')) {
-                  const match = part.match(/```(\w*)\s+([\s\S]*?)(?:```|$)/);
+                  // Language class allows +/#/- so c++, objective-c, f# match.
+                  const match = part.match(/```([\w+#-]*)\s+([\s\S]*?)(?:```|$)/);
                   if (match || part.startsWith('```')) {
-                    const lang = match && match[1] ? match[1] : 'python';
+                    const lang = match && match[1] ? match[1] : '';
                     const code = (match && match[2]
                       ? match[2]
-                      : part.replace(/^```\w*\s*/, '').replace(/```$/, '')).trim();
+                      : part.replace(/^```[\w+#-]*\s*/, '').replace(/```$/, '')).trim();
                     return (
                       <HighlightedCode
                         key={i}

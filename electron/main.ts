@@ -1198,6 +1198,16 @@ export class AppState {
         const cm = CredentialsManager.getInstance();
         const openaiKey = cm.getOpenaiApiKey() || process.env.OPENAI_API_KEY;
         const geminiKey = cm.getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+        // Gemini embedding key POOL: credential key + all GEMINI_API_KEY(_2.._6)/GOOGLE
+        // env keys, de-duped. Lets the embedding provider rotate off a rate-limited
+        // key (429 → per-key cooldown → next key) instead of failing the index.
+        const geminiKeys = (() => {
+          const pool: string[] = [];
+          const add = (k?: string) => { const v = (k || '').trim(); if (v && !pool.includes(v)) pool.push(v); };
+          add(cm.getGeminiApiKey());
+          for (const n of ['GEMINI_API_KEY', 'GEMINI_API_KEY_2', 'GEMINI_API_KEY_3', 'GEMINI_API_KEY_4', 'GEMINI_API_KEY_5', 'GEMINI_API_KEY_6', 'GOOGLE_API_KEY']) add(process.env[n]);
+          return pool;
+        })();
 
         const providerDataScopes = (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })();
         this.ragManager = new RAGManager({
@@ -1206,6 +1216,7 @@ export class AppState {
             extPath: db.getExtPath(),
             openaiKey,
             geminiKey,
+            geminiKeys,
             ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
             providerDataScopes
         });
@@ -5914,6 +5925,21 @@ async function initializeApp() {
   // Initialize IPC handlers before window creation
   initializeIpcHandlers(appState)
 
+  // Start the in-app review session ledger. This is intentionally main-process
+  // owned so renderer reloads don't double-count app sessions. Also sync the
+  // backend prompt-state once so cross-install dismissals/reviews are honored.
+  try {
+    const { ReviewService, getReviewApiKey, getReviewHardwareId } = require('./services/ReviewService');
+    const reviewService = ReviewService.getInstance();
+    reviewService.recordSessionStart();
+    const apiKey = getReviewApiKey();
+    getReviewHardwareId()
+      .then((hwid: string | null) => reviewService.syncWithBackend(apiKey, hwid))
+      .catch(() => {});
+  } catch (err) {
+    console.warn('[Init] ReviewService recordSessionStart failed (non-fatal):', err);
+  }
+
   // Generic, provider-agnostic local-model download service. Owns the
   // in-flight state for Whisper (today) and any future local model family
   // (vision, embeddings, …). Instantiated BEFORE createWindow so the
@@ -6296,6 +6322,23 @@ if (process.env.THINKING_MATRIX === '1') {
       HindsightManager.getInstance().stopSync();
     } catch { /* optional */ }
 
+    // Review-prompt service: close any in-flight session so total_usage_ms
+    // captures this run, then flush the debounced state write (250ms window)
+    // synchronously so a user dismissing the prompt 100ms before quit isn't
+    // re-prompted on next launch. Idempotent with the renderer's
+    // beforeunload path (which also calls review:flush-session).
+    try {
+      const { ReviewService, getReviewApiKey, getReviewHardwareId } = require('./services/ReviewService');
+      const reviewService = ReviewService.getInstance();
+      const totals = reviewService.beforeQuit();
+      if (totals.counted) {
+        const apiKey = getReviewApiKey();
+        getReviewHardwareId()
+          .then((hwid: string | null) => reviewService.reportUsage(apiKey, hwid, totals.usage_ms))
+          .catch(() => {});
+      }
+    } catch { /* optional */ }
+
     // Stop the default-output watcher so the setInterval doesn't keep calling
     // into the native module while V8 is tearing down. Without this, quitting
     // mid-meeting extends shutdown by 1–2s on slow CoreAudio teardown because
@@ -6374,6 +6417,7 @@ if (process.env.THINKING_MATRIX === '1') {
     PhoneMirrorService.getInstance().dispose().catch((err) =>
       console.error('[Main] PhoneMirror dispose failed:', err)
     );
+
 
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');

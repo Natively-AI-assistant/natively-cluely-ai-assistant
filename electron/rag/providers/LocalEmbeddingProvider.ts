@@ -21,10 +21,30 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     // bundles this file (bundle: true inlines the provider into main.js, which
     // makes __dirname-relative paths fragile).
     // In prod: app.isPackaged = true → use process.resourcesPath (electron-builder extraResources).
-    this.modelPath = path.join(
-      app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), 'resources'),
-      'models'
-    );
+    this.modelPath = LocalEmbeddingProvider.resolveModelPath();
+  }
+
+  // Resolve to the first candidate that actually holds the model, so the local
+  // fallback works whether launched packaged, `electron .` from the repo, or
+  // Playwright launching dist-electron/main.js (where getAppPath() points at the
+  // built dir, not the repo root that holds resources/models). Without this an
+  // exhausted-cloud-quota run had NO working embedder (tokenizer 404).
+  private static resolveModelPath(): string {
+    const fs = require('fs');
+    const candidates: string[] = [];
+    if (process.env.NATIVELY_LOCAL_MODELS_PATH) candidates.push(process.env.NATIVELY_LOCAL_MODELS_PATH);
+    if (app.isPackaged) candidates.push(path.join(process.resourcesPath, 'models'));
+    let appPath = '';
+    try { appPath = app.getAppPath(); } catch { /* not ready */ }
+    if (appPath) {
+      candidates.push(path.join(appPath, 'resources', 'models'));
+      candidates.push(path.join(appPath, '..', 'resources', 'models'));
+      candidates.push(path.join(appPath, '..', '..', 'resources', 'models'));
+    }
+    for (const c of candidates) {
+      try { if (fs.existsSync(path.join(c, 'Xenova', 'all-MiniLM-L6-v2', 'tokenizer.json'))) return c; } catch { /* keep trying */ }
+    }
+    return candidates.find(Boolean) || path.join(process.resourcesPath || '.', 'models');
   }
 
   async isAvailable(): Promise<boolean> {

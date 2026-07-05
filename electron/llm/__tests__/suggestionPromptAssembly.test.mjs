@@ -24,9 +24,16 @@ test('generateSuggestion loads active mode prompt suffix and retrieved active mo
   assert.ok(generateSuggestionStart >= 0, 'generateSuggestion should exist');
   assert.match(generateSuggestionSource, /require\('\.\/services\/ModesManager'\)/);
   assert.match(generateSuggestionSource, /getActiveModeSystemPromptSuffix\(\)/);
-  // Retrieved mode context is scoped by a non-negotiation answer type so the
-  // mode's sensitive customContext (salary/pricing) is dropped on this path.
-  assert.match(generateSuggestionSource, /buildRetrievedActiveModeContextBlock\(lastQuestion, context, 1800, 'general_meeting_answer'\)/);
+  // Retrieved mode context is scoped by answer type. Since the 2026-06-27
+  // document-grounded fix, generateSuggestion picks the answer type
+  // conditionally ('document_grounded_suggestion' when the active mode is
+  // document-grounded, else 'general_meeting_answer') and threads
+  // forceDocumentGrounding through the retrievalOptions position. Assert the
+  // call uses lastQuestion + the conditional retrieveAnswerType, not the old
+  // hardcoded 'general_meeting_answer' literal.
+  assert.match(generateSuggestionSource, /buildRetrievedActiveModeContextBlock\(\s*lastQuestion,/);
+  assert.match(generateSuggestionSource, /retrieveAnswerType/);
+  assert.match(generateSuggestionSource, /documentGroundedCustomModeActive/);
   assert.doesNotMatch(generateSuggestionSource, /\|\| modesMgr\.buildActiveModeContextBlock\(\)/);
 });
 

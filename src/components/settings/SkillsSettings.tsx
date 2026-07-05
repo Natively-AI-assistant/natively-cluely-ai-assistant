@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Check,
     CheckCircle,
@@ -74,6 +74,12 @@ export const SkillsSettings: React.FC = () => {
     const [installing, setInstalling] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
+    // Counter for dragenter/dragleave. A simple boolean flag would flicker
+    // every time the cursor crossed a child boundary inside the card (icon,
+    // heading, button) — those boundaries DO fire dragleave. Tracking the
+    // depth via a counter means we only clear the highlight when the cursor
+    // has fully exited the entire card.
+    const dragDepthRef = useRef(0);
     const [showAdvanced, setShowAdvanced] = useState(false);
 
     const loadSkills = useCallback(async () => {
@@ -112,10 +118,19 @@ export const SkillsSettings: React.FC = () => {
         }
     };
 
-    // Run validate-only (autoInstall: false). The result is either a
-    // 'validated' stage (we show the preview card), an 'installed' stage
-    // (shouldn't happen here — autoInstall: false — but treat it as
-    // success), or 'failed' (we show the first error in the status banner).
+    // Shared upload runner used by both stages of the upload flow:
+    //   - handleFilePicked → runUpload(payload, false) for the preview
+    //     card (autoInstall:false → uploader returns stage:'validated')
+    //   - handleInstall → runUpload(preview.payload, true) to commit
+    //     (autoInstall:true → uploader returns stage:'installed')
+    //
+    // On any outcome other than 'failed', the status banner is cleared.
+    // On 'failed', the first error is surfaced in the status banner AND
+    // the preview card is preserved (if present) so the user can see
+    // "what they tried" alongside "why it failed". On unexpected stages
+    // (anything other than validated/installed/failed) we log + surface
+    // a generic error rather than failing silently — see handleInstall
+    // for the defensive always-refresh list behavior.
     const runUpload = useCallback(
         async (payload: SkillUploadPayload, autoInstall: boolean): Promise<UploadSkillOutcome | null> => {
             if (typeof window.electronAPI?.skillsUpload !== 'function') {
@@ -169,8 +184,6 @@ export const SkillsSettings: React.FC = () => {
     // are NOT supported here — users wanting to install a folder of files
     // should use the Advanced "open skills folder" escape hatch and drop files
     // manually into the OS file explorer. This avoids the complexity of
-    // async-recursive DataTransferItem traversal in the renderer.
-    // us a complete FileList in one shot. This avoids the complexity of
     // async-recursive DataTransferItem traversal in the renderer.
     const handleDrop = async (e: React.DragEvent) => {
         e.preventDefault();
@@ -287,10 +300,18 @@ export const SkillsSettings: React.FC = () => {
             <div
                 onDragOver={(e) => {
                     e.preventDefault();
-                    setIsDragging(true);
+                    if (dragDepthRef.current === 0) setIsDragging(true);
+                    dragDepthRef.current += 1;
                 }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={handleDrop}
+                onDragLeave={() => {
+                    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+                    if (dragDepthRef.current === 0) setIsDragging(false);
+                }}
+                onDrop={(e) => {
+                    dragDepthRef.current = 0;
+                    setIsDragging(false);
+                    handleDrop(e);
+                }}
                 className={[
                     'rounded-xl border transition-colors p-4 bg-bg-card',
                     isDragging

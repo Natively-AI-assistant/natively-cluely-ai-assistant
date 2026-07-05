@@ -77,6 +77,22 @@ const EXPECTED_KEYS = [
   'ragLocalRerank',
   'ragRrfFusion',
   'ragSpeculativeRerank',
+  // OKF document knowledge system flags.
+  'okfKnowledgePacks',
+  'okfMarkdownExport',
+  'okfHybridRetrieval',
+  'okfGraphExpansion',
+  'okfKnowledgeUi',
+  'okfUserEditableCards',
+  // OKF Profile Intelligence upgrade flags (2026-07-02).
+  'okfProfilePacks',
+  'okfProfileHybridRetrieval',
+  'okfProfileMarkdownExport',
+  'okfProfileGraphExpansion',
+  'okfProfileKnowledgeUi',
+  // Document-grounded safety isolation gates.
+  'docGroundedStrictIsolation',
+  'docGroundedFalseRefusalRepair',
 ];
 
 // All NATIVELY_* env vars these flags read — cleared before/after so a leaked env from the
@@ -87,6 +103,12 @@ const DEFAULT_ON_KEYS = new Set([
   'followUpDraftV2',
   'speakerLabelsV1',
   'meetingSummaryLlmPolish',
+  // Safety isolation gates — ON everywhere by default. (The okf*/okfProfile* dev/
+  // test-default flags resolve to isInternalDevTestContext(), which is FALSE when
+  // NODE_ENV is unset as it is under this bare `node --test` harness, so they are
+  // NOT default-ON here.)
+  'docGroundedStrictIsolation',
+  'docGroundedFalseRefusalRepair',
 ]);
 
 const ALL_ENV_VARS = [
@@ -114,6 +136,23 @@ const ALL_ENV_VARS = [
   'NATIVELY_HINDSIGHT_MEMORY',
   'NATIVELY_HINDSIGHT_LIVE_RECALL',
   'NATIVELY_HINDSIGHT_POST_MEETING_RETAIN',
+  'NATIVELY_RAG_CONFIDENCE_GATE',
+  'NATIVELY_RAG_LOCAL_RERANK',
+  'NATIVELY_RAG_RRF_FUSION',
+  'NATIVELY_RAG_SPECULATIVE_RERANK',
+  'NATIVELY_OKF_KNOWLEDGE_PACKS',
+  'NATIVELY_OKF_MARKDOWN_EXPORT',
+  'NATIVELY_OKF_HYBRID_RETRIEVAL',
+  'NATIVELY_OKF_GRAPH_EXPANSION',
+  'NATIVELY_OKF_KNOWLEDGE_UI',
+  'NATIVELY_OKF_USER_EDITABLE_CARDS',
+  'NATIVELY_OKF_PROFILE_PACKS',
+  'NATIVELY_OKF_PROFILE_HYBRID_RETRIEVAL',
+  'NATIVELY_OKF_PROFILE_MARKDOWN_EXPORT',
+  'NATIVELY_OKF_PROFILE_GRAPH_EXPANSION',
+  'NATIVELY_OKF_PROFILE_KNOWLEDGE_UI',
+  'NATIVELY_DOC_GROUNDED_STRICT_ISOLATION',
+  'NATIVELY_DOC_GROUNDED_FALSE_REFUSAL_REPAIR',
 ];
 
 function clearAllEnv() {

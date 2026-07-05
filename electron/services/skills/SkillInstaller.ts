@@ -217,13 +217,8 @@ export async function installUploadedSkill(
     existsOnDisk = stat.isDirectory();
   } catch (e) {
     // ENOENT is the expected case for a fresh install. Anything else is
-    // a real I/O error and we'll let the staging loop surface it.
-    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
-      // Don't try to be clever — just retry the write under the staging
-      // loop so the error message is consistent.
-    } else {
-      existsOnDisk = false;
-    }
+    // a real I/O error — let the staging loop surface it with a
+    // consistent message rather than trying to be clever here.
   }
   if (existsOnDisk) {
     return {

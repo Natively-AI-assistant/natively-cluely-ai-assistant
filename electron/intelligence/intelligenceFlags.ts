@@ -88,7 +88,58 @@ export type IntelligenceFlagKey =
   // overruns, the race already falls through to the non-reranked block, so
   // first-token latency can never regress. Default OFF. Requires ragLocalRerank
   // (the reranker itself) to also be on.
-  | 'ragSpeculativeRerank';
+  | 'ragSpeculativeRerank'
+  // ── OKF Hybrid Knowledge System (2026-07-01 autopilot build) ─────────────
+  // Generate OKF-compatible (Open Knowledge Format v0.1) "Knowledge Packs"
+  // from uploaded reference files — source-attributed concept cards layered
+  // ON TOP of (never replacing) the existing chunk-retrieval pipeline.
+  // Default ON in dev/test so the benchmark + test suite exercise the real
+  // path; configurable (default OFF) in production until validated.
+  | 'okfKnowledgePacks'
+  // Export a generated Knowledge Pack as a real OKF v0.1 Markdown bundle
+  // (index.md/log.md/concept files). Default ON in dev/test.
+  | 'okfMarkdownExport'
+  // Use OKF cards (in addition to raw chunks) in document-grounded retrieval
+  // and prompt assembly. Default ON in dev/test, guarded (OFF) in production
+  // until the 19-question benchmark is consistently green end-to-end.
+  | 'okfHybridRetrieval'
+  // Entity/relation graph layer derived from OKF cards (Phase 4). Default OFF
+  // everywhere until Phase 4 ships.
+  | 'okfGraphExpansion'
+  // Knowledge Pack inspector UI (Phase 5). Default OFF until the UI ships.
+  | 'okfKnowledgeUi'
+  // Allow users to edit/approve/reject generated cards (Phase 6). Default OFF
+  // until the edit/approval flow ships.
+  | 'okfUserEditableCards'
+  // ── OKF Profile Intelligence upgrade (2026-07-02 autopilot build) ────────
+  // Generate an OKF-compatible Knowledge Pack (candidate profile + target job +
+  // AOT interview artifacts) from the structured resume/JD on ingest — layered
+  // ON TOP of (never replacing) the deterministic fast path, structured-JSON
+  // grounding, and context_nodes vector store. PROFILE packs are PII and obey
+  // profileContextPolicy; they are FORBIDDEN in document-grounded custom modes.
+  // Default ON in dev/test so the 18-question benchmark exercises the real
+  // path; configurable (default OFF) in production until validated.
+  | 'okfProfilePacks'
+  // Use profile OKF cards (in addition to context_nodes) in answer evidence.
+  // Fail-closed: contributes nothing without an explicit AnswerPlan/route that
+  // allows profile context. Default ON in dev/test, guarded (OFF) in production.
+  | 'okfProfileHybridRetrieval'
+  // Allow a profile Knowledge Pack to be exported as an OKF v0.1 Markdown
+  // bundle (explicit user action only). Default ON in dev/test.
+  | 'okfProfileMarkdownExport'
+  // Typed relation graph derived from profile cards (Phase 4). Default OFF.
+  | 'okfProfileGraphExpansion'
+  // Profile Knowledge Pack inspector UI (Phase 5). Default OFF until UI ships.
+  | 'okfProfileKnowledgeUi'
+  // Document-grounded custom modes must NEVER let Hindsight/profile/general
+  // knowledge override uploaded document evidence. Default ON everywhere —
+  // this is a safety isolation gate, not an experimental feature.
+  | 'docGroundedStrictIsolation'
+  // Attempt a single bounded repair when the model issues a false refusal
+  // ("I could not find that...") despite strong retrieved evidence existing.
+  // Default ON everywhere — see SYSTEM_REFUSAL_RE / isFalseRefusal in
+  // ipcHandlers.ts. Turning this OFF reverts to the prior log-only behavior.
+  | 'docGroundedFalseRefusalRepair';
 
 interface FlagSpec {
   /** env var name (NATIVELY_* convention). */
@@ -97,6 +148,16 @@ interface FlagSpec {
   setting: string;
   /** Default when neither env nor settings decide. */
   default: boolean;
+}
+
+/** Is this an internal/dev/test/benchmark context (used for OKF default-ON gating)? */
+function isInternalDevTestContext(): boolean {
+  try {
+    if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') return true;
+    if (process.env.BENCHMARK_MODEL) return true;
+    if (process.env.NATIVELY_INTERNAL === '1' || process.env.NATIVELY_DEV === '1') return true;
+  } catch { /* default false */ }
+  return false;
 }
 
 const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
@@ -150,6 +211,33 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   ragRrfFusion: { env: 'NATIVELY_RAG_RRF_FUSION', setting: 'ragRrfFusionEnabled', default: false },
   // Phase 3 — allow rerank on the live transcript path (prewarmed + budget-guarded). Default OFF.
   ragSpeculativeRerank: { env: 'NATIVELY_RAG_SPECULATIVE_RERANK', setting: 'ragSpeculativeRerankEnabled', default: false },
+  // OKF Hybrid Knowledge System — default ON in dev/test/benchmark contexts so
+  // the 19-question thesis benchmark and test suite exercise the real path;
+  // default OFF in production until validated end-to-end.
+  okfKnowledgePacks: { env: 'NATIVELY_OKF_KNOWLEDGE_PACKS', setting: 'okfKnowledgePacksEnabled', default: isInternalDevTestContext() },
+  okfMarkdownExport: { env: 'NATIVELY_OKF_MARKDOWN_EXPORT', setting: 'okfMarkdownExportEnabled', default: isInternalDevTestContext() },
+  okfHybridRetrieval: { env: 'NATIVELY_OKF_HYBRID_RETRIEVAL', setting: 'okfHybridRetrievalEnabled', default: isInternalDevTestContext() },
+  okfGraphExpansion: { env: 'NATIVELY_OKF_GRAPH_EXPANSION', setting: 'okfGraphExpansionEnabled', default: false },
+  okfKnowledgeUi: { env: 'NATIVELY_OKF_KNOWLEDGE_UI', setting: 'okfKnowledgeUiEnabled', default: false },
+  okfUserEditableCards: { env: 'NATIVELY_OKF_USER_EDITABLE_CARDS', setting: 'okfUserEditableCardsEnabled', default: false },
+  // OKF Profile Intelligence — default ON in dev/test/benchmark contexts so the
+  // 18-question profile benchmark + test suite exercise the real path; default
+  // OFF in production until validated end-to-end. Graph/UI stay OFF everywhere
+  // until their phases ship.
+  okfProfilePacks: { env: 'NATIVELY_OKF_PROFILE_PACKS', setting: 'okfProfilePacksEnabled', default: isInternalDevTestContext() },
+  okfProfileHybridRetrieval: { env: 'NATIVELY_OKF_PROFILE_HYBRID_RETRIEVAL', setting: 'okfProfileHybridRetrievalEnabled', default: isInternalDevTestContext() },
+  okfProfileMarkdownExport: { env: 'NATIVELY_OKF_PROFILE_MARKDOWN_EXPORT', setting: 'okfProfileMarkdownExportEnabled', default: isInternalDevTestContext() },
+  okfProfileGraphExpansion: { env: 'NATIVELY_OKF_PROFILE_GRAPH_EXPANSION', setting: 'okfProfileGraphExpansionEnabled', default: false },
+  okfProfileKnowledgeUi: { env: 'NATIVELY_OKF_PROFILE_KNOWLEDGE_UI', setting: 'okfProfileKnowledgeUiEnabled', default: false },
+  // Safety isolation gates — ON everywhere by default.
+  docGroundedStrictIsolation: { env: 'NATIVELY_DOC_GROUNDED_STRICT_ISOLATION', setting: 'docGroundedStrictIsolationEnabled', default: true },
+  // NOTE (2026-07-02): the false-refusal REPAIR path is INERT unless
+  // `okfHybridRetrieval` is also on — the repair gate keys off the active OKF
+  // pack's entity/card-title overlap, which only exists when OKF packs are
+  // built. With OKF off, a doc-grounded "not mentioned" is always treated as an
+  // honest refusal (the safe fallback) regardless of this flag. Toggling this
+  // flag alone (without okfHybridRetrieval) has no effect.
+  docGroundedFalseRefusalRepair: { env: 'NATIVELY_DOC_GROUNDED_FALSE_REFUSAL_REPAIR', setting: 'docGroundedFalseRefusalRepairEnabled', default: true },
 };
 
 const ON_VALUES = new Set(['1', 'true', 'on', 'enabled', 'yes']);
@@ -267,6 +355,66 @@ export const isRagRrfFusionEnabled = (): boolean =>
  */
 export const isRagSpeculativeRerankEnabled = (): boolean =>
   isIntelligenceFlagEnabled('ragSpeculativeRerank');
+
+/** True when uploaded reference files should be indexed into OKF Knowledge Packs. */
+export const isOkfKnowledgePacksEnabled = (): boolean =>
+  isIntelligenceFlagEnabled('okfKnowledgePacks');
+
+/** True when a generated Knowledge Pack may be exported as an OKF v0.1 Markdown bundle. */
+export const isOkfMarkdownExportEnabled = (): boolean =>
+  isIntelligenceFlagEnabled('okfMarkdownExport');
+
+/** True when OKF cards should be consulted (alongside raw chunks) in document-grounded retrieval. */
+export const isOkfHybridRetrievalEnabled = (): boolean =>
+  isIntelligenceFlagEnabled('okfHybridRetrieval');
+
+/** True when the entity/relation graph layer derived from OKF cards may expand retrieval (Phase 4). */
+export const isOkfGraphExpansionEnabled = (): boolean =>
+  isIntelligenceFlagEnabled('okfGraphExpansion');
+
+/** True when the Knowledge Pack inspector UI is shown (Phase 5). */
+export const isOkfKnowledgeUiEnabled = (): boolean =>
+  isIntelligenceFlagEnabled('okfKnowledgeUi');
+
+/** True when users may edit/approve/reject generated Knowledge Cards (Phase 6). */
+export const isOkfUserEditableCardsEnabled = (): boolean =>
+  isIntelligenceFlagEnabled('okfUserEditableCards');
+
+/** True when a profile OKF Knowledge Pack should be generated on resume/JD ingest. */
+export const isOkfProfilePacksEnabled = (): boolean =>
+  isIntelligenceFlagEnabled('okfProfilePacks');
+
+/** True when profile OKF cards may contribute to answer evidence (still fail-closed on route/policy). */
+export const isOkfProfileHybridRetrievalEnabled = (): boolean =>
+  isIntelligenceFlagEnabled('okfProfileHybridRetrieval');
+
+/** True when a profile Knowledge Pack may be exported as an OKF v0.1 Markdown bundle. */
+export const isOkfProfileMarkdownExportEnabled = (): boolean =>
+  isIntelligenceFlagEnabled('okfProfileMarkdownExport');
+
+/** True when the profile entity/relation graph layer may expand retrieval (Phase 4). */
+export const isOkfProfileGraphExpansionEnabled = (): boolean =>
+  isIntelligenceFlagEnabled('okfProfileGraphExpansion');
+
+/** True when the profile Knowledge Pack inspector UI is shown (Phase 5). */
+export const isOkfProfileKnowledgeUiEnabled = (): boolean =>
+  isIntelligenceFlagEnabled('okfProfileKnowledgeUi');
+
+/**
+ * True when document-grounded custom modes must positively isolate retrieval
+ * evidence from Hindsight/profile/persona/general-knowledge context. Default
+ * ON everywhere — this is a safety gate, not an experimental feature.
+ */
+export const isDocGroundedStrictIsolationEnabled = (): boolean =>
+  isIntelligenceFlagEnabled('docGroundedStrictIsolation');
+
+/**
+ * True when a single bounded regeneration attempt is allowed for a detected
+ * false refusal ("I could not find that...") when strong evidence exists in
+ * the retrieved context. Default ON everywhere.
+ */
+export const isDocGroundedFalseRefusalRepairEnabled = (): boolean =>
+  isIntelligenceFlagEnabled('docGroundedFalseRefusalRepair');
 
 /**
  * A snapshot of every flag's resolved state — handy for the IntelligenceTrace and

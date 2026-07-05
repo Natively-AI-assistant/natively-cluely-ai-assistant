@@ -3,6 +3,8 @@ import { useStreamBuffer } from '../hooks/useStreamBuffer';
 import { X, Copy, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { genMessageId } from '../utils/messageId';
+import { mapLanguageForPrism, isBlockCode } from '../utils/prismLanguage';
+import { registerPrismLanguages } from '../utils/registerPrismLanguages';
 import nativelyIcon from './icon.png';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 
@@ -13,95 +15,8 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism-light';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import python from 'react-syntax-highlighter/dist/esm/languages/prism/python';
-import javascript from 'react-syntax-highlighter/dist/esm/languages/prism/javascript';
-import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript';
-import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash';
-import yaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml';
-import sql from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
-import go from 'react-syntax-highlighter/dist/esm/languages/prism/go';
-import rust from 'react-syntax-highlighter/dist/esm/languages/prism/rust';
-import cpp from 'react-syntax-highlighter/dist/esm/languages/prism/cpp';
-import csharp from 'react-syntax-highlighter/dist/esm/languages/prism/csharp';
-import css from 'react-syntax-highlighter/dist/esm/languages/prism/css';
-import json from 'react-syntax-highlighter/dist/esm/languages/prism/json';
-import markdown from 'react-syntax-highlighter/dist/esm/languages/prism/markdown';
-import markup from 'react-syntax-highlighter/dist/esm/languages/prism/markup';
 
-SyntaxHighlighter.registerLanguage('python', python);
-SyntaxHighlighter.registerLanguage('py', python);
-SyntaxHighlighter.registerLanguage('javascript', javascript);
-SyntaxHighlighter.registerLanguage('js', javascript);
-SyntaxHighlighter.registerLanguage('typescript', typescript);
-SyntaxHighlighter.registerLanguage('ts', typescript);
-SyntaxHighlighter.registerLanguage('bash', bash);
-SyntaxHighlighter.registerLanguage('sh', bash);
-SyntaxHighlighter.registerLanguage('shell', bash);
-SyntaxHighlighter.registerLanguage('yaml', yaml);
-SyntaxHighlighter.registerLanguage('yml', yaml);
-SyntaxHighlighter.registerLanguage('sql', sql);
-SyntaxHighlighter.registerLanguage('go', go);
-SyntaxHighlighter.registerLanguage('rust', rust);
-SyntaxHighlighter.registerLanguage('rs', rust);
-SyntaxHighlighter.registerLanguage('cpp', cpp);
-SyntaxHighlighter.registerLanguage('c++', cpp);
-SyntaxHighlighter.registerLanguage('csharp', csharp);
-SyntaxHighlighter.registerLanguage('cs', csharp);
-SyntaxHighlighter.registerLanguage('css', css);
-SyntaxHighlighter.registerLanguage('json', json);
-SyntaxHighlighter.registerLanguage('markdown', markdown);
-SyntaxHighlighter.registerLanguage('md', markdown);
-SyntaxHighlighter.registerLanguage('markup', markup);
-SyntaxHighlighter.registerLanguage('html', markup);
-
-const mapLanguageForPrism = (lang: string, code: string): string => {
-  if (!lang) {
-    if (code.includes('def ') || code.includes('import ') || code.includes('elif ') || code.includes('print(') || code.includes(':\n')) {
-      return 'python';
-    }
-    return 'javascript';
-  }
-  const lower = lang.toLowerCase().trim();
-  const mapper: Record<string, string> = {
-    'js': 'javascript',
-    'javascript': 'javascript',
-    'ts': 'typescript',
-    'typescript': 'typescript',
-    'py': 'python',
-    'python': 'python',
-    'rb': 'ruby',
-    'ruby': 'ruby',
-    'sh': 'bash',
-    'bash': 'bash',
-    'shell': 'bash',
-    'zsh': 'bash',
-    'go': 'go',
-    'golang': 'go',
-    'rs': 'rust',
-    'rust': 'rust',
-    'cs': 'csharp',
-    'csharp': 'csharp',
-    'cpp': 'cpp',
-    'c++': 'cpp',
-    'h': 'cpp',
-    'c': 'c',
-    'java': 'java',
-    'kt': 'kotlin',
-    'kotlin': 'kotlin',
-    'swift': 'swift',
-    'yml': 'yaml',
-    'yaml': 'yaml',
-    'xml': 'markup',
-    'html': 'markup',
-    'svg': 'markup',
-    'json': 'json',
-    'css': 'css',
-    'md': 'markdown',
-    'markdown': 'markdown',
-    'sql': 'sql',
-  };
-  return mapper[lower] || lower;
-};
+registerPrismLanguages();
 
 // ============================================
 // Types 
@@ -237,21 +152,22 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
                             ol: ({ node, ...props }: any) => <ol className="list-decimal pl-4 mt-[4.5px] mb-[4.5px] space-y-0 leading-relaxed text-[13.5px]" {...props} />,
                             li: ({ node, ...props }: any) => <li className="pl-1 mb-[4.5px] last:mb-0 leading-relaxed text-[13.5px]" {...props} />,
                             pre: ({ children }: any) => <div className="not-prose mb-3 mt-1.5">{children}</div>,
-                            code: ({ node, inline, className, children, ...props }: any) => {
-                                const match = /language-(\w+)/.exec(className || '');
-                                const isInline = inline ?? false;
+                            code: ({ node, className, children, ...props }: any) => {
+                                const match = /language-([\w+#-]+)/.exec(className || '');
+                                const isBlock = isBlockCode(className, String(children));
                                 const lang = match ? match[1] : '';
+                                const resolved = mapLanguageForPrism(lang, String(children));
 
-                                return !isInline ? (
+                                return isBlock ? (
                                     <div className="my-2 rounded-xl overflow-hidden border border-white/[0.08] shadow-lg bg-zinc-800/60 backdrop-blur-md">
                                         <div className="bg-white/[0.04] px-3 py-1 border-b border-white/[0.08]">
                                             <span className="text-[9px] uppercase tracking-widest font-semibold text-white/40 font-mono">
-                                                {lang || 'CODE'}
+                                                {resolved || 'CODE'}
                                             </span>
                                         </div>
                                         <div className="bg-transparent">
                                             <SyntaxHighlighter
-                                                language={mapLanguageForPrism(lang, String(children))}
+                                                language={resolved}
                                                 style={vscDarkPlus}
                                                 customStyle={{
                                                     margin: 0,

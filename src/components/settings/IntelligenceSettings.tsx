@@ -606,10 +606,12 @@ export const IntelligenceSettings: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <div className="flex items-center gap-2">
-        <Cpu size={18} className="text-accent-primary" />
-        <h2 className="text-base font-semibold text-text-primary">Intelligence</h2>
-      </div>
+      <header>
+        <h3 className="text-lg font-bold text-text-primary mb-1">Intelligence</h3>
+        <p className="text-xs text-text-secondary mb-5">
+          Tune features that surface during real-time conversations, lectures, and meetings.
+        </p>
+      </header>
 
       {/* ── Long-term memory (Hindsight) ─────────────────────────── */}
       <section className="rounded-xl border border-border-subtle bg-bg-item-surface p-5 space-y-4">

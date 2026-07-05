@@ -79,9 +79,12 @@ export class EmbeddingPipeline {
     private _isConfigImprovement(prev: AppAPIConfig, next: AppAPIConfig): boolean {
         const hasNew = (prevVal: string | undefined, nextVal: string | undefined) =>
             !prevVal && !!nextVal;
+        // A larger Gemini key pool is also an improvement (more rotation headroom).
+        const poolGrew = (next.geminiKeys?.length || 0) > (prev.geminiKeys?.length || 0);
         return (
             hasNew(prev.openaiKey, next.openaiKey) ||
             hasNew(prev.geminiKey, next.geminiKey) ||
+            poolGrew ||
             hasNew(prev.ollamaUrl, next.ollamaUrl)
         );
     }
@@ -621,6 +624,22 @@ export class EmbeddingPipeline {
      */
     get localSpaceKey(): string | null {
         return this.fallbackProvider?.space ?? null;
+    }
+
+    /**
+     * Fraction (0-1) of the active provider's key pool that is currently healthy
+     * (not cooling from a 429), or null when the provider doesn't expose pool
+     * health (e.g. a single-key or non-Gemini provider — treat as healthy).
+     * Lets a caller doing an indexing burst then an immediate query decide
+     * whether to settle a moment first, rather than a blind delay every time.
+     */
+    get primaryPoolHealth(): number | null {
+        const p = this.provider as any;
+        if (p && typeof p.healthyKeyCount === 'function' && typeof p.keyPoolSize === 'function') {
+            const total = p.keyPoolSize();
+            return total > 0 ? p.healthyKeyCount() / total : null;
+        }
+        return null;
     }
 
     async getEmbeddingForQueryLocalOnly(text: string): Promise<number[] | null> {

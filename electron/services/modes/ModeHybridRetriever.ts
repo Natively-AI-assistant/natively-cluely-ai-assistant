@@ -7,6 +7,7 @@ import { ModeReferenceFile } from '../ModesManager';
 import { VectorStore, ScoredChunk } from '../../rag/VectorStore';
 import { EmbeddingPipeline } from '../../rag/EmbeddingPipeline';
 import Database from 'better-sqlite3';
+import { buildDocumentMap, sectionAwareChunksFromMap, sentenceAwareWindows, tabularChunks } from './DocumentMap';
 
 export interface ModeRetrievedChunk {
     sourceId: string;
@@ -73,6 +74,12 @@ const DEFAULT_TOKEN_BUDGET = 1800;
 const DEFAULT_TOP_K = 6;
 const CHUNK_WORDS = 140;
 const CHUNK_OVERLAP = 30;
+// Max chunks embedded per getEmbeddingsWithFallback call during indexing. Files
+// larger than this are embedded + persisted in sub-batches so a very large doc
+// (e.g. a 14k-row CSV → hundreds of chunks) doesn't exceed the pipeline's 30s
+// per-call embed timeout and lose all progress. 100 aligns with the Gemini
+// batchEmbedContents request cap.
+const MODE_INDEX_EMBED_BATCH = Number(process.env.NATIVELY_MODE_INDEX_EMBED_BATCH) || 100;
 const MIN_COMBINED_SCORE = 0.15;
 const FTS_WEIGHT = 0.4;  // alpha for combined score: alpha * fts + (1-alpha) * vector
 
@@ -342,14 +349,66 @@ export class ModeHybridRetriever {
 
         this.updateIndexState(file.id, contentHash, chunks.length, 'indexing', activeSpace);
         try {
-            const result = await this.embeddingPipeline.getEmbeddingsWithFallback(chunks);
-            const embeddings = result.embeddings;
-            const embeddingSpace = result.space;
-            if (!Array.isArray(embeddings) || embeddings.length !== chunks.length) {
-                throw new Error(`batch embed returned ${embeddings?.length ?? 'none'} vectors for ${chunks.length} chunks`);
+            // Large files (e.g. a 14k-row CSV → hundreds of chunks) can't be embedded
+            // in ONE call: the pipeline wraps a single getEmbeddingsWithFallback in a
+            // 30s timeout, so a big corpus times out all-or-nothing. Embed + persist in
+            // bounded sub-batches so each has its own budget.
+            const INDEX_BATCH = MODE_INDEX_EMBED_BATCH;
+            if (chunks.length <= INDEX_BATCH) {
+                const result = await this.embeddingPipeline.getEmbeddingsWithFallback(chunks);
+                const embeddings = result.embeddings;
+                if (!Array.isArray(embeddings) || embeddings.length !== chunks.length) {
+                    throw new Error(`batch embed returned ${embeddings?.length ?? 'none'} vectors for ${chunks.length} chunks`);
+                }
+                this.persistChunks(file.id, chunks, embeddings, result.space);
+                this.updateIndexState(file.id, contentHash, chunks.length, 'ready', result.space);
+            } else {
+                // FAULT-TOLERANT batched indexing: a mid-file sub-batch failure (429
+                // rotation exhausted, timeout) must NOT discard the chunks already
+                // embedded. We embed the leading vectors we CAN, persist them (with
+                // the remaining chunks kept as lexical-only text), and mark the file
+                // 'ready' as long as a meaningful fraction embedded — a partially
+                // vectorized large CSV massively outperforms an all-lexical one.
+                const embeddedVectors: number[][] = [];
+                let embeddingSpace: string | null = null;
+                let failedOffset = -1;
+                for (let start = 0; start < chunks.length; start += INDEX_BATCH) {
+                    const slice = chunks.slice(start, start + INDEX_BATCH);
+                    try {
+                        const result = await this.embeddingPipeline.getEmbeddingsWithFallback(slice);
+                        if (!Array.isArray(result.embeddings) || result.embeddings.length !== slice.length) {
+                            throw new Error(`returned ${result.embeddings?.length ?? 'none'} vectors for ${slice.length} chunks`);
+                        }
+                        embeddedVectors.push(...result.embeddings);
+                        embeddingSpace = result.space;
+                        console.log(`[ModeHybridRetriever] ${file.fileName}: embedded ${embeddedVectors.length}/${chunks.length} chunks`);
+                    } catch (batchErr) {
+                        failedOffset = start;
+                        console.warn(`[ModeHybridRetriever] ${file.fileName}: sub-batch at offset ${start} failed (${batchErr instanceof Error ? batchErr.message : batchErr}); keeping ${embeddedVectors.length} embedded + rest lexical.`);
+                        break;
+                    }
+                }
+                const embeddedCount = embeddedVectors.length;
+                if (embeddedCount === 0) {
+                    // Nothing embedded — lexical only, mark failed so a later prewarm retries.
+                    this.persistChunks(file.id, chunks, null, null);
+                    this.updateIndexState(file.id, contentHash, chunks.length, 'failed', null);
+                } else if (embeddedCount === chunks.length) {
+                    this.persistChunks(file.id, chunks, embeddedVectors, embeddingSpace);
+                    this.updateIndexState(file.id, contentHash, chunks.length, 'ready', embeddingSpace);
+                } else {
+                    // Partial: persist the embedded prefix WITH vectors, and the tail as
+                    // lexical-only text. persistChunks reads embeddings[i] per row and
+                    // stores a null blob where the vector is absent, so a padded array
+                    // (vectors for the prefix, null for the tail) gives a mixed index.
+                    const padded = chunks.map((_, i) => (i < embeddedCount ? embeddedVectors[i] : null)) as unknown as number[][];
+                    this.persistChunks(file.id, chunks, padded, embeddingSpace);
+                    // 'ready' — retrieval works over the embedded prefix + lexical tail.
+                    // A follow-up prewarm/retry can complete the tail when quota frees up.
+                    this.updateIndexState(file.id, contentHash, chunks.length, 'ready', embeddingSpace);
+                    console.log(`[ModeHybridRetriever] ${file.fileName}: partial index READY (${embeddedCount}/${chunks.length} vectors, tail lexical; failed@${failedOffset})`);
+                }
             }
-            this.persistChunks(file.id, chunks, embeddings, embeddingSpace);
-            this.updateIndexState(file.id, contentHash, chunks.length, 'ready', embeddingSpace);
         } catch (e) {
             console.warn(`[ModeHybridRetriever] indexFile failed for ${file.fileName}:`, e instanceof Error ? e.message : e);
             // Keep the chunk text for lexical retrieval; mark failed for retry.
@@ -464,6 +523,23 @@ export class ModeHybridRetriever {
      * ingest are SOFT boundaries — they don't close a section.
      */
     private chunkText(content: string): string[] {
+        // TABULAR data (CSV/TSV) is chunked by ROWS with the header repeated, so a
+        // query for one entity retrieves its row with columns labelled instead of a
+        // giant undifferentiated blob (which caused fabricated figures on datasets).
+        const table = tabularChunks(content);
+        if (table) return table;
+
+        // STRUCTURED documents (real ToC + numbered sections, e.g. a thesis PDF)
+        // are chunked by the shared Document Map, which EXCLUDES the Table of
+        // Contents and tags each chunk `[Section N.N | pX-Y]`. This is the same
+        // chunker the lexical retriever uses — keeping them identical prevents
+        // the hybrid path from silently serving ToC fragments (the round-6 bug
+        // where the fix reached only the lexical path). Flat-prose files (no
+        // ToC) fall through to the legacy heading/word-window chunker below.
+        const docMap = buildDocumentMap(content);
+        const sectionChunks = sectionAwareChunksFromMap(docMap, CHUNK_WORDS, CHUNK_OVERLAP);
+        if (sectionChunks) return sectionChunks;
+
         const lines = content.split('\n');
         const sections: Array<{ heading: string | null; body: string[] }> = [];
         let current: { heading: string | null; body: string[] } = { heading: null, body: [] };
@@ -500,14 +576,12 @@ export class ModeHybridRetriever {
                 chunks.push(fullText);
                 continue;
             }
-            for (let i = 0; i < words.length; i += CHUNK_WORDS - CHUNK_OVERLAP) {
-                const window = words.slice(i, i + CHUNK_WORDS);
-                if (window.length === 0) break;
-                const chunkText = headingLine
-                    ? `${headingLine}\n${window.join(' ')}`
-                    : window.join(' ');
+            // Sentence-aware windowing: never split a normative clause across a
+            // chunk boundary (the RFC "MUST NOT add a byte order mark" bug).
+            const bodyForWindows = headingLine ? bodyText : fullText;
+            for (const window of sentenceAwareWindows(bodyForWindows, CHUNK_WORDS, CHUNK_OVERLAP)) {
+                const chunkText = headingLine ? `${headingLine}\n${window}` : window;
                 if (chunkText.trim()) chunks.push(chunkText);
-                if (i + CHUNK_WORDS >= words.length) break;
             }
         }
         return chunks;
@@ -813,12 +887,24 @@ export class ModeHybridRetriever {
         const {
             query,
             files,
-            tokenBudget = DEFAULT_TOKEN_BUDGET,
-            topK = DEFAULT_TOP_K,
+            tokenBudget: _rawTokenBudget,
+            topK: _rawTopK,
             hasTranscript = false,
             allowRerank = false,
             forceDocumentGrounding = false,
         } = params;
+        // Auto-upgrade limits for doc-grounded large PDFs (mirrors the guard in
+        // ModeContextRetriever.retrieve()). Must be applied AFTER extracting
+        // forceDocumentGrounding from params — JS destructuring can't reference
+        // sibling parameters.
+        const DOC_GROUNDED_TOKEN_BUDGET_LOCAL = 3600;
+        const DOC_GROUNDED_TOP_K_LOCAL = 12;
+        const tokenBudget = _rawTokenBudget != null
+            ? _rawTokenBudget
+            : (forceDocumentGrounding ? DOC_GROUNDED_TOKEN_BUDGET_LOCAL : DEFAULT_TOKEN_BUDGET);
+        const topK = _rawTopK != null
+            ? _rawTopK
+            : (forceDocumentGrounding ? DOC_GROUNDED_TOP_K_LOCAL : DEFAULT_TOP_K);
 
         // If no files, return empty
         if (files.length === 0) {
@@ -937,11 +1023,15 @@ export class ModeHybridRetriever {
             }
         }
 
-        // Deduplicate: keep highest-scoring chunk per file
-        const deduped = this.deduplicateChunks(candidates, reranked);
+        // Deduplicate: keep highest-scoring chunk per file (default), or per
+        // section when document-grounded (preserves multi-section answers).
+        const deduped = this.deduplicateChunks(candidates, reranked, forceDocumentGrounding);
 
-        // Enforce token budget
-        const selected = this.enforceTokenBudget(deduped, tokenBudget, reranked, topK);
+        // Enforce token budget. For document-grounded modes with MULTIPLE files,
+        // guarantee each file contributes its best chunk so a large dataset can't
+        // starve a small one out of the retrieved set.
+        const guaranteePerFile = forceDocumentGrounding && files.length > 1;
+        const selected = this.enforceTokenBudget(deduped, tokenBudget, reranked, topK, guaranteePerFile);
 
         // Format output with citations
         const formattedContext = this.formatContext(selected);
@@ -1103,7 +1193,11 @@ export class ModeHybridRetriever {
         try {
             queryEmbedding = await this.embeddingPipeline.getEmbeddingForQuery(queryText);
         } catch (error) {
-            throw new Error('Query embedding failed: ' + error);
+            // Surface key-pool health in the failure so a 429-burst (vs. a genuine
+            // outage) is distinguishable in logs without re-running with tracing on.
+            const health = (this.embeddingPipeline as any).primaryPoolHealth;
+            const healthNote = typeof health === 'number' ? ` (key pool health: ${Math.round(health * 100)}%)` : '';
+            throw new Error('Query embedding failed: ' + error + healthNote);
         }
 
         const activeSpace = this.embeddingPipeline.getActiveSpaceKey?.() ?? null;
@@ -1229,49 +1323,89 @@ export class ModeHybridRetriever {
      * Deduplicate chunks from the same file, keeping highest-scoring. When
      * `byRerank` is true the "highest" is by cross-encoder score.
      */
-    private deduplicateChunks(candidates: ChunkCandidate[], byRerank: boolean = false): ChunkCandidate[] {
-        const bestByFile = new Map<string, ChunkCandidate>();
+    /**
+     * Dedup key: prefer the section number from the `[Section N.N | pX-Y]`
+     * chunk-text prefix (section-aware chunking, see chunkText()) so a long
+     * doc-grounded PDF can surface multiple distinct sections from the SAME
+     * file instead of collapsing to one chunk per file (OKF Phase 1 fix —
+     * F4 from knowledge-architecture-okf-upgrade-plan.md). Falls back to
+     * chunkIndex when no section prefix is present (flat-prose chunking,
+     * !hasToc path) so non-sectioned files still dedup per-chunk rather than
+     * per-file.
+     */
+    private dedupeGroupKey(candidate: ChunkCandidate): string {
+        const sectionMatch = candidate.text.match(/^\[Section ([\d.]+)/);
+        return sectionMatch ? `${candidate.sourceId}#${sectionMatch[1]}` : `${candidate.sourceId}#chunk${candidate.chunkIndex}`;
+    }
+
+    private deduplicateChunks(candidates: ChunkCandidate[], byRerank: boolean = false, forceDocumentGrounding: boolean = false): ChunkCandidate[] {
+        // Document-grounded mode: dedup per-section (or per-chunk when no
+        // section prefix) so multi-section answers survive. Non-doc-grounded
+        // callers keep the original per-file behavior (unchanged default
+        // mode UX — one best chunk per reference file).
+        const bestByKey = new Map<string, ChunkCandidate>();
 
         for (const candidate of candidates) {
-            const existing = bestByFile.get(candidate.sourceId);
+            const key = forceDocumentGrounding ? this.dedupeGroupKey(candidate) : candidate.sourceId;
+            const existing = bestByKey.get(key);
 
             if (!existing) {
-                bestByFile.set(candidate.sourceId, candidate);
+                bestByKey.set(key, candidate);
             } else {
                 const currentScore = this.rankScore(candidate, byRerank);
                 const existingScore = this.rankScore(existing, byRerank);
                 if (currentScore > existingScore) {
-                    bestByFile.set(candidate.sourceId, candidate);
+                    bestByKey.set(key, candidate);
                 }
             }
         }
 
-        return Array.from(bestByFile.values());
+        return Array.from(bestByKey.values());
     }
 
     /**
      * Enforce token budget by selecting highest-scoring chunks that fit. When
      * `byRerank` is true, "highest" is the cross-encoder order.
      */
-    private enforceTokenBudget(candidates: ChunkCandidate[], budget: number, byRerank: boolean = false, topK: number = DEFAULT_TOP_K): ChunkCandidate[] {
+    private enforceTokenBudget(candidates: ChunkCandidate[], budget: number, byRerank: boolean = false, topK: number = DEFAULT_TOP_K, guaranteePerFile = false): ChunkCandidate[] {
         const sorted = [...candidates].sort((a, b) => this.rankScore(b, byRerank) - this.rankScore(a, byRerank));
 
         const selected: ChunkCandidate[] = [];
+        const picked = new Set<ChunkCandidate>();
         let totalTokens = 0;
+        const tryAdd = (candidate: ChunkCandidate): boolean => {
+            if (picked.has(candidate)) return false;
+            const tokens = estimateTokens(candidate.text);
+            if (totalTokens + tokens > budget && selected.length > 0) return false;
+            selected.push(candidate);
+            picked.add(candidate);
+            totalTokens += tokens;
+            return true;
+        };
+
+        // PER-FILE FLOOR (multi-doc grounded modes): a large file (e.g. a 14k-row
+        // dataset → 120 chunks) can crowd every slot and starve a small file (e.g. a
+        // 142-row dataset), so a query for an entity in the small file retrieves
+        // nothing from it and the model says "not in the documents". Guarantee the
+        // top-N highest-scoring chunks from EACH file first, then fill the rest by
+        // global score. N=2 (not 1) because the single top chunk of a file is often
+        // not the one holding the specific fact (a normative clause / a particular
+        // data row / an equation), so one extra per file materially improves recall
+        // without blowing topK. Cheap: at most (#files * PER_FILE_FLOOR) reserved slots.
+        const PER_FILE_FLOOR = Number(process.env.NATIVELY_RETRIEVAL_PER_FILE_FLOOR) || 2;
+        if (guaranteePerFile) {
+            const perFileCount = new Map<string, number>();
+            for (const c of sorted) {
+                if (selected.length >= topK) break;
+                const n = perFileCount.get(c.sourceId) || 0;
+                if (n >= PER_FILE_FLOOR) continue;
+                if (tryAdd(c)) perFileCount.set(c.sourceId, n + 1);
+            }
+        }
 
         for (const candidate of sorted) {
-            const tokens = estimateTokens(candidate.text);
-
-            // If adding this chunk would exceed budget and we already have content, skip
-            if (totalTokens + tokens > budget && selected.length > 0) {
-                continue;
-            }
-
-            selected.push(candidate);
-            totalTokens += tokens;
-
-            // Stop if we've reached topK
             if (selected.length >= topK) break;
+            tryAdd(candidate);
         }
 
         return selected;

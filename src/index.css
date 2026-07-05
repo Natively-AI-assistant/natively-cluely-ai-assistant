@@ -5092,3 +5092,34 @@ html[data-platform="linux"] body {
   line-height: 1.6 !important;
   font-weight: 700 !important;
 }
+/* ── Usage-section code block: thin horizontal scrollbar, revealed on hover ──
+   The global scrollbar is hidden (width:0). The code hero needs a discreet
+   horizontal scrollbar so long lines are reachable; it stays near-invisible
+   until the card is hovered. Scoped to .code-scroll so nothing else changes. */
+.code-scroll {
+  scrollbar-width: thin;                       /* Firefox */
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 200ms ease;
+}
+.code-scroll:hover {
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+.code-scroll::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+  background: transparent;
+}
+.code-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  transition: background 200ms ease;
+}
+.code-scroll:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+}
+.code-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+.code-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}

@@ -188,21 +188,41 @@ function buildOverview(summary: string[], atoms: ChunkMeetingAtoms[], decisions:
 
 // Deterministic follow-up body (fallback used when the LLM follow-up generator is
 // unavailable or scope-denied). Kept exported so FollowUpDraftGenerator can reuse it.
-export function buildFollowUpBody(decisions: DecisionItem[], actionItems: ActionItem[]): string {
-  const lines = ['Hi team,', '', 'Thanks for the conversation.'];
-  if (decisions.length > 0) {
-    lines.push('', 'Decisions confirmed:', ...decisions.slice(0, 5).map(item => `- ${item.text}`));
+// Mode-aware: salutation, opening, section labels and sign-off match the meeting mode
+// so an offline draft still reads correctly for its audience (a sales prospect, a
+// candidate, an internal team, a study recap, etc.) rather than always "Hi team,".
+export function buildFollowUpBody(decisions: DecisionItem[], actionItems: ActionItem[], mode?: string | null): string {
+  // Per-mode scaffold: [salutation, opening, decisionsLabel, nextStepsLabel, emptyLine, signoff]
+  // A null salutation/sign-off means "omit" (study notes, interviewer feedback).
+  const S: Record<string, { salutation: string | null; opening: string; decisionsLabel: string; nextStepsLabel: string; empty: string; signoff: string | null }> = {
+    general:              { salutation: 'Hi team,',            opening: 'Thanks for the conversation.',           decisionsLabel: 'Decisions confirmed:', nextStepsLabel: 'Next steps:',        empty: 'No explicit decisions or action items were captured.', signoff: 'Best,' },
+    sales:                { salutation: 'Hi there,',           opening: 'Thanks for taking the time to meet today.', decisionsLabel: 'What we aligned on:',  nextStepsLabel: 'Next steps:',        empty: 'It was great connecting — I\'ll follow up with next steps shortly.', signoff: 'Best regards,' },
+    // Recruiting omits the decisions block from the deterministic fallback entirely:
+    // negative-hiring decisions or Concerns would be leaked to the candidate if rendered.
+    recruiting:           { salutation: 'Hi there,',           opening: 'Thank you for taking the time to speak with us today.', decisionsLabel: '',                       nextStepsLabel: 'What happens next:',  empty: 'Thanks again — we\'ll be in touch about next steps soon.', signoff: 'Best,' },
+    'team-meet':          { salutation: 'Hi team,',            opening: 'Quick recap from our sync:',             decisionsLabel: 'Decisions:',           nextStepsLabel: 'Owners & next steps:', empty: 'No decisions or action items were captured this time.', signoff: 'Thanks,' },
+    'looking-for-work':   { salutation: 'Dear interviewer,',   opening: 'Thank you for taking the time to speak with me today.', decisionsLabel: 'What we discussed:',   nextStepsLabel: 'Next steps:',        empty: 'Thank you again for the conversation — I really enjoyed it.', signoff: 'Best regards,' },
+    'technical-interview':{ salutation: null,                  opening: 'Interview debrief:',                     decisionsLabel: 'Assessment:',          nextStepsLabel: 'Recommended next step:', empty: 'No decisions were recorded during the session.', signoff: null },
+    lecture:              { salutation: null,                  opening: 'Study recap:',                           decisionsLabel: 'Key points:',          nextStepsLabel: 'To review:',         empty: 'No key points were captured.', signoff: null },
+  };
+  const p = (mode && S[mode]) || S.general;
+
+  const lines: string[] = [];
+  if (p.salutation) lines.push(p.salutation, '');
+  lines.push(p.opening);
+  if (decisions.length > 0 && p.decisionsLabel) {
+    lines.push('', p.decisionsLabel, ...decisions.slice(0, 5).map(item => `- ${item.text}`));
   }
   if (actionItems.length > 0) {
-    lines.push('', 'Next steps:', ...actionItems.slice(0, 8).map(item => {
+    lines.push('', p.nextStepsLabel, ...actionItems.slice(0, 8).map(item => {
       const owner = item.owner ? `${item.owner}: ` : '';
       const deadline = item.deadline ? ` by ${item.deadline}` : '';
       const inferred = item.explicitness === 'inferred' ? ' (inferred)' : '';
       return `- ${owner}${item.text}${deadline}${inferred}`;
     }));
   }
-  if (decisions.length === 0 && actionItems.length === 0) lines.push('', 'No explicit decisions or action items were captured.');
-  lines.push('', 'Best,');
+  if (decisions.length === 0 && actionItems.length === 0) lines.push('', p.empty);
+  if (p.signoff) lines.push('', p.signoff);
   return lines.join('\n');
 }
 

@@ -15,6 +15,7 @@ import { useShortcuts } from '../hooks/useShortcuts';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { isMac } from '../utils/platformUtils';
 import WindowControls from './WindowControls';
+import { emitOrchestratorEvent, setUserState as setOrchestratorUserState } from './onboarding/OrchestratedToasterHost';
 
 interface Meeting {
     id: string;
@@ -150,25 +151,14 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
             window.electronAPI.seedDemo().catch(err => console.error("Failed to seed demo:", err));
         }
 
-        // Onboarding Check
+        // Onboarding state — push to orchestrator. The orchestrator handles
+        // sequencing and timing; Launcher no longer auto-shows popovers.
         const hasSeenModesOnboarding = localStorage.getItem('natively_seen_modes_onboarding_v5');
-        if (!hasSeenModesOnboarding) {
-            setTimeout(() => {
-                if (mounted) setShowModesOnboarding(true);
-            }, 8000); // Increased delay so it doesn't overlap with other startup notifications
-        }
-
         const hasSeenProfileOnboarding = localStorage.getItem('natively_seen_profile_onboarding_v1');
-        if (!hasSeenProfileOnboarding && hasSeenModesOnboarding) {
-            setTimeout(() => {
-                if (mounted) setShowProfileOnboarding(true);
-            }, 9000);
-        } else if (!hasSeenProfileOnboarding && !hasSeenModesOnboarding) {
-             // If both haven't been seen, show profile after modes
-             setTimeout(() => {
-                if (mounted) setShowProfileOnboarding(true);
-            }, 18000);
-        }
+        setOrchestratorUserState({
+            seenModesOnboarding: hasSeenModesOnboarding === 'true',
+            seenProfileOnboarding: hasSeenProfileOnboarding === 'true',
+        });
 
         // Sync initial undetectable state
         if (window.electronAPI?.getUndetectable) {
@@ -200,6 +190,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         if (window.electronAPI?.onMeetingStateChanged) {
             removeMeetingStateListener = window.electronAPI.onMeetingStateChanged(({ isActive }) => {
                 setIsMeetingActive(isActive);
+                emitOrchestratorEvent({ type: 'meeting:state', isActive });
             });
         }
 
@@ -212,12 +203,31 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         // Simple polling for events every minute
         const interval = setInterval(fetchEvents, 60000);
 
+        // Orchestrator: foreground/background tracking via window blur/focus.
+        // On macOS Cmd+H and Cmd+Tab the BrowserWindow fires 'blur'/'focus'
+        // (mapped to window blur/focus in renderer).
+        const onFocus = () => emitOrchestratorEvent({ type: 'foreground:change', isForeground: true });
+        const onBlur  = () => emitOrchestratorEvent({ type: 'foreground:change', isForeground: false });
+        window.addEventListener('focus', onFocus);
+        window.addEventListener('blur', onBlur);
+
+        // Orchestrator: usage-time accumulator. Tick every 30s while launcher
+        // is mounted and the window is foregrounded.
+        const usageTimer = setInterval(() => {
+            if (document.visibilityState === 'visible') {
+                emitOrchestratorEvent({ type: 'usage:tick', deltaMs: 30_000 });
+            }
+        }, 30_000);
+
         return () => {
             mounted = false;
             if (removeMeetingsListener) removeMeetingsListener();
             if (removeUndetectableListener) removeUndetectableListener();
             if (removeMeetingStateListener) removeMeetingStateListener();
             clearInterval(interval);
+            window.removeEventListener('focus', onFocus);
+            window.removeEventListener('blur', onBlur);
+            clearInterval(usageTimer);
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // Mount-only: stable setup that must run exactly once
@@ -304,11 +314,18 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         return () => window.removeEventListener('click', handleClickOutside);
     }, []);
 
-    // Notify parent if we are on the main launcher list view
+    // Notify parent if we are on the main launcher list view; also feed the
+    // orchestrator's homepage-mounted clock.
     useEffect(() => {
-        if (onPageChange) {
-            onPageChange(!selectedMeeting && !isGlobalChatOpen);
+        const isMain = !selectedMeeting && !isGlobalChatOpen;
+        if (onPageChange) onPageChange(isMain);
+        if (isMain) {
+            emitOrchestratorEvent({ type: 'launcher:mounted' });
+        } else {
+            emitOrchestratorEvent({ type: 'launcher:unmounted' });
         }
+        // Cleanup on unmount: ensure unmount is fired
+        return () => emitOrchestratorEvent({ type: 'launcher:unmounted' });
     }, [selectedMeeting, isGlobalChatOpen, onPageChange]);
 
     const handleOpenMeeting = async (meeting: Meeting) => {
@@ -415,11 +432,13 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                     meetings={meetings}
                     onAIQuery={(query) => {
                         analytics.trackCommandExecuted('ai_query_search');
+                        emitOrchestratorEvent({ type: 'turn:done', surface: 'chat' });
                         setSubmittedGlobalQuery(query);
                         setIsGlobalChatOpen(true);
                     }}
                     onLiteralSearch={(query) => {
                         analytics.trackCommandExecuted('literal_search');
+                        emitOrchestratorEvent({ type: 'turn:done', surface: 'chat' });
                         // GLOBAL SEARCH V2 (Phase 9): real local-DB literal search behind
                         // global_search_v2_enabled. When enabled and there's a match, open
                         // the top-ranked meeting directly. Otherwise fall back to the
@@ -826,6 +845,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                     window.electronAPI?.setWindowMode?.('overlay', true);
                                                     analytics.trackCommandExecuted('resume_meeting_from_launcher');
                                                 } else {
+                                                    emitOrchestratorEvent({ type: 'turn:done', surface: 'meeting' });
                                                     onStartMeeting();
                                                     analytics.trackCommandExecuted('start_natively_cta');
                                                 }

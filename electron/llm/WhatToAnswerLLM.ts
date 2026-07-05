@@ -29,6 +29,13 @@ import type { WhatToAnswerRequestSnapshot } from "./whatToAnswerRequestSnapshot"
 // synchronous lexical retrieval on timeout, so a slow embedder can never stall
 // first-useful-token. Mirrors the bounded grounding race in IntelligenceEngine.
 const HYBRID_RETRIEVAL_BUDGET_MS = 1500;
+// Document-grounded custom modes answer STRICTLY from uploaded files, so their
+// vector retrieval is not optional — a cloud query-embed routinely exceeds 1500ms,
+// and falling to lexical-only makes the model miss facts that ARE in the docs and
+// false-refuse. Grounded answers get a larger (but still bounded) budget so their
+// hybrid retrieval completes. Env-overridable.
+const HYBRID_RETRIEVAL_BUDGET_DOC_GROUNDED_MS =
+    Number(process.env.NATIVELY_HYBRID_RETRIEVAL_DOC_GROUNDED_MS) || 6000;
 
 /**
  * Resolve `promise` or, after `ms`, resolve `fallback` instead — whichever is
@@ -298,11 +305,14 @@ ANSWER SHAPE: ${intentResult.answerShape}
                                 const { isRagSpeculativeRerankEnabled } = require('../intelligence/intelligenceFlags');
                                 allowRerank = isRagSpeculativeRerankEnabled();
                             } catch { /* flag module unavailable → no rerank */ }
+                            // Pass undefined tokenBudget when doc-grounded so the
+                            // retriever auto-upgrades to DOC_GROUNDED_TOKEN_BUDGET
+                            // (3600). Explicit 1800 would bypass the != null guard.
                             const { value, timedOut } = await raceWithBudget(
                                 modesManager.buildRetrievedActiveModeContextBlockHybrid(
-                                    cleanedTranscript, cleanedTranscript, 1800, answerPlan?.answerType, true, requestSnapshot?.modeUniqueId, allowRerank, retrievalOptions,
+                                    cleanedTranscript, cleanedTranscript, forceDocumentGrounding ? undefined : 1800, answerPlan?.answerType, true, requestSnapshot?.modeUniqueId, allowRerank, retrievalOptions,
                                 ),
-                                HYBRID_RETRIEVAL_BUDGET_MS,
+                                forceDocumentGrounding ? HYBRID_RETRIEVAL_BUDGET_DOC_GROUNDED_MS : HYBRID_RETRIEVAL_BUDGET_MS,
                                 '',
                             );
                             modeContextBlock = value;
@@ -314,11 +324,11 @@ ANSWER SHAPE: ${intentResult.answerShape}
                             // excludeCustomContext (PI v3 W2): the mode's
                             // customContext is PINNED below — keep retrieval to
                             // reference files only so the text never ships twice.
-                            modeContextBlock = modesManager.buildRetrievedActiveModeContextBlock(cleanedTranscript, cleanedTranscript, 1800, answerPlan?.answerType, true, requestSnapshot?.modeUniqueId, retrievalOptions);
+                            modeContextBlock = modesManager.buildRetrievedActiveModeContextBlock(cleanedTranscript, cleanedTranscript, forceDocumentGrounding ? undefined : 1800, answerPlan?.answerType, true, requestSnapshot?.modeUniqueId, retrievalOptions);
                         }
                     } else if (await this.llmHelper.canUseLocalFallback(false)) {
                         console.warn('[ScopeFallback] reference_files denied; local fallback available, routing via streamChat');
-                        modeContextBlock = modesManager.buildRetrievedActiveModeContextBlock(cleanedTranscript, cleanedTranscript, 1800, answerPlan?.answerType, true, requestSnapshot?.modeUniqueId, retrievalOptions);
+                        modeContextBlock = modesManager.buildRetrievedActiveModeContextBlock(cleanedTranscript, cleanedTranscript, forceDocumentGrounding ? undefined : 1800, answerPlan?.answerType, true, requestSnapshot?.modeUniqueId, retrievalOptions);
                     } else {
                         console.warn('[ScopeFallback] reference_files denied; Ollama unavailable, omitting from context');
                         if (forceDocumentGrounding) {
