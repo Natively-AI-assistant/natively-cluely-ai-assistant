@@ -48,6 +48,7 @@ function isCloudIdentifier(id: string): boolean {
   // DeepSeek cloud API (OpenAI-compatible). The local Ollama "deepseek-coder"
   // family is handled by the isOllama branch above.
   if (/^deepseek-v\d/.test(s)) return true;
+  if (s.startsWith('openrouter:')) return true;
   return false;
 }
 
@@ -115,7 +116,8 @@ export function getModelCapabilities(modelId: string, isOllama: boolean): ModelC
     const b = TIER_BUDGETS['cloud'];
     const supportsImages = lower.startsWith('gemini-') || lower.startsWith('claude-')
       || lower.startsWith('gpt-4o') || lower.startsWith('gpt-4.1') || lower.startsWith('gpt-5')
-      || lower === 'natively' || lower.startsWith('natively-');
+      || lower === 'natively' || lower.startsWith('natively-')
+      || lower.startsWith('openrouter:');
     return {
       tier: 'cloud',
       maxContextTokens: b.max,
