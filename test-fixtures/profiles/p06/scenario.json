@@ -1,0 +1,190 @@
+{
+  "turns": [
+    {
+      "speaker": "interviewer",
+      "text": "Hi, thanks for joining me today. Could you start by giving a brief introduction of yourself and your background?",
+      "isQuestion": true,
+      "qid": "Q1"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Sure, I'm a senior engineering leader with about 15 years of experience across distributed systems and platform engineering.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Great. Could you walk me through your most recent role and what you were responsible for there?",
+      "isQuestion": true,
+      "qid": "Q2"
+    },
+    {
+      "speaker": "candidate",
+      "text": "My most recent role was as VP of Engineering at a data infrastructure company, leading multiple orgs across infrastructure, data, and platform.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Roughly how many years have you been working with distributed systems as a core focus?",
+      "isQuestion": true,
+      "qid": "Q3"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I'd say around 12 years, with the last 8 or so being deep, hands-on architectural work.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "I noticed a named project on your resume — could you tell me what that was and what you did on it?",
+      "isQuestion": true,
+      "qid": "Q4"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I can speak to several, though the resume doesn't single one out by name. One example was a real-time analytics platform I led the build-out for.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "What would you say was your biggest achievement at your most recent employer?",
+      "isQuestion": true,
+      "qid": "Q5"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Scaling the platform team from 8 to 60 engineers and taking the system from prototype to handling billions of events per day.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Why are you interested in this Director of Engineering role at Skyforge Analytics specifically?",
+      "isQuestion": true,
+      "qid": "Q6"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Skyforge is doing meaningful work in analytics infrastructure, and the scope of the role matches well with what I do best — leading large platform orgs.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "This role calls for demonstrated experience leading engineering organizations at scale. Could you describe how your background meets that requirement?",
+      "isQuestion": true,
+      "qid": "Q7"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I've led orgs of 100+ across multiple geographies, managed directors and senior managers, and owned multi-million dollar budgets.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "There's a requirement around hands-on experience with our specific analytics stack — how would you approach closing that gap if hired?",
+      "isQuestion": true,
+      "qid": "Q8"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I'd ramp by digging into the codebase, partnering closely with senior ICs, and leaning on my prior analytics-platform experience to get productive quickly.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Can you tell me about your education — degree, field, and institution?",
+      "isQuestion": true,
+      "qid": "Q9"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I have a Master's in Computer Science, focused on distributed computing.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Now I'd like a STAR-format answer: tell me about a challenging situation in your recent work, the task, the actions you took, and the result.",
+      "isQuestion": true,
+      "qid": "Q10"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Sure — Situation: a major customer-facing outage during peak traffic. Task: restore service fast. Action: I led the incident command, drove the war room, and coordinated the rollback and root-cause analysis. Result: restored service in under 90 minutes and shipped permanent guardrails to prevent recurrence.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "What are your salary expectations for this role?",
+      "isQuestion": true,
+      "qid": "Q11"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I'm flexible based on the full picture — total comp, scope, and equity. What's the range you've budgeted for this position?",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Do you have any questions for me about the role, the team, or Skyforge?",
+      "isQuestion": true,
+      "qid": "Q12"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Yes — could you tell me more about the team I'd be leading and how the platform org is structured today?",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "You mentioned the team grew from 8 to 60 — how long did that scaling take, end to end?",
+      "isQuestion": true,
+      "qid": "Q13"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Roughly three years, with the steepest growth in the first 18 months.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "One quick logistical question — do you currently hold a valid driver's license?",
+      "isQuestion": true,
+      "qid": "Q14"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Yes, I do — current and unrestricted.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Nice weather we're having this week, by the way — I took my dog out to the park this morning and it was great.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "candidate",
+      "text": "Thanks, it really has been pleasant — hard to stay focused indoors on days like that.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Before we wrap, can you tell me about a time you had to influence a cross-functional stakeholder without direct authority, and how did you measure whether your influence was actually working? And what interests you most about this opportunity?",
+      "isQuestion": true,
+      "qid": "Q15"
+    }
+  ]
+}

@@ -1,0 +1,145 @@
+{
+  "0": "PostgreSQL",
+  "1": "Redis",
+  "2": "Kafka",
+  "3": "Apache Flink",
+  "4": "ClickHouse",
+  "name": "José Muñoz",
+  "email": "jose.munoz.dev@example.com",
+  "phone": "+1 (415) 555-0182",
+  "location": "San Francisco, CA",
+  "linkedin": "linkedin.com/in/josemunozdev",
+  "github": "github.com/jmunoz-eng",
+  "fullName": "José Muñoz",
+  "totalExperienceMonths": 0,
+  "title": "Senior Software Engineer",
+  "languages": [
+    "Python",
+    "Go",
+    "TypeScript",
+    "SQL",
+    "Bash"
+  ],
+  "current_company": "Helix Freight Labs",
+  "mostRecentTitle": "Senior Software Engineer",
+  "jdRole": "Senior Software Engineer",
+  "current_title": "Senior Software Engineer",
+  "projects": [
+    {
+      "name": "pq-tap",
+      "verifiableFact": "A plug-and-back-pressure testing harness for PostgreSQL connection pools."
+    },
+    {
+      "name": "sf-transit-rider",
+      "verifiableFact": "CLI + dashboard predicting Muni arrival times from GTFS + AVL feeds."
+    }
+  ],
+  "years_experience": "7+",
+  "infrastructure": [
+    "Kubernetes",
+    "Terraform",
+    "AWS EKS",
+    "AWS RDS",
+    "AWS S3",
+    "AWS Lambda",
+    "Envoy"
+  ],
+  "data": [
+    "PostgreSQL",
+    "Redis",
+    "Kafka",
+    "Apache Flink",
+    "ClickHouse"
+  ],
+  "practices": [
+    "CI/CD",
+    "observability",
+    "on-call",
+    "code review",
+    "RFC writing",
+    "chaos engineering",
+    "contract testing (Pact)"
+  ],
+  "current_since": "03/2022",
+  "highlights": [
+    "Owned 99.95% SLO across 14 regions",
+    "Cut p99 latency 1840ms→310ms via Kafka/Flink",
+    "Multi-tenant feature-flag framework adopted by 6 teams",
+    "Reduced config incidents by 71%",
+    "Mentored 4 engineers",
+    "Led billing reconciliation cut from 9h→42m"
+  ],
+  "scale": [
+    "18k req/s sustained",
+    "42k req/s peak",
+    "$2.4M weekly refund volume"
+  ],
+  "open_source": "pq-tap (1.4k★)",
+  "bilingual": [
+    "English",
+    "Spanish"
+  ],
+  "contact": {
+    "email": "jose.munoz.dev@example.com",
+    "phone": "+1 (415) 555-0182",
+    "linkedin": "linkedin.com/in/josemunozdev",
+    "github": "github.com/jmunoz-eng"
+  },
+  "leadership_signals": [
+    "tech lead for dispatch optimization service",
+    "mentored 4 engineers",
+    "co-authored SRE handbook (120+ pages) used by 9 teams"
+  ],
+  "education": "not listed in resume",
+  "work_authorization": "not listed",
+  "availability": "not listed",
+  "data_technologies": [
+    "PostgreSQL",
+    "Redis",
+    "Kafka",
+    "Apache Flink",
+    "ClickHouse"
+  ],
+  "notable_achievements": [
+    "Cut p99 route-compute latency from 1840ms to 310ms",
+    "Cut nightly reconciliation from 9 hours to 42 minutes",
+    "Reduced configuration-related incidents by 71%",
+    "Sustained 18k req/sec with peaks of 42k req/sec",
+    "Caught 31/quarter consumer-driven failures via Pact"
+  ],
+  "jd_alignment_facts": {},
+  "leadership": [
+    "Tech lead for dispatch service",
+    "Mentored 4 engineers",
+    "On-call rotation owner",
+    "Co-authored 120-page SRE handbook"
+  ],
+  "certifications": "not listed",
+  "languages_spoken": [
+    "English",
+    "Spanish"
+  ],
+  "mostRecentEmployer": "Helix Freight Labs",
+  "topSkills": [
+    "Python",
+    "Go",
+    "TypeScript",
+    "SQL",
+    "Bash"
+  ],
+  "jdCompany": "Coastal Logistics Inc",
+  "requirementsMet": [
+    "Relevant experience present",
+    "Relevant experience present",
+    "Relevant experience present"
+  ],
+  "requirementsNotMet": [
+    "Gap to be assessed in interview",
+    "Gap to be assessed in interview"
+  ],
+  "expectedSalaryBand": null,
+  "id": "p07",
+  "edgeCase": "Software engineer whose resume has UNUSUAL FORMATTING: a two-column feel, some skills in a table-like list, unicode bullets (•, ▪, ►), accen",
+  "resumeFormat": "docx",
+  "hasSecondDoc": false
+}

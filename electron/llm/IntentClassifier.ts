@@ -10,6 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import { Worker } from 'worker_threads';
 import { app } from 'electron';
+import { acquireOnnxSlot, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSession } from '../utils/onnxThreadConfig';
 
 export type ConversationIntent =
     | 'clarification'      // "Can you explain that?"
@@ -80,6 +81,7 @@ class ZeroShotClassifier {
     private loadingPromise: Promise<void> | null = null;
     private loadFailed = false;
     private loaded = false;
+    private slotRelease: (() => void) | null = null;
 
     private static readonly WORKER_TIMEOUT_MS = 30_000;
 
@@ -127,6 +129,7 @@ class ZeroShotClassifier {
                 console.warn('[IntentClassifier] Worker error, regex-only fallback until retry:', err);
                 this.loaded = false;
                 this.loadingPromise = null;
+                if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
                 this.rejectAllPending(err);
             });
 
@@ -137,6 +140,7 @@ class ZeroShotClassifier {
                 this.worker = null;
                 this.loaded = false;
                 this.loadingPromise = null;
+                if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
                 this.rejectAllPending(new Error(`Worker exited with code ${code}`));
             });
         }
@@ -189,11 +193,28 @@ class ZeroShotClassifier {
             return;
         }
 
+        // Cross-loader ONNX gate (shared with LocalReranker / LocalEmbeddingProvider /
+        // Whisper). Gate refusal is non-fatal — the classifier falls through to
+        // regex-only and the next call retries. Gate refusals do NOT set
+        // loadFailed (that's reserved for actual load errors); a less-pressured
+        // moment will retry the full init automatically.
+        if (!hasEnoughMemoryForOnnxSession()) {
+            console.warn(
+                `[IntentClassifier] skipping zero-shot worker load — free memory below ${getMinFreeGBForOnnxSession()}GB floor`,
+            );
+            this.loadingPromise = Promise.resolve().then(() => { this.loadingPromise = null; });
+            return;
+        }
+
+        const releaseSlot = await acquireOnnxSlot('normal');
+
         this.loadingPromise = (async () => {
             try {
                 await this.postToWorker({ type: 'init', ...this.workerConfig() });
                 this.loaded = true;
+                this.slotRelease = releaseSlot;
             } catch (e) {
+                releaseSlot();
                 console.warn('[IntentClassifier] Failed to load zero-shot worker model, regex-only fallback:', e);
                 this.loadFailed = true;
                 this.loaded = false;

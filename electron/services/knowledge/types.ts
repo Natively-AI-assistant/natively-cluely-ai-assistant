@@ -57,6 +57,7 @@ export type KnowledgeCardType =
   | 'candidate_project'
   | 'candidate_education'
   | 'candidate_achievement'
+  | 'candidate_leadership'
   | 'candidate_skills'
   | 'target_job_role'
   | 'target_job_requirements'

@@ -1,0 +1,473 @@
+{
+  "meta": {
+    "name": "pi-flop-session-39",
+    "description": "39-question benchmark encoding the real failed manual-chat session (2026-07-05) against Evin John's resume (EstroTech Robotics + Aetherbot AI internships, Natively/TalentScope/RedisMart projects, CUSAT B.Tech CGPA 7.5).",
+    "sourceSession": "natively-api/debug-artifacts/pi-flop-session/{responses.md,terminal.log}"
+  },
+  "cases": [
+    {
+      "id": "q01",
+      "question": "Tell me about yourself.",
+      "expectFamily": "profile",
+      "mustInclude": [
+        "Evin John"
+      ],
+      "mustNotInclude": [
+        "What would you like help with",
+        "Nothing actionable"
+      ],
+      "observedInSession": "correct (deterministic intro fast path fired)"
+    },
+    {
+      "id": "q02",
+      "question": "Walk me through your background in one minute.",
+      "expectFamily": "profile",
+      "mustInclude": [
+        "Evin John"
+      ],
+      "mustNotInclude": [
+        "What would you like help with",
+        "Nothing actionable"
+      ],
+      "observedInSession": "correct"
+    },
+    {
+      "id": "q03",
+      "question": "What's your current role or most recent experience?",
+      "expectFamily": "experience",
+      "mustInclude": [
+        "EstroTech"
+      ],
+      "mustNotInclude": [
+        "What would you like help with"
+      ],
+      "observedInSession": "DEFECT A - unknown_answer, generic greeting"
+    },
+    {
+      "id": "q04",
+      "question": "Tell me about your time at EstroTech Robotics.",
+      "expectFamily": "experience",
+      "mustInclude": [
+        "EstroTech"
+      ],
+      "mustNotInclude": [
+        "What would you like help with"
+      ],
+      "observedInSession": "DEFECT A - unknown_answer, generic greeting"
+    },
+    {
+      "id": "q05",
+      "question": "What did you work on at Aetherbot AI?",
+      "expectFamily": "experience",
+      "mustInclude": [
+        "Aetherbot"
+      ],
+      "mustNotInclude": [
+        "What would you like help with"
+      ],
+      "observedInSession": "DEFECT A - unknown_answer, generic greeting"
+    },
+    {
+      "id": "q06",
+      "question": "What was the latency you achieved on the pixel-streaming pipeline at Aetherbot?",
+      "expectFamily": "experience",
+      "mustInclude": [
+        "sub-80ms|80ms"
+      ],
+      "mustNotInclude": [
+        "What would you like help with"
+      ],
+      "observedInSession": "correct (sub-80ms cited)"
+    },
+    {
+      "id": "q07",
+      "question": "How did your work at Aetherbot affect customer retention?",
+      "expectFamily": "experience",
+      "mustInclude": [
+        "25%|retention"
+      ],
+      "mustNotInclude": [
+        "Nothing actionable"
+      ],
+      "observedInSession": "DEFECT D - 'Nothing actionable right now' though 25% retention is on resume"
+    },
+    {
+      "id": "q08",
+      "question": "What hardware constraints did you deal with at EstroTech?",
+      "expectFamily": "experience",
+      "mustInclude": [
+        "low-power|kiosk"
+      ],
+      "mustNotInclude": [
+        "microcontroller",
+        "C\\+\\+",
+        "RAM|flash",
+        "What would you like help with"
+      ],
+      "fabricationCanaries": [
+        "microcontroller",
+        "RAM and flash",
+        "battery drain",
+        "C/C++"
+      ],
+      "observedInSession": "DEFECT A+C - unknown_answer first, then when later re-asked fabricated microcontrollers/C++/RAM/battery (none on resume; actual is low-power kiosk hardware, Python/FastAPI)"
+    },
+    {
+      "id": "q09",
+      "question": "Tell me about Natively.",
+      "expectFamily": "project",
+      "mustInclude": [
+        "privacy-first|meeting"
+      ],
+      "observedInSession": "correct"
+    },
+    {
+      "id": "q10",
+      "question": "How many users and stars did Natively get, and in what timeframe?",
+      "expectFamily": "project",
+      "mustInclude": [
+        "Natively|meeting|privacy"
+      ],
+      "observedInSession": "metric absent from profile (RC3 data gap) \u2014 honest project answer, no fabrication"
+    },
+    {
+      "id": "q11",
+      "question": "What's the architecture of Natively's RAG system?",
+      "expectFamily": "project",
+      "mustInclude": [
+        "SQLite|Vector|Embedding"
+      ],
+      "observedInSession": "correct"
+    },
+    {
+      "id": "q12",
+      "question": "Why did you choose Electron + Rust for Natively instead of a pure web stack?",
+      "expectFamily": "project",
+      "mustInclude": [
+        "Electron|Rust"
+      ],
+      "mustNotInclude": [
+        "What would you like help with"
+      ],
+      "observedInSession": "DEFECT A - unknown_answer, generic greeting"
+    },
+    {
+      "id": "q13",
+      "question": "Tell me about TalentScope.",
+      "expectFamily": "project",
+      "mustInclude": [
+        "TalentScope"
+      ],
+      "observedInSession": "correct"
+    },
+    {
+      "id": "q14",
+      "question": "What's RedisMart and what problem does it solve?",
+      "expectFamily": "project",
+      "mustInclude": [
+        "RedisMart"
+      ],
+      "mustNotInclude": [
+        "two_sum",
+        "TalentScope"
+      ],
+      "observedInSession": "DEFECT B DESYNC - answered with leftover TalentScope text + a full two_sum DSA solution (wrong question entirely)"
+    },
+    {
+      "id": "q15",
+      "question": "How did you reduce database read operations in RedisMart, and by how much?",
+      "expectFamily": "project",
+      "mustInclude": [
+        "40%|Redis"
+      ],
+      "mustNotInclude": [
+        "HyperLogLog",
+        "ZINCRBY",
+        "trackProductView"
+      ],
+      "observedInSession": "DEFECT B DESYNC - generic Redis-analytics essay with invented HyperLogLog/ZSET code, not the resume's 40% read-reduction fact"
+    },
+    {
+      "id": "q16",
+      "question": "What programming languages are you strongest in?",
+      "expectFamily": "skills",
+      "mustInclude": [
+        "Python|Java|TypeScript"
+      ],
+      "mustNotInclude": [
+        "What would you like help with"
+      ],
+      "observedInSession": "DEFECT A - unknown_answer, generic greeting"
+    },
+    {
+      "id": "q17",
+      "question": "What's your experience with AWS?",
+      "expectFamily": "skill_experience",
+      "mustInclude": [
+        "EC2|Aetherbot"
+      ],
+      "mustNotInclude": [
+        "^Yes, aws has been part"
+      ],
+      "observedInSession": "DEFECT D - lowercase 'aws', one weak sentence, ignores the EC2 pixel-streaming sub-80ms bullet"
+    },
+    {
+      "id": "q18",
+      "question": "Have you worked with Redis in production-like settings?",
+      "expectFamily": "skill_experience",
+      "mustInclude": [
+        "RedisMart|caching"
+      ],
+      "mustNotInclude": [
+        "^Yes, redis has been part"
+      ],
+      "observedInSession": "DEFECT D - one weak templated sentence"
+    },
+    {
+      "id": "q19",
+      "question": "What databases have you used?",
+      "expectFamily": "skills",
+      "mustInclude": [
+        "MongoDB|PostgreSQL|Redis|MySQL"
+      ],
+      "observedInSession": "DEFECT B DESYNC - answered with the generic self-intro instead of a database list"
+    },
+    {
+      "id": "q20",
+      "question": "How long were you at EstroTech Robotics?",
+      "expectFamily": "experience_timeline",
+      "mustInclude": [
+        "3 month|Jun.*Aug|two month|three month"
+      ],
+      "mustNotInclude": [
+        "cache-aside",
+        "RedisMart",
+        "Cache-Aside Pattern"
+      ],
+      "observedInSession": "DEFECT B DESYNC - long RedisMart caching essay instead of a 3-month duration answer (Jun-Aug 2025)"
+    },
+    {
+      "id": "q21",
+      "question": "What's your total internship experience?",
+      "expectFamily": "experience_timeline",
+      "mustInclude": [
+        "month|year"
+      ],
+      "mustNotInclude": [
+        "What would you like help with"
+      ],
+      "observedInSession": "DEFECT A - unknown_answer, generic greeting (should compute ~7mo total: Dec2024-Mar2025 + Jun2025-Aug2025)"
+    },
+    {
+      "id": "q22",
+      "question": "When did you graduate, or when do you expect to?",
+      "expectFamily": "education",
+      "mustInclude": [
+        "2026|Mar 2026"
+      ],
+      "mustNotInclude": [
+        "What would you like help with"
+      ],
+      "observedInSession": "DEFECT A - unknown_answer, generic greeting"
+    },
+    {
+      "id": "q23",
+      "question": "What's the gap between your Aetherbot and EstroTech roles?",
+      "expectFamily": "experience_timeline",
+      "mustInclude": [
+        "month|gap"
+      ],
+      "mustNotInclude": [
+        "What would you like help with"
+      ],
+      "observedInSession": "DEFECT A - unknown_answer, generic greeting (should compute ~2-3mo gap: Mar2025-Jun2025)"
+    },
+    {
+      "id": "q24",
+      "question": "Where do you study and what's your CGPA?",
+      "expectFamily": "education",
+      "mustInclude": [
+        "CUSAT",
+        "7.5"
+      ],
+      "mustNotInclude": [
+        "What would you like help with"
+      ],
+      "observedInSession": "DEFECT A - unknown_answer, generic greeting"
+    },
+    {
+      "id": "q25",
+      "question": "What coursework have you done relevant to backend systems?",
+      "expectFamily": "education",
+      "mustInclude": [
+        "CUSAT|Computer Science|coursework|foundation|B.Tech"
+      ],
+      "mustNotInclude": [
+        "What would you like help with"
+      ],
+      "observedInSession": "specific coursework absent from profile \u2014 honest foundation answer, no fabrication"
+    },
+    {
+      "id": "q26",
+      "question": "Tell me about your role at SEDS CUSAT.",
+      "expectFamily": "leadership",
+      "mustInclude": [
+        "Technical Head|SEDS"
+      ],
+      "mustNotInclude": [
+        "Nothing actionable"
+      ],
+      "observedInSession": "DEFECT D - 'Nothing actionable right now' though a full SEDS section exists on resume"
+    },
+    {
+      "id": "q27",
+      "question": "What's the Google GenAI Exchange Scholar thing on your resume?",
+      "expectFamily": "leadership",
+      "mustInclude": [
+        "GenAI Exchange Scholar|Google"
+      ],
+      "mustNotInclude": [
+        "What would you like help with"
+      ],
+      "observedInSession": "DEFECT A - unknown_answer, generic greeting"
+    },
+    {
+      "id": "q28",
+      "question": "What did you do for TEDx CUSAT?",
+      "expectFamily": "leadership",
+      "mustInclude": [
+        "TEDx|Sponsorship|corporate partnerships"
+      ],
+      "mustNotInclude": [
+        "e-commerce",
+        "dashboard",
+        "Lambda"
+      ],
+      "observedInSession": "DEFECT B DESYNC - e-commerce analytics dashboard design essay instead of the TEDx sponsorship fact"
+    },
+    {
+      "id": "q29",
+      "question": "Why are you a good fit for [role in JD]?",
+      "expectFamily": "jd_fit",
+      "mustInclude": [
+        "Python|SQL|data"
+      ],
+      "mustNotInclude": [
+        "ROWS BETWEEN",
+        "window function",
+        "AVG\\("
+      ],
+      "observedInSession": "DEFECT B DESYNC - SQL moving-average window-function coding essay instead of a JD-fit answer"
+    },
+    {
+      "id": "q30",
+      "question": "This role requires [X from JD] \u2014 do you have that experience?",
+      "expectFamily": "jd_fit",
+      "mustInclude": [
+        "experience|resume"
+      ],
+      "mustNotInclude": [
+        "longest.*substring",
+        "sliding window technique"
+      ],
+      "observedInSession": "DEFECT B DESYNC - longest-substring-without-repeating DSA answer instead of a JD-requirement fit answer"
+    },
+    {
+      "id": "q31",
+      "question": "This role requires [something not on your resume] \u2014 how would you address that gap?",
+      "expectFamily": "gap",
+      "mustInclude": [
+        "gap|learn|pivot|ramp|transition|haven't|don't have|not on my resume|straightforward"
+      ],
+      "mustNotInclude": [
+        "ETL pipeline",
+        "pandas",
+        "IQR"
+      ],
+      "observedInSession": "DEFECT B DESYNC - ETL/pandas data-cleaning essay instead of a gap-bridging answer"
+    },
+    {
+      "id": "q32",
+      "question": "Do you have a driving license?",
+      "expectFamily": "unanswerable_profile_fact",
+      "mustInclude": [
+        "not on my resume|don't have that|isn't something|not something I have loaded"
+      ],
+      "mustNotInclude": [
+        "Next.js",
+        "Convex",
+        "Stream SDK",
+        "Clerk"
+      ],
+      "observedInSession": "DEFECT D - answered with a TalentScope tool list, complete non-sequitur; correct behavior is an honest not-on-resume line"
+    },
+    {
+      "id": "q33",
+      "question": "What was your GPA at your previous company?",
+      "expectFamily": "unanswerable_profile_fact",
+      "mustInclude": [
+        "GPA|CGPA|academic|7.5|doesn't apply|don't have"
+      ],
+      "mustNotInclude": [
+        "Nothing actionable"
+      ],
+      "observedInSession": "DEFECT D - 'Nothing actionable right now'; correct behavior is an honest clarification (GPA is academic, not a company attribute) or CGPA redirect"
+    },
+    {
+      "id": "q34",
+      "question": "Great weather today, isn't it?",
+      "expectFamily": "smalltalk",
+      "mustInclude": [
+        ".+"
+      ],
+      "observedInSession": "correct (greeting-style non-answer acceptable for small talk)"
+    },
+    {
+      "id": "q35",
+      "question": "Tell me about your React Native experience.",
+      "expectFamily": "unanswerable_profile_fact",
+      "mustInclude": [
+        "not.{0,20}(have|on my resume|listed)|React$|Next.js|don't have React Native"
+      ],
+      "mustNotInclude": [
+        "What would you like help with"
+      ],
+      "observedInSession": "DEFECT A - unknown_answer, generic greeting (resume has React/Next.js, NOT React Native \u2014 correct answer is an honest clarification, never a false yes-claim of React Native experience)"
+    },
+    {
+      "id": "q36",
+      "question": "So you worked at Google?",
+      "expectFamily": "identity_trap",
+      "mustInclude": [
+        "GenAI Exchange Scholar|not.*employee|attended|summit"
+      ],
+      "mustNotInclude": [
+        "I was developed by Evin John"
+      ],
+      "observedInSession": "DEFECT D - assistant identity template misfire ('I was developed by Evin John') instead of GenAI Exchange Scholar clarification"
+    },
+    {
+      "id": "q37",
+      "question": "How long did that take?",
+      "expectFamily": "follow_up",
+      "mustNotInclude": [
+        "Evin John, Candidate Id",
+        "Candidate Id"
+      ],
+      "observedInSession": "DEFECT D - broken template literally rendered field labels 'Evin John, Candidate Id'"
+    },
+    {
+      "id": "q38",
+      "question": "Write a Python function to reverse a linked list.",
+      "expectFamily": "coding",
+      "mustInclude": [
+        "def.*reverse|linked list|ListNode|prev|next"
+      ],
+      "mustNotInclude": [
+        "longestPalindrome",
+        "palindrom"
+      ],
+      "observedInSession": "DEFECT B DESYNC - answered with a longestPalindrome solution, wrong DSA problem entirely"
+    }
+  ]
+}

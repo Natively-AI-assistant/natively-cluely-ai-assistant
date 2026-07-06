@@ -194,4 +194,68 @@ describe('toCandidateFraming (interviewer 2nd-person → candidate 1st-person)',
     assert.equal(r.isFollowUp, true);
     assert.equal(r.followUpTarget, 'RedisMart', 'must skip "So"/"Right" and pick the CamelCase project');
   });
+
+  // E2E MiniMax campaign, F-DETECT (round-13 p08): question-shaped social
+  // pleasantries must NOT clear the live speculative gate (0.75) on their own.
+  describe('social-pleasantry down-weight (no small-talk misfire)', () => {
+    const smalltalk = [
+      'By the way, did you have any trouble finding parking around here?',
+      'How was your weekend?',
+      'Did you find us okay?',
+      "How's the weather out there?",
+      'How are you doing today?',
+      'How was the traffic on your way in?',
+    ];
+    for (const text of smalltalk) {
+      test(`"${text.slice(0, 40)}…" → confidence below live gate (0.75)`, () => {
+        const r = extractLatestQuestion([turn('interviewer', text)]);
+        assert.ok(r.confidence < 0.75, `expected < 0.75, got ${r.confidence}`);
+      });
+    }
+
+    // Substantive questions that merely CONTAIN a pleasantry topic word must
+    // still fire — the down-weight is anchored on the social phrase, not the word.
+    const realQuestions = [
+      'How did you architect the parking-lot allocation service?',
+      'Walk me through your most impactful project.',
+      'How many years have you worked on distributed systems?',
+      'Why are you interested in this role?',
+    ];
+    for (const text of realQuestions) {
+      test(`"${text.slice(0, 40)}…" still clears the live gate`, () => {
+        const r = extractLatestQuestion([turn('interviewer', text)]);
+        assert.ok(r.confidence >= 0.75, `expected >= 0.75, got ${r.confidence}`);
+      });
+    }
+  });
+  // E2E MiniMax campaign (round 13/14, F-VOICE live-path): the LIVE grounding
+  // gate keys on classifyType (this extractor), NOT AnswerPlanner. Intro/self-
+  // intro openers must classify as 'identity' so the auto-trigger grounds the
+  // intro instead of returning "I don't have a resume loaded".
+  describe('intro/self-introduction → identity questionType (live grounding gate)', () => {
+    const intros = [
+      'Great to meet you. To start, could you give us a quick self-introduction?',
+      'Could you start by giving a brief introduction of yourself?',
+      'Can you start by introducing yourself?',
+      'Could you start by giving me a brief self-intro?',
+      'Could you start us off with a brief self-introduction?',
+    ];
+    for (const text of intros) {
+      test(`"${text.slice(0, 42)}…" → identity`, () => {
+        const r = extractLatestQuestion([turn('interviewer', text)]);
+        assert.equal(r.questionType, 'identity');
+      });
+    }
+    // Substantive asks that merely say "brief/quick" must NOT be intro-classified.
+    for (const text of [
+      'Give me a brief summary of your most impactful project.',
+      'Can you give a quick overview of the system architecture?',
+    ]) {
+      test(`"${text.slice(0, 42)}…" is NOT identity`, () => {
+        const r = extractLatestQuestion([turn('interviewer', text)]);
+        assert.notEqual(r.questionType, 'identity');
+      });
+    }
+  });
 });
+

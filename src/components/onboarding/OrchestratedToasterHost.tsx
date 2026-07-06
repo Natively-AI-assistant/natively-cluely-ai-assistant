@@ -8,8 +8,13 @@
  */
 
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
-import { getOrchestrator, type OrchestratorEvent, type UserState } from '../../lib/onboarding/orchestrator';
-import type { ToasterId } from '../../lib/onboarding/orchestrator';
+// Explicit `.ts` extension is load-bearing — see App.tsx's import of the
+// same module for why (Vite resolves the sibling orchestrator.mjs test
+// companion first on an unqualified specifier, silently loading a no-op
+// stub whose getSnapshot() is not referentially stable and infinite-loops
+// useSyncExternalStore below).
+import { getOrchestrator, type OrchestratorEvent, type UserState } from '../../lib/onboarding/orchestrator.ts';
+import type { ToasterId } from '../../lib/onboarding/orchestrator.ts';
 import { PermissionsToaster } from './PermissionsToaster';
 import { BrowserExtensionToaster } from './BrowserExtensionToaster';
 import { TrialPromoToaster } from '../trial/TrialPromoToaster';
@@ -152,6 +157,25 @@ export const OrchestratedToasterHost: React.FC = () => {
       return null;
 
     case 'review_prompt':
+      // In dev builds an uncontrolled <ReviewPromptHost /> is mounted in
+      // App.tsx via shouldMountDevReviewHost() so the modal can be iterated
+      // on without going through the full orchestrator gating. Skip the
+      // orchestrator's own mount in that case to avoid two modals. In
+      // production, this branch is the only render path.
+      if (typeof window !== 'undefined') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const dev: boolean = !!(import.meta as any)?.env?.DEV
+        if (dev) {
+          try {
+            const params = new URLSearchParams(window.location?.search || '')
+            const explicit = params.get('review')
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const forced = (window as any).__reviewForceShow === true
+            const devAuto = (explicit !== 'off' && (forced || explicit === 'force'))
+            if (devAuto) return null
+          } catch { /* fall through */ }
+        }
+      }
       return <ReviewPromptHost isOpen={true} paused={false} onClose={onDismiss('review_prompt')} />;
 
     default:

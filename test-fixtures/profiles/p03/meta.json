@@ -1,0 +1,232 @@
+{
+  "name": "Margaret \"Meg\" Donovan",
+  "location": "Atlanta, GA",
+  "phone": "(404) 555-2187",
+  "email": "meg.donovan.email@gmail.com",
+  "linkedin": "linkedin.com/in/megdonovan-data",
+  "github": "megdonovan-data",
+  "fullName": "Margaret \"Meg\" Donovan",
+  "totalExperienceMonths": 0,
+  "preferred_name": "Meg",
+  "current_title": "Entry-level Data Analyst (aspiring)",
+  "target_role": "Entry-level Data Analyst",
+  "certifications": [
+    "Google Data Analytics Professional Certificate (Aug 2024)"
+  ],
+  "skills": [
+    "SQL",
+    "PostgreSQL",
+    "Python",
+    "pandas",
+    "matplotlib",
+    "Jupyter",
+    "Excel",
+    "Google Sheets",
+    "VLOOKUP",
+    "pivot tables",
+    "conditional formatting",
+    "data cleaning",
+    "EDA",
+    "regression",
+    "classification/flagging",
+    "dashboarding",
+    "reporting"
+  ],
+  "experience": [
+    {
+      "company": "Westlake High School, Fulton County Public Schools",
+      "role": "Mathematics Teacher (Grades 9-12)",
+      "start": "Aug 2017",
+      "end": "June 2023",
+      "highlights": [
+        "Taught Algebra I/II, Geometry, AP Statistics to 125+ students/yr",
+        "Pass-rate gains of 5-8pp on Georgia Milestones EOC",
+        "Built Excel/Sheets gradebook with VLOOKUP, pivot tables, conditional formatting tracking 400+ data points/semester",
+        "Designed unit-level common-assessment framework adopted by 5 teachers",
+        "Coached data-science competition team (top 10 of 47 GA entries)"
+      ]
+    },
+    {
+      "company": "Career Break / Caregiving",
+      "role": "Family Caregiver",
+      "start": "July 2023",
+      "end": "August 2025",
+      "highlights": [
+        "Completed bootcamp, earned Google Data Analytics Certificate, built 2 portfolio projects"
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "Nashville Housing Market: Price Drivers and Foreclosure Risk",
+      "verifiableFact": ""
+    },
+    {
+      "name": "Cyclistic Bike-Share: Annual Member vs. Casual Rider Behavior",
+      "verifiableFact": ""
+    }
+  ],
+  "topSkills": [
+    "SQL",
+    "PostgreSQL",
+    "Python",
+    "pandas",
+    "matplotlib",
+    "Jupyter",
+    "Excel",
+    "Google Sheets"
+  ],
+  "contact": [
+    "(404) 555-2187",
+    "meg.donovan.email@gmail.com"
+  ],
+  "bootcamp": "9-month data-analytics bootcamp (Spring 2024 - Winter 2024)",
+  "years_experience_analyst": "0 (entry-level, career changer)",
+  "years_experience_other": "6 years teaching math",
+  "industries": [
+    "Education",
+    "Public Schools",
+    "Real Estate (project)",
+    "Bike-share/Mobility (project)"
+  ],
+  "core_skills": [
+    "SQL (PostgreSQL)",
+    "Python",
+    "pandas",
+    "matplotlib",
+    "Jupyter",
+    "Excel (VLOOKUP, pivot tables, conditional formatting)",
+    "Google Sheets",
+    "data cleaning",
+    "exploratory data analysis",
+    "correlation analysis",
+    "regression analysis",
+    "forecasting/classification flagging",
+    "dashboard creation",
+    "report writing",
+    "presentation/deck delivery"
+  ],
+  "tools": [
+    "PostgreSQL",
+    "Python",
+    "pandas",
+    "matplotlib",
+    "Jupyter",
+    "Excel",
+    "Google Sheets"
+  ],
+  "domain_experience": [
+    "K-12 education analytics",
+    "assessment design",
+    "progress monitoring",
+    "outcome tracking",
+    "student data tracking",
+    "common-assessment frameworks"
+  ],
+  "soft_skills": [
+    "translating complex quantitative concepts for diverse audiences",
+    "communication to administrators and parents",
+    "mentoring",
+    "coaching",
+    "collaboration across 5-person team",
+    "presenting findings"
+  ],
+  "career_gap_explanation": "Provided full-time care for parent recovering from surgery; reskilled via bootcamp and certificate",
+  "availability": "Active job seeker August 2025",
+  "years_experience_teaching": "6",
+  "years_education_experience": 6,
+  "career_break": "2023-07 to 2025-08 (caregiving + reskilling)",
+  "degree": "Not listed (former high-school math teacher)",
+  "teaching_metrics": [
+    "125+ students/year",
+    "5-8 pp year-over-year pass-rate gains",
+    "22% reduction in score variance",
+    "top 10 of 47 district teams (2022)"
+  ],
+  "work_authorization": "Not specified",
+  "links": [
+    "linkedin.com/in/megdonovan-data",
+    "github.com/megdonovan-data"
+  ],
+  "years_experience": 6,
+  "education": "Google Data Analytics Professional Certificate (Aug 2024)",
+  "domains": [
+    "education",
+    "real estate",
+    "bike-share/mobility",
+    "property analytics"
+  ],
+  "experience_summary": "Six years HS math teaching (Algebra, Geometry, AP Stats); 9-month data analytics bootcamp; two end-to-end portfolio projects",
+  "career_transition": "Former high-school mathematics teacher transitioning into data analytics",
+  "certification": "Google Data Analytics Professional Certificate (August 2024)",
+  "education_background": "Mathematics teaching (Grades 9-12, Algebra I/II, Geometry, AP Statistics)",
+  "technical_skills": [
+    "SQL (PostgreSQL)",
+    "Python (pandas, matplotlib)",
+    "Excel (VLOOKUP, pivot tables, conditional formatting)",
+    "Google Sheets",
+    "Jupyter"
+  ],
+  "analytical_skills": [
+    "regression/correlation",
+    "exploratory data analysis",
+    "forecasting-style flagging (CASE expressions)",
+    "data cleaning",
+    "statistical analysis"
+  ],
+  "portfolio_projects": [
+    {
+      "name": "Nashville Housing Market Analysis",
+      "tools": [
+        "SQL",
+        "Excel",
+        "PostgreSQL"
+      ],
+      "dataset_size": "56,000+ Davidson County property records (2014-2024)",
+      "techniques": [
+        "data cleaning",
+        "address standardization",
+        "null handling",
+        "joins with assessor land-use codes",
+        "correlation analysis",
+        "multiple-regression-style queries",
+        "foreclosure-risk flag via CASE expression"
+      ],
+      "results": "R-squared ~0.71 on 20% holdout; foreclosure flag precision 0.68, recall 0.74"
+    },
+    {
+      "name": "Cyclistic Bike-Share Rider Segmentation",
+      "tools": [
+        "Python",
+        "pandas",
+        "matplotlib",
+        "Jupyter"
+      ],
+      "dataset_size": "5.7 million Divvy/Bikeshare trip records (June 2023 - May 2024)",
+      "status": "Project description appears truncated in resume"
+    }
+  ],
+  "resume_completeness_issues": [
+    "Cyclistic project description is truncated mid-sentence",
+    "no formal degree listed",
+    "no explicit mention of BI tools (Tableau, Power BI)",
+    "no explicit mention of statistical software beyond Excel/SQL/Python"
+  ],
+  "mostRecentEmployer": "Westlake High School, Fulton County Public Schools",
+  "jdCompany": "ABOUT NORTHWIND LOGISTICS\nNorthwind",
+  "jdRole": "Data Analyst",
+  "requirementsMet": [
+    "Relevant experience present",
+    "Relevant experience present",
+    "Relevant experience present"
+  ],
+  "requirementsNotMet": [
+    "Gap to be assessed in interview",
+    "Gap to be assessed in interview"
+  ],
+  "expectedSalaryBand": null,
+  "id": "p03",
+  "edgeCase": "Career switcher: was a high-school math TEACHER for 6 years, then a 2-YEAR EMPLOYMENT GAP, now targeting data analyst. Resume shows the teac",
+  "resumeFormat": "docx",
+  "hasSecondDoc": false
+}

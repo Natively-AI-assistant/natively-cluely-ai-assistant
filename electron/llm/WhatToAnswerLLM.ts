@@ -80,6 +80,9 @@ type ModesManagerType = {
         // module shapes (tests/stubs) — absence simply skips pinning.
         getActiveModePinnedInstructions?: (answerType?: AnswerType, pinnedModeId?: string) => string;
         getActiveModeDocumentGroundingInfo?: (pinnedModeId?: string) => ActiveModeDocumentGroundingInfo;
+        // Fix 1b (2026-07-06): OKF-augmented context block. Optional for older
+        // module shapes — absence simply skips OKF augmentation on the WTA path.
+        buildOkfAugmentedContextBlock?: (modeContextBlock: string, query: string, pinnedModeId?: string) => string;
     };
 };
 
@@ -236,7 +239,9 @@ ANSWER SHAPE: ${intentResult.answerShape}
                     const activeModeGroundingInfo = modesManager.getActiveModeDocumentGroundingInfo?.(requestSnapshot?.modeUniqueId);
                     const documentGroundedCustomModeActive = activeModeGroundingInfo?.documentGroundedCustomModeActive === true;
                     const forceDocumentGrounding = documentGroundedCustomModeActive;
-                    const retrievalOptions = forceDocumentGrounding ? { forceDocumentGrounding: true } : undefined;
+                    const retrievalOptions = forceDocumentGrounding
+                        ? { forceDocumentGrounding: true, followUpReferentHint: temporalContext?.previousResponses?.slice(-1)?.[0] }
+                        : undefined;
                     if (activeModeGroundingInfo?.isCustom) {
                         console.log('[WhatToAnswerLLM] Active mode grounding', {
                             selectedModeType: activeModeGroundingInfo.isCustom ? 'custom' : 'default',
@@ -308,9 +313,10 @@ ANSWER SHAPE: ${intentResult.answerShape}
                             // Pass undefined tokenBudget when doc-grounded so the
                             // retriever auto-upgrades to DOC_GROUNDED_TOKEN_BUDGET
                             // (3600). Explicit 1800 would bypass the != null guard.
+                            const retrievalQuery = answerPlan?.question?.trim() || cleanedTranscript;
                             const { value, timedOut } = await raceWithBudget(
                                 modesManager.buildRetrievedActiveModeContextBlockHybrid(
-                                    cleanedTranscript, cleanedTranscript, forceDocumentGrounding ? undefined : 1800, answerPlan?.answerType, true, requestSnapshot?.modeUniqueId, allowRerank, retrievalOptions,
+                                    retrievalQuery, cleanedTranscript, forceDocumentGrounding ? undefined : 1800, answerPlan?.answerType, true, requestSnapshot?.modeUniqueId, allowRerank, retrievalOptions,
                                 ),
                                 forceDocumentGrounding ? HYBRID_RETRIEVAL_BUDGET_DOC_GROUNDED_MS : HYBRID_RETRIEVAL_BUDGET_MS,
                                 '',
@@ -324,11 +330,25 @@ ANSWER SHAPE: ${intentResult.answerShape}
                             // excludeCustomContext (PI v3 W2): the mode's
                             // customContext is PINNED below — keep retrieval to
                             // reference files only so the text never ships twice.
-                            modeContextBlock = modesManager.buildRetrievedActiveModeContextBlock(cleanedTranscript, cleanedTranscript, forceDocumentGrounding ? undefined : 1800, answerPlan?.answerType, true, requestSnapshot?.modeUniqueId, retrievalOptions);
+                            const retrievalQuery = answerPlan?.question?.trim() || cleanedTranscript;
+                            modeContextBlock = modesManager.buildRetrievedActiveModeContextBlock(retrievalQuery, cleanedTranscript, forceDocumentGrounding ? undefined : 1800, answerPlan?.answerType, true, requestSnapshot?.modeUniqueId, retrievalOptions);
+                        }
+
+                        // Fix 1b (2026-07-06): augment the retrieved chunk block
+                        // with OKF Knowledge Cards + graph hints on the WTA path.
+                        // Synthesis-question types (research_questions / objectives
+                        // / main_topic / summary / conclusion / problem_statement)
+                        // return ALL cards in document order, recovering the
+                        // "dedicated Research Questions / Phases section" wins
+                        // that chunk-level cosine systematically lost.
+                        if (modeContextBlock && typeof modesManager.buildOkfAugmentedContextBlock === 'function' && forceDocumentGrounding) {
+                            const okfQuery = answerPlan?.question?.trim() || cleanedTranscript;
+                            modeContextBlock = modesManager.buildOkfAugmentedContextBlock(modeContextBlock, okfQuery, requestSnapshot?.modeUniqueId);
                         }
                     } else if (await this.llmHelper.canUseLocalFallback(false)) {
                         console.warn('[ScopeFallback] reference_files denied; local fallback available, routing via streamChat');
-                        modeContextBlock = modesManager.buildRetrievedActiveModeContextBlock(cleanedTranscript, cleanedTranscript, forceDocumentGrounding ? undefined : 1800, answerPlan?.answerType, true, requestSnapshot?.modeUniqueId, retrievalOptions);
+                        const retrievalQuery = answerPlan?.question?.trim() || cleanedTranscript;
+                        modeContextBlock = modesManager.buildRetrievedActiveModeContextBlock(retrievalQuery, cleanedTranscript, forceDocumentGrounding ? undefined : 1800, answerPlan?.answerType, true, requestSnapshot?.modeUniqueId, retrievalOptions);
                     } else {
                         console.warn('[ScopeFallback] reference_files denied; Ollama unavailable, omitting from context');
                         if (forceDocumentGrounding) {

@@ -139,7 +139,15 @@ export type IntelligenceFlagKey =
   // ("I could not find that...") despite strong retrieved evidence existing.
   // Default ON everywhere — see SYSTEM_REFUSAL_RE / isFalseRefusal in
   // ipcHandlers.ts. Turning this OFF reverts to the prior log-only behavior.
-  | 'docGroundedFalseRefusalRepair';
+  | 'docGroundedFalseRefusalRepair'
+  // Custom-Mode Source Isolation (2026-07-06, hardening/v2.7.0): when ON, the
+  // SourceArbiter enforces the CustomModeExecutionContract at every layer
+  // (retrieval, prompt, validator, regen, SessionTracker write). When OFF,
+  // the arbiter logs the resolved contract as telemetry but does NOT block
+  // any path. Phase 4 ships the arbiter in observe-only mode (default OFF);
+  // Phase H flips this ON after we've collected telemetry confirming the
+  // contract is correctly built for every modeKind × answerType combination.
+  | 'customModeSourceEnforcement';
 
 interface FlagSpec {
   /** env var name (NATIVELY_* convention). */
@@ -203,21 +211,28 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   hindsightMemory: { env: 'NATIVELY_HINDSIGHT_MEMORY', setting: 'hindsightMemoryEnabled', default: false },
   hindsightLiveRecall: { env: 'NATIVELY_HINDSIGHT_LIVE_RECALL', setting: 'hindsightLiveRecallEnabled', default: false },
   hindsightPostMeetingRetain: { env: 'NATIVELY_HINDSIGHT_POST_MEETING_RETAIN', setting: 'hindsightPostMeetingRetainEnabled', default: false },
-  // Phase 0 — observe-only confidence telemetry. Default OFF.
-  ragConfidenceGate: { env: 'NATIVELY_RAG_CONFIDENCE_GATE', setting: 'ragConfidenceGateEnabled', default: false },
-  // Phase 1 — local cross-encoder rerank escalation (manual/follow-up). Default OFF.
-  ragLocalRerank: { env: 'NATIVELY_RAG_LOCAL_RERANK', setting: 'ragLocalRerankEnabled', default: false },
+  // Phase 0 — observe-only confidence telemetry. Permanently ON (2026-07-06
+  // user directive — flip the smart-retrieval stack on by default).
+  ragConfidenceGate: { env: 'NATIVELY_RAG_CONFIDENCE_GATE', setting: 'ragConfidenceGateEnabled', default: true },
+  // Phase 1 — local cross-encoder rerank escalation (manual/follow-up).
+  // Permanently ON (2026-07-06 user directive).
+  ragLocalRerank: { env: 'NATIVELY_RAG_LOCAL_RERANK', setting: 'ragLocalRerankEnabled', default: true },
   // Phase 2 — Reciprocal Rank Fusion across heterogeneous retrieval sources. Default OFF.
   ragRrfFusion: { env: 'NATIVELY_RAG_RRF_FUSION', setting: 'ragRrfFusionEnabled', default: false },
-  // Phase 3 — allow rerank on the live transcript path (prewarmed + budget-guarded). Default OFF.
-  ragSpeculativeRerank: { env: 'NATIVELY_RAG_SPECULATIVE_RERANK', setting: 'ragSpeculativeRerankEnabled', default: false },
-  // OKF Hybrid Knowledge System — default ON in dev/test/benchmark contexts so
-  // the 19-question thesis benchmark and test suite exercise the real path;
-  // default OFF in production until validated end-to-end.
-  okfKnowledgePacks: { env: 'NATIVELY_OKF_KNOWLEDGE_PACKS', setting: 'okfKnowledgePacksEnabled', default: isInternalDevTestContext() },
-  okfMarkdownExport: { env: 'NATIVELY_OKF_MARKDOWN_EXPORT', setting: 'okfMarkdownExportEnabled', default: isInternalDevTestContext() },
-  okfHybridRetrieval: { env: 'NATIVELY_OKF_HYBRID_RETRIEVAL', setting: 'okfHybridRetrievalEnabled', default: isInternalDevTestContext() },
-  okfGraphExpansion: { env: 'NATIVELY_OKF_GRAPH_EXPANSION', setting: 'okfGraphExpansionEnabled', default: false },
+  // Phase 3 — allow rerank on the live transcript path (prewarmed + budget-guarded).
+  // Permanently ON (2026-07-06 user directive — safe by construction; prewarmed at mode
+  // activation and runs inside the existing raceWithBudget(1500ms) envelope).
+  ragSpeculativeRerank: { env: 'NATIVELY_RAG_SPECULATIVE_RERANK', setting: 'ragSpeculativeRerankEnabled', default: true },
+  // OKF Hybrid Knowledge System — permanently ON in all contexts (2026-07-06
+  // user directive — flip the OKF stack on by default). Originally ON in dev/test
+  // and OFF in production until validated end-to-end; the 19-question thesis
+  // benchmark now drives production behavior too.
+  okfKnowledgePacks: { env: 'NATIVELY_OKF_KNOWLEDGE_PACKS', setting: 'okfKnowledgePacksEnabled', default: true },
+  okfMarkdownExport: { env: 'NATIVELY_OKF_MARKDOWN_EXPORT', setting: 'okfMarkdownExportEnabled', default: true },
+  okfHybridRetrieval: { env: 'NATIVELY_OKF_HYBRID_RETRIEVAL', setting: 'okfHybridRetrievalEnabled', default: true },
+  // Entity/relation graph layer derived from OKF cards (Phase 4).
+  // Permanently ON (2026-07-06 user directive).
+  okfGraphExpansion: { env: 'NATIVELY_OKF_GRAPH_EXPANSION', setting: 'okfGraphExpansionEnabled', default: true },
   okfKnowledgeUi: { env: 'NATIVELY_OKF_KNOWLEDGE_UI', setting: 'okfKnowledgeUiEnabled', default: false },
   okfUserEditableCards: { env: 'NATIVELY_OKF_USER_EDITABLE_CARDS', setting: 'okfUserEditableCardsEnabled', default: false },
   // OKF Profile Intelligence — default ON in dev/test/benchmark contexts so the
@@ -231,6 +246,8 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   okfProfileKnowledgeUi: { env: 'NATIVELY_OKF_PROFILE_KNOWLEDGE_UI', setting: 'okfProfileKnowledgeUiEnabled', default: false },
   // Safety isolation gates — ON everywhere by default.
   docGroundedStrictIsolation: { env: 'NATIVELY_DOC_GROUNDED_STRICT_ISOLATION', setting: 'docGroundedStrictIsolationEnabled', default: true },
+  // Custom-Mode Source Isolation (2026-07-06, hardening/v2.7.0). Default OFF.
+  customModeSourceEnforcement: { env: 'NATIVELY_CUSTOM_MODE_SOURCE_ENFORCEMENT', setting: 'customModeSourceEnforcementEnabled', default: false },
   // NOTE (2026-07-02): the false-refusal REPAIR path is INERT unless
   // `okfHybridRetrieval` is also on — the repair gate keys off the active OKF
   // pack's entity/card-title overlap, which only exists when OKF packs are

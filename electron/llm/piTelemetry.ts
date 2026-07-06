@@ -43,6 +43,8 @@ export type PiTelemetryEvent =
   | 'pi_doc_grounded_validation_failed'
   | 'pi_doc_grounded_regenerated'
   | 'pi_doc_grounded_safe_failure'
+  // Round-7 Failure-3: completeness re-ask kept the original (valid but partial) answer.
+  | 'pi_doc_grounded_completeness_kept_original'
   // OKF Phase 0 (2026-07-01): false-refusal self-trigger guard + repair markers.
   | 'pi_doc_grounded_false_refusal_repair_attempted'
   | 'pi_doc_grounded_retrieval_summary'

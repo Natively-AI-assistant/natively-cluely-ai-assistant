@@ -21,7 +21,6 @@ import {
   TINY_PROMPTS_SET
 } from "./llm/tinyPrompts"
 import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
-import { OLLAMA_NUM_PREDICT_LOCAL_SMALL } from "./llm/liveDeadlines"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
 import {
   runStreamingVisionFallback,
@@ -4430,7 +4429,12 @@ const isMultimodal = !!(imagePaths?.length);
     // grounding, so the skip is bypassed (the route still scopes sensitivity).
     const isModeScopedAnswer = routeOptions?.answerType === 'sales_answer'
       || routeOptions?.answerType === 'product_candidate_mix_answer'
-      || routeOptions?.answerType === 'lecture_answer';
+      || routeOptions?.answerType === 'lecture_answer'
+      || routeOptions?.answerType === 'definitional_answer'
+      || routeOptions?.answerType === 'list_answer'
+      || routeOptions?.answerType === 'exact_numeric_answer'
+      || routeOptions?.answerType === 'document_absent_fact_refusal'
+      || routeOptions?.answerType === 'document_followup_answer';
     const shouldSkipModeInjection = skipModeInjection || (isUniversalOverride && !isModeScopedAnswer && !isActiveCustomMode);
 
     if (!shouldSkipModeInjection) {

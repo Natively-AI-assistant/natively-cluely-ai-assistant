@@ -4,6 +4,8 @@ The dataset is formatted into observations, language instructions, and robot act
 Preprocessing before finetuning aligns camera frames, action chunks, and language commands.
 OpenVLA-OFT finetuning uses LoRA adapters with the collected robot demonstration dataset.
 Hyperparameters are present in the thesis for fine-tuning runs, including learning rate, batch size, training steps, and LoRA rank.
+Dataset sizes and sampling rates mentioned in the thesis include 480 teleoperation demonstration episodes, a 50 Hz robot control loop, and 25 Hz synchronized camera sampling.
+GPU memory and VRAM numbers mentioned include 96 GB for high-memory training, 62 GB observed peak usage, 24 GB for a smaller available GPU configuration, and 16 GB for deployment/inference constraints.
 Compared models are OpenVLA, finetuned OpenVLA-OFT, and AgenticVLA.
 Experiments and results compare standard VLA behavior against AgenticVLA on semantic relationship, prompt complexity, and self-awareness benchmarks.
 Limitations include sim-to-real transfer, dataset scale, hardware constraints, and robustness in open environments.

@@ -1,0 +1,922 @@
+%PDF-1.3
+%ºß¬à
+3 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 4 0 R
+>>
+endobj
+4 0 obj
+<<
+/Length 5379
+>>
+stream
+0.200025 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 744. Td
+(MARCUS J. HOLLOWAY) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 730.5 Td
+(marcus.holloway@protonmail.com | \(415\) 555-0182 | linkedin.com/in/marcusholloway | github.com/mjholloway) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 717. Td
+(San Francisco, CA | Authorized to work in the US \(US Citizen\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 690. Td
+(SUMMARY) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 663. Td
+(Senior backend engineer with 10 years of experience designing, building, and operating distributed systems at scale.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 649.5 Td
+(Deep expertise in service-oriented architectures, consensus protocols, and high-throughput data pipelines. Shipped) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 636. Td
+(infrastructure that handled tens of billions of requests per day at FAANG-adjacent companies. Comfortable owning) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 622.5 Td
+(systems end-to-end: from RFC and capacity planning through on-call rotation and post-incident review. Strong) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 609. Td
+(opinions, loosely held, on idempotency, backpressure, and the cost of premature abstraction.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 582. Td
+(WORK EXPERIENCE) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 555. Td
+(Stripe, Inc. — Staff Software Engineer \(L6\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 541.5 Td
+(San Francisco, CA | March 2022 – Present) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 528. Td
+(Payments Orchestration Platform team. Tech lead for the merchant settlement reconciliation pipeline.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 501. Td
+(- Designed and shipped a replacement reconciliation system that processes 4.2B ledger entries per day, replacing a) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 487.5 Td
+(legacy Hadoop batch job with a streaming pipeline on Kafka and Flink. Reduced end-to-end reconciliation latency) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 474. Td
+(from 14 hours to 38 minutes \(p99\) and cut compute cost by 61% \(~$2.3M/year\).) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 460.5 Td
+(- Led the migration of 17 microservices from a monolithic API gateway to an Envoy-based service mesh. Defined the) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 447. Td
+(SLO framework \(availability, latency, error budget burn rate\) used across the org; published internal RFC adopted by) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 433.5 Td
+(9 teams in the first quarter.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 420. Td
+(- Built a deterministic replay framework for payment workflows that reproduces production bugs from sampled traces) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 406.5 Td
+(with 99.2% fidelity. Reduced mean time to resolution on P0 payment bugs from 6.5 hours to 47 minutes.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 393. Td
+(- Owned the on-call rotation for a Tier-1 service surface \(Stripe Terminal backend\). Maintained 99.987% availability) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 379.5 Td
+(over 18 consecutive months across 3 quarterly SLO reviews.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 366. Td
+(- Mentored 4 engineers through promotion to senior; authored the team's distributed-systems interview rubric now) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 352.5 Td
+(used by 30+ interviewers.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 325.5 Td
+(Datadog — Senior Software Engineer) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 312. Td
+(New York, NY | August 2019 – February 2022) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 298.5 Td
+(Metrics ingestion platform \("Longtail" team\). Owned the tail-aggregation service for high-cardinality customer metrics.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 271.5 Td
+(- Re-architected the metrics tail-aggregation pipeline to use a custom sharded RocksDB store with consistent) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 258. Td
+(hashing across 2,400 ingestion nodes. Increased sustained write throughput from 1.1M points/sec to 8.4M points/sec) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 244.5 Td
+(on the same hardware footprint.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 231. Td
+(- Designed and implemented the cross-region failover protocol for the metrics backend, using Raft over gRPC with) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 217.5 Td
+(explicit lease-based leader election. Cut regional failover time from 11 minutes to 19 seconds and eliminated 3) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 204. Td
+(classes of split-brain incidents observed in the prior system.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 190.5 Td
+(- Shipped a query-side caching layer \(Redis + LFU eviction with adaptive TTLs\) that reduced p95 dashboard load) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 177. Td
+(times by 73% for customers with >10K active series. Drove $4.1M in incremental ARR per the FY21 retention) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 163.5 Td
+(analysis.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 150. Td
+(- Co-led the company's adoption of OpenTelemetry for trace ingestion; authored the auto-instrumentation guide that) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 136.5 Td
+(became required reading for new backend hires.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 109.5 Td
+(Uber Technologies — Software Engineer II) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 96. Td
+(San Francisco, CA | July 2017 – July 2019) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 82.5 Td
+(Real-time pricing and dispatch infrastructure \(Surge team\). Focused on the geospatial indexing layer for the) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 69. Td
+(rider-driver matching system.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 6 0 R
+>>
+endobj
+6 0 obj
+<<
+/Length 5122
+>>
+stream
+0.200025 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 730.5 Td
+(- Rebuilt the surge-pricing grid index from a quadtree-based PostgreSQL implementation to a custom H3-based) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 717. Td
+(in-memory index, reducing per-query p99 latency from 38ms to 2.4ms at the 95th percentile. Sustained through the) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 703.5 Td
+(2018 New Year's Eve peak of 19M rides globally.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 690. Td
+(- Designed the backpressure protocol used between the dispatch service and downstream trip-state stores;) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 676.5 Td
+(eliminated a class of cascading failures that had caused 4 P0 incidents in the prior 6 months.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 663. Td
+(- Owned the schema migration tooling used by the team to evolve Redis cluster state across rolling deploys without) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 649.5 Td
+(dropping in-flight requests. Used in production for 47 zero-downtime migrations.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 636. Td
+(- Presented an internal talk on "Time, Clocks, and the Ordering Problem in Distributed Dispatch" that was mandatory) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 622.5 Td
+(viewing for new engineers on the marketplace org for two quarters.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 595.5 Td
+(Amazon Web Services — Software Development Engineer) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 582. Td
+(Seattle, WA | August 2014 – June 2017) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 568.5 Td
+(EC2 control plane, Instance State Management team. Owned the EBS-backed instance launch path.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 541.5 Td
+(- Shipped the migration of instance-launch state from a single-region MySQL cluster \(with cross-region async) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 528. Td
+(replication\) to a per-AZ DynamoDB-backed state machine. Reduced launch failures due to state-store contention by) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 514.5 Td
+(94% and cut the median launch path by 280ms.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 501. Td
+(- Designed and implemented the optimistic concurrency control scheme for the instance-terminate API, using) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 487.5 Td
+(conditional writes plus a tombstone TTL. Eliminated the "zombie instance" class of bugs that had generated 600+) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 474. Td
+(customer support tickets in the preceding year.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 460.5 Td
+(- Authored the team's runbook for the 2017 s2n TLS rotation across the EC2 control plane, completed 11 days ahead) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 447. Td
+(of the corporate security deadline.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 433.5 Td
+(- Received the Q4 2016 "Bar Raiser" award for technical interviewing; conducted 60+ on-site loops.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 406.5 Td
+(PROJECTS) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 379.5 Td
+(tinroof — A pure-Go implementation of the Raft consensus algorithm with a built-in linearizable KV store. Used as a) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 366. Td
+(teaching tool at two Bay Area meetups. github.com/mjholloway/tinroof — 1.4k GitHub stars, adopted by a YC W23) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 352.5 Td
+(startup as their config-store backbone.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 325.5 Td
+(obscura — A Prometheus-compatible remote-write proxy that batches and compacts metrics before forwarding, with) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 312. Td
+(a sidecar mode for Kubernetes pods. Reduced egress costs by 44% for the maintainer's homelab cluster of 32) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 298.5 Td
+(nodes. Documented at obscura.dev with a published benchmark suite.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 271.5 Td
+(levee — An open-source circuit-breaker library for Go with adaptive thresholds based on a rolling EWMA of error) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 258. Td
+(rates and explicit half-open concurrency limits. Vendored by 11 OSS projects \(including two CNCF incubating) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 244.5 Td
+(projects\). Available at github.com/mjholloway/levee — 2.1k stars, 47 contributors.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 217.5 Td
+(EDUCATION) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 190.5 Td
+(University of California, Berkeley) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 177. Td
+(B.S., Electrical Engineering and Computer Science | GPA 3.82/4.00 | Graduated May 2014) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 163.5 Td
+(Relevant coursework: Distributed Systems \(CS 162\), Operating Systems \(CS 162 grad section\), Algorithms \(CS) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 150. Td
+(170\), Databases \(CS 186\).) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 136.5 Td
+(Senior thesis: "Practical Tradeoffs in Eventually-Consistent Counters" — advised by Prof. Ion Stoica.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 109.5 Td
+(SKILLS) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 82.5 Td
+(Languages: Go \(primary, 8+ years production\), Python, Rust \(working proficiency\), Java, TypeScript) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 69. Td
+(Distributed systems: Raft, Paxos, consistent hashing, gossip protocols, CRDTs, vector clocks, leaderless replication,) Tj
+ET
+endstream
+endobj
+7 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 8 0 R
+>>
+endobj
+8 0 obj
+<<
+/Length 1270
+>>
+stream
+0.200025 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 744. Td
+(quorum systems, two-phase commit, saga pattern) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 730.5 Td
+(Storage: PostgreSQL, MySQL, DynamoDB, RocksDB, Cassandra, Redis, Kafka, Pulsar, S3) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 717. Td
+(Infra & orchestration: Kubernetes \(operated 1.2k-node clusters\), Envoy/Istio, Terraform, Ansible, Helm, Argo, Linkerd) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 703.5 Td
+(Observability: Prometheus, Grafana, OpenTelemetry, Jaeger, Honeycomb, Datadog \(self-explanatory\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 690. Td
+(Protocol & RPC: gRPC, Thrift, Protocol Buffers, FlatBuffers, HTTP/2, QUIC) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 676.5 Td
+(CI/CD: GitHub Actions, Buildkite, Spinnaker, Prow) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 663. Td
+(AWS: EC2, S3, RDS, DynamoDB, Kinesis, Lambda, IAM, VPC networking — Solutions Architect Associate certified) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 649.5 Td
+(\(2021, since lapsed\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 636. Td
+(Other: Linux internals \(cgroups, namespaces, eBPF beginner\), capacity planning, chaos engineering \(chaos-mesh,) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 622.5 Td
+(Gremlin\), postmortem culture, technical writing, hiring & interviewing, mentoring) Tj
+ET
+endstream
+endobj
+1 0 obj
+<</Type /Pages
+/Kids [3 0 R 5 0 R 7 0 R ]
+/Count 3
+>>
+endobj
+9 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+10 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+11 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+12 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+13 0 obj
+<<
+/Type /Font
+/BaseFont /Courier
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+14 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+15 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+16 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+17 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Roman
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+18 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+19 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Italic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+20 0 obj
+<<
+/Type /Font
+/BaseFont /Times-BoldItalic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+21 0 obj
+<<
+/Type /Font
+/BaseFont /ZapfDingbats
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+22 0 obj
+<<
+/Type /Font
+/BaseFont /Symbol
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+2 0 obj
+<<
+/ProcSet [/PDF /Text /ImageB /ImageC /ImageI]
+/Font <<
+/F1 9 0 R
+/F2 10 0 R
+/F3 11 0 R
+/F4 12 0 R
+/F5 13 0 R
+/F6 14 0 R
+/F7 15 0 R
+/F8 16 0 R
+/F9 17 0 R
+/F10 18 0 R
+/F11 19 0 R
+/F12 20 0 R
+/F13 21 0 R
+/F14 22 0 R
+>>
+/XObject <<
+>>
+>>
+endobj
+23 0 obj
+<<
+/Producer (jsPDF 4.2.1)
+/CreationDate (D:20260702220907+05'30')
+>>
+endobj
+24 0 obj
+<<
+/Type /Catalog
+/Pages 1 0 R
+/OpenAction [3 0 R /FitH null]
+/PageLayout /OneColumn
+>>
+endobj
+xref
+0 25
+0000000000 65535 f 
+0000012257 00000 n 
+0000014090 00000 n 
+0000000015 00000 n 
+0000000120 00000 n 
+0000005551 00000 n 
+0000005656 00000 n 
+0000010830 00000 n 
+0000010935 00000 n 
+0000012326 00000 n 
+0000012451 00000 n 
+0000012582 00000 n 
+0000012716 00000 n 
+0000012854 00000 n 
+0000012978 00000 n 
+0000013107 00000 n 
+0000013239 00000 n 
+0000013375 00000 n 
+0000013503 00000 n 
+0000013630 00000 n 
+0000013759 00000 n 
+0000013892 00000 n 
+0000013994 00000 n 
+0000014342 00000 n 
+0000014428 00000 n 
+trailer
+<<
+/Size 25
+/Root 24 0 R
+/Info 23 0 R
+/ID [ <EB98E5E13292F207A511653864F52F42> <EB98E5E13292F207A511653864F52F42> ]
+>>
+startxref
+14532
+%%EOF

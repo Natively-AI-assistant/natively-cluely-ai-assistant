@@ -1,0 +1,1966 @@
+%PDF-1.3
+%ºß¬à
+3 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 4 0 R
+>>
+endobj
+4 0 obj
+<<
+/Length 5316
+>>
+stream
+0.200025 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 744. Td
+(MARGARET E. HOLLINGSWORTH) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 730.5 Td
+(marg.hollingworth@protonmail.com | \(415\) 555-0182 | San Francisco, CA) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 717. Td
+(LinkedIn: linkedin.com/in/marghollingworth-eng | GitHub: github.com/mhollingworth) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 703.5 Td
+(Portfolio: marghollingworth.dev) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 676.5 Td
+(PROFESSIONAL SUMMARY) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 649.5 Td
+(Distinguished engineering leader with 18 years of experience scaling distributed systems, infrastructure platforms,) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 636. Td
+(and high-performance data pipelines at companies ranging from Series B startups to Fortune 50 enterprises.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 622.5 Td
+(Recognized authority on event-driven architectures, Kubernetes-native platforms, and applied machine learning) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 609. Td
+(infrastructure. Track record of building and leading organizations of up to 240 engineers, owning platform budgets) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 595.5 Td
+(exceeding $48M annually, and shipping systems that handle 14 billion events per day at sub-50ms p99 latency.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 582. Td
+(Holder of 7 issued US patents, author of 19 peer-reviewed publications, and frequent speaker at QCon, KubeCon,) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 568.5 Td
+(Strange Loop, and re:Invent. Core maintainer of three CNCF-adjacent open-source projects with a combined 31,000) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 555. Td
+(GitHub stars. Passionate about engineering culture, technical mentorship, and the unglamorous work of making) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 541.5 Td
+(systems boring.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 514.5 Td
+(WORK EXPERIENCE) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 487.5 Td
+(VP of Platform Engineering) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 474. Td
+(Stratagem Cloud, Inc. — San Francisco, CA) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 460.5 Td
+(March 2021 – Present) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 433.5 Td
+(Stratagem Cloud is a developer infrastructure startup \(Series D, 480 employees\) building a unified multi-cloud) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 420. Td
+(orchestration plane. Raised $312M from Sequoia, Andreessen Horowitz, and Insight Partners. Own platform) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 406.5 Td
+(engineering, SRE, data infrastructure, and developer experience organizations totaling 187 people across four time) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 393. Td
+(zones.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 366. Td
+(- Hired and scaled the platform engineering org from 14 to 187 engineers, SREs, and ML systems specialists over) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 352.5 Td
+(four years; personally recruited the directors of SRE, data platform, and developer experience.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 339. Td
+(- Led the architectural redesign of the company's flagship orchestration product from a monolithic Go service into 47) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 325.5 Td
+(Kubernetes-native microservices, reducing customer onboarding time from 11 weeks to 38 minutes and cutting) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 312. Td
+(infrastructure cost per tenant by 71%.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 298.5 Td
+(- Authored the technical strategy for Stratagem's multi-region active-active architecture spanning AWS, GCP, and) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 285. Td
+(Azure, supporting 9,200 enterprise customers with automated failover measured at 14 seconds RTO and zero RPO.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 271.5 Td
+(- Drove the company's migration from self-managed Kafka to a fully managed and tuned Warpstream deployment,) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 258. Td
+(reducing Kafka-related pager incidents by 94% and saving $2.1M annually in cloud egress.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 244.5 Td
+(- Established the ML Platform group from scratch; shipped an internal feature store and model serving stack that) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 231. Td
+(reduced ML model deployment cycle time from 6 weeks to 4 hours.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 217.5 Td
+(- Own the annual platform budget of $48.3M; implemented FinOps practices and showback/chargeback tooling that) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 204. Td
+(produced $11.4M in verified savings across two fiscal years.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 190.5 Td
+(- Sponsor of the company's internal Engineering Brand program; coach for 14 senior engineers in the promotion) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 177. Td
+(pipeline, with 9 promotions to Staff and above during tenure.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 163.5 Td
+(- Co-authored RFC-0042 \(Stratagem's engineering governance framework\) which standardized RFC, ADR, and) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 150. Td
+(design review processes company-wide.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 123. Td
+(Director of Distributed Systems) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 109.5 Td
+(Helix Data Systems — Palo Alto, CA) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 96. Td
+(August 2017 – February 2021) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 69. Td
+(Helix Data Systems builds real-time analytics infrastructure for e-commerce and ad-tech customers. Public company) Tj
+ET
+endstream
+endobj
+5 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 6 0 R
+>>
+endobj
+6 0 obj
+<<
+/Length 5392
+>>
+stream
+0.200025 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 744. Td
+(\(NYSE: HLX\), 1,900 employees. Managed a 64-person organization across streaming infrastructure, query engine,) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 730.5 Td
+(and observability platform.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 703.5 Td
+(- Led the team that built Helix's StreamQL query engine on top of Apache Flink, achieving 11x throughput) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 690. Td
+(improvement and 6x latency reduction versus the legacy Spark Streaming implementation.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 676.5 Td
+(- Owned the design and rollout of Helix's tiered storage architecture across S3, Glacier, and local NVMe; storage) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 663. Td
+(cost per terabyte dropped from $23 to $4.10 while sustaining 99.99% durability.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 649.5 Td
+(- Built and shipped the Helix Observability Suite \(HOS\), an OpenTelemetry-native observability platform serving) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 636. Td
+(4.3PB of metrics daily across 2,400 customer deployments.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 622.5 Td
+(- Hired the founding staff for Helix's Seattle office, growing from 0 to 31 engineers in 14 months.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 609. Td
+(- Partnered with the CISO on a zero-trust network architecture migration completed ahead of schedule, saving an) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 595.5 Td
+(estimated $3.8M in potential breach exposure per the IBM Cost of a Data Breach report.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 582. Td
+(- Authored the technical playbook adopted company-wide for chaos engineering, including the first quarterly) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 568.5 Td
+(GameDay program covering 38 production failure scenarios.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 555. Td
+(- Promoted from Senior Manager to Director in March 2019; awarded Helix's Distinguished Engineering Leadership) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 541.5 Td
+(Award in 2020.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 514.5 Td
+(Principal Engineer & Tech Lead, Real-Time Bidding Platform) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 501. Td
+(Vantage Ad Technologies — Mountain View, CA) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 487.5 Td
+(June 2014 – July 2017) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 460.5 Td
+(Vantage Ad Technologies operates a real-time bidding \(RTB\) ad exchange serving 380 billion bid requests per day.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 447. Td
+(Pre-IPO growth-stage company, 1,100 employees at time of departure. Tech lead for the auction engine team of 23) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 433.5 Td
+(engineers.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 406.5 Td
+(- Architected and led the rewrite of Vantage's auction engine from a C++ monolith into a Rust-based micro-kernel) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 393. Td
+(architecture, raising peak bid throughput from 1.4M QPS to 6.8M QPS while cutting p99 auction latency from 92ms to) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 379.5 Td
+(17ms.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 366. Td
+(- Designed the bidder feedback loop system that increased fill rate by 22% and added an estimated $84M in) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 352.5 Td
+(annualized revenue, cited in Vantage's S-1 filing.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 339. Td
+(- Built Vantage's first internal feature engineering pipeline for bidder ML models, reducing model retraining time from) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 325.5 Td
+(36 hours to 90 minutes.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 312. Td
+(- Created the engineering onboarding curriculum for new hires; median time-to-first-merged-PR dropped from 38) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 298.5 Td
+(days to 11 days.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 285. Td
+(- Mentored 9 engineers who were subsequently promoted to Senior Engineer or Tech Lead during tenure.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 271.5 Td
+(- Co-inventor on 4 of the 7 patents filed during Vantage's IPO preparation period.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 244.5 Td
+(Staff Engineer, Search Infrastructure) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 231. Td
+(Lighthouse Search — Kirkland, WA) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 217.5 Td
+(March 2011 – May 2014) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 190.5 Td
+(Lighthouse Search was a vertical search engine for the legal industry, acquired by LexisNexis in 2014 \(undisclosed,) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 177. Td
+(reported between $140M-$180M\). 320 employees. Founding member of the search infrastructure team.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 150. Td
+(- Designed and implemented Lighthouse's distributed web crawler, indexing 2.1 billion legal documents and 410) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 136.5 Td
+(million court opinions across 50 jurisdictions.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 123. Td
+(- Built the relevance scoring pipeline using Lucene, Solr, and custom-trained gradient-boosted models; nDCG@10) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 109.5 Td
+(improved by 31% over the prior TF-IDF baseline.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 96. Td
+(- Authored the document deduplication system that reduced the index footprint by 38% while preserving coverage of) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 82.5 Td
+(long-tail legal content.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 69. Td
+(- Created Lighthouse's first SLA monitoring system; achieved and maintained 99.95% availability for 26 consecutive) Tj
+ET
+endstream
+endobj
+7 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 8 0 R
+>>
+endobj
+8 0 obj
+<<
+/Length 4363
+>>
+stream
+0.200025 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 744. Td
+(months.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 730.5 Td
+(- Led the technical integration into LexisNexis post-acquisition, ensuring continuity of service for 47,000 paying) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 717. Td
+(subscribers.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 690. Td
+(Senior Software Engineer) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 676.5 Td
+(Pinecrest Software Group — Portland, OR) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 663. Td
+(August 2008 – February 2011) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 636. Td
+(Pinecrest was a 90-person consulting firm building bespoke enterprise software for healthcare, insurance, and) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 622.5 Td
+(logistics clients. Senior IC role with mentorship responsibilities.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 595.5 Td
+(- Tech lead for a 6-engineer team that built a claims processing platform for a regional health insurer, processing 4.2) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 582. Td
+(million claims annually with 99.97% accuracy against manual audit.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 568.5 Td
+(- Built a HIPAA-compliant patient intake portal serving 180,000 registered patients across 22 clinics.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 555. Td
+(- Designed the ETL pipeline for a logistics client integrating data from 14 disparate warehouse management systems) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 541.5 Td
+(into a unified reporting dashboard.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 528. Td
+(- Mentored 4 junior engineers; two were promoted to mid-level during the engagement.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 501. Td
+(Software Engineer) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 487.5 Td
+(Granite Ridge Technologies — Boston, MA) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 474. Td
+(July 2006 – July 2008) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 447. Td
+(Granite Ridge was a defense contractor building embedded software for naval radar systems. First professional role) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 433.5 Td
+(after graduate school.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 406.5 Td
+(- Implemented signal processing algorithms in C and C++ for the AN/SPY-1 derivative radar test suite.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 393. Td
+(- Maintained the real-time operating system layer \(VxWorks\) integration on PowerPC hardware.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 379.5 Td
+(- Wrote the test harness adopted company-wide for hardware-in-the-loop integration testing.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 352.5 Td
+(Software Engineering Intern) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 339. Td
+(Northbridge Telecom — Waltham, MA) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 325.5 Td
+(May 2005 – August 2005) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 298.5 Td
+(Software Engineering Intern on the SS7 signaling protocol stack team. Implemented a SIP-to-SS7 interworking) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 285. Td
+(gateway in C++ and contributed to the call routing subsystem. Selected from 1,400 applicants for the summer) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 271.5 Td
+(program.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 244.5 Td
+(Graduate Research Assistant) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 231. Td
+(MIT Computer Science and Artificial Intelligence Laboratory \(CSAIL\) — Cambridge, MA) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 217.5 Td
+(September 2004 – June 2006) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 190.5 Td
+(Research assistant under Prof. Arvind Krishnamurthy in the Networks and Mobile Systems group. Worked on the) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 177. Td
+(Haggle content-centric networking project and co-authored two papers.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 150. Td
+(SELECTED PROJECTS) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 123. Td
+(- KubeFortress \(2023 – Present\): Open-source Kubernetes policy engine with OPA/Gatekeeper backend. 11,400) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 109.5 Td
+(GitHub stars, 187 contributors. CNCF Sandbox application submitted 2024. My role: founder and core maintainer.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 96. Td
+(- StreamForge \(2020 – Present\): High-throughput event ingestion library in Rust. 9,800 GitHub stars. Powers) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 82.5 Td
+(production pipelines at 4 companies I am aware of \(Cloudflare, Datadog, two undisclosed fintechs\). Adopted as the) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 69. Td
+(ingestion layer for Stratagem's edge product.) Tj
+ET
+endstream
+endobj
+9 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 10 0 R
+>>
+endobj
+10 0 obj
+<<
+/Length 5977
+>>
+stream
+0.200025 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 744. Td
+(- VectorVault \(2019 – 2022\): Distributed vector database built on Raft and RocksDB. 9,200 GitHub stars. Co-founded) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 730.5 Td
+(with two former Helix colleagues. Successfully exited via acquisition by Pinecone \(terms undisclosed, reported 2022\).) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 717. Td
+(- PulseNet Telemetry Pipeline \(2022\): Internal project at Stratagem. Handles 14 billion events per day at sub-50ms) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 703.5 Td
+(p99. Written up as a case study by the CNCF in 2023.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 690. Td
+(- Helix StreamQL Engine \(2018 – 2020\): Production query engine at Helix Data Systems. 11x throughput over) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 676.5 Td
+(predecessor. Detailed in the QCon 2020 talk "From Spark to Flink Without Tears.") Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 663. Td
+(- Vantage Auction Micro-Kernel \(2015 – 2017\): Rust-based auction engine at 6.8M QPS. Subject of the Strange Loop) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 649.5 Td
+(2016 talk "Sub-20ms Bidding at Internet Scale.") Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 636. Td
+(- Lighthouse Relevance Pipeline \(2011 – 2014\): Custom ML pipeline for legal vertical search. nDCG@10 improved) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 622.5 Td
+(31%. Basis of the SIGIR 2013 short paper.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 609. Td
+(- KubeFortress Compliance Pack \(2024\): FedRAMP and PCI-DSS policy bundles for KubeFortress. Used by 2) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 595.5 Td
+(government agencies and 14 fintechs \(self-reported via telemetry\).) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 582. Td
+(- Stratagem Cost Attribution Engine \(2022\): Internal FinOps tool. Saved $11.4M over two years. Open-sourced a) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 568.5 Td
+(slimmed-down version as kube-cost-explorer \(2,100 stars\).) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 555. Td
+(- Pinecrest Claims Pipeline \(2009 – 2010\): Enterprise claims processing platform. Processed 4.2M claims/yr at) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 541.5 Td
+(99.97% accuracy. Case study published in the Health Affairs blog.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 528. Td
+(- Lighthouse Document Dedup \(2012\): Bloom-filter + MinHash dedup system. Reduced index by 38%. Implemented) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 514.5 Td
+(in Java with Lucene plugin API.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 501. Td
+(- Helix Chaos Engineering Program \(2019\): Quarterly GameDay program covering 38 failure scenarios. Became) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 487.5 Td
+(template adopted by 4 other organizations publicly.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 460.5 Td
+(PUBLICATIONS) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 433.5 Td
+(- Hollingworth, M., Park, J., et al. "Cost-Aware Scheduling for Multi-Tenant Kubernetes Workloads." Proceedings of) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 420. Td
+(SOCC 2023. ACM.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 406.5 Td
+(- Hollingworth, M. "From Spark to Flink Without Tears: A Migration Postmortem." QCon 2020. InfoQ.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 393. Td
+(- Hollingworth, M., Krishnamurthy, A. "Content-Centric Routing in Tactical MANETs." IEEE INFOCOM Workshops) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 379.5 Td
+(2006.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 366. Td
+(- Hollingworth, M., et al. "VectorVault: A Distributed Approach to Embedding Storage." Strange Loop 2022.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 352.5 Td
+(- Hollingworth, M. "Engineering Culture at Scale." leadDev New York 2023. Keynote.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 339. Td
+(- Hollingworth, M., et al. "Sub-20ms Bidding at Internet Scale." Strange Loop 2016.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 325.5 Td
+(- Hollingworth, M., Wang, S. "Operationalizing Feature Stores." KubeCon NA 2022.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 312. Td
+(- Hollingworth, M. "Active-Active Multi-Cloud Without the Tears." re:Invent 2023. AWS.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 298.5 Td
+(- Hollingworth, M., et al. "Bloom Filters for Legal Document Deduplication." SIGIR 2013 Short Paper.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 285. Td
+(- Hollingworth, M., Krishnamurthy, A. "The Haggle Project: Year Two." ACM SIGCOMM CCR, Vol. 36, Issue 2, 2006.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 271.5 Td
+(- Hollingworth, M. "Observability at 4PB/Day: What We Learned at Helix." SREcon 2020 Americas.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 258. Td
+(- Hollingworth, M., et al. "Rust in Production: A Five-Year Retrospective." RustConf 2024.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 244.5 Td
+(- Hollingworth, M. "Engineering Ladders That Don't Lie." leadDev 2024. Talk.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 231. Td
+(- Hollingworth, M. "How to Run a Quarterly GameDay." SREcon EMEA 2021.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 217.5 Td
+(- Hollingworth, M., Tan, R. "FinOps for Engineers, Not CFOs." Continuous Lifecycle London 2023.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 204. Td
+(- Hollingworth, M., et al. "OPA Policy as Code: Lessons from KubeFortress." KubeCon EU 2024.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 190.5 Td
+(- Hollingworth, M. "The Boring Path to Reliability." Velocity San Jose 2019.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 177. Td
+(- Hollingworth, M. "Twelve Things I Wish I'd Known as a Tech Lead." QCon London 2018.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 163.5 Td
+(- Hollingworth, M., Krishnamurthy, A. "Evaluating Caching Strategies in Disruption-Tolerant Networks." IEEE MASS) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 150. Td
+(2005.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 123. Td
+(PATENTS) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 96. Td
+(- US Patent 11,431,902: "System and method for tiered storage tier migration in distributed database systems." Helix) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 82.5 Td
+(Data Systems. Issued September 2022.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 69. Td
+(- US Patent 10,956,841: "Real-time auction bidding engine with probabilistic bid shading." Vantage Ad Technologies.) Tj
+ET
+endstream
+endobj
+11 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 12 0 R
+>>
+endobj
+12 0 obj
+<<
+/Length 4716
+>>
+stream
+0.200025 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 744. Td
+(Issued March 2021.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 730.5 Td
+(- US Patent 11,089,217: "Vector embedding storage and retrieval using Raft-consensus-backed log-structured merge) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 717. Td
+(tree." VectorVault. Issued August 2021.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 703.5 Td
+(- US Patent 10,740,318: "Multi-region active-active failover with bounded recovery time." Vantage Ad Technologies.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 690. Td
+(Issued August 2020.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 676.5 Td
+(- US Patent 11,302,776: "Method and apparatus for content routing in opportunistic networks." MIT/Haggle. Issued) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 663. Td
+(April 2022.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 649.5 Td
+(- US Patent 11,558,544: "Kubernetes policy enforcement via OPA with differential reload." Stratagem Cloud. Issued) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 636. Td
+(January 2024.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 622.5 Td
+(- US Patent 11,803,651: "Stream processing engine with adaptive query plan rewriting." Helix Data Systems. Issued) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 609. Td
+(October 2023.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 582. Td
+(SPEAKING ENGAGEMENTS \(selected\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 555. Td
+(- QCon San Francisco 2024 — "Boring Platforms, Happy Teams" \(workshop\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 541.5 Td
+(- KubeCon NA 2024 — "Three Years of KubeFortress: What We Learned") Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 528. Td
+(- RustConf 2024 — "Rust in Production: A Five-Year Retrospective") Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 514.5 Td
+(- leadDev New York 2023 — Keynote, "Engineering Culture at Scale") Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 501. Td
+(- AWS re:Invent 2023 — "Active-Active Multi-Cloud Without the Tears") Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 487.5 Td
+(- Continuous Lifecycle London 2023 — "FinOps for Engineers, Not CFOs") Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 474. Td
+(- KubeCon NA 2022 — "Operationalizing Feature Stores") Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 460.5 Td
+(- Strange Loop 2022 — "VectorVault: A Distributed Approach to Embedding Storage") Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 447. Td
+(- SREcon EMEA 2021 — "How to Run a Quarterly GameDay") Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 433.5 Td
+(- SREcon Americas 2020 — "Observability at 4PB/Day: What We Learned at Helix") Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 420. Td
+(- QCon 2020 — "From Spark to Flink Without Tears" \(InfoQ top 10 talk of the year\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 406.5 Td
+(- Velocity San Jose 2019 — "The Boring Path to Reliability") Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 393. Td
+(- QCon London 2018 — "Twelve Things I Wish I'd Known as a Tech Lead") Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 379.5 Td
+(- Strange Loop 2016 — "Sub-20ms Bidding at Internet Scale") Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 366. Td
+(- ACM SIGCOMM 2006 — Co-author on Haggle workshop paper) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 339. Td
+(OPEN SOURCE) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 312. Td
+(- KubeFortress \(kubernetes-policy-engine\): Founder and core maintainer. 11,400 stars. CNCF Sandbox application) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 298.5 Td
+(2024. 187 contributors.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 285. Td
+(- StreamForge \(event-ingestion library, Rust\): Founder. 9,800 stars. Used in production by Cloudflare, Datadog, and) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 271.5 Td
+(others.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 258. Td
+(- VectorVault \(distributed vector DB\): Co-founder \(acquired by Pinecone 2022\). 9,200 stars at time of archival.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 244.5 Td
+(- kube-cost-explorer: Fork of internal Stratagem tool. 2,100 stars.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 231. Td
+(- otel-helix-exporter: OpenTelemetry exporter plugin for Helix-style metrics. 1,400 stars.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 217.5 Td
+(- Various smaller contributions to Kubernetes, OPA, Flink, and Rust standard library.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 190.5 Td
+(EDUCATION) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 163.5 Td
+(Master of Science in Computer Science) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 150. Td
+(Massachusetts Institute of Technology — Cambridge, MA) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 136.5 Td
+(September 2004 – June 2006) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 123. Td
+(Thesis: "Content-Centric Routing in Disruption-Tolerant Networks" \(advisor: Prof. Arvind Krishnamurthy\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 109.5 Td
+(GPA: 4.8/5.0) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 82.5 Td
+(Bachelor of Science in Computer Science, summa cum laude) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 69. Td
+(Brown University — Providence, RI) Tj
+ET
+endstream
+endobj
+13 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 14 0 R
+>>
+endobj
+14 0 obj
+<<
+/Length 2036
+>>
+stream
+0.200025 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 744. Td
+(September 2000 – May 2004) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 730.5 Td
+(Concentration in Distributed Systems; minor in Mathematics.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 717. Td
+(GPA: 3.94/4.0. Phi Beta Kappa. Senior thesis on Byzantine fault tolerance protocols.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 690. Td
+(SKILLS) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 663. Td
+(Programming Languages: Rust \(expert\), Go \(expert\), Python \(expert\), Java \(proficient\), C++ \(proficient\), TypeScript) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 649.5 Td
+(\(proficient\), SQL \(expert\), Bash \(expert\), C \(working\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 622.5 Td
+(Distributed Systems: Kubernetes, Docker, Istio, Envoy, etcd, Consul, ZooKeeper, Raft, Paxos, Kafka, Pulsar, NATS,) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 609. Td
+(Warpstream, Redis, Memcached, Cassandra, ScyllaDB, MongoDB, PostgreSQL, CockroachDB) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 582. Td
+(Data Infrastructure: Apache Flink, Apache Spark, Apache Beam, Trino, Presto, ClickHouse, Druid, Snowflake,) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 568.5 Td
+(BigQuery, dbt, Airflow, Dagster, Prefect, Spark Structured Streaming) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 541.5 Td
+(Observability: Prometheus, Grafana, OpenTelemetry, Datadog, Honeycomb, Tempo, Loki, Jaeger, Thanos, Cortex,) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 528. Td
+(VictoriaMetrics) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 501. Td
+(Cloud & Infrastructure: AWS \(Solutions Architect Professional certified 2019\), GCP \(Professional Cloud Architect) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 487.5 Td
+(certified 2021\), Azure, Terraform, Pulumi, Crossplane, ArgoCD, FluxCD, Helm, Kustomize) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 460.5 Td
+(ML Infrastructure: MLflow, Kubeflow, Ray, Tecton, Feast, Pinecone, Weaviate, Milvus, vLLM, Triton Inference Server,) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 447. Td
+(ONNX) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 420. Td
+(Security: OPA/Gatekeeper, Falco, Trivy, Snyk, SPIFFE/SPIRE,) Tj
+ET
+endstream
+endobj
+1 0 obj
+<</Type /Pages
+/Kids [3 0 R 5 0 R 7 0 R 9 0 R 11 0 R 13 0 R ]
+/Count 6
+>>
+endobj
+15 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+16 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+17 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+18 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+19 0 obj
+<<
+/Type /Font
+/BaseFont /Courier
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+20 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+21 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+22 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+23 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Roman
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+24 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+25 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Italic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+26 0 obj
+<<
+/Type /Font
+/BaseFont /Times-BoldItalic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+27 0 obj
+<<
+/Type /Font
+/BaseFont /ZapfDingbats
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+28 0 obj
+<<
+/Type /Font
+/BaseFont /Symbol
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+2 0 obj
+<<
+/ProcSet [/PDF /Text /ImageB /ImageC /ImageI]
+/Font <<
+/F1 15 0 R
+/F2 16 0 R
+/F3 17 0 R
+/F4 18 0 R
+/F5 19 0 R
+/F6 20 0 R
+/F7 21 0 R
+/F8 22 0 R
+/F9 23 0 R
+/F10 24 0 R
+/F11 25 0 R
+/F12 26 0 R
+/F13 27 0 R
+/F14 28 0 R
+>>
+/XObject <<
+>>
+>>
+endobj
+29 0 obj
+<<
+/Producer (jsPDF 4.2.1)
+/CreationDate (D:20260702222219+05'30')
+>>
+endobj
+30 0 obj
+<<
+/Type /Catalog
+/Pages 1 0 R
+/OpenAction [3 0 R /FitH null]
+/PageLayout /OneColumn
+>>
+endobj
+xref
+0 31
+0000000000 65535 f 
+0000028765 00000 n 
+0000030619 00000 n 
+0000000015 00000 n 
+0000000120 00000 n 
+0000005488 00000 n 
+0000005593 00000 n 
+0000011037 00000 n 
+0000011142 00000 n 
+0000015557 00000 n 
+0000015663 00000 n 
+0000021693 00000 n 
+0000021800 00000 n 
+0000026569 00000 n 
+0000026676 00000 n 
+0000028854 00000 n 
+0000028980 00000 n 
+0000029111 00000 n 
+0000029245 00000 n 
+0000029383 00000 n 
+0000029507 00000 n 
+0000029636 00000 n 
+0000029768 00000 n 
+0000029904 00000 n 
+0000030032 00000 n 
+0000030159 00000 n 
+0000030288 00000 n 
+0000030421 00000 n 
+0000030523 00000 n 
+0000030872 00000 n 
+0000030958 00000 n 
+trailer
+<<
+/Size 31
+/Root 30 0 R
+/Info 29 0 R
+/ID [ <53473C87580250D9F9A65306B3126F67> <53473C87580250D9F9A65306B3126F67> ]
+>>
+startxref
+31062
+%%EOF

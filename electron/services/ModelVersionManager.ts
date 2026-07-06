@@ -1178,13 +1178,13 @@ export class ModelVersionManager {
     lines.push('  --- Vision ---');
     for (const family of VISION_PROVIDER_ORDER) {
       const tiers = this.getTieredModels(family);
-      lines.push(`  ${family}: T1=${tiers.tier1} | T2/T3=${tiers.tier2}`);
+      lines.push(`  ${family}: T1=${tiers.tier1} | T2=${tiers.tier2} | T3=${tiers.tier3}`);
     }
 
     lines.push('  --- Text ---');
     for (const family of TEXT_PROVIDER_ORDER) {
       const tiers = this.getTextTieredModels(family);
-      lines.push(`  ${family}: T1=${tiers.tier1} | T2/T3=${tiers.tier2}`);
+      lines.push(`  ${family}: T1=${tiers.tier1} | T2=${tiers.tier2} | T3=${tiers.tier3}`);
     }
 
     // Show rollback availability (both vision and text)

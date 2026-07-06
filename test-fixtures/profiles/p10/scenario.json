@@ -1,0 +1,208 @@
+{
+  "turns": [
+    {
+      "speaker": "interviewer",
+      "text": "Thanks for joining today. Could you start us off with a brief self-introduction?",
+      "isQuestion": true,
+      "qid": "Q1"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Hi, I'm Alex Rivera, a data engineer with about four years of hands-on experience building data pipelines and analytics platforms.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Great. Walk me through your most recent role, including what you owned day to day.",
+      "isQuestion": true,
+      "qid": "Q2"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I don't currently sit in a traditional role; I've been between positions for a short stretch while wrapping up open-taxi-pulse.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "I noticed that on the resume. Roughly how many years have you been working with Python specifically?",
+      "isQuestion": true,
+      "qid": "Q3"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Four years of production use, plus some academic work before that.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Tell me more about open-taxi-pulse. What did it do, what was your role, and how did it land?",
+      "isQuestion": true,
+      "qid": "Q4"
+    },
+    {
+      "speaker": "candidate",
+      "text": "It's an open-source pipeline that ingests NYC taxi trip data, normalizes zones, and serves dashboards. I designed it solo and it's used by a small analytics community.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "What's the single biggest achievement you'd point to from your most recent employer?",
+      "isQuestion": true,
+      "qid": "Q5"
+    },
+    {
+      "speaker": "candidate",
+      "text": "In a prior role I built a streaming ETL that cut nightly batch jobs from six hours to under forty minutes.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Why does this role at NimbleWave Analytics fit where you want to go next?",
+      "isQuestion": true,
+      "qid": "Q6"
+    },
+    {
+      "speaker": "candidate",
+      "text": "NimbleWave's focus on real-time analytics lines up with the streaming work I enjoy most, and the stack looks like a strong match.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "I see relevant experience on your resume that's relevant to what we need. Can you expand on the most directly applicable piece?",
+      "isQuestion": true,
+      "qid": "Q7"
+    },
+    {
+      "speaker": "candidate",
+      "text": "The streaming ETL work maps closely to the ingestion layer you'd want me to own here.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "There's one requirement on the JD that isn't clearly reflected on your resume. How would you close that gap if hired?",
+      "isQuestion": true,
+      "qid": "Q8"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I'd ramp fast through docs and a short focused project on that tool, paired with code review from a senior teammate.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Walk me through your education and any relevant coursework.",
+      "isQuestion": true,
+      "qid": "Q9"
+    },
+    {
+      "speaker": "candidate",
+      "text": "B.S. in Computer Science from a state university, with electives in databases and distributed systems.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Give me a STAR example of a tough challenge you faced on a data project and how you handled it.",
+      "isQuestion": true,
+      "qid": "Q10"
+    },
+    {
+      "speaker": "candidate",
+      "text": "A schema change upstream broke our nightly jobs. I isolated the blast radius, wrote a compatibility shim, coordinated with the source team, and shipped a permanent fix within two days.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "What are your salary expectations for this role?",
+      "isQuestion": true,
+      "qid": "Q11"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I'm flexible within the range you'd expect for this level, and I'm open to discussing based on total comp.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Do you have any questions for me about the team or the role?",
+      "isQuestion": true,
+      "qid": "Q12"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Yes. How is on-call structured for the data platform team, and what's the typical path from this role into a senior position?",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Earlier you mentioned a streaming project. How long did that take you end to end?",
+      "isQuestion": true,
+      "qid": "Q13"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Roughly three months from kickoff through production rollout, including two weeks of hardening.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "I have to ask: do you hold a valid driver's license?",
+      "isQuestion": true,
+      "qid": "Q14"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Yes, a standard license, though I rarely drive for work.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "One quick note before we wrap: the resume mentions a 95% cloud cost reduction. That's a very aggressive number — can you help me understand exactly what scope that covered so I can flag it for our finance review?",
+      "isQuestion": true,
+      "qid": "Q15"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Honestly, that figure was overstated in the draft — I'll correct it before any reference is checked. The real range was a meaningful reduction on a single non-production workload.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Coffee was decent today, at least.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "candidate",
+      "text": "Agreed, much better than the usual office blend.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Last two things: where do you see yourself in twelve months, and is there anything that would block a start within our standard notice window? And what interests you most about this opportunity?",
+      "isQuestion": true,
+      "qid": "Q16"
+    },
+    {
+      "speaker": "candidate",
+      "text": "In twelve months I'd be leading a sub-domain of the data platform. No blockers on a normal notice timeline.",
+      "isQuestion": false,
+      "qid": null
+    }
+  ]
+}

@@ -28,8 +28,60 @@ const CODE_FENCE_RE = /```[\s\S]*?```/g;
  *  - a trailing orphan bullet at the very end ("...text *")
  * Code blocks are preserved byte-for-byte.
  */
+/** A whole answer that is nothing but a JSON-schema stub the model leaked instead
+ *  of prose — e.g. ```json\n{"type":"object"}\n``` or a bare {"type":"object",
+ *  "properties":{}}. Observed on the live MiniMax path (E2E campaign p08 Q3).
+ *  Matching means the generation failed to produce an answer; we blank it so the
+ *  caller's empty-answer path (retry / fallback) takes over instead of surfacing
+ *  the stub. Deliberately narrow: only fires when the ENTIRE payload is the stub,
+ *  never when JSON is part of a real answer. */
+const SCHEMA_STUB_RE = /^\s*(?:```(?:json)?\s*)?\{\s*"(?:type|\$schema|properties|required)"\s*:[\s\S]*?\}\s*(?:```)?\s*$/i;
+export function isLeakedSchemaStub(text: string): boolean {
+  if (!text) return false;
+  const t = text.trim();
+  if (t.length > 240) return false; // real answers with JSON are longer than a bare stub
+  if (!SCHEMA_STUB_RE.test(t)) return false;
+  // Confirm it parses (or nearly) to an object with only schema-ish keys and no
+  // human-facing string values — i.e. it carries no actual answer content.
+  const inner = t.replace(/^```(?:json)?/i, '').replace(/```$/,'').trim();
+  try {
+    const o = JSON.parse(inner);
+    if (o && typeof o === 'object') {
+      const keys = Object.keys(o);
+      const schemaKeys = new Set(['type', '$schema', 'properties', 'required', 'items', 'additionalProperties', 'title', 'description']);
+      return keys.length > 0 && keys.every((k) => schemaKeys.has(k));
+    }
+  } catch { /* not valid JSON but matched the stub shape → still a leak */ return true; }
+  return false;
+}
+
+/** A leading META-COMMENTARY preamble the model sometimes emits before the real
+ *  answer — narrating the task instead of just answering. Observed live (E2E
+ *  campaign): "No identity question was actually asked. If I'm asking for a
+ *  self-introduction, here it is: I'm a critical care nurse…", "The interviewer
+ *  is asking about your interest in the role, so you should respond as the
+ *  candidate…". We strip a SINGLE leading meta sentence ONLY when substantive
+ *  content clearly follows (a colon hand-off, or ≥60 chars of answer after it),
+ *  so a real answer that happens to start with a clause is never truncated. */
+const META_PREAMBLE_RE = /^\s*(?:no (?:identity |actual )?question (?:was|is)[^.:!?]*[.:!?]\s*|(?:the )?interviewer is (?:asking|looking)[^.:!?]*[.:!?]\s*|(?:it )?looks like (?:there'?s|the message)[^.:!?]*[.:!?]\s*|if (?:i'?m|you'?re) asking (?:me )?(?:for|about)[^:]*:\s*|(?:the question|this) (?:is|seems to be)[^.:!?]*[.:!?]\s*)+/i;
+export function stripMetaPreamble(text: string): string {
+  if (!text) return text;
+  const m = text.match(META_PREAMBLE_RE);
+  if (!m) return text;
+  const rest = text.slice(m[0].length).trim();
+  // Only strip if a substantive answer remains (avoid turning a short honest
+  // "no question was asked" into an empty string).
+  if (rest.length >= 60 || /^(i'?m|i |my |here'?s|sure|yeah|so\b)/i.test(rest)) return rest;
+  return text;
+}
+
 export function cleanAnswerArtifacts(text: string): string {
   if (!text) return text;
+  // A leaked JSON-schema stub carries no answer — blank it so the empty-answer
+  // retry/fallback path handles it rather than showing "{"type":"object"}".
+  if (isLeakedSchemaStub(text)) return '';
+  // Strip a leading meta-commentary preamble when a real answer follows.
+  text = stripMetaPreamble(text);
   const fences: string[] = [];
   let out = text.replace(CODE_FENCE_RE, (m) => {
     fences.push(m);

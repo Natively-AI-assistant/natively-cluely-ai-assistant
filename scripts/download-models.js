@@ -25,25 +25,21 @@ async function downloadModels() {
         console.log('[download-models] mobilebert-uncased-mnli downloaded.');
 
         // 3. Cross-encoder reranker (smart-retrieval Phase 1/3 — confidence-gated
-        //    rerank escalation). LocalReranker.ts loads this via
-        //    AutoModelForSequenceClassification + AutoTokenizer with
-        //    local_files_only in packaged builds, so it MUST be bundled here or
-        //    the rerank silently no-ops in production. The `text-classification`
-        //    pipeline fetches the same model + tokenizer files those Auto* APIs
-        //    read. Gated by the (default-OFF) ragLocalRerank flag at runtime, but
-        //    bundled unconditionally so flipping the flag needs no re-download.
-        //    Honors NATIVELY_RERANKER_MODEL so an override is bundled too.
-        const rerankerModel = (process.env.NATIVELY_RERANKER_MODEL || '').trim() || 'Xenova/bge-reranker-base';
-        const rerankerDtype = (process.env.NATIVELY_RERANKER_DTYPE || 'q8').trim() || 'q8';
-        console.log(`[download-models] Downloading reranker ${rerankerModel} (dtype=${rerankerDtype})...`);
-        // Fetch ONLY the quantized ONNX variant the runtime loads (LocalReranker
-        // uses dtype:'q8' → model_quantized.onnx, ~280MB) instead of the fp32
-        // model.onnx (~1.1GB) the generic pipeline() would pull, so the bundle
-        // stays small. Use the Auto* APIs with an explicit dtype to match.
-        const { AutoModelForSequenceClassification, AutoTokenizer } = await import('@huggingface/transformers');
-        await AutoTokenizer.from_pretrained(rerankerModel);
-        await AutoModelForSequenceClassification.from_pretrained(rerankerModel, { dtype: rerankerDtype });
-        console.log(`[download-models] ${rerankerModel} downloaded.`);
+        //    rerank escalation).
+        //
+        // 2026-07-06: NO LONGER bundled into resources/models/. The 266MB q8
+        // model now downloads on FIRST document-grounded mode activation via
+        // `electron/rag/rerankerDownloadProvider.ts` + `LocalModelDownloadService`.
+        // This shrinks the installer by ~283MB for the >80% of users who never
+        // invoke a custom document-grounded mode. The download is idempotent
+        // (ModesManager.prewarmModeReferenceIndex triggers it; rerank stays
+        // inert via the shared ONNX gate until the download completes).
+        //
+        // To pre-download the model into the user-data cache for offline
+        // testing/dev, run instead:
+        //   ELECTRON_RUN_AS_NODE=1 ./node_modules/.bin/electron \
+        //     -e "require('./dist-electron/electron/services/LocalModelDownloadService').LocalModelDownloadService.getInstance().start('reranker', 'Xenova/bge-reranker-base#q8')"
+        console.log('[download-models] Skipping reranker (lazy-downloaded on first mode activation; see rerankerDownloadProvider).');
 
         console.log('[download-models] All models downloaded successfully!');
     } catch (e) {

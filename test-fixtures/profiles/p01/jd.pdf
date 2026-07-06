@@ -1,0 +1,693 @@
+%PDF-1.3
+%ºß¬à
+3 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 4 0 R
+>>
+endobj
+4 0 obj
+<<
+/Length 5008
+>>
+stream
+0.200025 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 744. Td
+(Senior Staff Software Engineer, Core Infrastructure) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 717. Td
+(Company: Pillarstream, Inc.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 703.5 Td
+(Location: San Francisco, CA \(Hybrid, 3 days onsite\) or Remote \(US\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 690. Td
+(Team: Platform Engineering) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 676.5 Td
+(Reports to: Director of Distributed Systems) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 649.5 Td
+(About Pillarstream) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 622.5 Td
+(Pillarstream is a Series D infrastructure company building the data movement and orchestration layer for modern) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 609. Td
+(engineering teams. Our platform processes over 9 petabytes of event data daily and powers mission-critical pipelines) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 595.5 Td
+(for more than 400 customers, including four of the Fortune 50. Founded in 2018 by former engineers at Stripe,) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 582. Td
+(Confluent, and Google, we are a team of 220 and have raised $215M from Sequoia, Index Ventures, and Greylock.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 568.5 Td
+(We move fast, ship often, and care deeply about reliability because our customers depend on us for workloads they) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 555. Td
+(cannot afford to lose.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 528. Td
+(The Role) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 501. Td
+(We are hiring a Senior Staff Software Engineer to join the Core Infrastructure group, the team responsible for the) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 487.5 Td
+(control plane, multi-tenant scheduler, and storage substrate that every other product at Pillarstream is built on. This is) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 474. Td
+(a hands-on technical leadership role: you will design and ship large-scale distributed systems, drive cross-team) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 460.5 Td
+(technical initiatives, set engineering standards for reliability and operability, and serve as a primary on-call leader) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 447. Td
+(during major incidents.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 420. Td
+(You will work closely with the CTO, engineering leadership, and senior engineers across Product, SRE, and Security) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 406.5 Td
+(to evolve a system that already handles tens of thousands of concurrent workflows per second and is growing rapidly.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 379.5 Td
+(What You Will Do) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 352.5 Td
+(- Lead the design and implementation of core distributed systems components, including our multi-tenant workflow) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 339. Td
+(scheduler, stateful job queue, and metadata service.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 325.5 Td
+(- Own the reliability and performance posture of services you and your team build, including SLO definition, capacity) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 312. Td
+(planning, and incident response.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 298.5 Td
+(- Drive technical strategy across the Platform org, producing RFCs and architectural documents reviewed by) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 285. Td
+(engineering leadership.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 271.5 Td
+(- Mentor staff and senior engineers, perform design reviews, and raise the technical bar through code review and) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 258. Td
+(pairing.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 244.5 Td
+(- Participate in the on-call rotation as a primary escalation point \(PagerDuty, roughly one week every six to eight) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 231. Td
+(weeks\), leading incident command during severe outages.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 217.5 Td
+(- Partner with Product and SRE to translate customer needs into platform capabilities, and with Security to maintain) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 204. Td
+(SOC 2 and FedRAMP-aligned controls.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 190.5 Td
+(- Identify and drive cost-efficiency initiatives across compute, storage, and network usage.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 163.5 Td
+(What We Are Looking For) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 136.5 Td
+(- 8 or more years of professional software engineering experience, with at least 4 years building production) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 123. Td
+(distributed systems at scale.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 109.5 Td
+(- Deep expertise in Go or Java, including concurrency primitives, memory and GC behavior, and performance tuning.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 96. Td
+(- Strong systems fundamentals: consensus protocols, distributed transactions, consistent hashing, failure detection,) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 82.5 Td
+(and exactly-once or at-least-once delivery semantics.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 69. Td
+(- Hands-on experience operating Kubernetes in production, including custom controllers, operators, and admission) Tj
+ET
+endstream
+endobj
+5 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 6 0 R
+>>
+endobj
+6 0 obj
+<<
+/Length 2535
+>>
+stream
+0.200025 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 744. Td
+(webhooks.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 730.5 Td
+(- Demonstrated track record of leading complex technical projects across multiple teams, from RFC through rollout.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 717. Td
+(- Proven ability to lead during production incidents, coordinate across teams, and drive blameless post-mortems.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 703.5 Td
+(- Excellent written communication; you can produce clear architectural documents and technical specs.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 676.5 Td
+(Nice to Have) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 649.5 Td
+(- Experience with control plane systems, schedulers, or workflow engines \(Airflow, Temporal, Argo, Cadence, or) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 636. Td
+(similar\).) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 622.5 Td
+(- Familiarity with gRPC, Protocol Buffers, Apache Kafka, and modern observability stacks \(OpenTelemetry,) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 609. Td
+(Prometheus, Grafana, Tempo\).) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 595.5 Td
+(- Contributions to open source infrastructure projects.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 582. Td
+(- Experience with multi-region active-active deployments, cross-region replication, or cell-based architectures.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 568.5 Td
+(- Background in regulated environments \(SOC 2, HIPAA, FedRAMP\) or in building platforms that serve other) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 555. Td
+(engineering teams internally.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 528. Td
+(Compensation and Benefits) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 501. Td
+(- Base salary range: $245,000 to $310,000, plus meaningful equity in a Series D company.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 487.5 Td
+(- Comprehensive medical, dental, and vision coverage, with premiums fully covered for employees and 80% for) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 474. Td
+(dependents.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 460.5 Td
+(- 401\(k\) with 4% match, unlimited PTO with a 20-day minimum, paid parental leave \(16 weeks\), and a $2,500 annual) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 447. Td
+(learning stipend.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 433.5 Td
+(- Top-tier home office setup, quarterly team offsites, and a commuter benefits program.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 406.5 Td
+(Pillarstream is an equal opportunity employer. We celebrate diversity and are committed to building an inclusive) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 393. Td
+(environment for all employees.) Tj
+ET
+endstream
+endobj
+1 0 obj
+<</Type /Pages
+/Kids [3 0 R 5 0 R ]
+/Count 2
+>>
+endobj
+7 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+8 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+9 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+10 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+11 0 obj
+<<
+/Type /Font
+/BaseFont /Courier
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+12 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+13 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+14 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+15 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Roman
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+16 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+17 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Italic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+18 0 obj
+<<
+/Type /Font
+/BaseFont /Times-BoldItalic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+19 0 obj
+<<
+/Type /Font
+/BaseFont /ZapfDingbats
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+20 0 obj
+<<
+/Type /Font
+/BaseFont /Symbol
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+2 0 obj
+<<
+/ProcSet [/PDF /Text /ImageB /ImageC /ImageI]
+/Font <<
+/F1 7 0 R
+/F2 8 0 R
+/F3 9 0 R
+/F4 10 0 R
+/F5 11 0 R
+/F6 12 0 R
+/F7 13 0 R
+/F8 14 0 R
+/F9 15 0 R
+/F10 16 0 R
+/F11 17 0 R
+/F12 18 0 R
+/F13 19 0 R
+/F14 20 0 R
+>>
+/XObject <<
+>>
+>>
+endobj
+21 0 obj
+<<
+/Producer (jsPDF 4.2.1)
+/CreationDate (D:20260702220907+05'30')
+>>
+endobj
+22 0 obj
+<<
+/Type /Catalog
+/Pages 1 0 R
+/OpenAction [3 0 R /FitH null]
+/PageLayout /OneColumn
+>>
+endobj
+xref
+0 23
+0000000000 65535 f 
+0000007872 00000 n 
+0000009697 00000 n 
+0000000015 00000 n 
+0000000120 00000 n 
+0000005180 00000 n 
+0000005285 00000 n 
+0000007935 00000 n 
+0000008060 00000 n 
+0000008190 00000 n 
+0000008323 00000 n 
+0000008461 00000 n 
+0000008585 00000 n 
+0000008714 00000 n 
+0000008846 00000 n 
+0000008982 00000 n 
+0000009110 00000 n 
+0000009237 00000 n 
+0000009366 00000 n 
+0000009499 00000 n 
+0000009601 00000 n 
+0000009947 00000 n 
+0000010033 00000 n 
+trailer
+<<
+/Size 23
+/Root 22 0 R
+/Info 21 0 R
+/ID [ <7AA9A961E205E2ACFC3678BF12385878> <7AA9A961E205E2ACFC3678BF12385878> ]
+>>
+startxref
+10137
+%%EOF

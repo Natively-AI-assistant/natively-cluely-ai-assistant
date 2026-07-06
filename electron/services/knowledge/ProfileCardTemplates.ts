@@ -249,6 +249,34 @@ export function buildResumeCardDrafts(
     });
   }
 
+  // 6b) leadership — one card per entry. leadership[] is real resume content
+  // that is NOT a full-time role, so it never enters experience[]. Without a
+  // dedicated card it stays out of knowledge_cards entirely, making it
+  // invisible to retrieval — an org-named question ("your role at SEDS CUSAT")
+  // then fabricates a denial of a role the candidate actually held.
+  for (const lead of arr(resume?.leadership)) {
+    const l = lead as any;
+    const role = str(l.role);
+    const org = str(l.organization);
+    const desc = str(l.description);
+    if (!role && !org) continue;
+    const title = role && org ? `${role} at ${org}` : (role || org || 'Leadership');
+    const { slug, conceptId } = slugIn(CANDIDATE_DIR, `leadership-${org || role}`);
+    const bodyLines: string[] = [];
+    if (role && org) bodyLines.push(`${role} at ${org}.`);
+    else if (title) bodyLines.push(`${title}.`);
+    if (desc) bodyLines.push(desc);
+    drafts.push({
+      type: 'candidate_leadership', title, bundleDir: CANDIDATE_DIR, slug, conceptId,
+      body: capBody(bodyLines.join('\n') || title),
+      sourceQuotes: [quote(desc || title, 'leadership')].concat(org ? [quote(org, 'leadership')] : []),
+      entities: [org, role].filter(Boolean),
+      tags: ['leadership', org].filter(Boolean),
+      confidence: desc ? 'high' : 'medium',
+      generatedFrom: 'structured_profile', sourceCategory: 'leadership',
+    });
+  }
+
   // 7) skills — one card per non-empty category
   const skills = (resume?.skills && typeof resume.skills === 'object') ? resume.skills : {};
   for (const category of Object.keys(skills)) {

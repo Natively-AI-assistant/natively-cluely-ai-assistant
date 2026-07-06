@@ -1,0 +1,201 @@
+MARGARET E. HOLLINGSWORTH
+marg.hollingworth@protonmail.com | (415) 555-0182 | San Francisco, CA
+LinkedIn: linkedin.com/in/marghollingworth-eng | GitHub: github.com/mhollingworth
+Portfolio: marghollingworth.dev
+
+PROFESSIONAL SUMMARY
+
+Distinguished engineering leader with 18 years of experience scaling distributed systems, infrastructure platforms, and high-performance data pipelines at companies ranging from Series B startups to Fortune 50 enterprises. Recognized authority on event-driven architectures, Kubernetes-native platforms, and applied machine learning infrastructure. Track record of building and leading organizations of up to 240 engineers, owning platform budgets exceeding $48M annually, and shipping systems that handle 14 billion events per day at sub-50ms p99 latency. Holder of 7 issued US patents, author of 19 peer-reviewed publications, and frequent speaker at QCon, KubeCon, Strange Loop, and re:Invent. Core maintainer of three CNCF-adjacent open-source projects with a combined 31,000 GitHub stars. Passionate about engineering culture, technical mentorship, and the unglamorous work of making systems boring.
+
+WORK EXPERIENCE
+
+VP of Platform Engineering
+Stratagem Cloud, Inc. — San Francisco, CA
+March 2021 – Present
+
+Stratagem Cloud is a developer infrastructure startup (Series D, 480 employees) building a unified multi-cloud orchestration plane. Raised $312M from Sequoia, Andreessen Horowitz, and Insight Partners. Own platform engineering, SRE, data infrastructure, and developer experience organizations totaling 187 people across four time zones.
+
+- Hired and scaled the platform engineering org from 14 to 187 engineers, SREs, and ML systems specialists over four years; personally recruited the directors of SRE, data platform, and developer experience.
+- Led the architectural redesign of the company's flagship orchestration product from a monolithic Go service into 47 Kubernetes-native microservices, reducing customer onboarding time from 11 weeks to 38 minutes and cutting infrastructure cost per tenant by 71%.
+- Authored the technical strategy for Stratagem's multi-region active-active architecture spanning AWS, GCP, and Azure, supporting 9,200 enterprise customers with automated failover measured at 14 seconds RTO and zero RPO.
+- Drove the company's migration from self-managed Kafka to a fully managed and tuned Warpstream deployment, reducing Kafka-related pager incidents by 94% and saving $2.1M annually in cloud egress.
+- Established the ML Platform group from scratch; shipped an internal feature store and model serving stack that reduced ML model deployment cycle time from 6 weeks to 4 hours.
+- Own the annual platform budget of $48.3M; implemented FinOps practices and showback/chargeback tooling that produced $11.4M in verified savings across two fiscal years.
+- Sponsor of the company's internal Engineering Brand program; coach for 14 senior engineers in the promotion pipeline, with 9 promotions to Staff and above during tenure.
+- Co-authored RFC-0042 (Stratagem's engineering governance framework) which standardized RFC, ADR, and design review processes company-wide.
+
+Director of Distributed Systems
+Helix Data Systems — Palo Alto, CA
+August 2017 – February 2021
+
+Helix Data Systems builds real-time analytics infrastructure for e-commerce and ad-tech customers. Public company (NYSE: HLX), 1,900 employees. Managed a 64-person organization across streaming infrastructure, query engine, and observability platform.
+
+- Led the team that built Helix's StreamQL query engine on top of Apache Flink, achieving 11x throughput improvement and 6x latency reduction versus the legacy Spark Streaming implementation.
+- Owned the design and rollout of Helix's tiered storage architecture across S3, Glacier, and local NVMe; storage cost per terabyte dropped from $23 to $4.10 while sustaining 99.99% durability.
+- Built and shipped the Helix Observability Suite (HOS), an OpenTelemetry-native observability platform serving 4.3PB of metrics daily across 2,400 customer deployments.
+- Hired the founding staff for Helix's Seattle office, growing from 0 to 31 engineers in 14 months.
+- Partnered with the CISO on a zero-trust network architecture migration completed ahead of schedule, saving an estimated $3.8M in potential breach exposure per the IBM Cost of a Data Breach report.
+- Authored the technical playbook adopted company-wide for chaos engineering, including the first quarterly GameDay program covering 38 production failure scenarios.
+- Promoted from Senior Manager to Director in March 2019; awarded Helix's Distinguished Engineering Leadership Award in 2020.
+
+Principal Engineer & Tech Lead, Real-Time Bidding Platform
+Vantage Ad Technologies — Mountain View, CA
+June 2014 – July 2017
+
+Vantage Ad Technologies operates a real-time bidding (RTB) ad exchange serving 380 billion bid requests per day. Pre-IPO growth-stage company, 1,100 employees at time of departure. Tech lead for the auction engine team of 23 engineers.
+
+- Architected and led the rewrite of Vantage's auction engine from a C++ monolith into a Rust-based micro-kernel architecture, raising peak bid throughput from 1.4M QPS to 6.8M QPS while cutting p99 auction latency from 92ms to 17ms.
+- Designed the bidder feedback loop system that increased fill rate by 22% and added an estimated $84M in annualized revenue, cited in Vantage's S-1 filing.
+- Built Vantage's first internal feature engineering pipeline for bidder ML models, reducing model retraining time from 36 hours to 90 minutes.
+- Created the engineering onboarding curriculum for new hires; median time-to-first-merged-PR dropped from 38 days to 11 days.
+- Mentored 9 engineers who were subsequently promoted to Senior Engineer or Tech Lead during tenure.
+- Co-inventor on 4 of the 7 patents filed during Vantage's IPO preparation period.
+
+Staff Engineer, Search Infrastructure
+Lighthouse Search — Kirkland, WA
+March 2011 – May 2014
+
+Lighthouse Search was a vertical search engine for the legal industry, acquired by LexisNexis in 2014 (undisclosed, reported between $140M-$180M). 320 employees. Founding member of the search infrastructure team.
+
+- Designed and implemented Lighthouse's distributed web crawler, indexing 2.1 billion legal documents and 410 million court opinions across 50 jurisdictions.
+- Built the relevance scoring pipeline using Lucene, Solr, and custom-trained gradient-boosted models; nDCG@10 improved by 31% over the prior TF-IDF baseline.
+- Authored the document deduplication system that reduced the index footprint by 38% while preserving coverage of long-tail legal content.
+- Created Lighthouse's first SLA monitoring system; achieved and maintained 99.95% availability for 26 consecutive months.
+- Led the technical integration into LexisNexis post-acquisition, ensuring continuity of service for 47,000 paying subscribers.
+
+Senior Software Engineer
+Pinecrest Software Group — Portland, OR
+August 2008 – February 2011
+
+Pinecrest was a 90-person consulting firm building bespoke enterprise software for healthcare, insurance, and logistics clients. Senior IC role with mentorship responsibilities.
+
+- Tech lead for a 6-engineer team that built a claims processing platform for a regional health insurer, processing 4.2 million claims annually with 99.97% accuracy against manual audit.
+- Built a HIPAA-compliant patient intake portal serving 180,000 registered patients across 22 clinics.
+- Designed the ETL pipeline for a logistics client integrating data from 14 disparate warehouse management systems into a unified reporting dashboard.
+- Mentored 4 junior engineers; two were promoted to mid-level during the engagement.
+
+Software Engineer
+Granite Ridge Technologies — Boston, MA
+July 2006 – July 2008
+
+Granite Ridge was a defense contractor building embedded software for naval radar systems. First professional role after graduate school.
+
+- Implemented signal processing algorithms in C and C++ for the AN/SPY-1 derivative radar test suite.
+- Maintained the real-time operating system layer (VxWorks) integration on PowerPC hardware.
+- Wrote the test harness adopted company-wide for hardware-in-the-loop integration testing.
+
+Software Engineering Intern
+Northbridge Telecom — Waltham, MA
+May 2005 – August 2005
+
+Software Engineering Intern on the SS7 signaling protocol stack team. Implemented a SIP-to-SS7 interworking gateway in C++ and contributed to the call routing subsystem. Selected from 1,400 applicants for the summer program.
+
+Graduate Research Assistant
+MIT Computer Science and Artificial Intelligence Laboratory (CSAIL) — Cambridge, MA
+September 2004 – June 2006
+
+Research assistant under Prof. Arvind Krishnamurthy in the Networks and Mobile Systems group. Worked on the Haggle content-centric networking project and co-authored two papers.
+
+SELECTED PROJECTS
+
+- KubeFortress (2023 – Present): Open-source Kubernetes policy engine with OPA/Gatekeeper backend. 11,400 GitHub stars, 187 contributors. CNCF Sandbox application submitted 2024. My role: founder and core maintainer.
+- StreamForge (2020 – Present): High-throughput event ingestion library in Rust. 9,800 GitHub stars. Powers production pipelines at 4 companies I am aware of (Cloudflare, Datadog, two undisclosed fintechs). Adopted as the ingestion layer for Stratagem's edge product.
+- VectorVault (2019 – 2022): Distributed vector database built on Raft and RocksDB. 9,200 GitHub stars. Co-founded with two former Helix colleagues. Successfully exited via acquisition by Pinecone (terms undisclosed, reported 2022).
+- PulseNet Telemetry Pipeline (2022): Internal project at Stratagem. Handles 14 billion events per day at sub-50ms p99. Written up as a case study by the CNCF in 2023.
+- Helix StreamQL Engine (2018 – 2020): Production query engine at Helix Data Systems. 11x throughput over predecessor. Detailed in the QCon 2020 talk "From Spark to Flink Without Tears."
+- Vantage Auction Micro-Kernel (2015 – 2017): Rust-based auction engine at 6.8M QPS. Subject of the Strange Loop 2016 talk "Sub-20ms Bidding at Internet Scale."
+- Lighthouse Relevance Pipeline (2011 – 2014): Custom ML pipeline for legal vertical search. nDCG@10 improved 31%. Basis of the SIGIR 2013 short paper.
+- KubeFortress Compliance Pack (2024): FedRAMP and PCI-DSS policy bundles for KubeFortress. Used by 2 government agencies and 14 fintechs (self-reported via telemetry).
+- Stratagem Cost Attribution Engine (2022): Internal FinOps tool. Saved $11.4M over two years. Open-sourced a slimmed-down version as kube-cost-explorer (2,100 stars).
+- Pinecrest Claims Pipeline (2009 – 2010): Enterprise claims processing platform. Processed 4.2M claims/yr at 99.97% accuracy. Case study published in the Health Affairs blog.
+- Lighthouse Document Dedup (2012): Bloom-filter + MinHash dedup system. Reduced index by 38%. Implemented in Java with Lucene plugin API.
+- Helix Chaos Engineering Program (2019): Quarterly GameDay program covering 38 failure scenarios. Became template adopted by 4 other organizations publicly.
+
+PUBLICATIONS
+
+- Hollingworth, M., Park, J., et al. "Cost-Aware Scheduling for Multi-Tenant Kubernetes Workloads." Proceedings of SOCC 2023. ACM.
+- Hollingworth, M. "From Spark to Flink Without Tears: A Migration Postmortem." QCon 2020. InfoQ.
+- Hollingworth, M., Krishnamurthy, A. "Content-Centric Routing in Tactical MANETs." IEEE INFOCOM Workshops 2006.
+- Hollingworth, M., et al. "VectorVault: A Distributed Approach to Embedding Storage." Strange Loop 2022.
+- Hollingworth, M. "Engineering Culture at Scale." leadDev New York 2023. Keynote.
+- Hollingworth, M., et al. "Sub-20ms Bidding at Internet Scale." Strange Loop 2016.
+- Hollingworth, M., Wang, S. "Operationalizing Feature Stores." KubeCon NA 2022.
+- Hollingworth, M. "Active-Active Multi-Cloud Without the Tears." re:Invent 2023. AWS.
+- Hollingworth, M., et al. "Bloom Filters for Legal Document Deduplication." SIGIR 2013 Short Paper.
+- Hollingworth, M., Krishnamurthy, A. "The Haggle Project: Year Two." ACM SIGCOMM CCR, Vol. 36, Issue 2, 2006.
+- Hollingworth, M. "Observability at 4PB/Day: What We Learned at Helix." SREcon 2020 Americas.
+- Hollingworth, M., et al. "Rust in Production: A Five-Year Retrospective." RustConf 2024.
+- Hollingworth, M. "Engineering Ladders That Don't Lie." leadDev 2024. Talk.
+- Hollingworth, M. "How to Run a Quarterly GameDay." SREcon EMEA 2021.
+- Hollingworth, M., Tan, R. "FinOps for Engineers, Not CFOs." Continuous Lifecycle London 2023.
+- Hollingworth, M., et al. "OPA Policy as Code: Lessons from KubeFortress." KubeCon EU 2024.
+- Hollingworth, M. "The Boring Path to Reliability." Velocity San Jose 2019.
+- Hollingworth, M. "Twelve Things I Wish I'd Known as a Tech Lead." QCon London 2018.
+- Hollingworth, M., Krishnamurthy, A. "Evaluating Caching Strategies in Disruption-Tolerant Networks." IEEE MASS 2005.
+
+PATENTS
+
+- US Patent 11,431,902: "System and method for tiered storage tier migration in distributed database systems." Helix Data Systems. Issued September 2022.
+- US Patent 10,956,841: "Real-time auction bidding engine with probabilistic bid shading." Vantage Ad Technologies. Issued March 2021.
+- US Patent 11,089,217: "Vector embedding storage and retrieval using Raft-consensus-backed log-structured merge tree." VectorVault. Issued August 2021.
+- US Patent 10,740,318: "Multi-region active-active failover with bounded recovery time." Vantage Ad Technologies. Issued August 2020.
+- US Patent 11,302,776: "Method and apparatus for content routing in opportunistic networks." MIT/Haggle. Issued April 2022.
+- US Patent 11,558,544: "Kubernetes policy enforcement via OPA with differential reload." Stratagem Cloud. Issued January 2024.
+- US Patent 11,803,651: "Stream processing engine with adaptive query plan rewriting." Helix Data Systems. Issued October 2023.
+
+SPEAKING ENGAGEMENTS (selected)
+
+- QCon San Francisco 2024 — "Boring Platforms, Happy Teams" (workshop)
+- KubeCon NA 2024 — "Three Years of KubeFortress: What We Learned"
+- RustConf 2024 — "Rust in Production: A Five-Year Retrospective"
+- leadDev New York 2023 — Keynote, "Engineering Culture at Scale"
+- AWS re:Invent 2023 — "Active-Active Multi-Cloud Without the Tears"
+- Continuous Lifecycle London 2023 — "FinOps for Engineers, Not CFOs"
+- KubeCon NA 2022 — "Operationalizing Feature Stores"
+- Strange Loop 2022 — "VectorVault: A Distributed Approach to Embedding Storage"
+- SREcon EMEA 2021 — "How to Run a Quarterly GameDay"
+- SREcon Americas 2020 — "Observability at 4PB/Day: What We Learned at Helix"
+- QCon 2020 — "From Spark to Flink Without Tears" (InfoQ top 10 talk of the year)
+- Velocity San Jose 2019 — "The Boring Path to Reliability"
+- QCon London 2018 — "Twelve Things I Wish I'd Known as a Tech Lead"
+- Strange Loop 2016 — "Sub-20ms Bidding at Internet Scale"
+- ACM SIGCOMM 2006 — Co-author on Haggle workshop paper
+
+OPEN SOURCE
+
+- KubeFortress (kubernetes-policy-engine): Founder and core maintainer. 11,400 stars. CNCF Sandbox application 2024. 187 contributors.
+- StreamForge (event-ingestion library, Rust): Founder. 9,800 stars. Used in production by Cloudflare, Datadog, and others.
+- VectorVault (distributed vector DB): Co-founder (acquired by Pinecone 2022). 9,200 stars at time of archival.
+- kube-cost-explorer: Fork of internal Stratagem tool. 2,100 stars.
+- otel-helix-exporter: OpenTelemetry exporter plugin for Helix-style metrics. 1,400 stars.
+- Various smaller contributions to Kubernetes, OPA, Flink, and Rust standard library.
+
+EDUCATION
+
+Master of Science in Computer Science
+Massachusetts Institute of Technology — Cambridge, MA
+September 2004 – June 2006
+Thesis: "Content-Centric Routing in Disruption-Tolerant Networks" (advisor: Prof. Arvind Krishnamurthy)
+GPA: 4.8/5.0
+
+Bachelor of Science in Computer Science, summa cum laude
+Brown University — Providence, RI
+September 2000 – May 2004
+Concentration in Distributed Systems; minor in Mathematics.
+GPA: 3.94/4.0. Phi Beta Kappa. Senior thesis on Byzantine fault tolerance protocols.
+
+SKILLS
+
+Programming Languages: Rust (expert), Go (expert), Python (expert), Java (proficient), C++ (proficient), TypeScript (proficient), SQL (expert), Bash (expert), C (working)
+
+Distributed Systems: Kubernetes, Docker, Istio, Envoy, etcd, Consul, ZooKeeper, Raft, Paxos, Kafka, Pulsar, NATS, Warpstream, Redis, Memcached, Cassandra, ScyllaDB, MongoDB, PostgreSQL, CockroachDB
+
+Data Infrastructure: Apache Flink, Apache Spark, Apache Beam, Trino, Presto, ClickHouse, Druid, Snowflake, BigQuery, dbt, Airflow, Dagster, Prefect, Spark Structured Streaming
+
+Observability: Prometheus, Grafana, OpenTelemetry, Datadog, Honeycomb, Tempo, Loki, Jaeger, Thanos, Cortex, VictoriaMetrics
+
+Cloud & Infrastructure: AWS (Solutions Architect Professional certified 2019), GCP (Professional Cloud Architect certified 2021), Azure, Terraform, Pulumi, Crossplane, ArgoCD, FluxCD, Helm, Kustomize
+
+ML Infrastructure: MLflow, Kubeflow, Ray, Tecton, Feast, Pinecone, Weaviate, Milvus, vLLM, Triton Inference Server, ONNX
+
+Security: OPA/Gatekeeper, Falco, Trivy, Snyk, SPIFFE/SPIRE,

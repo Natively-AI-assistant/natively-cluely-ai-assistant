@@ -1,0 +1,50 @@
+Jordan Avery Mitchell
+jmitchell.cs@outlook.com | (512) 555-0148 | linkedin.com/in/jordanmitchelldev | github.com/jmitchell-dev | Austin, TX
+
+SUMMARY
+Recent Bachelor of Science in Computer Science graduate from the University of Texas at Austin with hands-on experience building full-stack web applications and machine-learning models through coursework and self-directed projects. Strong foundation in Python, JavaScript, and data structures. Hackathon winner with demonstrated ability to ship working software under tight deadlines. Seeking an entry-level software engineer role where I can contribute to backend or full-stack development.
+
+EDUCATION
+University of Texas at Austin, Austin, TX
+Bachelor of Science in Computer Science, Minor in Mathematics
+GPA: 3.78/4.0 | Expected May 2025
+Relevant Coursework: Data Structures and Algorithms, Algorithms Design and Analysis, Operating Systems, Database Systems, Computer Networks, Software Engineering, Machine Learning, Web Development, Linear Algebra, Discrete Mathematics, Cloud Computing Fundamentals
+Honors: Dean's List (Fall 2023, Spring 2024, Fall 2024); recipient of the UT CS Departmental Scholarship ($2,500/yr)
+
+PROJECTS
+
+BookSwap — Peer-to-Peer Campus Textbook Exchange Platform (React, Node.js, PostgreSQL)
+github.com/jmitchell-dev/bookswap | January 2025 – April 2025
+- Built and deployed a full-stack web app used by 84 UT Austin students to list, search, and request textbooks across 7 departments during a 4-week beta.
+- Implemented JWT-based authentication, bcrypt password hashing, and role-based access control for 3 user roles (buyer, seller, admin) using Express middleware.
+- Designed a normalized PostgreSQL schema with 6 tables and 11 indexes, cutting average listing-search latency from 420ms to 95ms on a dataset of 1,200 seeded books.
+- Integrated the Stripe Test API for hold-and-release payments and Twilio SMS for in-app messaging between buyers and sellers.
+
+CropYield — CNN-Based Crop Yield Prediction (Python, PyTorch, Pandas)
+github.com/jmitchell-dev/cropyield | September 2024 – December 2024
+- Trained a ResNet-50 model on 18,000 satellite images from the USDA Sentinel-2 dataset to predict county-level corn yield with a final test MAE of 8.2 bushels/acre (R^2 = 0.81).
+- Built a Flask dashboard with Plotly visualizations that let agronomy researchers filter predictions by date range, county, and confidence threshold.
+- Preprocessed 4 years of weather and soil data (12 GB) using Pandas and saved 40% of pipeline runtime by switching to Dask for parallel ingestion.
+
+TaskOrbit — CLI Task and Habit Manager (Go, SQLite)
+github.com/jmitchell-dev/taskorbit | June 2024 – July 2024
+- Developed a command-line habit and task tracker in Go backed by a local SQLite database, supporting recurring rules, streaks, and JSON-based export/import.
+- Wrote 42 unit tests (testify) achieving 91% line coverage; integrated the suite into a GitHub Actions CI workflow that runs on every push and PR.
+- Published v1.0.0 on Homebrew tap; reached 230+ installations across macOS and Linux in the first 6 weeks.
+
+ACHIEVEMENTS
+HackTX 2024 — 1st Place, Education Track (out of 62 teams), Austin, TX | November 2024
+- Led a 4-person team that built "LectureLoop," an AI-powered lecture summarizer using Whisper for transcription and GPT-4 for key-point extraction, in 24 hours.
+- Built the React frontend and the FastAPI backend; the demo processed a 50-minute sample lecture and surfaced 12 timestamped summaries with 94% judged accuracy.
+- Presented to a panel of 5 judges including engineers from Google and Atlassian; awarded $1,500 in prizes.
+
+SKILLS
+Languages: Python, JavaScript (ES6+), TypeScript, Java, Go, SQL, HTML/CSS
+Frameworks/Tools: React, Node.js, Express, Flask, FastAPI, PyTorch, Pandas, NumPy, Git, Docker, PostgreSQL, SQLite, MongoDB, Tailwind CSS
+Cloud/DevOps: AWS (S3, EC2, Lambda basics), GitHub Actions, Vercel, Render, Linux CLI
+Practices: REST API design, unit/integration testing (Jest, Pytest, testify), Agile workflows, code review, technical documentation
+
+ACTIVITIES
+Association for Computing Machinery (ACM) UT Austin Chapter — Member (Fall 2022 – Spring 2025)
+Longhorn Coding Club — Member (Spring 2023 – Spring 2025)
+Volunteer, Code2College weekend workshop for high-school students (October 2024)

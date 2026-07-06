@@ -1,0 +1,894 @@
+%PDF-1.3
+%ºß¬à
+3 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 4 0 R
+>>
+endobj
+4 0 obj
+<<
+/Length 5094
+>>
+stream
+0.200025 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 744. Td
+(ARJUN MEHTA) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 730.5 Td
+(Senior Machine Learning Engineer) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 717. Td
+(Bangalore, Karnataka, India | +91-98453-22108 | arjun.mehta.iitb@gmail.com | linkedin.com/in/arjunmehta-ml |) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 703.5 Td
+(github.com/arjunm-iitb) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 676.5 Td
+(SUMMARY) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 649.5 Td
+(Machine learning engineer with 5 years of experience building production ML systems across recommendation, NLP,) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 636. Td
+(and computer vision. Shipped models that served over 40 million monthly active users across fintech and) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 622.5 Td
+(e-commerce platforms. Strong background in large-scale training pipelines, feature engineering, and A/B) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 609. Td
+(experimentation. Seeking senior ML engineer roles in the United States; will require H-1B visa sponsorship from the) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 595.5 Td
+(prospective employer. Compensation expectation in the range of INR 65-75 lakhs per annum for India-based roles,) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 582. Td
+(with flexibility to align with U.S. market benchmarks for sponsored positions.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 555. Td
+(WORK EXPERIENCE) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 528. Td
+(Senior Machine Learning Engineer) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 514.5 Td
+(Razorpay Software Pvt. Ltd., Bangalore, India) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 501. Td
+(March 2023 - Present) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 474. Td
+(- Designed and deployed a real-time fraud detection system using a gradient-boosted ensemble \(XGBoost +) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 460.5 Td
+(LightGBM\) over 180+ engineered features, reducing payment fraud losses by 31 percent and saving an estimated) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 447. Td
+(INR 84 crore annually across 12 million monthly transactions.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 433.5 Td
+(- Led the migration of the legacy batch scoring pipeline to a streaming architecture on Apache Flink and Kafka,) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 420. Td
+(cutting end-to-end inference latency from 14 seconds to under 220 milliseconds for the risk decisioning service.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 406.5 Td
+(- Architected the merchant lifetime value \(LTV\) prediction model using Temporal Fusion Transformers, integrated into) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 393. Td
+(the CRM tool used by 800+ relationship managers; improved upsell conversion by 19 percent in controlled A/B tests) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 379.5 Td
+(over 60 days.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 366. Td
+(- Built an internal ML platform feature store \(Feast-based\) serving 2.4 TB of online features with sub-50ms p99) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 352.5 Td
+(lookup, adopted by six downstream teams and eliminating approximately 70 percent of redundant feature) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 339. Td
+(computation.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 325.5 Td
+(- Mentored four junior engineers through structured biweekly ML system design reviews; two were promoted to) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 312. Td
+(mid-level within 11 months.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 285. Td
+(Machine Learning Engineer) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 271.5 Td
+(Flipkart Internet Pvt. Ltd., Bangalore, India) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 258. Td
+(July 2021 - February 2023) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 231. Td
+(- Built the next-best-action recommender for the post-order tracking page using a two-tower neural retrieval model) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 217.5 Td
+(followed by a cross-attention ranker, increasing repeat purchase rate by 7.4 percent and incremental GMV of INR) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 204. Td
+(220 crore over 9 months.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 190.5 Td
+(- Co-developed Flipkart's session-based personalization service on TensorFlow Serving, handling 18,000 QPS during) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 177. Td
+(peak Big Billion Days traffic with a documented availability of 99.94 percent.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 163.5 Td
+(- Created an off-policy evaluation framework using IPS and doubly robust estimators that reduced the) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 150. Td
+(time-to-decision for new ranking models from 6 weeks to 9 days, saving roughly 280 engineering hours per quarter.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 136.5 Td
+(- Owned the cold-start problem for new seller listings by combining product attribute embeddings \(from a fine-tuned) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 123. Td
+(MiniLM\) with category-level priors, lifting first-week impressions for new SKUs by 23 percent.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 96. Td
+(Associate Machine Learning Engineer) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 82.5 Td
+(Mu Sigma Business Solutions Pvt. Ltd., Bangalore, India) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 69. Td
+(August 2019 - June 2021) Tj
+ET
+endstream
+endobj
+5 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 6 0 R
+>>
+endobj
+6 0 obj
+<<
+/Length 4835
+>>
+stream
+0.200025 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 730.5 Td
+(- Delivered churn prediction models for two Fortune 500 telecom clients \(Verizon Wireless, Deutsche Telekom\) using) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 717. Td
+(stacked ensembles; achieved AUC of 0.87 and 0.84 respectively on holdout sets.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 703.5 Td
+(- Built a demand forecasting system for a U.S. grocery client using Prophet and LSTM hybrids, reducing mean) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 690. Td
+(absolute percentage error from 18.6 percent to 9.2 percent across 1,400 store-SKU combinations.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 676.5 Td
+(- Authored an internal NLP toolkit \(tokenization, NER wrappers, and weak-supervision labeling using Snorkel\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 663. Td
+(adopted by 11 client teams, cutting typical text pipeline setup time by approximately 60 percent.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 636. Td
+(PROJECTS) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 609. Td
+(BharatTranslate - Low-Resource Neural Machine Translation) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 595.5 Td
+(github.com/arjunm-iitb/bharattranslate) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 582. Td
+(- Built a 250M-parameter Transformer model translating between 11 Indian language pairs \(Hindi, Tamil, Bengali,) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 568.5 Td
+(Telugu, Marathi, Malayalam, Kannada, Gujarati, Punjabi, Odia, Assamese\), training on a curated 18M) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 555. Td
+(sentence-parallel corpus augmented with back-translation.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 541.5 Td
+(- Achieved a BLEU score of 28.4 on Hindi-Tamil \(compared to 14.1 from the IndicTrans baseline\) and won the Best) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 528. Td
+(Open-Source Project award at ML India Annual Summit 2022.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 501. Td
+(CardioRisk - ECG-Based Cardiovascular Risk Stratification) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 487.5 Td
+(- Developed a 1D ResNet-50 model trained on 1.2 million 12-lead ECG recordings \(PTB-XL and a private hospital) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 474. Td
+(dataset\) to predict 5-year major adverse cardiac events, reaching an AUROC of 0.91.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 460.5 Td
+(- Deployed as a clinician-facing dashboard at a partner hospital in Mumbai; flagged 312 high-risk patients in a) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 447. Td
+(3-month pilot, of whom 274 were independently confirmed positive on follow-up angiography.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 420. Td
+(EDUCATION) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 393. Td
+(Bachelor of Technology \(B.Tech.\), Computer Science and Engineering) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 379.5 Td
+(Indian Institute of Technology Bombay, Mumbai, India) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 366. Td
+(2015 - 2019) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 352.5 Td
+(CGPA: 9.18 / 10.0) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 339. Td
+(Relevant Coursework: Machine Learning, Deep Learning, Optimization, Probabilistic Graphical Models, Distributed) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 325.5 Td
+(Systems, Information Retrieval.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 312. Td
+(Capstone: "Sparse Mixture-of-Experts for Multilingual Document Classification" \(Advisor: Prof. Preethi Jyothi\),) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 298.5 Td
+(published as a workshop paper at EMNLP 2020.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 271.5 Td
+(SKILLS) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 244.5 Td
+(Programming: Python, Scala, Go, SQL, Bash, C++) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 231. Td
+(ML Frameworks: PyTorch, TensorFlow, JAX, scikit-learn, XGBoost, LightGBM, CatBoost) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 217.5 Td
+(NLP / CV: Hugging Face Transformers, spaCy, OpenCV, Sentence-Transformers, FAISS) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 204. Td
+(Data & Infrastructure: Apache Spark, Kafka, Flink, Airflow, dbt, Ray, MLflow, Kubeflow, Feast, Redis, PostgreSQL,) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 190.5 Td
+(BigQuery, Snowflake) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 177. Td
+(Cloud: AWS \(S3, SageMaker, EKS, Lambda\), GCP \(Vertex AI, GKE\), Kubernetes, Docker, Terraform) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 163.5 Td
+(Practices: A/B testing, causal inference, offline/online evaluation, feature stores, model governance, MLOps, cost) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 150. Td
+(optimization, technical mentoring) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 123. Td
+(ADDITIONAL) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 96. Td
+(- Publications: "Sparse Routing for Low-Resource Code-Mixed Hinglish Classification," EMNLP 2020 Workshop on) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 82.5 Td
+(NLP for Similar Languages and Code-Switching.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 69. Td
+(- Certifications: AWS Certified Machine Learning - Specialty \(2023\), Deep Learning Specialization, deeplearning.ai) Tj
+ET
+endstream
+endobj
+7 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 8 0 R
+>>
+endobj
+8 0 obj
+<<
+/Length 575
+>>
+stream
+0.200025 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 744. Td
+(\(2020\).) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 730.5 Td
+(- Languages: English \(fluent\), Hindi \(native\), Marathi \(conversational\).) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 717. Td
+(- Visa status: Indian citizen; requires H-1B sponsorship for U.S.-based employment. Already in possession of a valid) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 703.5 Td
+(U.S. B1/B2 visa \(expiring March 2028\) and have previously traveled to the U.S. on business four times for client) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 690. Td
+(engagements.) Tj
+ET
+endstream
+endobj
+1 0 obj
+<</Type /Pages
+/Kids [3 0 R 5 0 R 7 0 R ]
+/Count 3
+>>
+endobj
+9 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+10 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+11 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+12 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+13 0 obj
+<<
+/Type /Font
+/BaseFont /Courier
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+14 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+15 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+16 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+17 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Roman
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+18 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+19 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Italic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+20 0 obj
+<<
+/Type /Font
+/BaseFont /Times-BoldItalic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+21 0 obj
+<<
+/Type /Font
+/BaseFont /ZapfDingbats
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+22 0 obj
+<<
+/Type /Font
+/BaseFont /Symbol
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+2 0 obj
+<<
+/ProcSet [/PDF /Text /ImageB /ImageC /ImageI]
+/Font <<
+/F1 9 0 R
+/F2 10 0 R
+/F3 11 0 R
+/F4 12 0 R
+/F5 13 0 R
+/F6 14 0 R
+/F7 15 0 R
+/F8 16 0 R
+/F9 17 0 R
+/F10 18 0 R
+/F11 19 0 R
+/F12 20 0 R
+/F13 21 0 R
+/F14 22 0 R
+>>
+/XObject <<
+>>
+>>
+endobj
+23 0 obj
+<<
+/Producer (jsPDF 4.2.1)
+/CreationDate (D:20260702223342+05'30')
+>>
+endobj
+24 0 obj
+<<
+/Type /Catalog
+/Pages 1 0 R
+/OpenAction [3 0 R /FitH null]
+/PageLayout /OneColumn
+>>
+endobj
+xref
+0 25
+0000000000 65535 f 
+0000010989 00000 n 
+0000012822 00000 n 
+0000000015 00000 n 
+0000000120 00000 n 
+0000005266 00000 n 
+0000005371 00000 n 
+0000010258 00000 n 
+0000010363 00000 n 
+0000011058 00000 n 
+0000011183 00000 n 
+0000011314 00000 n 
+0000011448 00000 n 
+0000011586 00000 n 
+0000011710 00000 n 
+0000011839 00000 n 
+0000011971 00000 n 
+0000012107 00000 n 
+0000012235 00000 n 
+0000012362 00000 n 
+0000012491 00000 n 
+0000012624 00000 n 
+0000012726 00000 n 
+0000013074 00000 n 
+0000013160 00000 n 
+trailer
+<<
+/Size 25
+/Root 24 0 R
+/Info 23 0 R
+/ID [ <B18E80E6C630E617F7F4D953634EE4E4> <B18E80E6C630E617F7F4D953634EE4E4> ]
+>>
+startxref
+13264
+%%EOF

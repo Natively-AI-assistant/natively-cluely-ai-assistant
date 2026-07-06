@@ -22,7 +22,14 @@
  * homepage-mounted + not-in-meeting + no active toaster.
  */
 
-import { loadState, saveState } from './persistence';
+// Explicit `.ts` extension — this directory also has a `.mjs` companion
+// (persistence.mjs) so `node --test` can exercise the pure logic without a
+// TS loader. Vite's default resolver tries `.mjs` before `.ts` on an
+// unqualified specifier (see orchestrator.mjs's own note on this), so an
+// unqualified import here would silently pull in the .mjs twin instead.
+// Functionally equivalent today, but do not remove the extension — it is
+// the only thing preventing a repeat of the orchestrator.mjs shadowing bug.
+import { loadState, saveState } from './persistence.ts';
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -58,6 +65,11 @@ export interface OrchestratorState {
   skipped: Set<string>;
   activeToasterId: ToasterId | null;
   lastShownTimes: Record<string, number>;
+  /**
+   * Internal revision counter that increments on every `notify()` so
+   * `useSyncExternalStore` consumers detect a change. Not persisted.
+   */
+  __rev?: number;
 }
 
 export interface UserState {
@@ -161,6 +173,10 @@ export class OnboardingOrchestrator {
   private rafHandle: number | null = null;
   private running = false;
   private stageConfigs: StageConfig[] = [];
+  // Bumped on every notify() so useSyncExternalStore consumers see a new
+  // snapshot reference and re-render. Persisted `state.version` (string) is
+  // unrelated.
+  private revision = 0;
 
   constructor() {
     this.state = loadState();
@@ -209,12 +225,28 @@ export class OnboardingOrchestrator {
     return () => this.listeners.delete(listener);
   }
 
+  // CRITICAL FIX (audit round 2): cache the snapshot object so React's
+  // `useSyncExternalStore` sees a referentially-stable value when nothing has
+  // changed. Without caching, every internal `getSnapshot()` call returned a
+  // fresh object, React's `Object.is` check saw a "change" on every poll, and
+  // the host re-rendered forever — causing "Maximum update depth exceeded".
+  // The bug lived in the orchestrator's own .mjs shim's comment history
+  // (cf6a2f9) and was reintroduced by the round-1 revision-counter fix.
+  // Cache key: revision counter (monotonically incremented by notify()).
+  private cachedSnapshot: OrchestratorState | null = null
+  private cachedRevision = -1
+
   getSnapshot(): OrchestratorState {
-    return this.state;
+    if (this.cachedRevision !== this.revision || !this.cachedSnapshot) {
+      this.cachedSnapshot = { ...this.state, __rev: this.revision }
+      this.cachedRevision = this.revision
+    }
+    return this.cachedSnapshot
   }
 
   private notify(): void {
-    this.listeners.forEach(l => l(this.state));
+    this.revision++;
+    this.listeners.forEach(l => l(this.state))
   }
 
   // ─── Event bus ────────────────────────────────────────────────

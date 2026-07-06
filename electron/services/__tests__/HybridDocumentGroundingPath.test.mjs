@@ -42,21 +42,24 @@ test('hybrid retriever accepts forceDocumentGrounding in its retrieve params', (
   );
 });
 
-test('hybrid retriever emits document_identity block when forceDocumentGrounding is set', () => {
+test('hybrid retriever gates document_identity to broad queries only', () => {
   const src = read('electron/services/modes/ModeHybridRetriever.ts');
-  // The return statement must branch on forceDocumentGrounding and prepend
-  // an identity block via prependIdentityBlock. Without this branch the
-  // hybrid path silently drops the identity block the document-grounded
-  // custom mode relies on for broad queries.
+  // Specific list/definition/numeric questions must not put the abstract-heavy
+  // identity block above precise chunks. Broad overview questions still include it.
   assert.match(
     src,
-    /if \(forceDocumentGrounding && files\.length > 0\)/,
-    'hybrid retriever must conditionally prepend identity block',
+    /const broadQuery = isBroadDocumentQuery\(queryText\)/,
+    'hybrid retriever must classify broad overview queries',
   );
   assert.match(
     src,
-    /prependIdentityBlock\(formattedContext, files\)/,
-    'identity block must be spliced into the existing context envelope',
+    /const withIdentity = broadQuery;/,
+    'hybrid retriever should include identity only for broad overview queries',
+  );
+  assert.match(
+    src,
+    /withIdentity \? this\.prependIdentityBlock\(formattedContext, files\) : formattedContext/,
+    'identity block must be gated instead of always prepended',
   );
 });
 
@@ -117,4 +120,26 @@ test('hybrid retriever no longer short-circuits forceDocumentGrounding to lexica
     !oldPattern.test(src),
     'ModesManager must no longer unconditionally short-circuit forceDocumentGrounding to lexical',
   );
+});
+
+test('WhatToAnswerLLM retrieves by planned question, not whole transcript blob', () => {
+  const src = read('electron/llm/WhatToAnswerLLM.ts');
+  assert.match(
+    src,
+    /const retrievalQuery = answerPlan\?\.question\?\.trim\(\) \|\| cleanedTranscript;/,
+    'WTA retrieval must use the latest/planned question as the primary query',
+  );
+  assert.doesNotMatch(
+    src,
+    /buildRetrievedActiveModeContextBlockHybrid\(\s*cleanedTranscript, cleanedTranscript, forceDocumentGrounding/s,
+    'WTA must not use the whole transcript as the retrieval query for doc-grounded answers',
+  );
+});
+
+test('IntelligenceEngine wires document-grounded WTA validation and repair', () => {
+  const src = read('electron/IntelligenceEngine.ts');
+  assert.match(src, /validateDocumentGroundedAnswer/, 'WTA must call the document-grounded answer validator');
+  assert.match(src, /completenessRegenFabricates/, 'WTA repair must reject fabricated numeric values');
+  assert.match(src, /doc_grounded_repair_applied/, 'WTA must have a successful document-grounded repair path');
+  assert.match(src, /doc_grounded_safe_refusal_after_repair_reject/, 'WTA must fail closed when repair cannot be trusted');
 });

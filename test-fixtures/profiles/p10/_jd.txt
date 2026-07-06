@@ -1,0 +1,49 @@
+NimbleWave Analytics — Data Engineer (SQL + Pipelines)
+
+Location: Austin, TX (Hybrid — 3 days onsite in our East 6th St. office)
+Team: Data Platform — reports to the Director of Data Engineering
+Compensation: $118,000 – $142,000 base + equity + 401(k) match
+
+About NimbleWave Analytics
+NimbleWave is a 140-person Series C SaaS company that helps mid-market retailers (think Outdoor Voices, Marine Layer, Quality Goods) unify their POS, e-commerce, and inventory data into a single analytics layer. Our customers use our dashboards to make merchandising decisions worth millions of dollars each quarter, so the data behind them has to be trustworthy, fresh, and fast. We process roughly 2.1 billion events per day across ~60 production data pipelines and store ~180 TB in our warehouse. We're hiring a Data Engineer to join the 9-person Platform team that owns ingestion, transformation, and the semantic layer every analyst and ML workflow depends on.
+
+What you'll do
+- Design, build, and own production ELT pipelines (Airflow + dbt) that ingest data from sources like Shopify, NetSuite, Stripe, and a fleet of MySQL/Postgres OLTP databases into Snowflake.
+- Write and review complex SQL (CTEs, window functions, incremental models, slowly changing dimensions) used by analysts, BI tools (Looker, Hex), and ML feature stores.
+- Maintain and improve our dbt project (~480 models, 30+ packages) including testing, documentation, and CI/CD via dbt Cloud and GitHub Actions.
+- Partner with analytics engineers and stakeholders to translate ambiguous business questions (e.g., "how does return rate vary by acquisition channel and product category?") into reliable, well-modeled datasets.
+- Own on-call rotation for the data platform (1 week every 6 weeks) and drive incident postmortems with blameless writeups.
+- Improve platform reliability — current SLO is 99.5% of daily pipelines completing by 7:00 AM CT; you will help us get to 99.9%.
+- Mentor junior engineers and review pull requests; contribute to internal RFCs on schema design, cost optimization, and tooling.
+
+Requirements
+- 3+ years of professional experience as a Data Engineer, Analytics Engineer, or similar role.
+- Strong SQL — you can write a recursive CTE, explain the difference between RANGE and ROWS in a window function, and debug a query plan without flinching.
+- Hands-on experience with at least one modern pipeline orchestrator (Airflow, Prefect, Dagster) and at least one transformation framework (dbt strongly preferred).
+- Production experience with a cloud data warehouse — Snowflake, BigQuery, Redshift, or Databricks SQL.
+- Proficiency in Python for pipeline tooling, data quality checks, and CLI utilities.
+- Solid understanding of data modeling concepts (dimensional, Data Vault, or anchor modeling) and when to apply each.
+- Experience with version control (Git), CI/CD, and code review workflows.
+- A demonstrated track record of measurable impact — please be ready to discuss specific metrics such as pipeline latency reductions, cost savings, reliability improvements, or data quality wins (e.g., "reduced overnight pipeline runtime from 4.5 hours to 52 minutes" or "cut warehouse spend by $11k/month by rewriting 12 models as incremental").
+
+Nice to have
+- Experience with Snowflake specifically, including Dynamic Tables, Snowpark, or cost governance via resource monitors.
+- Familiarity with streaming ingestion (Kafka, Kinesis, or Snowpipe Streaming).
+- dbt package development or contributing to open-source dbt utilities.
+- Exposure to data observability tools (Monte Carlo, Bigeye, Soda) and contract testing.
+- Prior work in retail, e-commerce, or supply chain analytics.
+
+What success looks like in the first 6 months
+- You've onboarded your pipelines into our on-call rotation and reduced average incident resolution time from 47 to under 25 minutes.
+- You've shipped at least one measurable performance or cost win on the warehouse (we'll help you find the target — last quarter one engineer saved us $14k/month by clustering a single 9 TB fact table).
+- You've written or rewritten 10+ dbt models with comprehensive tests and documentation, and your PRs are models of clarity the rest of the team references.
+
+Benefits
+- Fully covered medical, dental, and vision (90% family coverage too)
+- $2,000 annual learning stipend (conferences, O'Reilly, etc.)
+- 20 days PTO + 12 company holidays + your birthday off
+- Hybrid flexibility, quarterly team offsites, and a genuinely kind engineering culture
+
+NimbleWave is an equal opportunity employer. We value diversity and are committed to building an inclusive team.
+
+To apply: send your resume and a brief note describing one data project where you moved a specific metric. (Generic cover letters get auto-rejected — show us your work.)

@@ -1,4 +1,5 @@
 import { parentPort } from 'worker_threads';
+import { getBoundedOnnxSessionOptions } from '../utils/onnxThreadConfig';
 
 if (!parentPort) throw new Error('intentClassifierWorker must be run as a Worker thread');
 
@@ -28,7 +29,7 @@ async function ensureLoaded(msg: any): Promise<void> {
     pipe = await pipeline(
       'zero-shot-classification',
       'Xenova/mobilebert-uncased-mnli',
-      { local_files_only: !!msg.isPackaged }
+      { local_files_only: !!msg.isPackaged, session_options: getBoundedOnnxSessionOptions() }
     );
     console.log('[IntentClassifierWorker] Zero-shot classifier loaded successfully.');
   })();

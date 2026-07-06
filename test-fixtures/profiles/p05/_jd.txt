@@ -1,0 +1,41 @@
+**Senior Product Designer (Contract-to-Hire)**
+
+**Company:** Lumen & Forge, Inc.
+**Location:** Remote (US-based, preference for NYC, SF, or Austin)
+**Engagement:** 6-month contract with strong intent to convert to full-time
+**Compensation:** $95–$115/hr depending on experience; conversion target base $165,000–$190,000 plus equity
+
+---
+
+**About Lumen & Forge**
+Lumen & Forge is a 140-person Series B fintech platform helping mid-market finance teams automate close-the-book processes. Backed by Founders Fund and Coatue, we've grown ARR 3.2x in the last 18 months and serve more than 600 customers including Mercury, Circle, and Pipe. Our design team of seven sits at the center of product strategy — we own the design system, partner directly with PMs and engineering leads in weekly critique rituals, and ship through a tightly integrated Figma-to-Storybook pipeline. We hire designers who can move between systems thinking, interaction craft, and ambiguous zero-to-one work without dropping any of those three balls.
+
+**What you'll do**
+- Lead end-to-end design for one of our two core product surfaces (either the Reconciliation Workbench or the Close Management Hub), owning everything from research synthesis through pixel-level ship-ready specs.
+- Evolve and extend our internal design system ("Ember," currently 240+ components) by partnering with engineering on tokens, accessibility primitives, and adoption metrics across squads.
+- Run quarterly generative and evaluative research cycles — including 8–12 customer interviews per quarter, JTBD analysis, and unmoderated usability tests.
+- Co-author quarterly product strategy docs with your PM and engineering counterpart, contributing design-led POV on roadmap prioritization.
+- Facilitate 2–3 design critiques per week and actively mentor a mid-level designer on the team.
+- Collaborate daily with engineers in Slack, in Storybook, and during pairing sessions to ensure design intent survives implementation.
+
+**Requirements**
+- 5+ years of product design experience at software companies, with at least 2 years owning a meaningful portion of a production design system.
+- Portfolio demonstrating end-to-end product work on complex, data-dense interfaces — please include case studies that walk through problem, process, decisions, and measurable outcomes.
+- Demonstrated ability to partner effectively with PM, engineering, and research counterparts — we'll be asking for examples of cross-functional influence and conflict navigation.
+- Strong systems thinking: you can articulate how a component decision at 9am propagates through tokens, themes, and downstream features.
+- Fluency in Figma (auto-layout, variables, component properties), and comfort working alongside engineers who use Storybook, React, and Tailwind.
+- Solid grasp of accessibility (WCAG 2.1 AA), responsive design, and how design systems scale across web and embedded surfaces.
+- Excellent written and verbal communication; you'll be writing narrative design specs, not just handing off screens.
+
+**Nice to have**
+- Experience designing for finance, accounting, or ERP-adjacent workflows.
+- Familiarity with AI-assisted product surfaces (LLM-powered summarization, inline suggestions, agent-style workflows).
+- Background in motion or interaction design (After Effects, Rive, or Framer).
+- Prior experience in a contract-to-hire role where you converted successfully.
+
+**What we offer**
+- Hardware budget of $2,500 and a $1,500 home office stipend.
+- Monthly coworking stipend if you're not fully remote.
+- Generous conversion equity grant and a transparent leveling rubric reviewed at month 4.
+
+*To apply: Send your portfolio (PDF or link) and a short note about a design system you're proud of to careers@lumenandforge.com with the subject line "Senior Product Designer — [Your Name]." Applications without a portfolio will not be reviewed.*

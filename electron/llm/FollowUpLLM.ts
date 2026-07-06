@@ -17,7 +17,13 @@ export class FollowUpLLM {
         try {
             const message = `PREVIOUS ANSWER:\n${previousAnswer}\n\nREQUEST: ${refinementRequest}`;
             const fittedContext = context ? this.llmHelper.fitContextForCurrentModel(context) : context;
-            const stream = this.llmHelper.streamChat(message, undefined, fittedContext, this.resolvePrompt());
+            // ignoreKnowledgeMode=true — `message` is a synthesized meta-message
+            // ("PREVIOUS ANSWER:...\nREQUEST:...") that embeds the prior answer
+            // verbatim, not a real question. Letting it through the knowledge-mode
+            // intent classifier risks misclassifying this refinement call as an
+            // intro/identity request whenever the previous answer happened to
+            // discuss the candidate's name/background (see ClarifyLLM.generate()).
+            const stream = this.llmHelper.streamChat(message, undefined, fittedContext, this.resolvePrompt(), true);
             let full = "";
             for await (const chunk of stream) full += chunk;
             return full;
@@ -31,7 +37,8 @@ export class FollowUpLLM {
         try {
             const message = `PREVIOUS ANSWER:\n${previousAnswer}\n\nREQUEST: ${refinementRequest}`;
             const fittedContext = context ? this.llmHelper.fitContextForCurrentModel(context) : context;
-            yield* this.llmHelper.streamChat(message, undefined, fittedContext, this.resolvePrompt());
+            // See generate() above — ignoreKnowledgeMode=true.
+            yield* this.llmHelper.streamChat(message, undefined, fittedContext, this.resolvePrompt(), true);
         } catch (e) {
             console.error("[FollowUpLLM] Stream Failed:", e);
         }

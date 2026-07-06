@@ -1,0 +1,56 @@
+MARISSA K. CHEN
+Seattle, WA | (206) 555-0179 | marissa.chen.dev@gmail.com | linkedin.com/in/marissachen-dev | github.com/mchen-cs
+
+PROFESSIONAL SUMMARY
+Staff Software Engineer with 9+ years of experience designing distributed systems, data pipelines, and developer tooling across fintech and cloud infrastructure. Returning Nimbus Systems engineer who led the rebuild of the company's core observability platform after rejoining in 2021. Comfortable owning ambiguous, cross-team technical strategy from whiteboard to production, and mentoring engineers across multiple orgs.
+
+WORK EXPERIENCE
+
+Nimbus Systems  (Boomerang: rejoined after 2.5 years away)
+Staff Software Engineer                                  January 2024 - Present
+- Lead architect for the FlowForge metrics pipeline rewrite; consolidated 14 legacy collectors into a unified agent that cut customer observability spend by an average of 38% across 220+ enterprise accounts.
+- Defined and drove the company's adoption of OpenTelemetry as the standard instrumentation layer, including a 9-month migration plan negotiated with 5 product teams.
+- Mentor four senior engineers; instituted a quarterly design-review forum that has been adopted org-wide.
+- Own technical strategy for the "Always-On" availability initiative, which brought platform p99 latency from 1.4s to 210ms and reduced customer-reported incidents by 62% YoY.
+
+Senior Software Engineer                                 June 2021 - December 2023
+- Re-architected the ingestion service from a monolithic Java app into a Go-based modular pipeline that now handles 4.2B events per day with 99.97% uptime.
+- Built the team's first chaos-engineering harness, integrating it into the release pipeline and exposing 11 previously-unknown failure modes before they hit production.
+- Co-led the migration from on-prem Elasticsearch to a managed cluster across two regions; reduced query cost by $1.1M annually.
+
+Senior Software Engineer                                 August 2017 - May 2021
+Cobaltline Financial
+Seattle, WA (Remote, 2020-2021)
+- Designed and shipped the Ledger Reconciliation service used by the settlement team to reconcile 8.3M daily transactions across three clearing partners; reduced end-of-day close time from 6 hours to 38 minutes.
+- Owned the migration of internal services from REST to gRPC, including a custom load-balancer that cut inter-service p95 latency by 47%.
+- Promoted to Senior in 2019 after leading the rebuild of the firm's regulatory reporting tool, which handled SOC 2 and FinCEN submissions.
+
+Software Engineer II                                     August 2015 - July 2017
+Nimbus Systems
+Seattle, WA
+- Built the original version of the NimbusTrace log search feature, which became the second-most-adopted product capability in the company's history.
+- Reduced infrastructure costs by $340K/year by refactoring the company's metering service to batch writes to DynamoDB.
+- On-call rotation lead for 12 months; authored the incident-response runbook still used today.
+
+PROJECTS
+
+OpenTelemetry Collector Distribution for k8s (Side Project)
+- Maintained a Helm-based distribution of the OTel Collector downloaded 140K+ times from GitHub Container Registry; published a CNCF sandbox talk in 2023.
+
+CFP-Review (Open Source)
+- Built a small CLI tool that helped conference program committees dedupe and rank talk submissions; used by RustConf 2022 and PyCon US 2023 program teams.
+
+EDUCATION
+
+University of Washington, Seattle
+B.S. in Computer Science, with honors                              2011 - 2015
+GPA: 3.78/4.0
+Senior thesis: "Adaptive Sampling Strategies for High-Volume Time-Series Data"
+
+SKILLS
+
+Languages: Go, Java, Python, TypeScript, Rust (working)
+Systems: Kubernetes, Docker, Terraform, Envoy, Istio, Kafka, gRPC
+Data: Elasticsearch, ClickHouse, PostgreSQL, DynamoDB, Apache Flink
+Observability: OpenTelemetry, Prometheus, Grafana, Loki, Jaeger
+Practices: Distributed systems design, SRE principles, chaos engineering, technical mentoring, cross-team roadmap planning

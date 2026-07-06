@@ -37,7 +37,7 @@ import { CHAT_MODE_PROMPT } from './llm/prompts';
 import { isAssistantIdentityQuestion, profileFactsReady } from './llm/manualProfileIntelligence';
 import { buildManualProfileBackendAnswer } from './llm/profileAnswerBackend';
 import { DOC_GROUNDED_TOKEN_BUDGET } from './services/ModeContextRetriever';
-import { detectIncompleteNumericAnswer, completenessRegenFabricates } from './llm/documentGroundedPrompt';
+import { detectIncompleteNumericAnswer, completenessRegenFabricates, isDocGroundedAnswerType } from './llm/documentGroundedPrompt';
 
 // Generic tokens excluded when splitting OKF entity names / card titles into
 // distinctive words for the document-grounded false-refusal gate (2026-07-02).
@@ -975,6 +975,43 @@ export function initializeIpcHandlers(appState: AppState): void {
           speakerPerspective: 'user',
           activeMode: manualActiveMode,
         });
+
+        // Custom-Mode Source Isolation (2026-07-06, hardening/v2.7.0) Phase 4:
+        // build the CustomModeExecutionContract and log it as `[SOURCE-ARBITER]`
+        // telemetry. Phase 4 is observe-only — no behavior change. Phase H
+        // (gated by `customModeSourceEnforcement` flag, default OFF) flips this
+        // into an enforcement point.
+        try {
+          const { buildCustomModeExecutionContract, logArbitratedContract } = require('./llm/customModeExecutionContract');
+          const _docGrounded = manualActiveMode?.documentGroundedCustomModeActive === true;
+          const _hasRefFiles = Boolean((manualActiveMode && (manualActiveMode as any).hasReferenceFiles) ?? false);
+          const _hasCustomPrompt = Boolean((manualActiveMode && (manualActiveMode as any).hasCustomPrompt) ?? false);
+          const _hasLiveTranscript = Boolean(intelligenceManager.getFormattedContext(100)?.trim());
+          const _hasProfileFacts = Boolean(llmHelper.getKnowledgeOrchestrator?.()?.activeResume?.structured_data);
+          const _hasMeetingRag = Boolean(false); // meeting_rag is gated by chat:sendMessage IPC, not in this path
+          const _hasLongTermMemory = Boolean(isIntelligenceFlagEnabled('hindsightLiveRecall') && isIntelligenceFlagEnabled('hindsightMemory'));
+          const _contract = buildCustomModeExecutionContract({
+            question: String(message || ''),
+            streamRoute: 'manual_chat_stream',
+            modeId: manualActiveMode?.id ?? null,
+            modeUniqueId: manualActiveMode?.id ?? null,
+            answerType: answerPlan.answerType,
+            isCustomMode: manualActiveMode?.isCustom === true,
+            isDocGroundedCustomModeActive: _docGrounded,
+            hasReferenceFiles: _hasRefFiles,
+            hasCustomPrompt: _hasCustomPrompt,
+            hasLiveTranscript: _hasLiveTranscript,
+            hasProfileFacts: _hasProfileFacts,
+            hasMeetingRag: _hasMeetingRag,
+            hasLongTermMemory: _hasLongTermMemory,
+          });
+          logArbitratedContract(_contract, String(message || ''));
+        } catch (arbiterErr: any) {
+          // SourceArbiter is best-effort — a failure here MUST NOT break the chat path.
+          if (isIntelligenceFlagEnabled('trace')) {
+            console.warn('[SOURCE-ARBITER] skipped (non-fatal):', arbiterErr?.message);
+          }
+        }
         let isCodingChat = isCodingAnswerType(answerPlan.answerType);
         chatTrace.mark('answer_type_selected', { answerType: answerPlan.answerType, isCoding: isCodingChat });
         piTelemetry.emit('pi_answer_plan_created', { answerType: answerPlan.answerType, surface: 'manual', isCoding: isCodingChat, profilePolicy: answerPlan.profileContextPolicy, answerStyle: answerPlan.answerStyle });
@@ -1358,8 +1395,25 @@ export function initializeIpcHandlers(appState: AppState): void {
           // turns are kept so follow-up pronoun resolution ("tell me more about
           // that") still works. Non-document-grounded chat keeps the full snapshot.
           let snapshotForContext = autoContextSnapshot;
-          if (answerPlan.answerType === 'lecture_answer' && manualActiveMode?.documentGroundedCustomModeActive) {
+          // Custom-Mode Source Isolation (2026-07-06, hardening/v2.7.0): the
+          // prior-assistant-turn strip previously fired ONLY for `lecture_answer`.
+          // For any other doc-grounded answer type the un-stripped rolling snapshot
+          // (which includes prior assistant turns and may carry Natively / generic
+          // content from earlier turns) was passed through to the model as
+          // `priorContext` in `buildDocumentGroundedUserContent`, even though the
+          // doc-grounded block labels it "for pronoun resolution only". The weak
+          // production model still mirrors phrasing out of it. Widen the strip to
+          // every doc-grounded turn.
+          const _stripFires = manualActiveMode?.documentGroundedCustomModeActive && isDocGroundedAnswerType(answerPlan.answerType);
+          if (_stripFires) {
             snapshotForContext = stripPriorAssistantTurns(autoContextSnapshot);
+            if (isIntelligenceFlagEnabled('trace')) {
+              console.log('[SOURCE-GUARD] blocked source=prior_assistant_facts reason=document_grounded_contract', {
+                answerType: answerPlan.answerType,
+                modeId: manualActiveMode?.id,
+                strippedLength: autoContextSnapshot.length - snapshotForContext.length,
+              });
+            }
           }
           if (snapshotForContext.trim().length > 0) {
             context = snapshotForContext;
@@ -1743,7 +1797,15 @@ export function initializeIpcHandlers(appState: AppState): void {
               const resumeFb = (orchFb as any)?.activeResume?.structured_data ?? null;
               const jdFb = (orchFb as any)?.activeJD?.structured_data ?? null;
               if (resumeFb && answerPlan.profileContextPolicy === 'required') {
-                fb = buildLiveFallbackAnswer({ question: message, answerType: answerPlan.answerType, profile: resumeFb, jobDescription: jdFb }) || '';
+                // Custom-Mode Source Isolation (2026-07-06, hardening/v2.7.0): the
+                // deadline fallback must NOT consult resume/JD for a document-grounded
+                // custom mode. The original stream was strictly doc-grounded; falling
+                // back to a profile-sourced answer here would inject Natively / project
+                // facts into a session that the contract forbids. Use the canned refusal
+                // instead.
+                if (!manualActiveMode?.documentGroundedCustomModeActive) {
+                  fb = buildLiveFallbackAnswer({ question: message, answerType: answerPlan.answerType, profile: resumeFb, jobDescription: jdFb }) || '';
+                }
               }
             } catch { /* best effort */ }
             if (!fb) {
@@ -1886,9 +1948,21 @@ export function initializeIpcHandlers(appState: AppState): void {
               // validateProfileOutput checks — so this is now the single
               // enforcement point for both classes of critical violation.
               const CRITICAL_CODES = new Set(['assistant_identity_leak', 'false_no_access_refusal', 'false_no_experience_refusal', 'unsupported_metric']);
+              const _docGroundedBlocksRepair = manualActiveMode?.documentGroundedCustomModeActive;
               const critical = profileAvailable
                 && answerPlan.profileContextPolicy === 'required'
+                // Custom-Mode Source Isolation (2026-07-06, hardening/v2.7.0):
+                // skip profile repair for doc-grounded modes — re-injecting
+                // activeResume/activeJD would contradict the contract.
+                && !_docGroundedBlocksRepair
                 && profileValidation.violations.find(v => v.severity === 'error' && CRITICAL_CODES.has(v.code));
+              if (_docGroundedBlocksRepair && profileAvailable && answerPlan.profileContextPolicy === 'required' && isIntelligenceFlagEnabled('trace')) {
+                console.log('[SOURCE-GUARD] blocked source=profile_resume reason=document_grounded_contract', {
+                  answerType: answerPlan.answerType,
+                  modeId: manualActiveMode?.id,
+                  repairPath: 'profileFallbackRepair',
+                });
+              }
               if (critical && _chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
                 try {
                   const orch2 = llmHelper.getKnowledgeOrchestrator?.();
@@ -2019,13 +2093,21 @@ export function initializeIpcHandlers(appState: AppState): void {
                 piTelemetry.emit('pi_candidate_sanitizer_applied', { answerType: answerPlan.answerType, repaired: true, needsFallback: true, markerCount: sani.removedMarkers.length });
                 // The whole answer was assistant-meta. Build a deterministic
                 // profile-grounded replacement instead of shipping an empty/broken one.
-                const orchS = llmHelper.getKnowledgeOrchestrator?.();
-                const fb = buildManualProfileBackendAnswer({ question: message, orchestrator: orchS, source: 'manual_input' });
-                if (fb?.route?.answer && fb.route.answer.trim().length >= 15) {
-                  fullResponse = fb.route.answer;
-                  finalText = fb.route.answer;
-                  console.warn('[ProfileIntelligence] candidate answer was all assistant-meta; used deterministic fallback', { answerType: answerPlan.answerType });
+                // Custom-Mode Source Isolation (2026-07-06, hardening/v2.7.0):
+                // for a document-grounded custom mode we MUST NOT fall back to
+                // resume/JD — that would inject Natively / project / candidate
+                // facts into a session that the contract forbids. Skip both
+                // fallbacks; ship a doc-grounded honest line instead.
+                if (manualActiveMode?.documentGroundedCustomModeActive) {
+                  console.warn('[SourceGuard] blocked profile fallback reason=document_grounded_contract', { answerType: answerPlan.answerType });
                 } else {
+                  const orchS = llmHelper.getKnowledgeOrchestrator?.();
+                  const fb = buildManualProfileBackendAnswer({ question: message, orchestrator: orchS, source: 'manual_input' });
+                  if (fb?.route?.answer && fb.route.answer.trim().length >= 15) {
+                    fullResponse = fb.route.answer;
+                    finalText = fb.route.answer;
+                    console.warn('[ProfileIntelligence] candidate answer was all assistant-meta; used deterministic fallback', { answerType: answerPlan.answerType });
+                  } else {
                   // Manual regression 2026-06-12 (stress seq_056): the backend has
                   // NO fast-path for behavioral/jd-fit asks, so an all-assistant-
                   // meta answer ("I'm Natively, I don't have personal experiences")
@@ -2042,6 +2124,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                       console.warn('[ProfileIntelligence] assistant-meta answer replaced with grounded live fallback', { answerType: answerPlan.answerType });
                     }
                   } catch { /* keep sanitized-but-thin answer */ }
+                  }
                 }
               }
               // Audit 2026-06-16 (H3): a PRODUCT-ABOUT question ("what is Natively built with",
@@ -2081,11 +2164,27 @@ export function initializeIpcHandlers(appState: AppState): void {
               const misfire = detectAssistantVoiceMisfire(fullResponse);
               if (misfire.isMisfire) {
                 _attr.assistant_voice_guard_triggered = true;
-                const honest = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
+                // RC3 fold-in (round 2, 2026-07-05): never ship a NEEDY
+                // clarification ("Could you give me a bit more to go on?") when a
+                // profile is loaded — answer the standard grounded version of the
+                // question instead. Clarification-seeking is only the last resort
+                // when no grounded fallback exists.
+                let groundedRepair = '';
+                try {
+                  const orchAv = llmHelper.getKnowledgeOrchestrator?.();
+                  const resumeAv = (orchAv as any)?.activeResume?.structured_data ?? null;
+                  if (resumeAv) {
+                    groundedRepair = buildLiveFallbackAnswer({
+                      question: message, answerType: answerPlan.answerType,
+                      profile: resumeAv, jobDescription: (orchAv as any)?.activeJD?.structured_data ?? null,
+                    }) || '';
+                  }
+                } catch { /* fall through to honest line */ }
+                const honest = groundedRepair || ((answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
                   ? "I don't have enough context from the conversation to answer that yet."
                   : answerPlan.answerType === 'sales_answer'
                     ? "I don't have enough context on that yet — could you share a bit more?"
-                    : "Could you give me a bit more to go on?";
+                    : "Could you give me a bit more to go on?");
                 piTelemetry.emit('pi_assistant_voice_misfire_repaired', { answerType: answerPlan.answerType, reason: misfire.reason });
                 console.warn('[ProfileIntelligence] assistant-voice identity/refusal misfire replaced with honest line', { answerType: answerPlan.answerType, reason: misfire.reason });
                 fullResponse = honest;
@@ -2223,6 +2322,20 @@ export function initializeIpcHandlers(appState: AppState): void {
           }
 
           // ── DOCUMENT-GROUNDED GROUNDEDNESS / GREETING VALIDATOR ───────────────
+          // One-shot observability: when the gate fires (or doesn't) on a doc-
+          // grounded turn, log the [SOURCE-GUARD] decision so post-mortem traces
+          // can prove which guards were active. Cheap (single console.log per turn)
+          // and gated behind the `trace` intelligence flag (default OFF in prod).
+          if (isIntelligenceFlagEnabled('trace') && manualActiveMode?.documentGroundedCustomModeActive) {
+            const _docGateFires = isDocGroundedAnswerType(answerPlan.answerType);
+            console.log('[SOURCE-GUARD] doc-grounded-validator-gate', {
+              answerType: answerPlan.answerType,
+              gateFires: _docGateFires,
+              modeId: manualActiveMode.id,
+              blockedFromSessionTracker: false, // updated below
+              reason: _docGateFires ? 'post_stream_validator_required' : 'answer_type_not_doc_grounded',
+            });
+          }
           // (audit 2026-06-27, real-path fix — backstop to the prompt-source
           // greeting override above). The production serverModel
           // (gemini-3.1-flash-lite) is weak and was emitting the canned greeting
@@ -2232,14 +2345,26 @@ export function initializeIpcHandlers(appState: AppState): void {
           // reject only unambiguous failures (greeting / empty / exact repeat of
           // the immediately-prior answer), regenerate ONCE with a stricter prompt
           // bound to the retrieved material, and — critically — block an invalid
+          // (Custom-Mode Source Isolation 2026-07-06: gate widened to all six
+          // doc-grounded answer shapes, not just `lecture_answer` — see the
+          // `isDocGroundedAnswerType` helper exported from documentGroundedPrompt.)
           // answer from ever entering SessionTracker. The brittle "answer says
           // not-mentioned while a chunk contains the entity term" signal is
           // LOG-ONLY (per review): a chunk often contains the term without
           // actually answering, so forcing a regen there risks overwriting an
           // honest "not in the material" with a hallucination.
           let blockedFromSessionTracker = false;
-          if (answerPlan.answerType === 'lecture_answer'
-            && manualActiveMode?.documentGroundedCustomModeActive
+          // Custom-Mode Source Isolation (2026-07-06, hardening/v2.7.0): the
+          // doc-grounded greeting/empty/exact-repeat + completeness validator
+          // previously fired ONLY for `lecture_answer`, so a `list_answer` /
+          // `exact_numeric_answer` / `definitional_answer` / `document_followup_answer`
+          // turn could ship a greeting/incomplete/invented answer that then
+          // poisoned SessionTracker and the rolling 100s snapshot for the next
+          // question (the observed "Natively" leak). We widen the gate to every
+          // doc-grounded answer shape — the validator itself (`validateDocumentGroundedAnswer`)
+          // is already pure, has unit coverage, and is answer-type-aware.
+          if (manualActiveMode?.documentGroundedCustomModeActive
+            && isDocGroundedAnswerType(answerPlan.answerType)
             && _chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
             try {
               const GREETING_RE = /^\s*(?:hey|hi|hello)[!,.]?\s*(?:there)?[!,.]?\s*(?:what would you like help with|how can i help|what can i (?:help|do)(?: you with| for you)?|how may i (?:help|assist))\b/i;
@@ -2629,13 +2754,62 @@ export function initializeIpcHandlers(appState: AppState): void {
                     incompleteRecoveredValue = incompleteMissing.some((mv) => regenVals.has(mv));
                   } catch { incompleteRegenFabricates = false; incompleteRecoveredValue = false; }
                 }
-                const regenValid = regenTrim.length >= 8
+                // Custom-Mode Source Isolation (2026-07-06, hardening/v2.7.0) Phase 6:
+                  // contract-safe regen — re-run the source-contract validator on the
+                  // regen output. The regen prompt itself only carries the retrieved
+                  // doc excerpts + question (no persona, profile, prior-assistant, or
+                  // Hindsight), but the model can still echo forbidden-source signals
+                  // ("my project", "Natively") it picked up from the retrieved block.
+                  // We block those before accepting the regen.
+                  let regenContractHonored = true;
+                  if (regenTrim && manualActiveMode?.documentGroundedCustomModeActive) {
+                    try {
+                      const { buildCustomModeExecutionContract, validateAgainstSourceContract } = require('./llm/customModeExecutionContract');
+                      const _regenContract = buildCustomModeExecutionContract({
+                        question: String(message || ''),
+                        streamRoute: 'manual_chat_stream',
+                        modeId: manualActiveMode?.id ?? null,
+                        modeUniqueId: manualActiveMode?.id ?? null,
+                        answerType: answerPlan.answerType,
+                        isCustomMode: manualActiveMode?.isCustom === true,
+                        isDocGroundedCustomModeActive: true,
+                        hasReferenceFiles: true,
+                        hasCustomPrompt: true,
+                        hasLiveTranscript: false,
+                        hasProfileFacts: false,
+                        hasMeetingRag: false,
+                        hasLongTermMemory: false,
+                      });
+                      const _regenCheck = validateAgainstSourceContract({
+                        contract: _regenContract,
+                        question: String(message || ''),
+                        answer: regenTrim,
+                        retrievedBlock: docContextBlock || '',
+                      });
+                      regenContractHonored = _regenCheck.ok;
+                      if (!_regenCheck.ok && isIntelligenceFlagEnabled('trace')) {
+                        console.log('[SOURCE-GUARD] regen-rejected-by-contract', {
+                          reason: _regenCheck.reason,
+                          entityLeaks: _regenCheck.entityLeaks,
+                          unsupportedTokens: _regenCheck.unsupportedTokens,
+                          listMissing: _regenCheck.listMissing,
+                        });
+                      }
+                    } catch (regenContractErr: any) {
+                      // best effort — never break the regen path on validator error
+                      if (isIntelligenceFlagEnabled('trace')) {
+                        console.warn('[SOURCE-GUARD] regen-contract check skipped (non-fatal):', regenContractErr?.message);
+                      }
+                    }
+                  }
+                  const regenValid = regenTrim.length >= 8
                   && !GREETING_RE.test(regenTrim)
                   && !/what would you like help with/i.test(regenTrim)
                   && regenTrim !== priorAnswer
                   && !regenIsStillRefusing
                   && !incompleteRegenFabricates
-                  && incompleteRecoveredValue;
+                  && incompleteRecoveredValue
+                  && regenContractHonored;
                 if (regenValid) {
                   fullResponse = regenTrim;
                   finalText = regenTrim;
@@ -8903,7 +9077,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // confirmation; only flip the toggle if the user picks "Allow".
       if (e?.name === 'LANBindConfirmationRequired') {
         const win = appState.getMainWindow() ?? undefined;
-        const { response } = dialog.showMessageBoxSync(win as BrowserWindow | undefined, {
+        const response = dialog.showMessageBoxSync(win as BrowserWindow | undefined, {
           type: 'warning',
           message: 'Allow LAN access?',
           detail:

@@ -1,0 +1,14 @@
+{"cases":[
+  {"id":"r01","question":"Give me the quick version of who you are.","expectFamily":"profile","mustInclude":["Evin John"],"mustNotInclude":["Nothing actionable","What would you like help with"]},
+  {"id":"r02","question":"Which job are you in right now?","expectFamily":"experience","mustInclude":["EstroTech"],"mustNotInclude":["Nothing actionable"]},
+  {"id":"r03","question":"On the streaming work at Aetherbot, what latency number did you hit?","expectFamily":"experience","mustInclude":["80ms|sub-80"],"mustNotInclude":["Nothing actionable"]},
+  {"id":"r04","question":"Did that Aetherbot work move any retention numbers?","expectFamily":"experience","mustInclude":["25%|retention"],"mustNotInclude":["Nothing actionable"]},
+  {"id":"r05","question":"What coding languages do you know best?","expectFamily":"skills","mustInclude":["Python|Java|TypeScript"],"mustNotInclude":["strongest in\\?"]},
+  {"id":"r06","question":"Break down how you cut DB reads in RedisMart.","expectFamily":"project","mustInclude":["40%|Redis|cach"],"mustNotInclude":["Nothing actionable"]},
+  {"id":"r07","question":"Walk me through what you did as Technical Head of SEDS.","expectFamily":"leadership","mustInclude":["Technical Head|SEDS|ticketing|strategy"],"mustNotInclude":["haven't worked|isn't part of my background|not.*part of my"]},
+  {"id":"r08","question":"Your TEDx involvement — what was your part?","expectFamily":"leadership","mustInclude":["TEDx|Sponsorship|corporate|partnership"],"mustNotInclude":["haven't worked|isn't part of my background"]},
+  {"id":"r09","question":"How many months total have you interned?","expectFamily":"experience_timeline","mustInclude":["month|year"],"mustNotInclude":["Nothing actionable"]},
+  {"id":"r10","question":"Ever driven a car? Got a license?","expectFamily":"unanswerable_profile_fact","mustInclude":["not on my resume|don't have that|isn't something|not something|loaded|confirm"],"mustNotInclude":["Yes, I have a driving license"]},
+  {"id":"r11","question":"You're ex-Google then?","expectFamily":"identity_trap","mustInclude":["GenAI|Scholar|attended|summit|not.*employee|didn't work"],"mustNotInclude":["Yes, I worked at Google"]},
+  {"id":"r12","question":"Show me a Python snippet that flips a linked list around.","expectFamily":"coding","mustInclude":["def|ListNode|prev|next|reverse"],"mustNotInclude":["Nothing actionable"]}
+]}

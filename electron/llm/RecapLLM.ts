@@ -17,7 +17,11 @@ export class RecapLLM {
         try {
             const promptOverride = this.llmHelper.getPromptTier() === 'tiny' ? TINY_RECAP_PROMPT : UNIVERSAL_RECAP_PROMPT;
             const fittedContext = this.llmHelper.fitContextForCurrentModel(context);
-            const stream = this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride);
+            // ignoreKnowledgeMode=true — see ClarifyLLM.generate() for the full
+            // rationale: `context` is a conversation-context blob, not a real
+            // question, and letting it through the knowledge-mode intent classifier
+            // risks misclassifying the whole recap call as an intro request.
+            const stream = this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride, true);
             let fullResponse = "";
             for await (const chunk of stream) fullResponse += chunk;
             return this.clampRecapResponse(fullResponse);
@@ -35,7 +39,8 @@ export class RecapLLM {
         try {
             const promptOverride = this.llmHelper.getPromptTier() === 'tiny' ? TINY_RECAP_PROMPT : UNIVERSAL_RECAP_PROMPT;
             const fittedContext = this.llmHelper.fitContextForCurrentModel(context);
-            yield* this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride);
+            // See generate() above — ignoreKnowledgeMode=true.
+            yield* this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride, true);
         } catch (error) {
             console.error("[RecapLLM] Streaming generation failed:", error);
         }

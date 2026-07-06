@@ -5950,6 +5950,15 @@ async function initializeApp() {
     const { LocalModelDownloadService, createWhisperDownloadProvider } = require('./services/LocalModelDownloadService');
     const downloadService = LocalModelDownloadService.getInstance();
     downloadService.registerProvider(createWhisperDownloadProvider());
+    // 2026-07-06: lazy download for the reranker (smart-retrieval Phase 1).
+    // The 283 MB bge-reranker-base model is no longer bundled — it is fetched
+    // on first document-grounded mode activation via ModesManager.
+    try {
+        const { createRerankerDownloadProvider } = require('./rag/rerankerDownloadProvider');
+        downloadService.registerProvider(createRerankerDownloadProvider());
+    } catch (e: any) {
+        console.warn('[main] Reranker download provider registration failed (non-fatal):', e?.message);
+    }
   } catch (e: any) {
     console.warn('[main] LocalModelDownloadService init failed (non-fatal):', e?.message);
   }

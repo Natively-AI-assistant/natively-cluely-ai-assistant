@@ -118,7 +118,11 @@ describe('Seminar Presentation Assistant reference retrieval', () => {
       assert.equal(ctx.usedFallback, false, `${label}: forced document grounding should not skip retrieval`);
       assertContains(ctx, sentinel, label);
       assert.match(ctx.formattedContext, /<evidence_use_rule>/, 'retrieved chunks must be wrapped by the evidence-use rule');
-      assert.match(ctx.formattedContext, /<document_identity purpose="broad_query_grounding">/, 'document identity block must be present');
+      if (label === 'main topic') {
+        assert.match(ctx.formattedContext, /<document_identity purpose="broad_query_grounding">/, 'broad overview queries should include the document identity block');
+      } else {
+        assert.doesNotMatch(ctx.formattedContext, /<document_identity purpose="broad_query_grounding">/, 'specific fact/list/definition queries should suppress the abstract-heavy identity block');
+      }
     });
   }
 });

@@ -1,0 +1,202 @@
+{
+  "turns": [
+    {
+      "speaker": "candidate",
+      "text": "Hi, thanks for having me today.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Great to meet you. To start, could you give us a quick self-introduction?",
+      "isQuestion": true,
+      "qid": "Q1"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Sure — I'm a senior backend engineer with about ten years of experience building distributed systems, most recently at large-scale platforms in the search and storage space.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Walk me through your most recent role — what you owned and the team setup.",
+      "isQuestion": true,
+      "qid": "Q2"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I was a senior engineer on the indexing platform team, about twelve people, owning the ingestion pipeline that handled billions of documents per day.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Roughly how many years have you been working directly on distributed systems?",
+      "isQuestion": true,
+      "qid": "Q3"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Around eight years focused on it, and the other two were adjacent — concurrency and storage internals.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "I noticed a project on your resume — can you tell me more about it and your specific contribution?",
+      "isQuestion": true,
+      "qid": "Q4"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I led the design of a sharded metadata service that replaced our legacy Zookeeper setup; I owned the consensus layer and the migration tooling.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "What would you say was the biggest quantified achievement at your recent employer?",
+      "isQuestion": true,
+      "qid": "Q5"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Reducing p99 ingestion latency from 1.2 seconds to under 180 milliseconds while cutting infrastructure cost by 35%.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Why are you interested in this Staff role at Pillarstream specifically?",
+      "isQuestion": true,
+      "qid": "Q6"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Your streaming infrastructure work lines up directly with what I've spent my career on, and the staff scope here looks like the right next step.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Based on the resume, you clearly meet our distributed-systems bar — anything you'd like to highlight there?",
+      "isQuestion": true,
+      "qid": "Q7"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I've run multi-region consensus systems in production and led a couple of postmortems on real incidents, so I'm comfortable owning that surface area end to end.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "There's one area we want to dig into — what's your hands-on experience with exactly-once semantics and event sourcing at scale?",
+      "isQuestion": true,
+      "qid": "Q8"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I've implemented idempotent producers with deduplication windows and worked on Kafka-backed event sourcing, though I'd say my depth there is moderate compared to consensus work.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Tell me about your education — degree, school, and any relevant coursework.",
+      "isQuestion": true,
+      "qid": "Q9"
+    },
+    {
+      "speaker": "candidate",
+      "text": "B.S. in Computer Science from a state university, graduated around 2014. Nothing outside the standard curriculum worth flagging.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Give me a STAR-format example of a tough production challenge you owned.",
+      "isQuestion": true,
+      "qid": "Q10"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Sure — Situation: a multi-region write path started failing during a deployment. Task: I was the incident commander. Action: I rolled back, traced it to a clock-skew bug in the new lease manager, and shipped a fix plus monitoring. Result: full recovery in under two hours, and we avoided it recurring the next quarter.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "What are your salary expectations for this role?",
+      "isQuestion": true,
+      "qid": "Q11"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I'm targeting the upper band for staff at this level, probably in the 240k to 280k base range depending on equity.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Do you have any questions for us?",
+      "isQuestion": true,
+      "qid": "Q12"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Yeah — what does the on-call rotation look like for this team, and how is tech leadership structured across staff engineers?",
+      "isQuestion": true,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Got it — how long did the incident recovery itself take from page to all-clear?",
+      "isQuestion": true,
+      "qid": "Q13"
+    },
+    {
+      "speaker": "candidate",
+      "text": "About 95 minutes from the first page to the all-clear, with mitigation happening earlier.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "One last thing — do you currently hold a valid driver's license?",
+      "isQuestion": true,
+      "qid": "Q14"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I do, yes — it's a standard U.S. license, currently valid.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Quick note before we wrap — our office does have a coffee bar that people seem to like.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Before we close — what does your typical week look like outside of work, and is there anything about your background we haven't covered that you'd want me to know? And what interests you most about this opportunity?",
+      "isQuestion": true,
+      "qid": "Q15"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I spend a lot of weekends on side projects, mostly distributed-systems tinkering, and I mentor a couple of early-career engineers. I think that covers the main gaps.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "candidate",
+      "text": "Alright, thanks for your time today — we'll be in touch soon with next steps.",
+      "isQuestion": false,
+      "qid": null
+    }
+  ]
+}

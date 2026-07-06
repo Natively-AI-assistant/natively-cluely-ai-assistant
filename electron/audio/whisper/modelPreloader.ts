@@ -21,6 +21,7 @@ import { app } from 'electron';
 import path from 'path';
 import { buildWorkerInitMessage } from './inferenceConfig';
 import { resolveWhisperWorkerPath } from './workerPathResolver';
+import { acquireOnnxSlot, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSession } from '../../utils/onnxThreadConfig';
 
 // Recent preload failure cooldown: tracks modelIds that just failed to init
 // so we don't hammer them on every app launch / settings toggle / hotkey.
@@ -97,6 +98,18 @@ class ModelPreloader {
             return;
         }
 
+        // Cross-loader ONNX gate — REFUSE silently if memory is tight. Do NOT
+        // surface as a worker error here, or the 5-min persisted failure
+        // cooldown above would block future preloads. The user can retry by
+        // toggling Settings → Audio when memory frees up. Acquire the slot
+        // at HIGH priority (Whisper is latency-critical).
+        if (!hasEnoughMemoryForOnnxSession()) {
+            console.warn(
+                `[ModelPreloader] skipping preload for ${modelId} — free memory below ${getMinFreeGBForOnnxSession()}GB floor (silent skip, not a worker error)`,
+            );
+            return;
+        }
+
         // Cancel any in-progress load for a different model
         if (this.loadingWorker) {
             this.loadingWorker.terminate();
@@ -125,8 +138,23 @@ class ModelPreloader {
             this.pendingModelId = null;
             return;
         }
+        // Acquire the shared ONNX slot BEFORE spawning the worker. The release
+        // function is wired into the worker's error/exit handlers below — the
+        // slot stays held for the lifetime of the worker's session.
+        let slotRelease: (() => void) | null = null;
+        acquireOnnxSlot('high').then((release) => {
+            slotRelease = release;
+        }).catch(() => { /* should never reject */ });
+
         const w = new Worker(workerPath);
         this.loadingWorker = w;
+        // Stash release on the worker object so takeWarmWorker() can hand it
+        // off cleanly when LocalWhisperSTT picks up this warm worker.
+        (w as any).__slotRelease = () => {
+            if (slotRelease) { slotRelease(); slotRelease = null; }
+        };
+        w.on('exit', () => { (w as any).__slotRelease?.(); });
+        w.on('error', () => { (w as any).__slotRelease?.(); });
 
         w.on('message', (msg: any) => {
             if (msg.type === 'ready') {
@@ -193,9 +221,15 @@ class ModelPreloader {
     takeWarmWorker(modelId: string): Worker | null {
         if (this.warmModelId === modelId && this.warmWorker) {
             const w = this.warmWorker;
+            // Slot ownership transfers with the worker. The consumer
+            // (LocalWhisperSTT) installs its own exit/error handlers via
+            // attachWorkerListeners(); those handlers read the slot release
+            // we stashed on the worker (see preload() below). We do NOT
+            // remove the preloader's existing exit/error listeners — they're
+            // already wired to the slot release, so the consumer's new
+            // listeners run AFTER and just re-call the same idempotent
+            // release (no-op).
             w.removeAllListeners('message');
-            w.removeAllListeners('error');
-            w.removeAllListeners('exit');
             this.warmWorker = null;
             this.warmModelId = null;
             console.log(`[ModelPreloader] Handing off warm worker for ${modelId}`);

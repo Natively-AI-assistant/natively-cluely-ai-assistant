@@ -1,0 +1,59 @@
+**Senior Machine Learning Engineer**
+**NovaLex AI**
+*Bengaluru, India (Hybrid) — Open to U.S. relocation*
+
+---
+
+**About NovaLex AI**
+
+NovaLex AI is a Series-C conversational intelligence platform helping Fortune 500 enterprises deploy production-grade LLM agents across customer support, sales enablement, and internal knowledge management. Founded by ex-DeepMind and Microsoft Research engineers, we process over 2.3 billion monthly conversations across 41 languages. Our 180-person team operates from Bengaluru, London, and Seattle, and we recently closed a $90M round led by Sequoia Capital and Index Ventures.
+
+**The Role**
+
+We're hiring a Senior Machine Learning Engineer to join our Core Models team, focused on building and scaling the proprietary fine-tuning, RLHF, and evaluation pipelines behind our enterprise LLM offerings. You'll work directly with our VP of AI, Dr. Aanya Krishnamurthy, and collaborate with research engineers across three time zones.
+
+**What You'll Do**
+
+- Design, train, and productionize fine-tuning and alignment pipelines for domain-specific foundation models (LoRA, DPO, PPO, and custom reward modeling)
+- Own the full lifecycle of model deployment on AWS SageMaker and Kubernetes, from data curation through inference optimization (vLLM, TensorRT-LLM)
+- Build evaluation harnesses that go beyond standard benchmarks — including adversarial probing, hallucination quantification, and domain-specific regression suites
+- Partner with our enterprise solutions team to scope and deliver bespoke model adaptations for clients in BFSI, healthcare, and legal verticals
+- Contribute to our open-source evaluation framework (`novaeval`), now used by 4,000+ teams globally
+
+**What We're Looking For**
+
+- 5+ years of hands-on ML engineering experience, with at least 2 years working on LLM training, fine-tuning, or alignment
+- Deep familiarity with PyTorch, Hugging Face Transformers, and at least one distributed training framework (DeepSpeed, FSDP, or Megatron)
+- Strong production engineering fundamentals: CI/CD for ML, model versioning, A/B testing infrastructure, observability
+- Proven track record of shipping models that handle real user traffic (please share scale metrics)
+- B.Tech or equivalent in Computer Science or related field from a top-tier institution
+
+**Nice to Have**
+
+- **Prior exposure to ML-powered speech or voice systems** (ASR, TTS, or full-duplex conversational audio) — experience with Whisper, Conformer, or streaming audio pipelines is a strong plus
+- Research publications at venues like NeurIPS, ICML, ACL, or EMNLP
+- Experience working with regulated industries and their data-handling constraints (HIPAA, SOC 2, data residency)
+
+**Compensation & Benefits**
+
+- Base salary: ₹42–58 lakhs per annum (depending on experience and interview performance)
+- Equity: 0.05%–0.12% in a high-growth Series-C company
+- Annual performance bonus: up to 15% of base
+- ₹2.5 lakh annual learning & development budget (conferences, courses, certifications)
+- Comprehensive family health insurance (₹10 lakh floater) and mental wellness support
+- Relocation assistance for U.S. transfer: **H-1B visa sponsorship provided** for candidates joining our Seattle office after 12+ months, with full immigration legal support covered
+- 24 days PTO + 12 company holidays + your birthday off
+
+**Our Hiring Process**
+
+1. Recruiter screen (30 min)
+2. Technical deep-dive on past ML systems (75 min)
+3. Live coding + system design round (90 min)
+4. Research conversation with VP of AI (45 min)
+5. Team & culture round (45 min)
+
+We aim to close the loop within 10 business days of your final round. NovaLex AI is an equal-opportunity employer and actively welcomes applications from candidates across India — we currently have teammates from IITs, BITS, IIIT Hyderabad, and IISc.
+
+---
+
+*Note: This is a synthetic job description created for testing purposes. NovaLex AI is a fictitious company. All details — including compensation figures, team size, funding, and product metrics — are invented for evaluation of interview-assistant tooling.*

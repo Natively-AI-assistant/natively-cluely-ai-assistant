@@ -1,0 +1,202 @@
+{
+  "turns": [
+    {
+      "speaker": "interviewer",
+      "text": "Welcome! Thanks for coming in today. How are you doing? Can you start us off with a quick self-introduction?",
+      "isQuestion": true,
+      "qid": "Q1"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I'm doing well, thanks. I'm a product designer with about a decade of freelance and consulting experience across various industries.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Great. So, can you walk me through your most recent role or engagement?",
+      "isQuestion": true,
+      "qid": "Q2"
+    },
+    {
+      "speaker": "candidate",
+      "text": "My most recent work was a six-month engagement with a fintech startup, running from late last year into early this year, focused on their onboarding redesign.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "And roughly how many years would you say you've been working with your top design skill?",
+      "isQuestion": true,
+      "qid": "Q3"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I'd estimate around eight years of focused product design work, though I've been designing in some form for closer to twelve.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "I noticed a specific project mentioned on your background — could you tell me more about that?",
+      "isQuestion": true,
+      "qid": "Q4"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I wasn't sure which project you were referring to since none were named specifically, but I can highlight one of my favorites: a redesign of a healthcare patient portal.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "What would you say was your biggest professional achievement at your most recent engagement?",
+      "isQuestion": true,
+      "qid": "Q5"
+    },
+    {
+      "speaker": "candidate",
+      "text": "At that fintech startup, I led a redesign that improved their activation rate by roughly 35% within the first quarter after launch.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "That's solid. So why are you interested in this Senior Product Designer role with us?",
+      "isQuestion": true,
+      "qid": "Q6"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I'm looking to move from freelance work into something more long-term, and your company's design-first culture really stands out to me.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "You clearly have relevant experience. Could you speak to how your background aligns with what we're looking for?",
+      "isQuestion": true,
+      "qid": "Q7"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I've spent years working directly with product and engineering teams to ship user-centered features, which I think maps well to your needs.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Now, I do see one potential gap — could you address that?",
+      "isQuestion": true,
+      "qid": "Q8"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I assume you're referring to the lack of long-tenure roles on my resume. As a consultant, I've often embedded with teams for extended periods, so the work itself has been deeply collaborative despite the contract structure.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Got it. Let's talk about your education — where did you study, and what did you focus on?",
+      "isQuestion": true,
+      "qid": "Q9"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I studied Visual Communication Design at [University], graduating about ten years ago with a focus on interaction design.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Can you walk me through a challenging situation using the STAR format?",
+      "isQuestion": true,
+      "qid": "Q10"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Sure. Situation: a client needed a complete app redesign in eight weeks. Task: I had to lead research, design, and handoff solo. Action: I prioritized ruthlessly and ran tight weekly reviews. Result: we shipped on time and the client's NPS jumped 20 points.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "What are your salary expectations for this role?",
+      "isQuestion": true,
+      "qid": "Q11"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Based on my research and experience, I'd be looking somewhere in the range of $140,000 to $160,000, but I'm flexible depending on the full package.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Do you have any questions for us?",
+      "isQuestion": true,
+      "qid": "Q12"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Yes — what does the design team's structure look like, and how does product design collaborate with engineering day-to-day?",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Going back to that fintech engagement you mentioned — how long did that take, and what was the team size?",
+      "isQuestion": true,
+      "qid": "Q13"
+    },
+    {
+      "speaker": "candidate",
+      "text": "It ran about six months, and the core team was four people including myself.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Quick one — do you have a valid driver's license?",
+      "isQuestion": true,
+      "qid": "Q14"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Yes, I do — current and unrestricted.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "For what it's worth, I really enjoyed our chat today, and I'm looking forward to the next steps.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Before we wrap — are you open to relocation if needed, and would you be able to start within two weeks?",
+      "isQuestion": true,
+      "qid": "Q15"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I'm open to relocation for the right opportunity, and yes, two weeks' notice should be doable.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Great. So, how soon would you need an answer if we extended an offer, and are there other roles you're actively considering?",
+      "isQuestion": true,
+      "qid": "Q16"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I'd want at least a week to consider any offer, and yes, I'm in late stages with one other company, so timing does matter for me.",
+      "isQuestion": false,
+      "qid": null
+    }
+  ]
+}

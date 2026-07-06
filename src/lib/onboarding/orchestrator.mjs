@@ -87,27 +87,41 @@ export function getOrchestrator() {
 
 function createNoopOrchestrator() {
   const noop = () => {};
+  // Referentially STABLE snapshot object — React's useSyncExternalStore
+  // (used by OrchestratedToasterHost.tsx) compares consecutive getSnapshot()
+  // return values with Object.is(). A fresh object literal on every call
+  // always compares unequal, which React interprets as "the store changed
+  // mid-render" and immediately re-renders to re-check — forever. That
+  // infinite render loop trips React's "Maximum update depth exceeded"
+  // safety valve, which unmounts the entire tree (blank #root / black
+  // screen) since nothing here ever wraps in an error boundary that can
+  // recover from a render-phase throw. Returning the SAME object every call
+  // (this noop orchestrator's state truly never changes) is what
+  // useSyncExternalStore requires. See orchestrator.ts's real getSnapshot(),
+  // which already returns `this.state` (a stable reference) for the same
+  // reason.
+  const snapshot = {
+    version: '1.0',
+    startupCount: 0,
+    totalUsageMs: 0,
+    turnCount: 0,
+    homepageMountedAt: null,
+    homepageFrozenAt: null,
+    homepageCurrentlyMounted: false,
+    appInForeground: true,
+    meetingActive: false,
+    queue: [],
+    completed: {},
+    skipped: new Set(),
+    activeToasterId: null,
+    lastShownTimes: {},
+  };
   return {
     start: noop,
     stop: noop,
     emit: noop,
     subscribe: () => noop,
-    getSnapshot: () => ({
-      version: '1.0',
-      startupCount: 0,
-      totalUsageMs: 0,
-      turnCount: 0,
-      homepageMountedAt: null,
-      homepageFrozenAt: null,
-      homepageCurrentlyMounted: false,
-      appInForeground: true,
-      meetingActive: false,
-      queue: [],
-      completed: {},
-      skipped: new Set(),
-      activeToasterId: null,
-      lastShownTimes: {},
-    }),
+    getSnapshot: () => snapshot,
     markDismissed: noop,
     markSkipped: noop,
     setUserState: noop,

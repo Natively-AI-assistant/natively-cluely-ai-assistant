@@ -71,6 +71,7 @@ const EMPTY_INFO: PhoneMirrorInfo = {
   qrDataUrl: null,
   clients: 0,
   extensionConnected: false,
+  bindAddress: '127.0.0.1',
 };
 
 export const PhoneMirrorSettings: React.FC = () => {
@@ -304,7 +305,7 @@ export const PhoneMirrorSettings: React.FC = () => {
             <div className="text-text-primary font-medium text-sm">Enable Phone Mirror</div>
             <div className="text-text-secondary text-xs mt-1">
               {info.running
-                ? `On — port ${info.port} · ${info.clients} ${info.clients === 1 ? 'phone' : 'phones'} connected`
+                ? `On — port ${info.port} · bound to ${info.bindAddress} (${info.bindAddress === '0.0.0.0' ? 'LAN' : 'loopback only'}) · ${info.clients} ${info.clients === 1 ? 'phone' : 'phones'} connected`
                 : 'Off'}
             </div>
           </div>

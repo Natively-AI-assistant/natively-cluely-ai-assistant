@@ -154,10 +154,26 @@ export class EmbeddingPipeline {
     }
 
     /**
-     * Check if pipeline is ready
+     * Check if pipeline is ready to serve an embed() call WITHOUT a slow
+     * cold-load first.
+     *
+     * 2026-07-05 fix: previously this only checked `provider !== null`, which
+     * is true the instant _doInitialize() assigns LocalEmbeddingProvider as a
+     * fallback — before its ONNX worker has actually loaded the model (that
+     * only happens lazily on the first real embed() call, and can take up to
+     * 60s cold). Callers using isReady() as a synchronous "is it safe to use
+     * this right now" gate (ModeHybridRetriever.isEmbeddingAvailable(), used
+     * inside a live per-query retrieval budget) would see `true`, take the
+     * hybrid-retrieval branch, then stall for up to 60s on the first query
+     * during that narrow startup window.
+     * `provider.isLoaded?.()` is optional — cloud HTTP providers (Gemini/
+     * OpenAI/Ollama) have no meaningful "warm-up" state (every embed() call
+     * is already just a network round-trip), so they simply don't implement
+     * it and this defaults to true for them, preserving existing behavior for
+     * every provider except the local fallback.
      */
     isReady(): boolean {
-        return this.provider !== null;
+        return this.provider !== null && (this.provider.isLoaded?.() ?? true);
     }
 
     /**

@@ -1,0 +1,55 @@
+Job Description: Senior Machine Learning Engineer
+
+Company: Lattice Analytics, Inc.
+Location: Remote (US-based); preference for candidates in Boston, MA or Austin, TX
+Team: Applied ML — Forecasting Platform
+Employment Type: Full-time
+Salary Range: $165,000 – $210,000 base + equity + benefits
+Visa Sponsorship: Available (H-1B transfer and O-1 considered)
+
+About Lattice Analytics
+Lattice Analytics is a 140-person Series C startup building demand-forecasting and inventory-optimization software for mid-market retailers and CPG brands. Our platform processes over 6 billion SKU-location-day forecasts per month for customers like Thrive Market, Bombas, and regional grocery chains. Founded in 2019 by former MIT CSAIL researchers and a ex-Stitch Fix engineering lead, we are backed by Andreessen Horowitz and Bain Capital Ventures. We are a remote-first team with optional offices in Boston and Austin, and we meet in person twice a year for company offsites.
+
+The Role
+We are hiring a Senior Machine Learning Engineer to join our Forecasting Platform team. You will own the end-to-end lifecycle of production forecasting models — from research and prototyping through deployment, monitoring, and continuous improvement. Our current stack runs on AWS (EKS, SageMaker, Airflow) with PyTorch and XGBoost serving ensembles behind a custom feature store. You will work closely with three other ML engineers, two ML researchers, and a platform team responsible for the underlying data and serving infrastructure. This is a hands-on IC role with significant technical autonomy and a clear path to Staff-level scope within 12–18 months for the right candidate.
+
+Responsibilities
+- Design, train, and evaluate forecasting models for retail demand, including transformer-based, gradient-boosted, and hierarchical reconciliation approaches.
+- Own the production deployment of ML models on AWS SageMaker and Kubernetes, including CI/CD pipelines, canary releases, and automated rollback.
+- Build and maintain monitoring, drift detection, and retraining systems for 40+ models in production.
+- Collaborate with data engineering to define and evolve the feature store, with a focus on time-series feature correctness and backfill semantics.
+- Partner with product and customer-facing teams to translate business requirements into modeling decisions and communicate trade-offs to non-technical stakeholders.
+- Contribute to ML platform improvements such as experiment tracking (MLflow), model registry hygiene, and cost optimization of inference workloads.
+- Participate in code reviews, design reviews, and incident response for ML-related production issues.
+- Mentor junior engineers and help shape team best practices around reproducibility, evaluation rigor, and productionization hygiene.
+
+Requirements
+- 4+ years of professional experience building and deploying machine learning systems in production.
+- Strong proficiency in Python and deep familiarity with at least one major deep learning framework (PyTorch preferred; TensorFlow acceptable).
+- Hands-on experience with MLOps tooling such as MLflow, Kubeflow, SageMaker, Vertex AI, or equivalent in-house platforms.
+- Solid understanding of SQL, data modeling, and working with large-scale time-series or tabular datasets.
+- Experience with cloud infrastructure on AWS, GCP, or Azure (we primarily use AWS — EKS, S3, SageMaker, Airflow, Terraform).
+- Familiarity with experiment design, statistical evaluation, and the practical pitfalls of A/B testing ML systems.
+- Working knowledge of Docker and container orchestration (Kubernetes or ECS).
+- Bachelor's or Master's degree in Computer Science, Statistics, Applied Mathematics, or a related quantitative field, or equivalent industry experience.
+
+Nice to Have
+- Experience with demand forecasting, supply chain, retail, or inventory optimization problems.
+- Familiarity with hierarchical time-series reconciliation methods (e.g., MinT, BU, TD methods) or probabilistic forecasting libraries such as GluonTS, Prophet, or NeuralForecast.
+- Contributions to open-source ML or MLOps projects.
+- Experience with streaming data systems (Kafka, Kinesis, or Pub/Sub) and real-time feature engineering.
+- Publications at venues such as NeurIPS, ICML, KDD, or AAAI, or equivalent applied research experience.
+
+Benefits
+- Comprehensive medical, dental, and vision coverage (premiums covered 100% for employees, 80% for dependents).
+- 401(k) with 4% match.
+- Unlimited PTO with a 3-week minimum.
+- $2,000 annual learning and development stipend.
+- Home office setup stipend of $1,500.
+- Paid parental leave (16 weeks primary, 8 weeks secondary).
+
+Equal Opportunity Employer
+Lattice Analytics is an equal opportunity employer. We value diversity and are committed to building an inclusive team. We do not discriminate on the basis of race, color, religion, gender, gender identity, sexual orientation, national origin, age, disability, veteran status, or any other protected category.
+
+How to Apply
+Please apply directly through our careers page at lattice-analytics.com/careers or email your resume and a brief note about a production ML system you're proud of to [email protected]. We typically respond within 5 business days.

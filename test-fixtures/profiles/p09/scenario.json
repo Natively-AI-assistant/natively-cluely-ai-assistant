@@ -1,0 +1,208 @@
+{
+  "turns": [
+    {
+      "speaker": "interviewer",
+      "text": "Welcome! Thanks for joining us today. Could you please start by introducing yourself and walking me through your background?",
+      "isQuestion": true,
+      "qid": "Q1"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Hi, thanks for having me. I'm a machine learning engineer with about five years of experience, primarily working on NLP and production ML systems. I completed my B.Tech from IIT Bombay, and I'm currently based in India.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Great. Could you tell me about your most recent role and what you were working on there?",
+      "isQuestion": true,
+      "qid": "Q2"
+    },
+    {
+      "speaker": "candidate",
+      "text": "My most recent focus has been independent research and consulting after wrapping up my last position. I've been working on ML projects, including the BharatTranslate system, while exploring new opportunities.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Nice. How many years of experience do you have working with XGBoost specifically?",
+      "isQuestion": true,
+      "qid": "Q3"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I've used XGBoost extensively, roughly three to four years across classification, regression, and ranking problems in production settings.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Tell me more about the BharatTranslate project — what was it and what was your contribution?",
+      "isQuestion": true,
+      "qid": "Q4"
+    },
+    {
+      "speaker": "candidate",
+      "text": "BharatTranslate is a low-resource neural machine translation system I built to translate between several Indian languages with limited parallel corpora. I designed the data augmentation pipeline, fine-tuned transformer models, and built the evaluation harness.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Can you share what you consider your biggest achievement at your most recent employer?",
+      "isQuestion": true,
+      "qid": "Q5"
+    },
+    {
+      "speaker": "candidate",
+      "text": "At my last full-time role, I led the deployment of a real-time recommendation model that improved click-through rates by roughly 18 percent and reduced inference latency by half.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Why are you interested in this Senior ML Engineer role at Lattice Analytics?",
+      "isQuestion": true,
+      "qid": "Q6"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Lattice's focus on applied ML for analytics resonates with my experience, and the seniority of the role aligns with where I want to take my career next.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "You mentioned relevant experience — could you walk me through how your background matches the core requirements of this role?",
+      "isQuestion": true,
+      "qid": "Q7"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I have five years of ML engineering experience, strong skills in Python and model deployment, and a track record of shipping NLP and tabular models to production.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Now, looking at the requirements, there are a few areas where I want to assess potential gaps. One area is large-scale distributed training on multi-node GPU clusters — how would you rate your experience there, and are you comfortable ramping up quickly on it?",
+      "isQuestion": true,
+      "qid": "Q8"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I've worked with multi-GPU training using PyTorch DDP and some Ray, though mostly on single-node setups with up to eight GPUs. I'm confident I can ramp on multi-node orchestration fairly quickly given my systems background.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Let's talk about your education — could you tell me more about your time at IIT Bombay and what you focused on?",
+      "isQuestion": true,
+      "qid": "Q9"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I did my B.Tech at IIT Bombay, where I concentrated on computer science with electives in machine learning and natural language processing. I also worked on a few research projects in low-resource NLP.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Can you describe a challenging technical situation using the STAR format — Situation, Task, Action, Result?",
+      "isQuestion": true,
+      "qid": "Q10"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Situation: our translation model's BLEU scores plateaued on a low-resource language pair. Task: I was asked to improve quality within two weeks before a client demo. Action: I built a back-translation data augmentation pipeline, tuned the transformer hyperparameters, and added domain-specific monolingual data. Result: BLEU improved by 6.2 points and the demo went ahead successfully.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "What are your salary expectations for this role?",
+      "isQuestion": true,
+      "qid": "Q11"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Given my experience and the seniority of the role, I'm targeting around 45 to 55 lakhs per annum, though I'm open to discussing the overall compensation package, including equity and visa support.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Do you have any questions for me about the role or the team?",
+      "isQuestion": true,
+      "qid": "Q12"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Yes — could you share more about the team structure and what a typical six months in this role looks like?",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "How long did that translation improvement work take you end-to-end?",
+      "isQuestion": true,
+      "qid": "Q13"
+    },
+    {
+      "speaker": "candidate",
+      "text": "The full iteration, from problem definition to the final evaluation run, took about ten days, with most of that time spent on data preparation and experimentation.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Quick one — do you have a valid driver's license?",
+      "isQuestion": true,
+      "qid": "Q14"
+    },
+    {
+      "speaker": "candidate",
+      "text": "No, I don't currently have a driver's license.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Quick follow-up on the compensation piece — would you need H-1B visa sponsorship for a US-based position, and how does that factor into your expectations?",
+      "isQuestion": true,
+      "qid": "Q15"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Yes, I would need H-1B sponsorship if the role is US-based. I'd appreciate the company's support with that process, and I'd be happy to discuss how that affects the overall package.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Before we dive back in — it's a really pleasant afternoon here, and the coffee they're serving is unusually good today.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "candidate",
+      "text": "Glad to hear it! The weather on my end is quite pleasant too, which always helps during interviews.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Last two things — what's your earliest possible start date, and are you open to a hybrid working arrangement out of the Bangalore office? And what interests you most about this opportunity?",
+      "isQuestion": true,
+      "qid": "Q16"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I can start within 30 to 45 days, and I'm very open to a hybrid arrangement out of Bangalore.",
+      "isQuestion": false,
+      "qid": null
+    }
+  ]
+}

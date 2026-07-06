@@ -52,7 +52,7 @@ export {
 export type { SpeakabilityDecision, SpeakabilityClass, SpeakabilityTarget, ShortLengthBand, ShortBandTarget } from "./speakability";
 export { checkAnswerForCodeBugs, checkCodeCompleteness } from "./CodeSanityCheck";
 export type { CodeSanityResult, CodeSanityIssue } from "./CodeSanityCheck";
-export { AnswerDiversityGuard, cleanAnswerArtifacts, compressToSpeakable, varySpokenOpening } from "./answerPolish";
+export { AnswerDiversityGuard, cleanAnswerArtifacts, isLeakedSchemaStub, stripMetaPreamble, compressToSpeakable, varySpokenOpening, SCAFFOLD_LABEL_RE } from "./answerPolish";
 export type { RepetitionVerdict, RepetitionReason, DiversityCheckOpts } from "./answerPolish";
 export type { AnswerPlan, AnswerSource, AnswerType, ContextLayer, OutputPerspective, SpeakerPerspective } from "./AnswerPlanner";
 export { applyModeFallback, MODE_CONTEXT_PROFILES } from "./modeProfiles";

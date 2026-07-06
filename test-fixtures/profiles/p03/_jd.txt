@@ -1,0 +1,45 @@
+DATA ANALYST
+Northwind Logistics — Chicago, IL (Hybrid, 2 days onsite)
+Salary: $68,000 – $82,000 base + annual bonus
+Department: Revenue Operations | Reports to: Director of Analytics
+
+ABOUT NORTHWIND LOGISTICS
+Northwind is a mid-market third-party logistics provider moving over 40,000 shipments per week across the Midwest and Southeast. We work with mid-sized manufacturers and retailers who need a technology-forward partner — our internal platform tracks every shipment, invoice, and exception in near real time. Our analytics team of seven sits at the center of that operation, turning operational data into decisions the COO and our regional GMs actually act on. We're profitable, we've grown headcount 30% in the last 18 months, and we invest in our tooling (Snowflake, dbt, Tableau, Census) rather than letting it rot.
+
+THE OPPORTUNITY
+We're hiring a Data Analyst to join the Revenue Operations analytics team. You'll partner directly with Sales, Finance, and Operations stakeholders — including two Regional GMs and our VP of Customer Success — to answer questions like: Where are we leaking margin on contracted vs. spot freight? Which customer segments are churning and what's the leading indicator? How should we reprice our LTL lanes next quarter? Your work will show up in weekly executive reviews, not just sit in a dashboard graveyard.
+
+This is an IC role with a clear growth path to Senior Analyst within 12–18 months for someone who builds trust with stakeholders and ships analysis that drives real decisions.
+
+WHAT YOU'LL DO
+- Write production SQL (CTEs, window functions, incremental models) against our Snowflake warehouse to model shipment, invoice, and customer data.
+- Build and maintain 4–6 Tableau dashboards used daily by Sales, Ops, and Finance leadership; own a quarterly dashboard review and retire what isn't being used.
+- Lead 2–3 deep-dive analyses per month end-to-end: scope the question with stakeholders, pull and validate the data, present findings, and track whether the recommendation was actually implemented.
+- Partner with our Data Engineering team to QA new dbt models before they ship to production and flag edge cases early.
+- Document metric definitions in our internal metrics catalog so "gross margin" means the same thing to Finance and to Sales.
+- Present findings to non-technical audiences — you'll regularly defend your methodology and assumptions in front of directors and VPs.
+
+REQUIREMENTS
+- 1+ years of professional analytics experience, OR equivalent transferable experience (e.g., data-adjacent role, strong bootcamp/Master's portfolio, research analyst work). We're serious about the transferable path.
+- Strong SQL skills: comfortable with joins across multiple tables, CTEs, window functions, and reading someone else's gnarly query without panic.
+- Hands-on experience with at least one BI tool — Tableau strongly preferred, Power BI also fine. We want to see dashboards you've built, not just ones you've viewed.
+- Demonstrated ability to translate a vague business question ("why are customers leaving?") into a defined analytical approach.
+- Clear, concise written and verbal communication. You'll be writing recap docs and presenting to VPs in your first 90 days.
+- Bachelor's degree in a quantitative field (Statistics, Economics, Computer Science, etc.) OR equivalent practical experience.
+
+NICE TO HAVE
+- Experience with a modern data stack: Snowflake, dbt, Census, or similar.
+- Familiarity with freight, logistics, supply chain, or another operations-heavy industry.
+- Light Python or R for ad-hoc analysis, statistical testing, or forecasting.
+- Prior experience working with commercial stakeholders (Sales, Marketing, Finance) rather than only product or engineering teams.
+
+WHAT WE OFFER
+- Hybrid schedule: 2 days onsite at our Chicago Loop office, 3 remote. No mandates to increase onsite days in 2025.
+- 4% 401(k) match, fully vested from day one.
+- Full medical/dental/vision, 25 PTO days + 11 federal holidays.
+- $1,500 annual learning stipend — conferences, certifications, courses.
+- A real analytics team that reviews each other's work and invests in tooling, not a one-person "data person" role.
+
+Northwind Logistics is an equal opportunity employer. We value diversity and don't discriminate on the basis of race, religion, color, national origin, gender, sexual orientation, age, marital status, veteran status, or disability status.
+
+To apply, send your resume and 2–3 bullet points describing an analysis you're proud of to analytics-hiring@northwindlogistics.com. No cover letter required.

@@ -1,0 +1,48 @@
+Coastal Logistics Inc. — Full-Stack Engineer
+
+Location: Boston, MA (Hybrid, 3 days onsite in Seaport office)
+Employment Type: Full-Time
+Compensation: $135,000 – $165,000 base + equity + comprehensive benefits
+
+About Coastal Logistics Inc.
+
+Coastal Logistics Inc. is a Series B freight-tech company transforming how goods move across North America's ports and highways. Our platform connects shippers, carriers, and terminal operators through real-time tracking, automated dispatching, and predictive ETA modeling. We process over 4 million shipment events per day and serve customers ranging from regional distributors to Fortune 500 logistics teams. Founded in 2019, we've grown to 180 employees and are backed by Founders Fund and Maersk's venture arm.
+
+Engineering at Coastal Logistics is pragmatic and product-focused. We ship continuously, value readable code over clever code, and invest heavily in developer tooling. Our stack is modern but not precious — we choose boring technology where it earns its keep.
+
+The Role
+
+We're hiring a Full-Stack Engineer to join our Shipment Visibility team, the group responsible for the live tracking dashboards and customer-facing shipment detail pages used by thousands of logistics coordinators daily. You'll work across the entire stack: building polished React interfaces, designing REST endpoints, and contributing to the data pipelines that power our real-time map views.
+
+You'll partner closely with product designers, two backend engineers, and a staff engineer tech lead. Expect to own features end-to-end — from RFC to production monitoring — within your first quarter.
+
+Responsibilities
+
+- Design, build, and maintain customer-facing features in our React/TypeScript web application used by 12,000+ daily active logistics coordinators
+- Develop and maintain RESTful API endpoints in our Node.js (NestJS) backend, with PostgreSQL as the system of record
+- Collaborate with product and design to translate shipment visibility requirements into intuitive, performant UI components
+- Write thoughtful, well-tested code with meaningful unit and integration test coverage
+- Participate in code reviews, architecture discussions, and technical RFCs
+- Contribute to CI/CD pipelines, observability tooling, and on-call rotations (rotating, with comp time)
+- Debug and resolve production issues across the full stack when they arise
+- Mentor junior engineers and share knowledge through internal tech talks and pairing sessions
+
+Requirements
+
+- 3+ years of professional full-stack or front-end-leaning software engineering experience
+- Strong proficiency in JavaScript and TypeScript, including modern ES features and async patterns
+- Production experience building React applications with hooks, state management (Redux, Zustand, or similar), and component-driven architecture
+- Hands-on experience with at least one backend language (Node.js, Python, Go, or Java) and building REST APIs
+- Solid understanding of relational databases, SQL, and data modeling fundamentals
+- Experience working with REST APIs, including designing endpoints, handling pagination, authentication, and error contracts
+- Familiarity with Git, CI/CD pipelines, and modern deployment workflows
+- Track record of shipping production features that real users rely on
+
+Nice to Have
+
+- Experience with mapping libraries (Mapbox GL JS, Leaflet, Google Maps) or geospatial data
+- Familiarity with WebSockets or server-sent events for real-time UI updates
+- Exposure to time-series data, IoT telemetry, or logistics/supply-chain domains
+- Experience with AWS services (ECS, RDS, S3, CloudWatch) or equivalent cloud platform
+- Contributions to open-source projects or a public technical portfolio
+- Comfort working in a fast-paced startup where priorities shift and ownership is broad

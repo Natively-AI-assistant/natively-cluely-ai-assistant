@@ -30,6 +30,15 @@ export interface StreamRouteOptions {
   answerType?: AnswerType;
   /** The plan's forbidden context layers — the authoritative exclusion list. */
   forbiddenContextLayers?: ContextLayer[];
+  /**
+   * Round-7 Failure-2: the previous assistant answer, supplied by the caller
+   * (the chat handler has it via getLastAssistantMessage()). For a short/
+   * anaphoric doc-grounded follow-up the retriever extracts this text's
+   * high-signal entities and appends them to the RETRIEVAL query only (never
+   * shown to the model), so "What processor controls it?" can still find the
+   * fact about the previously-named subject. Absent → legacy behavior.
+   */
+  followUpReferentHint?: string;
 }
 
 /**
@@ -60,5 +69,17 @@ export function profileInterceptAllowedByRoute(route?: StreamRouteOptions): bool
  * (matches the prior hardcoded value, so legacy callers are unchanged).
  */
 export function modeAnswerType(route?: StreamRouteOptions): AnswerType {
-  return route?.answerType ?? 'general_meeting_answer';
+  const answerType = route?.answerType;
+  if (answerType === 'definitional_answer'
+      || answerType === 'list_answer'
+      || answerType === 'exact_numeric_answer'
+      || answerType === 'document_absent_fact_refusal'
+      || answerType === 'document_followup_answer') {
+    // Execution paths that predate these document-specific subtypes still gate
+    // mode injection on lecture_answer as the mode-scoped document lane. Retrieval
+    // receives the precise subtype via routeOptions; mode scoping remains enabled
+    // by normalizing the active-mode injection answer type to lecture_answer.
+    return 'lecture_answer';
+  }
+  return answerType ?? 'general_meeting_answer';
 }

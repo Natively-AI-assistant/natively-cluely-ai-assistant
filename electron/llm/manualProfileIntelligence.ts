@@ -21,6 +21,8 @@ interface ProfileExperience {
   bullets?: unknown;
   highlights?: unknown;
   responsibilities?: unknown;
+  start_date?: unknown;
+  end_date?: unknown;
 }
 
 interface ProfileProject {
@@ -31,6 +33,11 @@ interface ProfileProject {
   technologies?: unknown;
   tech_stack?: unknown;
   tools?: unknown;
+  // Individual resume bullets beyond the single summary description (e.g. a
+  // metrics bullet — "gained 4,000+ users and 500+ stars in one week" — kept
+  // distinct from the architecture/tech bullets). Optional: absent on
+  // profiles ingested before this field existed.
+  highlights?: unknown;
 }
 
 interface ProfileEducation {
@@ -209,6 +216,17 @@ const SKILL_PATTERNS = [
   // "what programming/coding languages do you know/use?" (Issue 7).
   /\bwhat\s+(programming|coding)\s+languages?\s+do\s+(you|i)\b/,
   /\bwhat\s+languages?\s+do\s+(you|i)\s+(know|use)\b/,
+  // "what programming languages are you STRONGEST in?" (Profile Intelligence
+  // production-fix round 2, RC3): a real-session phrasing variant that fell
+  // through the fast path entirely (no pattern matched "strongest") and hit
+  // the provider, which echoed a rephrased version of the question back as
+  // the "answer" ("What programming languages do you work with?", 44 chars)
+  // instead of ever answering. This is exactly the class of question
+  // skills_answer's deterministic template already handles correctly for
+  // "do you know/use" phrasing — it just needs to recognise "strongest in" /
+  // "best at" / "most skilled in" as the same ask.
+  /\b(programming|coding)?\s*languages?\b[\w\s]{0,20}\b(strongest|best|most\s+(skilled|proficient|comfortable|experienced))\b/i,
+  /\b(strongest|best|most\s+(skilled|proficient|comfortable|experienced))\b[\w\s]{0,20}\b(programming|coding)?\s*languages?\b/i,
 ];
 
 const EDUCATION_PATTERNS = [
@@ -338,6 +356,152 @@ const formatIntro = (profile: MaybeStructured<StructuredProfileFacts>, question?
   return variants[Math.abs(h) % variants.length].filter(Boolean).join(' ');
 };
 
+// ── DETERMINISTIC TIMELINE MATH (Profile Intelligence production-fix
+// 2026-07-05, Phase 4 item 5) ────────────────────────────────────────────
+// "How long were you at EstroTech?", "What's your total internship
+// experience?", "What's the gap between your X and Y roles?" are exact
+// arithmetic over the resume's OWN start_date/end_date fields — the LLM
+// should never be asked to compute these (and shouldn't need to; a wrong
+// answer here is a pure math error, not a judgment call). Dates are
+// normalized "YYYY-MM" per the extraction schema; a null/missing end_date
+// means "ongoing" and resolves to the current month.
+const parseYearMonth = (raw: unknown): { y: number; m: number } | null => {
+  const s = clean(raw);
+  const m = s.match(/^(\d{4})-(\d{2})$/);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || mo < 1 || mo > 12) return null;
+  return { y, m: mo };
+};
+const monthIndex = (d: { y: number; m: number }): number => d.y * 12 + (d.m - 1);
+const nowYearMonth = (): { y: number; m: number } => {
+  const d = new Date();
+  return { y: d.getFullYear(), m: d.getMonth() + 1 };
+};
+const formatDurationMonths = (months: number): string => {
+  if (months <= 0) return 'less than a month';
+  if (months < 12) return `${months} month${months === 1 ? '' : 's'}`;
+  const years = Math.floor(months / 12);
+  const rem = months % 12;
+  const yearPart = `${years} year${years === 1 ? '' : 's'}`;
+  return rem > 0 ? `${yearPart} and ${rem} month${rem === 1 ? '' : 's'}` : yearPart;
+};
+// A single experience entry's [start, end) span in absolute month-index form,
+// with metadata for rendering. `end` resolves ongoing roles to "now".
+const experienceSpan = (entry: ProfileExperience): { start: number; end: number; company: string; role: string } | null => {
+  const start = parseYearMonth((entry as Record<string, unknown>).start_date);
+  if (!start) return null;
+  const endRaw = (entry as Record<string, unknown>).end_date;
+  const end = endRaw ? parseYearMonth(endRaw) : nowYearMonth();
+  const resolvedEnd = end || nowYearMonth();
+  return {
+    start: monthIndex(start),
+    end: monthIndex(resolvedEnd),
+    company: firstNonEmpty(entry.company, entry.organization, entry.employer),
+    role: firstNonEmpty(entry.role, entry.title, entry.position),
+  };
+};
+// Find the experience entry whose company name is referenced in the question
+// (e.g. "EstroTech" in "how long were you at EstroTech Robotics?"). Matches
+// on the first significant token of the company name so "EstroTech" matches
+// "EstroTech Robotics".
+const findExperienceByCompanyMention = (profile: MaybeStructured<StructuredProfileFacts>, q: string): ReturnType<typeof experienceSpan> => {
+  for (const entry of profileExperience(profile)) {
+    const company = firstNonEmpty(entry.company, entry.organization, entry.employer);
+    if (!company) continue;
+    const head = company.toLowerCase().split(/[\s,.]+/).filter(Boolean)[0];
+    if (head && head.length >= 4 && q.includes(head)) {
+      const span = experienceSpan(entry);
+      if (span) return span;
+    }
+  }
+  return null;
+};
+const DURATION_AT_COMPANY_PATTERNS = [
+  /\bhow\s+long\s+(were|was|have)\s+(you|i)\s+(at|with)\b/,
+  /\bhow\s+(many|much)\s+(months?|years?)\s+(were|was|have)\s+(you|i)\s+(at|with)\b/,
+  /\bhow\s+long\s+did\s+(you|i)\s+(work|stay|spend)\s+(at|with)\b/,
+];
+const TOTAL_EXPERIENCE_DURATION_PATTERNS = [
+  /\bwhat.?s\s+(your|my)\s+total\s+(internship\s+)?experience\b/,
+  /\btotal\s+(internship\s+)?experience\b/,
+  /\bhow\s+much\s+total\s+experience\b/,
+];
+const GAP_BETWEEN_ROLES_PATTERNS = [
+  /\bgap\s+between\b/,
+  /\bhow\s+(much|long)\s+(of\s+a\s+)?gap\b/,
+];
+
+// TENURE is INCLUSIVE of both the start and end calendar month — "June to
+// August" reads as 3 worked months (June, July, August), not 2. This matches
+// how a candidate would actually describe their own tenure, and is the
+// convention the task's own expected answers use ("~3 months" for a
+// Jun-Aug internship, "~7 months" total for a 3-month + 4-month pair).
+// NOTE: this deliberately diverges from the EXCLUSIVE
+// premium/electron/knowledge/DocumentChunker.ts#calculateDurationMonths
+// (used for skill-experience-months bucketing, an internal ranking signal
+// where the off-by-one doesn't matter) — that function is not reused here
+// because user-facing tenure phrasing and internal ranking arithmetic are
+// different concerns with different correctness bars.
+const tenureMonthsInclusive = (span: { start: number; end: number }): number => span.end - span.start + 1;
+
+// "How long were you at <Company>?" — exact months/years between that role's
+// start_date and end_date (or now, if ongoing).
+const formatDurationAtCompany = (profile: MaybeStructured<StructuredProfileFacts>, q: string): string => {
+  const span = findExperienceByCompanyMention(profile, q);
+  if (!span) return '';
+  const months = tenureMonthsInclusive(span);
+  if (months < 1) return '';
+  return `I was at ${span.company} for ${formatDurationMonths(months)}.`;
+};
+
+// "What's your total internship experience?" — sum of every experience
+// entry's INCLUSIVE tenure (deterministic; no double-counting overlaps since
+// resume roles are sequential, not concurrent, for this population).
+const formatTotalExperience = (profile: MaybeStructured<StructuredProfileFacts>): string => {
+  const spans = profileExperience(profile).map(experienceSpan).filter((s): s is NonNullable<typeof s> => s !== null);
+  if (spans.length === 0) return '';
+  const totalMonths = spans.reduce((sum, s) => sum + Math.max(0, tenureMonthsInclusive(s)), 0);
+  if (totalMonths <= 0) return '';
+  const roleCount = spans.length;
+  return `I have completed ${roleCount} internship${roleCount === 1 ? '' : 's'} totaling ${formatDurationMonths(totalMonths)} of experience.`;
+};
+
+// "What's the gap between your X and Y roles?" — the CHRONOLOGICAL gap
+// between whichever two mentioned roles are closest in time to each other,
+// resolved from the two most recent distinctly-mentioned companies in the
+// question (falls back to the two most recent overall roles when the
+// question only names one or zero companies, since "the gap" implies
+// adjacency in the timeline). Gap is EXCLUSIVE of both roles' own tenure
+// months — it counts only the months NEITHER role covers (e.g. an Aetherbot
+// role ending March and an EstroTech role starting June leaves April and May
+// unaccounted for: a 2-month gap, not 3).
+const formatGapBetweenRoles = (profile: MaybeStructured<StructuredProfileFacts>, q: string): string => {
+  const spans = profileExperience(profile).map(experienceSpan).filter((s): s is NonNullable<typeof s> => s !== null);
+  if (spans.length < 2) return '';
+  // Sort chronologically ascending by start.
+  const sorted = [...spans].sort((a, b) => a.start - b.start);
+  // Prefer the pair BOTH explicitly named in the question; else fall back to
+  // the two most recent roles (the natural reading of "the gap" with no
+  // other context).
+  const mentioned = sorted.filter((s) => {
+    const head = s.company.toLowerCase().split(/[\s,.]+/).filter(Boolean)[0];
+    return head && head.length >= 4 && q.includes(head);
+  });
+  const pair = mentioned.length >= 2 ? mentioned.slice(-2) : sorted.slice(-2);
+  const [earlier, later] = pair;
+  // `earlier.end` is the INDEX of the last worked month (inclusive, per
+  // experienceSpan/monthIndex) — so the gap is the count of months strictly
+  // BETWEEN the two roles: later.start - earlier.end - 1. A March-end role
+  // followed by a June-start role leaves April and May unaccounted for (2
+  // months), not later.start - earlier.end (3, which would double-count
+  // March as part of the gap).
+  const gapMonths = later.start - earlier.end - 1;
+  if (gapMonths <= 0) return `There was no gap between my time at ${earlier.company} and ${later.company} — they were back-to-back or overlapping.`;
+  return `The gap between my time at ${earlier.company} and ${later.company} was ${formatDurationMonths(gapMonths)}.`;
+};
+
 const formatExperience = (profile: MaybeStructured<StructuredProfileFacts>): string => {
   const entries = profileExperience(profile);
   if (entries.length === 0) return '';
@@ -404,6 +568,12 @@ const afterCopula = (description: string): string => {
   return d.replace(/^(A|An|The|It|This|That)\b/, (m) => m.toLowerCase());
 };
 
+// A quantitative claim (contains a digit) reads as a concrete metric worth
+// surfacing on its own — "gained 4,000+ users and 500+ stars in one week" —
+// distinct from qualitative highlights ("architected a local RAG system")
+// which are already implied by description/technologies.
+const HAS_DIGIT_RE = /\d/;
+
 const formatSingleProject = (project: ProfileProject): string => {
   const name = firstNonEmpty(project.name, project.title);
   const description = firstNonEmpty(project.description, project.summary);
@@ -412,17 +582,54 @@ const formatSingleProject = (project: ProfileProject): string => {
   const parts = [`Your project ${name}`];
   if (description) parts.push(`is ${afterCopula(description)}`);
   const head = parts.join(' ');
-  return `${head}.${tech ? ` It was built with ${tech}.` : ''}`;
+  // Metric bullet recall (Profile Intelligence production-fix 2026-07-05,
+  // Confirmed Bug #4): the single `description` field can't hold every bullet
+  // — a resume project entry often has a separate metrics bullet ("gained
+  // 4,000+ users and 500+ stars in one week") that a 1-sentence summary
+  // drops. Surface the first highlight containing a number so "how many
+  // users/stars did X get?" is answered instead of silently omitted.
+  const highlights = asArray(project.highlights).map(clean).filter(Boolean);
+  const metricHighlight = highlights.find((h) => HAS_DIGIT_RE.test(h) && !description.includes(h));
+  const metricSentence = metricHighlight ? ` ${afterCopula(metricHighlight).replace(/^[a-z]/, (m) => m.toUpperCase())}.` : '';
+  return `${head}.${metricSentence}${tech ? ` It was built with ${tech}.` : ''}`;
 };
 
 // Find a skill token in the question that the profile actually lists, and which
 // projects use it. Returns null when the skill isn't recognised in the profile
 // (so we defer to the LLM rather than guess). Grounded — never invented.
 const SKILL_TOKEN_RE = /\b(python|sql|java(?:script)?|typescript|react|node(?:\.?js)?|c\+\+|go(?:lang)?|rust|aws|gcp|azure|docker|kubernetes|graphql|rest|fastapi|django|flask|spring|pandas|numpy|spark|hadoop|tableau|power\s?bi|excel|tensorflow|pytorch|sql|nosql|mongodb|postgres(?:ql)?|redis|data analysis|analytics|machine learning|ml|statistics)\b/i;
+// Canonical display casing for common acronym/proper-noun skills — the
+// question text is lowercased for matching (SKILL_TOKEN_RE runs on
+// `normalize(question)`), so the raw match ("aws", "sql") is never fit to
+// print verbatim in a candidate-voice answer (real-session Defect D:
+// "Yes, aws has been part of..."). Prefer the profile's OWN casing from its
+// skill list when present; this map is only the fallback for skills matched
+// via a project/bullet mention that isn't in the flat skill list verbatim.
+const SKILL_DISPLAY_CASING: Record<string, string> = {
+  aws: 'AWS', gcp: 'GCP', azure: 'Azure', sql: 'SQL', nosql: 'NoSQL', graphql: 'GraphQL',
+  rest: 'REST', ml: 'ML', javascript: 'JavaScript', typescript: 'TypeScript', python: 'Python',
+  java: 'Java', react: 'React', nodejs: 'Node.js', 'node.js': 'Node.js', node: 'Node.js',
+  'c++': 'C++', go: 'Go', golang: 'Go', rust: 'Rust', docker: 'Docker', kubernetes: 'Kubernetes',
+  fastapi: 'FastAPI', django: 'Django', flask: 'Flask', spring: 'Spring', pandas: 'Pandas',
+  numpy: 'NumPy', spark: 'Spark', hadoop: 'Hadoop', tableau: 'Tableau', 'power bi': 'Power BI',
+  'powerbi': 'Power BI', excel: 'Excel', tensorflow: 'TensorFlow', pytorch: 'PyTorch',
+  mongodb: 'MongoDB', postgres: 'Postgres', postgresql: 'PostgreSQL', redis: 'Redis',
+  'data analysis': 'data analysis', analytics: 'analytics', 'machine learning': 'machine learning',
+  statistics: 'statistics',
+};
+const displaySkillName = (profile: MaybeStructured<StructuredProfileFacts>, rawSkill: string): string => {
+  const lower = rawSkill.toLowerCase();
+  const fromProfile = profileSkills(profile)
+    .map((s) => (typeof s === 'string' ? s : firstNonEmpty(s.name, s.skill)))
+    .find((s) => clean(s).toLowerCase() === lower);
+  if (fromProfile) return clean(fromProfile);
+  if (SKILL_DISPLAY_CASING[lower]) return SKILL_DISPLAY_CASING[lower];
+  return rawSkill.charAt(0).toUpperCase() + rawSkill.slice(1);
+};
 const findProfileSkill = (profile: MaybeStructured<StructuredProfileFacts>, q: string): { skill: string; projects: string[] } | null => {
   const m = q.match(SKILL_TOKEN_RE);
   if (!m) return null;
-  const skill = m[0];
+  const skill = displaySkillName(profile, m[0]);
   const all = profileSkills(profile)
     .map((s) => (typeof s === 'string' ? s : firstNonEmpty(s.name, s.skill)))
     .filter(Boolean).map((s) => s.toLowerCase());
@@ -438,6 +645,26 @@ const findProfileSkill = (profile: MaybeStructured<StructuredProfileFacts>, q: s
   if (!inSkills && projects.length === 0) return null;
   return { skill, projects };
 };
+// A grounded bullet/description sentence naming the skill, trimmed to a
+// single readable clause. Capped so a long bullet doesn't turn a "yes/no"
+// skill-experience answer into a wall of text.
+const EVIDENCE_BULLET_MAX_CHARS = 220;
+const trimEvidenceBullet = (s: string): string => {
+  const t = clean(s).replace(/\.+$/, '');
+  return t.length > EVIDENCE_BULLET_MAX_CHARS ? `${t.slice(0, EVIDENCE_BULLET_MAX_CHARS - 1).trimEnd()}…` : t;
+};
+// Resume `description`/`summary` fields (on BOTH experience entries and
+// project entries — the extraction schema doesn't constrain grammatical
+// person for either) can be phrased as either a first-person, verb-led
+// bullet ("Engineered a scalable pipeline...") OR a third-person noun phrase
+// ("A high-performance e-commerce engine..."). Mixing the two into one
+// template produced a broken sentence ("Specifically, I a high-performance
+// e-commerce engine...", code-review 2026-07-05 HIGH) when an experience
+// entry's own description happened to be a noun phrase rather than a bullet.
+// Detect which shape it is so the caller picks the right suffix framing
+// ("Specifically, I <verb>..." vs "It's <noun phrase>...").
+const looksLikeFirstPersonBullet = (s: string): boolean => /^(i|i've|i'd|we|we've|led|built|engineered|architected|designed|developed|created|launched|coordinated|optimized|orchestrated|managed|implemented|redesigned|reduced|increased|improved|delivered|drove|shipped|owned)\b/i.test(clean(s));
+
 const formatSkillExperience = (profile: MaybeStructured<StructuredProfileFacts>, q: string): string => {
   const found = findProfileSkill(profile, q);
   if (!found) return '';
@@ -446,27 +673,72 @@ const formatSkillExperience = (profile: MaybeStructured<StructuredProfileFacts>,
   // "central to what I built" at a role the resume doesn't link to the skill — that's
   // a falsifiable hallucination). "where" is the projects that actually use the skill,
   // OR an experience entry whose role/tech/description actually mentions the skill.
-  const groundedRole = (() => {
+  // ANSWER-QUALITY FIX (Phase 0 replay finding, real-session Defect D): the
+  // template used to discard the actual bullet text and only say "my work at
+  // <Company>" — a one-line non-answer ("Yes, aws has been part of my work at
+  // Aetherbot AI.") even when the resume has a rich, specific bullet ("...on
+  // AWS EC2, managing system trade-offs to reduce latency to sub-80ms...").
+  // Now capture that bullet (if the match came from one) so the answer can
+  // quote the real evidence instead of just naming the company.
+  // evidenceBullet: a first-person, verb-led clause ("Engineered a scalable
+  // pixel-streaming pipeline...") that can be prepended with "Specifically, I".
+  // evidenceNounPhrase: a THIRD-person noun-phrase description ("A
+  // high-performance e-commerce engine...", from a project's `description`
+  // field) that needs different framing ("It's ...") — mixing the two grammars
+  // produced a broken sentence ("Specifically, I a high-performance...").
+  const { where, evidenceBullet, evidenceNounPhrase } = (() => {
     for (const e of profileExperience(profile)) {
       const ex = e as Record<string, unknown>;
-      const hay = [firstNonEmpty(e.role, e.title, e.position), firstNonEmpty(e.company, e.organization, e.employer),
-        firstNonEmpty(ex.description, ex.summary),
-        ...asArray(e.bullets || e.highlights || e.responsibilities),
-        ...asArray(ex.technologies || ex.tech_stack || ex.skills)]
-        .map((x) => clean(x).toLowerCase()).join(' ');
+      const company = firstNonEmpty(e.company, e.organization, e.employer);
+      const role = firstNonEmpty(e.role, e.title, e.position);
+      const bullets = asArray(e.bullets || e.highlights || e.responsibilities).map(clean).filter(Boolean);
+      const descOrSummary = firstNonEmpty(ex.description, ex.summary);
+      const techList = asArray(ex.technologies || ex.tech_stack || ex.skills).map(clean).filter(Boolean);
+
+      const matchingBullet = bullets.find((b) => b.toLowerCase().includes(skill.toLowerCase()));
+      if (matchingBullet) {
+        return {
+          where: company ? `my work at ${company}` : (role ? `my ${role} role` : ''),
+          evidenceBullet: trimEvidenceBullet(matchingBullet),
+          evidenceNounPhrase: '',
+        };
+      }
+      const hay = [role, company, descOrSummary, ...techList].map((x) => clean(x).toLowerCase()).join(' ');
       if (hay.includes(skill.toLowerCase())) {
-        const company = firstNonEmpty(e.company, e.organization, e.employer);
-        const role = firstNonEmpty(e.role, e.title, e.position);
         // Company-led phrasing (manual regression 2026-06-12): the full
         // "my work as an <Role> at <Company>" string shares its stem with the
         // intro answer, so several skill answers in one session read as the
         // same canned intro. "my work at <Company>" is just as grounded.
-        return company ? `my work at ${company}` : (role ? `my ${role} role` : '');
+        // An experience entry's own description/summary can be phrased as a
+        // first-person bullet OR a third-person noun phrase just like a
+        // project's description (code-review 2026-07-05 HIGH) — classify it
+        // instead of assuming it's always a bullet.
+        const descIsBullet = descOrSummary ? looksLikeFirstPersonBullet(descOrSummary) : false;
+        return {
+          where: company ? `my work at ${company}` : (role ? `my ${role} role` : ''),
+          evidenceBullet: descOrSummary && descIsBullet ? trimEvidenceBullet(descOrSummary) : '',
+          evidenceNounPhrase: descOrSummary && !descIsBullet ? trimEvidenceBullet(descOrSummary) : '',
+        };
       }
     }
-    return '';
+    return { where: '', evidenceBullet: '', evidenceNounPhrase: '' };
   })();
-  const where = projects.length ? formatInlineList(projects, 2) : groundedRole;
+  // Project-grounded match ("used in RedisMart") takes precedence for the
+  // NAMED "where", but still deserves real evidence — pull the matched
+  // project's own description so "Have you used Redis?" cites the actual
+  // 40%-read-reduction caching work instead of a bare "Redis has been part
+  // of RedisMart." non-answer. A project's `description` is a NOUN PHRASE
+  // ("A high-performance e-commerce engine...") not a first-person bullet.
+  const projectEvidenceNounPhrase = projects.length
+    ? (() => {
+        const p = profileProjects(profile).find((proj) => firstNonEmpty(proj.name, proj.title) === projects[0]);
+        const desc = p ? firstNonEmpty((p as Record<string, unknown>).description, (p as Record<string, unknown>).summary) : '';
+        return desc ? trimEvidenceBullet(desc) : '';
+      })()
+    : '';
+  const finalWhere = projects.length ? formatInlineList(projects, 2) : where;
+  const finalEvidenceBullet = projects.length ? '' : evidenceBullet;
+  const finalEvidenceNounPhrase = projects.length ? projectEvidenceNounPhrase : evidenceNounPhrase;
 
   const isWhere = /\bwhere\b/.test(q);
   const isHow = /\bhow\s+(have|did|do)\b/.test(q);
@@ -474,11 +746,11 @@ const formatSkillExperience = (profile: MaybeStructured<StructuredProfileFacts>,
 
   if (isHypothetical) {
     // "how would you use X" — a brief grounded-but-forward answer (profile optional).
-    return where
-      ? `I'd apply ${skill} the way I have in ${projects.length ? formatInlineList(projects, 1) : where} — building the core logic and validating it against real data.`
+    return finalWhere
+      ? `I'd apply ${skill} the way I have in ${projects.length ? formatInlineList(projects, 1) : finalWhere} — building the core logic and validating it against real data.`
       : `I'd use ${skill} for the core implementation and validate it against real data, the way I approach any tool in my stack.`;
   }
-  if (where) {
+  if (finalWhere) {
     // Grounded use exists → concrete, but don't overclaim "central"; state it
     // plainly. Phrasing is hash-varied by SKILL so two "where have you used X?"
     // asks in one session don't share an identical stem (manual regression
@@ -487,14 +759,26 @@ const formatSkillExperience = (profile: MaybeStructured<StructuredProfileFacts>,
     let sh = 0;
     for (let i = 0; i < skill.length; i++) sh = ((sh << 5) - sh + skill.charCodeAt(i)) | 0;
     const v = Math.abs(sh) % 3;
+    // A real grounded bullet/description turns the answer into a genuine 2-4
+    // sentence interview response instead of a bare one-liner, without
+    // inventing anything beyond what's in the resume. Bullets are first-person
+    // verb clauses ("Engineered a scalable pipeline...") → "Specifically, I ...";
+    // project descriptions are third-person noun phrases ("A high-performance
+    // e-commerce engine...") → "It's ..." (mixing the two produced a broken
+    // sentence, see the finalEvidenceBullet/finalEvidenceNounPhrase split above).
+    const bulletSuffix = finalEvidenceBullet
+      ? ` Specifically, I ${finalEvidenceBullet.replace(/^(i|we)\s+/i, '').replace(/^([A-Z])/, (m) => m.toLowerCase())}.`
+      : finalEvidenceNounPhrase
+        ? ` It's ${afterCopula(finalEvidenceNounPhrase)}.`
+        : '';
     if (isWhere) {
-      return v === 0 ? `I've used ${skill} in ${where}.`
-        : v === 1 ? `${skill.charAt(0).toUpperCase()}${skill.slice(1)} came up mainly in ${where}.`
-          : `Mostly in ${where} — that's where I've worked with ${skill} day to day.`;
+      return (v === 0 ? `I've used ${skill} in ${finalWhere}.`
+        : v === 1 ? `${skill.charAt(0).toUpperCase()}${skill.slice(1)} came up mainly in ${finalWhere}.`
+          : `Mostly in ${finalWhere} — that's where I've worked with ${skill} day to day.`) + bulletSuffix;
     }
-    if (isHow) return `I've used ${skill} hands-on in ${where} — building real features with it, not just studying it.`;
-    return v === 0 ? `Yes — I've used ${skill} in ${where}.`
-      : `Yes, ${skill} has been part of ${where}.`;
+    if (isHow) return `I've used ${skill} hands-on in ${finalWhere} — building real features with it, not just studying it.${bulletSuffix}`;
+    return (v === 0 ? `Yes — I've used ${skill} in ${finalWhere}.`
+      : `Yes, ${skill.toUpperCase() === skill ? skill : skill.charAt(0).toUpperCase() + skill.slice(1)} has been part of ${finalWhere}.`) + bulletSuffix;
   }
   // Skill is in the profile's skill LIST but no project/role grounds a concrete use
   // case → honest, never the weak "X is one of the skills I work with" and never a
@@ -507,6 +791,22 @@ const formatSkills = (profile: MaybeStructured<StructuredProfileFacts>): string 
   const skills = profileSkills(profile).map((skill) => typeof skill === 'string' ? skill : firstNonEmpty(skill.name, skill.skill)).filter(Boolean);
   return skills.length ? `Your skills include ${formatInlineList(skills, 12)}.` : '';
 };
+
+// "What programming languages are you strongest in?" specifically wants the
+// LANGUAGES category, not the full skills dump (which mixes in frameworks,
+// cloud, databases, tools). When the resume's skills are categorized
+// (skills.languages present), answer precisely from that category — this is
+// the "deterministic, straight from structured skills categories, languages
+// first" behavior called for by the Profile Intelligence production-fix
+// round 2 (RC3). Falls back to '' (defer to formatSkills / the generic
+// dump) when the profile has no categorized languages list (legacy flat
+// skills array only).
+const formatProgrammingLanguages = (profile: MaybeStructured<StructuredProfileFacts>): string => {
+  const languages = asArray((profile as any)?.skills?.languages).map(clean).filter(Boolean);
+  if (languages.length === 0) return '';
+  return `The programming languages I'm strongest in are ${formatInlineList(languages, 8)}.`;
+};
+const ASKS_SPECIFICALLY_ABOUT_LANGUAGES_RE = /\b(programming|coding)\s+languages?\b|\blanguages?\s+do\s+(you|i)\s+(know|use)\b/i;
 
 const formatEducation = (profile: MaybeStructured<StructuredProfileFacts>): string => {
   const entries = profileEducation(profile);
@@ -636,14 +936,27 @@ const QUALIFIER_PATTERNS = [
 // an unhandled filter. Exempt it so jd-fit keeps fast-pathing.
 const JD_FIT_CANONICAL = /\b(how|why)\s+(do\s+i|am\s+i|are\s+you|would\s+i)\b.*\bfit\b/;
 
+// "What languages are you STRONGEST in?" / "what are you BEST at?" is a
+// self-rating superlative over the WHOLE list, not a filter that excludes
+// some items — the canned template can still answer it precisely (list the
+// languages/skills, framed as "strongest in"). Distinct from a genuine filter
+// like "which PROJECT used GraphQL" (narrows to a subset the template can't
+// select). Exempt it from the generic `most|best|top|strongest` qualifier
+// trigger (QUALIFIER_PATTERNS) so it fast-paths (Profile Intelligence
+// production-fix round 2, RC3 — this exact phrasing previously fell through
+// to the provider and produced a question-echo instead of an answer).
+const SUPERLATIVE_SKILL_SELF_RATING = /\b(languages?|skills?)\b[\w\s]{0,20}\b(strongest|best)\b|\b(strongest|best)\b[\w\s]{0,20}\b(languages?|skills?)\b/i;
+
 /**
  * True when the question carries a qualifier/filter/selection/constraint that the
  * canned listing template cannot honor — meaning the fast path must defer to the
  * grounded LLM. e.g. "projects that used REST API", "which project used GraphQL".
- * Exempts the canonical "how do I fit this role" jd-fit phrasing.
+ * Exempts the canonical "how do I fit this role" jd-fit phrasing and the
+ * "strongest/best languages/skills" self-rating superlative.
  */
 export const hasUnhandledQualifier = (normalizedQuestion: string): boolean => {
   if (JD_FIT_CANONICAL.test(normalizedQuestion)) return false;
+  if (SUPERLATIVE_SKILL_SELF_RATING.test(normalizedQuestion)) return false;
   return hasAny(normalizedQuestion, QUALIFIER_PATTERNS);
 };
 
@@ -747,6 +1060,38 @@ export const tryBuildManualProfileFastPathAnswer = ({
     if (intro) return makeRoute(intro, 'identity_answer', ['stable_identity', 'resume']);
   }
 
+  // DETERMINISTIC TIMELINE MATH (Phase 4 item 5): duration-at-company, total
+  // internship experience, and inter-role gap are exact arithmetic over the
+  // resume's own start_date/end_date — never LLM-computed. Checked BEFORE the
+  // generic EXPERIENCE_PATTERNS list-dump below so a specific "how long"/
+  // "total experience"/"gap" ask gets the precise answer instead of a bullet
+  // list. Each formatter returns '' when the dates can't be parsed (e.g. a
+  // profile ingested without start_date/end_date) so the caller falls
+  // through to the generic experience answer / grounded LLM.
+  //
+  // GATED ON `!qualified` (test-engineer + debugger finding, 2026-07-05): a
+  // filtered/scoped ask — "total experience IN PYTHON", "how long at
+  // EstroTech COMPARED TO Aetherbot" — must NOT get the canned sum/duration,
+  // which silently ignores the filter/comparison and states a flatly wrong
+  // number with full confidence (usedDeterministicFastPath: true, no LLM
+  // fallback). Matches every sibling block in this function
+  // (EXPERIENCE_PATTERNS/PROJECT_PATTERNS/SKILL_PATTERNS/EDUCATION_PATTERNS
+  // all gate on !qualified) — this block was the one exception, now fixed.
+  if (!qualified) {
+    if (hasAny(q, GAP_BETWEEN_ROLES_PATTERNS)) {
+      const answer = formatGapBetweenRoles(profile, q);
+      if (answer) return makeRoute(answer, 'experience_answer', ['resume']);
+    }
+    if (hasAny(q, TOTAL_EXPERIENCE_DURATION_PATTERNS)) {
+      const answer = formatTotalExperience(profile);
+      if (answer) return makeRoute(answer, 'experience_answer', ['resume']);
+    }
+    if (hasAny(q, DURATION_AT_COMPANY_PATTERNS)) {
+      const answer = formatDurationAtCompany(profile, q);
+      if (answer) return makeRoute(answer, 'experience_answer', ['resume']);
+    }
+  }
+
   // List-returning answers: a canned dump can't honor a filter/qualifier, so
   // defer to the grounded LLM when one is present (e.g. "projects that use REST
   // API", "skills in Python", "experience related to ML").
@@ -801,6 +1146,17 @@ export const tryBuildManualProfileFastPathAnswer = ({
   }
 
   if (hasAny(q, SKILL_PATTERNS) && !qualified) {
+    // "What programming languages are you strongest in?" wants the LANGUAGES
+    // category specifically, not the full mixed skills dump (RC3, round 2).
+    if (ASKS_SPECIFICALLY_ABOUT_LANGUAGES_RE.test(q)) {
+      const langAnswer = formatProgrammingLanguages(profile);
+      if (langAnswer) {
+        return makeRoute(
+          firstPerson ? langAnswer : langAnswer.replace(/^The programming languages I'm/i, 'The programming languages you are'),
+          'skills_answer', ['resume'],
+        );
+      }
+    }
     const answer = formatSkills(profile);
     if (!answer) return null;
     return makeRoute(firstPerson ? answer.replace(/^Your skills include/i, 'My skills include') : answer, 'skills_answer', ['resume']);

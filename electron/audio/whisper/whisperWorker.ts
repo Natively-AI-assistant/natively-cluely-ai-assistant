@@ -16,6 +16,7 @@
  */
 import { parentPort } from 'worker_threads';
 import { WhisperProgressAggregator } from './whisperProgressAggregator';
+import { getBoundedOnnxSessionOptions } from '../../utils/onnxThreadConfig';
 
 const LANG_MAP: Record<string, string | null> = {
   'auto': null,
@@ -215,6 +216,7 @@ parentPort.on('message', async (msg: any) => {
         msg.useExternalDataFormat;
       pipe = await pipeline('automatic-speech-recognition', msg.modelId, {
         dtype,
+        session_options: getBoundedOnnxSessionOptions(),
         ...(useExternalDataFormat !== undefined
           ? { use_external_data_format: useExternalDataFormat }
           : {}),

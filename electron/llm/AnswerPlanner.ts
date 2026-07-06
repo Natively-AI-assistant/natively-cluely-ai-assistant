@@ -4,6 +4,7 @@ import { CODING_CONTRACT, CODING_CONTRACT_IMPL, CODING_VERIFICATION_INSTRUCTION 
 import { detectAnswerStyle, type AnswerStyle } from './answerStyle';
 import { classifyTargetSpeakability, classifyShortBand, shortBandTargetWords } from './speakability';
 import { applyModeFallback, type ActiveModeInfo } from './modeProfiles';
+import { classifyDocumentQuestionShape } from './documentGroundedPrompt';
 
 export type AnswerType =
   | 'identity_answer'
@@ -25,6 +26,11 @@ export type AnswerType =
   | 'sales_answer'
   | 'product_candidate_mix_answer'
   | 'lecture_answer'
+  | 'definitional_answer'
+  | 'list_answer'
+  | 'exact_numeric_answer'
+  | 'document_absent_fact_refusal'
+  | 'document_followup_answer'
   | 'follow_up_answer'
   | 'unknown_answer'
   | 'general_meeting_answer'
@@ -324,6 +330,11 @@ const DIRECT_SHORT_TEMPLATE = `Answer directly in 1-2 sentences. Do not include 
 // loaded experience; speak to the user about their own skill.
 const SKILL_RATING_TEMPLATE = `Answer in 1-2 sentences as the candidate. If asked to rate a skill (e.g. "out of 10"), GIVE a concrete number grounded in the loaded experience and add one phrase of justification. Never refuse, never say you are an AI or that you "cannot assign ratings". Do not mention the profile/context explicitly — just answer confidently.`;
 const GENERAL_TEMPLATE = `Answer naturally and directly. Use only relevant context. Keep it predictable and concise.`;
+const DOCUMENT_DEFINITION_TEMPLATE = `Answer from the uploaded document evidence only. Give a concise definition in 1-3 sentences. Prefer text that explicitly defines the term ("is", "are", "refers to", "represents") and do not drift into procedures or training details unless the question asks for them.`;
+const DOCUMENT_LIST_TEMPLATE = `Answer from the uploaded document evidence only. Return the complete list the question asks for. Scan every retrieved excerpt before answering; include all listed items, phases, questions, models, objects, or components that are literally present. Do not stop at the first matching excerpt and do not invent missing list items.`;
+const DOCUMENT_NUMERIC_TEMPLATE = `Answer from the uploaded document evidence only. Report exact values with units and the entity they belong to. If multiple related values are present (training/peak/inference, control/sampling, per-model rates), include all of them. Do not infer numbers that are not written in the evidence.`;
+const DOCUMENT_ABSENT_FACT_TEMPLATE = `Answer from the uploaded document evidence only. If the requested fact is not supported by the selected evidence after retrieval, say exactly and briefly that it is not directly mentioned in the uploaded seminar material. Do not provide a plausible estimate or use general knowledge.`;
+const DOCUMENT_FOLLOWUP_TEMPLATE = `Answer the follow-up from the uploaded document evidence only. Resolve pronouns like "it", "that", and "they" using the immediately previous topic, but treat the prior answer only as a referent hint — facts must come from the retrieved document excerpts.`;
 
 // Generic technical-concept answers (what is Redis / JWT / CORS / caching / REST) were
 // coming back as long beginner TUTORIALS. In an interview the user needs a short, confident
@@ -481,7 +492,18 @@ const CODING_PATTERNS = [
 
 const SYSTEM_DESIGN_PATTERNS = [
   /\bsystem design\b|\bdesign (a|an|the)\b/i,
-  /\bscalable\b|\bscale\b|\barchitecture\b|\bdistributed\b/i,
+  // Bare technology nouns (scalable / scale / architecture / distributed) only
+  // signal a SYSTEM-DESIGN ASK when paired with a design/build imperative. Without
+  // this guard, a candidate EXPERIENCE probe that merely mentions the technology —
+  // "how many years have you worked on DISTRIBUTED systems?", "tell me about your
+  // SCALABLE services experience" — misrouted to a system_design_answer (profile
+  // FORBIDDEN, assistant voice), so it got the "Clarify Requirements / High-Level
+  // Design" template instead of a first-person experience answer AND could not be
+  // grounded in the résumé (E2E campaign Round 1, F-ROUTE). A real design ask
+  // ("design a scalable system", "how would you architect a distributed cache")
+  // still matches via the design verb.
+  /\b(design|architect|build|scale|structure|lay ?out)\b[^.?!]{0,40}\b(scalable|architecture|distributed|high[- ]?throughput|fault[- ]?toleran\w+)\b/i,
+  /\b(scalable|distributed|high[- ]?throughput)\b[^.?!]{0,40}\b(system|service|architecture|design)\b[^.?!]{0,40}\b(design|build|architect|handle|scale to|support)\b/i,
   /\brate limiter\b|\burl shortener\b|\bchat system\b|\bnotification system\b/i,
 ];
 
@@ -546,7 +568,19 @@ const IDENTITY_PATTERNS = [
   // Natural intro/identity phrasings (benchmark 2026-06-05): "give me a quick
   // introduction", "what should I call you?", "how would you describe yourself
   // (professionally)?", "(can you )summarize who you are", "introduce yourself".
-  /\b(give|tell)\s+(me\s+)?(a\s+)?(quick\s+|brief\s+|short\s+)?(introduction|intro|overview of yourself|rundown)\b/i,
+  /\b(give|tell|provide|share)\s+(me\s+|us\s+|the team\s+|everyone\s+)?(a\s+)?(quick\s+|brief\s+|short\s+|little\s+)?(self[- ]?introduction|introduction|intro|overview of yourself|rundown)\b/i,
+  // bare "(quick) self-introduction" / "self intro" anywhere (E2E F-VOICE Q1:
+  // "could you give us a quick self-introduction?" fell to general_meeting).
+  /\bself[- ]?(introduc(tion|e)|intro)\b/i,
+  // "tell me a little about yourself and your background", "tell us about yourself
+  // and what you do" — the classic opener. The "about yourself" anchor makes it an
+  // intro even when it trails into "and your background/experience" (which would
+  // otherwise pull it to experience_answer). E2E MiniMax campaign, F-VOICE Q1.
+  // `(?![-\w])` stops "yourself" matching the "your self" in a hyphenated
+  // compound ("tell me about your self-attention / self-hosted / self-driving
+  // project") — those are technical/project asks, NOT an intro. (Code review.)
+  /\btell (me|us)\b.{0,25}\babout your ?self\b(?![-\w])/i,
+  /\b(quick|brief|short|little)\s+(bit\s+)?(about|on)\s+your ?self\b(?![-\w])/i,
   /\bwhat should (i|we) call you\b/i,
   /\b(how (would|do) you )?describe yourself\b/i,
   /\b(summari[sz]e|describe|tell me about) who you are\b/i,
@@ -931,6 +965,13 @@ const SKILL_EXPERIENCE_PATTERNS = [
   // (release 2026-06-07c: live stale-vs-fresh skill follow-up).
   /\bhow (is|are|s) (your|ur) (python|sql|java(?:script)?|typescript|react|node(?:\.?js)?|c\+\+|go(?:lang)?|rust|aws|gcp|azure|docker|kubernetes|graphql|rest|fastapi|django|flask|spring|pandas|numpy|spark|hadoop|tableau|power\s?bi|excel|tensorflow|pytorch|backend|frontend|full[\s-]?stack|databases?|machine learning|sql skills|coding skills)\b/i,
   /\bhow many years (of|with)\b.{0,30}\b(do you have|experience|you got)\b/i,
+  // "how many years have you (been) working on/with/in X", "how long have you
+  // worked with X" — a duration/experience probe about the USER phrased with a
+  // work verb instead of "experience"/"do you have". Without this, e.g. "how many
+  // years have you been working directly on distributed systems?" missed
+  // skill-experience framing and fell to a forbidden general/system-design route
+  // (E2E Round 1, F-ROUTE).
+  /\bhow (many years|long) have you (been )?(work(ed|ing)?|do(ing|ne)?|us(e|ed|ing)|build(ing)?|built|develop(ed|ing)?|cod(e|ed|ing)|programm(ed|ing))\b/i,
   /\bhow (much|many years) (of )?experience\b/i,
   /\byour experience (with|in|using)\b/i,
   /\bhow (much |many years )?(experience|familiar).*\b(with|in|using)\b/i,
@@ -1074,6 +1115,17 @@ const EXPERIENCE_PATTERNS = [
 ];
 const BEHAVIORAL_PATTERNS = [
   /\btell me about a time\b|\bdescribe a situation\b|\bexample of when\b|\bconflict\b|\bfailure\b|\bchallenge\b/i,
+  // "biggest / greatest / proudest achievement/accomplishment", "what are you most
+  // proud of", "your proudest/best work at <Company>" — an accomplishment probe
+  // about the CANDIDATE. Without this it fell to general_meeting_answer (profile
+  // FORBIDDEN, assistant voice) when phrased with an employer ("...at Stripe?"),
+  // so the answer could not name the employer or speak in first person (E2E Round
+  // 1, F-ROUTE + the "answer omits employer" F-FACT root for achievement Qs).
+  // Accomplishment nouns ONLY (NOT "project"/"work" — those belong to
+  // project_answer; "best project" must stay a project ask).
+  /\b(biggest|greatest|proudest|best|most (significant|impactful|notable))\s+(achievement|accomplishment|win|success|contribution|impact)\b/i,
+  /\bwhat (are|were) you most proud of\b|\bwhat achievement\b|\bproudest (achievement|accomplishment|moment)\b/i,
+  /\bwhat (did|have) you (accomplish|achieve|deliver)\w*\b.{0,30}\bat\b/i,
   // Past-experience war stories about a specific artifact — "tell me about a
   // difficult BUG you solved", "the hardest issue you ever faced" (manual
   // regression 2026-06-12, stress seq_056: the bare \bbug\b debugging pattern
@@ -1403,6 +1455,16 @@ const templateFor = (answerType: AnswerType): string => {
       return SALES_TEMPLATE;
     case 'lecture_answer':
       return GENERAL_TEMPLATE;
+    case 'definitional_answer':
+      return DOCUMENT_DEFINITION_TEMPLATE;
+    case 'list_answer':
+      return DOCUMENT_LIST_TEMPLATE;
+    case 'exact_numeric_answer':
+      return DOCUMENT_NUMERIC_TEMPLATE;
+    case 'document_absent_fact_refusal':
+      return DOCUMENT_ABSENT_FACT_TEMPLATE;
+    case 'document_followup_answer':
+      return DOCUMENT_FOLLOWUP_TEMPLATE;
     case 'ethical_usage_answer':
       return ETHICAL_USAGE_TEMPLATE;
     case 'project_link_answer':
@@ -1449,6 +1511,11 @@ const requiredLayersFor = (answerType: AnswerType, documentGroundedCustomModeAct
       // NOT the résumé (no full profile dump in a selling answer).
       return ['custom_context', 'reference_files', 'active_mode', 'ai_persona'];
     case 'lecture_answer':
+    case 'definitional_answer':
+    case 'list_answer':
+    case 'exact_numeric_answer':
+    case 'document_absent_fact_refusal':
+    case 'document_followup_answer':
       return ['live_transcript', 'screen_context', 'reference_files', 'active_mode'];
     case 'follow_up_answer':
       // Document-grounded custom mode (audit 2026-06-27): drop
@@ -1524,7 +1591,12 @@ const forbiddenLayersFor = (answerType: AnswerType): ContextLayer[] => {
       // comes from persona/custom-context framing, not a profile list.
       return ['resume', 'jd', 'negotiation'];
     case 'lecture_answer':
-      // Lecture answers must not pull resume/JD/negotiation.
+    case 'definitional_answer':
+    case 'list_answer':
+    case 'exact_numeric_answer':
+    case 'document_absent_fact_refusal':
+    case 'document_followup_answer':
+      // Document/lecture answers must not pull resume/JD/negotiation.
       return ['resume', 'jd', 'negotiation'];
     case 'general_meeting_answer':
       // Meeting recap ("action items?", "what did we decide?", "what was the
@@ -1583,6 +1655,11 @@ export const profileContextPolicyFor = (answerType: AnswerType): ProfileContextP
     case 'sales_answer':
     case 'product_candidate_mix_answer':
     case 'lecture_answer':
+    case 'definitional_answer':
+    case 'list_answer':
+    case 'exact_numeric_answer':
+    case 'document_absent_fact_refusal':
+    case 'document_followup_answer':
     case 'general_meeting_answer':
       // Meeting recap is about the conversation, not the candidate — no profile.
       return 'forbidden';
@@ -1811,6 +1888,39 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     || /\brate\s+(your|my)\s+[\w ]*\b(fit|suitabilit|match|readiness|data analyst|analyst)\b/i.test(text);
   const hasSkillRatingFraming = includesAny(text, SKILL_RATING_PATTERNS) && !ratesRoleFit;
 
+  // "solve" alone is a false-positive coding signal for a PRODUCT/PROJECT
+  // question ("What's RedisMart and what problem does it SOLVE?", "What
+  // problem does Natively solve?") — a bare project-description ask that
+  // shares the word "solve" with a genuine coding task ("solve two sum",
+  // "can you solve this problem"), but is never asking for code. Without
+  // this guard the bare `\bsolve\b` in CODING_PATTERNS (and the
+  // hasExplicitCodingVerb/hasWriteCodeVerb checks below) hijacked the
+  // question into coding_question_answer — profile FORBIDDEN, so the model
+  // never named the actual project and instead answered a generic invented
+  // Redis-concept essay (Phase 0 replay finding, real-session desync bug).
+  // Scoped narrowly to "what problem(s) does <it/this/that/a project name/
+  // your/my/the> solve" so a genuine coding ask ("how did you solve the
+  // caching problem in RedisMart", "solve two sum") is unaffected.
+  //
+  // COMPOUND-MESSAGE FIX (code-review 2026-07-05 HIGH + debugger-confirmed):
+  // the original fix computed isProductProblemSolveQuestion as a whole-message
+  // boolean and, once true, narrowed hasExplicitCodingVerb/hasWriteCodeVerb's
+  // verb regex for the ENTIRE message — so a compound message pairing the
+  // product-solve phrase with a SEPARATE, genuine coding request ("What
+  // problem does RedisMart solve? Also please write a function that reverses
+  // a linked list.") lost its `write` signal too and fell through to
+  // unknown_answer/profileContextPolicy:'allowed' instead of
+  // coding_question_answer/forbidden — silently dropping the coding-answer
+  // safety nets (structure validation, contract injection) for a genuine
+  // coding ask. Fixed by stripping ONLY the matched product-solve CLAUSE from
+  // a working copy of the text before testing for the bare `solve` verb, so a
+  // `write`/`implement`/DSA signal ELSEWHERE in the same message still fires
+  // normally — the guard now suppresses just its own clause, not the whole
+  // message.
+  const productProblemSolveMatch = text.match(/\bwhat\s+(problem|issue|pain\s?point)s?\s+(does|do|did)\s+(it|this|that|he|she|they|natively|redismart|talentscope|your|my|the|his|her)\b[\w '-]{0,20}\bsolves?\b/i);
+  const textWithoutProductSolveClause = productProblemSolveMatch
+    ? (text.slice(0, productProblemSolveMatch.index) + text.slice((productProblemSolveMatch.index || 0) + productProblemSolveMatch[0].length))
+    : text;
   // A CODING TASK that merely mentions a comp word as DATA ("write a SQL query
   // for the second highest SALARY", "function to compute BONUS") is NOT a
   // negotiation question — the explicit code verb wins. Guard the negotiation
@@ -1824,12 +1934,12 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
   // they'd wrongly veto a real comp question ("compute my total compensation").
   // Genuine SQL/coding "salary" cases are caught by the write/COMMON_CODING/DSA
   // signals instead.
-  const hasExplicitCodingVerb = /\b(write|implement|code|program|function|solve)\b/i.test(text)
+  const hasExplicitCodingVerb = /\b(write|implement|code|program|function|solve)\b/i.test(textWithoutProductSolveClause)
     || includesAny(text, COMMON_CODING_PROBLEM_PATTERNS) || includesAny(textNoTechStack, DSA_PATTERNS);
   // Strict "write code" verbs only (no DSA-term inference). Used to gate the
   // HYPOTHETICAL branch: "how would you use BFS?" is a concept (BFS is a DSA term
   // but there's no write-verb), so it must NOT be blocked from technical_concept.
-  const hasWriteCodeVerb = /\b(write|implement|code|program|solve)\b/i.test(text)
+  const hasWriteCodeVerb = /\b(write|implement|code|program|solve)\b/i.test(textWithoutProductSolveClause)
     || includesAny(text, COMMON_CODING_PROBLEM_PATTERNS);
   // A CLEAR past/present EXPERIENCE probe ("have you implemented X before", "where
   // have you used X", "did you actually use X") is about the CANDIDATE — it must
@@ -2064,7 +2174,15 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     // Kept BEFORE generic CODING so the specific DSA label/template wins.
     answerType = 'dsa_question_answer';
   } else if (
-    (includesAny(text, CODING_PATTERNS) || input.intentResult?.intent === 'coding')
+    // "What problem does RedisMart/Natively/it solve?" trips the bare
+    // `\bsolve\b` inside CODING_PATTERNS — that's a project-description ask,
+    // never a coding task. CODING_PATTERNS is tested against the
+    // clause-stripped text (textWithoutProductSolveClause) so a genuine
+    // coding request ELSEWHERE in the same message still routes correctly
+    // (compound-message fix, code-review 2026-07-05 HIGH: the original whole-
+    // message boolean silently swallowed a real "write a function..." coding
+    // ask appended after a "what problem does X solve" clause).
+    (includesAny(textWithoutProductSolveClause, CODING_PATTERNS) || input.intentResult?.intent === 'coding')
     // Guard: a very short addend phrase like "with code?", "show code?", "include code?",
     // "add code?", "can you give code?" is a conversational follow-up requesting a code
     // example from the prior context — NOT a new standalone coding problem. Only suppress
@@ -2146,8 +2264,12 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
   if (documentGroundedCustomModeActive && !explicitDocumentModeCodingAsk && !explicitDocumentModeProfileAsk) {
     // A user-created document-grounded custom mode makes uploaded/reference files
     // the primary source. Do not let generic coding/profile heuristics steal normal
-    // seminar/thesis questions into contracts that forbid reference_files.
-    answerType = 'lecture_answer';
+    // seminar/thesis questions into contracts that forbid reference_files. Within
+    // that safe document lane, preserve the QUESTION SHAPE so retrieval/packing and
+    // validators can prefer definitions, lists, exact values, absent-fact refusals,
+    // and follow-up referents instead of collapsing every turn to lecture_answer.
+    const docShape = classifyDocumentQuestionShape(question, input.extractedQuestion?.isFollowUp ? input.extractedQuestion?.followUpTarget || 'prior' : undefined);
+    answerType = docShape === 'broad_overview' ? 'lecture_answer' : docShape;
   }
 
   const speakerPerspective = input.speakerPerspective

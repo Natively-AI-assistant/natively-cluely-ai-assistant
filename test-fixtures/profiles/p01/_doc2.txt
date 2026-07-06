@@ -1,0 +1,39 @@
+# Project Deep-Dive: Helios Shard Coordinator
+
+## Context
+At Lumina Cloud (2021–2024), I owned the rewrite of our regional control-plane consistency layer — internally codenamed **Project Helios** — after the August 2022 zonal split-brain incident in eu-west-2 that cost roughly **47 minutes of degraded writes for 312 enterprise tenants** and triggered a Sev-1 customer commitment review with HelixBank (the largest single tenant at the time, representing ~€4.1M ARR). The post-mortem pointed at the legacy Quorum-based shard registry, which made cross-region leadership handoffs take an average of 8.2 seconds under partition — far too slow for our new 99.99% multi-region write SLA.
+
+## Problem
+Scale: ~184,000 active shards across 7 regions by Q4 2022, with shard leadership churning at roughly 3,400 transfers/day during normal operation and spiking to 19,000/day during rolling cluster upgrades. The legacy coordinator used a Raft-over-etcd design that serialized all leadership decisions through a single 8-vCPU leader pod, which became a tail-latency cliff above ~2,200 transfers/minute. P99 leadership-stepdown latency had crept to 6.1 seconds, and we were projecting it would exceed the 8-second budget by mid-2023.
+
+## Design
+I led a 5-engineer pod to replace the serialized path with a **decentralized lease-coordinator** built on a custom **Hybrid Logical Clock + Lattice Paxos** consensus protocol (HLC-LP). Key choices:
+
+- **Decentralized lease arbitration** — shards grouped into 256-bucket rings; each bucket coordinator handles its own lease renewals, so leadership decisions parallelize naturally.
+- **Hybrid Logical Clocks** to bound clock skew to <3 ms across AZs without requiring PTP hardware.
+- **Lattice Paxos** instead of Raft for the inter-bucket reconciliation — each bucket independently proposes, with anti-dependency sets tracked via Bloom-filter summaries exchanged in a 50 ms gossip round.
+- **Two-phase leadership transfer** with explicit "shadow" leases — the incoming leader begins accepting reads 200 ms before the outgoing leader stops writes, eliminating the gap where neither side serves.
+
+## Implementation Highlights
+- **Go 1.20** core, **Rust 1.68** for the gossip/HLC-LP crypto path (ed25519 batch verification at ~280k sigs/sec/core).
+- **etcd v3.5** retained only as a bootstrap discovery service; runtime coordination is fully peer-to-peer.
+- **gRPC streaming** with custom flow control for lease-renewal channels; switched from HTTP/2 keepalive to ping frames every 750 ms.
+- **eBPF-based failure detector** (`xdp_drop` + custom tracepoints) to detect leader liveness within 120 ms — replaces the old 1-second TCP-based heartbeat.
+- **CRIU-based leader snapshots** with copy-on-write lazy materialization — cuts cold-start leadership transfer from ~3.4 s to ~410 ms.
+
+## Quantified Outcomes
+Production rollout completed across all 7 regions by **March 14, 2024**:
+
+| Metric | Before (Q4 2022) | After (Q2 2024) | Δ |
+|---|---|---|---|
+| P99 leadership-stepdown latency | 6,100 ms | **380 ms** | **−94%** |
+| P50 handoff latency | 1,850 ms | **95 ms** | **−95%** |
+| Sustained transfer throughput | 2,200/min | **11,400/min** | **+418%** |
+| Cross-region split-brain events | 3/year | **0 in 14 months** | — |
+| CPU cost for control plane | 1,840 vCPU | **610 vCPU** | **−67%** |
+| HelixBank sev incidents related to leadership | 4 in 2022 | **0 in 2023–24** | — |
+
+The Helios design was published internally as **Lumina Tech Report #2024-07** and a redacted version was presented at the ACM Symposium on Cloud Computing 2024 (SOSP-adjacent workshop track). A follow-on design for **multi-leader per-shard** with causal consistency (codename **Helios-II**) is currently in the design-review phase.
+
+## Lessons
+The biggest non-obvious lesson: **moving from a centralized Raft leader to a decentralized lattice protocol bought us much more than throughput — it eliminated entire classes of correlated-failure bugs** that had been hiding under the serialization point. The 67% CPU reduction was a side effect of removing contention, not a primary goal. If I were doing it again, I would have invested in the eBPF observability stack six months earlier; it was the single highest-leverage debugging tool on the project.

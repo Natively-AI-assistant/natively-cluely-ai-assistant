@@ -5,6 +5,25 @@
 import { RecapLLM } from './llm';
 import { isVerboseLogging } from './verboseLog';
 
+// Canned-fallback phrases that mean the model gave up entirely, not phrases
+// that might legitimately appear inside a real answer. Matched only when the
+// ENTIRE (trimmed, punctuation-stripped) message consists of one of these —
+// never as a substring — so honest answers like "I'm not sure of his exact
+// title, but he's on the platform team" are kept in session history instead
+// of being silently dropped from contextItems/fullTranscript/history.
+// Mirrors the equivalent guard in LLMHelper.processResponse (kept as a
+// separate local copy here to avoid a cross-module import for one helper).
+const CANNED_FALLBACK_PHRASES = [
+    "i'm not sure",
+    "it depends",
+    "i can't answer",
+    "i don't know",
+];
+function isCannedFallbackPhrase(text: string): boolean {
+    const normalized = text.trim().toLowerCase().replace(/^[\s"'.!?]+|[\s"'.!?]+$/g, '');
+    return CANNED_FALLBACK_PHRASES.includes(normalized);
+}
+
 export interface TranscriptSegment {
     marker?: string;
     speaker: string;
@@ -273,7 +292,7 @@ export class SessionTracker {
             return;
         }
 
-        if (cleanText.includes("I'm not sure") || cleanText.includes("I can't answer")) {
+        if (isCannedFallbackPhrase(cleanText)) {
             console.warn(`[SessionTracker] Ignored fallback message`);
             return;
         }

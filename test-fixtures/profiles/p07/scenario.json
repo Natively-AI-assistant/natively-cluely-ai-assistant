@@ -1,0 +1,196 @@
+{
+  "turns": [
+    {
+      "speaker": "interviewer",
+      "text": "Welcome, thanks for joining me today. Could you start by giving me a brief self-introduction?",
+      "isQuestion": true,
+      "qid": "Q1"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Hi, I'm José Muñoz, a software engineer focused on backend systems and data tooling.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Great to meet you, José. Tell me about your most recent role — what were you responsible for?",
+      "isQuestion": true,
+      "qid": "Q2"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I wasn't in a formal role recently. I spent the last stretch consulting independently and contributing to open source.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Understood. Roughly how many years of experience do you have with Python specifically?",
+      "isQuestion": true,
+      "qid": "Q3"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Around six years, mostly in data pipelines, APIs, and testing frameworks.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Nice. I noticed a project called pq-tap on your resume — can you walk me through what that is and your role on it?",
+      "isQuestion": true,
+      "qid": "Q4"
+    },
+    {
+      "speaker": "candidate",
+      "text": "pq-tap is a Python utility I built for tapping into PostgreSQL query logs to assert on query behavior in tests.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "What would you say was your biggest professional achievement, even outside a traditional employer?",
+      "isQuestion": true,
+      "qid": "Q5"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Designing pq-tap and getting it adopted by a mid-sized analytics team that cut their flaky-test rate significantly.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Why are you interested in this Senior Software Engineer role at Coastal Logistics Inc?",
+      "isQuestion": true,
+      "qid": "Q6"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Logistics is an interesting domain with real-time data problems, and the role's scope matches what I enjoy building.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Your resume shows backend and data work — how does that align with what we're looking for?",
+      "isQuestion": true,
+      "qid": "Q7"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I bring solid Python, PostgreSQL, and systems thinking, which fits a senior backend position well.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "I also want to flag a potential gap: we need experience leading a team of engineers, and I don't see that explicitly on your resume. How would you address that?",
+      "isQuestion": true,
+      "qid": "Q8"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I've mentored juniors on pq-tap and led design reviews; I can grow into formal leadership quickly given the chance.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Before we go further, can you tell me about your education — degree, field, and institution?",
+      "isQuestion": true,
+      "qid": "Q9"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I have a B.S. in Computer Science from UNAM.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Great. Now a behavioral one: tell me about a challenging technical problem you faced, using the STAR format.",
+      "isQuestion": true,
+      "qid": "Q10"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Sure — Situation: a flaky integration suite. Task: stabilize it. Action: I isolated nondeterministic DB queries with pq-tap. Result: failures dropped by about 70%.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "What are your salary expectations for this role?",
+      "isQuestion": true,
+      "qid": "Q11"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I'm targeting around the senior band for the local market, flexible based on total compensation.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Do you have any questions for me about the role or the team?",
+      "isQuestion": true,
+      "qid": "Q12"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Yes — what does the onboarding path look like, and how is success measured in the first six months?",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Following up on the pq-tap stabilization work you mentioned — how long did that take end-to-end?",
+      "isQuestion": true,
+      "qid": "Q13"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Roughly two months of iterative work, with the biggest gains in the final three weeks.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Quick one — do you have a valid driver's license?",
+      "isQuestion": true,
+      "qid": "Q14"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I don't, actually — I primarily use public transit and remote work.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Nice chatting with you today, José.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "candidate",
+      "text": "Thank you — I appreciate the time.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Two quick things before we wrap: are you open to relocation, and what's your earliest possible start date? And what interests you most about this opportunity?",
+      "isQuestion": true,
+      "qid": "Q15"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I'm open to relocation for the right fit, and I could start within four to six weeks.",
+      "isQuestion": false,
+      "qid": null
+    }
+  ]
+}
