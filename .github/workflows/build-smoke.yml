@@ -21,6 +21,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Belt-and-suspenders: confirm postinstall produced correct-arch
+      # binaries. CI runners are macos-latest (arm64), so x86_64 here
+      # means the install itself was poisoned. Mirrors the developer-side
+      # pre-commit + boot-time gates in main.ts.
+      - name: Verify native module architecture
+        run: node scripts/verify-native-arch.js
+
       - name: Typecheck Electron main process
         run: npm run typecheck:electron
 
