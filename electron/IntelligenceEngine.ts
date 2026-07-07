@@ -16,9 +16,10 @@ import {
     buildContextRoute, summarizeContextRoute, shouldThrottleTrigger,
     validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, sanitizeCandidateAnswer, CANDIDATE_VOICE_ANSWER_TYPES,
     detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES,
-    raceStreamWithDeadline, firstUsefulDeadlineMs, LIVE_INTER_TOKEN_STALL_MS, LIVE_TOTAL_HARD_TIMEOUT_MS,
+    raceStreamWithDeadline, LIVE_INTER_TOKEN_STALL_MS, LIVE_TOTAL_HARD_TIMEOUT_MS,
     LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS, isLeakedSchemaStub,
-    cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE
+    cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE,
+    buildProfileJitPrompt, decideSessionWritePolicy
 } from './llm';
 import {
     validateDocumentGroundedAnswer,
@@ -1212,7 +1213,55 @@ export class IntelligenceEngine extends EventEmitter {
             // assistant" or "I can't share that" — the exact benchmark failures.
             // This supplies FACTS only; the first-person VOICE is owned by the
             // WhatToAnswer prompt. Best-effort and fully guarded.
-            if (!candidateProfile && !documentGroundedCustomModeActive) {
+            // SOURCE-OWNERSHIP GATE (2026-07-06): generalize the doc-grounded
+            // guard so the profile identity fallback is also blocked in a
+            // transcript_only mode (a meeting where the résumé is not the source).
+            // Derived from the SAME arbiter/resolver the manual + phone paths use,
+            // so all three surfaces share ONE ownership decision. Falls back to the
+            // legacy `!documentGroundedCustomModeActive` guard if the resolver
+            // throws (never more permissive).
+            let wtaProfileAllowed = !documentGroundedCustomModeActive;
+            try {
+                const { buildCustomModeExecutionContract } = require('./llm/customModeExecutionContract');
+                const { resolveSourceOwnership } = require('./llm/sourceOwnership');
+                const { getSourceOwnerEnforcementStage } = require('./intelligence/intelligenceFlags');
+                const _wtaQ = extractedQuestion.latestQuestion || lastInterviewerTurn || '';
+                const _wtaHasProfile = Boolean((this.llmHelper.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data);
+                const _wtaPlan = planAnswer({
+                    question: String(_wtaQ),
+                    source: 'what_to_answer',
+                    speakerPerspective: 'interviewer',
+                    activeMode: snapshotModeInfo,
+                });
+                const _wtaContract = buildCustomModeExecutionContract({
+                    question: String(_wtaQ),
+                    streamRoute: 'wta_live',
+                    modeId: snapshotModeId ?? null,
+                    modeUniqueId: snapshotModeId ?? null,
+                    answerType: _wtaPlan.answerType,
+                    isCustomMode: snapshotModeInfo?.isCustom === true,
+                    isDocGroundedCustomModeActive: documentGroundedCustomModeActive,
+                    hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
+                    hasCustomPrompt: Boolean((snapshotModeInfo as any)?.hasCustomPrompt),
+                    hasLiveTranscript: true, // WTA is always transcript-driven
+                    hasProfileFacts: _wtaHasProfile,
+                    hasMeetingRag: false,
+                    hasLongTermMemory: false,
+                });
+                const _wtaOwn = resolveSourceOwnership({
+                    question: String(_wtaQ),
+                    contract: _wtaContract,
+                    profileContextPolicy: _wtaPlan.profileContextPolicy,
+                    answerType: _wtaPlan.answerType,
+                    hasProfileFacts: _wtaHasProfile,
+                });
+                // Staged enforcement (plan §6): `off` restores the legacy
+                // doc-grounded guard; every other stage honors the resolver.
+                wtaProfileAllowed = getSourceOwnerEnforcementStage() === 'off'
+                    ? !documentGroundedCustomModeActive
+                    : _wtaOwn.profileAllowed;
+            } catch { /* keep legacy doc-grounded guard */ }
+            if (!candidateProfile && wtaProfileAllowed) {
                 try {
                     const orch = this.llmHelper.getKnowledgeOrchestrator?.();
                     const resume = (orch as any)?.activeResume?.structured_data ?? null;
@@ -1220,14 +1269,22 @@ export class IntelligenceEngine extends EventEmitter {
                     const identityQ = extractedQuestion.detectedSpeaker === 'interviewer'
                         && (extractedQuestion.questionType === 'identity' || extractedQuestion.questionType === 'profile_detail');
                     if (resume && identityQ) {
-                        const { tryBuildManualProfileFastPathAnswer } = await import('./llm/manualProfileIntelligence');
-                        const fp = tryBuildManualProfileFastPathAnswer({
+                        const { selectManualProfileEvidence } = await import('./llm/manualProfileIntelligence');
+                        const evidence = selectManualProfileEvidence({
                             question: extractedQuestion.latestQuestion || lastInterviewerTurn,
                             profile: resume, jobDescription: jd, source: 'what_to_answer',
                         });
-                        if (fp?.answer) {
-                            candidateProfile = `<candidate_identity_fact>\n${fp.answer}\n</candidate_identity_fact>`;
-                            trace.mark('repair_used', { reason: 'identity_fastpath_grounding' });
+                        if (evidence) {
+                            const jit = buildProfileJitPrompt({
+                                question: extractedQuestion.latestQuestion || lastInterviewerTurn,
+                                answerType: evidence.answerType,
+                                answerShape: evidence.answerShape,
+                                sourceOwner: evidence.sourceOwner,
+                                evidence,
+                                maxAnswerWords: 90,
+                            });
+                            candidateProfile = `<profile_jit_evidence_request>\n${jit.userPrompt}\n</profile_jit_evidence_request>`;
+                            trace.mark('repair_used', { reason: 'identity_jit_evidence_grounding', evidenceItems: evidence.items.length, promptChars: jit.promptChars });
                         }
                     }
                 } catch (fbErr: any) {
@@ -1340,47 +1397,16 @@ export class IntelligenceEngine extends EventEmitter {
             const STREAMING_SAFE_PREFIX_CHARS = 160;
 
             // ── LIVE LATENCY GUARDRAIL (Phase 9) ───────────────────────────────
-            // The live copilot must NEVER make the user wait 10s+ or show an empty
-            // answer. We arm a first-useful-token DEADLINE: if the provider hasn't
-            // produced a useful token within the plan's budget (+ grace), we abort
-            // the stream and emit a deterministic, grounded fallback for profile
-            // routes (coding keeps its scaffold). Non-live (speculative) prefetch
-            // is exempt — it has no user waiting. The deadline is generous enough
-            // (>= 3.5s) that healthy responses are never pre-empted.
-            // Precompute the deterministic fallback up front. Its EXISTENCE
-            // decides the deadline: when we have a safe answer to substitute we
-            // abort a stalled provider at the first-useful budget; when we don't
-            // (negotiation/meeting/coding have no profile fallback) we must NOT
-            // abort to empty, so we extend to the total live budget (~9s) and let
-            // the stream finish.
-            let liveFallbackAnswer = '';
-            if (!isSpeculative && answerPlan.profileContextPolicy === 'required') {
-                try {
-                    const orch = this.llmHelper.getKnowledgeOrchestrator?.();
-                    const resume = (orch as any)?.activeResume?.structured_data ?? null;
-                    const jd = (orch as any)?.activeJD?.structured_data ?? null;
-                    if (resume) {
-                        const { buildLiveFallbackAnswer } = await import('./llm/manualProfileIntelligence');
-                        liveFallbackAnswer = buildLiveFallbackAnswer({
-                            question: extractedQuestion.latestQuestion || lastInterviewerTurn,
-                            answerType: answerPlan.answerType, profile: resume, jobDescription: jd,
-                        }) || '';
-                    }
-                } catch { /* no fallback */ }
-            }
-            const hasLiveFallback = liveFallbackAnswer.length > 0;
-            // First-useful deadline: when we have a deterministic fallback we abort
-            // fast (the spec's hard/complex cap) and swap it in; when we don't
-            // (negotiation/meeting/coding with no profile fallback) we extend to the
-            // total live ceiling so we never abort to empty. After streaming begins,
-            // an inter-token STALL guard (not a wall-clock cap) protects long
-            // answers from truncation while still killing a mid-stream hang.
+            // Full-JIT policy: provider stalls/failures may not be repaired with
+            // deterministic profile prose. We still enforce first-useful/inter-token
+            // deadlines, but a zero-token provider failure becomes a transparent,
+            // non-authoritative provider-error line instead of a profile fallback.
             const usingLocalLlm = typeof (this.llmHelper as any).isUsingOllama === 'function'
                 ? (this.llmHelper as any).isUsingOllama()
                 : false;
             const firstUsefulDeadline = usingLocalLlm
-                ? (hasLiveFallback ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS)
-                : (hasLiveFallback ? firstUsefulDeadlineMs(answerPlan.answerType) : LIVE_TOTAL_HARD_TIMEOUT_MS);
+                ? LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS
+                : LIVE_TOTAL_HARD_TIMEOUT_MS;
             let liveDeadlineFired = false;
 
             const emitChunk = (chunk: string) => {
@@ -1439,31 +1465,25 @@ export class IntelligenceEngine extends EventEmitter {
             }
             trace.mark('response_completed', { chars: fullAnswer.length, coding: isCoding });
 
-            // LIVE LATENCY FALLBACK: the deadline fired before any useful token,
-            // so the partial/empty stream is unusable. Substitute the precomputed
-            // deterministic answer (profile routes) so the candidate always has
-            // something correct to say. For fallback-less routes we kept streaming
-            // to the total budget, so reaching here without content means a genuine
-            // outage — the non-answer guard below substitutes a graceful line.
+            // LIVE LATENCY FALLBACK: the deadline fired before any useful token.
+            // Full-JIT policy forbids deterministic profile fallback here; ship a
+            // transparent non-authoritative line instead of guessing from cached/AOT prose.
+            let wtaWriteDecision = decideSessionWritePolicy({ finalGenerationMode: 'jit_llm', validationOk: true, sourceContractHonored: true });
             if (liveDeadlineFired && !emittedStreamingToken && !isSpeculative
                 && this.currentGenerationId === generationId) {
-                // Discard any stale partial provider text that never crossed the
-                // emit threshold so it can't be flushed AFTER the fallback (and
-                // double-render) below (code-review 2026-06-05, MEDIUM).
                 streamingTokenBuffer = '';
-                if (hasLiveFallback) {
-                    fullAnswer = liveFallbackAnswer;
-                    emitChunk(liveFallbackAnswer);
-                    trace.mark('fallback_answer_used', { answerType: answerPlan.answerType });
-                } else if (!fullAnswer.trim()) {
-                    // No grounded fallback (meeting/lecture with no context, etc.) —
-                    // emit an honest insufficient-context line, never an empty answer.
+                if (!fullAnswer.trim()) {
                     const safe = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
                         ? "I don't have enough context from the conversation to answer that yet."
-                        : "Let me come back to that in just a moment.";
+                        : "The model did not produce an answer in time, so I won't guess from your profile.";
                     fullAnswer = safe;
                     emitChunk(safe);
-                    trace.mark('fallback_answer_used', { answerType: answerPlan.answerType });
+                    wtaWriteDecision = decideSessionWritePolicy({
+                        finalGenerationMode: 'provider_error_no_answer',
+                        validationOk: false,
+                        criticalViolations: ['provider_timeout_no_answer'],
+                    });
+                    trace.mark('fallback_answer_used', { answerType: answerPlan.answerType, finalGenerationMode: 'provider_error_no_answer' });
                 }
             }
 
@@ -1860,14 +1880,15 @@ export class IntelligenceEngine extends EventEmitter {
             // one, else the honest insufficient-context line. Narrow check (whole
             // answer must BE the stub), so real answers containing JSON are untouched.
             if (fullAnswer && isLeakedSchemaStub(fullAnswer)) {
-                trace.mark('fallback_answer_used', { answerType: answerPlan.answerType, reason: 'leaked_schema_stub' });
-                if (hasLiveFallback && liveFallbackAnswer.trim()) {
-                    fullAnswer = liveFallbackAnswer;
-                } else {
-                    fullAnswer = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
-                        ? "I don't have enough context from the conversation to answer that yet."
-                        : "Let me come back to that in just a moment.";
-                }
+                trace.mark('fallback_answer_used', { answerType: answerPlan.answerType, reason: 'leaked_schema_stub', finalGenerationMode: 'provider_error_no_answer' });
+                fullAnswer = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
+                    ? "I don't have enough context from the conversation to answer that yet."
+                    : "The model produced an invalid answer artifact, so I won't guess from your profile. Please try again.";
+                wtaWriteDecision = decideSessionWritePolicy({
+                    finalGenerationMode: 'provider_error_no_answer',
+                    validationOk: false,
+                    criticalViolations: ['leaked_schema_stub'],
+                });
             }
             // OUTPUT SHAPE NORMALIZER (Phase 4 wiring, behind answer_diversity_guard_enabled):
             // the WTA path applies NO answer polish today (unlike the manual path), so empty
@@ -1914,14 +1935,23 @@ export class IntelligenceEngine extends EventEmitter {
                 }
             } catch { /* normalizer never blocks the answer */ }
 
-            this.session.addAssistantMessage(finalWtaAnswer);
+            this.session.addAssistantMessage(finalWtaAnswer, wtaWriteDecision);
 
-            this.session.pushUsage({
-                type: 'assist',
-                timestamp: Date.now(),
-                question: question || 'What to Answer',
-                answer: finalWtaAnswer
-            });
+            // Full-JIT write-gating law (§6): a provider-error/no-answer WTA
+            // fallback (deadline timeout, leaked-schema-stub) carries a
+            // do_not_store decision. Skip pushUsage so the "did not produce an
+            // answer in time" line is not persisted into the saved meeting's
+            // fullUsage. The suggested_answer emit below is UNGATED — that is the
+            // live UI delivery the user still needs to see; only storage is gated.
+            // Mirrors the manual path, where logUsage sits inside the same gate.
+            if (wtaWriteDecision.policy !== 'do_not_store') {
+                this.session.pushUsage({
+                    type: 'assist',
+                    timestamp: Date.now(),
+                    question: question || 'What to Answer',
+                    answer: finalWtaAnswer
+                });
+            }
 
             this.emit('suggested_answer', finalWtaAnswer, question || 'What to Answer', confidence);
             try {

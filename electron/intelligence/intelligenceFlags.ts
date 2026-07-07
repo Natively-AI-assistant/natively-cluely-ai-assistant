@@ -28,6 +28,8 @@
 // set). That's cheap enough for that cadence; there is deliberately no cache (see
 // readEnvOverride for why a cache would be wrong under esbuild inline-bundling).
 
+export type SourceOwnerEnforcementStage = 'off' | 'observe' | 'soft_block' | 'enforce';
+
 export type IntelligenceFlagKey =
   // Observe-only structured per-answer trace + context-inclusion report (Phase 3/12/13).
   | 'trace'
@@ -147,7 +149,15 @@ export type IntelligenceFlagKey =
   // any path. Phase 4 ships the arbiter in observe-only mode (default OFF);
   // Phase H flips this ON after we've collected telemetry confirming the
   // contract is correctly built for every modeKind × answerType combination.
-  | 'customModeSourceEnforcement';
+  | 'customModeSourceEnforcement'
+  // Full-JIT final-answer law (2026-07-07, JD/Resume JIT pipeline fix). When ON,
+  // AOT-precomputed intro/identity/greeting text is demoted to EVIDENCE (a
+  // <candidate_identity_fact> context block) and the provider generates the
+  // user-visible final answer — instead of the AOT string being emitted verbatim.
+  // Default ON (the full-JIT policy is the intended behavior); flip OFF to
+  // restore the legacy AOT-emit fast paths if a latency/behavior regression is
+  // found in the field.
+  | 'jitFinalAnswerEnforced';
 
 interface FlagSpec {
   /** env var name (NATIVELY_* convention). */
@@ -255,6 +265,9 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   // honest refusal (the safe fallback) regardless of this flag. Toggling this
   // flag alone (without okfHybridRetrieval) has no effect.
   docGroundedFalseRefusalRepair: { env: 'NATIVELY_DOC_GROUNDED_FALSE_REFUSAL_REPAIR', setting: 'docGroundedFalseRefusalRepairEnabled', default: true },
+  // Full-JIT final-answer law (2026-07-07). Default ON — AOT intro/identity/
+  // greeting is demoted to evidence and the provider writes the final answer.
+  jitFinalAnswerEnforced: { env: 'NATIVELY_JIT_FINAL_ANSWER_ENFORCED', setting: 'jitFinalAnswerEnforcedEnabled', default: true },
 };
 
 const ON_VALUES = new Set(['1', 'true', 'on', 'enabled', 'yes']);
@@ -318,6 +331,15 @@ export function isIntelligenceFlagEnvForced(key: IntelligenceFlagKey): boolean {
 
 /** True when the observe-only IntelligenceTrace should collect (Phase 12/13). */
 export const isIntelligenceTraceEnabled = (): boolean => isIntelligenceFlagEnabled('trace');
+
+/**
+ * True when the full-JIT final-answer law is enforced: AOT intro/identity/
+ * greeting text is demoted to evidence and the provider writes every
+ * user-visible final answer. Default ON. Flip OFF to restore the legacy
+ * AOT-emit fast paths.
+ */
+export const isJitFinalAnswerEnforced = (): boolean =>
+  isIntelligenceFlagEnabled('jitFinalAnswerEnforced');
 
 /**
  * True when the live long-range follow-up memory should read from the durable
@@ -432,6 +454,22 @@ export const isDocGroundedStrictIsolationEnabled = (): boolean =>
  */
 export const isDocGroundedFalseRefusalRepairEnabled = (): boolean =>
   isIntelligenceFlagEnabled('docGroundedFalseRefusalRepair');
+
+export function getSourceOwnerEnforcementStage(): SourceOwnerEnforcementStage {
+  try {
+    const raw = (process.env.NATIVELY_SOURCE_OWNER_ENFORCEMENT_STAGE || '').trim().toLowerCase();
+    if (raw === 'off' || raw === 'observe' || raw === 'soft_block' || raw === 'enforce') return raw;
+    if (isIntelligenceFlagEnabled('customModeSourceEnforcement')) return 'enforce';
+  } catch {
+    /* fall through */
+  }
+  return 'observe';
+}
+
+export function isSourceOwnerEnforcementBlocking(): boolean {
+  const stage = getSourceOwnerEnforcementStage();
+  return stage === 'soft_block' || stage === 'enforce';
+}
 
 /**
  * A snapshot of every flag's resolved state — handy for the IntelligenceTrace and

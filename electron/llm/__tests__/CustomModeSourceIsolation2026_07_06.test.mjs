@@ -29,17 +29,27 @@ const distDir = (() => {
   return target;
 })();
 
+// The GENERAL entity/property validator checks are gated behind the
+// `customModeSourceEnforcement` flag (default OFF). Enable it for THIS suite so
+// the v2 (blacklist-free) behavior is exercised. Set before requiring the
+// compiled module so the flag read picks it up.
+process.env.NATIVELY_CUSTOM_MODE_SOURCE_ENFORCEMENT = '1';
+
 const cjsRequire = createRequire(import.meta.url);
 const dgMod = cjsRequire(path.resolve(distDir, 'electron/llm/documentGroundedPrompt.js'));
 const csiMod = cjsRequire(path.resolve(distDir, 'electron/llm/customModeExecutionContract.js'));
+const soMod = cjsRequire(path.resolve(distDir, 'electron/llm/sourceOwnership.js'));
 
-const { DOC_GROUNDED_ANSWER_TYPES, isDocGroundedAnswerType } = dgMod;
+const { DOC_GROUNDED_ANSWER_TYPES, isDocGroundedAnswerType, deriveRetrievalHints, expandQueryWithHints } = dgMod;
 const {
   buildCustomModeExecutionContract,
   validateAgainstSourceContract,
-  isMercuryControllerQuestion,
-  SourceAuthority,
+  extractCandidateEntities,
+  unsupportedEntities,
+  classifyRequestedProperty,
+  validatePropertyAnswerability,
 } = csiMod;
+const { resolveSourceOwnership, isExplicitProfileAsk, buildSourceSwitchClarification } = soMod;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -276,49 +286,44 @@ test('REGRESSION A: same question with on-topic answer is accepted', () => {
   assert.equal(result.action, 'ship');
 });
 
-// ── Test 8: REGRESSION B — Mercury processor ESP32 leak ────────────────────
+// ── Test 8: REGRESSION B — property-aware answerability (GENERAL, no entity
+//    constants). The controller/processor case is now proven through the
+//    generic classifyRequestedProperty + validatePropertyAnswerability path —
+//    the entity name "Mercury X1" lives only in the test fixture, never in
+//    product code. The SAME mechanism covers cost/funding/participants below.
 
-test('REGRESSION B: Mercury processor question rejects ESP32 / Xavier NX unless controller evidence supports them', () => {
+test('REGRESSION B: property classifier recognizes a controller/processor question generically', () => {
+  assert.equal(classifyRequestedProperty('What processor controls the Mercury X1?'), 'processor_or_controller');
+  assert.equal(classifyRequestedProperty('What are the key specifications of the Mercury X1?'), 'unknown');
+  // Generalizes to any entity — no hardcoded name.
+  assert.equal(classifyRequestedProperty('Which controller runs the Falcon R2 arm?'), 'processor_or_controller');
+});
+
+test('REGRESSION B: controller answer rejected when evidence lacks entity+controller support', () => {
   const contract = contractFor({ ...DOC_GROUNDED_INPUT, answerType: 'exact_numeric_answer' });
-  const wrongAnswer = 'The Mercury X1 is controlled by the NVIDIA Jetson Xavier NX AI controller and ESP32 motor control boards.';
-  // Add "Jetson Xavier NX" to the block to simulate the model echoing evidence,
-  // while keeping it outside the Mercury controller property. ESP32 appears only
-  // as low-level motor-control evidence, not as the processor/controller.
-  const blockWithNx = THESIS_BLOCK + '\n[Section 4.2.2 | p57] The Jetson Xavier NX variant provides additional inference acceleration.';
+  // Evidence mentions the entity ONLY in a non-controller (motor-subsystem)
+  // sentence — the property is not supported for that entity.
+  const blockNoController = `
+[Section 4.2.1 | p55] The Falcon R2 communicates with the motor control subsystem via generic boards at 50 Hz.
+`;
   const result = validateAgainstSourceContract({
     contract,
-    question: 'What processor controls the Mercury X1?',
-    answer: wrongAnswer,
-    retrievedBlock: blockWithNx,
+    question: 'What processor controls the Falcon R2?',
+    answer: 'The Falcon R2 is controlled by a high-performance AI controller.',
+    retrievedBlock: blockNoController,
   });
-  assert.equal(result.ok, false, `expected controller answerability rejection, got ok=true`);
-  assert.ok(result.answerabilityViolations.includes('mercury_controller_esp32_only_low_level_motor_control'));
-  assert.ok(result.answerabilityViolations.includes('mercury_controller_unsupported_xavier_nx'));
-  assert.equal(result.action, 'retry');
+  assert.equal(result.ok, false, `expected property-evidence-missing rejection, got ok=true`);
+  assert.ok(
+    result.answerabilityViolations.some(v => v.startsWith('property_evidence_missing:processor_or_controller')),
+    `expected processor_or_controller violation, got: ${JSON.stringify(result.answerabilityViolations)}`,
+  );
 });
 
-
-test('REGRESSION B: Mercury controller question is detected as property-specific', () => {
-  assert.equal(isMercuryControllerQuestion('What processor controls the Mercury X1?'), true);
-  assert.equal(isMercuryControllerQuestion('What are the key specifications of the Mercury X1?'), false);
-});
-
-test('REGRESSION B: correct Mercury controller evidence is preferred and accepted', () => {
+test('REGRESSION B: controller answer accepted when evidence supports entity+controller', () => {
   const contract = contractFor({ ...DOC_GROUNDED_INPUT, answerType: 'exact_numeric_answer' });
-  const expected = 'The Mercury X1 uses an NVIDIA Jetson Xavier as the main controller and a Jetson Nano as the auxiliary controller.';
-  const result = validateAgainstSourceContract({
-    contract,
-    question: 'What processor controls the Mercury X1?',
-    answer: expected,
-    retrievedBlock: THESIS_BLOCK,
-  });
-  assert.equal(result.ok, true, `expected accepted controller answer, got: ${result.reason}`);
-  assert.equal(result.action, 'ship');
-});
-
-test('REGRESSION B: correct Mercury answer names BOTH controllers', () => {
-  const contract = contractFor({ ...DOC_GROUNDED_INPUT, answerType: 'exact_numeric_answer' });
-  const goodAnswer = 'The Mercury X1 is controlled by the NVIDIA Jetson Xavier main controller with a Jetson Nano auxiliary controller. The motor subsystem uses ESP32 boards but the primary control is the Jetson Xavier.';
+  // THESIS_BLOCK has "Mercury X1 is controlled by the NVIDIA Jetson Xavier main
+  // controller…" — entity + property co-occur, so a grounded answer ships.
+  const goodAnswer = 'The Mercury X1 is controlled by the NVIDIA Jetson Xavier main controller with a Jetson Nano auxiliary controller.';
   const result = validateAgainstSourceContract({
     contract,
     question: 'What processor controls the Mercury X1?',
@@ -424,4 +429,168 @@ test('buildCustomModeExecutionContract: different input → different hash', () 
   const a = contractFor(DOC_GROUNDED_INPUT);
   const b = contractFor(PROFILE_INPUT);
   assert.notEqual(a.contractHash, b.contractHash);
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// SOURCE-OWNERSHIP RESOLVER — the general disambiguation authority.
+// Proves ambiguous-noun ownership resolves by MODE source authority, not by
+// per-entity/per-question keyword lists. No document term, project name, or
+// specific question string is asserted as product logic here.
+// ══════════════════════════════════════════════════════════════════════════
+
+function ownershipFor(question, authority, profilePolicy = 'forbidden', hasProfileFacts = true) {
+  return resolveSourceOwnership({
+    question,
+    contract: { sourceAuthority: authority },
+    profileContextPolicy: profilePolicy,
+    answerType: 'x',
+    hasProfileFacts,
+  });
+}
+
+// ── Doc-grounded: the reported leak ────────────────────────────────────────
+
+test('OWNERSHIP: doc-grounded "four main phases of the project?" → reference_files, profile NOT allowed', () => {
+  const d = ownershipFor('What are the four main phases of the project?', 'reference_files_only');
+  assert.equal(d.owner, 'reference_files');
+  assert.equal(d.profileAllowed, false, 'the profile fast-path must NOT run — this is the reported leak');
+  assert.equal(d.shouldClarifyInsteadOfProfile, false, 'a normal doc question does not clarify');
+});
+
+test('OWNERSHIP: doc-grounded "main stages of the pipeline?" (definitional) → profile NOT allowed', () => {
+  const d = ownershipFor('What are the main stages of the pipeline?', 'reference_files_only');
+  assert.equal(d.profileAllowed, false);
+});
+
+test('OWNERSHIP: doc-grounded "List the four objectives." (list) → profile NOT allowed', () => {
+  const d = ownershipFor('List the four objectives of the study.', 'reference_files_only');
+  assert.equal(d.profileAllowed, false);
+});
+
+// ── Doc-grounded + explicit profile ask → clarify / offer to switch ────────
+
+test('OWNERSHIP: doc-grounded EXPLICIT "what is my project X?" → clarify, no profile leak', () => {
+  const d = ownershipFor('What is my project Natively?', 'reference_files_only');
+  assert.equal(d.profileAllowed, false, 'never leak the profile');
+  assert.equal(d.explicitProfileAsk, true, 'possessive "my project" is detected generically');
+  assert.equal(d.shouldClarifyInsteadOfProfile, true, 'explicit profile ask in a doc mode → clarify');
+  // The clarify line is source-honest and names no specific document/project.
+  const line = buildSourceSwitchClarification(d.owner);
+  assert.match(line, /uploaded material/i);
+  assert.doesNotMatch(line, /Natively/i);
+});
+
+test('OWNERSHIP: explicit-profile shape detector is generic (not an entity list)', () => {
+  assert.equal(isExplicitProfileAsk('what is my project Natively?'), true);
+  assert.equal(isExplicitProfileAsk('tell me about my resume'), true);
+  assert.equal(isExplicitProfileAsk('from my background, what fits?'), true);
+  assert.equal(isExplicitProfileAsk('your skills for this role'), true);
+  // A plain document question is NOT an explicit profile ask.
+  assert.equal(isExplicitProfileAsk('what are the four main phases of the project?'), false);
+  assert.equal(isExplicitProfileAsk('what does the paper conclude?'), false);
+});
+
+// ── Profile mode: profile IS the owner ─────────────────────────────────────
+
+test('OWNERSHIP: profile mode "what are my best projects?" → profile allowed', () => {
+  const d = ownershipFor('What are my best projects?', 'profile_only', 'required');
+  assert.equal(d.owner, 'profile');
+  assert.equal(d.profileAllowed, true);
+  assert.equal(d.shouldClarifyInsteadOfProfile, false);
+});
+
+// ── Transcript mode: transcript owns "project" ─────────────────────────────
+
+test('OWNERSHIP: transcript mode "what project did we discuss?" → transcript, profile NOT allowed', () => {
+  const d = ownershipFor('What project did we discuss in the meeting?', 'transcript_only');
+  assert.equal(d.owner, 'transcript');
+  assert.equal(d.profileAllowed, false);
+});
+
+// ── General/built-in mode: ZERO regression — defer to AnswerPlan policy ─────
+
+test('OWNERSHIP: general_mixed defers to the AnswerPlan policy (profile question → profile)', () => {
+  const allowed = ownershipFor('What are my best projects?', 'general_mixed', 'required', true);
+  assert.equal(allowed.profileAllowed, true, 'built-in mode profile question still routes to profile');
+  const forbidden = ownershipFor('reverse a linked list', 'general_mixed', 'forbidden', true);
+  assert.equal(forbidden.profileAllowed, false, 'a coding question keeps profile forbidden');
+});
+
+test('OWNERSHIP: general_mixed with no profile facts → profile not allowed (no false grounding)', () => {
+  const d = ownershipFor('What are my best projects?', 'general_mixed', 'required', false);
+  assert.equal(d.profileAllowed, false);
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// GENERAL ENTITY / PROPERTY VALIDATOR — blacklist-free proofs.
+// ══════════════════════════════════════════════════════════════════════════
+
+test('ENTITY: extractCandidateEntities finds proper nouns + product tokens generically', () => {
+  const ents = extractCandidateEntities('The Falcon R2 uses a Jetson Xavier and an ESP32 board.');
+  const norm = ents.map(e => e.toLowerCase());
+  assert.ok(norm.some(e => e.includes('falcon')), `expected Falcon, got ${JSON.stringify(ents)}`);
+  assert.ok(norm.some(e => e.includes('jetson')), `expected Jetson, got ${JSON.stringify(ents)}`);
+  assert.ok(ents.includes('ESP32') || ents.includes('R2'), `expected a product token, got ${JSON.stringify(ents)}`);
+});
+
+test('ENTITY: unsupportedEntities flags any answer entity absent from evidence — no hardcoded names', () => {
+  // "Natively" is absent from the thesis block → flagged.
+  const leaks = unsupportedEntities('My project Natively uses Electron and Rust.', THESIS_BLOCK);
+  assert.ok(leaks.includes('Natively'), `expected Natively flagged, got ${JSON.stringify(leaks)}`);
+  // A brand-new invented entity is ALSO flagged with zero code changes.
+  const leaks2 = unsupportedEntities('The system runs on QuantumForge9000.', THESIS_BLOCK);
+  assert.ok(leaks2.includes('QuantumForge9000'), `expected the invented entity flagged, got ${JSON.stringify(leaks2)}`);
+});
+
+test('ENTITY: an entity present in the evidence is NOT flagged', () => {
+  const leaks = unsupportedEntities('Mercury X1 uses the Jetson Xavier controller.', THESIS_BLOCK);
+  assert.equal(leaks.length, 0, `expected no leaks (all in evidence), got ${JSON.stringify(leaks)}`);
+});
+
+test('PROPERTY: cost question requires cost/price evidence (general)', () => {
+  assert.equal(classifyRequestedProperty('What was the total cost of building the teleoperation system?'), 'cost_or_price');
+  const violations = validatePropertyAnswerability({
+    question: 'What was the total cost of building the teleoperation system?',
+    answer: 'It cost $50,000.',
+    retrievedBlock: THESIS_BLOCK, // no cost figure present
+  });
+  assert.ok(violations.some(v => v.startsWith('property_evidence_missing:cost_or_price')), `got ${JSON.stringify(violations)}`);
+});
+
+test('PROPERTY: funding question requires sponsor/grant evidence (general)', () => {
+  assert.equal(classifyRequestedProperty('Who funded this research?'), 'funding_source');
+  const violations = validatePropertyAnswerability({
+    question: 'Who funded this research?',
+    answer: 'It was funded by a private grant.',
+    retrievedBlock: THESIS_BLOCK, // only a collaboration mention, no funding
+  });
+  assert.ok(violations.some(v => v.startsWith('property_evidence_missing:funding_source')), `got ${JSON.stringify(violations)}`);
+});
+
+test('PROPERTY: participants question requires participant evidence (general)', () => {
+  assert.equal(classifyRequestedProperty('How many participants took part?'), 'human_participants');
+  const violations = validatePropertyAnswerability({
+    question: 'How many participants took part in the study?',
+    answer: 'There were 40 participants.',
+    retrievedBlock: THESIS_BLOCK,
+  });
+  assert.ok(violations.some(v => v.startsWith('property_evidence_missing:human_participants')), `got ${JSON.stringify(violations)}`);
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// SOURCE-AWARE RETRIEVAL HINTS — generic synonym expansion, no doc terms.
+// ══════════════════════════════════════════════════════════════════════════
+
+test('HINTS: "phases" expands to generic stage/objective synonyms', () => {
+  const h = deriveRetrievalHints('What are the four main phases of the project?');
+  assert.ok(h.sectionHints.includes('objective'), `expected objective synonym, got ${JSON.stringify(h.sectionHints)}`);
+  assert.ok(h.sectionHints.includes('milestone'));
+  const expanded = expandQueryWithHints('What are the four main phases of the project?');
+  assert.match(expanded, /objective/);
+  assert.match(expanded, /milestone/);
+});
+
+test('HINTS: a question with no ambiguous concept nouns returns the raw query', () => {
+  const expanded = expandQueryWithHints('hello there');
+  assert.equal(expanded, 'hello there');
 });

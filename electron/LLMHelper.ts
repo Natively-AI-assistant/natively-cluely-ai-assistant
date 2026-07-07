@@ -2082,8 +2082,18 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           // compatibility — factual retrieval, not persona injection, so mode gating is
           // inappropriate. Mirrors the same bypass in _streamChatInner.
           if (knowledgeResult?.isIntroQuestion && knowledgeResult?.introResponse) {
-            console.log('[LLMHelper] Knowledge mode: returning intro response (mode-gate bypassed for identity recall)');
-            return knowledgeResult.introResponse;
+            const { isJitFinalAnswerEnforced } = require('./intelligence/intelligenceFlags');
+            if (isJitFinalAnswerEnforced()) {
+              // FULL-JIT LAW (mirror of the streaming site): demote the AOT intro
+              // to a candidate_identity_fact EVIDENCE block and fall through to
+              // provider generation instead of returning the AOT string verbatim.
+              const identityFactBlock = `<candidate_identity_fact source="aot_precomputed_intro" trust="high">\n${knowledgeResult.introResponse}\n</candidate_identity_fact>\n<identity_fact_use_rule>The candidate_identity_fact above is grounded recall about the user. Use it to write a natural, first-person answer to the exact question — do not quote it verbatim, do not add facts not present in it.</identity_fact_use_rule>`;
+              context = context ? `${identityFactBlock}\n\n${context}` : identityFactBlock;
+              console.log('[LLMHelper] Knowledge mode: AOT intro demoted to evidence (full-JIT); provider will generate');
+            } else {
+              console.log('[LLMHelper] Knowledge mode: returning intro response (mode-gate bypassed for identity recall)');
+              return knowledgeResult.introResponse;
+            }
           }
 
           // Issue #272: gate ALL other premium-intercept side-effects (coaching,
@@ -2178,10 +2188,24 @@ if (!shouldSkipModeInjection) {
     // the manual-streaming fix) so the uploaded reference files actually
     // reach the model. Other modes fall back to the existing sync lexical
     // retriever for byte-for-byte legacy behavior.
+    // SOURCE-AWARE RETRIEVAL HINTS (2026-07-06): for a doc-grounded turn,
+    // expand the query with GENERIC concept synonyms ("phases"→objectives/
+    // milestones/stages, "system"→architecture/pipeline) so the lexical/hybrid
+    // retriever matches sections that use different words than the question.
+    // This only broadens recall WITHIN the uploaded reference files — it never
+    // injects answer text and carries no document-specific terms. Non-doc modes
+    // pass the raw query byte-for-byte (legacy behavior preserved).
+    let docRetrievalQuery = message;
+    if (forceDocumentGrounding) {
+      try {
+        const { expandQueryWithHints } = require('./llm/documentGroundedPrompt');
+        docRetrievalQuery = expandQueryWithHints(message);
+      } catch { docRetrievalQuery = message; }
+    }
     if (forceDocumentGrounding && typeof modesMgr.buildRetrievedActiveModeContextBlockHybrid === 'function') {
       try {
         const groundedContext = await modesMgr.buildRetrievedActiveModeContextBlockHybrid(
-          message, context, undefined, modeAnswerType(routeOptions), true,
+          docRetrievalQuery, context, undefined, modeAnswerType(routeOptions), true,
         );
         if (groundedContext && groundedContext.trim()) {
           modeContextBlock = groundedContext;
@@ -2193,7 +2217,7 @@ if (!shouldSkipModeInjection) {
     }
     if (!usedRerankPath) {
       modeContextBlock = modesMgr.buildRetrievedActiveModeContextBlock(
-        message, context, forceDocumentGrounding ? undefined : 1800, modeAnswerType(routeOptions), true, undefined, { forceDocumentGrounding },
+        docRetrievalQuery, context, forceDocumentGrounding ? undefined : 1800, modeAnswerType(routeOptions), true, undefined, { forceDocumentGrounding },
       );
     }
     const modePromptSuffix = modesMgr.getActiveModeSystemPromptSuffix();
@@ -4331,9 +4355,23 @@ const isMultimodal = !!(imagePaths?.length);
         // D1/R1: but never for a resume-forbidden answer type (a coding/sales/
         // lecture turn must not be answered with the candidate's intro).
         if (profileInjectionAllowed && knowledgeResult?.isIntroQuestion && knowledgeResult?.introResponse) {
-          console.log('[LLMHelper] Knowledge mode (stream): returning generated intro response (mode-gate bypassed for identity recall)');
-          yield knowledgeResult.introResponse;
-          return;
+          const { isJitFinalAnswerEnforced } = require('./intelligence/intelligenceFlags');
+          // A bare social greeting ("hi") is not a factual answer — keep its
+          // instant canned reply even under the full-JIT law.
+          if (isJitFinalAnswerEnforced() && !(knowledgeResult as any)?.isBareGreeting) {
+            // FULL-JIT LAW: do not emit the AOT-precomputed intro/identity as the
+            // final answer. Demote it to EVIDENCE (a candidate_identity_fact
+            // block) and fall through so the provider writes the answer just-in-
+            // time. The precompute still saves the retrieval round-trip; only the
+            // verbatim emit is removed.
+            const identityFactBlock = `<candidate_identity_fact source="aot_precomputed_intro" trust="high">\n${knowledgeResult.introResponse}\n</candidate_identity_fact>\n<identity_fact_use_rule>The candidate_identity_fact above is grounded recall about the user. Use it to write a natural, first-person answer to the exact question — do not quote it verbatim, do not add facts not present in it.</identity_fact_use_rule>`;
+            context = context ? `${identityFactBlock}\n\n${context}` : identityFactBlock;
+            console.log('[LLMHelper] Knowledge mode (stream): AOT intro demoted to evidence (full-JIT); provider will generate');
+          } else {
+            console.log('[LLMHelper] Knowledge mode (stream): returning generated intro response (mode-gate bypassed for identity recall)');
+            yield knowledgeResult.introResponse;
+            return;
+          }
         }
 
         // Factual recall (the user's own name/projects/skills/experience/

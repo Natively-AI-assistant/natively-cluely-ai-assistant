@@ -155,3 +155,9 @@ export {
     getOpenAiReasoningEffort
 } from "./modelCapabilities";
 export type { ModelCapabilities, ModelTier, PromptTier, OpenAiReasoningEffort } from "./modelCapabilities";
+export { resolveSourceOwnership, isExplicitProfileAsk, buildSourceSwitchClarification } from "./sourceOwnership";
+export type { SourceOwner, SourceOwnershipDecision, ResolveSourceOwnershipInput } from "./sourceOwnership";
+export { buildProfileJitPrompt, escapeProfileJitXml } from "./ProfileJitPromptBuilder";
+export type { BuildProfileJitPromptInput, BuiltProfileJitPrompt } from "./ProfileJitPromptBuilder";
+export { evaluateFinalAnswerPolicy, assertNoForbiddenFinalAnswerPath, legacyFastPathToForbiddenPath, finalAnswerRequiresProvider, decideSessionWritePolicy } from "./FinalAnswerGenerationPolicy";
+export type { FinalGenerationMode, ForbiddenFinalAnswerPath, FinalAnswerGenerationTrace, FinalAnswerPolicyInput, FinalAnswerPolicyViolation, SessionWritePolicy, SessionWriteDecision, SessionWriteDecisionInput } from "./FinalAnswerGenerationPolicy";

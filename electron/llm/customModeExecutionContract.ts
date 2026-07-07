@@ -401,19 +401,32 @@ export function isContractHonored(check: ContractCheckInput): { honored: true } 
   return { honored: true };
 }
 
-// ── SourceContractValidator (light v1) ────────────────────────────────────
+// ── SourceContractValidator (general v2, blacklist-free) ───────────────────
 //
-// Phase 5 of the migration: a thin wrapper that runs the four light checks
-// (unsupported entity, unsupported number, forbidden-source signal, list
-// completeness) against the CustomModeExecutionContract. Wraps the existing
-// `validateDocumentGroundedAnswer` for the numeric + list checks, and adds a
-// new entity-leak check that catches the observed "Natively" / "my project"
-// / "my resume" contamination in doc-grounded answers.
+// Custom-Mode Source Disambiguation (2026-07-06): the v1 validator hardcoded a
+// per-deployment blacklist (`FORBIDDEN_PROJECT_NAMES = ['Natively', …]`) and a
+// document-specific `validateMercuryControllerAnswerability` function. Those do
+// not generalize to the next uploaded document or the next user's résumé.
 //
-// Custom-Mode Source Isolation (2026-07-06, hardening/v2.7.0):
-// The four checks are intentionally narrow — we only add things the existing
-// production dataset has proven broken. Phase 5 ships these; Phase E of the
-// wider migration expands to 10 checks once we have telemetry on v1.
+// v2 replaces both with GENERAL, evidence-first mechanisms:
+//   1. Numeric + list completeness — the existing generic primitives (kept).
+//   2. Unsupported-ENTITY check: extract candidate proper nouns / quoted terms
+//      from the answer and reject any that do NOT appear in the retrieved
+//      evidence block. This catches "Natively", "Jetson", "ESP32" AND any future
+//      entity with ZERO hardcoded names — a leaked entity is simply one the
+//      evidence never mentions.
+//   3. Forbidden first-person-source SIGNAL check (generic possessive shapes:
+//      "my project", "my résumé"), fired only when the evidence lacks the same
+//      shape.
+//   4. Property-aware answerability: for a question asking a specific PROPERTY
+//      of a target entity (processor/controller, cost, funding, cloud provider,
+//      participants, dataset size, …), require the evidence to contain the
+//      target entity together with a synonym of the requested property — one
+//      rule that applies to EVERY entity/property, not a Mercury-specific fn.
+//
+// The stricter v2 behavior (entity + property checks) is gated by the
+// `customModeSourceEnforcement` flag (default OFF) so it can be rolled out on
+// telemetry; the generic numeric/list checks run whenever `evidenceRequired`.
 
 import {
   validateDocumentGroundedAnswer,
@@ -439,35 +452,20 @@ export interface SourceContractValidatorResult {
   answerabilityViolations: string[];
 }
 
-// Forbidden-source signal phrases — when the answer contains one of these AND
-// the retrieved evidence does not, the answer is leaking from a forbidden
-// source. Tuned to the observed failures (Natively identity leak + generic
-// project/meta leaks). Add more if new leaks appear in production telemetry.
+// GENERIC first-person-source signal shapes — a doc-grounded answer that claims
+// personal ownership ("my project", "my résumé", "my experience") is leaking
+// from the profile source. These are SHAPES, not entity names, so they
+// generalize across every deployment. Fired only when the evidence block does
+// NOT itself contain the same shape.
 const FORBIDDEN_SOURCE_SIGNAL_PHRASES = [
   /\bmy project\b/i,
   /\bmy resume\b/i,
+  /\bmy résumé\b/i,
   /\bmy experience\b/i,
   /\bI(?:'m| am) (?:an?|the) AI assistant\b/i,
   /\bI (?:cannot|can't|can not) share (?:that|this)\b/i,
   /\bI (?:don't|do not) have (?:a|an|the|my|personal)\b/i,
 ];
-
-const FORBIDDEN_PROJECT_NAMES = [
-  'Natively',
-  'TalentScope',
-  'agenticVLA',
-  'Phlo',
-];
-
-const MERCURY_CONTROLLER_QUERY_RE = /\bmercury\s*x1\b/i;
-const CONTROLLER_PROPERTY_QUERY_RE = /\b(?:processor|controller|control\s+system|controls?|main\s+controller|auxiliary\s+controller)\b/i;
-const ESP32_ANSWER_RE = /\bESP32\b/i;
-const XAVIER_NX_ANSWER_RE = /\bXavier\s+NX\b/i;
-const MERCURY_CONTROLLER_SUPPORT_RE = /\bmercury\s*x1\b[\s\S]{0,220}\b(?:control\s+system|main\s+controller|auxiliary\s+controller|controlled\s+by|uses?\s+(?:an?\s+)?(?:NVIDIA\s+)?Jetson)\b|\b(?:control\s+system|main\s+controller|auxiliary\s+controller|controlled\s+by|uses?\s+(?:an?\s+)?(?:NVIDIA\s+)?Jetson)\b[\s\S]{0,220}\bmercury\s*x1\b/i;
-const MERCURY_EXPECTED_CONTROLLER_RE = /\bJetson\s+Xavier\b/i;
-const MERCURY_EXPECTED_AUX_RE = /\bJetson\s+Nano\b/i;
-const ESP32_LOW_LEVEL_ONLY_RE = /\bESP32\b[\s\S]{0,180}\b(?:motor\s+control|low-level\s+motor|communication\s+board|motor\s+control\s+board)\b|\b(?:motor\s+control|low-level\s+motor|communication\s+board|motor\s+control\s+board)\b[\s\S]{0,180}\bESP32\b/i;
-const CONTROLLER_SUPPORT_SENTENCE_RE = /\b(?:main\s+controller|auxiliary\s+controller|processor|controls?\s+(?:the\s+)?Mercury\s*X1|controlled\s+by|control\s+system)\b/i;
 
 function evidenceSentences(text: string): string[] {
   return String(text || '')
@@ -477,45 +475,159 @@ function evidenceSentences(text: string): string[] {
     .filter(Boolean);
 }
 
-function evidenceSentenceSupportsEntityAsController(retrievedBlock: string, entityRe: RegExp): boolean {
-  return evidenceSentences(retrievedBlock).some(sentence => entityRe.test(sentence) && CONTROLLER_SUPPORT_SENTENCE_RE.test(sentence));
+// ── General unsupported-ENTITY extraction ──────────────────────────────────
+//
+// A leaked entity is simply a proper noun / product token in the ANSWER that
+// the evidence never mentions. We extract candidate entities generically:
+//   - Capitalized multi-word or single-word proper nouns ("Natively", "Jetson
+//     Xavier"), excluding sentence-initial common words.
+//   - ALLCAPS / alphanumeric product tokens ("ESP32", "GPT-4", "RQ1").
+//   - Double-quoted spans.
+// Then reject any whose normalized form is absent from the evidence block. No
+// entity is ever hardcoded — the evidence is the sole authority.
+
+// Common sentence-initial / function words that are Capitalized but not entities.
+const ENTITY_STOPWORDS = new Set([
+  'The', 'A', 'An', 'This', 'That', 'These', 'Those', 'It', 'They', 'We', 'I',
+  'In', 'On', 'For', 'To', 'Of', 'And', 'Or', 'But', 'If', 'When', 'What',
+  'Which', 'How', 'Why', 'Where', 'Who', 'Phase', 'Section', 'Project', 'Page',
+  'Yes', 'No', 'Your', 'My', 'Their', 'His', 'Her', 'Its', 'Our', 'Requirements',
+  'Design', 'Implementation', 'Testing', 'Step', 'Stage', 'Figure', 'Table',
+]);
+
+function normalizeEntity(s: string): string {
+  return s.toLowerCase().replace(/[\s\-]+/g, '').replace(/[.,;:!?)"']+$/, '');
 }
 
-export function isMercuryControllerQuestion(question: string): boolean {
-  return MERCURY_CONTROLLER_QUERY_RE.test(question) && CONTROLLER_PROPERTY_QUERY_RE.test(question);
+/**
+ * Candidate entities in `text`: proper-noun phrases + alphanumeric product
+ * tokens + quoted spans. Generic — no hardcoded names.
+ */
+export function extractCandidateEntities(text: string): string[] {
+  const out = new Set<string>();
+  const t = String(text || '');
+  // Proper-noun phrases: one-or-more Capitalized words, optionally with an
+  // internal lowercase connector (e.g. "Bank of America"). Trim leading
+  // stopword-only heads.
+  for (const m of t.match(/\b[A-Z][a-zA-Z0-9]+(?:\s+(?:of|the|and)?\s*[A-Z][a-zA-Z0-9]+)*\b/g) || []) {
+    const words = m.split(/\s+/);
+    // Drop when EVERY word is a stopword (e.g. "The Design").
+    const meaningful = words.filter(w => !ENTITY_STOPWORDS.has(w));
+    if (meaningful.length === 0) continue;
+    // Use the meaningful span so "In Natively" → "Natively".
+    const phrase = meaningful.join(' ');
+    if (phrase.length >= 3) out.add(phrase);
+  }
+  // Alphanumeric product/model tokens: a letter-run followed by digits, or
+  // ALLCAPS+digits ("ESP32", "GPT-4", "RQ1", "X1").
+  for (const m of t.match(/\b(?:[A-Z]{2,}\d+|[A-Za-z]+\d[A-Za-z0-9-]*)\b/g) || []) {
+    if (m.length >= 2 && !ENTITY_STOPWORDS.has(m)) out.add(m);
+  }
+  // Double-quoted spans.
+  for (const m of t.match(/"([^"]{2,40})"/g) || []) out.add(m.replace(/"/g, ''));
+  return [...out];
 }
 
-function validateMercuryControllerAnswerability(input: { question: string; answer: string; retrievedBlock: string }): string[] {
+/**
+ * Entities present in the ANSWER but absent from the evidence block. These are
+ * the source-leak / hallucination candidates. Generic — catches any name.
+ */
+export function unsupportedEntities(answer: string, retrievedBlock: string): string[] {
+  const blockNorm = normalizeEntity(retrievedBlock);
+  const leaks: string[] = [];
+  for (const ent of extractCandidateEntities(answer)) {
+    if (!blockNorm.includes(normalizeEntity(ent))) leaks.push(ent);
+  }
+  return leaks;
+}
+
+// ── General property-aware answerability ────────────────────────────────────
+//
+// For a question asking a specific PROPERTY of a target entity, require the
+// evidence to contain the target entity together with a synonym of the
+// requested property. One rule for every entity/property — replaces the
+// Mercury-specific function.
+
+export type RequestedProperty =
+  | 'phase_or_stage'
+  | 'processor_or_controller'
+  | 'cost_or_price'
+  | 'funding_source'
+  | 'cloud_provider'
+  | 'human_participants'
+  | 'dataset_size'
+  | 'metric_or_result'
+  | 'unknown';
+
+// Generic synonym sets per property. Extend as new property classes appear —
+// these are CATEGORY synonyms, never document-specific terms.
+const PROPERTY_SYNONYMS: Record<Exclude<RequestedProperty, 'unknown'>, RegExp> = {
+  phase_or_stage: /\b(phase|stage|step|objective|milestone|pipeline|methodology|workflow)s?\b/i,
+  processor_or_controller: /\b(processor|controller|control\s+system|controlled\s+by|compute\s+(?:unit|module)|main\s+controller|auxiliary\s+controller|mcu|soc|cpu|gpu\s+module)\b/i,
+  cost_or_price: /\b(cost|price|priced|budget|expense|expenditure|\$\s?\d|usd|dollars?|euros?)\b/i,
+  funding_source: /\b(funded|funding|sponsor|sponsored|grant|grants?|financed|backed\s+by|supported\s+by)\b/i,
+  cloud_provider: /\b(aws|amazon\s+web\s+services|gcp|google\s+cloud|azure|cloud\s+provider|on-?prem|data\s?center)\b/i,
+  human_participants: /\b(participants?|subjects?|volunteers?|respondents?|users?\s+recruited|human\s+(?:subjects|evaluators))\b/i,
+  dataset_size: /\b(dataset|samples?|examples?|episodes?|rows?|records?|images?|trajectories|demonstrations?)\b/i,
+  metric_or_result: /\b(accuracy|precision|recall|f1|success\s+rate|score|error\s+rate|latency|throughput|%|percent)\b/i,
+};
+
+// What PROPERTY is the question asking for? Generic classification.
+export function classifyRequestedProperty(question: string): RequestedProperty {
+  const q = String(question || '');
+  if (/\b(phase|stage|step|objective|milestone|pipeline\s+stage)s?\b/i.test(q)) return 'phase_or_stage';
+  if (/\b(processor|controller|control\s+system|controls?|compute|mcu|soc)\b/i.test(q)) return 'processor_or_controller';
+  if (/\b(cost|price|budget|expensive|how\s+much\s+(?:did|does|to))\b/i.test(q)) return 'cost_or_price';
+  if (/\b(funded|funding|sponsor|grant|financed|who\s+paid|who\s+funded)\b/i.test(q)) return 'funding_source';
+  if (/\b(cloud\s+provider|which\s+cloud|aws|gcp|azure|hosted\s+on)\b/i.test(q)) return 'cloud_provider';
+  if (/\b(participants?|subjects?|volunteers?|how\s+many\s+people)\b/i.test(q)) return 'human_participants';
+  if (/\b(dataset\s+size|how\s+many\s+(?:samples|examples|episodes|images)|size\s+of\s+the\s+dataset)\b/i.test(q)) return 'dataset_size';
+  return 'unknown';
+}
+
+/**
+ * Extract the TARGET ENTITY the property question is about (the thing whose
+ * property is asked). Generic: the first candidate entity in the question, else
+ * empty (property-only questions like "who funded this research?" have no named
+ * target and skip the entity co-occurrence requirement).
+ */
+export function extractPropertyTargetEntity(question: string): string {
+  const ents = extractCandidateEntities(question);
+  return ents.length > 0 ? ents[0] : '';
+}
+
+/**
+ * General property-aware answerability check. Returns violation codes when the
+ * evidence does not support answering the requested property for the target
+ * entity. No entity or document term is hardcoded.
+ */
+const ANSWER_IS_REFUSAL_RE = /not (?:directly )?(?:mentioned|specified|stated|provided|included|found|available|present)|could ?n[o']t find|could not find|not in (?:the )?(?:uploaded|provided|retrieved|document)|isn'?t (?:in|mentioned|specified)|no (?:information|mention|data) (?:about|on|regarding)/i;
+
+export function validatePropertyAnswerability(input: { question: string; answer: string; retrievedBlock: string }): string[] {
   const { question, answer, retrievedBlock } = input;
-  if (!isMercuryControllerQuestion(question)) return [];
-
+  const property = classifyRequestedProperty(question);
+  if (property === 'unknown') return [];
+  // An honest refusal makes NO property claim — it is the CORRECT response when
+  // the evidence lacks the property. Never flag it as unanswerable.
+  if (ANSWER_IS_REFUSAL_RE.test(answer)) return [];
+  const synonym = PROPERTY_SYNONYMS[property];
   const violations: string[] = [];
-  const evidenceSupportsController = MERCURY_CONTROLLER_SUPPORT_RE.test(retrievedBlock)
-    && MERCURY_EXPECTED_CONTROLLER_RE.test(retrievedBlock)
-    && MERCURY_EXPECTED_AUX_RE.test(retrievedBlock);
 
-  if (!evidenceSupportsController) {
-    violations.push('mercury_controller_evidence_missing_main_auxiliary_support');
+  const targetEntity = extractPropertyTargetEntity(question);
+  const sentences = evidenceSentences(retrievedBlock);
+
+  // Does ANY evidence sentence contain the requested property synonym AND (when
+  // a target entity is named) that entity? If not, the evidence cannot answer
+  // the property — a confident answer would be unsupported.
+  const supportingSentence = sentences.some(s => {
+    if (!synonym.test(s)) return false;
+    if (!targetEntity) return true; // property-only question
+    return normalizeEntity(s).includes(normalizeEntity(targetEntity));
+  });
+
+  if (!supportingSentence) {
+    violations.push(`property_evidence_missing:${property}`);
   }
-
-  if (XAVIER_NX_ANSWER_RE.test(answer) && !evidenceSentenceSupportsEntityAsController(retrievedBlock, /\bXavier\s+NX\b/i)) {
-    violations.push('mercury_controller_unsupported_xavier_nx');
-  }
-
-  if (ESP32_ANSWER_RE.test(answer)) {
-    const answerSentencesWithEsp32 = evidenceSentences(answer).filter(sentence => /\bESP32\b/i.test(sentence));
-    const esp32PresentedAsController = answerSentencesWithEsp32.some(sentence => CONTROLLER_SUPPORT_SENTENCE_RE.test(sentence));
-    const explicitlyController = evidenceSentenceSupportsEntityAsController(retrievedBlock, /\bESP32\b/i);
-    const lowLevelOnly = evidenceSentences(retrievedBlock).some(sentence => /\bESP32\b/i.test(sentence) && ESP32_LOW_LEVEL_ONLY_RE.test(sentence));
-    if (esp32PresentedAsController && (!explicitlyController || lowLevelOnly)) {
-      violations.push('mercury_controller_esp32_only_low_level_motor_control');
-    }
-  }
-
-  if (!MERCURY_EXPECTED_CONTROLLER_RE.test(answer) || !MERCURY_EXPECTED_AUX_RE.test(answer)) {
-    violations.push('mercury_controller_answer_missing_xavier_or_nano');
-  }
-
   return violations;
 }
 
@@ -545,19 +657,22 @@ export function validateAgainstSourceContract(input: SourceContractValidatorInpu
     listMissing.push(...listCheck.missing);
   }
 
-  // 2. Entity-leak check: forbidden source names appearing in the answer that
-  //    don't appear in the retrieved block. This is the [Natively] leak the
-  //    user observed.
-  const blockLower = retrievedBlock.toLowerCase();
-  for (const name of FORBIDDEN_PROJECT_NAMES) {
-    const nameLower = name.toLowerCase();
-    if (answer.includes(name) && !blockLower.includes(nameLower)) {
-      reasons.push(`forbidden_entity_in_answer: ${name}`);
-      entityLeaks.push(name);
+  // 2. GENERAL unsupported-entity check: any proper noun / product token in the
+  //    answer that the evidence never mentions is a source leak or hallucination.
+  //    Catches "Natively", "Jetson", "ESP32" AND any future entity — no hardcoded
+  //    names. Gated by `customModeSourceEnforcement` (default OFF) since it is the
+  //    new, broader behavior; the numeric/list checks above always run.
+  const strictEnforcement = isIntelligenceFlagEnabled('customModeSourceEnforcement');
+  if (strictEnforcement) {
+    for (const ent of unsupportedEntities(answer, retrievedBlock)) {
+      reasons.push(`unsupported_entity_in_answer: ${ent}`);
+      entityLeaks.push(ent);
     }
   }
 
-  // 3. Forbidden-source signal phrases
+  // 3. Forbidden first-person-source SIGNAL shapes ("my project", "my résumé").
+  //    Generic possessive shapes, not entity names — fired only when the
+  //    evidence itself lacks the same shape.
   for (const re of FORBIDDEN_SOURCE_SIGNAL_PHRASES) {
     if (re.test(answer) && !re.test(retrievedBlock)) {
       const label = re.source.replace(/\\b/g, '').slice(0, 32);
@@ -565,11 +680,13 @@ export function validateAgainstSourceContract(input: SourceContractValidatorInpu
     }
   }
 
-  // 4. Property-specific answerability: controller/processor questions need
-  //    controller evidence, not merely any sentence mentioning Mercury X1 + ESP32.
-  const mercuryControllerViolations = validateMercuryControllerAnswerability({ question, answer, retrievedBlock });
-  if (mercuryControllerViolations.length > 0) {
-    for (const violation of mercuryControllerViolations) {
+  // 4. GENERAL property-aware answerability: a question asking a specific
+  //    property (processor/controller, cost, funding, cloud provider,
+  //    participants, dataset size, …) of a target entity requires evidence
+  //    containing that entity + a property synonym. One rule for every
+  //    entity/property. Gated with the entity check.
+  if (strictEnforcement) {
+    for (const violation of validatePropertyAnswerability({ question, answer, retrievedBlock })) {
       reasons.push(violation);
       answerabilityViolations.push(violation);
     }

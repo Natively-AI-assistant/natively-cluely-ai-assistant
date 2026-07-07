@@ -377,6 +377,82 @@ export function isBroadDocumentQuery(question: string): boolean {
   return classifyDocumentQuestionShape(question) === 'broad_overview';
 }
 
+// ── Source-aware retrieval hints (2026-07-06) ──────────────────────────────
+//
+// Expand an ambiguous question's key nouns to their GENERIC synonym set so
+// reference-file retrieval matches sections that use different words than the
+// question ("objectives"/"milestones" for "phases", "architecture" for
+// "system"). This ONLY broadens recall WITHIN the uploaded material — it never
+// injects answer text and carries NO document-specific terms. The concept→
+// synonym map is category-level and applies to any document.
+export interface RetrievalHints {
+  /** The salient nouns detected in the question. */
+  targetConcepts: string[];
+  /** Generic section/heading synonyms to also match against. */
+  sectionHints: string[];
+  /** Generic property synonyms ("phase", "stage", …) for scoring boosts. */
+  propertyHints: string[];
+}
+
+// Category-level synonym expansion. Keys are ambiguous nouns; values are the
+// generic vocabulary a document might use for the same concept. No proper nouns.
+const CONCEPT_SYNONYMS: Record<string, string[]> = {
+  project: ['project', 'phase', 'stage', 'step', 'objective', 'milestone', 'pipeline', 'methodology', 'workflow', 'implementation'],
+  phase: ['phase', 'stage', 'step', 'objective', 'milestone', 'pipeline', 'workflow'],
+  stage: ['stage', 'phase', 'step', 'pipeline', 'workflow'],
+  system: ['system', 'architecture', 'pipeline', 'framework', 'design', 'components'],
+  model: ['model', 'architecture', 'network', 'approach', 'method'],
+  method: ['method', 'methodology', 'approach', 'technique', 'procedure', 'process'],
+  methodology: ['methodology', 'method', 'approach', 'procedure', 'process'],
+  pipeline: ['pipeline', 'stage', 'phase', 'workflow', 'process'],
+  result: ['result', 'finding', 'outcome', 'metric', 'evaluation', 'performance'],
+  experiment: ['experiment', 'evaluation', 'study', 'trial', 'test', 'benchmark'],
+  dataset: ['dataset', 'data', 'samples', 'corpus', 'examples'],
+  hardware: ['hardware', 'device', 'processor', 'controller', 'board', 'compute'],
+  processor: ['processor', 'controller', 'control system', 'compute', 'cpu', 'gpu', 'mcu'],
+  contribution: ['contribution', 'novelty', 'objective', 'goal'],
+  objective: ['objective', 'goal', 'aim', 'phase', 'milestone'],
+};
+
+const HINT_STOPWORDS = new Set([
+  ...Array.from(DOC_STOPWORDS),
+  'four', 'three', 'five', 'two', 'six', 'seven', 'eight', 'nine', 'ten',
+]);
+
+export function deriveRetrievalHints(question: string): RetrievalHints {
+  const words = docWords(question).filter(w => !HINT_STOPWORDS.has(w));
+  const targetConcepts: string[] = [];
+  const sectionHints = new Set<string>();
+  const propertyHints = new Set<string>();
+  for (const w of words) {
+    const singular = w.endsWith('s') ? w.slice(0, -1) : w;
+    const key = CONCEPT_SYNONYMS[w] ? w : (CONCEPT_SYNONYMS[singular] ? singular : null);
+    if (key) {
+      targetConcepts.push(key);
+      for (const syn of CONCEPT_SYNONYMS[key]) {
+        sectionHints.add(syn);
+        propertyHints.add(syn);
+      }
+    }
+  }
+  return {
+    targetConcepts: unique(targetConcepts),
+    sectionHints: [...sectionHints],
+    propertyHints: [...propertyHints],
+  };
+}
+
+/**
+ * Build a compact, source-scoped query expansion string from the hints for a
+ * lexical retriever that scores on term overlap. Appended to the raw query so
+ * synonyms boost the right sections; never shown to the user, never an answer.
+ */
+export function expandQueryWithHints(question: string, hints?: RetrievalHints): string {
+  const h = hints || deriveRetrievalHints(question);
+  if (h.sectionHints.length === 0) return question;
+  return `${question} ${h.sectionHints.join(' ')}`;
+}
+
 export interface DocumentAnswerabilityScore {
   queryShape: DocumentQuestionShape;
   score: number;

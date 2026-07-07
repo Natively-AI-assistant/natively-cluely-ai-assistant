@@ -4,10 +4,12 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const {
+  selectManualProfileEvidence,
   tryBuildManualProfileFastPathAnswer,
   isAssistantIdentityQuestion,
   logManualProfileRoute,
   hasUnhandledQualifier,
+  buildLiveFallbackAnswer,
 } = require('../../../dist-electron/electron/llm/manualProfileIntelligence.js');
 
 const PROFILE = {
@@ -22,18 +24,18 @@ const PROFILE = {
     { name: 'Churn Dashboard', description: 'Tableau dashboard for retention metrics' },
   ],
   education: [
-    { institution: 'State University', degree: 'BS', field: 'Computer Science' },
+    { institution: 'State University', degree: 'BS', field: 'Computer Science', cgpa: '7.5/10' },
   ],
 };
 
 const JD = {
   title: 'Data Analyst',
   company: 'ExampleCo',
-  skills: ['SQL', 'dashboards', 'stakeholder communication'],
+  requirements: ['SQL', 'dashboards', 'stakeholder communication'],
 };
 
-function fast(question, perspective = 'manual_input') {
-  return tryBuildManualProfileFastPathAnswer({
+function route(question, perspective = 'manual_input') {
+  return selectManualProfileEvidence({
     question,
     profile: PROFILE,
     jobDescription: JD,
@@ -41,60 +43,71 @@ function fast(question, perspective = 'manual_input') {
   });
 }
 
-describe('manual Profile Intelligence deterministic fast path', () => {
-  test('MANUAL-PI-IDENTITY-001: answers name from structured resume without provider', () => {
-    const result = fast('what is my name?');
+function values(result) {
+  return JSON.stringify(result?.items?.map((item) => item.value) ?? []);
+}
+
+describe('manual Profile Intelligence evidence selector (Full-JIT)', () => {
+  test('MANUAL-PI-IDENTITY-001: selects name evidence without rendering final prose', () => {
+    const result = route('what is my name?');
     assert.ok(result);
-    assert.equal(result.providerUsed, false);
-    assert.equal(result.answer, 'Your name is Evin John.');
+    assert.equal(result.answer, undefined);
+    assert.equal(result.usedDeterministicFastPath, false);
+    assert.equal(result.usedDeterministicEvidenceSelection, true);
+    assert.equal(result.providerUsed, true);
+    assert.equal(result.finalGenerationMode, 'jit_llm');
+    assert.equal(result.answerType, 'identity_answer');
     assert.deepEqual(result.selectedContextLayers, ['stable_identity', 'resume']);
     assert.ok(result.excludedContextLayers.includes('assistant_identity'));
+    assert.deepEqual(result.items.map((item) => item.field), ['identity.name']);
+    assert.match(values(result), /Evin John/);
   });
 
-  test('MANUAL-PI-EXPERIENCE-001: a "your experiences" question (asking the CANDIDATE) answers in FIRST person', () => {
-    // Manual regression fix 2026-06-08: "your experiences" addresses the candidate, so
-    // a profile-loaded manual answer is first-person candidate voice ("My experience…"),
-    // not "Your experience…". (A "my experiences" self-query stays second-person.)
-    const result = fast('what are your experiences?');
+  test('MANUAL-PI-EXPERIENCE-001: selects experience entries as evidence only', () => {
+    const result = route('what are your experiences?');
     assert.ok(result);
-    assert.match(result.answer, /My experience includes/i);
-    assert.match(result.answer, /Acme Analytics/);
-    assert.match(result.answer, /Data Analyst/);
-    assert.match(result.answer, /Northstar Labs/);
-    assert.doesNotMatch(result.answer, /Natively|AI assistant/i);
-    assert.equal(result.providerUsed, false);
+    assert.equal(result.answer, undefined);
+    assert.equal(result.answerType, 'experience_answer');
+    assert.equal(result.selectedExperiences.length, 2);
+    assert.match(values(result), /Acme Analytics/);
+    assert.match(values(result), /Data Analyst/);
+    assert.match(values(result), /Northstar Labs/);
+    assert.doesNotMatch(values(result), /Natively|AI assistant/i);
   });
 
-  test('MANUAL-PI-PROJECTS-001: a "projects you have done" question answers in FIRST person', () => {
-    const result = fast('what all projects have you done?');
+  test('MANUAL-PI-PROJECTS-001: selects project evidence only', () => {
+    const result = route('what all projects have you done?');
     assert.ok(result);
-    assert.match(result.answer, /My projects include/i);
-    assert.match(result.answer, /Revenue Forecasting/);
-    assert.match(result.answer, /Churn Dashboard/);
-    assert.doesNotMatch(result.answer, /Natively|AI assistant/i);
+    assert.equal(result.answer, undefined);
+    assert.equal(result.answerType, 'project_answer');
+    assert.equal(result.selectedProjects.length, 2);
+    assert.match(values(result), /Revenue Forecasting/);
+    assert.match(values(result), /Churn Dashboard/);
   });
 
-  test('MANUAL-PI-SKILLS-001: answers skills from structured resume', () => {
-    const result = fast('what are my skills?');
+  test('MANUAL-PI-SKILLS-001: selects skills evidence', () => {
+    const result = route('what are my skills?');
     assert.ok(result);
-    assert.match(result.answer, /Your skills include/i);
-    assert.match(result.answer, /Python/);
-    assert.match(result.answer, /SQL/);
-    assert.match(result.answer, /Tableau/);
+    assert.equal(result.answer, undefined);
+    assert.equal(result.answerType, 'skills_answer');
+    assert.deepEqual(result.selectedSkills, ['Python', 'SQL', 'Tableau']);
   });
 
-  test('manual education and role facts work before AOT', () => {
-    const education = fast('what is my education?');
+  test('manual education and role facts are selected before AOT/JIT generation', () => {
+    const education = route('what is my education?');
     assert.ok(education);
-    assert.match(education.answer, /State University/);
-    assert.match(education.answer, /Computer Science/);
+    assert.equal(education.answer, undefined);
+    assert.match(values(education), /State University/);
+    assert.match(values(education), /Computer Science/);
+    assert.match(values(education), /7.5\/10/);
 
-    const role = fast('what role am I applying for?');
+    const role = route('what role am I applying for?');
     assert.ok(role);
-    assert.match(role.answer, /Data Analyst/);
+    assert.equal(role.answer, undefined);
+    assert.equal(role.items.find((item) => item.field === 'job.title')?.value, 'Data Analyst');
   });
 
-  test('resume-only profile facts still work and JD role does not fabricate', () => {
+  test('resume-only profile facts still select and JD role does not fabricate', () => {
     for (const question of [
       'what is my name?',
       'what are my experiences?',
@@ -102,17 +115,13 @@ describe('manual Profile Intelligence deterministic fast path', () => {
       'what all projects have you done?',
       'what is my education?',
     ]) {
-      const result = tryBuildManualProfileFastPathAnswer({
-        question,
-        profile: PROFILE,
-        jobDescription: null,
-        source: 'manual_input',
-      });
-      assert.ok(result, `${question} should work without a JD`);
-      assert.equal(result.providerUsed, false);
+      const result = selectManualProfileEvidence({ question, profile: PROFILE, jobDescription: null, source: 'manual_input' });
+      assert.ok(result, `${question} should select evidence without a JD`);
+      assert.equal(result.answer, undefined);
+      assert.equal(result.providerUsed, true);
     }
 
-    const role = tryBuildManualProfileFastPathAnswer({
+    const role = selectManualProfileEvidence({
       question: 'what role am I applying for?',
       profile: PROFILE,
       jobDescription: null,
@@ -121,7 +130,7 @@ describe('manual Profile Intelligence deterministic fast path', () => {
     assert.equal(role, null, 'target role must not be fabricated when no JD exists');
   });
 
-  test('WTA/interviewer perspective uses first-person candidate wording', () => {
+  test('deprecated wrapper is evidence-only too', () => {
     const result = tryBuildManualProfileFastPathAnswer({
       question: 'Interviewer: What is your name?',
       profile: PROFILE,
@@ -129,45 +138,43 @@ describe('manual Profile Intelligence deterministic fast path', () => {
       source: 'what_to_answer',
     });
     assert.ok(result);
-    assert.equal(result.answer, 'My name is Evin John.');
+    assert.equal(result.answer, undefined);
+    assert.equal(result.usedDeterministicFastPath, false);
+    assert.match(values(result), /Evin John/);
   });
 
   test('GENUINE assistant-meta still bails to the assistant (not hijacked by profile)', () => {
-    // Release 2026-06-06b: narrowed to TRUE assistant-meta — what-is-Natively,
-    // who-built-you, are-you-an-AI/model. These legitimately address the app.
     for (const question of ['what is Natively?', 'who made you?', 'are you an AI?', 'what model do you use?', 'are you a bot?']) {
       assert.equal(isAssistantIdentityQuestion(question), true, `${question} should be assistant identity`);
-      assert.equal(fast(question), null, `${question} must not use candidate profile facts`);
+      assert.equal(route(question), null, `${question} must not select candidate profile facts`);
     }
   });
 
-  test('identity asks ("who are you", "what is your name") now answer AS the candidate (2026-06-06b)', () => {
-    // In an interview-prep product with a loaded profile, "who are you" / "what is
-    // your name" are the candidate's identity questions and must be answered as the
-    // candidate (real manual-chat log: they leaked "I'm Natively, an AI assistant").
+  test('identity asks are candidate profile evidence, not assistant identity', () => {
     for (const question of ['who are you?', 'what is your name?', "what's your name?"]) {
-      assert.equal(isAssistantIdentityQuestion(question), false, `${question} is now a candidate identity ask`);
-      const r = fast(question);
-      assert.ok(r, `${question} should fast-path to a candidate answer`);
-      assert.match(r.answer, /Evin John/, `${question} answers with the loaded candidate name`);
-      assert.doesNotMatch(r.answer, /Natively|AI assistant/i, `${question} must NOT leak the assistant identity`);
+      assert.equal(isAssistantIdentityQuestion(question), false, `${question} is a candidate identity ask`);
+      const r = route(question);
+      assert.ok(r, `${question} should select candidate identity evidence`);
+      assert.match(values(r), /Evin John/);
+      assert.doesNotMatch(values(r), /Natively|AI assistant/i);
     }
   });
 
   test('JD-only role question uses structured JD without requiring resume facts', () => {
-    const role = tryBuildManualProfileFastPathAnswer({
+    const role = selectManualProfileEvidence({
       question: 'what role am I applying for?',
       profile: null,
       jobDescription: JD,
       source: 'manual_input',
     });
     assert.ok(role);
-    assert.equal(role.providerUsed, false);
-    assert.equal(role.answer, 'You are applying for the Data Analyst role.');
+    assert.equal(role.answer, undefined);
+    assert.equal(role.providerUsed, true);
+    assert.equal(role.items.find((item) => item.field === 'job.title')?.value, 'Data Analyst');
   });
 
   test('safe route log redacts question and never logs raw profile facts', () => {
-    const result = fast('what is my name?');
+    const result = route('what is my name?');
     const log = logManualProfileRoute({
       source: 'manual_input',
       question: 'what is my name?',
@@ -177,40 +184,39 @@ describe('manual Profile Intelligence deterministic fast path', () => {
     assert.equal(log.question, undefined);
     assert.match(log.questionHash, /^[a-f0-9]{12}$/);
     assert.equal(log.profileFactsReady, true);
-    assert.equal(log.usedDeterministicFastPath, true);
-    assert.equal(log.providerUsed, false);
+    assert.equal(log.usedDeterministicFastPath, false);
+    assert.equal(log.providerUsed, true);
     assert.doesNotMatch(JSON.stringify(log), /Evin John|Acme Analytics|Revenue Forecasting/);
+  });
+
+  test('live fallback never returns deterministic profile prose on provider failure', () => {
+    assert.equal(buildLiveFallbackAnswer({ question: 'what is my name?', answerType: 'identity_answer', profile: PROFILE, jobDescription: JD }), null);
   });
 });
 
-// REGRESSION: the deterministic fast path used to fire a canned "your projects
-// include ..." dump for ANY question containing "projects", ignoring filters like
-// "...that I used REST API". Those qualified questions must DEFER to the grounded
-// LLM (return null) so it can actually reason over the filter, not dump verbatim.
-describe('manual Profile Intelligence: qualified questions defer to the LLM', () => {
-  test('bare listing questions still FIRE the fast path', () => {
-    assert.ok(fast('what are my projects?'), 'plain projects listing should fast-path');
-    assert.ok(fast('what are my skills?'), 'plain skills listing should fast-path');
-    assert.ok(fast('what is my name?'), 'name lookup should fast-path');
-    assert.ok(fast('what are your experiences?'), 'plain experience listing should fast-path');
+describe('manual Profile Intelligence: qualified questions defer to JIT/general grounding', () => {
+  test('bare listing questions still select evidence', () => {
+    assert.ok(route('what are my projects?'), 'plain projects listing should select evidence');
+    assert.ok(route('what are my skills?'), 'plain skills listing should select evidence');
+    assert.ok(route('what is my name?'), 'name lookup should select evidence');
+    assert.ok(route('what are your experiences?'), 'plain experience listing should select evidence');
   });
 
-  test('FILTERED project question DEFERS (the reported "dumb" bug)', () => {
-    assert.equal(fast('what are my projects that i have used rest api'), null,
-      'a project question with a tech filter must defer to the grounded LLM');
-    assert.equal(fast('which project used graphql'), null);
-    assert.equal(fast('tell me about my projects related to machine learning'), null);
-    assert.equal(fast('any projects with kubernetes'), null);
+  test('FILTERED project question DEFERS to broader grounded generation', () => {
+    assert.equal(route('what are my projects that i have used rest api'), null);
+    assert.equal(route('which project used graphql'), null);
+    assert.equal(route('tell me about my projects related to machine learning'), null);
+    assert.equal(route('any projects with kubernetes'), null);
   });
 
   test('FILTERED skill question DEFERS', () => {
-    assert.equal(fast('what skills do i have in python'), null);
-    assert.equal(fast('which skills are most relevant for this role'), null);
+    assert.equal(route('what skills do i have in python'), null);
+    assert.equal(route('which skills are most relevant for this role'), null);
   });
 
   test('comparison / how / why questions DEFER', () => {
-    assert.equal(fast('how did i use redis in my projects'), null);
-    assert.equal(fast('why are my projects a good fit'), null);
+    assert.equal(route('how did i use redis in my projects'), null);
+    assert.equal(route('why are my projects a good fit'), null);
   });
 
   test('hasUnhandledQualifier detects filters but not plain listings', () => {

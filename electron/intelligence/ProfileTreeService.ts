@@ -5,14 +5,12 @@
 // getSkills()/getEducation()/getRoleFit()/getCompactIdentityBlock()/
 // getInterviewIntro().
 //
-// THIS IS A FACADE, NOT A REWRITE. Natively already answers every one of these
-// deterministically via electron/llm/manualProfileIntelligence.ts
-// (`tryBuildManualProfileFastPathAnswer`), the exact function the live manual-chat
-// and live-fallback paths call. Rather than re-implement (and inevitably diverge
-// from) that benchmark-green logic, this service DELEGATES to it with the canonical
-// question phrasing that triggers each branch, in candidate FIRST-PERSON voice
-// (source: 'what_to_answer' → firstPerson). The output is therefore byte-identical
-// to what the product already ships — there is no second source of truth.
+// THIS IS A FACADE, NOT A REWRITE. Natively already selects source-aware profile
+// evidence via electron/llm/manualProfileIntelligence.ts (`selectManualProfileEvidence`),
+// the same selector used by live manual-chat/WTA JIT paths. This service DELEGATES
+// to that selector with canonical question phrasing, then returns the compact JIT
+// prompt that a provider must answer from. It does not render final prose.
+// The output is therefore aligned with the product's single evidence source of truth.
 //
 // Why a class with per-instance profile (not module functions): it structurally
 // guarantees the spec's privacy/isolation requirement. An instance built for Bob
@@ -28,12 +26,13 @@
 //     null only when that specific facet is genuinely absent from the profile).
 
 import {
-  tryBuildManualProfileFastPathAnswer,
+  selectManualProfileEvidence,
   profileFactsReady,
   isAssistantIdentityQuestion,
   type StructuredProfileFacts,
   type StructuredJobFacts,
 } from '../llm/manualProfileIntelligence';
+import { buildProfileJitPrompt } from '../llm/ProfileJitPromptBuilder';
 
 type MaybeStructured<T> = T | null | undefined;
 
@@ -57,7 +56,7 @@ export interface ProfileIdentityResult {
 }
 
 // Canonical phrasings — each is the simplest, unqualified question that routes to
-// the intended branch of tryBuildManualProfileFastPathAnswer. (Verified against
+// the intended branch of selectManualProfileEvidence. (Verified against
 // NAME_PATTERNS / INTRO_PATTERNS / EXPERIENCE_PATTERNS / PROJECT_PATTERNS /
 // SKILL_PATTERNS / EDUCATION_PATTERNS / JD_FIT_PATTERNS in manualProfileIntelligence.)
 const Q = {
@@ -117,18 +116,28 @@ export class ProfileTreeService {
     return profileFactsReady(this.profile);
   }
 
-  /** Delegate one canonical question to the live deterministic fast path. */
+  /**
+   * Build a compact JIT prompt for the canonical profile question. This service
+   * no longer returns deterministic final prose; callers must pass this prompt to
+   * a provider when a user-visible answer is needed.
+   */
   private answer(question: string): string | null {
     try {
-      const route = tryBuildManualProfileFastPathAnswer({
+      const evidence = selectManualProfileEvidence({
         question,
         profile: this.profile,
         jobDescription: this.jd,
-        // 'what_to_answer' → firstPerson candidate voice ("My name is…", "I fit…").
         source: 'what_to_answer',
       });
-      const ans = route?.answer?.trim();
-      return ans ? ans : null;
+      if (!evidence) return null;
+      return buildProfileJitPrompt({
+        question,
+        answerType: evidence.answerType,
+        answerShape: evidence.answerShape,
+        sourceOwner: evidence.sourceOwner,
+        evidence,
+        maxAnswerWords: 90,
+      }).userPrompt;
     } catch {
       return null;
     }

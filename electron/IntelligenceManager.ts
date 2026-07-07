@@ -112,8 +112,8 @@ export class IntelligenceManager extends EventEmitter {
         }
     }
 
-    addAssistantMessage(text: string): void {
-        this.session.addAssistantMessage(text);
+    addAssistantMessage(text: string, writeDecision?: { policy?: 'store_conversational_only' | 'store_non_authoritative' | 'do_not_store'; reason?: string; blockedFromSessionTracker?: boolean }): void {
+        this.session.addAssistantMessage(text, writeDecision);
     }
 
     getContext(lastSeconds: number = 120) {

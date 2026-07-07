@@ -259,6 +259,30 @@ The review surfaced pre-existing structural issues that this commit intentionall
 - No `preinstall` guard against running `npm install` under Rosetta on Apple Silicon — a future contributor would silently regress the native module ABI mismatch fixed here.
 - No `scripts.build` at repo root. Build is invoked via `scripts/build-electron.js` + `vite build` directly. Worth adding for CI parity.
 
+    ### Full-JIT Profile Intelligence Hardening (2026-07-08)
+
+    Converts the profile-intelligence path from deterministic final-answer rendering to **deterministic evidence selection + provider-generated just-in-time (JIT) final answers**. The durable law: AOT/deterministic code may only select evidence, compute metadata, resolve source ownership, and build compact prompts — it must never emit a user-visible final profile answer. Every user-visible profile answer is now one of exactly four modes: `jit_llm`, `jit_llm_repaired`, `source_safe_refusal` (a source-switch/insufficient-source line with no profile facts), or `provider_error_no_answer` (a provider-failure line with no profile facts, never stored as authoritative memory). The forbidden paths — `atomic_deterministic`, `deterministic_fast_path`, `aot_final_answer`, `cached_final_answer`, `template_final_answer` — are eliminated from the user-visible answer.
+
+    #### New modules
+
+    - **`electron/llm/FinalAnswerGenerationPolicy.ts`** — the final-answer law. `evaluateFinalAnswerPolicy`, `assertNoForbiddenFinalAnswerPath`, `legacyFastPathToForbiddenPath`, `finalAnswerRequiresProvider`, and `decideSessionWritePolicy` (which returns `store_conversational_only` / `store_non_authoritative` / `do_not_store`). Rejects user-visible deterministic/template/cached answers and blocks SessionTracker storage for provider-error/no-answer, critical unrepaired validator failures, and source-contract failures.
+    - **`electron/llm/ProfileJitPromptBuilder.ts`** — compact provider prompt builder. Emits the exact user question in a `<question trust="untrusted" data_only="true">` tag, a bounded `<allowed_evidence>` block with source labels/refs/confidence, a no-hallucination rule, and explicit missing-info/conflict instructions. Filters evidence by the source contract's `allowedSources` / `forbiddenSources`, and splits JD (target-role) evidence from resume (candidate) evidence into separate labelled blocks so a JD requirement can never be fused into claimed candidate experience.
+    - **`electron/llm/sourceOwnership.ts`** — resolves `SourceOwner` (`profile` / `reference_files` / `transcript` / `mixed` / `unknown`) from active-mode source authority and profile policy. Explicit profile asks in reference-file/transcript-only modes become a source-switch clarification rather than a profile leak.
+
+    #### Behavioral changes
+
+    - **Evidence selectors, not answer builders**: `manualProfileIntelligence.ts` now exposes `selectManualProfileEvidence` returning evidence with no final `answer` string; `profileAnswerBackend.ts` exposes `buildManualProfileEvidenceRoute` (deprecated alias kept, evidence-only). `buildLiveFallbackAnswer` always returns `null`, so provider stalls can never fall back to canned profile prose.
+    - **Manual chat (`gemini-chat-stream`)** plans the answer, resolves source ownership, selects evidence only when ownership permits, prepends a compact JIT prompt, and streams the final answer from the provider. Deterministic profile prose is no longer streamed on the fast path, provider-outage repair, sanitizer repair, or assistant-voice-misfire repair — those emit source-safe/provider-error lines instead.
+    - **WTA (What-to-Answer)** identity fallback now grounds on selected JIT evidence rather than `<candidate_identity_fact>` prose; the deterministic live fallback is removed.
+    - **Staged source-owner enforcement** via `NATIVELY_SOURCE_OWNER_ENFORCEMENT_STAGE` (`off` / `observe` / `soft_block` / `enforce`), consumed at the manual + WTA ownership gates: `off` restores the legacy permissive guard (opt-in only), every other stage honors the resolver, so live behavior is enforce-by-default and leak-safe.
+    - **Hindsight recall** is now owner-gated (permitted only for `mixed`/`transcript` owners; blocked for `reference_files`/`profile`/`unknown`) and wrapped in a `<long_term_memory trust="low" authority="non_authoritative">` envelope. Prior assistant responses are continuity/referent-only, never source evidence.
+    - **SessionTracker writes** are gated by the write policy on both the manual completion store (including `logUsage` + `conversationMemoryV2` record) and the WTA path (`addAssistantMessage` + `pushUsage`), so provider-error/no-answer artifacts never become authoritative memory or land in the saved meeting's usage.
+
+    #### Tests
+
+    New: `FinalAnswerGenerationPolicy.test.mjs`, `ProfileJitPromptBuilder.test.mjs`, `SourceOwnerEnforcement.test.mjs`. Rewritten evidence-only: `manualProfileIntelligence.test.mjs`, `profileAnswerBackend.test.mjs`. Updated: `CustomModeSourceIsolation2026_07_06.test.mjs`. Focused suites pass 37/37, source isolation passes 37/37 in `NATIVELY_SOURCE_OWNER_ENFORCEMENT_STAGE=enforce`, full `tsc --noEmit` clean. Two code-reviewer passes closed 1 CRITICAL (inert session-write gate on the main completion store) + 4 lower-severity findings (dead staged-enforcement accessor, ungated Hindsight recall, WTA `pushUsage` store-gate asymmetry, profile-evidence double-injection). See `docs/PROFILE_INTELLIGENCE_FULL_JIT_POLICY.md` and `docs/PROFILE_INTELLIGENCE_FULL_JIT_IMPLEMENTATION_REPORT.md`.
+
+
 ## [2.7.0] - 2026-06-05
 
     ### What's New

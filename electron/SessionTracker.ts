@@ -280,8 +280,13 @@ export class SessionTracker {
     /**
      * Add assistant-generated message to context
      */
-    addAssistantMessage(text: string): void {
-        console.log(`[SessionTracker] addAssistantMessage called`, { length: text.length });
+    addAssistantMessage(text: string, writeDecision?: { policy?: 'store_conversational_only' | 'store_non_authoritative' | 'do_not_store'; reason?: string; blockedFromSessionTracker?: boolean }): void {
+        console.log(`[SessionTracker] addAssistantMessage called`, { length: text.length, policy: writeDecision?.policy || 'store_conversational_only' });
+
+        if (writeDecision?.policy === 'do_not_store' || writeDecision?.blockedFromSessionTracker) {
+            console.warn(`[SessionTracker] Blocked assistant message by write policy`, { reason: writeDecision?.reason || 'unspecified' });
+            return;
+        }
 
         // Natively-style filtering
         if (!text) return;

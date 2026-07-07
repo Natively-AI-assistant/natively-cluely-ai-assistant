@@ -1,5 +1,8 @@
 import { createHash } from 'crypto';
 import type { AnswerType } from './AnswerPlanner';
+import type { SourceKind } from './customModeExecutionContract';
+import type { SourceOwner } from './sourceOwnership';
+import type { FinalGenerationMode } from './FinalAnswerGenerationPolicy';
 
 export type ManualProfileSource = 'manual_input' | 'what_to_answer' | 'transcript' | 'system';
 
@@ -70,6 +73,15 @@ export interface StructuredJobFacts {
   responsibilities?: unknown;
   technologies?: unknown;
   keywords?: unknown;
+  // Extended JD fields (Stage 4/5 — full JD evidence). Optional; absent on
+  // older extractions. Never fabricated — an absent field means the JD did not
+  // state it, which jd_fact_answer reports as an honest absence.
+  description_summary?: unknown;
+  level?: unknown;
+  employment_type?: unknown;
+  min_years_experience?: unknown;
+  compensation_hint?: unknown;
+  location?: unknown;
 }
 
 export interface ManualProfileFastPathInput {
@@ -77,17 +89,56 @@ export interface ManualProfileFastPathInput {
   profile: MaybeStructured<StructuredProfileFacts>;
   jobDescription?: MaybeStructured<StructuredJobFacts>;
   source?: ManualProfileSource;
+  /**
+   * Optional pre-computed answer type from the planner (Stage 4/5). When the
+   * caller has already run planAnswer, passing its answerType lets the selector
+   * emit the FULL source-tagged JD/resume evidence for the JD-source and
+   * resume+JD shapes without re-classifying. Absent → the selector falls back to
+   * its own pattern detection (unchanged legacy behavior).
+   */
+  answerType?: AnswerType;
 }
 
-export interface ManualProfileRouteResult {
-  answer: string;
+export interface ProfileEvidenceItem {
+  field: string;
+  value: unknown;
+  sourceKind: SourceKind;
+  confidence: 'high' | 'medium' | 'low';
+  sourceRef?: string;
+}
+
+export interface ProfileEvidenceSelection {
   answerType: AnswerType;
+  answerShape: string;
+  sourceOwner: SourceOwner;
+  items: ProfileEvidenceItem[];
   selectedContextLayers: string[];
   excludedContextLayers: string[];
   profileFactsReady: boolean;
-  usedDeterministicFastPath: boolean;
+  selectedFacts: ProfileEvidenceItem[];
+  selectedEntities: string[];
+  selectedProjects: ProfileProject[];
+  selectedExperiences: ProfileExperience[];
+  selectedSkills: string[];
+  selectedEducation: ProfileEducation[];
+  selectedAchievements: string[];
+  sourceRefs: string[];
+  confidence: 'high' | 'medium' | 'low';
+  missingInfoDetected: boolean;
+  checkedSources: SourceKind[];
+  conflictDetected: boolean;
+  recommendedPromptHints: string[];
+  usedDeterministicEvidenceSelection: boolean;
+  finalGenerationMode: FinalGenerationMode;
   providerUsed: boolean;
   promptContainsProfileContext?: boolean;
+}
+
+export interface ManualProfileRouteResult extends ProfileEvidenceSelection {
+  /** @deprecated Final profile answers are JIT-only. This is intentionally absent. */
+  answer?: never;
+  /** @deprecated Deterministic logic may select evidence only, never final prose. */
+  usedDeterministicFastPath: false;
 }
 
 export interface ManualProfileRouteLogInput {
@@ -260,6 +311,25 @@ const profileName = (profile: MaybeStructured<StructuredProfileFacts>): string =
 
 const jdTitle = (jd: MaybeStructured<StructuredJobFacts>): string => firstNonEmpty(jd?.title, jd?.role, jd?.position, jd?.jobTitle);
 const jdCompany = (jd: MaybeStructured<StructuredJobFacts>): string => firstNonEmpty(jd?.company);
+// Extended JD field readers (Stage 4/5). Each returns the cleaned value or ''
+// (scalars) / [] (lists) with NO fabrication — an empty return means the field
+// is absent from the active JD, which the jd_fact answer reports honestly.
+const jdSummary = (jd: MaybeStructured<StructuredJobFacts>): string => firstNonEmpty(jd?.description_summary);
+const jdLevel = (jd: MaybeStructured<StructuredJobFacts>): string => firstNonEmpty(jd?.level);
+const jdEmploymentType = (jd: MaybeStructured<StructuredJobFacts>): string => firstNonEmpty(jd?.employment_type);
+const jdMinYears = (jd: MaybeStructured<StructuredJobFacts>): string => firstNonEmpty(jd?.min_years_experience);
+const jdCompensationHint = (jd: MaybeStructured<StructuredJobFacts>): string => firstNonEmpty(jd?.compensation_hint);
+const jdLocation = (jd: MaybeStructured<StructuredJobFacts>): string => firstNonEmpty(jd?.location);
+const jdRequirements = (jd: MaybeStructured<StructuredJobFacts>): string[] => asArray(jd?.requirements).map(clean).filter(Boolean);
+const jdResponsibilities = (jd: MaybeStructured<StructuredJobFacts>): string[] => asArray(jd?.responsibilities).map(clean).filter(Boolean);
+const jdTechnologies = (jd: MaybeStructured<StructuredJobFacts>): string[] => asArray(jd?.technologies).map(clean).filter(Boolean);
+const jdKeywords = (jd: MaybeStructured<StructuredJobFacts>): string[] => asArray(jd?.keywords).map(clean).filter(Boolean);
+const jdNiceToHaves = (jd: MaybeStructured<StructuredJobFacts>): string[] => asArray(jd?.nice_to_haves).map(clean).filter(Boolean);
+/** True when the active JD carries any non-title/company structured content. */
+const jdHasStructuredContent = (jd: MaybeStructured<StructuredJobFacts>): boolean =>
+  jdRequirements(jd).length > 0 || jdResponsibilities(jd).length > 0
+  || jdTechnologies(jd).length > 0 || jdKeywords(jd).length > 0
+  || jdNiceToHaves(jd).length > 0 || Boolean(jdSummary(jd));
 
 const formatInlineList = (items: string[], max = 8): string => {
   const values = items.map(clean).filter(Boolean).slice(0, max);
@@ -897,19 +967,119 @@ export const profileFactsReady = (profile: MaybeStructured<StructuredProfileFact
   ),
 );
 
-const makeRoute = (
-  answer: string,
-  answerType: AnswerType,
-  selectedContextLayers: string[],
-): ManualProfileRouteResult => ({
-  answer,
+const profileEvidenceItem = (
+  field: string,
+  value: unknown,
+  sourceKind: SourceKind = 'profile_resume',
+  sourceRef?: string,
+  confidence: 'high' | 'medium' | 'low' = 'high',
+): ProfileEvidenceItem => ({ field, value, sourceKind, sourceRef, confidence });
+
+const compactExperienceEvidence = (entry: ProfileExperience, index: number): ProfileEvidenceItem[] => {
+  const role = firstNonEmpty(entry.role, entry.title, entry.position);
+  const company = firstNonEmpty(entry.company, entry.organization, entry.employer);
+  const bullets = asArray(entry.bullets || entry.highlights || entry.responsibilities).map(clean).filter(Boolean).slice(0, 3);
+  return [
+    role ? profileEvidenceItem(`experience.${index}.role`, role, 'profile_resume', `experience:${company || index}`) : null,
+    company ? profileEvidenceItem(`experience.${index}.company`, company, 'profile_resume', `experience:${company || index}`) : null,
+    bullets.length ? profileEvidenceItem(`experience.${index}.highlights`, bullets, 'profile_resume', `experience:${company || index}`) : null,
+    clean((entry as Record<string, unknown>).start_date) ? profileEvidenceItem(`experience.${index}.start_date`, (entry as Record<string, unknown>).start_date, 'profile_resume', `experience:${company || index}`) : null,
+    clean((entry as Record<string, unknown>).end_date) ? profileEvidenceItem(`experience.${index}.end_date`, (entry as Record<string, unknown>).end_date, 'profile_resume', `experience:${company || index}`) : null,
+  ].filter(Boolean) as ProfileEvidenceItem[];
+};
+
+const compactProjectEvidence = (project: ProfileProject, index: number): ProfileEvidenceItem[] => {
+  const name = firstNonEmpty(project.name, project.title);
+  const description = firstNonEmpty(project.description, project.summary);
+  const tech = asArray(project.technologies || project.tech_stack || project.tools).map(clean).filter(Boolean);
+  const highlights = asArray(project.highlights).map(clean).filter(Boolean).slice(0, 4);
+  return [
+    name ? profileEvidenceItem(`projects.${index}.name`, name, 'projects', `project:${name}`) : null,
+    description ? profileEvidenceItem(`projects.${index}.description`, description, 'projects', `project:${name || index}`) : null,
+    tech.length ? profileEvidenceItem(`projects.${index}.technologies`, tech, 'projects', `project:${name || index}`) : null,
+    highlights.length ? profileEvidenceItem(`projects.${index}.highlights`, highlights, 'projects', `project:${name || index}`) : null,
+  ].filter(Boolean) as ProfileEvidenceItem[];
+};
+
+const compactEducationEvidence = (edu: ProfileEducation, index: number): ProfileEvidenceItem[] => {
+  const degree = firstNonEmpty(edu.degree);
+  const field = firstNonEmpty(edu.field, edu.major);
+  const institution = firstNonEmpty(edu.institution, edu.school, edu.university);
+  const e = edu as Record<string, unknown>;
+  const extra: ProfileEvidenceItem[] = [];
+  for (const [key, raw] of Object.entries(e)) {
+    if (['degree', 'field', 'major', 'institution', 'school', 'university'].includes(key)) continue;
+    const value = clean(raw);
+    if (value) extra.push(profileEvidenceItem(`education.${index}.${key}`, value, 'profile_resume', `education:${institution || index}`));
+  }
+  return [
+    degree ? profileEvidenceItem(`education.${index}.degree`, degree, 'profile_resume', `education:${institution || index}`) : null,
+    field ? profileEvidenceItem(`education.${index}.field`, field, 'profile_resume', `education:${institution || index}`) : null,
+    institution ? profileEvidenceItem(`education.${index}.institution`, institution, 'profile_resume', `education:${institution || index}`) : null,
+    ...extra,
+  ].filter(Boolean) as ProfileEvidenceItem[];
+};
+
+const makeEvidenceSelection = ({
   answerType,
   selectedContextLayers,
-  excludedContextLayers: ['assistant_identity'],
-  profileFactsReady: true,
-  usedDeterministicFastPath: true,
-  providerUsed: false,
-});
+  items,
+  sourceOwner = 'profile',
+  projects = [],
+  experiences = [],
+  skills = [],
+  education = [],
+  entities = [],
+  achievements = [],
+  missingInfoDetected = false,
+  checkedSources,
+  confidence = 'high',
+  recommendedPromptHints = [],
+}: {
+  answerType: AnswerType;
+  selectedContextLayers: string[];
+  items: ProfileEvidenceItem[];
+  sourceOwner?: SourceOwner;
+  projects?: ProfileProject[];
+  experiences?: ProfileExperience[];
+  skills?: string[];
+  education?: ProfileEducation[];
+  entities?: string[];
+  achievements?: string[];
+  missingInfoDetected?: boolean;
+  checkedSources?: SourceKind[];
+  confidence?: 'high' | 'medium' | 'low';
+  recommendedPromptHints?: string[];
+}): ManualProfileRouteResult => {
+  const sourceRefs = Array.from(new Set(items.map((item) => item.sourceRef).filter(Boolean) as string[]));
+  return {
+    answerType,
+    answerShape: answerType,
+    sourceOwner,
+    items,
+    selectedContextLayers,
+    excludedContextLayers: ['assistant_identity'],
+    profileFactsReady: true,
+    selectedFacts: items,
+    selectedEntities: entities,
+    selectedProjects: projects,
+    selectedExperiences: experiences,
+    selectedSkills: skills,
+    selectedEducation: education,
+    selectedAchievements: achievements,
+    sourceRefs,
+    confidence,
+    missingInfoDetected,
+    checkedSources: checkedSources ?? Array.from(new Set(items.map((item) => item.sourceKind))),
+    conflictDetected: false,
+    recommendedPromptHints,
+    usedDeterministicEvidenceSelection: true,
+    finalGenerationMode: 'jit_llm',
+    providerUsed: true,
+    promptContainsProfileContext: true,
+    usedDeterministicFastPath: false,
+  };
+};
 
 // The deterministic fast-path answers SIMPLE, UNFILTERED listing questions
 // ("what are my projects?", "what are my skills?") with a canned template. But a
@@ -960,216 +1130,436 @@ export const hasUnhandledQualifier = (normalizedQuestion: string): boolean => {
   return hasAny(normalizedQuestion, QUALIFIER_PATTERNS);
 };
 
-export const tryBuildManualProfileFastPathAnswer = ({
+export const selectManualProfileEvidence = ({
   question,
   profile,
   jobDescription,
-  source = 'manual_input',
+  answerType,
 }: ManualProfileFastPathInput): ManualProfileRouteResult | null => {
-  const qNorm = normalize(question);
-  // ── CANDIDATE VOICE (release 2026-06-08 manual regression fix) ──────────────
-  // The manual-send path must answer candidate identity/profile questions in FIRST
-  // PERSON AS the candidate ("I'm Evin John, …" / "My name is …"), NOT in second
-  // person ("Your name is …") and NOT as the assistant ("I'm Natively, an AI
-  // assistant"). The prior code keyed first-person voice off `source` alone, so
-  // manual_input answered everything 2nd-person — the real bug the user hit.
-  //
-  // Voice is now CANDIDATE first-person whenever a candidate PROFILE is loaded and
-  // the question is NOT an explicit assistant-meta ask. WTA/transcript stay
-  // first-person as before. An assistant-meta question ("are you an AI?", "what is
-  // Natively?", "who made you?") always bails to the assistant path (returns null),
-  // in every mode, so those still answer about the app — never as the candidate.
+  const q = normalize(question);
   if (isAssistantIdentityQuestion(question)) return null;
+
   const profileLoaded = profileFactsReady(profile);
-  // Voice: FIRST PERSON ("My name is…", "I've used…") when WTA/transcript, OR when a
-  // profile is loaded AND the question addresses the candidate as "you" / is an intro
-  // ("who are you?", "what is YOUR name?", "introduce yourself", "why should we hire
-  // you?", "rate YOUR Python"). SECOND PERSON ("Your name is…") only when the user
-  // asks about THEMSELVES in first person ("what is MY name?", "what are MY skills?")
-  // — there the user wants to be told their own fact. This is the manual regression
-  // fix (release 2026-06-08): "who are you?" in profile mode → "My name is Evin John",
-  // never "Your name is…" or "I'm Natively".
-  const lc = qNorm;
-  // SELF-query (user asking about THEMSELVES → second-person "Your name is…"): a
-  // first-person "my"/"I" signal AND no second-person ADDRESS of the candidate. The
-  // `you` exclusion is scoped to genuine candidate-address ("your X", "are you",
-  // "have you", "did you", "yourself") so a stray "can you tell me my skills" still
-  // reads as a self-query (code-review 2026-06-08 MEDIUM: align with the planner).
-  const selfSignal = /\bmy\b|\bwho\s+am\s+i\b|\b(have|do)\s+i\b|\bi\s+have\b/.test(lc);
-  const candidateAddress = /\byour\b|\byourself\b|\b(are|have|did|do|were|can|could|would|will|should)\s+you\b|\babout\s+you\b/.test(lc);
-  const asksAboutSelf = selfSignal && !candidateAddress;
-  const firstPerson = source === 'what_to_answer' || source === 'transcript'
-    || (profileLoaded && !asksAboutSelf);
-
-  const q = qNorm;
-
-  // A qualified/filtered question must reach the grounded LLM, not the canned
-  // template. Identity (name) and the JD role lookup are exact single-fact
-  // answers with no list to filter, so they're allowed through below; everything
-  // that returns a LIST (experience/projects/skills/education/jd-fit) defers when
-  // a qualifier is present.
   const qualified = hasUnhandledQualifier(q);
 
-  // JD-fit is itself a "reasoning" answer; if the user adds a further qualifier,
-  // let the grounded LLM handle it rather than the deterministic anchor template.
-  if (hasAny(q, JD_FIT_PATTERNS) && !qualified) {
-    if (!profileFactsReady(profile)) return null;
-    const answer = formatJDFit(profile, jobDescription);
-    if (!answer) return null;
-    return makeRoute(firstPerson ? answer.replace(/^You fit/i, 'I fit') : answer, 'jd_fit_answer', ['resume', 'jd']);
+  // ── JD-SOURCE + resume+JD evidence (Stage 4/5) ──
+  // When the planner already routed a JD-source or resume+JD shape, emit the
+  // FULL source-tagged JD (and, for the mixes, resume) evidence — not just
+  // title/company. This is what makes `jdEvidenceCount > 0` true and puts real
+  // JD requirements/responsibilities/technologies into the JIT prompt.
+  if (answerType === 'jd_summary_answer' || answerType === 'jd_requirements_answer' || answerType === 'jd_fact_answer') {
+    const jdItems = buildJdEvidenceItems(jobDescription);
+    // No JD loaded at all → let the caller fall through (the false-refusal
+    // validator will handle "no JD" honestly). An EMPTY JD (loaded but no
+    // structured content) still routes with missingInfo so jd_fact answers
+    // "the JD does not specify that" instead of refusing.
+    const jdPresent = Boolean(jobDescription);
+    if (!jdPresent && jdItems.length === 0) return null;
+    return makeEvidenceSelection({
+      answerType,
+      sourceOwner: 'profile',
+      selectedContextLayers: ['jd'],
+      items: jdItems,
+      missingInfoDetected: jdItems.length === 0
+        || (answerType === 'jd_fact_answer' && !jdHasStructuredContent(jobDescription)),
+      checkedSources: ['profile_jd'],
+      recommendedPromptHints: [answerType === 'jd_fact_answer'
+        ? 'Answer the factual question strictly from the JD fields. If the field is absent, say the JD does not specify it — do not ask for an upload and do not give negotiation advice.'
+        : 'Describe the target role strictly from the JD evidence. Do not invent requirements.'],
+    });
+  }
+
+  if (answerType === 'resume_jd_fit_answer' || answerType === 'resume_jd_gap_answer' || answerType === 'resume_jd_intro_answer') {
+    if (!profileLoaded) return null;
+    const jdItems = buildJdEvidenceItems(jobDescription);
+    const { items: resumeItems, experiences, projects, skills } = buildResumeEvidenceItems(profile);
+    const name = profileName(profile);
+    const items = [
+      answerType === 'resume_jd_intro_answer' && name
+        ? profileEvidenceItem('identity.name', name, 'profile_resume', 'identity:name') : null,
+      ...resumeItems,
+      ...jdItems,
+    ].filter(Boolean) as ProfileEvidenceItem[];
+    if (items.length === 0) return null;
+    const layers = answerType === 'resume_jd_intro_answer'
+      ? ['stable_identity', 'resume', 'jd']
+      : answerType === 'resume_jd_gap_answer'
+        ? ['resume', 'jd']
+        : ['resume', 'jd', 'custom_context'];
+    return makeEvidenceSelection({
+      answerType,
+      sourceOwner: 'mixed',
+      selectedContextLayers: layers,
+      items,
+      experiences,
+      projects,
+      skills,
+      entities: name ? [name] : [],
+      checkedSources: ['profile_resume', 'profile_jd', 'projects'],
+      recommendedPromptHints: [answerType === 'resume_jd_gap_answer'
+        ? 'Lead with the honest gap between the resume and the JD. Never fabricate the missing experience.'
+        : answerType === 'resume_jd_intro_answer'
+          ? 'Give a first-person intro tailored to the JD, using only real resume facts.'
+          : 'Explain fit using only the candidate resume evidence mapped to the JD evidence. Keep resume and JD facts distinct.'],
+    });
   }
 
   if (hasAny(q, ROLE_PATTERNS)) {
     const title = jdTitle(jobDescription);
     if (!title) return null;
-    return makeRoute(
-      firstPerson ? `I am applying for the ${title} role.` : `You are applying for the ${title} role.`,
-      'jd_fit_answer',
-      ['jd'],
-    );
+    const company = jdCompany(jobDescription);
+    return makeEvidenceSelection({
+      answerType: 'jd_fit_answer',
+      selectedContextLayers: ['jd'],
+      items: [
+        profileEvidenceItem('job.title', title, 'profile_jd', 'jd:title'),
+        company ? profileEvidenceItem('job.company', company, 'profile_jd', 'jd:company') : null,
+      ].filter(Boolean) as ProfileEvidenceItem[],
+      checkedSources: ['profile_jd'],
+      recommendedPromptHints: ['Answer as a direct role/position fact from the active JD.'],
+    });
   }
 
-  if (!profileFactsReady(profile)) return null;
+  if (!profileLoaded) return null;
 
-  const isNameQuestion = hasAny(q, NAME_PATTERNS)
-    || (firstPerson && /\bwhat\s+(is|s)\s+your\s+name\b/.test(q));
+  if (hasAny(q, JD_FIT_PATTERNS) && !qualified) {
+    const matchedSkills = matchingSkillsForJD(profile, jobDescription);
+    const anchorSkills = matchedSkills.length ? matchedSkills : profileSkillNames(profile).slice(0, 3);
+    const experiences = profileExperience(profile).slice(0, 2);
+    const projects = profileProjects(profile).slice(0, 2);
+    const items = [
+      jdTitle(jobDescription) ? profileEvidenceItem('job.title', jdTitle(jobDescription), 'profile_jd', 'jd:title') : null,
+      jdCompany(jobDescription) ? profileEvidenceItem('job.company', jdCompany(jobDescription), 'profile_jd', 'jd:company') : null,
+      ...anchorSkills.map((skill, i) => profileEvidenceItem(matchedSkills.length ? `jd_fit.matched_skills.${i}` : `jd_fit.profile_skills.${i}`, skill, 'profile_resume', `skill:${skill}`)),
+      ...experiences.flatMap(compactExperienceEvidence),
+      ...projects.flatMap(compactProjectEvidence),
+    ].filter(Boolean) as ProfileEvidenceItem[];
+    if (items.length === 0) return null;
+    return makeEvidenceSelection({
+      answerType: 'jd_fit_answer',
+      selectedContextLayers: ['resume', 'jd'],
+      items,
+      experiences,
+      projects,
+      skills: anchorSkills,
+      checkedSources: ['profile_resume', 'profile_jd', 'projects'],
+      recommendedPromptHints: [matchedSkills.length
+        ? 'Explain fit only from matched skills, experience, projects, and JD facts listed here.'
+        : 'No exact JD skill matches were found; use the selected profile skills, experience, projects, and JD facts only.'],
+    });
+  }
+
+  const isNameQuestion = hasAny(q, NAME_PATTERNS) || /\bwhat\s+(is|s)\s+your\s+name\b/.test(q);
   if (isNameQuestion) {
     const name = profileName(profile);
     if (!name) return null;
-    return makeRoute(
-      firstPerson ? `My name is ${name}.` : `Your name is ${name}.`,
-      'identity_answer',
-      ['stable_identity', 'resume'],
-    );
+    return makeEvidenceSelection({
+      answerType: 'identity_answer',
+      selectedContextLayers: ['stable_identity', 'resume'],
+      items: [profileEvidenceItem('identity.name', name, 'profile_resume', 'identity:name')],
+      entities: [name],
+      checkedSources: ['profile_resume'],
+      recommendedPromptHints: ['Answer the identity fact naturally from the allowed evidence.'],
+    });
   }
 
-  // INTRO: a grounded first-person introduction built from structured facts.
-  // Release 2026-06-06b: this now fires in MANUAL mode too (not just WTA). The
-  // real manual-chat log showed plain "introduce yourself" / "introduce yourseld"
-  // reaching the LLM and answering "I'm Natively, an AI assistant" — wrong when a
-  // candidate profile is loaded. An intro ask is an INTERVIEW-style question
-  // ("introduce yourself", "tell me about yourself"), distinct from the
-  // assistant-meta "who are you / what is Natively" (those still bail above via
-  // isAssistantIdentityQuestion). With a profile loaded, the deterministic
-  // first-person candidate intro is always the right answer — it can never leak
-  // the assistant identity or refuse. NOTE: does NOT gate on `qualified` —
-  // "tell me ABOUT yourself" trips the generic about-qualifier, but INTRO_PATTERNS
-  // is already precise.
   if (hasAny(q, INTRO_PATTERNS)) {
-    const intro = formatIntro(profile, question);
-    if (intro) return makeRoute(intro, 'identity_answer', ['stable_identity', 'resume']);
+    const name = profileName(profile);
+    const experiences = profileExperience(profile).slice(0, 2);
+    const projects = profileProjects(profile).slice(0, 1);
+    const skills = profileSkillNames(profile).slice(0, 6);
+    const items = [
+      name ? profileEvidenceItem('identity.name', name, 'profile_resume', 'identity:name') : null,
+      ...experiences.flatMap(compactExperienceEvidence),
+      ...projects.flatMap(compactProjectEvidence),
+      skills.length ? profileEvidenceItem('skills.summary', skills, 'profile_resume', 'skills') : null,
+    ].filter(Boolean) as ProfileEvidenceItem[];
+    if (items.length === 0) return null;
+    return makeEvidenceSelection({
+      answerType: 'identity_answer',
+      selectedContextLayers: ['stable_identity', 'resume'],
+      items,
+      projects,
+      experiences,
+      skills,
+      checkedSources: ['profile_resume', 'projects'],
+      recommendedPromptHints: ['Write an interview-style intro from the selected profile facts only.'],
+    });
   }
 
-  // DETERMINISTIC TIMELINE MATH (Phase 4 item 5): duration-at-company, total
-  // internship experience, and inter-role gap are exact arithmetic over the
-  // resume's own start_date/end_date — never LLM-computed. Checked BEFORE the
-  // generic EXPERIENCE_PATTERNS list-dump below so a specific "how long"/
-  // "total experience"/"gap" ask gets the precise answer instead of a bullet
-  // list. Each formatter returns '' when the dates can't be parsed (e.g. a
-  // profile ingested without start_date/end_date) so the caller falls
-  // through to the generic experience answer / grounded LLM.
-  //
-  // GATED ON `!qualified` (test-engineer + debugger finding, 2026-07-05): a
-  // filtered/scoped ask — "total experience IN PYTHON", "how long at
-  // EstroTech COMPARED TO Aetherbot" — must NOT get the canned sum/duration,
-  // which silently ignores the filter/comparison and states a flatly wrong
-  // number with full confidence (usedDeterministicFastPath: true, no LLM
-  // fallback). Matches every sibling block in this function
-  // (EXPERIENCE_PATTERNS/PROJECT_PATTERNS/SKILL_PATTERNS/EDUCATION_PATTERNS
-  // all gate on !qualified) — this block was the one exception, now fixed.
   if (!qualified) {
     if (hasAny(q, GAP_BETWEEN_ROLES_PATTERNS)) {
-      const answer = formatGapBetweenRoles(profile, q);
-      if (answer) return makeRoute(answer, 'experience_answer', ['resume']);
+      const spans = profileExperience(profile).map(experienceSpan).filter((s): s is NonNullable<typeof s> => s !== null);
+      if (spans.length >= 2) {
+        const sorted = [...spans].sort((a, b) => a.start - b.start);
+        const mentioned = sorted.filter((s) => {
+          const head = s.company.toLowerCase().split(/[\s,.]+/).filter(Boolean)[0];
+          return head && head.length >= 4 && q.includes(head);
+        });
+        const pair = mentioned.length >= 2 ? mentioned.slice(-2) : sorted.slice(-2);
+        const [earlier, later] = pair;
+        const gapMonths = later.start - earlier.end - 1;
+        return makeEvidenceSelection({
+          answerType: 'experience_answer',
+          selectedContextLayers: ['resume'],
+          items: [
+            profileEvidenceItem('experience_gap.earlier_company', earlier.company, 'profile_resume', `experience:${earlier.company}`),
+            profileEvidenceItem('experience_gap.later_company', later.company, 'profile_resume', `experience:${later.company}`),
+            profileEvidenceItem('experience_gap.months', Math.max(0, gapMonths), 'profile_resume', 'experience:timeline'),
+            profileEvidenceItem('experience_gap.duration_text', gapMonths <= 0 ? 'no gap' : formatDurationMonths(gapMonths), 'profile_resume', 'experience:timeline'),
+          ],
+          checkedSources: ['profile_resume'],
+          recommendedPromptHints: ['Use the computed duration evidence; do not recompute dates.'],
+        });
+      }
     }
     if (hasAny(q, TOTAL_EXPERIENCE_DURATION_PATTERNS)) {
-      const answer = formatTotalExperience(profile);
-      if (answer) return makeRoute(answer, 'experience_answer', ['resume']);
+      const spans = profileExperience(profile).map(experienceSpan).filter((s): s is NonNullable<typeof s> => s !== null);
+      if (spans.length > 0) {
+        const totalMonths = spans.reduce((sum, s) => sum + Math.max(0, tenureMonthsInclusive(s)), 0);
+        return makeEvidenceSelection({
+          answerType: 'experience_answer',
+          selectedContextLayers: ['resume'],
+          items: [
+            profileEvidenceItem('experience.total_months', totalMonths, 'profile_resume', 'experience:timeline'),
+            profileEvidenceItem('experience.total_duration_text', formatDurationMonths(totalMonths), 'profile_resume', 'experience:timeline'),
+            profileEvidenceItem('experience.role_count', spans.length, 'profile_resume', 'experience:timeline'),
+          ],
+          checkedSources: ['profile_resume'],
+          recommendedPromptHints: ['Use the computed total-experience evidence; do not recompute dates.'],
+        });
+      }
     }
     if (hasAny(q, DURATION_AT_COMPANY_PATTERNS)) {
-      const answer = formatDurationAtCompany(profile, q);
-      if (answer) return makeRoute(answer, 'experience_answer', ['resume']);
+      const span = findExperienceByCompanyMention(profile, q);
+      if (span) {
+        const months = tenureMonthsInclusive(span);
+        return makeEvidenceSelection({
+          answerType: 'experience_answer',
+          selectedContextLayers: ['resume'],
+          items: [
+            profileEvidenceItem('experience.company', span.company, 'profile_resume', `experience:${span.company}`),
+            profileEvidenceItem('experience.role', span.role, 'profile_resume', `experience:${span.company}`),
+            profileEvidenceItem('experience.duration_months', months, 'profile_resume', `experience:${span.company}`),
+            profileEvidenceItem('experience.duration_text', formatDurationMonths(months), 'profile_resume', `experience:${span.company}`),
+          ],
+          checkedSources: ['profile_resume'],
+          recommendedPromptHints: ['Use the computed company-duration evidence; do not recompute dates.'],
+        });
+      }
     }
   }
 
-  // List-returning answers: a canned dump can't honor a filter/qualifier, so
-  // defer to the grounded LLM when one is present (e.g. "projects that use REST
-  // API", "skills in Python", "experience related to ML").
   if (hasAny(q, EXPERIENCE_PATTERNS) && !qualified) {
-    const answer = formatExperience(profile);
-    if (!answer) return null;
-    return makeRoute(firstPerson ? answer.replace(/^Your experience includes/i, 'My experience includes') : answer, 'experience_answer', ['resume']);
+    const experiences = profileExperience(profile).slice(0, 5);
+    if (experiences.length === 0) return null;
+    return makeEvidenceSelection({
+      answerType: 'experience_answer',
+      selectedContextLayers: ['resume'],
+      items: experiences.flatMap(compactExperienceEvidence),
+      experiences,
+      checkedSources: ['profile_resume'],
+      recommendedPromptHints: ['Summarize the selected experience entries only.'],
+    });
   }
 
-  // Phase 10: single-project FAST PATH — "tell me about Natively", "best
-  // project", "tech stack of Natively". Deterministic from the matched project
-  // node (zero provider latency). Narrative drill-ins ("how was it developed?",
-  // "hardest part?", "what did you learn?", "your role?") are NOT handled here —
-  // they deserve a richer grounded answer, so we only fast-path the factual
-  // "what is it / what stack" shape and defer everything else to the LLM.
-  // NOTE: this branch does NOT gate on `qualified` — "tell me ABOUT Natively"
-  // trips the generic `about`-qualifier, but findProjectByName already scopes the
-  // answer to the named project, so the qualifier guard would wrongly suppress a
-  // perfectly answerable direct project ask. Narrative drill-ins are excluded
-  // explicitly below so they still reach the richer grounded LLM.
   const isNarrativeDrillIn = /\b(how (was|is|did)|hardest|challenge|learn|your role|why did you|proud|improve|optimi[sz]e|architecture|coordinat)\b/.test(q);
   const isProjectFactAsk = /\b(tell me about|talk about|explain|describe|what(?:'s| is)?|tech ?stack|technolog|stack of|built with|made with)\b/.test(q);
   if (isProjectFactAsk && !isNarrativeDrillIn) {
     const project = findProjectByName(profile, q);
     if (project) {
-      const answer = formatSingleProject(project);
-      if (answer) {
-        return makeRoute(
-          firstPerson ? answer.replace(/^Your project/i, 'My project') : answer,
-          'project_answer', ['resume', 'projects'],
-        );
-      }
+      return makeEvidenceSelection({
+        answerType: 'project_answer',
+        selectedContextLayers: ['resume', 'projects'],
+        items: compactProjectEvidence(project, 0),
+        projects: [project],
+        checkedSources: ['projects'],
+        recommendedPromptHints: ['Answer about the selected project only.'],
+      });
     }
   }
 
   if (hasAny(q, PROJECT_PATTERNS) && !qualified) {
-    const answer = formatProjects(profile);
-    if (!answer) return null;
-    return makeRoute(firstPerson ? answer.replace(/^Your projects include/i, 'My projects include') : answer, 'project_answer', ['resume', 'projects']);
+    const projects = profileProjects(profile).slice(0, 6);
+    if (projects.length === 0) return null;
+    return makeEvidenceSelection({
+      answerType: 'project_answer',
+      selectedContextLayers: ['resume', 'projects'],
+      items: projects.flatMap(compactProjectEvidence),
+      projects,
+      checkedSources: ['projects'],
+      recommendedPromptHints: ['Summarize the selected project evidence only.'],
+    });
   }
 
-  // SKILL-EXPERIENCE fast path: "what is your experience with Python?", "have you
-  // used SQL?", "your data analysis experience" — grounded confirmation + where
-  // it's used. NOT skill RATINGS ("rate your Python 8/10") — a number is a
-  // judgment we leave to the grounded LLM. Returns '' (→ LLM) if the skill isn't
-  // genuinely in the profile.
   const isSkillExperienceQ = /\b(experience\s+(with|in|using)|have\s+(you|i)\s+(used|worked\s+with)|worked\s+with|familiar\s+with)\b/.test(q)
     && !/\brate|out of (?:10|ten)|scale\b/.test(q);
   if (isSkillExperienceQ) {
-    const answer = formatSkillExperience(profile, q);
-    if (answer) return makeRoute(firstPerson ? answer : answer.replace(/^Yes, I've/i, "Yes, you've"), 'skill_experience_answer', ['resume']);
+    const found = findProfileSkill(profile, q);
+    if (found) {
+      const projectItems = profileProjects(profile)
+        .filter((p) => found.projects.includes(firstNonEmpty(p.name, p.title)))
+        .flatMap(compactProjectEvidence);
+      return makeEvidenceSelection({
+        answerType: 'skill_experience_answer',
+        selectedContextLayers: ['resume'],
+        items: [
+          profileEvidenceItem('skill.name', found.skill, 'profile_resume', `skill:${found.skill}`),
+          found.projects.length ? profileEvidenceItem('skill.projects', found.projects, 'projects', `skill:${found.skill}`) : null,
+          ...projectItems,
+        ].filter(Boolean) as ProfileEvidenceItem[],
+        skills: [found.skill],
+        checkedSources: ['profile_resume', 'projects'],
+        recommendedPromptHints: ['Answer whether/how the skill appears in the selected profile evidence.'],
+      });
+    }
   }
 
   if (hasAny(q, SKILL_PATTERNS) && !qualified) {
-    // "What programming languages are you strongest in?" wants the LANGUAGES
-    // category specifically, not the full mixed skills dump (RC3, round 2).
-    if (ASKS_SPECIFICALLY_ABOUT_LANGUAGES_RE.test(q)) {
-      const langAnswer = formatProgrammingLanguages(profile);
-      if (langAnswer) {
-        return makeRoute(
-          firstPerson ? langAnswer : langAnswer.replace(/^The programming languages I'm/i, 'The programming languages you are'),
-          'skills_answer', ['resume'],
-        );
-      }
-    }
-    const answer = formatSkills(profile);
-    if (!answer) return null;
-    return makeRoute(firstPerson ? answer.replace(/^Your skills include/i, 'My skills include') : answer, 'skills_answer', ['resume']);
+    const allSkills = ASKS_SPECIFICALLY_ABOUT_LANGUAGES_RE.test(q)
+      ? asArray((profile as any)?.skills?.languages).map(clean).filter(Boolean)
+      : profileSkillNames(profile).slice(0, 12);
+    if (allSkills.length === 0) return null;
+    return makeEvidenceSelection({
+      answerType: 'skills_answer',
+      selectedContextLayers: ['resume'],
+      items: [profileEvidenceItem(ASKS_SPECIFICALLY_ABOUT_LANGUAGES_RE.test(q) ? 'skills.languages' : 'skills', allSkills, 'profile_resume', 'skills')],
+      skills: allSkills,
+      checkedSources: ['profile_resume'],
+      recommendedPromptHints: ['List only the selected skill evidence.'],
+    });
   }
 
-  if (hasAny(q, EDUCATION_PATTERNS) && !qualified) {
-    const answer = formatEducation(profile);
-    if (!answer) return null;
-    return makeRoute(firstPerson ? answer.replace(/^Your education includes/i, 'My education includes') : answer, 'profile_fact_answer', ['resume']);
+  const educationFactAsk = /\b(gpa|cgpa|grade point|score|college|school|university|degree|education|educational|study|studied|graduate)\b/i.test(q);
+  if ((hasAny(q, EDUCATION_PATTERNS) || educationFactAsk) && !qualified) {
+    const education = profileEducation(profile).slice(0, 3);
+    if (education.length === 0) return null;
+    return makeEvidenceSelection({
+      answerType: 'profile_fact_answer',
+      selectedContextLayers: ['resume'],
+      items: education.flatMap(compactEducationEvidence),
+      education,
+      checkedSources: ['profile_resume'],
+      recommendedPromptHints: ['Answer only from the selected education fields; if a requested field is absent, say it is not specified.'],
+    });
+  }
+
+  const missingProfileFactAsk = /\b(expected salary|salary expectation|current location|where do (?:i|you) live|married|rejected|hobbies|certifications?|operating systems?)\b/i.test(q);
+  if (missingProfileFactAsk) {
+    return makeEvidenceSelection({
+      answerType: 'profile_fact_answer',
+      selectedContextLayers: ['resume'],
+      items: [],
+      missingInfoDetected: true,
+      checkedSources: ['profile_resume'],
+      confidence: 'high',
+      recommendedPromptHints: ['The requested profile fact is not present in the allowed profile evidence. Do not infer.'],
+    });
   }
 
   return null;
 };
+
+// ── JD-source evidence builder (Stage 4/5) ──────────────────────────────────
+//
+// Emits source-tagged `profile_jd` EvidenceItems covering the WHOLE structured
+// JD (not just title/company). Each item carries a `jd.<field>[i]` fieldPath so
+// telemetry can prove the JD reached the prompt and the JIT builder can render
+// a labelled <target_job_evidence> block. Caps keep the prompt bounded. No
+// fabrication: absent fields simply produce no item.
+const JD_LIST_EVIDENCE_CAP = 8;
+const JD_KEYWORD_EVIDENCE_CAP = 10;
+export const buildJdEvidenceItems = (
+  jd: MaybeStructured<StructuredJobFacts>,
+): ProfileEvidenceItem[] => {
+  const items: ProfileEvidenceItem[] = [];
+  const title = jdTitle(jd);
+  const company = jdCompany(jd);
+  const summary = jdSummary(jd);
+  const level = jdLevel(jd);
+  const employment = jdEmploymentType(jd);
+  const minYears = jdMinYears(jd);
+  const location = jdLocation(jd);
+  if (title) items.push(profileEvidenceItem('jd.title', title, 'profile_jd', 'jd:title'));
+  if (company) items.push(profileEvidenceItem('jd.company', company, 'profile_jd', 'jd:company'));
+  if (summary) items.push(profileEvidenceItem('jd.description_summary', summary, 'profile_jd', 'jd:summary'));
+  if (level) items.push(profileEvidenceItem('jd.level', level, 'profile_jd', 'jd:level'));
+  if (employment) items.push(profileEvidenceItem('jd.employment_type', employment, 'profile_jd', 'jd:employment_type'));
+  if (minYears) items.push(profileEvidenceItem('jd.min_years_experience', minYears, 'profile_jd', 'jd:min_years'));
+  if (location) items.push(profileEvidenceItem('jd.location', location, 'profile_jd', 'jd:location'));
+  jdRequirements(jd).slice(0, JD_LIST_EVIDENCE_CAP).forEach((r, i) =>
+    items.push(profileEvidenceItem(`jd.requirements[${i}]`, r, 'profile_jd', 'jd:requirements')));
+  jdResponsibilities(jd).slice(0, JD_LIST_EVIDENCE_CAP).forEach((r, i) =>
+    items.push(profileEvidenceItem(`jd.responsibilities[${i}]`, r, 'profile_jd', 'jd:responsibilities')));
+  const tech = jdTechnologies(jd).slice(0, JD_LIST_EVIDENCE_CAP);
+  if (tech.length) items.push(profileEvidenceItem('jd.technologies', tech, 'profile_jd', 'jd:technologies'));
+  const kw = jdKeywords(jd).slice(0, JD_KEYWORD_EVIDENCE_CAP);
+  if (kw.length) items.push(profileEvidenceItem('jd.keywords', kw, 'profile_jd', 'jd:keywords'));
+  const nice = jdNiceToHaves(jd).slice(0, JD_LIST_EVIDENCE_CAP);
+  if (nice.length) items.push(profileEvidenceItem('jd.nice_to_haves', nice, 'profile_jd', 'jd:nice_to_haves'));
+  return items;
+};
+
+// Resume evidence for the mixed resume+JD answer shapes (fit/gap/intro). Kept
+// compact — experience + projects + top skills, each `profile_resume`-tagged.
+export const buildResumeEvidenceItems = (
+  profile: MaybeStructured<StructuredProfileFacts>,
+): { items: ProfileEvidenceItem[]; experiences: ProfileExperience[]; projects: ProfileProject[]; skills: string[] } => {
+  const experiences = profileExperience(profile).slice(0, 2);
+  const projects = profileProjects(profile).slice(0, 2);
+  const skills = profileSkillNames(profile).slice(0, 8);
+  const items: ProfileEvidenceItem[] = [
+    ...experiences.flatMap(compactExperienceEvidence),
+    ...projects.flatMap(compactProjectEvidence),
+    skills.length ? profileEvidenceItem('skills.summary', skills, 'profile_resume', 'skills') : null,
+  ].filter(Boolean) as ProfileEvidenceItem[];
+  return { items, experiences, projects, skills };
+};
+
+// ── Evidence diagnostics (Stage 0) ──────────────────────────────────────────
+//
+// A PURE projection of a selection into the honest per-answer diagnostic
+// counters. `hasProfileJDBlock` / `hasProfileResumeBlock` are derived from
+// actual EvidenceItems (source-tagged), never from `selectedContextLayers` —
+// so "layer selected" can never masquerade as "evidence present".
+export interface EvidenceDiagnostics {
+  answerType: string;
+  sourceOwner: SourceOwner;
+  jdEvidenceCount: number;
+  resumeEvidenceCount: number;
+  hasProfileJDBlock: boolean;
+  hasProfileResumeBlock: boolean;
+  renderedEvidenceSourceTypes: SourceKind[];
+  selectedContextLayers: string[];
+  excludedContextLayers: string[];
+  missingInfoDetected: boolean;
+}
+export const computeEvidenceDiagnostics = (
+  selection: ProfileEvidenceSelection | null | undefined,
+): EvidenceDiagnostics | null => {
+  if (!selection) return null;
+  const items = selection.items ?? [];
+  const jdEvidenceCount = items.filter((it) => it.sourceKind === 'profile_jd').length;
+  const resumeEvidenceCount = items.filter((it) => it.sourceKind === 'profile_resume' || it.sourceKind === 'projects').length;
+  return {
+    answerType: selection.answerType,
+    sourceOwner: selection.sourceOwner,
+    jdEvidenceCount,
+    resumeEvidenceCount,
+    hasProfileJDBlock: jdEvidenceCount > 0,
+    hasProfileResumeBlock: resumeEvidenceCount > 0,
+    renderedEvidenceSourceTypes: Array.from(new Set(items.map((it) => it.sourceKind))),
+    selectedContextLayers: selection.selectedContextLayers ?? [],
+    excludedContextLayers: selection.excludedContextLayers ?? [],
+    missingInfoDetected: selection.missingInfoDetected === true,
+  };
+};
+
+/**
+ * @deprecated Full-JIT policy: deterministic profile logic selects evidence only.
+ * Use selectManualProfileEvidence and pass the result to ProfileJitPromptBuilder.
+ */
+export const tryBuildManualProfileFastPathAnswer = selectManualProfileEvidence;
 
 /**
  * LIVE LATENCY FALLBACK (Phase 9). When the provider stalls past the live-copilot
@@ -1181,45 +1571,19 @@ export const tryBuildManualProfileFastPathAnswer = ({
  * profile is loaded — the caller then keeps whatever partial text streamed.
  */
 export const buildLiveFallbackAnswer = ({
-  question,
-  answerType,
-  profile,
-  jobDescription,
+  question: _question,
+  answerType: _answerType,
+  profile: _profile,
+  jobDescription: _jobDescription,
 }: {
   question: string;
   answerType: string;
   profile: MaybeStructured<StructuredProfileFacts>;
   jobDescription?: MaybeStructured<StructuredJobFacts>;
 }): string | null => {
-  if (!profileFactsReady(profile)) return null;
-  const profileRoutes = new Set([
-    'identity_answer', 'profile_fact_answer', 'project_answer', 'project_followup_answer',
-    'skills_answer', 'skill_experience_answer', 'experience_answer', 'jd_fit_answer',
-    'behavioral_interview_answer',
-  ]);
-  if (!profileRoutes.has(answerType)) return null;
-
-  // 1. Exact deterministic fast-path (handles name/intro/role/jd-fit/projects/etc.).
-  try {
-    const fp = tryBuildManualProfileFastPathAnswer({ question, profile, jobDescription, source: 'what_to_answer' });
-    if (fp?.answer) return fp.answer;
-  } catch { /* fall through */ }
-
-  // 2. JD-fit specific summary.
-  if (answerType === 'jd_fit_answer') {
-    const fit = formatJDFit(profile, jobDescription);
-    if (fit) return fit.replace(/^You fit/i, 'I fit');
-  }
-
-  // 3. A grounded intro is a safe, on-topic answer for any "about me" route.
-  const intro = formatIntro(profile, question);
-  if (intro) return intro;
-
-  // 4. Last resort: an experience or skills line.
-  const exp = formatExperience(profile);
-  if (exp) return exp.replace(/^Your experience includes/i, 'My experience includes');
-  const skills = formatSkills(profile);
-  if (skills) return skills.replace(/^Your skills include/i, 'My skills include');
+  // Full-JIT policy (2026-07-07): provider failures/stalls must not fall back to
+  // canned profile prose. Keep this exported for compatibility with existing call
+  // sites, but return null so callers emit source-safe/provider-error messages.
   return null;
 };
 
