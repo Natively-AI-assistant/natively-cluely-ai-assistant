@@ -6471,6 +6471,29 @@ const isMultimodal = !!(imagePaths?.length);
   }
 
   /**
+   * Fast liveness probe for the Ollama daemon, distinct from getOllamaModels().
+   *
+   * getOllamaModels() returns [] for BOTH "daemon down" and "daemon up but no
+   * models pulled". Callers that want to decide whether to (destructively)
+   * restart Ollama must not conflate the two — a healthy daemon with zero
+   * models must never be `kill -9`'d. This returns true iff /api/tags answers
+   * with a 2xx within 1.5s, which means the daemon is alive regardless of how
+   * many models it has.
+   */
+  public async isOllamaReachable(): Promise<boolean> {
+    const baseUrl = (this.ollamaUrl || "http://127.0.0.1:11434").replace('localhost', '127.0.0.1');
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 1500);
+      const response = await fetch(`${baseUrl}/api/tags`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Authoritatively probe whether a single Ollama model supports vision via
    * /api/show `capabilities` (Ollama lists "vision" for multimodal models).
    * Falls back to the name heuristic when capabilities are absent (older
@@ -6560,6 +6583,27 @@ const isMultimodal = !!(imagePaths?.length);
 
   public async forceRestartOllama(): Promise<boolean> {
     try {
+      // GUARD: never tear down a HEALTHY, USER-MANAGED daemon. `kill -9` here
+      // used to fire whenever getOllamaModels() came back empty — which is also
+      // the state of a perfectly healthy Ollama that simply has no models pulled.
+      // Killing it aborted in-flight embedding-model pulls and broke other apps
+      // sharing the daemon. Only proceed with the destructive path when Ollama is
+      // actually unreachable, OR when this app spawned it (app-managed).
+      try {
+        const reachable = await this.isOllamaReachable();
+        if (reachable) {
+          const { OllamaManager } = require('./services/OllamaManager');
+          const appManaged = OllamaManager.getInstance().getIsAppManaged?.() === true;
+          if (!appManaged) {
+            console.log('[LLMHelper] forceRestartOllama: daemon reachable + user-managed — skipping destructive restart.');
+            return true;
+          }
+        }
+      } catch (guardErr: any) {
+        // Probe failure is non-fatal — fall through to the legacy restart path.
+        console.warn('[LLMHelper] forceRestartOllama guard probe failed (non-fatal):', guardErr?.message);
+      }
+
       console.log("[LLMHelper] Attempting to force restart Ollama...");
 
       // 1. Check for process on port 11434

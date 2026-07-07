@@ -457,6 +457,7 @@ interface ElectronAPI {
   toggleModelSelector: (coords: { x: number; y: number; activate?: boolean }) => Promise<void>;
   modelSelectorCloseIfOpen: () => Promise<void>;
   forceRestartOllama: () => Promise<void>;
+  isOllamaReachable: () => Promise<boolean>;
 
   // Settings Window
   toggleSettingsWindow: (coords?: { x: number; y: number }) => Promise<void>;
@@ -1872,6 +1873,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('toggle-model-selector', coords),
   modelSelectorCloseIfOpen: () => ipcRenderer.invoke('model-selector:close-if-open'),
   forceRestartOllama: () => ipcRenderer.invoke('force-restart-ollama'),
+  isOllamaReachable: () => ipcRenderer.invoke('is-ollama-reachable'),
 
   // Settings Window
   toggleSettingsWindow: (coords?: { x: number; y: number }) =>

@@ -51,12 +51,19 @@ const ModelSelectorWindow = () => {
                 try {
                     let oModels = await window.electronAPI?.getAvailableOllamaModels?.();
 
-                    // If no models found, try to fix/restart Ollama (server might be down)
+                    // If no models found, the daemon might be DOWN — or it might
+                    // simply be UP with zero models pulled. Only restart in the
+                    // former case: getAvailableOllamaModels returns [] for BOTH,
+                    // and forceRestartOllama does a `kill -9` that would tear down a
+                    // perfectly healthy user-managed daemon (and abort an in-flight
+                    // embedding-model pull). Probe reachability first.
                     if (!oModels || oModels.length === 0) {
                         try {
-                            // @ts-ignore
-                            if (window.electronAPI?.forceRestartOllama) {
-                                // @ts-ignore
+                            const reachable = await window.electronAPI?.isOllamaReachable?.();
+                            // Reachable === false means the daemon isn't answering; only
+                            // then is a restart warranted. If reachable (or the probe is
+                            // unavailable on an older preload → undefined), leave it alone.
+                            if (reachable === false && window.electronAPI?.forceRestartOllama) {
                                 await window.electronAPI.forceRestartOllama();
                                 // Wait a moment for server to come up
                                 await new Promise(resolve => setTimeout(resolve, 1500));

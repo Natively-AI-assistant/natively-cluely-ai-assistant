@@ -20,6 +20,16 @@ export class OllamaManager {
   }
 
   /**
+   * True only when THIS app spawned the Ollama daemon (via startOllama()).
+   * False when a user-managed `ollama serve` was already running at init.
+   * Consulted before any destructive restart so we never `kill -9` a daemon
+   * the user (or another app) owns.
+   */
+  public getIsAppManaged(): boolean {
+    return this.isAppManaged;
+  }
+
+  /**
    * Initialize the manager. Checks if Ollama is running, starts it if not.
    */
   public async init(): Promise<void> {

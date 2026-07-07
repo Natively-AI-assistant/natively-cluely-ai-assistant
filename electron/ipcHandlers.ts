@@ -3678,6 +3678,18 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // Liveness probe distinct from get-available-ollama-models. Lets callers tell
+  // "Ollama daemon is down" apart from "Ollama is up but has no models pulled"
+  // so they don't destructively restart a healthy daemon (see ModelSelectorWindow).
+  safeHandle('is-ollama-reachable', async () => {
+    try {
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      return await llmHelper.isOllamaReachable();
+    } catch {
+      return false;
+    }
+  });
+
   safeHandle('switch-to-ollama', async (_, model?: string, url?: string) => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();

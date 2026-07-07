@@ -383,6 +383,14 @@ export class WindowHelper {
       console.error(`[WindowHelper] did-fail-load: ${errorCode} ${errorDescription}`);
     });
 
+    // Pipe renderer-side diagnostics into the main-process log file. Without
+    // this, a "stuck at logo" hang or a renderer crash leaves NO trace in
+    // ~/Documents/natively_debug.log — the renderer's console, uncaught JS
+    // errors, crashes, and hangs are otherwise invisible to us. This is the
+    // difference between "the app is stuck and we can't tell why" and a log
+    // line naming the exact failing module/line on the user's machine.
+    this.attachRendererDiagnostics(this.launcherWindow, 'launcher');
+
     // if (isDev) {
     //   this.launcherWindow.webContents.openDevTools({ mode: 'detach' }); // DEBUG: Open DevTools
     // }
@@ -503,6 +511,8 @@ export class WindowHelper {
       console.error('[WindowHelper] Failed to load Overlay URL:', e);
     });
 
+    this.attachRendererDiagnostics(this.overlayWindow, 'overlay');
+
     // --- 3. Startup Sequence ---
     this.launcherWindow.once('ready-to-show', () => {
       this.switchToLauncher();
@@ -510,6 +520,76 @@ export class WindowHelper {
     });
 
     this.setupWindowListeners();
+  }
+
+  /**
+   * Route a window's renderer-side diagnostics into the main-process log so a
+   * "stuck at logo" hang or a renderer crash is diagnosable from
+   * ~/Documents/natively_debug.log alone — no DevTools, no remote debugging.
+   *
+   * Captures, per window:
+   *   - console-message      → renderer console output (React errors, warnings,
+   *                            our own console.error from ErrorBoundary etc.).
+   *                            Levels: 0=verbose 1=info 2=warning 3=error; we
+   *                            only forward warning+error to keep the log lean.
+   *   - render-process-gone  → the actual CRASH signal (SIGSEGV/OOM/killed).
+   *                            Names the reason + exitCode — this is what tells
+   *                            us "the renderer died" vs "the renderer hung".
+   *   - unresponsive         → the HANG signal ("stuck at logo"): the renderer
+   *                            stopped pumping its event loop. Paired with
+   *                            'responsive' so we can see if it recovered.
+   *   - did-finish-load / dom-ready → positive proof the React bundle actually
+   *                            evaluated (the log previously had no such marker,
+   *                            so we couldn't tell mount-failure from hang).
+   *   - preload-error        → a throw inside preload.js (would leave the
+   *                            renderer with no window.electronAPI → white/stuck
+   *                            screen with no other trace).
+   */
+  private attachRendererDiagnostics(win: BrowserWindow, tag: string): void {
+    try {
+      const wc = win.webContents;
+
+      wc.on('did-finish-load', () => {
+        console.log(`[Renderer:${tag}] did-finish-load (bundle evaluated)`);
+      });
+
+      wc.on('dom-ready', () => {
+        console.log(`[Renderer:${tag}] dom-ready`);
+      });
+
+      wc.on('console-message', (_event, level, message, line, sourceId) => {
+        // 0=verbose 1=info 2=warning 3=error. Only surface warning+ to avoid
+        // flooding the log with routine info/verbose renderer chatter.
+        if (level < 2) return;
+        const label = level === 3 ? 'ERROR' : 'WARN';
+        // sourceId can be a long file:// path; keep only the tail for readability.
+        const src = typeof sourceId === 'string' ? sourceId.split('/').pop() : sourceId;
+        console.error(`[Renderer:${tag}] console.${label} ${message} (${src}:${line})`);
+      });
+
+      wc.on('render-process-gone', (_event, details) => {
+        console.error(
+          `[Renderer:${tag}] RENDER-PROCESS-GONE reason=${details?.reason} exitCode=${details?.exitCode}`,
+        );
+      });
+
+      wc.on('preload-error', (_event, preloadPath, error) => {
+        console.error(
+          `[Renderer:${tag}] PRELOAD-ERROR in ${preloadPath}: ${error?.stack || error?.message || String(error)}`,
+        );
+      });
+
+      win.on('unresponsive', () => {
+        console.error(`[Renderer:${tag}] UNRESPONSIVE — renderer stopped pumping its event loop (hang / "stuck at logo")`);
+      });
+
+      win.on('responsive', () => {
+        console.log(`[Renderer:${tag}] responsive again (recovered from hang)`);
+      });
+    } catch (e) {
+      // Diagnostics attachment must never break window creation.
+      console.warn(`[WindowHelper] attachRendererDiagnostics(${tag}) failed (non-fatal):`, e);
+    }
   }
 
   private setupWindowListeners(): void {
