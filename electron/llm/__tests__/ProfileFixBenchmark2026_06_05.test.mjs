@@ -237,16 +237,22 @@ describe('fix: single-project fast path (deterministic, zero latency)', () => {
   };
   const fp = (q) => mpi.tryBuildManualProfileFastPathAnswer({ question: q, profile, jobDescription: null, source: 'manual_input' });
 
-  test('"Tell me about Natively." → deterministic answer naming the project + stack', () => {
+  // Full-JIT policy (2026-07): the deterministic path SELECTS source-tagged
+  // evidence; it never returns final prose (`.answer` is intentionally absent —
+  // ManualProfileRouteResult.answer is typed `never`). These assert the project
+  // + stack are SELECTED as evidence, which is what reaches the JIT prompt.
+  const evidenceText = (r) => (r?.items || []).map((it) => (typeof it.value === 'string' ? it.value : JSON.stringify(it.value))).join(' | ');
+  test('"Tell me about Natively." → selects the project + stack as evidence', () => {
     const r = fp('Tell me about Natively.');
-    assert.ok(r && r.answer, 'expected a fast-path answer');
-    assert.match(r.answer, /Natively/);
-    assert.match(r.answer, /Electron|TypeScript|Rust/);
+    assert.ok(r && Array.isArray(r.items) && r.items.length > 0, 'expected selected evidence');
+    const txt = evidenceText(r);
+    assert.match(txt, /Natively/);
+    assert.match(txt, /Electron|TypeScript|Rust/);
   });
-  test('"What tech stack did you use in Natively?" → deterministic stack answer', () => {
+  test('"What tech stack did you use in Natively?" → selects the stack as evidence', () => {
     const r = fp('What tech stack did you use in Natively?');
-    assert.ok(r && r.answer, 'expected a fast-path answer');
-    assert.match(r.answer, /Electron|TypeScript|Rust/);
+    assert.ok(r && Array.isArray(r.items) && r.items.length > 0, 'expected selected evidence');
+    assert.match(evidenceText(r), /Electron|TypeScript|Rust/);
   });
   test('narrative drill-in "What was your role in Natively?" defers to LLM (no fast path)', () => {
     const r = fp('What was your role in Natively?');

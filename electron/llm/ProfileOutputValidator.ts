@@ -83,6 +83,11 @@ const PROFILE_ANSWER_TYPES: ReadonlySet<AnswerType> = new Set<AnswerType>([
   'identity_answer', 'profile_fact_answer', 'project_answer', 'project_followup_answer',
   'skills_answer', 'skill_experience_answer', 'experience_answer', 'jd_fit_answer',
   'behavioral_interview_answer', 'negotiation_answer',
+  // JD-source + resume+JD shapes (2026-07-07). These are profile/JD answers too,
+  // so the false-refusal repair (no "I don't have the JD" when the JD is loaded)
+  // must cover them.
+  'jd_summary_answer', 'jd_requirements_answer', 'jd_fact_answer',
+  'resume_jd_fit_answer', 'resume_jd_gap_answer', 'resume_jd_intro_answer',
 ]);
 
 const isProfileAnswerType = (t: AnswerType): boolean => PROFILE_ANSWER_TYPES.has(t);

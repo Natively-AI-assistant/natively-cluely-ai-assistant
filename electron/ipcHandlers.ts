@@ -16,6 +16,7 @@ import { formatEnvelopeForPrompt } from './services/browser-context/formatEnvelo
 import { BrowserMetadataClassifierService } from './services/browser-context/BrowserMetadataClassifierService';
 import type { BrowserContextCategory, SafeWebsiteMetadata } from './services/browser-context/types';
 import { SettingsManager } from './services/SettingsManager';
+import { ProviderStatusRegistry } from './services/ProviderStatusRegistry';
 import { SkillsManager } from './services/SkillsManager';
 import { DEFAULT_BUILTIN_SKILL_IDS, type SkillUploadPayload } from './services/skills/SkillValidator';
 
@@ -1370,7 +1371,10 @@ export function initializeIpcHandlers(appState: AppState): void {
               // is now derived from evidence, not from the layer flag.
               try {
                 const { computeEvidenceDiagnostics } = require('./llm/manualProfileIntelligence');
-                const provenance = {};
+                const { buildActiveProfileContext, summarizeActiveProfileContext } = require('./llm/ActiveProfileContext');
+                const orchDiag = llmHelper.getKnowledgeOrchestrator?.();
+                const activeCtx = buildActiveProfileContext(orchDiag);
+                const provenance = summarizeActiveProfileContext(activeCtx);
                 const diag = computeEvidenceDiagnostics(evidenceRoute);
                 const jdEvidenceCount = diag?.jdEvidenceCount ?? 0;
                 const resumeEvidenceCount = diag?.resumeEvidenceCount ?? 0;
@@ -3781,6 +3785,25 @@ export function initializeIpcHandlers(appState: AppState): void {
     return os.type();
   });
 
+  safeHandle('get-provider-statuses', async () => {
+    return ProviderStatusRegistry.getInstance().getAll();
+  });
+
+  safeHandle('get-provider-status', async (_evt, id: string) => {
+    return ProviderStatusRegistry.getInstance().getStatus(id);
+  });
+
+  safeHandle('get-local-fallback-preflight', async () => {
+    const { getLatestLocalFallbackPreflight } = require('./services/LocalFallbackPreflight');
+    return getLatestLocalFallbackPreflight();
+  });
+
+  safeHandle('run-local-fallback-preflight', async () => {
+    const llmHelper = appState.processingHelper.getLLMHelper();
+    const { runLocalFallbackPreflight } = require('./services/LocalFallbackPreflight');
+    return runLocalFallbackPreflight({ ollamaSelected: llmHelper.isUsingOllama?.() === true });
+  });
+
   // LLM Model Management Handlers
   safeHandle('get-current-llm-config', async () => {
     try {
@@ -3821,6 +3844,11 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('switch-to-ollama', async (_, model?: string, url?: string) => {
     try {
+      const { OllamaManager } = require('./services/OllamaManager');
+      const status = await OllamaManager.getInstance().ensureRunning({ reason: 'selected-model', selectedModel: model, url });
+      if (status.health === 'missing_optional_dependency' || status.health === 'unavailable') {
+        return { success: false, error: status.message };
+      }
       const llmHelper = appState.processingHelper.getLLMHelper();
       await llmHelper.switchToOllama(model, url);
       // Warm + pin the local model off the hot path so the FIRST live question
@@ -3840,6 +3868,12 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('force-restart-ollama', async () => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
+      // Gate on user selection — fresh users should never have Ollama spawned
+      // by a stray IPC the renderer fires on mount.
+      if (!llmHelper.isUsingOllama()) {
+        console.log('[IPC force-restart-ollama] Ollama not selected — no-op.');
+        return { success: false, reason: 'ollama-not-selected' };
+      }
       const success = await llmHelper.forceRestartOllama();
       return { success };
     } catch (error: any) {
@@ -3850,10 +3884,15 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('restart-ollama', async () => {
     try {
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      if (!llmHelper.isUsingOllama()) {
+        console.log('[IPC restart-ollama] Ollama not selected — no-op.');
+        return false;
+      }
       // First try to kill it if it's running
-      await appState.processingHelper.getLLMHelper().forceRestartOllama();
+      await llmHelper.forceRestartOllama();
 
-      // The forceRestartOllama now calls OllamaManager.getInstance().init() internally
+      // The forceRestartOllama now calls OllamaManager.ensureRunning internally
       // so we don't need to do it again here.
 
       return true;
@@ -3865,9 +3904,17 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('ensure-ollama-running', async () => {
     try {
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      if (!llmHelper.isUsingOllama()) {
+        console.log('[IPC ensure-ollama-running] Ollama not selected — no-op.');
+        return { success: false, reason: 'ollama-not-selected' };
+      }
       const { OllamaManager } = require('./services/OllamaManager');
-      await OllamaManager.getInstance().init();
-      return { success: true };
+      const status = await OllamaManager.getInstance().ensureRunning({
+        reason: 'user-action',
+        selectedModel: llmHelper.getCurrentModel(),
+      });
+      return { success: status.health === 'ready' || status.health === 'degraded', status };
     } catch (error: any) {
       return { success: false, message: error.message };
     }

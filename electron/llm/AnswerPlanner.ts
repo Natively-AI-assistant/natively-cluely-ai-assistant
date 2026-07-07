@@ -15,6 +15,17 @@ export type AnswerType =
   | 'experience_answer'
   | 'jd_fit_answer'
   | 'gap_analysis_answer'
+  // JD-SOURCE answer shapes (2026-07-07, JD/Resume JIT pipeline fix). The JD is
+  // the TARGET-ROLE source, not the candidate's biography. These route the `jd`
+  // layer as the PRIMARY source so "what does this role require?" no longer
+  // falls to unknown/skills (which forbid jd) and drops the JD before any prompt
+  // is built. `sourceOwner` for these is profile_jd (jd_*) or a resume+jd mix.
+  | 'jd_summary_answer'        // "what kind of candidate / role does the JD want?"
+  | 'jd_requirements_answer'   // "top skills / responsibilities / requirements in the JD"
+  | 'jd_fact_answer'           // "does the JD mention salary / relocation / location?"
+  | 'resume_jd_fit_answer'     // "which of MY projects best matches this JD?" (resume+jd)
+  | 'resume_jd_gap_answer'     // "my gaps for this JD / lack of experience in a requirement"
+  | 'resume_jd_intro_answer'   // "tell me about myself FOR THIS ROLE" (identity+resume+jd)
   | 'behavioral_interview_answer'
   | 'project_followup_answer'
   | 'coding_question_answer'
@@ -267,6 +278,71 @@ How I'd Close It:
 
 Speakable Final Answer:
 [A confident-but-honest first-person answer the candidate can say out loud: gap first, then mitigation. Do not say "let me come back to that".]`;
+
+// ── JD-SOURCE templates (2026-07-07) ────────────────────────────────────────
+// These answer FROM the job description (the target role). They must never
+// invent JD content and never turn JD requirements into the candidate's claimed
+// experience. When a requested JD field is absent, they state that honestly
+// ("the JD does not specify …") rather than refusing or asking for an upload.
+
+const JD_SUMMARY_TEMPLATE = `You are describing the TARGET ROLE from the job description, to the user. Neutral, second-person/explanatory voice (not first-person candidate).
+
+Answer concisely:
+- What kind of role/candidate the JD is looking for (seniority, focus, the core of the role).
+- Ground EVERY claim in the JD evidence provided. Do not invent responsibilities or requirements that are not in the JD.
+- If a detail the user asked about is not in the JD, say plainly it is not specified. Do not ask the user to upload or paste the JD — it is already provided as evidence.
+- 2-4 sentences, speakable.`;
+
+const JD_REQUIREMENTS_TEMPLATE = `You are listing what the job description REQUIRES (skills, responsibilities, requirements), to the user. Neutral, explanatory voice.
+
+Answer:
+- Pull the requested items (top skills / requirements / responsibilities / technologies) DIRECTLY from the JD evidence provided.
+- Do not add requirements that are not in the JD. Do not map them onto the candidate's resume here — this is about the role only.
+- If the JD does not list the requested category, say so honestly.
+- Prefer a short, scannable list; keep it tight.`;
+
+const JD_FACT_TEMPLATE = `You are answering a specific FACTUAL question about the job description (e.g. salary, relocation, location, employment type, years required).
+
+Answer:
+- If the JD evidence contains the fact, state it directly.
+- If the JD does NOT contain the fact, say plainly: "The JD does not specify [that]." Never say the JD is not loaded, never ask for an upload, and never pivot into salary negotiation advice unless the user explicitly asked how to negotiate.
+- One or two sentences. No filler.`;
+
+const RESUME_JD_FIT_TEMPLATE = `Use exactly these sections. Resume evidence describes the CANDIDATE; JD evidence describes the TARGET ROLE — keep them distinct and never present a JD requirement as the candidate's experience.
+
+Short Fit Summary:
+[Concise first-person fit statement for THIS role.]
+
+Matching Experience & Projects:
+[Only the candidate's real resume experience/projects that map to the JD's needs. Name the specific project/role. Never invent experience the resume does not show.]
+
+Where I'm Strongest For This JD:
+[The 1-2 requirements from the JD the candidate most clearly meets, tied to concrete resume evidence.]
+
+Speakable Final Answer:
+[A polished 2-4 sentence first-person answer.]`;
+
+const RESUME_JD_GAP_TEMPLATE = `This is a GAP question about the candidate vs THIS JD. Lead with the honest gap. Resume evidence = the candidate; JD evidence = the role. If the JD asks for something the resume does not show, that is the gap — name it; do NOT fabricate the experience.
+Use exactly these sections:
+
+The Honest Gap:
+[ONE specific JD requirement the candidate's resume shows less of. Concrete. Do not pretend there is no gap; do not turn this into a fit-summary.]
+
+Why It's Manageable:
+[Adjacent, REAL resume experience that makes closing the gap credible — no invented experience.]
+
+How I'd Close It:
+[A specific, realistic ramp/mitigation plan.]
+
+Speakable Final Answer:
+[Confident-but-honest first person: gap first, then mitigation. Never stall.]`;
+
+const RESUME_JD_INTRO_TEMPLATE = `You are giving a first-person self-introduction TAILORED TO THIS ROLE. Use the candidate's real identity + resume, and steer the emphasis toward what the JD values. Resume evidence = the candidate; JD evidence = the role — do not claim JD requirements as experience you don't have.
+
+Answer:
+- Open with who the candidate is (name + current focus), then 2-3 of the most role-relevant experiences/projects/skills from the resume, framed toward the JD's priorities.
+- First person, natural, speakable (about 4-6 sentences). No headers.
+- Never invent experience; if the JD wants something the resume lacks, simply emphasize the closest real strength instead of fabricating.`;
 
 const NEGOTIATION_TEMPLATE = `Use exactly these sections:
 
@@ -926,6 +1002,64 @@ const SKILLS_PATTERNS = [
   /\bwhat(?:'s| is) (your|my) strongest (skill|area|tech|language|domain)\b/i,
   /\bwhere do (you|i) special/i,
 ];
+
+// ── JD-SOURCE cue predicates (2026-07-07, JD/Resume JIT pipeline fix) ─────────
+//
+// GENERALIZED, benchmark-free cues. They key off SHAPE — "does the question
+// refer to the target role / job description?" vs "does it claim first-person
+// candidate ownership (my / I / me)?" — never off any specific JD title,
+// company, or question string. The routing rule (applied in planAnswer):
+//   JD-reference cue WITHOUT candidate cue  → JD-source shape (jd_* )
+//   JD-reference cue WITH candidate cue     → resume+JD shape (resume_jd_*)
+//   candidate cue, no JD cue                → existing profile route (unchanged)
+//   no cue                                  → existing route (unchanged)
+
+// The question references the TARGET ROLE / JD as a source. Deliberately broad
+// on role/JD nouns but requires the JD framing, not just any occurrence of
+// "role" (a bare "your role in the project" is candidate-owned, handled by the
+// candidate cue winning the mix).
+const JD_REFERENCE_CUE_RE = /\bjd\b|\b(this|the)\s+(job\s*description|role|position|job|posting|listing|opening|vacancy)\b|\bjob\s*description\b|\bfor\s+(this|the)\s+(role|position|job)\b|\brequired\s+for\s+(the|this)\s+(role|position|job)\b|\b(they|the\s+employer|the\s+company|the\s+recruiter|the\s+hiring\s+manager)\s+(want|wants|require|requires|need|needs|are\s+looking\s+for|is\s+looking\s+for|expect|expects)\b|\blooking\s+for\s+in\s+(a|the|this)\b/i;
+
+// First-person candidate ownership: "my / I / me / mine / myself" over a
+// candidate-ish noun, OR the bare first-person pronouns in an interview frame.
+// Reuses the same shape sourceOwnership.ts uses so the two stay consistent.
+const CANDIDATE_OWNERSHIP_CUE_RE = /\b(my|mine|myself)\b|\bi\s+(have|had|did|do|am|was|worked|built|made|led|used|studied|know)\b|\b(should|do|would|can)\s+i\b|\bam\s+i\b|\bfor\s+me\b/i;
+
+// A JD FACTUAL lookup — a specific field of the JD (salary, relocation,
+// location, employment type, years required, a named technology requirement).
+const JD_FACT_CUE_RE = /\b(salary|compensation|pay|wage|stipend|ctc|relocat(?:e|ion)|location|remote|onsite|on-site|hybrid|employment\s*type|full[- ]?time|part[- ]?time|contract|years?\s+of\s+experience|experience\s+(required|needed)|visa|sponsor(?:ship)?|benefits?)\b/i;
+
+// The JD asks for its own requirements/skills/responsibilities (role-directed,
+// not the candidate's skills). "skills required for this role", "what does the
+// role require", "responsibilities in the JD", "technologies the JD lists".
+const JD_REQUIREMENTS_CUE_RE = /\b(require(?:d|ment|ments)?|responsibilit(?:y|ies)|skills?\s+(required|needed|listed|for\s+(the|this))|technolog(?:y|ies)|qualifications?|must[- ]haves?|duties|expect(?:ed|ations?)?)\b/i;
+
+// The JD-summary shape: "what kind of candidate/engineer/analyst/person does
+// the JD want", "what is this role", "what are they looking for".
+const JD_SUMMARY_CUE_RE = /\bwhat\s+(kind|type|sort)\s+of\s+(candidate|engineer|developer|analyst|person|role|hire|profile)\b|\bwhat\s+(is|kind of)\s+(this|the)\s+(role|job|position)\b|\bwhat\s+(are|is)\s+(they|the\s+employer|the\s+company)\s+looking\s+for\b|\bwhat\s+does\s+(this|the)\s+(role|job|position)\s+(involve|entail|need|want)\b/i;
+
+// A JD-tailored INTRO ("tell me about yourself / walk me through my resume FOR
+// THIS ROLE / WITH THIS JD in mind"). Needs BOTH an intro cue and a JD cue.
+const INTRO_SHAPE_CUE_RE = /\b(tell me about (yourself|myself)|introduce (yourself|myself)|walk me through (your|my) (resume|cv|background)|give me (a|an) (intro|introduction)|30[- ]?second (intro|introduction|pitch)|elevator pitch)\b/i;
+
+// A JD-relative RESUME selector ("most relevant PROJECT / internship / experience
+// FOR THIS JD/role", "which of my X best matches"). Needs a candidate-owned
+// artifact noun AND a JD cue.
+const RESUME_JD_SELECTOR_CUE_RE = /\b(most|best|strongest)\s+(relevant\s+)?(project|projects|internship|internships|experience|role|work)\b|\bwhich\s+(of\s+)?(my\s+)?(project|projects|internship|internships|experience|role|skill)s?\b/i;
+
+// A gap/lack-of-experience cue explicitly relative to the JD's requirements.
+// This must be checked BEFORE isHypotheticalTech so "how would you explain your
+// lack of experience in [a JD requirement]" stops routing to technical_concept.
+const RESUME_JD_GAP_CUE_RE = /\b(lack|lacking|missing|gap|gaps|weak|weakness|don'?t\s+have|do\s+not\s+have|no\s+experience|less\s+experience|not\s+experienced|short\s+on)\b/i;
+
+// Explicit "how to negotiate" steer — the ONLY thing that keeps a salary
+// question on the negotiation route instead of jd_fact.
+const NEGOTIATION_ADVICE_CUE_RE = /\b(how\s+(should|do|would|can)\s+i\s+(negotiate|ask\s+for|counter)|negotiat(?:e|ing|ion)\s+(advice|tips|strategy|script)|counter[- ]?offer|how\s+much\s+should\s+i\s+ask)\b/i;
+
+/** Does the question reference the target role / JD as a source? */
+const hasJdReferenceCue = (text: string): boolean => JD_REFERENCE_CUE_RE.test(text);
+/** Does the question claim first-person candidate ownership? */
+const hasCandidateOwnershipCue = (text: string): boolean => CANDIDATE_OWNERSHIP_CUE_RE.test(text);
 // A PEOPLE / leadership / conflict OBJECT after a lead/manage/handle verb marks a behavioral
 // STORY (not a skill probe). This ONE source is interpolated into the behavioral matcher AND
 // its two skill-side guards so the guard is always a superset of the matcher and the three lists
@@ -1202,7 +1336,7 @@ const MEETING_PATTERNS = [
 const PROFILE_FACT_PATTERNS = [
   /\bwhere did (you|i) (study|go to (school|college|university)|graduate)\b/i,
   /\bwhat (role|job|position) (are|am) (you|i) (applying|interviewing) for\b/i,
-  /\bwhat(?:'s| is) (your|my) (degree|major|gpa|qualification)\b/i,
+  /\bwhat(?:'s| is) (your|my) (degree|major|gpa|cgpa|grade\s*point|qualification)\b/i,
   // Recruiter logistics / factual probes (release 2026-06-07 multimode-1000):
   // qualification, graduation, location, relocation, notice period, current title,
   // years of experience, last company, area of focus.
@@ -1435,6 +1569,18 @@ const templateFor = (answerType: AnswerType): string => {
       return JD_FIT_TEMPLATE;
     case 'gap_analysis_answer':
       return GAP_ANALYSIS_TEMPLATE;
+    case 'jd_summary_answer':
+      return JD_SUMMARY_TEMPLATE;
+    case 'jd_requirements_answer':
+      return JD_REQUIREMENTS_TEMPLATE;
+    case 'jd_fact_answer':
+      return JD_FACT_TEMPLATE;
+    case 'resume_jd_fit_answer':
+      return RESUME_JD_FIT_TEMPLATE;
+    case 'resume_jd_gap_answer':
+      return RESUME_JD_GAP_TEMPLATE;
+    case 'resume_jd_intro_answer':
+      return RESUME_JD_INTRO_TEMPLATE;
     case 'negotiation_answer':
       return NEGOTIATION_TEMPLATE;
     case 'system_design_answer':
@@ -1496,6 +1642,24 @@ const requiredLayersFor = (answerType: AnswerType, documentGroundedCustomModeAct
     case 'jd_fit_answer':
     case 'gap_analysis_answer':
       return ['resume', 'jd', 'custom_context', 'ai_persona'];
+    // JD-SOURCE shapes. The JD is the PRIMARY source (target role), so `jd` is
+    // required. jd_summary may also use custom_context (a user preference like
+    // "I care about remote"), but never the resume as a mandatory source — these
+    // describe the ROLE, not the candidate.
+    case 'jd_summary_answer':
+      return ['jd', 'custom_context'];
+    case 'jd_requirements_answer':
+    case 'jd_fact_answer':
+      return ['jd'];
+    // Resume+JD MIX shapes. Both the candidate resume AND the target JD ground
+    // the answer; the prompt keeps them in SEPARATE labelled blocks so JD
+    // requirements never become candidate claims.
+    case 'resume_jd_fit_answer':
+      return ['resume', 'jd', 'custom_context', 'ai_persona'];
+    case 'resume_jd_gap_answer':
+      return ['resume', 'jd'];
+    case 'resume_jd_intro_answer':
+      return ['stable_identity', 'resume', 'jd', 'custom_context', 'ai_persona'];
     case 'coding_question_answer':
     case 'dsa_question_answer':
     case 'technical_concept_answer':
@@ -1581,6 +1745,19 @@ const forbiddenLayersFor = (answerType: AnswerType): ContextLayer[] => {
     case 'jd_fit_answer':
     case 'gap_analysis_answer':
       return ['negotiation'];
+    case 'jd_summary_answer':
+    case 'jd_requirements_answer':
+    case 'jd_fact_answer':
+      // JD-source answers describe the TARGET ROLE only — never the salary/
+      // negotiation layer (jd_fact reports an absent comp field honestly instead
+      // of negotiating) and never reference_files (the JD is structured, not an
+      // uploaded doc in a custom mode).
+      return ['negotiation', 'reference_files'];
+    case 'resume_jd_fit_answer':
+    case 'resume_jd_gap_answer':
+    case 'resume_jd_intro_answer':
+      // Resume+JD answers never pull the negotiation/salary layer.
+      return ['negotiation'];
     case 'negotiation_answer':
       return ['reference_files'];
     case 'sales_answer':
@@ -1639,6 +1816,10 @@ const CANDIDATE_VOICE_TYPES: ReadonlySet<AnswerType> = new Set<AnswerType>([
   'identity_answer', 'profile_fact_answer', 'project_answer', 'project_followup_answer',
   'skills_answer', 'skill_experience_answer', 'experience_answer', 'jd_fit_answer',
   'gap_analysis_answer', 'behavioral_interview_answer', 'negotiation_answer',
+  // Resume+JD mixes are answered in the candidate's own voice (fit/gap/intro
+  // for THIS role). JD-only shapes (jd_summary/requirements/fact) are NOT here —
+  // they describe the role to the user in neutral assistant voice.
+  'resume_jd_fit_answer', 'resume_jd_gap_answer', 'resume_jd_intro_answer',
 ]);
 
 // Phase 2: the profile-context policy per answer type. `forbidden` is the hard
@@ -1677,9 +1858,22 @@ export const profileContextPolicyFor = (answerType: AnswerType): ProfileContextP
     case 'gap_analysis_answer':
     case 'behavioral_interview_answer':
     case 'project_about_answer':
+    case 'resume_jd_fit_answer':
+    case 'resume_jd_gap_answer':
+    case 'resume_jd_intro_answer':
+      // Resume+JD mixes are ABOUT the candidate (in the context of the role) —
+      // profile grounding is required, same as jd_fit.
       // Product-about answers MUST be grounded in the loaded project metadata
       // (no overclaim) — same as a project answer.
       return 'required';
+    case 'jd_summary_answer':
+    case 'jd_requirements_answer':
+    case 'jd_fact_answer':
+      // JD-source answers describe the TARGET ROLE, not the candidate. The
+      // profile is NOT required (and must not be forced in); the JD layer is the
+      // source. 'allowed' keeps the profile from being mandated while the `jd`
+      // layer (required above) carries the actual grounding.
+      return 'allowed';
     case 'project_link_answer':
     case 'source_code_evidence_answer':
       // The link/source comes from loaded metadata/reference files; grounding is
@@ -1816,6 +2010,117 @@ const normalizeSms = (s: string): string => {
   let out = s;
   for (const [re, rep] of SMS_NORMALIZATIONS) out = out.replace(re, rep);
   return out;
+};
+
+// ── JD-SOURCE resolver (2026-07-07, JD/Resume JIT pipeline fix) ──────────────
+//
+// The SINGLE, generalized decision for "is this a JD-source or resume+JD
+// question, and which shape?". Returns one of the 6 new answer types or null.
+// Keyed purely off SHAPE cues (JD-reference vs candidate-ownership vs
+// fact/requirement/intro/gap/selector) — never off any specific JD/company/
+// project/question string. Runs EARLY in planAnswer (before negotiation/
+// identity/skills/technical/unknown) so a JD question can no longer have its
+// `jd` layer dropped by a candidate-centric branch.
+//
+// Precedence inside a JD context:
+//   1. JD-tailored intro (intro cue + JD cue)          → resume_jd_intro_answer
+//   2. JD-relative resume gap (gap cue + JD cue)        → resume_jd_gap_answer
+//   3. JD-relative resume selector (my-artifact + JD)   → resume_jd_fit_answer
+//   4. Candidate-owned fit inside a JD frame            → resume_jd_fit_answer
+//   5. JD factual field lookup (no candidate cue)       → jd_fact_answer
+//   6. JD requirements/skills/responsibilities          → jd_requirements_answer
+//   7. JD summary ("what role/candidate do they want")  → jd_summary_answer
+// A coding/write verb ALWAYS vetoes (a JD-shaped coding task is still coding).
+// The resolver is deliberately CONSERVATIVE: it only claims questions the
+// existing branches MISS (JD-only → unknown/skills, which forbid jd) or
+// MISROUTE (JD-tailored intro → identity; gap-for-JD phrased as "how would you
+// explain your lack…" → technical_concept). Questions the established
+// GAP_PATTERNS / JD_FIT_PATTERNS branches already route correctly (both emit
+// resume+jd) are DEFERRED (return null) so their proven regression guards stay
+// authoritative. `matchesJdFitPattern`/`matchesGapPattern`/`isHypotheticalTechAsk`
+// are passed in from planAnswer so this stays a pure function of the same text.
+const resolveJdSourceType = (
+  text: string,
+  hasWriteCodeVerb: boolean,
+  isHypotheticalTechAsk: boolean,
+  matchesJdFitPattern: boolean,
+  matchesGapPattern: boolean,
+): AnswerType | null => {
+  if (hasWriteCodeVerb) return null;
+  const jdRef = hasJdReferenceCue(text);
+  // First-person candidate ownership ("my resume", "I built", "should I").
+  const firstPerson = hasCandidateOwnershipCue(text);
+  // Second-person address to the candidate ("you/your").
+  const secondPerson = /\b(you|your|yourself|u|ur)\b/i.test(text);
+  const candidateAddressed = firstPerson || secondPerson;
+  const introShape = INTRO_SHAPE_CUE_RE.test(text);
+
+  // (1) JD-tailored intro: an intro request tied to the role. Needs BOTH the
+  // intro shape and a JD reference so a plain "tell me about yourself" (no JD
+  // cue) still routes to the existing identity path. Fixes "tell me about
+  // yourself FOR THIS ROLE" / "walk me through my resume WITH THIS JD" collapsing
+  // to identity_answer (which forbids jd).
+  if (introShape && jdRef) return 'resume_jd_intro_answer';
+
+  // Everything below requires a JD reference cue — no JD framing, no JD route.
+  if (!jdRef) return null;
+
+  // (2) Gap-for-JD phrased as a HYPOTHETICAL ("how would you explain your lack
+  // of experience in [a JD requirement]"). This is the ONLY gap shape we claim:
+  // it is the one the existing GAP_PATTERNS branch never sees because
+  // isHypotheticalTech steals it into technical_concept FIRST. A plain gap ask
+  // ("what gap do you have for this role") does NOT match isHypotheticalTech, so
+  // it falls through to the proven GAP_PATTERNS→gap_analysis_answer route.
+  if (isHypotheticalTechAsk && RESUME_JD_GAP_CUE_RE.test(text) && candidateAddressed) {
+    return 'resume_jd_gap_answer';
+  }
+
+  // (3) JD-relative resume SELECTOR ("most relevant project/internship for this
+  // JD", "which of my projects best matches"). Fixes "most relevant project for
+  // this JD" → project_answer (drops jd). Defer if the existing jd_fit patterns
+  // already claim it (they route resume+jd correctly).
+  if (!matchesJdFitPattern && RESUME_JD_SELECTOR_CUE_RE.test(text) && candidateAddressed) {
+    return 'resume_jd_fit_answer';
+  }
+
+  // A candidate-addressed question the existing GAP/JD_FIT patterns already
+  // handle → defer to them (they route resume+jd; their guards are proven).
+  if (candidateAddressed && (matchesJdFitPattern || matchesGapPattern)) return null;
+
+  // (4) A FIRST-PERSON question in a JD frame that the existing patterns MISSED
+  // is an explicit resume+JD FIT ask ("how do I align with this role").
+  if (firstPerson) return 'resume_jd_fit_answer';
+
+  // A bare second-person motivation/fit question the existing patterns missed is
+  // still deferred (return null) — the JD-ONLY shapes below are only for
+  // questions that do NOT address the candidate at all.
+  if (secondPerson) return null;
+
+  // ── JD-ONLY shapes (the question does not address the candidate) ──
+  // (5) A factual field lookup about the JD ("does the JD mention salary?",
+  // "is relocation required?", "how many years does the role need?"). Reported
+  // from the JD's fields, or an honest absence — NOT negotiation. GUARD: a
+  // "use the JD but NOT salary" fit STEER negates the field — it is not a salary
+  // FACT lookup, so defer it to the jd_fit route. A genuine fact question ("does
+  // the JD mention salary?") does not negate the field and still routes here.
+  if (JD_FACT_CUE_RE.test(text)) {
+    const negatesTheFact = /\b(not|no|without|never|skip|avoid|exclude|but no|but not)\s+(?:any\s+|the\s+|give\s+|giving\s+|mention(?:ing)?\s+|talk(?:ing)?\s+about\s+|discuss(?:ing)?\s+)?(salary|compensation|package|ctc|pay|money|relocat(?:e|ion))\b/i.test(text);
+    if (negatesTheFact) return matchesJdFitPattern ? null : 'jd_summary_answer';
+    return 'jd_fact_answer';
+  }
+
+  // (6) The JD's own requirements/skills/responsibilities/technologies.
+  if (JD_REQUIREMENTS_CUE_RE.test(text)) return 'jd_requirements_answer';
+
+  // (7) A summary of the role / what kind of candidate the JD wants.
+  if (JD_SUMMARY_CUE_RE.test(text)) return 'jd_summary_answer';
+
+  // A JD reference the existing jd_fit patterns already claim → defer.
+  if (matchesJdFitPattern) return null;
+
+  // A JD reference with no more specific shape and not claimed elsewhere →
+  // summarize the role.
+  return 'jd_summary_answer';
 };
 
 export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
@@ -2010,6 +2315,20 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
   // PROJECT LINK: a repo/url/website ask. Win over unknown so it never false-refuses.
   const wantsProjectLink = includesAny(text, PROJECT_LINK_PATTERNS);
 
+  // JD-SOURCE routing decision (2026-07-07). Computed once; consulted in the
+  // chain BELOW so JD/resume+JD questions never have their `jd` layer dropped by
+  // a candidate-centric or fallback branch. A negotiation-ADVICE cue ("how
+  // should I negotiate salary") keeps the negotiation route; a bare JD salary
+  // FACT ("does the JD mention salary") routes jd_fact instead of negotiation.
+  const jdSourceType = resolveJdSourceType(
+    text,
+    hasWriteCodeVerb,
+    isHypotheticalTech(text),
+    includesAny(text, JD_FIT_PATTERNS),
+    includesAny(text, GAP_PATTERNS),
+  );
+  const wantsNegotiationAdvice = NEGOTIATION_ADVICE_CUE_RE.test(text);
+
   if (!question) {
     answerType = 'unknown_answer';
   } else if (isStealthEvasion) {
@@ -2020,6 +2339,14 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     answerType = 'project_link_answer';
   } else if (metaDirective) {
     answerType = metaDirective;
+  } else if (jdSourceType && !wantsNegotiationAdvice) {
+    // A JD-source / resume+JD question. Placed before negotiation/identity/
+    // skills/technical/unknown so the JD layer is routed as the primary source.
+    // The one carve-out: an explicit "how do I negotiate / counter" steer keeps
+    // the question on the negotiation route (falls through to the branch below),
+    // so a JD-framed comp question that ASKS FOR NEGOTIATION ADVICE isn't
+    // swallowed by the JD-source route.
+    answerType = jdSourceType;
   } else if (includesAny(text, NEGOTIATION_PATTERNS) && !hasExplicitCodingVerb && !negatesSalary) {
     // A salary word that is explicitly NEGATED ("use JD but no salary", "rate me
     // but not compensation") is a steer AWAY from negotiation — never a comp ask.

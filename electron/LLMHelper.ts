@@ -6620,6 +6620,16 @@ const isMultimodal = !!(imagePaths?.length);
   }
 
   public async forceRestartOllama(): Promise<boolean> {
+    // 2026-07-07 fix: the user has NOT selected Ollama. Spawning ollama serve
+    // here would contradict the recent startup gating contract — a fresh user
+    // on a new PC who has never picked Ollama should not have it start as a
+    // side-effect of an IPC the renderer fires on mount. Treat this as a
+    // no-op and let the renderer know via `false` so the UI can show "Ollama
+    // is not selected; switch to another provider."
+    if (!this.useOllama) {
+      console.log('[LLMHelper] forceRestartOllama: Ollama not selected — no-op (useOllama=false).');
+      return false;
+    }
     try {
       // GUARD: never tear down a HEALTHY, USER-MANAGED daemon. `kill -9` here
       // used to fire whenever getOllamaModels() came back empty — which is also
@@ -6642,7 +6652,7 @@ const isMultimodal = !!(imagePaths?.length);
         console.warn('[LLMHelper] forceRestartOllama guard probe failed (non-fatal):', guardErr?.message);
       }
 
-      console.log("[LLMHelper] Attempting to force restart Ollama...");
+      console.log('[LLMHelper] Attempting to force restart Ollama...');
 
       // 1. Check for process on port 11434
       try {
@@ -6668,7 +6678,11 @@ const isMultimodal = !!(imagePaths?.length);
       // 2. Restart Ollama through the Manager (which handles polling and background spawn)
       // We don't want to use exec('ollama serve') here directly anymore to avoid duplicate tracking
       const { OllamaManager } = require('./services/OllamaManager');
-      await OllamaManager.getInstance().init();
+      await OllamaManager.getInstance().ensureRunning({
+        reason: 'user-action',
+        selectedModel: this.ollamaModel || undefined,
+        url: this.ollamaUrl,
+      });
 
       return true;
     } catch (error) {
