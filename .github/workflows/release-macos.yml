@@ -134,6 +134,16 @@ jobs:
             codesign --verify --deep --strict --verbose=4 "$APP"
             spctl -a -vvv -t execute "$APP"          # expect: accepted / source=Notarized Developer ID
             xcrun stapler validate "$APP"
+            # 2026-07-08: confirm the binary is NOT marked with a quarantine
+            # xattr (e.g. com.apple.quarantine). The notarization + stapling
+            # pipeline should clear this on signed apps, but a stale flag
+            # would make the app refuse to launch on a fresh macOS profile
+            # — exactly the "never opens again" failure mode we shipped to
+            # production in the past. Treat as a hard release gate.
+            if xattr -l "$APP" 2>/dev/null | grep -q 'com.apple.quarantine'; then
+              echo "::error::Natively.app carries com.apple.quarantine — would refuse to launch on a fresh macOS profile. Re-run electron-builder to clean the build artifact."
+              exit 1
+            fi
             echo "::endgroup::"
           done
           # DMGs are signed + notarized + stapled by scripts/afterAllArtifactBuild.cjs.
@@ -144,8 +154,43 @@ jobs:
             echo "::group::Verifying dmg: $DMG"
             xcrun stapler validate "$DMG"            # hard requirement
             spctl -a -vvv -t open --context context:primary-signature "$DMG" || true  # informational
+            # 2026-07-08: same quarantine gate for the DMG.
+            if xattr -l "$DMG" 2>/dev/null | grep -q 'com.apple.quarantine'; then
+              echo "::error::$DMG carries com.apple.quarantine. The .dmg would not auto-mount cleanly on a fresh macOS profile. Re-run electron-builder."
+              exit 1
+            fi
             echo "::endgroup::"
           done
+
+      # Required packaged local-fallback assets (ONNX/Transformers deps + bundled
+      # MiniLM/MobileBERT models + local ONNX worker scripts). The packaged app
+      # must work on a clean machine with no Ollama, no API keys, no internet.
+      - name: Verify packaged local fallback assets (per-arch)
+        run: |
+          set -euo pipefail
+          APPS=$(find release -maxdepth 2 -name 'Natively.app' -path '*mac*')
+          if [ -z "$APPS" ]; then echo "No Natively.app found in release/"; exit 1; fi
+          for APP in $APPS; do
+            echo "::group::Verify packaged local assets: $APP"
+            node scripts/verify-packaged-local-assets.mjs --app "$APP"
+            echo "::endgroup::"
+          done
+
+      # Runtime gate: actually launch the packaged app with no Ollama and no
+      # API keys and assert the local fallback preflight passes. This is the
+      # only step that proves the packaged binary really works on a clean
+      # machine — the static verifier above can pass even when the runtime
+      # worker load path is broken. Uses arm64 to match the runner.
+      - name: Packaged no-Ollama no-keys smoke (arm64)
+        run: |
+          set -euo pipefail
+          APPS=$(find release -maxdepth 2 -name 'Natively.app' -path '*mac*')
+          if [ -z "$APPS" ]; then echo "No Natively.app found in release/"; exit 1; fi
+          APP=$(echo "$APPS" | tr ' ' '\n' | grep arm64 | head -n1)
+          if [ -z "$APP" ]; then echo "No arm64 Natively.app found"; exit 1; fi
+          echo "::group::Smoke: $APP"
+          node scripts/smoke-packaged-local-fallback.mjs --app "$APP" --no-ollama --no-keys
+          echo "::endgroup::"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

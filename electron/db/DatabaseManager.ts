@@ -125,6 +125,49 @@ export class DatabaseManager {
     }
 
     /**
+     * Truncate the WAL file by running a `PRAGMA wal_checkpoint(TRUNCATE)`.
+     * On a force-quit or a crash mid-write, the `-wal` file is left in an
+     * inconsistent state and the next launch's `new Database(dbPath)` may
+     * either hang on a kernel lock the OS thinks is held, or read partial
+     * committed data. This call is best-effort: if it fails (db is null or
+     * the connection is closed) it does nothing. Should be called from
+     * `before-quit` AND from any force-quit-handler path so a SIGKILL of
+     * the Electron main process is the ONLY way the WAL stays dirty.
+     *
+     * This is the missing piece for the "fresh-profile crash, never opens
+     * again" bug: a half-written .db-wal on a brand-new install would lock
+     * the next launch's `new Database(dbPath)` against a phantom lock.
+     */
+    public checkpoint(): void {
+        if (!this.db) return;
+        try {
+            this.db.pragma('wal_checkpoint(TRUNCATE)');
+        } catch (e: any) {
+            // best-effort: a checkpoint failure should not block shutdown.
+            console.warn('[DatabaseManager] wal_checkpoint(TRUNCATE) failed:', e?.message || e);
+        }
+    }
+
+    /**
+     * Close the better-sqlite3 connection cleanly. After this, all public
+     * methods are no-ops (db is null). Idempotent. Safe to call from
+     * `before-quit` AND from the `window-all-closed` handler so the
+     * launcher hides-to-tray path also releases the connection.
+     */
+    public close(): void {
+        if (!this.db) return;
+        try {
+            this.db.pragma('wal_checkpoint(TRUNCATE)');
+        } catch { /* best-effort */ }
+        try {
+            this.db.close();
+        } catch (e: any) {
+            console.warn('[DatabaseManager] close failed:', e?.message || e);
+        }
+        this.db = null;
+    }
+
+    /**
      * The error that caused initialization to fail, if any. Lets the app surface
      * a single user-facing banner (e.g. "Local database unavailable — meeting
      * history disabled") instead of relying on log scraping.

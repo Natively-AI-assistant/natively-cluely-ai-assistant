@@ -56,6 +56,11 @@ interface ElectronAPI {
     isOllama: boolean;
   }>;
   getAvailableOllamaModels: () => Promise<string[]>;
+  getProviderStatuses: () => Promise<any[]>;
+  getProviderStatus: (id: string) => Promise<any | null>;
+  onProviderStatusChanged: (callback: (status: any) => void) => () => void;
+  getLocalFallbackPreflight: () => Promise<any | null>;
+  runLocalFallbackPreflight: () => Promise<any>;
   switchToOllama: (model?: string, url?: string) => Promise<{ success: boolean; error?: string }>;
   switchToGemini: (
     apiKey?: string,
@@ -1252,6 +1257,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // LLM Model Management
   getCurrentLlmConfig: () => ipcRenderer.invoke('get-current-llm-config'),
   getAvailableOllamaModels: () => ipcRenderer.invoke('get-available-ollama-models'),
+  getProviderStatuses: () => ipcRenderer.invoke('get-provider-statuses'),
+  getProviderStatus: (id: string) => ipcRenderer.invoke('get-provider-status', id),
+  onProviderStatusChanged: (callback: (status: any) => void) => {
+    const subscription = (_: any, status: any) => callback(status);
+    ipcRenderer.on('provider-status-changed', subscription);
+    return () => ipcRenderer.removeListener('provider-status-changed', subscription);
+  },
+  getLocalFallbackPreflight: () => ipcRenderer.invoke('get-local-fallback-preflight'),
+  runLocalFallbackPreflight: () => ipcRenderer.invoke('run-local-fallback-preflight'),
   switchToOllama: (model?: string, url?: string) =>
     ipcRenderer.invoke('switch-to-ollama', model, url),
   switchToGemini: (apiKey?: string, modelId?: string) =>

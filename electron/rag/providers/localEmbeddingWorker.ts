@@ -23,6 +23,7 @@
 
 import { parentPort } from 'worker_threads';
 import { getBoundedOnnxSessionOptions } from '../../utils/onnxThreadConfig';
+import { classifyWorkerFailure } from '../../utils/workerStatus';
 
 if (!parentPort) throw new Error('localEmbeddingWorker must be run as a Worker thread');
 
@@ -56,6 +57,7 @@ async function ensureLoaded(msg: any): Promise<void> {
       session_options: getBoundedOnnxSessionOptions(),
     });
     console.log('[LocalEmbeddingWorker] Feature-extraction model loaded successfully.');
+    parentPort!.postMessage({ type: 'status', status: { type: 'ready', backend: 'onnx', modelPath: msg.modelPath } });
   })();
 
   try {
@@ -63,6 +65,17 @@ async function ensureLoaded(msg: any): Promise<void> {
   } catch (e) {
     loadingPromise = null;
     pipe = null;
+    const failure = classifyWorkerFailure(e);
+    parentPort!.postMessage({
+      type: 'status',
+      status: {
+        type: failure.recoverable ? 'degraded' : 'failed',
+        backend: 'none',
+        reason: failure.reason,
+        message: failure.message,
+        recoverable: failure.recoverable,
+      },
+    });
     throw e;
   }
 }

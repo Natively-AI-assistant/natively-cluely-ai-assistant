@@ -25,6 +25,8 @@ import { app } from 'electron';
 import { IEmbeddingProvider } from './IEmbeddingProvider';
 import { embeddingSpaceKey } from '../embeddingSpace';
 import { acquireOnnxSlot, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSession } from '../../utils/onnxThreadConfig';
+import { ProviderStatusRegistry } from '../../services/ProviderStatusRegistry';
+import type { LocalWorkerStatus } from '../../utils/workerStatus';
 
 const WORKER_INIT_TIMEOUT_MS = 60_000; // model load (cold disk read + ORT session init)
 const WORKER_EMBED_TIMEOUT_MS = 30_000; // a single embed()/embedBatch() call
@@ -41,6 +43,8 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   private loadingPromise: Promise<void> | null = null; // prevents concurrent init races
   private loaded = false;
   private slotRelease: (() => void) | null = null;
+  private lastWorkerStatus: LocalWorkerStatus | null = null;
+  private nonRecoverableLoadError: Error | null = null;
   private modelPath: string;
 
   constructor() {
@@ -97,8 +101,12 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     if (!this.worker) {
       this.worker = new Worker(this.getWorkerPath());
 
-      this.worker.on('message', (msg: { type: string; requestId: number; vectors?: number[][]; error?: string }) => {
-        const pending = this.pendingRequests.get(msg.requestId);
+      this.worker.on('message', (msg: { type: string; requestId?: number; vectors?: number[][]; error?: string; status?: LocalWorkerStatus }) => {
+        if (msg.type === 'status' && msg.status) {
+          this.handleWorkerStatus(msg.status);
+          return;
+        }
+        const pending = this.pendingRequests.get(msg.requestId as number);
         if (!pending) return;
         clearTimeout(pending.timer);
         this.pendingRequests.delete(msg.requestId);
@@ -114,6 +122,11 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
         console.error('[LocalEmbeddingProvider] Worker error:', err);
         this.loaded = false;
         this.loadingPromise = null;
+        // Worker died mid-load — latch non-recoverable so future embed
+        // calls don't spin up a fresh worker against the same broken asset.
+        if (!this.loaded && !this.nonRecoverableLoadError) {
+          this.latchNonRecoverableLoadError(`Worker error before ready: ${err?.message || err}`);
+        }
         if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
         this.rejectAllPending(err);
       });
@@ -127,6 +140,9 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
         this.loadingPromise = null;
         if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
         this.rejectAllPending(new Error(`Worker exited with code ${code}`));
+        if (!this.loaded && !this.nonRecoverableLoadError) {
+          this.latchNonRecoverableLoadError(`Worker exited with code ${code} before model loaded`);
+        }
       });
     }
     return this.worker;
@@ -138,6 +154,71 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       pending.reject(err);
     }
     this.pendingRequests.clear();
+  }
+
+  private handleWorkerStatus(status: LocalWorkerStatus): void {
+    this.lastWorkerStatus = status;
+    if (status.type === 'ready') {
+      ProviderStatusRegistry.getInstance().setStatus({
+        id: 'local-embedding',
+        kind: 'packaged_local',
+        health: 'ready',
+        requiredForStartup: false,
+        requiredForCoreFallback: true,
+        message: 'Local embedding fallback ready',
+        recoverable: true,
+        details: { backend: status.backend, modelPath: status.modelPath },
+      });
+      return;
+    }
+    if (!status.recoverable) {
+      this.nonRecoverableLoadError = new Error(status.message);
+    }
+    ProviderStatusRegistry.getInstance().setStatus({
+      id: 'local-embedding',
+      kind: 'packaged_local',
+      health: status.recoverable ? 'degraded' : 'missing_required_asset',
+      requiredForStartup: false,
+      requiredForCoreFallback: true,
+      // Human-readable status; `details.reason` carries the debug classification.
+      message: status.recoverable
+        ? 'Local embedding fallback running in degraded mode. Some semantic search features may be slower or less accurate.'
+        : 'Natively local embedding fallback assets are missing or corrupted. Please reinstall Natively.',
+      recoverable: status.recoverable,
+      details: { backend: status.backend, reason: status.reason, error: status.message },
+    });
+  }
+
+  getStatus(): LocalWorkerStatus | null {
+    return this.lastWorkerStatus ? { ...this.lastWorkerStatus } : null;
+  }
+
+  /**
+   * Test-only: returns the synthetic non-recoverable load error if the worker
+   * latch has been triggered. Returns null otherwise.
+   */
+  __getNonRecoverableLoadError(): Error | null {
+    return this.nonRecoverableLoadError;
+  }
+
+  /**
+   * Latch a synthetic non-recoverable failure when the worker dies before
+   * the model is fully loaded. Idempotent. Mirrors IntentClassifier's latch
+   * so the retry-on-every-call pathology can't happen against a missing
+   * packaged asset.
+   */
+  private latchNonRecoverableLoadError(message: string): void {
+    this.nonRecoverableLoadError = new Error(message);
+    ProviderStatusRegistry.getInstance().setStatus({
+      id: 'local-embedding',
+      kind: 'packaged_local',
+      health: 'missing_required_asset',
+      requiredForStartup: false,
+      requiredForCoreFallback: true,
+      message: 'Natively local embedding fallback assets are missing or corrupted. Please reinstall Natively.',
+      recoverable: false,
+      details: { reason: 'worker-died-before-ready', error: message },
+    });
   }
 
   private postToWorker<T>(message: any, timeoutMs: number): Promise<T> {
@@ -188,6 +269,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
 
   private async ensureLoaded(): Promise<void> {
     if (this.loaded) return;
+    if (this.nonRecoverableLoadError) throw this.nonRecoverableLoadError;
 
     // If another caller already kicked off loading, wait for that same promise
     // rather than launching a second concurrent init.

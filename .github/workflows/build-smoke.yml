@@ -40,6 +40,16 @@ jobs:
       - name: Verify packaged entrypoint exists
         run: test -f dist-electron/electron/main.js
 
+      # Required packaged local-fallback assets (ONNX/Transformers deps +
+      # bundled MiniLM/MobileBERT models + local ONNX worker scripts). Fail the
+      # build here if any required core-fallback asset is missing — the app must
+      # work on a clean machine with no Ollama and no API keys.
+      - name: Verify required local models present
+        run: node scripts/download-models.js --verify
+
+      - name: Verify packaged local fallback assets (source mode)
+        run: npm run verify:packaged-local-assets
+
       - name: Run Electron unit tests
         run: npm test
 

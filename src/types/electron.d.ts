@@ -117,6 +117,15 @@ export interface ElectronAPI {
   // LLM Model Management
   getCurrentLlmConfig: () => Promise<{ provider: "ollama" | "gemini" | "custom" | "codex-cli"; model: string; isOllama: boolean }>
   getAvailableOllamaModels: () => Promise<string[]>
+  getProviderStatuses: () => Promise<any[]>
+  getProviderStatus: (id: string) => Promise<any | null>
+  onProviderStatusChanged: (callback: (status: any) => void) => () => void
+  // Returns the latest local-fallback preflight result, or `null` if the
+  // preflight has not yet run. The preflight is scheduled ~1.5s after the
+  // main window is created. Call `runLocalFallbackPreflight()` to force a
+  // fresh run.
+  getLocalFallbackPreflight: () => Promise<any | null>
+  runLocalFallbackPreflight: () => Promise<any>
   switchToOllama: (model?: string, url?: string) => Promise<{ success: boolean; error?: string }>
   switchToGemini: (apiKey?: string, modelId?: string) => Promise<{ success: boolean; error?: string }>
   testLlmConnection: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', apiKey?: string) => Promise<{ success: boolean; error?: string }>

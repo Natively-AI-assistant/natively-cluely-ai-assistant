@@ -11,6 +11,8 @@ import path from 'path';
 import { Worker } from 'worker_threads';
 import { app } from 'electron';
 import { acquireOnnxSlot, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSession } from '../utils/onnxThreadConfig';
+import { ProviderStatusRegistry } from '../services/ProviderStatusRegistry';
+import type { LocalWorkerStatus } from '../utils/workerStatus';
 
 export type ConversationIntent =
     | 'clarification'      // "Can you explain that?"
@@ -82,6 +84,8 @@ class ZeroShotClassifier {
     private loadFailed = false;
     private loaded = false;
     private slotRelease: (() => void) | null = null;
+    private lastWorkerStatus: LocalWorkerStatus | null = null;
+    private nonRecoverableLoadError: Error | null = null;
 
     private static readonly WORKER_TIMEOUT_MS = 30_000;
 
@@ -112,8 +116,12 @@ class ZeroShotClassifier {
         if (!this.worker) {
             this.worker = new Worker(this.getWorkerPath());
 
-            this.worker.on('message', (msg: { type: string; requestId: number; labels?: string[]; scores?: number[]; error?: string }) => {
-                const pending = this.pendingRequests.get(msg.requestId);
+            this.worker.on('message', (msg: { type: string; requestId?: number; labels?: string[]; scores?: number[]; error?: string; status?: LocalWorkerStatus }) => {
+                if (msg.type === 'status' && msg.status) {
+                    this.handleWorkerStatus(msg.status);
+                    return;
+                }
+                const pending = this.pendingRequests.get(msg.requestId as number);
                 if (!pending) return;
                 clearTimeout(pending.timer);
                 this.pendingRequests.delete(msg.requestId);
@@ -129,6 +137,15 @@ class ZeroShotClassifier {
                 console.warn('[IntentClassifier] Worker error, regex-only fallback until retry:', err);
                 this.loaded = false;
                 this.loadingPromise = null;
+                // Worker died mid-load (no `ready` arrived) — treat the failure
+                // as non-recoverable so future calls don't spin up a fresh
+                // worker against the same broken asset. Latching prevents the
+                // infinite-retry loop a missing packaged model would otherwise
+                // cause. A diagnostics-driven "reset and retry" path can
+                // explicitly clear this latch when the user reinstalls.
+                if (!this.loaded && !this.nonRecoverableLoadError) {
+                    this.latchNonRecoverableLoadError(`Worker error before ready: ${err?.message || err}`);
+                }
                 if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
                 this.rejectAllPending(err);
             });
@@ -142,6 +159,12 @@ class ZeroShotClassifier {
                 this.loadingPromise = null;
                 if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
                 this.rejectAllPending(new Error(`Worker exited with code ${code}`));
+                // If we never reached `loaded` and the latch hasn't been set,
+                // this exit was the load-failure case. Classify the failure
+                // so the diagnostics surface a reinstall-required message.
+                if (!this.loaded && !this.nonRecoverableLoadError) {
+                    this.latchNonRecoverableLoadError(`Worker exited with code ${code} before model loaded`);
+                }
             });
         }
         return this.worker;
@@ -153,6 +176,65 @@ class ZeroShotClassifier {
             pending.reject(err);
         }
         this.pendingRequests.clear();
+    }
+
+    private handleWorkerStatus(status: LocalWorkerStatus): void {
+        this.lastWorkerStatus = status;
+        if (status.type === 'ready') {
+            ProviderStatusRegistry.getInstance().setStatus({
+                id: 'intent-classifier',
+                kind: 'packaged_local',
+                health: 'ready',
+                requiredForStartup: false,
+                requiredForCoreFallback: true,
+                message: 'Intent classifier ready',
+                recoverable: true,
+                details: { backend: status.backend, modelPath: status.modelPath },
+            });
+            return;
+        }
+        if (!status.recoverable) {
+            this.nonRecoverableLoadError = new Error(status.message);
+        }
+        ProviderStatusRegistry.getInstance().setStatus({
+            id: 'intent-classifier',
+            kind: 'packaged_local',
+            health: status.recoverable ? 'degraded' : 'missing_required_asset',
+            requiredForStartup: false,
+            requiredForCoreFallback: true,
+            // Human-readable status; `details.reason` carries the debug
+            // classification (module-missing / native-addon-missing / etc.)
+            // for the renderer's diagnostic UI.
+            message: status.recoverable
+                ? 'Intent classifier running in fallback mode (regex + heuristics). Smart suggestions may be less accurate.'
+                : 'Natively local classifier assets are missing or corrupted. Please reinstall Natively.',
+            recoverable: status.recoverable,
+            details: { backend: status.backend, reason: status.reason, error: status.message },
+        });
+    }
+
+    getStatus(): LocalWorkerStatus | null {
+        return this.lastWorkerStatus ? { ...this.lastWorkerStatus } : null;
+    }
+
+    /**
+     * Latch a synthetic non-recoverable failure when the worker dies before
+     * the model is fully loaded. Publishes a fresh ProviderStatus so the
+     * renderer can show "reinstall required" without waiting for the next
+     * user-driven classify call. Idempotent.
+     */
+    private latchNonRecoverableLoadError(message: string): void {
+        this.nonRecoverableLoadError = new Error(message);
+        ProviderStatusRegistry.getInstance().setStatus({
+            id: 'intent-classifier',
+            kind: 'packaged_local',
+            health: 'missing_required_asset',
+            requiredForStartup: false,
+            requiredForCoreFallback: true,
+            message: 'Natively local classifier assets are missing or corrupted. Please reinstall Natively.',
+            recoverable: false,
+            details: { reason: 'worker-died-before-ready', error: message },
+        });
     }
 
     private postToWorker<T>(message: any): Promise<T> {
@@ -186,6 +268,7 @@ class ZeroShotClassifier {
      */
     private async ensureLoaded(): Promise<void> {
         if (this.loaded) return;
+        if (this.nonRecoverableLoadError) return;
         if (this.loadFailed) return;
 
         if (this.loadingPromise) {

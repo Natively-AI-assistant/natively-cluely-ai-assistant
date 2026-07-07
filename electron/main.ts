@@ -512,6 +512,7 @@ import { PhoneMirrorService } from "./services/PhoneMirrorService"
 import { setVerboseLoggingFlag } from "./verboseLog"
 import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
+import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
 
 // Valid disguise modes. The persisted setting is untyped on disk and historical
@@ -1031,6 +1032,10 @@ export class AppState {
     } catch { /* optional */ }
 
     this.setupIntelligenceEvents()
+
+    ProviderStatusRegistry.getInstance().setBroadcaster((channel, payload) => {
+      this.broadcast(channel, payload);
+    });
 
     // Intent-classifier warmup is scheduled after the launcher is visible so
     // transformers/ONNX initialization cannot contend with the first paint.
@@ -6022,8 +6027,30 @@ async function initializeApp() {
   // Apply the full disguise payload (names, dock icon, AUMID) early
   appState.applyInitialDisguise();
 
-  // Start the Ollama lifecycle manager
-  OllamaManager.getInstance().init().catch(console.error);
+  // Ollama is an external optional provider. Do not spawn it on startup unless
+  // the user explicitly selected/opted into it; Natively's packaged fallback
+  // stack must work without Ollama installed.
+  try {
+    const settingsManager = SettingsManager.getInstance();
+    const defaultModel = CredentialsManager.getInstance().getDefaultModel();
+    const shouldStartOllama =
+      settingsManager.get('autoStartOllama') === true ||
+      defaultModel.startsWith('ollama-') ||
+      defaultModel.startsWith('ollama:') ||
+      process.env.NATIVELY_AUTO_START_OLLAMA === '1';
+    if (shouldStartOllama) {
+      OllamaManager.getInstance().ensureRunning({
+        reason: settingsManager.get('autoStartOllama') === true ? 'auto-start-setting' : 'startup-selected',
+        selectedModel: defaultModel,
+      }).catch((err: any) => console.warn('[OllamaManager] Startup ensureRunning failed (non-fatal):', err?.message || err));
+    } else {
+      OllamaManager.getInstance().skipStartup('Ollama not selected; startup skipped');
+      console.log('[OllamaManager] Skipping Ollama startup; Ollama provider not selected');
+    }
+  } catch (err: any) {
+    console.warn('[OllamaManager] Startup selection check failed (non-fatal):', err?.message || err);
+    OllamaManager.getInstance().skipStartup('Ollama startup skipped after selection check failure');
+  }
 
   // NOTE: CredentialsManager.init() and loadStoredCredentials() are already called
   // above before this block — do NOT call them again here to avoid double key-load.
@@ -6141,6 +6168,35 @@ if (process.env.THINKING_MATRIX === '1') {
   }
 
   appState.createWindow()
+
+  // Run the local-fallback preflight AFTER the launcher paints. We schedule
+  // it via setTimeout so the visible launch is not blocked by:
+  //   - native module requires (onnxruntime-node, sqlite-vec)
+  //   - transformers.js / @huggingface/transformers probe
+  //   - reading the bundled model file sizes
+  // The preflight itself never blocks the main thread for more than a few
+  // hundred ms; we add a second safety net: if the app is quitting when
+  // the timer fires, skip the preflight (its writes to ProviderStatusRegistry
+  // would still succeed but its reads of process.resourcesPath / app.getPath
+  // can throw during teardown). Also wrapped in try/catch so a synchronous
+  // throw in the require() or in runLocalFallbackPreflight cannot crash
+  // the main process. Idempotent: runLocalFallbackPreflight is single-flighted.
+  const preflightTimer = setTimeout(() => {
+    if (appState.isQuitting?.()) {
+      console.log('[LocalFallbackPreflight] skipped — app is quitting');
+      return;
+    }
+    try {
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      const { runLocalFallbackPreflight } = require('./services/LocalFallbackPreflight');
+      runLocalFallbackPreflight({ ollamaSelected: llmHelper.isUsingOllama?.() === true })
+        .catch((err: any) => console.warn('[LocalFallbackPreflight] failed to run (non-fatal):', err?.message || err));
+    } catch (err: any) {
+      console.warn('[LocalFallbackPreflight] scheduling failed (non-fatal):', err?.message || err);
+    }
+  }, Number(process.env.NATIVELY_LOCAL_PREFLIGHT_DELAY_MS || '1500'));
+  // Don't let the preflight timer keep the process alive past quit.
+  if (preflightTimer && typeof preflightTimer.unref === 'function') preflightTimer.unref();
 
   // Defer the zero-shot intent classifier warmup until after the launcher has
   // had a chance to paint and settle. The classifier still lazy-loads on first
@@ -6379,6 +6435,34 @@ if (process.env.THINKING_MATRIX === '1') {
     console.log("App is quitting, cleaning up resources...");
     appState.setQuitting(true);
 
+    // Stop the default-output watcher immediately after setting the quitting
+    // flag so any straggler interval tick observes _isQuitting before native
+    // audio handles start tearing down.
+    try {
+      appState.stopDefaultOutputWatcherForShutdown?.();
+    } catch (e) {
+      console.error('[main] Failed to stop DefaultOutputWatcher during shutdown:', e);
+    }
+
+    // 2026-07-08: TRUNCATE the SQLite WAL file early in shutdown.
+    // On a force-quit (e.g. user ⌘Q during a meeting, macOS sending
+    // SIGKILL after a hang, or `kill -9` from the auto-update flow) the
+    // `-wal` file may be left mid-transaction. The next launch's
+    // `new Database(dbPath)` then either:
+    //   1. Hangs on a kernel lock the OS believes is held by the dead
+    //      process (the user sees a frozen launcher), or
+    //   2. Reads partial data, fails a migration, and degrades to
+    //      `db: null` silently.
+    // PRAGMA wal_checkpoint(TRUNCATE) is synchronous and fast (<5ms
+    // typically) and writes any pending WAL frames to the main .db
+    // before exit. Idempotent and safe to call even when db is null.
+    try {
+      const { DatabaseManager } = require('./db/DatabaseManager');
+      DatabaseManager.getInstance().checkpoint();
+    } catch (e) {
+      console.warn('[main] DatabaseManager.checkpoint failed (non-fatal):', e);
+    }
+
     // Stop an app-managed Hindsight server SYNCHRONOUSLY (kills the detached process group
     // → no orphaned Python/Postgres). No-op unless we spawned one. Must be sync: the app
     // can exit before any async kill completes.
@@ -6403,16 +6487,6 @@ if (process.env.THINKING_MATRIX === '1') {
           .catch(() => {});
       }
     } catch { /* optional */ }
-
-    // Stop the default-output watcher so the setInterval doesn't keep calling
-    // into the native module while V8 is tearing down. Without this, quitting
-    // mid-meeting extends shutdown by 1–2s on slow CoreAudio teardown because
-    // the next tick fires after Electron has begun releasing native handles.
-    try {
-      appState.stopDefaultOutputWatcherForShutdown?.();
-    } catch (e) {
-      console.error('[main] Failed to stop DefaultOutputWatcher during shutdown:', e);
-    }
 
     // Local-model download service: synchronously flush the in-flight state
     // map to disk and terminate every live worker. Without this, a quit
@@ -6483,6 +6557,21 @@ if (process.env.THINKING_MATRIX === '1') {
       console.error('[Main] PhoneMirror dispose failed:', err)
     );
 
+    // Best-effort WAL checkpoint so a crash/force-quit followed by immediate
+    // relaunch has less recovery work and fewer chances to trip over a large
+    // or stale natively.db-wal. Must be synchronous and must never block quit.
+    // 2026-07-08: now uses the new `close()` method which checkpoints AND
+    // closes the better-sqlite3 connection so the file lock is released
+    // before the process exits. A stale lock on a brand-new user profile
+    // would cause the next launch to hang on `new Database(dbPath)`.
+    try {
+      const { DatabaseManager } = require('./db/DatabaseManager');
+      const dbMgr = DatabaseManager.getInstance();
+      dbMgr.checkpoint?.();
+      dbMgr.close?.();
+    } catch (e) {
+      console.error('[Main] Failed to checkpoint/close database during shutdown:', e);
+    }
 
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
