@@ -1,3 +1,13 @@
+// ============================================================================
+// NATIVE-ARCH BOOT GATE — see electron/nativeArchGate.ts.
+//
+// This MUST be the first import in this file. esbuild hoists all imports
+// to the top of the bundled init_main() function in source order; by
+// placing the gate first, we ensure init_nativeArchGate() runs before
+// init_DatabaseManager() (which is what loads better-sqlite3).
+// ============================================================================
+import './nativeArchGate';
+
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPreferences, screen, desktopCapturer } from "electron"
 import * as crypto from "crypto"
 import path from "path"
@@ -34,7 +44,6 @@ dns.lookup = function(hostname: any, options: any, callback: any) {
 if (!app.isPackaged) {
   require('dotenv').config();
 }
-
 
 /**
  * Whether THIS build carries a real Developer ID signature.
@@ -81,6 +90,31 @@ process.stdout?.on?.('error', () => { });
 process.stderr?.on?.('error', () => { });
 
 process.on('uncaughtException', (err) => {
+  // First-line handler for the native-arch gate (thrown synchronously at
+  // module-load above) and any other uncaught errors. The arch gate's
+  // error message starts with '[nativeArch]' — for those, render the
+  // copy-pasteable fix dialog and exit 1. For everything else, fall
+  // through to the original logToFile behavior.
+  if (err instanceof Error && err.message.startsWith('[nativeArch]')) {
+    const detail = err.message.replace(/^\[nativeArch\]\s*/, '').replace(/^Architecture mismatch:\s*/, '');
+    try {
+      // Lazy-require electron so this handler doesn't fire before
+      // app.whenReady() if the bundle is loaded in a non-Electron context.
+      const { dialog, app: electronApp } = require('electron');
+      // showErrorBox is modal and blocks until the user clicks OK.
+      dialog.showErrorBox(
+        'Native modules are wrong architecture — run this command to fix:',
+        detail,
+      );
+      electronApp.exit(1);
+    } catch {
+      // Electron not loaded (running under bare Node in a test) — exit
+      // cleanly with the error text on stderr.
+      console.error('[nativeArch] ' + detail);
+      process.exit(1);
+    }
+    return;
+  }
   logToFile('[CRITICAL] Uncaught Exception: ' + redactArgsForLog([err]));
 });
 
@@ -1157,6 +1191,28 @@ export class AppState {
   private async bootstrapOllamaEmbeddings() {
     this._ollamaBootstrapPromise = (async () => {
       try {
+        // SKIP when a cloud embedding provider is already available. Pulling the
+        // 274MB `nomic-embed-text` on first launch is pure waste for users who
+        // have an OpenAI/Gemini key (the RAG pipeline resolves to that cloud
+        // provider anyway), and the background pull was racing the ModelSelector
+        // window's forceRestartOllama `kill -9` — leaving a "Setting up AI
+        // memory… 0%" pill stuck forever. Only bootstrap Ollama embeddings when
+        // there is NO cloud key, i.e. Ollama is genuinely the intended provider.
+        try {
+          const { CredentialsManager } = require('./services/CredentialsManager');
+          const cm = CredentialsManager.getInstance();
+          const hasCloudEmbeddingKey =
+            !!(cm.getOpenaiApiKey() || process.env.OPENAI_API_KEY) ||
+            !!(cm.getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY);
+          if (hasCloudEmbeddingKey) {
+            console.log('[AppState] Skipping Ollama embeddings bootstrap — a cloud embedding provider is configured.');
+            return;
+          }
+        } catch (guardErr: any) {
+          // Credential lookup failed — fall through and attempt the bootstrap.
+          console.warn('[AppState] Ollama bootstrap cloud-key guard failed (non-fatal):', guardErr?.message);
+        }
+
         const { OllamaBootstrap } = require('./rag/OllamaBootstrap');
         const bootstrap = new OllamaBootstrap();
 

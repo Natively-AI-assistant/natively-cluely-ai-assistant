@@ -11,8 +11,9 @@
     "build:electron:tsc": "tsc -p electron/tsconfig.json",
     "typecheck:electron": "tsc -p electron/tsconfig.json --noEmit",
     "preview": "vite preview",
-    "postinstall": "cross-env SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm rebuild sharp && node scripts/rebuild-native-electron.js && node scripts/download-models.js && node scripts/ensure-sqlite-vec.js && node scripts/patch-electron-plist.js && node scripts/verify-native-arch.js",
+    "postinstall": "patch-package && cross-env SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm rebuild sharp && node scripts/rebuild-native-electron.js && node scripts/download-models.js && node scripts/ensure-sqlite-vec.js && node scripts/patch-electron-plist.js && node scripts/verify-native-arch.js",
     "rebuild:native": "node scripts/rebuild-native-electron.js && node scripts/verify-native-arch.js",
+    "prepare": "husky",
     "electron:dev": "npm run build && npm run build:electron && cross-env NODE_ENV=development electron .",
     "electron:build": "npm run build:electron && cross-env NODE_ENV=production electron .",
     "app:dev": "concurrently \"npm run dev -- --port 5180 --strictPort\" \"wait-on http://localhost:5180 && npm run electron:dev\"",
@@ -100,7 +101,11 @@
       "**/intentClassifierWorker.js",
       "**/localEmbeddingWorker.js",
       "**/localRerankerWorker.js",
-      "**/node_modules/@huggingface/transformers/**"
+      "**/node_modules/@huggingface/transformers/**",
+      "**/node_modules/@huggingface/jinja/**",
+      "**/node_modules/onnxruntime-common/**",
+      "**/node_modules/onnxruntime-node/**",
+      "**/node_modules/onnxruntime-web/**"
     ],
     "directories": {
       "output": "release",
@@ -230,6 +235,8 @@
     "electron-builder": "^26.8.1",
     "electron-is-dev": "^3.0.1",
     "electron-rebuild": "^3.2.9",
+    "husky": "^9.1.7",
+    "patch-package": "^8.0.1",
     "postcss": "^8.4.49",
     "react-doctor": "^0.2.10",
     "rimraf": "^6.0.1",
