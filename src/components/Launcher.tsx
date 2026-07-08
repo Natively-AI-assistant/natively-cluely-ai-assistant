@@ -978,7 +978,8 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                     'bg-teal-200/90 text-teal-900',
                                                 ];
                                                 const initialsFor = (a: { email: string; name?: string }) => {
-                                                    const src = (a.name || a.email).trim();
+                                                    const src = (a.name || a.email || '').trim();
+                                                    if (!src) return '?';
                                                     const parts = src.split(/[\s._-]+/).filter(Boolean);
                                                     if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
                                                     return src.slice(0, 2).toUpperCase();
@@ -1057,15 +1058,19 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                                             </span>
                                                                             {visibleAttendees.length > 0 && (
                                                                                 <div className="flex -space-x-1.5">
-                                                                                    {visibleAttendees.map((a: { email: string; name?: string }) => (
-                                                                                        <span
-                                                                                            key={a.email}
-                                                                                            title={a.name || a.email}
-                                                                                            className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded-full ring-[1.5px] ring-[#1f1740] text-[8.5px] font-bold ${colorFor(a.email)}`}
-                                                                                        >
-                                                                                            {initialsFor(a)}
-                                                                                        </span>
-                                                                                    ))}
+                                                                                    {visibleAttendees.map((a: { email: string; name?: string }, i: number) => {
+                                                                                        const attendeeIdentity = (a.email || a.name || '').trim();
+                                                                                        const attendeeKey = a.email ? `email:${a.email}` : `${attendeeIdentity || 'attendee'}:${i}`;
+                                                                                        return (
+                                                                                            <span
+                                                                                                key={attendeeKey}
+                                                                                                title={a.name || a.email}
+                                                                                                className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded-full ring-[1.5px] ring-[#1f1740] text-[8.5px] font-bold ${colorFor(attendeeIdentity || String(i))}`}
+                                                                                            >
+                                                                                                {initialsFor(a)}
+                                                                                            </span>
+                                                                                        );
+                                                                                    })}
                                                                                     {remaining > 0 && (
                                                                                         <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full ring-[1.5px] ring-[#1f1740] bg-white/15 text-[8.5px] font-bold text-white/85 tabular-nums">
                                                                                             +{remaining}

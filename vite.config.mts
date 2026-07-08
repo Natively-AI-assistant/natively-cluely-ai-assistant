@@ -39,7 +39,11 @@ export default defineConfig({
         },
     },
     build: {
-        chunkSizeWarningLimit: 1000,
+        // Electron ships these assets locally; our production budget is based on
+        // gzip size (<500kB for the main chunk), while Vite warns on raw minified
+        // bytes. Keep the threshold aligned with the current deliberate split so
+        // real regressions still surface without blocking release builds on noise.
+        chunkSizeWarningLimit: 1500,
         rollupOptions: {
             // Pin the entry to the app's index.html so Vite doesn't auto-
             // discover natively-browser/src/popup.html (extension builds via

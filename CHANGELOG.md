@@ -38,6 +38,18 @@
 
     - **Renderer diagnostics now reach the log file** (`electron/WindowHelper.ts`, `src/main.tsx`). The main process logged everything but the renderer logged nothing to `~/Documents/natively_debug.log` — which is exactly why the first three "stuck at logo" logs were silent about the renderer. Added `WindowHelper.attachRendererDiagnostics(win, tag)` (launcher + overlay) capturing `console-message` (warn+error), `render-process-gone` (crash + reason/exitCode), `unresponsive`/`responsive` (hang = "stuck at logo"), `did-finish-load`/`dom-ready` (bundle-evaluated proof), and `preload-error`; plus `src/main.tsx` global `error`/`unhandledrejection` handlers, a `[renderer] main.tsx evaluating` marker, and a try/catch around React mount with a `#root not found` fatal log. A future crash or hang on a user's machine now leaves a precise trace.
 
+    ### Renderer console hygiene (2026-07-08) — clean startup logs for release
+
+    Renderer-side warnings surfacing on every dev boot that needed to be silent before the next production release. None are crashes or functional bugs, but together they make production logs look noisier than the app actually is. All fixes verified via `npm run build`, `npm run typecheck:electron`, and `npm run build:electron`.
+
+    - **`onConnect` no longer leaks onto the DOM `<button>`** (`src/components/ui/ConnectCalendarButton.tsx`). The custom callback prop was declared on `ConnectCalendarButtonProps` and consumed internally via `props.onConnect?.()`, but it was never destructured before spreading `...props` onto the native button, so React forwarded `onConnect` to the DOM and emitted `Warning: Unknown event handler property 'onConnect'. It will be ignored.` on every launcher mount. Now destructured alongside `className`/`variant`, with both call sites repointed to the local `onConnect`. The persisted-status mount check is intentionally pinned to `[]` with an `eslint-disable react-hooks/exhaustive-deps` so the unmemoized inline callback the Launcher passes (`onConnect={() => setIsCalendarConnected(true)}`) cannot cause repeated `getCalendarStatus()` IPC polls every render.
+
+    - **Stable attendee keys eliminate the blank/duplicate React-key warning** (`src/components/Launcher.tsx`). The Launcher's next-meeting avatar row was using `key={a.email}`, so calendar attendees with empty `email` (resource rooms, unnamed invitees, some Google/Outlook entries) collapsed to duplicate `''` keys and triggered `Encountered two children with the same key, ''` on every poll. Now keyed on `email:${a.email}` when present, otherwise `${identity || 'attendee'}:${i}`. Index in the fallback is safe because `visibleAttendees` is a static `slice(0, 3)` (no reorder/filter between renders). `colorFor` was hardened in parallel with `attendeeIdentity || String(i)`. Also hardened the matching `initialsFor(a)` helper so a fully-empty attendee no longer risks `undefined.trim()` at render time — falls back to `'?'` instead.
+
+    - **Shared theme subscription eliminates `MaxListenersExceededWarning`** (`src/hooks/useResolvedTheme.ts`). `useResolvedTheme` is called from ~25 sites (Launcher, NativelyInterface, SettingsOverlay, HelpSettings, meeting overlays, toasters, etc.), and each call was registering its own `ipcRenderer.on('theme:changed', …)` via the preload bridge — well past Node's default listener cap of 10, surfacing `MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 theme:changed listeners added`. Reworked to a single module-level subscription: one shared `MutationObserver` on `<html data-theme>` plus one shared IPC listener, fanning out to a `Set<setter>` of mounted hook consumers; the shared subscription tears down only when the last consumer unmounts. Live updates still fire on every theme change, the pre-React `data-theme`/`localStorage` write in the IPC handler stays in one place (single source of truth), and StrictMode mount→unmount→mount is idempotent via the existing guards. Net `theme:changed` listeners drop from ~27 (main.tsx + App.tsx + 25 hooks) to a small fixed count.
+
+    - **Vite production chunk warning suppressed for an intentional Electron-local build** (`vite.config.mts`). The deliberate vendor split leaves the main entry at ~1.32 MB minified / ~329 kB gzipped — comfortably under our real budget (we ship assets locally; the constraint is gzipped size, not minified bytes). The previous `chunkSizeWarningLimit: 1000` flagged every release build. Raised to `1500` with a comment explaining the gzipped budget so future regressions still surface without blocking the build on already-known noise.
+
     ### Improvements & Fixes
 
     - **Close Settings on outside click + Escape, matching Modes/Profile**: `SettingsOverlay` now closes when you click the dimmed area around the card, mirroring the `e.target === e.currentTarget` backdrop pattern that Modes Manager and Profile Intelligence already used (App.tsx:774/807). Pressing **Escape** closes whichever of the three center overlays is open (top-most-wins order: Settings > Modes > Profile) via a shared listener in App.tsx, plus an internal listener inside `SettingsOverlay` and `ProfileIntelligenceSettings` for consistency. The opacity-slider preview is guarded both with a JS early-return and `pointer-events: none` on the backdrop so dragging the slider can never dismiss Settings mid-drag. (`2299895` — 3 files, +121/-9.)
@@ -305,6 +317,57 @@ The review surfaced pre-existing structural issues that this commit intentionall
     #### Tests
 
     New: `FinalAnswerGenerationPolicy.test.mjs`, `ProfileJitPromptBuilder.test.mjs`, `SourceOwnerEnforcement.test.mjs`. Rewritten evidence-only: `manualProfileIntelligence.test.mjs`, `profileAnswerBackend.test.mjs`. Updated: `CustomModeSourceIsolation2026_07_06.test.mjs`. Focused suites pass 37/37, source isolation passes 37/37 in `NATIVELY_SOURCE_OWNER_ENFORCEMENT_STAGE=enforce`, full `tsc --noEmit` clean. Two code-reviewer passes closed 1 CRITICAL (inert session-write gate on the main completion store) + 4 lower-severity findings (dead staged-enforcement accessor, ungated Hindsight recall, WTA `pushUsage` store-gate asymmetry, profile-evidence double-injection). See `docs/PROFILE_INTELLIGENCE_FULL_JIT_POLICY.md` and `docs/PROFILE_INTELLIGENCE_FULL_JIT_IMPLEMENTATION_REPORT.md`.
+
+## [2.8.1] - 2026-07-08
+
+Startup-crash hardening follow-up to v2.8.0. The v2.8.0 build never crashed, but it shipped **without a published `latest-mac.yml`** (no `v2.8.0` git tag was ever pushed, so `release-macos.yml` never ran), the `update-available` handler had no version guard, and the app had zero crash/quit observability — every `before-quit` cleanup looked identical to an OS-reaped crash. Plus four latent issues that previously fired on every fresh install: noisy `vec0 constructor error` from a broken sqlite-vec migration, `onnxruntime-common` was a transitive-only dep, Ollama was force-spawned regardless of user selection, and ENOENT noise every retry.
+
+### Auto-updater safety
+
+- **`AppState.isRealUpgrade(current, remote)` gates the production updater path** (`electron/main.ts`). Strips `v` prefix and pre-release suffix, parses strictly `X[.Y[.Z[.B]]]`, returns strict greater-than. The `update-available` handler now silently demotes non-upgrades (downgrade, equal, malformed) to `update-not-available { ignored: true, reason: 'non-upgrade', remote }` — never broadcasts the update UI, never queues a download. The `quitAndInstallUpdate()` path is also gated, so a stray renderer/UI call can't apply a downgrade. New startup log: `currentVersion=… channel=… feed=…` so a mis-pointed `latest.yml` is immediately diagnosable from the log. 8 unit tests (`electron/update/AppState.isRealUpgrade.test.mjs`) including the exact v2.7.0-vs-2.8.0 prod repro.
+
+### ONNX runtime packaging
+
+- **`onnxruntime-common` promoted to a direct `dependencies` entry** (`package.json`). It was a transitive-only dep of `onnxruntime-node`; a packaging pass that strips non-direct deps would have produced the exact `Cannot find package 'onnxruntime-common' imported from … app.asar.unpacked/node_modules/@huggingface/transformers/dist/transformers.node.mjs` failure from the user log. Pinned to `1.22.0` to match `onnxruntime-node`'s declared peer for ABI parity.
+- **New `scripts/smoke-onnx-packaging.mjs`** (`npm run smoke:onnx-packaging`). Eight assertions: all three packages (`onnxruntime-{node,common}`, `@huggingface/transformers`) resolve from the packaged-app context, both are declared direct deps, ABI versions match, and `asarUnpack` includes the four required globs. Runs in <100 ms with no Electron boot.
+
+### Ollama optionality & non-fatal spawning
+
+- **`bootstrapOllamaEmbeddings` now consults `SettingsManager` for an explicit opt-out** (`electron/main.ts`). `disableOllamaBootstrap: true`, `localProvider: 'none'`, or `localProvider: 'cloud'` short-circuits the bootstrap with a clear log line, so a fresh install on a user who never selected Ollama no longer triggers `spawn('ollama', ['serve'])`.
+- **`OllamaBootstrap.ensureOllamaRunning` throttles the ENOENT noise** (`electron/rag/OllamaBootstrap.ts`). A `MISSING_BACKOFF_MS = 60_000` per-process flag means the "Ollama binary not on PATH; skipping spawn" log line fires at most once per minute per process instead of every retry. The pre-existing `useOllama` gate on `forceRestartOllama` (added 2026-07-07) is unchanged.
+
+### sqlite-vec v3/v4 — silent on fresh install
+
+- **Migrations v2→v3 and v3→v4 are now no-op on the happy path** (`electron/db/DatabaseManager.ts`). The historical SQL `CREATE VIRTUAL TABLE vec_chunks USING vec0(..., embedding float)` (no dimension) was rejected by sqlite-vec on every fresh install with `vec0 constructor error: At least one vector column is required`. New `tryProvisionLegacyVecTables()` probes `sqlite_master` for orphan `vec_chunks` / `vec_summaries` from prior broken installs and DROPs them only if they exist, bumping a `_lastLegacyCleanup` counter. The v3/v4 migration blocks only log when that counter is non-zero. A clean fresh install now produces **zero log lines** for v3/v4 (was 2 errors + 1 warning). `user_version` still advances normally, so users mid-migration are unaffected.
+
+### Crash / quit observability
+
+- **New `electron/utils/lifecycleTracker.ts`** wires the previously-missing `will-quit`, `render-process-gone`, `child-process-gone`, and `gpu-process-crashed` handlers, plus a tagged `QuitReason` enum (`user-quit`, `window-close`, `updater-quit-install`, `manual-relaunch`, `fatal-main-error`, `renderer-gone`, `child-process-gone`, `gpu-process-crashed`, `os-signal`, `unknown`). The marker persists as `lifecycle-marker.json` in `userData/`. `setQuitReason(reason, meta)` is called before `autoUpdater.quitAndInstall`, the native-arch-gate fatal path, and any main-process crash; `markCleanExit()` is called at the end of `before-quit` cleanup so a Cmd+Q leaves the marker in `lastEvent='clean-exit'` / `quitReason=null`.
+- **`installBeforeReady(consoleLog)` static method** wires `uncaughtException`, `unhandledRejection`, and `SIGTERM/SIGINT/SIGHUP` on `process` (not `app`). Called from `nativeArchGate.ts` as the very first thing its IIFE does, so a crash during native-binding dlopen — before `app.whenReady()` ever fires — still writes a marker to `os.tmpdir()/natively-lifecycle-${pid}.json`. The full `install()` (called from `main.ts` after the `second-instance` handler but before `whenReady()`) wires the `app.on(...)` handlers and is idempotent with `installBeforeReady`.
+- **Next-launch crash detection**: `didPreviousSessionCrash()` reads the durable `userData` marker (tmpdir fallback markers are process-scoped and OS-cleared, so they don't help cross-launch detection). Returns true for any `quitReason` other than `user-quit` / `window-close`, plus the SIGKILL signature (`quitReason: null` AND `lastEvent !== 'clean-exit'`). On boot, `main.ts` logs `[Lifecycle] previous session ended unexpectedly: pid=… lastEvent=… reason=…` so the next user bug report starts with a known quit reason.
+- **Meta sanitizer** strips `key|secret|token|password|auth|credential` fields from any object passed to `setQuitReason()` — a future maintainer can't accidentally log credentials, transcripts, or screenshots into the marker.
+
+### Release gate / CI
+
+- **New `scripts/release-gate.mjs`** (`npm run release-gate`) — 8 assertions that must all pass before tagging:
+  1. `package.json#version` is well-formed semver.
+  2. **Latest `v*` git tag ≤ current version** (the exact failure that caused v2.8.0 to ship without a published `latest-mac.yml`; the gate's error message names this explicitly: *"no v* git tags found. Tag the release with `git tag v${current}` before publishing — otherwise `latest-mac.yml` on GitHub Releases will keep pointing at the previous version"*). Hotfix bypass: `NATIVELY_ALLOW_UNTAGGED_RELEASE=1`.
+  3. Delegates to `smoke:onnx-packaging`.
+  4. `DatabaseManager.ts` contains no active reference to the broken `embedding float` vec0 schema.
+  5. `LifecycleTracker.getInstance().install(...)` is wired in `main.ts`.
+  6. `bootstrapOllamaEmbeddings` has the cloud-key skip guard.
+  7. `isRealUpgrade(` is wired into the updater.
+  8. Packaged `app-update.yml` (when present) points at `github/Natively-AI-assistant/natively-cluely-ai-assistant/release`.
+
+### Verification
+
+`npm run typecheck:electron` clean; 19 new tests in `AppState.isRealUpgrade.test.mjs` (8) + `lifecycleTracker.test.mjs` (11, including 2 for the tmpdir fallback when `userData` throws); the pre-existing `electron/update/**/*.test.mjs` (10/10) and `NewUserPcHardening2026_07_07.test.mjs` (5/5 Ollama regressions) still pass. `npm run smoke:onnx-packaging` and `npm run release-gate` both green.
+
+### Ship checklist for this release
+
+1. Confirm `git tag v2.8.1` is pushed and `release-macos.yml` published a fresh `latest-mac.yml` / `latest.yml` to GitHub Releases.
+2. Run `npm run release-gate` locally.
+3. Install the produced `Natively-2.8.1-arm64.dmg` on a clean macOS profile and walk the 8-step manual QA (clean install no Ollama spawn noise, Settings AI Providers Ollama section "Not installed" without spam, sign in to a cloud provider and confirm RAG tab shows "Embeddings ready" without any Ollama attempt, manual Check-for-Updates returns `Update not available: 2.8.1`, `kill -9` then relaunch surfaces the "previous session ended unexpectedly" warning).
 
 ## [2.7.0] - 2026-06-05
 
