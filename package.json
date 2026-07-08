@@ -1,6 +1,6 @@
 {
   "name": "natively",
-  "version": "2.8.1",
+  "version": "2.8.2",
   "main": "dist-electron/electron/main.js",
   "description": "Natively is a meeting notes app that uses AI to generate notes from your meetings.",
   "scripts": {
@@ -22,9 +22,9 @@
     "watch": "tsc -p electron/tsconfig.json --watch",
     "start": "npm run app:dev",
     "dist": "npm run app:build",
-    "dist:signed": "npm run app:build:signed",
+    "dist:signed": "npm run app:build:signed && node scripts/upload-release.mjs",
     "build:native": "node scripts/build-native.js",
-    "test": "npm run build:electron && node --test 'electron/services/__tests__/**/*.test.mjs' 'electron/llm/__tests__/**/*.test.mjs' 'electron/llm/codeVerification/__tests__/**/*.test.mjs' 'electron/audio/__tests__/**/*.test.mjs' 'electron/update/**/*.test.mjs'",
+    "test": "npm run build:electron && node --test 'electron/services/__tests__/**/*.test.mjs' 'electron/llm/__tests__/**/*.test.mjs' 'electron/llm/codeVerification/__tests__/**/*.test.mjs' 'electron/audio/__tests__/**/*.test.mjs' 'electron/rag/__tests__/**/*.test.mjs' 'electron/utils/__tests__/**/*.test.mjs' 'electron/update/**/*.test.mjs'",
     "test:intelligence": "npm run build:electron && node --test 'electron/intelligence/__tests__/**/*.test.mjs'",
     "test:ci": "npm run typecheck:electron && npm run build && npm test && npm run test:intelligence",
     "test:modes": "npm run build:electron && node --test electron/services/__tests__/Mode*.test.mjs electron/services/__tests__/ProfileIntelligenceGate.test.mjs electron/services/__tests__/NativelyApiE2E.test.mjs",
