@@ -25,11 +25,21 @@ import { app } from 'electron';
 import { IEmbeddingProvider } from './IEmbeddingProvider';
 import { embeddingSpaceKey } from '../embeddingSpace';
 import { acquireOnnxSlot, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSession } from '../../utils/onnxThreadConfig';
+import {
+    clearLoadSentinel as clearOnnxLoadSentinel,
+    consumePoisonedOnnxLoad,
+    writeLoadSentinel as writeOnnxLoadSentinel,
+} from '../../utils/onnxLoadSentinel';
 import { ProviderStatusRegistry } from '../../services/ProviderStatusRegistry';
 import type { LocalWorkerStatus } from '../../utils/workerStatus';
 
 const WORKER_INIT_TIMEOUT_MS = 60_000; // model load (cold disk read + ORT session init)
 const WORKER_EMBED_TIMEOUT_MS = 30_000; // a single embed()/embedBatch() call
+
+/** Process-local poison flag: set by the cold-start consume path to tell the
+ *  ensureLoaded + embed paths to fast-fail this launch. Mirrors
+ *  IntentClassifier's startupPoisoned. */
+let startupPoisoned = false;
 
 export class LocalEmbeddingProvider implements IEmbeddingProvider {
   readonly name = 'local';
@@ -99,10 +109,18 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
 
   private getWorker(): Worker {
     if (!this.worker) {
+      // Cross-launch disk sentinel: written BEFORE new Worker() so a native
+      // ORT abort that kills the process before the JS `ready` arrives
+      // leaves a recoverable breadcrumb for the next launch's consume.
+      writeOnnxLoadSentinel('embeddings', this.model);
       this.worker = new Worker(this.getWorkerPath());
 
       this.worker.on('message', (msg: { type: string; requestId?: number; vectors?: number[][]; error?: string; status?: LocalWorkerStatus }) => {
         if (msg.type === 'status' && msg.status) {
+          if (msg.status.type === 'ready') {
+            // Worker reached `ready` — clear the poisoned-load sentinel.
+            clearOnnxLoadSentinel('embeddings', this.model);
+          }
           this.handleWorkerStatus(msg.status);
           return;
         }
@@ -135,6 +153,9 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
         if (code !== 0) {
           console.warn(`[LocalEmbeddingProvider] Worker exited with code ${code}`);
         }
+        // Clear on clean exit; non-zero exit keeps the sentinel so the
+        // next launch knows the previous attempt died hard.
+        if (code === 0) clearOnnxLoadSentinel('embeddings', this.model);
         this.worker = null;
         this.loaded = false;
         this.loadingPromise = null;
@@ -269,6 +290,11 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
 
   private async ensureLoaded(): Promise<void> {
     if (this.loaded) return;
+    if (startupPoisoned) {
+      throw new Error(
+        '[LocalEmbeddingProvider] skipped: previous launch poisoned the load (see `onnx-load-sentinel-embeddings.json`)',
+      );
+    }
     if (this.nonRecoverableLoadError) throw this.nonRecoverableLoadError;
 
     // If another caller already kicked off loading, wait for that same promise
@@ -331,4 +357,37 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     );
     return result.vectors;
   }
+}
+
+/**
+ * Cold-start helper: read the leftover embeddings sentinel from disk and
+ * seed the in-memory poison flag so the next embed() call fast-fails and
+ * `isAvailable()` returns false → retrieval routes to lexical. Returns the
+ * recovered sentinel record so the caller can stash a recovery notice on
+ * AppState. Idempotent.
+ */
+export function consumeLocalEmbeddingSentinel(): { modelId: string; startedAt: number; attempt: number } | null {
+  const consumed = consumePoisonedOnnxLoad('embeddings');
+  if (consumed) {
+    startupPoisoned = true;
+  }
+  return consumed;
+}
+
+/**
+ * Public reset: clears the cold-start poison flag, allowing the next
+ * embed() call to attempt a fresh load. Mirrors `clearIntentClassifierPoison`
+ * and the local-whisper-reset-to-default IPC but generalized. Idempotent.
+ */
+export function clearLocalEmbeddingPoison(): void {
+  startupPoisoned = false;
+  clearOnnxLoadSentinel('embeddings');
+}
+
+/**
+ * Diagnostic accessor: is the local embedder currently skipped because the
+ * previous launch poisoned the load?
+ */
+export function isLocalEmbeddingPoisoned(): boolean {
+  return startupPoisoned;
 }

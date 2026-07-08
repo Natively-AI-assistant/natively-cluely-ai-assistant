@@ -11,8 +11,23 @@ import path from 'path';
 import { Worker } from 'worker_threads';
 import { app } from 'electron';
 import { acquireOnnxSlot, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSession } from '../utils/onnxThreadConfig';
+import {
+    clearLoadSentinel as clearOnnxLoadSentinel,
+    consumePoisonedOnnxLoad,
+    writeLoadSentinel as writeOnnxLoadSentinel,
+} from '../utils/onnxLoadSentinel';
 import { ProviderStatusRegistry } from '../services/ProviderStatusRegistry';
 import type { LocalWorkerStatus } from '../utils/workerStatus';
+
+/** Hardcoded intent model id — must match `intentClassifierWorker.ts`. Used
+ *  as the sentinel key so a poisoned load is attributable. */
+const INTENT_MODEL_ID = 'Xenova/mobilebert-uncased-mnli';
+
+/** Process-local poison flag: set by the cold-start consume path to tell the
+ *  warmup + classify paths to skip ONNX entirely this launch. Cleared on
+ *  retry (via `clearStartupPoison`). Mirrors the in-memory `nonRecoverableLoadError`
+ *  latch but seeded from disk so it survives a native main-thread abort. */
+let startupPoisoned = false;
 
 export type ConversationIntent =
     | 'clarification'      // "Can you explain that?"
@@ -114,10 +129,21 @@ class ZeroShotClassifier {
 
     private getWorker(): Worker {
         if (!this.worker) {
+            // Cross-launch disk sentinel: written BEFORE new Worker() so a native
+            // ORT abort that kills the process before the JS `ready` arrives
+            // leaves a recoverable breadcrumb for the next launch's consume.
+            writeOnnxLoadSentinel('intent', INTENT_MODEL_ID);
             this.worker = new Worker(this.getWorkerPath());
 
             this.worker.on('message', (msg: { type: string; requestId?: number; labels?: string[]; scores?: number[]; error?: string; status?: LocalWorkerStatus }) => {
                 if (msg.type === 'status' && msg.status) {
+                    // Worker reached `ready` — clear the poisoned-load sentinel
+                    // for this family/model pair. Without this clear, a clean
+                    // init could still leave a stale sentinel if the worker
+                    // happened to crash AFTER posting ready.
+                    if (msg.status.type === 'ready') {
+                        clearOnnxLoadSentinel('intent', INTENT_MODEL_ID);
+                    }
                     this.handleWorkerStatus(msg.status);
                     return;
                 }
@@ -154,6 +180,9 @@ class ZeroShotClassifier {
                 if (code !== 0) {
                     console.warn(`[IntentClassifier] Worker exited with code ${code}`);
                 }
+                // Clear on clean exit; non-zero exit keeps the sentinel so
+                // the next launch knows the previous attempt died hard.
+                if (code === 0) clearOnnxLoadSentinel('intent', INTENT_MODEL_ID);
                 this.worker = null;
                 this.loaded = false;
                 this.loadingPromise = null;
@@ -223,7 +252,7 @@ class ZeroShotClassifier {
      * renderer can show "reinstall required" without waiting for the next
      * user-driven classify call. Idempotent.
      */
-    private latchNonRecoverableLoadError(message: string): void {
+    public latchNonRecoverableLoadError(message: string): void {
         this.nonRecoverableLoadError = new Error(message);
         ProviderStatusRegistry.getInstance().setStatus({
             id: 'intent-classifier',
@@ -265,8 +294,16 @@ class ZeroShotClassifier {
     /**
      * Lazy-load the zero-shot classification model in a worker thread.
      * Uses Xenova/mobilebert-uncased-mnli — tiny (~100MB quantized), fast (~10-50ms inference).
+     *
+     * If the cold-start consume path (see `consumeStartupPoison`) determined
+     * the previous process died while loading this model, the warmup is
+     * skipped entirely this launch and the classifier falls through to the
+     * regex tier. The poison flag is in-memory only — clearing it via
+     * `clearStartupPoison` (the onnx-reset-family IPC) restores the next
+     * call to attempt a fresh load.
      */
     private async ensureLoaded(): Promise<void> {
+        if (startupPoisoned) return;
         if (this.loaded) return;
         if (this.nonRecoverableLoadError) return;
         if (this.loadFailed) return;
@@ -506,7 +543,67 @@ export function getAnswerShapeGuidance(intent: ConversationIntent): string {
 /**
  * Pre-warm the SLM model in background.
  * Call this during app initialization to avoid cold-start on first classification.
+ *
+ * No-op when the cold-start consume path seeded `startupPoisoned` — the
+ * previous process died while loading the model; we don't retry until the
+ * user explicitly clears the poison via `clearIntentClassifierPoison`.
  */
 export function warmupIntentClassifier(): void {
+    if (startupPoisoned) return;
     ZeroShotClassifier.getInstance().warmup();
+}
+
+/**
+ * Cold-start helper: read the leftover intent sentinel from disk (if any)
+ * and seed the in-memory poison flag so the warmup + classify paths skip
+ * the ONNX worker this launch. Returns the recovered sentinel record so
+ * the caller can stash a recovery notice on AppState.
+ *
+ * Idempotent. Safe to call more than once (the second call returns null).
+ */
+export function consumeIntentClassifierSentinel(): { modelId: string; startedAt: number; attempt: number } | null {
+    const consumed = consumePoisonedOnnxLoad('intent');
+    if (consumed) {
+        startupPoisoned = true;
+        // Also seed the singleton's in-memory latch so a future explicit
+        // `__resetForTests`/reinstall path still observes the poison. Use the
+        // public clear path to undo if the user requests a retry.
+        try {
+            ZeroShotClassifier.getInstance().latchNonRecoverableLoadError(
+                `Recovered from previous launch: intent classifier crashed during load (attempt ${consumed.attempt}).`,
+            );
+        } catch { /* defensive — never let the consume helper itself throw */ }
+    }
+    return consumed;
+}
+
+/**
+ * Public reset: clears the cold-start poison flag AND the singleton's
+ * in-memory non-recoverable latch, allowing the next classify call to
+ * attempt a fresh load. Mirrors the local-whisper-reset-to-default IPC
+ * but generalized. Idempotent.
+ */
+export function clearIntentClassifierPoison(): void {
+    startupPoisoned = false;
+    clearOnnxLoadSentinel('intent', INTENT_MODEL_ID);
+    try {
+        const inst = ZeroShotClassifier.getInstance() as unknown as {
+            nonRecoverableLoadError?: Error | null;
+            loadFailed?: boolean;
+            loaded?: boolean;
+        };
+        inst.nonRecoverableLoadError = null;
+        inst.loadFailed = false;
+        // We do NOT clear `loaded` — if the singleton actually has a live
+        // worker, leave it alone. The sentinel clearance is enough to let
+        // ensureLoaded() attempt a new spawn if the next call hits.
+    } catch { /* defensive */ }
+}
+
+/**
+ * Diagnostic accessor: is the intent classifier currently skipped because
+ * the previous launch poisoned the load? Used by tests and the recovery IPC.
+ */
+export function isIntentClassifierPoisoned(): boolean {
+    return startupPoisoned;
 }

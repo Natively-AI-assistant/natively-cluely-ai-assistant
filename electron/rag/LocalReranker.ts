@@ -43,6 +43,11 @@ import {
     hasEnoughMemoryForOnnxSession,
     getMinFreeGBForOnnxSession,
 } from '../utils/onnxThreadConfig';
+import {
+    clearLoadSentinel as clearOnnxLoadSentinel,
+    consumePoisonedOnnxLoad,
+    writeLoadSentinel as writeOnnxLoadSentinel,
+} from '../utils/onnxLoadSentinel';
 
 export interface RerankResult {
     /** Index into the input passages array. */
@@ -50,6 +55,10 @@ export interface RerankResult {
     /** Cross-encoder relevance score (higher = more relevant). Raw logit. */
     score: number;
 }
+
+/** Process-local poison flag: set by the cold-start consume path to tell
+ *  ensureLoaded + rerank to fast-fail this launch. */
+let startupPoisoned = false;
 
 /**
  * Default model: bge-reranker-base, ONNX port that runs in transformers.js.
@@ -156,6 +165,12 @@ class LocalRerankerImpl {
 
     private getWorker(): Worker {
         if (!this.worker) {
+            // Cross-launch disk sentinel: written BEFORE new Worker() so a
+            // native ORT abort that kills the process before the JS `ready`
+            // arrives leaves a recoverable breadcrumb for the next launch's
+            // consume. Closes the cross-launch crashloop the previous version
+            // shared with the Whisper bug.
+            writeOnnxLoadSentinel('reranker', this.modelId);
             this.worker = new Worker(this.getWorkerPath());
 
             this.worker.on('message', (msg: { type: string; requestId: number; scores?: number[]; error?: string }) => {
@@ -166,6 +181,10 @@ class LocalRerankerImpl {
 
                 if (msg.type === 'error') {
                     pending.reject(new Error(msg.error || 'Worker error'));
+                } else if (msg.type === 'ready') {
+                    // Worker reached `ready` — clear the poisoned-load sentinel.
+                    clearOnnxLoadSentinel('reranker', this.modelId);
+                    pending.resolve(msg);
                 } else {
                     pending.resolve(msg);
                 }
@@ -175,6 +194,16 @@ class LocalRerankerImpl {
                 console.warn('[LocalReranker] Worker error (rerank disabled until retry):', err);
                 this.loaded = false;
                 this.loadingPromise = null;
+                // 2026-07-08 latch fix: loadFailed was declared + read but
+                // NEVER assigned true, so every worker death mid-load let
+                // isAvailable() spin up a fresh worker against the same broken
+                // asset. Mirror LocalEmbeddingProvider's
+                // latchNonRecoverableLoadError: only latch when we never
+                // reached `loaded` (a runtime error after loaded=true is
+                // NOT a load failure, just a transient hiccup). Idempotent.
+                if (!this.loaded && !this.loadFailed) {
+                    this.loadFailed = true;
+                }
                 // Free the ONNX gate slot so other consumers can proceed.
                 if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
                 this.rejectAllPending(err);
@@ -183,6 +212,15 @@ class LocalRerankerImpl {
             this.worker.on('exit', (code) => {
                 if (code !== 0) {
                     console.warn(`[LocalReranker] Worker exited with code ${code}`);
+                }
+                // Clear on clean exit; non-zero exit keeps the sentinel so
+                // the next launch knows the previous attempt died hard.
+                if (code === 0) clearOnnxLoadSentinel('reranker', this.modelId);
+                // Same dead-latch fix as the `error` handler above — if we
+                // died before `loaded`, latch `loadFailed` so the next call
+                // doesn't re-spawn against the same broken asset.
+                if (!this.loaded && code !== 0 && !this.loadFailed) {
+                    this.loadFailed = true;
                 }
                 this.worker = null;
                 this.loaded = false;
@@ -266,6 +304,7 @@ class LocalRerankerImpl {
      * keeps the current top-K.
      */
     async isAvailable(): Promise<boolean> {
+        if (startupPoisoned) return false;
         if (this.loadFailed) return false;
         try {
             await this.ensureLoaded();
@@ -277,6 +316,7 @@ class LocalRerankerImpl {
 
     private async ensureLoaded(): Promise<void> {
         if (this.loaded) return;
+        if (startupPoisoned) throw new Error('reranker skipped: previous launch poisoned the load');
         if (this.loadFailed) throw new Error('reranker previously failed to load');
         if (this.loadingPromise) return this.loadingPromise;
 
@@ -373,6 +413,26 @@ class LocalRerankerImpl {
         this.loadFailed = false;
         this.loaded = false;
     }
+
+    /**
+     * Public seed: set the loadFailed latch without otherwise touching the
+     * worker. Called by the cold-start consume path when the previous process
+     * died loading this model — the in-memory latch plus the on-disk sentinel
+     * together force every rerank()/isAvailable() call to fast-fail this
+     * launch. Idempotent.
+     */
+    public markStartupPoisoned(): void {
+        this.loadFailed = true;
+    }
+
+    /**
+     * Public reset: clear the loadFailed latch. Called by the onnx-reset-family
+     * IPC to let the user retry after a successful reinstall or a temp
+     * condition resolved. Idempotent.
+     */
+    public clearLoadFailed(): void {
+        this.loadFailed = false;
+    }
 }
 
 // Process-wide singleton — one model load shared across all modes/queries,
@@ -384,3 +444,44 @@ export function getLocalReranker(): LocalRerankerImpl {
 }
 
 export type { LocalRerankerImpl };
+
+/**
+ * Cold-start helper: read the leftover reranker sentinel from disk and seed
+ * the in-memory poison flag + the singleton's `loadFailed` latch so the
+ * next rerank() call fast-fails. Returns the recovered sentinel record so
+ * the caller can stash a recovery notice on AppState. Idempotent.
+ */
+export function consumeLocalRerankerSentinel(): { modelId: string; startedAt: number; attempt: number } | null {
+    const consumed = consumePoisonedOnnxLoad('reranker');
+    if (consumed) {
+        startupPoisoned = true;
+        try {
+            const inst = getLocalReranker();
+            inst.markStartupPoisoned();
+        } catch { /* defensive */ }
+    }
+    return consumed;
+}
+
+/**
+ * Public reset: clears the cold-start poison flag AND the singleton's
+ * in-memory loadFailed latch, allowing the next rerank() call to attempt a
+ * fresh load. Mirrors `local-whisper-reset-to-default` but generalized.
+ * Idempotent.
+ */
+export function clearLocalRerankerPoison(): void {
+    startupPoisoned = false;
+    clearOnnxLoadSentinel('reranker');
+    try {
+        const inst = getLocalReranker();
+        inst.clearLoadFailed();
+    } catch { /* defensive */ }
+}
+
+/**
+ * Diagnostic accessor: is the reranker currently skipped because the
+ * previous launch poisoned the load?
+ */
+export function isLocalRerankerPoisoned(): boolean {
+    return startupPoisoned;
+}
