@@ -92,11 +92,12 @@ process.stderr?.on?.('error', () => { });
 process.on('uncaughtException', (err) => {
   // First-line handler for the native-arch gate (thrown synchronously at
   // module-load above) and any other uncaught errors. The arch gate's
-  // error message starts with '[nativeArch]' — for those, render the
-  // copy-pasteable fix dialog and exit 1. For everything else, fall
+  // error message starts with '[nativeArch]' or '[nativeArch:packaged]' — for those,
+  // render the appropriate fix dialog and exit 1. For everything else, fall
   // through to the original logToFile behavior.
-  if (err instanceof Error && err.message.startsWith('[nativeArch]')) {
-    const detail = err.message.replace(/^\[nativeArch\]\s*/, '').replace(/^Architecture mismatch:\s*/, '');
+  if (err instanceof Error && /^\[nativeArch(?::packaged)?\]/.test(err.message)) {
+    const packaged = err.message.startsWith('[nativeArch:packaged]');
+    const detail = err.message.replace(/^\[nativeArch(?::packaged)?\]\s*/, '').replace(/^Architecture mismatch:\s*/, '');
     // PHASE-2E (CRITICAL fix): tag this fatal exit so the NEXT launch sees
     // a "previous session ended unexpectedly" marker with reason
     // fatal-main-error — instead of mis-reading it as a generic crash.
@@ -117,7 +118,9 @@ process.on('uncaughtException', (err) => {
       const { dialog, app: electronApp } = require('electron');
       // showErrorBox is modal and blocks until the user clicks OK.
       dialog.showErrorBox(
-        'Native modules are wrong architecture — run this command to fix:',
+        packaged
+          ? 'Natively was built for a different chip — please reinstall'
+          : 'Native modules are wrong architecture — run this command to fix:',
         detail,
       );
       electronApp.exit(1);
@@ -502,6 +505,17 @@ export interface LocalWhisperRecoveryNotice {
   message: string;
 }
 
+/** Family-keyed recovery notice for the generalized ONNX load sentinel.
+ *  Each `family` corresponds to one of the local model consumers wired to
+ *  `electron/utils/onnxLoadSentinel.ts`. Renderer pulls via the
+ *  `onnx-get-recovery-notice` IPC, one-shot drained through AppState. */
+export type OnnxRecoveryFamily = 'whisper' | 'intent' | 'embeddings' | 'reranker';
+export interface OnnxRecoveryNotice {
+  family: OnnxRecoveryFamily;
+  badModelId: string;
+  message: string;
+}
+
 type ScreenshotCaptureKind = 'full' | 'selective';
 
 interface ScreenshotCaptureSession {
@@ -645,6 +659,10 @@ export class AppState {
   private _ollamaBootstrapPromise: Promise<void> | null = null;
   private screenshotCaptureInProgress: boolean = false;
   private localWhisperRecoveryNotice: LocalWhisperRecoveryNotice | null = null;
+  // Family-keyed stash for the generalized ONNX load-sentinel recovery
+  // notices (intent / embeddings / reranker). Whisper keeps its dedicated
+  // channel for backward-compat with the shipped renderer banner.
+  private onnxRecoveryNotices: Partial<Record<OnnxRecoveryFamily, OnnxRecoveryNotice>> = {};
 
 
   // Processing events
@@ -808,6 +826,56 @@ export class AppState {
       } catch (e) {
         // Non-fatal — recording still works, just with a cold-start delay
         console.warn('[AppState] Local Whisper preload skipped:', e);
+      }
+    });
+
+    // Generalized ONNX load-sentinel consume (intent / embeddings / reranker).
+    // Runs UNCONDITIONALLY — these families are loaded on demand and a poisoned
+    // disk sentinel must be consumed regardless of the user's STT selection.
+    // Each consumer seeds its own in-memory poison flag so the first call
+    // (warmup, embed, rerank) fast-fails and the user sees a degraded
+    // experience instead of a crashloop.
+    setImmediate(() => {
+      try {
+        const { consumeIntentClassifierSentinel } = require('./llm/IntentClassifier');
+        const { consumeLocalEmbeddingSentinel } = require('./rag/providers/LocalEmbeddingProvider');
+        const { consumeLocalRerankerSentinel } = require('./rag/LocalReranker');
+
+        const intentPoisoned = consumeIntentClassifierSentinel();
+        if (intentPoisoned) {
+          const message = `Recovered from an intent classifier crash. ${intentPoisoned.modelId} is skipped this launch — falling back to regex/heuristic intent.`;
+          console.warn(`[AppState] ${message}`);
+          this.setOnnxRecoveryNotice('intent', {
+            family: 'intent',
+            badModelId: intentPoisoned.modelId,
+            message,
+          });
+        }
+
+        const embeddingPoisoned = consumeLocalEmbeddingSentinel();
+        if (embeddingPoisoned) {
+          const message = `Recovered from a local embedding crash. ${embeddingPoisoned.modelId} is skipped this launch — retrieval falls back to lexical.`;
+          console.warn(`[AppState] ${message}`);
+          this.setOnnxRecoveryNotice('embeddings', {
+            family: 'embeddings',
+            badModelId: embeddingPoisoned.modelId,
+            message,
+          });
+        }
+
+        const rerankerPoisoned = consumeLocalRerankerSentinel();
+        if (rerankerPoisoned) {
+          const message = `Recovered from a local reranker crash. ${rerankerPoisoned.modelId} is skipped this launch — retrieval falls back to cosine top-K.`;
+          console.warn(`[AppState] ${message}`);
+          this.setOnnxRecoveryNotice('reranker', {
+            family: 'reranker',
+            badModelId: rerankerPoisoned.modelId,
+            message,
+          });
+        }
+      } catch (e: any) {
+        // Non-fatal — a missing or broken consume helper must never brick startup.
+        console.warn('[AppState] ONNX sentinel consume skipped (non-fatal):', e?.message || e);
       }
     });
 
@@ -5127,6 +5195,16 @@ export class AppState {
     const notice = this.localWhisperRecoveryNotice;
     this.localWhisperRecoveryNotice = null;
     return notice;
+  }
+
+  public setOnnxRecoveryNotice(family: OnnxRecoveryFamily, notice: OnnxRecoveryNotice): void {
+    this.onnxRecoveryNotices[family] = notice;
+  }
+
+  public takeOnnxRecoveryNotice(family: OnnxRecoveryFamily): OnnxRecoveryNotice | null {
+    const notice = this.onnxRecoveryNotices[family];
+    if (notice) delete this.onnxRecoveryNotices[family];
+    return notice ?? null;
   }
 
   public getWindowHelper(): WindowHelper {

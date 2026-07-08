@@ -5632,8 +5632,53 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle('local-whisper-get-recovery-notice', async () => {
+    return appState.takeLocalWhisperRecoveryNotice?.() ?? null;
+  });
+
+  // Generalized ONNX load-sentinel IPCs. One notice channel takes a
+  // `family` argument so the renderer can pull intent / embeddings /
+  // reranker notices through a single path. Each is one-shot drained
+  // through AppState so a renderer reload does not see the same notice
+  // twice. `onnx-reset-family` is the public "retry now" hook mirroring
+  // the existing `local-whisper-reset-to-default`.
+  safeHandle('onnx-get-recovery-notice', async (_: any, family: 'whisper' | 'intent' | 'embeddings' | 'reranker') => {
+    if (!family) return null;
+    return appState.takeOnnxRecoveryNotice?.(family) ?? null;
+  });
+
+  safeHandle('onnx-reset-family', async (_: any, family: 'whisper' | 'intent' | 'embeddings' | 'reranker') => {
+    try {
+      if (family === 'intent') {
+        const { clearIntentClassifierPoison } = require('./llm/IntentClassifier');
+        clearIntentClassifierPoison();
+        return { success: true };
+      }
+      if (family === 'embeddings') {
+        const { clearLocalEmbeddingPoison } = require('./rag/providers/LocalEmbeddingProvider');
+        clearLocalEmbeddingPoison();
+        return { success: true };
+      }
+      if (family === 'reranker') {
+        const { clearLocalRerankerPoison } = require('./rag/LocalReranker');
+        clearLocalRerankerPoison();
+        return { success: true };
+      }
+      // Whisper reset uses the existing dedicated IPC below; keep this
+      // handler future-proof so a stray family arg is a no-op rather than
+      // an error.
+      return { success: false, error: `No poison reset path for family '${family}'` };
+    } catch (e: any) {
+      return { success: false, error: e?.message || String(e) };
+    }
+  });
+
   safeHandle('local-whisper-set-model', async (_, modelId: string) => {
     try {
+      const { MODEL_CATALOG_IDS } = require('./audio/whisper/modelManager');
+      if (!MODEL_CATALOG_IDS.has(modelId)) {
+        return { success: false, error: `Unknown local Whisper model: ${modelId}` };
+      }
       SettingsManager.getInstance().set('localWhisperModel', modelId);
       return { success: true };
     } catch (e: any) {
@@ -5693,6 +5738,13 @@ export function initializeIpcHandlers(appState: AppState): void {
     async (_, cfg: { enabled?: boolean; micModelId?: string; systemModelId?: string }) => {
       try {
         const sm = SettingsManager.getInstance();
+        const { MODEL_CATALOG_IDS } = require('./audio/whisper/modelManager');
+        if (typeof cfg?.micModelId === 'string' && cfg.micModelId && !MODEL_CATALOG_IDS.has(cfg.micModelId)) {
+          return { success: false, error: `Unknown local Whisper mic model: ${cfg.micModelId}` };
+        }
+        if (typeof cfg?.systemModelId === 'string' && cfg.systemModelId && !MODEL_CATALOG_IDS.has(cfg.systemModelId)) {
+          return { success: false, error: `Unknown local Whisper system model: ${cfg.systemModelId}` };
+        }
         if (typeof cfg?.enabled === 'boolean') sm.set('localWhisperPerChannelEnabled', cfg.enabled);
         if (typeof cfg?.micModelId === 'string') sm.set('localWhisperModelMic', cfg.micModelId);
         if (typeof cfg?.systemModelId === 'string')

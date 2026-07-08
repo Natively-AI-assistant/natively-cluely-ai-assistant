@@ -226,7 +226,22 @@ interface ElectronAPI {
       | 'local-whisper',
   ) => Promise<{ success: boolean; error?: string }>;
   localWhisperGetModels: () => Promise<{ models: any[]; activeModelId: string }>;
-  localWhisperSetModel: (modelId: string) => Promise<{ success: boolean }>;
+  localWhisperGetRecoveryNotice: () => Promise<{
+    recovered: true;
+    badModelId: string;
+    fallbackModelId: string;
+    message: string;
+  } | null>;
+  // Generalized ONNX load-sentinel recovery surface (intent / embeddings /
+  // reranker). Whisper keeps its dedicated banner; the other three families
+  // share a single channel keyed by `family`.
+  onnxGetRecoveryNotice: (family: 'whisper' | 'intent' | 'embeddings' | 'reranker') => Promise<{
+    family: 'whisper' | 'intent' | 'embeddings' | 'reranker';
+    badModelId: string;
+    message: string;
+  } | null>;
+  onnxResetFamily: (family: 'whisper' | 'intent' | 'embeddings' | 'reranker') => Promise<{ success: boolean; error?: string }>;
+  localWhisperSetModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
   localWhisperResetToDefault: () => Promise<{ success: boolean; error?: string; modelId?: string }>;
   localWhisperGetChannelConfig: () => Promise<{
     enabled: boolean;
@@ -1354,6 +1369,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     region?: string,
   ) => ipcRenderer.invoke('test-stt-connection', provider, apiKey, region),
   localWhisperGetModels: () => ipcRenderer.invoke('local-whisper-get-models'),
+  localWhisperGetRecoveryNotice: () => ipcRenderer.invoke('local-whisper-get-recovery-notice'),
+  onnxGetRecoveryNotice: (family) => ipcRenderer.invoke('onnx-get-recovery-notice', family),
+  onnxResetFamily: (family) => ipcRenderer.invoke('onnx-reset-family', family),
   localWhisperSetModel: (modelId: string) => ipcRenderer.invoke('local-whisper-set-model', modelId),
   // In-app recovery: resets the active local-Whisper model + per-channel
   // overrides back to the safe fallback. See electron/ipcHandlers.ts handler.
