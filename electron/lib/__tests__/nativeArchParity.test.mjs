@@ -86,4 +86,60 @@ describe('nativeArch parity (cjs ↔ esm)', () => {
       assert.equal(cResult.fix, eResult.fix, 'fix mismatch');
     });
   });
+
+  // --- Packaged-mode parity (v2.8.2 fix for false-positive dialog) ---------
+  // The packaged branch is what the boot gate uses when running from a real
+  // .app bundle. It must remain byte-equivalent between the cjs and esm
+  // implementations, because the gate loads the cjs version synchronously
+  // at module-load (before require('electron')) — and any drift here
+  // re-introduces the false-positive "Built unknown" mismatch that broke
+  // v2.8.1.
+
+  test('resolveTargetPath produces the same packaged-path string from both modules', () => {
+    const cjs = require('../nativeArch.cjs');
+    return import('../nativeArch.mjs').then((esm) => {
+      const rel = 'node_modules/better-sqlite3/build/Release/better_sqlite3.node';
+      const fakeResources = '/Applications/Natively.app/Contents/Resources';
+      const c = cjs.resolveTargetPath(rel, { resourcesPath: fakeResources });
+      const e = esm.resolveTargetPath(rel, { resourcesPath: fakeResources });
+      assert.equal(c, e, `cjs=${c} esm=${e}`);
+      // And it must point into app.asar.unpacked — NOT into app.asar/,
+      // which is the bug we are fixing.
+      assert.ok(c.includes('app.asar.unpacked'), 'must resolve into app.asar.unpacked');
+      assert.ok(!c.includes('app.asar/'), 'must NOT resolve into the asar virtual filesystem');
+    });
+  });
+
+  test('resolveTargetPath falls back to repoRoot when no resourcesPath given', () => {
+    const cjs = require('../nativeArch.cjs');
+    return import('../nativeArch.mjs').then((esm) => {
+      const rel = 'node_modules/keytar/build/Release/keytar.node';
+      const c = cjs.resolveTargetPath(rel, { repoRoot: process.cwd() });
+      const e = esm.resolveTargetPath(rel, { repoRoot: process.cwd() });
+      assert.equal(c, e);
+      assert.equal(c, require('node:path').join(process.cwd(), rel));
+    });
+  });
+
+  test('buildFixCommand({ packaged }) returns the same reinstall message from both modules', () => {
+    const cjs = require('../nativeArch.cjs');
+    return import('../nativeArch.mjs').then((esm) => {
+      const c = cjs.buildFixCommand({ packaged: true });
+      const e = esm.buildFixCommand({ packaged: true });
+      assert.equal(c, e, 'packaged-mode fix messages must match');
+      // Must NOT suggest a developer shell command.
+      assert.ok(!c.includes('npm run rebuild:native'), 'must NOT suggest npm run rebuild:native to end-users');
+      assert.ok(c.includes('releases/latest'), 'must point users to the release page');
+    });
+  });
+
+  test('verifyAll(opts.packaged) marks the result as packaged in both modules', () => {
+    const cjs = require('../nativeArch.cjs');
+    return import('../nativeArch.mjs').then((esm) => {
+      const cResult = cjs.verifyAll(undefined, { packaged: true });
+      const eResult = esm.verifyAll(undefined, { packaged: true });
+      assert.equal(cResult.packaged, eResult.packaged);
+      assert.equal(cResult.packaged, true);
+    });
+  });
 });

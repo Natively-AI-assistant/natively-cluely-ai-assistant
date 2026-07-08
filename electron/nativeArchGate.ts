@@ -77,6 +77,30 @@
     return process.cwd();
   }
 
+  /**
+   * Detect a packaged build WITHOUT requiring the Electron `app` object
+   * (the gate may run before electron is safe to load). The two signals:
+   *
+   *   1. Electron sets `process.resourcesPath` to `…/Natively.app/Contents/Resources`
+   *      when the bundle is packaged. In dev it's `undefined` or points
+   *      at the running `electron` executable's Resources dir.
+   *   2. `process.defaultApp === true` is set when Electron is invoked
+   *      as a normal CLI binary (i.e. dev mode), and is NOT set when the
+   *      app was launched from a `.app` bundle.
+   *
+   * Combining the two gives a reliable packaged / dev split without ever
+   * touching the `app` API.
+   */
+  function isPackagedBuild(): boolean {
+    const rp = (process as any).resourcesPath as string | undefined;
+    if (typeof rp !== 'string') return false;
+    if ((process as any).defaultApp === true) return false;
+    // Real packaged apps: resourcesPath ends in /Natively.app/Contents/Resources.
+    // The `.app` substring is a robust heuristic — there's no `.app` segment
+    // in any Electron dev tree path.
+    return rp.includes('.app/');
+  }
+
   // Register the arch-mismatch handler BEFORE running the check. The
   // check throws synchronously, and if the throw reaches process-level
   // without a handler attached, it becomes an uncaughtException with
@@ -90,16 +114,19 @@
   // so any setQuitReason call here would never execute. The actual
   // marker write lives in main.ts:92's branch (see the FIX-1 commit).
   process.on('uncaughtException', (err: NodeJS.ErrnoException) => {
-    if (!(err instanceof Error) || !err.message.startsWith('[nativeArch]')) return;
+    if (!(err instanceof Error) || !/^\[nativeArch(?::packaged)?\]/.test(err.message)) return;
+    const packaged = err.message.startsWith('[nativeArch:packaged]');
     const detail = err.message
-      .replace(/^\[nativeArch\]\s*/, '')
+      .replace(/^\[nativeArch(?::packaged)?\]\s*/, '')
       .replace(/^Architecture mismatch:\s*/, '');
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { dialog, app: electronApp } = require('electron');
       // showErrorBox is modal and blocks until the user clicks OK.
       dialog.showErrorBox(
-        'Native modules are wrong architecture — run this command to fix:',
+        packaged
+          ? 'Natively was built for a different chip — please reinstall'
+          : 'Native modules are wrong architecture — run this command to fix:',
         detail,
       );
       electronApp.exit(1);
@@ -116,22 +143,31 @@
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const nativeArch = require('./lib/nativeArch.cjs');
-    const repoRoot = findRepoRoot(__dirname);
-    const result = nativeArch.verifyAll(repoRoot);
+    const packaged = isPackagedBuild();
+    const verifyOpts = packaged
+      ? { resourcesPath: (process as any).resourcesPath, packaged: true }
+      : {};
+    const repoRoot = packaged ? undefined : findRepoRoot(__dirname);
+    const result = nativeArch.verifyAll(repoRoot, verifyOpts);
     if (result.ok || result.skipped) return;
-    const detail =
-      `Detected: ${result.hardware}\n` +
-      `Built:    ${result.mismatches.map((m: any) => m.actual).join(', ')}\n\n` +
-      `The compiled binaries were built under Rosetta and will not load under the ` +
-      `native Electron runtime. The local database, meeting history, and modes ` +
-      `will not work until rebuilt.\n\n` +
-      `Fix (copy and paste into a terminal):\n\n` +
-      `  ${result.fix}\n\n` +
-      `Mismatched files:\n` +
-      result.mismatches.map((m: any) => `  - ${m.path} (built ${m.actual}, need ${m.expected})`).join('\n');
-    throw new Error('[nativeArch] Architecture mismatch:\n' + detail);
+    const detail = packaged
+      ? `Detected: ${result.hardware}\n` +
+        `Built:    ${result.mismatches.map((m: any) => m.actual).join(', ')}\n\n` +
+        `${result.fix}\n\n` +
+        `Mismatched files:\n` +
+        result.mismatches.map((m: any) => `  - ${m.path} (built ${m.actual}, need ${m.expected})`).join('\n')
+      : `Detected: ${result.hardware}\n` +
+        `Built:    ${result.mismatches.map((m: any) => m.actual).join(', ')}\n\n` +
+        `The compiled binaries were built under Rosetta and will not load under the ` +
+        `native Electron runtime. The local database, meeting history, and modes ` +
+        `will not work until rebuilt.\n\n` +
+        `Fix (copy and paste into a terminal):\n\n` +
+        `  ${result.fix}\n\n` +
+        `Mismatched files:\n` +
+        result.mismatches.map((m: any) => `  - ${m.path} (built ${m.actual}, need ${m.expected})`).join('\n');
+    throw new Error(`${packaged ? '[nativeArch:packaged]' : '[nativeArch]'} Architecture mismatch:\n` + detail);
   } catch (e: any) {
-    if (e instanceof Error && e.message.startsWith('[nativeArch]')) {
+    if (e instanceof Error && /^\[nativeArch(?::packaged)?\]/.test(e.message)) {
       // Re-throw synchronously. The uncaughtException handler in main.ts
       // will display the dialog and exit cleanly.
       throw e;

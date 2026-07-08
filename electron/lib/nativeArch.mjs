@@ -91,6 +91,29 @@ export function binaryArch(absPath) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Resolve a TARGET (a `node_modules/...` relative path) to an absolute path,
+ * correctly handling packaged vs dev layouts.
+ *
+ *   - Packaged: electron-builder unpacks native `.node` files to
+ *     `${resourcesPath}/app.asar.unpacked/${rel}`. Probing the asar side
+ *     returns ENOTDIR from `file -b` (asar is a virtual filesystem that
+ *     `file` cannot `open()`), which previously caused a false-positive
+ *     "Built unknown" mismatch and fired the dialog for every end-user
+ *     launch of v2.8.1.
+ *   - Dev: fall back to `${repoRoot}/${rel}` (the existing behavior).
+ *
+ * @param {string} rel            TARGET entry, e.g. "node_modules/better-sqlite3/build/Release/better_sqlite3.node"
+ * @param {{ repoRoot?: string, resourcesPath?: string }} [opts]
+ * @returns {string} absolute path
+ */
+export function resolveTargetPath(rel, { repoRoot, resourcesPath } = {}) {
+  if (resourcesPath) {
+    return path.join(resourcesPath, 'app.asar.unpacked', rel);
+  }
+  return path.join(repoRoot || process.cwd(), rel);
+}
+
+/**
  * Run the arch check against every TARGET. Returns a structured result
  * suitable for both throwing (script use) and in-place UI (boot gate).
  *
@@ -103,11 +126,18 @@ export function binaryArch(absPath) {
  *   - Mismatched .node files: collected into `mismatches` with the actual
  *     and expected arch, plus the one-line fix the user can copy.
  *
+ * Packaged mode:
+ *   - Pass `opts.resourcesPath` (= `process.resourcesPath` from the Electron
+ *     main process) so each TARGET resolves into `app.asar.unpacked/`. The
+ *     existing single-arg form (`verifyAll(repoRoot)`) is unchanged and
+ *     stays in use by `scripts/verify-native-arch.js` + the parity test.
+ *
  * @param {string} [repoRoot]  defaults to process.cwd(); pass explicitly
  *                             when called from main.ts (which has its own cwd).
- * @returns {{ ok: boolean, skipped?: boolean, hardware?: string, mismatches: Array<{ path: string, actual: string, expected: string }>, fix: string }}
+ * @param {{ resourcesPath?: string, packaged?: boolean }} [opts]
+ * @returns {{ ok: boolean, skipped?: boolean, hardware?: string, mismatches: Array<{ path: string, actual: string, expected: string }>, fix: string, packaged?: boolean }}
  */
-export function verifyAll(repoRoot = process.cwd()) {
+export function verifyAll(repoRoot = process.cwd(), opts = {}) {
   if (os.platform() !== 'darwin') {
     return { ok: true, skipped: true, mismatches: [] };
   }
@@ -116,7 +146,7 @@ export function verifyAll(repoRoot = process.cwd()) {
   const mismatches = [];
 
   for (const rel of TARGETS) {
-    const abs = path.join(repoRoot, rel);
+    const abs = resolveTargetPath(rel, { repoRoot, resourcesPath: opts.resourcesPath });
     if (!existsSync(abs)) {
       // Not built yet (e.g. partial install) — the rebuild step is what
       // creates these; absence isn't an arch error.
@@ -136,20 +166,39 @@ export function verifyAll(repoRoot = process.cwd()) {
     ok: mismatches.length === 0,
     hardware: expected,
     mismatches,
-    fix: buildFixCommand(),
+    fix: buildFixCommand({ packaged: opts.packaged }),
+    packaged: !!opts.packaged,
   };
 }
 
 // ---------------------------------------------------------------------------
-// User-facing fix command.
+// User-facing fix guidance.
 // ---------------------------------------------------------------------------
+
+/**
+ * End-user-facing message for a packaged-app arch mismatch. An end-user
+ * cannot run `npm run rebuild:native`; the only action available is to
+ * reinstall the DMG that matches their Mac's CPU.
+ */
+const PACKAGED_REINSTALL_MESSAGE =
+  'This copy of Natively was built for a different chip than your Mac.\n' +
+  'Please download the correct version and reinstall:\n\n' +
+  '  https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases/latest\n\n' +
+  '  • Apple Silicon (M1–M4): the arm64 DMG\n' +
+  '  • Intel Macs:            the standard DMG\n\n' +
+  'Your data is safe — reinstalling over the current app keeps meeting\n' +
+  'history and settings.';
 
 /**
  * The single command the user (or our dialog) should suggest.
  * Always wraps in `arch -arm64` on macOS so the toolchain itself runs
  * natively, not under Rosetta.
+ *
+ * In packaged mode (`opts.packaged === true`), end-users cannot rebuild
+ * from a terminal — return a reinstall-the-DMG message instead.
  */
-export function buildFixCommand() {
+export function buildFixCommand(opts = {}) {
+  if (opts.packaged) return PACKAGED_REINSTALL_MESSAGE;
   if (os.platform() === 'darwin') {
     return 'arch -arm64 npm run rebuild:native';
   }
