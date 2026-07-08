@@ -22,6 +22,11 @@ import path from 'path';
 import { buildWorkerInitMessage } from './inferenceConfig';
 import { resolveWhisperWorkerPath } from './workerPathResolver';
 import { acquireOnnxSlot, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSession } from '../../utils/onnxThreadConfig';
+import {
+    consumePoisonedOnnxLoad,
+    clearLoadSentinel as clearOnnxLoadSentinel,
+    writeLoadSentinel as writeOnnxLoadSentinel,
+} from '../../utils/onnxLoadSentinel';
 
 // Recent preload failure cooldown: tracks modelIds that just failed to init
 // so we don't hammer them on every app launch / settings toggle / hotkey.
@@ -29,6 +34,20 @@ import { acquireOnnxSlot, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSess
 // re-attempted across restarts. TTL is short (5 min) — the recovery path is
 // the new local-whisper-reset-to-default IPC.
 const RECENT_FAILURE_TTL_MS = 5 * 60 * 1000;
+
+// Cross-launch disk sentinel: re-exports of the generalized module keyed on
+// the 'whisper' family. The original `WhisperLoadSentinel` type is preserved
+// as a structural superset of the generalized record, so call sites and the
+// existing `WhisperLoadSentinel.test.mjs` keep compiling without changes.
+// `family` is widened to the full `OnnxFamily` union so the generalized
+// module's return type assigns cleanly into this alias.
+import type { OnnxFamily } from '../../utils/onnxLoadSentinel';
+export type WhisperLoadSentinel = {
+    family: OnnxFamily;
+    modelId: string;
+    startedAt: number;
+    attempt: number;
+};
 
 function recentFailuresPath(): string {
     return path.join(app.getPath('userData'), 'whisper-recent-failures.json');
@@ -64,6 +83,18 @@ function saveRecentFailures(m: Map<string, number>): void {
     } catch {
         // best-effort; failure to persist is non-fatal
     }
+}
+
+// Whisper-family thin shims over the generalized module so existing call
+// sites in `electron/main.ts` and `electron/audio/LocalWhisperSTT.ts` keep
+// working byte-identically. New families wire the generalized primitives
+// directly (no shim).
+export function writeLoadSentinel(modelId: string): void {
+    writeOnnxLoadSentinel('whisper', modelId);
+}
+
+export function clearLoadSentinel(modelId?: string): void {
+    clearOnnxLoadSentinel('whisper', modelId);
 }
 
 class ModelPreloader {
@@ -146,6 +177,7 @@ class ModelPreloader {
             slotRelease = release;
         }).catch(() => { /* should never reject */ });
 
+        writeLoadSentinel(modelId);
         const w = new Worker(workerPath);
         this.loadingWorker = w;
         // Stash release on the worker object so takeWarmWorker() can hand it
@@ -153,11 +185,24 @@ class ModelPreloader {
         (w as any).__slotRelease = () => {
             if (slotRelease) { slotRelease(); slotRelease = null; }
         };
-        w.on('exit', () => { (w as any).__slotRelease?.(); });
+        w.on('exit', (code) => {
+            if (code === 0) {
+                clearLoadSentinel(modelId);
+            } else {
+                this.recordFailure(modelId);
+            }
+            if (this.loadingWorker === w) {
+                this.loadingWorker = null;
+                this.pendingModelId = null;
+                this.loading = false;
+            }
+            (w as any).__slotRelease?.();
+        });
         w.on('error', () => { (w as any).__slotRelease?.(); });
 
         w.on('message', (msg: any) => {
             if (msg.type === 'ready') {
+                clearLoadSentinel(modelId);
                 console.log(`[ModelPreloader] Worker warm for ${modelId}`);
                 this.warmWorker = w;
                 this.loadingWorker = null;
@@ -167,6 +212,7 @@ class ModelPreloader {
             } else if (msg.type === 'error') {
                 console.warn(`[ModelPreloader] Worker init failed: ${msg.message}`);
                 this.recordFailure(modelId);
+                clearLoadSentinel(modelId);
                 w.terminate();
                 this.loadingWorker = null;
                 this.pendingModelId = null;
@@ -189,6 +235,19 @@ class ModelPreloader {
         const expiry = Date.now() + RECENT_FAILURE_TTL_MS;
         this.recentFailures.set(modelId, expiry);
         saveRecentFailures(this.recentFailures);
+    }
+
+    recordLoadFailure(modelId: string): void {
+        this.recordFailure(modelId);
+    }
+
+    consumePoisonedLoadSentinel(): WhisperLoadSentinel | null {
+        const sentinel = consumePoisonedOnnxLoad('whisper');
+        if (sentinel) {
+            console.warn(`[ModelPreloader] Previous process exited while loading ${sentinel.modelId}; recording recent-failure cooldown`);
+            this.recordFailure(sentinel.modelId);
+        }
+        return sentinel;
     }
 
     /**

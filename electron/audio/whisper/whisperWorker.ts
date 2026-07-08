@@ -160,6 +160,7 @@ parentPort.on('message', async (msg: any) => {
       const dtypeDesc = typeof dtype === 'string'
         ? dtype
         : 'mixed:' + Object.entries(dtype).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k}=${v}`).join(',');
+      const sessionOptions = getBoundedOnnxSessionOptions();
 
       console.log(`[WhisperWorker] Loading ${msg.modelId} | providers=${providers.join(',')} | dtype=${dtypeDesc}`);
 
@@ -185,6 +186,7 @@ parentPort.on('message', async (msg: any) => {
           encoderFile: _encName, encoderBytes: _stat(_path.join(_modelDir, _encName)),
           decoderFile: _decName, decoderBytes: _stat(_path.join(_modelDir, _decName)),
           providers, dtype: dtypeDesc,
+          sessionOptions,
           ortNodeVersion: _ortVer,
           ortBackend: (env.backends?.onnx ? Object.keys(env.backends.onnx) : []),
           execEnv: { execPath: process.execPath, nodeVer: process.version, modules: process.versions.modules, electron: process.versions.electron || 'n/a' },
@@ -216,7 +218,7 @@ parentPort.on('message', async (msg: any) => {
         msg.useExternalDataFormat;
       pipe = await pipeline('automatic-speech-recognition', msg.modelId, {
         dtype,
-        session_options: getBoundedOnnxSessionOptions(),
+        session_options: sessionOptions,
         ...(useExternalDataFormat !== undefined
           ? { use_external_data_format: useExternalDataFormat }
           : {}),

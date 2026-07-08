@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Download, Trash2, HardDrive, Check, Loader2, Zap, AlertCircle, ChevronDown } from 'lucide-react';
+import { Download, Trash2, HardDrive, Check, Loader2, Zap, AlertCircle, ChevronDown, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { isMac } from '../utils/platformUtils';
 
@@ -36,6 +36,19 @@ interface ChannelConfig {
     micModelId: string;
     systemModelId: string;
     globalModelId: string;
+}
+
+interface RecoveryNotice {
+    recovered: true;
+    badModelId: string;
+    fallbackModelId: string;
+    message: string;
+}
+
+interface OnnxRecoveryNotice {
+    family: 'whisper' | 'intent' | 'embeddings' | 'reranker';
+    badModelId: string;
+    message: string;
 }
 
 const electronAPI = (window as any).electronAPI;
@@ -113,11 +126,13 @@ export function LocalWhisperModelPanel() {
     
     const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({});
     const [downloadingSet, setDownloadingSet] = useState<Set<string>>(new Set());
+    const [recoveryNotice, setRecoveryNotice] = useState<RecoveryNotice | null>(null);
+    const [onnxNotices, setOnnxNotices] = useState<Partial<Record<OnnxRecoveryNotice['family'], OnnxRecoveryNotice>>>({});
     const [loading, setLoading] = useState(true);
 
     const loadData = useCallback(async () => {
         try {
-            const [modelsRes, hwRes, cfgRes, stateRes] = await Promise.all([
+            const [modelsRes, hwRes, cfgRes, stateRes, noticeRes, intentRes, embedRes, rerankRes] = await Promise.all([
                 electronAPI?.localWhisperGetModels?.(),
                 electronAPI?.localWhisperGetHardware?.(),
                 electronAPI?.localWhisperGetChannelConfig?.(),
@@ -127,11 +142,29 @@ export function LocalWhisperModelPanel() {
                 // would show 0% / "Install" even though the main process is
                 // still downloading.
                 electronAPI?.localWhisperGetDownloadState?.().catch(() => []),
+                electronAPI?.localWhisperGetRecoveryNotice?.().catch(() => null),
+                // Generalized ONNX load-sentinel notices for the other three
+                // local-model families (intent classifier / local embeddings /
+                // local reranker). Each is one-shot drained through AppState so
+                // a renderer reload does not see the same notice twice.
+                electronAPI?.onnxGetRecoveryNotice?.('intent').catch(() => null),
+                electronAPI?.onnxGetRecoveryNotice?.('embeddings').catch(() => null),
+                electronAPI?.onnxGetRecoveryNotice?.('reranker').catch(() => null),
             ]);
 
             if (modelsRes) setModels(modelsRes.models ?? []);
             if (hwRes) setHardware(hwRes);
             if (cfgRes) setConfig(cfgRes);
+            if (noticeRes?.recovered) setRecoveryNotice(noticeRes);
+
+            // Merge the three family-keyed notices into a single keyed object
+            // so the chips render in a deterministic order. A `null` from the
+            // IPC means "no notice this session" — leave the chip out.
+            const nextOnnx: typeof onnxNotices = {};
+            if (intentRes) nextOnnx.intent = intentRes as OnnxRecoveryNotice;
+            if (embedRes) nextOnnx.embeddings = embedRes as OnnxRecoveryNotice;
+            if (rerankRes) nextOnnx.reranker = rerankRes as OnnxRecoveryNotice;
+            setOnnxNotices(nextOnnx);
 
             // Merge service state into UI state. We only mutate state for
             // entries the service knows about — a 'complete' entry triggers
@@ -297,6 +330,48 @@ export function LocalWhisperModelPanel() {
     
     return (
         <div className="space-y-4">
+            {recoveryNotice && (
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex items-start gap-3 text-amber-700 dark:text-amber-300">
+                    <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold text-text-primary">Recovered local transcription</div>
+                        <p className="text-xs text-text-secondary mt-1 leading-relaxed">
+                            Natively recovered from a local transcription model crash. We reset <span className="font-mono text-text-primary">{recoveryNotice.badModelId}</span> to <span className="font-mono text-text-primary">{recoveryNotice.fallbackModelId}</span> so the app can start safely.
+                        </p>
+                    </div>
+                    <button
+                        onClick={() => setRecoveryNotice(null)}
+                        className="p-1 rounded-md text-text-tertiary hover:text-text-primary hover:bg-bg-elevated transition-colors"
+                        aria-label="Dismiss recovery notice"
+                    >
+                        <X size={14} />
+                    </button>
+                </div>
+            )}
+            {onnxNotices.intent && (
+                <OnnxRecoveryChip
+                    title="Recovered intent classifier"
+                    family="intent"
+                    notice={onnxNotices.intent}
+                    onDismiss={() => setOnnxNotices((s) => ({ ...s, intent: undefined }))}
+                />
+            )}
+            {onnxNotices.embeddings && (
+                <OnnxRecoveryChip
+                    title="Recovered local embeddings"
+                    family="embeddings"
+                    notice={onnxNotices.embeddings}
+                    onDismiss={() => setOnnxNotices((s) => ({ ...s, embeddings: undefined }))}
+                />
+            )}
+            {onnxNotices.reranker && (
+                <OnnxRecoveryChip
+                    title="Recovered local reranker"
+                    family="reranker"
+                    notice={onnxNotices.reranker}
+                    onDismiss={() => setOnnxNotices((s) => ({ ...s, reranker: undefined }))}
+                />
+            )}
             <div className="bg-bg-card rounded-xl border border-border-subtle p-5 shadow-sm">
                 <div className="mb-5">
                     <h3 className="text-sm font-semibold text-text-primary">Local Engine Configuration</h3>
@@ -475,6 +550,70 @@ export function LocalWhisperModelPanel() {
                     </p>
                 </div>
             )}
+        </div>
+    );
+}
+
+/**
+ * Compact status chip for the three "silent background" local models
+ * (intent / embeddings / reranker). Smaller than the full Whisper banner
+ * because the user doesn't otherwise notice these degraded paths.
+ *
+ * "Retry now" calls the `onnx-reset-family` IPC to clear the cold-start
+ * poison flag in the main process. The user must reopen the panel to see
+ * the actual retry attempt — the next `ensureLoaded()` will try a fresh
+ * spawn; if it succeeds the chip will simply not reappear next launch
+ * because the disk sentinel was cleared on `ready`.
+ */
+function OnnxRecoveryChip({
+    title,
+    family,
+    notice,
+    onDismiss,
+}: {
+    title: string;
+    family: OnnxRecoveryNotice['family'];
+    notice: OnnxRecoveryNotice;
+    onDismiss: () => void;
+}) {
+    const [retrying, setRetrying] = useState(false);
+    const handleRetry = useCallback(async () => {
+        setRetrying(true);
+        try {
+            await electronAPI?.onnxResetFamily?.(family);
+        } finally {
+            setRetrying(false);
+            onDismiss();
+        }
+    }, [family, onDismiss]);
+    return (
+        <div className="bg-amber-500/5 border border-amber-500/15 rounded-xl p-3 flex items-start gap-3 text-amber-700 dark:text-amber-300/90">
+            <AlertCircle size={14} className="mt-0.5 flex-shrink-0 opacity-80" />
+            <div className="flex-1 min-w-0">
+                <div className="text-xs font-semibold text-text-primary">{title}</div>
+                <p className="text-[11px] text-text-secondary mt-0.5 leading-relaxed">
+                    {notice.message}
+                </p>
+                <div className="mt-2 flex items-center gap-3">
+                    <button
+                        onClick={handleRetry}
+                        disabled={retrying}
+                        className="text-[11px] font-semibold text-accent-primary hover:underline disabled:opacity-50"
+                    >
+                        {retrying ? 'Retrying…' : 'Retry now'}
+                    </button>
+                    <span className="text-[10px] text-text-tertiary">
+                        Skipped model: <span className="font-mono">{notice.badModelId}</span>
+                    </span>
+                </div>
+            </div>
+            <button
+                onClick={onDismiss}
+                className="p-1 rounded-md text-text-tertiary hover:text-text-primary hover:bg-bg-elevated transition-colors"
+                aria-label="Dismiss recovery notice"
+            >
+                <X size={12} />
+            </button>
         </div>
     );
 }

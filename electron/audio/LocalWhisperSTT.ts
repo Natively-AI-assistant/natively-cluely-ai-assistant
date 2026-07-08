@@ -37,7 +37,7 @@ import { resampleToF32 } from './whisper/audioResampler';
 import { VadProcessor } from './whisper/vadProcessor';
 import { filterHallucination } from './whisper/hallucinationFilter';
 import { configureTransformersCache } from './whisper/modelManager';
-import { modelPreloader } from './whisper/modelPreloader';
+import { clearLoadSentinel, modelPreloader, writeLoadSentinel } from './whisper/modelPreloader';
 import { buildWorkerInitMessage } from './whisper/inferenceConfig';
 import { resolveWhisperWorkerPath } from './whisper/workerPathResolver';
 import type { WorkerOutMessage } from './whisper/types';
@@ -627,6 +627,7 @@ export class LocalWhisperSTT extends EventEmitter {
 
         console.log(`[LocalWhisperSTT] Cold-starting worker for ${this.modelId}`);
         const workerPath = resolveWhisperWorkerPath();
+        writeLoadSentinel(this.modelId);
         this.worker = new Worker(workerPath);
         this.attachWorkerListeners();
         this.worker.postMessage(buildWorkerInitMessage(this.modelId));
@@ -637,6 +638,7 @@ export class LocalWhisperSTT extends EventEmitter {
 
         this.worker.on('message', (msg: WorkerOutMessage) => {
             if (msg.type === 'ready') {
+                clearLoadSentinel(this.modelId);
                 this.workerReady = true;
                 this.flushPending();
                 return;
@@ -718,6 +720,13 @@ export class LocalWhisperSTT extends EventEmitter {
             // Free the shared ONNX gate slot — Whisper's session is gone.
             if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
             this.workerReady = false;
+            // Symmetric with the exit handler below: a worker `error` is
+            // followed by a non-zero `exit` in node:worker_threads, so the
+            // exit handler also calls recordLoadFailure. Calling here too is
+            // belt-and-braces for the theoretical error-without-exit case
+            // (e.g. a hard native abort that races the parent). Idempotent
+            // because recordLoadFailure only sets a map expiry, never clears.
+            modelPreloader.recordLoadFailure(this.modelId);
             const isOnnxSymbolError = err.message.includes('Symbol not found')
                 || err.message.includes('to_chars')
                 || err.message.includes('libonnxruntime');
@@ -735,7 +744,11 @@ export class LocalWhisperSTT extends EventEmitter {
         // streaming loop must be unblocked — otherwise streamingTaskInFlight
         // stays true and the next tick silently stalls forever.
         this.worker.on('exit', (code) => {
-            if (code === 0) return; // clean shutdown
+            if (code === 0) {
+                clearLoadSentinel(this.modelId);
+                return; // clean shutdown
+            }
+            modelPreloader.recordLoadFailure(this.modelId);
             this.clearStreamingWatchdog();
             if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
             const hadInFlight = this.streamingTaskInFlight;

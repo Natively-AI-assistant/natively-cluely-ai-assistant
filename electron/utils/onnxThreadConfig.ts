@@ -50,6 +50,8 @@ export interface OnnxThreadBounds {
     intraOpNumThreads: number;
     interOpNumThreads: number;
     executionMode: 'sequential' | 'parallel';
+    enableCpuMemArena?: boolean;
+    enableMemPattern?: boolean;
 }
 
 function readIntEnv(name: string, fallback: number): number {
@@ -57,6 +59,15 @@ function readIntEnv(name: string, fallback: number): number {
     if (!raw) return fallback;
     const n = Number.parseInt(raw, 10);
     return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function readBoolEnv(name: string, fallback: boolean): boolean {
+    const raw = process.env[name];
+    if (!raw) return fallback;
+    const normalized = raw.trim().toLowerCase();
+    if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+    if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+    return fallback;
 }
 
 /**
@@ -69,6 +80,12 @@ export function getBoundedOnnxSessionOptions(): OnnxThreadBounds {
         intraOpNumThreads: readIntEnv('NATIVELY_ONNX_INTRA_OP_THREADS', 1),
         interOpNumThreads: readIntEnv('NATIVELY_ONNX_INTER_OP_THREADS', 1),
         executionMode: 'sequential',
+        // Disable ORT's persistent BFCArena/memory-pattern reuse by default.
+        // The crash forensics above point at BFCArena::Extend; standard system
+        // allocations are safer inside Electron. Env vars keep this reversible
+        // for perf experiments without shipping a new build.
+        enableCpuMemArena: readBoolEnv('NATIVELY_ONNX_ENABLE_CPU_MEM_ARENA', false),
+        enableMemPattern: readBoolEnv('NATIVELY_ONNX_ENABLE_MEM_PATTERN', false),
     };
 }
 
