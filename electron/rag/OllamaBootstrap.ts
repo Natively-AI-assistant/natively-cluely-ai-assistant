@@ -22,24 +22,51 @@ export class OllamaBootstrap {
     }
   }
 
+  // PHASE-2C: log the "not installed" ENOENT at most ONCE per process. Repeated
+  // spawns on every fresh bootstrap (or every retry from ensureRunning) used
+  // to fill the user's log with the same noise. If the user later installs
+  // Ollama, the next call will re-attempt naturally because the gate is per-
+  // process-instance, not persisted to disk.
+  private static _loggedMissingOnce = false;
+  private static readonly MISSING_BACKOFF_MS = 60_000;
+  private static _lastMissingLogAt = 0;
+
   /**
    * Attempt to start the Ollama daemon via shell
    */
   async ensureOllamaRunning(): Promise<boolean> {
     if (await this.isOllamaRunning()) return true;
-    
+
+    // PHASE-2C: short-circuit if we recently logged "not installed" — no point
+    // spamming spawn attempts every few seconds.
+    const now = Date.now();
+    if (
+      OllamaBootstrap._loggedMissingOnce &&
+      now - OllamaBootstrap._lastMissingLogAt < OllamaBootstrap.MISSING_BACKOFF_MS
+    ) {
+      return false;
+    }
+
     // Try to start it
     try {
       const child = spawn('ollama', ['serve'], { detached: true, stdio: 'ignore' });
-      child.on('error', (err) => {
-        console.error('[OllamaBootstrap] Failed to spawn ollama (not installed?):', err);
+      child.on('error', (err: NodeJS.ErrnoException) => {
+        // Throttle: log the FIRST occurrence, then only every MISSING_BACKOFF_MS.
+        if (
+          !OllamaBootstrap._loggedMissingOnce ||
+          now - OllamaBootstrap._lastMissingLogAt >= OllamaBootstrap.MISSING_BACKOFF_MS
+        ) {
+          console.warn('[OllamaBootstrap] Ollama binary not on PATH; skipping spawn (this message is logged at most once per minute per process):', err?.code || err?.message || err);
+          OllamaBootstrap._loggedMissingOnce = true;
+          OllamaBootstrap._lastMissingLogAt = now;
+        }
       });
       child.unref();
     } catch (e) {
       console.error('[OllamaBootstrap] Synchronous error spawning ollama:', e);
       return false;
     }
-    
+
     // Wait up to 5 seconds for it to come up
     for (let i = 0; i < 10; i++) {
       await new Promise(r => setTimeout(r, 500));

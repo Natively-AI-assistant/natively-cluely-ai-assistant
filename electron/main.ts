@@ -97,6 +97,20 @@ process.on('uncaughtException', (err) => {
   // through to the original logToFile behavior.
   if (err instanceof Error && err.message.startsWith('[nativeArch]')) {
     const detail = err.message.replace(/^\[nativeArch\]\s*/, '').replace(/^Architecture mismatch:\s*/, '');
+    // PHASE-2E (CRITICAL fix): tag this fatal exit so the NEXT launch sees
+    // a "previous session ended unexpectedly" marker with reason
+    // fatal-main-error — instead of mis-reading it as a generic crash.
+    // MUST happen here, in this branch, because this handler is the FIRST
+    // one to match the [nativeArch] prefix and exit()s before any other
+    // uncaughtException handler (including the one inside nativeArchGate.ts
+    // and the one in LifecycleTracker) gets a chance to run.
+    try {
+      const { LifecycleTracker } = require('./utils/lifecycleTracker');
+      LifecycleTracker.getInstance().setQuitReason('fatal-main-error', {
+        source: 'native-arch-gate',
+        message: detail.slice(0, 200), // bounded — don't spam the marker
+      });
+    } catch { /* best-effort */ }
     try {
       // Lazy-require electron so this handler doesn't fire before
       // app.whenReady() if the bundle is loaded in a non-Electron context.
@@ -480,6 +494,14 @@ interface SttStatusPayload {
   channel: 'user' | 'interviewer';
   reconnectAttempts?: number;
 }
+
+export interface LocalWhisperRecoveryNotice {
+  recovered: true;
+  badModelId: string;
+  fallbackModelId: string;
+  message: string;
+}
+
 type ScreenshotCaptureKind = 'full' | 'selective';
 
 interface ScreenshotCaptureSession {
@@ -622,6 +644,7 @@ export class AppState {
   private _dockReassertTimers: NodeJS.Timeout[] = []; // Self-verifying dock-enforcement retry timers
   private _ollamaBootstrapPromise: Promise<void> | null = null;
   private screenshotCaptureInProgress: boolean = false;
+  private localWhisperRecoveryNotice: LocalWhisperRecoveryNotice | null = null;
 
 
   // Processing events
@@ -686,6 +709,12 @@ export class AppState {
           // crashes on init with a confusing "model not found" and the user
           // is locked out of audio until they manually clear settings.
           //
+          // Also consume the Whisper load sentinel before validation/preload. If
+          // it exists, the previous process died while loading that model natively
+          // (before JS error handlers could persist a cooldown). Reset any
+          // matching selection headlessly so one bad ONNX model cannot brick
+          // startup.
+          //
           // Validate BOTH the global setting AND the per-channel overrides
           // (when per-channel mode is enabled). Per-channel validation runs
           // here because the per-channel id is read at meeting-start time
@@ -693,6 +722,28 @@ export class AppState {
           // un-validated here means a corrupt per-channel id would still
           // crash the meeting even though the global gate passes.
           const FALLBACK = 'Xenova/whisper-tiny.en';
+          const poisoned = modelPreloader.consumePoisonedLoadSentinel?.();
+          if (poisoned?.modelId) {
+            let resetAny = false;
+            for (const key of ['localWhisperModel', 'localWhisperModelMic', 'localWhisperModelSystem'] as const) {
+              if (settingsManager.get(key) === poisoned.modelId) {
+                settingsManager.set(key, FALLBACK);
+                resetAny = true;
+              }
+            }
+            if (resetAny) {
+              const message = `Recovered from a local transcription model crash. Reset ${poisoned.modelId} to ${FALLBACK}.`;
+              console.warn(`[AppState] ${message}`);
+              this.setLocalWhisperRecoveryNotice({
+                recovered: true,
+                badModelId: poisoned.modelId,
+                fallbackModelId: FALLBACK,
+                message,
+              });
+            } else {
+              console.warn(`[AppState] Previous local Whisper load for ${poisoned.modelId} did not finish cleanly; current settings no longer reference it.`);
+            }
+          }
           const rawModelId = settingsManager.get('localWhisperModel') ?? FALLBACK;
           const modelId = MODEL_CATALOG_IDS.has(rawModelId) ? rawModelId : FALLBACK;
           if (modelId !== rawModelId) {
@@ -1218,6 +1269,33 @@ export class AppState {
           console.warn('[AppState] Ollama bootstrap cloud-key guard failed (non-fatal):', guardErr?.message);
         }
 
+        // PHASE-2C: capability resolver — even when no cloud key is
+        // configured, the user may have explicitly disabled Ollama (or
+        // configured a non-Ollama local provider). Without this gate, a fresh
+        // install's `spawn ollama` is wasted work that fills the log with
+        // ENOENT noise and can race the ModelSelector force-restart path.
+        // Only attempt to bootstrap when the user has not opted out.
+        try {
+          const { SettingsManager } = require('./services/SettingsManager');
+          const settings = SettingsManager.getInstance();
+          // Best-effort check — any missing key returns undefined and is
+          // treated as "no opt-out" (the bootstrap proceeds, matching
+          // pre-fix behavior). This is intentionally permissive: we only
+          // short-circuit when the user has clearly said NO.
+          const explicitNoOllama =
+            settings.get?.('disableOllamaBootstrap') === true ||
+            settings.get?.('localProvider') === 'none' ||
+            settings.get?.('localProvider') === 'cloud';
+          if (explicitNoOllama) {
+            console.log('[AppState] Skipping Ollama embeddings bootstrap — user has opted out (disableOllamaBootstrap/localProvider).');
+            return;
+          }
+        } catch (settingsErr: any) {
+          // Settings lookup is best-effort; failure here just falls through
+          // to the prior behavior.
+          console.warn('[AppState] Ollama bootstrap opt-out check failed (non-fatal):', settingsErr?.message);
+        }
+
         const { OllamaBootstrap } = require('./rag/OllamaBootstrap');
         const bootstrap = new OllamaBootstrap();
 
@@ -1486,6 +1564,37 @@ export class AppState {
       `(canAutoInstall=${autoInstall}, signedBuild=${isSignedBuild()}, platform=${process.platform})`
     )
 
+    // PHASE-2A: log current + feed config on startup so a mis-pointed `latest.yml`
+    // is immediately diagnosable from the log (and from any user bug report).
+    //
+    // NOTE: electron-updater@6.x deprecated `getFeedURL()` — when no explicit URL
+    // was set via `setFeedURL()`, the method returns the literal string
+    // "Deprecated. Do not use it." instead of resolving from `package.json`.
+    // Read the `publish` block directly so the diagnostic reflects truth.
+    try {
+      const pkgPath = path.join(app.getAppPath(), 'package.json')
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+      const publish = pkg?.build?.publish || pkg?.publish
+      let feedLabel: string
+      if (Array.isArray(publish) && publish.length > 0) {
+        // electron-builder allows a publish array (multi-channel). Log them all.
+        feedLabel = publish
+          .map((p: any) => `${p.provider || 'unknown'}:${p.owner ? `${p.owner}/${p.repo ?? ''}` : (p.url || '(default)')}`)
+          .join(', ')
+      } else if (publish && typeof publish === 'object') {
+        feedLabel = `${publish.provider || 'unknown'}:${publish.owner ? `${publish.owner}/${publish.repo ?? ''}` : (publish.url || '(default)')}`
+      } else if (publish) {
+        feedLabel = String(publish)
+      } else {
+        feedLabel = 'auto (publish in package.json)'
+      }
+      console.log(
+        `[AutoUpdater] currentVersion=${app.getVersion()} channel=${autoUpdater.channel} feed=${feedLabel}`
+      )
+    } catch (feedErr) {
+      console.warn('[AutoUpdater] Could not read feed URL:', feedErr)
+    }
+
     // Default to latest (stable) channel - matches latest.yml generated by electron-builder
     autoUpdater.channel = 'latest'
     console.log(`[AutoUpdater] Channel: ${autoUpdater.channel}`)
@@ -1496,6 +1605,30 @@ export class AppState {
     })
 
     autoUpdater.on("update-available", async (info) => {
+      // PHASE-2A: refuse non-upgrades (downgrade, equal, malformed). electron-updater
+      // normally already filters this, but we belt-and-brace it: a stale latest.yml on
+      // GitHub (or a republish with the wrong tag) must NEVER cause us to invite the
+      // user to "update" to a version older than or equal to what they're running.
+      const currentVersion = app.getVersion()
+      const remoteVersion = (info?.version ?? '').toString().replace(/^v/, '')
+      if (!AppState.isRealUpgrade(currentVersion, remoteVersion)) {
+        console.warn(
+          '[AutoUpdater] Ignoring non-upgrade update:',
+          `current=${currentVersion} remote=${remoteVersion} channel=${autoUpdater.channel}`
+        )
+        this.updateAvailable = false
+        this.updateDownloadState = 'idle'
+        this.downloadedUpdateInfo = null
+        // Treat as "not available" so the UI doesn't show a stale banner.
+        this.broadcast('update-not-available', {
+          version: currentVersion,
+          ignored: true,
+          reason: 'non-upgrade',
+          remote: remoteVersion
+        })
+        return
+      }
+
       console.log("[AutoUpdater] Update available:", info.version)
       this.updateAvailable = true
       this.updateDownloadState = 'available'
@@ -1623,8 +1756,63 @@ export class AppState {
     return false;
   }
 
+  /**
+   * PHASE-2A: Is `remote` strictly newer than `current` (both semver-ish)?
+   *
+   * Used as the GATE on the production autoUpdater path so a stale or repointed
+   * `latest.yml` can never invite the user to "update" to a version <= theirs.
+   *
+   * Rules:
+   *   - Accept only well-formed X[.Y[.Z[.B]]] (digits). Anything else → false.
+   *   - Leading 'v' (e.g. "v2.8.0") and pre-release suffixes ("2.8.0-beta.1") are
+   *     stripped before comparison so a stable build never accepts a beta as a
+   *     downgrade (and vice versa).
+   *   - Strict greater-than. Equal or older → false.
+   */
+  static isRealUpgrade(current: string, remote: string): boolean {
+    const stripPre = (v: string) => v.replace(/^v/, '').replace(/-.*$/, '')
+    const parse = (v: string): number[] | null => {
+      const parts = stripPre(v).split('.')
+      if (parts.length < 1 || parts.length > 4) return null
+      const out: number[] = []
+      for (const p of parts) {
+        if (!/^\d+$/.test(p)) return null
+        const n = parseInt(p, 10)
+        if (!Number.isFinite(n) || n < 0) return null
+        out.push(n)
+      }
+      // Pad to 4 parts for stable comparison (major.minor.patch.build).
+      while (out.length < 4) out.push(0)
+      return out
+    }
+    const c = parse(current)
+    const r = parse(remote)
+    if (!c || !r) return false
+    for (let i = 0; i < 4; i++) {
+      if (r[i] > c[i]) return true
+      if (r[i] < c[i]) return false
+    }
+    return false
+  }
 
   public async quitAndInstallUpdate(): Promise<void> {
+    // PHASE-2A: belt-and-brace guard against applying a downgrade or no-op update.
+    // The `update-downloaded` path can only be reached after `update-available`
+    // passed isRealUpgrade, but renderer/UI bugs could call this IPC directly.
+    const currentVersion = app.getVersion()
+    const downloadedVersion = (this.downloadedUpdateInfo?.version ?? '').toString().replace(/^v/, '')
+    if (!downloadedVersion) {
+      console.error('[AutoUpdater] quitAndInstall called but no downloaded update info')
+      return
+    }
+    if (!AppState.isRealUpgrade(currentVersion, downloadedVersion)) {
+      console.warn(
+        '[AutoUpdater] Refusing to apply non-upgrade update:',
+        `current=${currentVersion} downloaded=${downloadedVersion}`
+      )
+      this.broadcast('update-error', `Refusing non-upgrade update (${currentVersion} → ${downloadedVersion})`)
+      return
+    }
     console.log('[AutoUpdater] quitAndInstall called - applying update...')
 
     // Real in-place install + relaunch. Available on signed macOS builds and on
@@ -1632,6 +1820,15 @@ export class AppState {
     // unpack the staged ZIP, swap the .app, and relaunch.
     if (canAutoInstall()) {
       console.log('[AutoUpdater] Performing real quitAndInstall (signed/auto-installable build)')
+      // PHASE-2E: tag this quit so the next-launch marker doesn't report it
+      // as a "previous session crashed" event.
+      try {
+        const { LifecycleTracker } = require('./utils/lifecycleTracker');
+        LifecycleTracker.getInstance().setQuitReason('updater-quit-install', {
+          fromVersion: app.getVersion(),
+          toVersion: downloadedVersion,
+        });
+      } catch { /* best-effort */ }
       setImmediate(() => {
         try {
           // isSilent=false (show installer UI on Windows), forceRunAfter=true (relaunch).
@@ -4922,6 +5119,16 @@ export class AppState {
     return this.windowHelper.getMainWindow()
   }
 
+  public setLocalWhisperRecoveryNotice(notice: LocalWhisperRecoveryNotice): void {
+    this.localWhisperRecoveryNotice = notice;
+  }
+
+  public takeLocalWhisperRecoveryNotice(): LocalWhisperRecoveryNotice | null {
+    const notice = this.localWhisperRecoveryNotice;
+    this.localWhisperRecoveryNotice = null;
+    return notice;
+  }
+
   public getWindowHelper(): WindowHelper {
     return this.windowHelper
   }
@@ -5882,6 +6089,40 @@ async function initializeApp() {
     }
   });
 
+  // PHASE-2E: install lifecycle tracking BEFORE app.whenReady() so we never
+  // miss a renderer crash, GPU crash, or worker death that occurs during
+  // initial window creation.
+  try {
+    const { LifecycleTracker } = require('./utils/lifecycleTracker');
+    const consoleLog: (msg: string, meta?: Record<string, unknown>) => void = (msg, meta) => {
+      // Use the same redaction policy as logToFile — never log secrets.
+      const safeMeta = meta
+        ? Object.fromEntries(
+            Object.entries(meta).map(([k, v]) => {
+              if (/key|secret|token|password|auth|credential/i.test(k)) return [k, '[REDACTED]'];
+              return [k, v];
+            })
+          )
+        : undefined;
+      console.log(msg, safeMeta ?? '');
+      logToFile(msg + ' ' + (safeMeta ? JSON.stringify(safeMeta) : ''));
+    };
+    LifecycleTracker.getInstance().install(consoleLog);
+    // Surface "previous session crashed" — useful for the user-facing
+    // diagnostics UI, and free insurance for the very report that triggered
+    // this work.
+    const prev = LifecycleTracker.getInstance().readPreviousSessionMarker();
+    if (prev && LifecycleTracker.getInstance().didPreviousSessionCrash()) {
+      console.warn(
+        `[Lifecycle] previous session ended unexpectedly: ` +
+        `pid=${prev.pid} lastEvent=${prev.lastEvent} reason=${prev.quitReason ?? 'unknown'} ` +
+        `startedAt=${prev.startedAt} lastEventAt=${prev.lastEventAt}`
+      );
+    }
+  } catch (err) {
+    console.warn('[Main] LifecycleTracker install failed (non-fatal):', err);
+  }
+
   // 2. Wait for app to be ready
   await app.whenReady()
 
@@ -6592,6 +6833,17 @@ if (process.env.THINKING_MATRIX === '1') {
     } catch (e) {
       console.error('[Main] Failed to clear screenshot queues on quit:', e);
     }
+
+    // PHASE-2E: mark this as a clean exit so the next-launch marker doesn't
+    // show "previous session crashed". Last write wins — placed at the end
+    // of the cleanup handler so a throw earlier in the chain still leaves
+    // the marker with the originating quit reason.
+    try {
+      const { LifecycleTracker } = require('./utils/lifecycleTracker');
+      // Only mark clean if no specific quit reason was set (e.g. an
+      // updater install). Those should retain their explicit reason.
+      LifecycleTracker.getInstance().markCleanExit();
+    } catch { /* best-effort */ }
   })
 
 

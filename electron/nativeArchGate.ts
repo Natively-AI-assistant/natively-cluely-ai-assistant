@@ -38,6 +38,24 @@
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const fs = require('fs');
 
+  // PHASE-2E (Fix-1): install the process-level lifecycle hooks BEFORE
+  // anything else so a crash during the arch check itself still writes
+  // a marker. This is the earliest module loaded by main.ts (it's the
+  // first `import` in main.ts), so any pre-whenReady crash (native
+  // bindings dlopen, electron itself not yet loaded, etc.) goes through
+  // the tracker. The full `install()` in main.ts adds the Electron-app
+  // handlers after this point.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { LifecycleTracker } = require('./utils/lifecycleTracker');
+    LifecycleTracker.installBeforeReady((msg: string, meta?: Record<string, unknown>) => {
+      try { console.log(msg, meta ?? ''); } catch { /* best-effort */ }
+    });
+  } catch {
+    // Tracker not loadable (very early failure path). Swallow — the
+    // existing uncaughtException handler below still shows the dialog.
+  }
+
   /**
    * Walk up from a starting directory until we find a directory that
    * contains node_modules/better-sqlite3/build/Release/better_sqlite3.node.
@@ -64,6 +82,13 @@
   // without a handler attached, it becomes an uncaughtException with
   // no useful UX. By attaching here (the very first thing this IIFE
   // does), we guarantee the handler exists when the throw fires.
+  //
+  // NOTE: We intentionally do NOT call LifecycleTracker.setQuitReason()
+  // here. The first matching uncaughtException handler is in main.ts:92
+  // (registered at module-load time, before this IIFE runs) — it matches
+  // the [nativeArch] prefix and calls electronApp.exit(1) synchronously,
+  // so any setQuitReason call here would never execute. The actual
+  // marker write lives in main.ts:92's branch (see the FIX-1 commit).
   process.on('uncaughtException', (err: NodeJS.ErrnoException) => {
     if (!(err instanceof Error) || !err.message.startsWith('[nativeArch]')) return;
     const detail = err.message

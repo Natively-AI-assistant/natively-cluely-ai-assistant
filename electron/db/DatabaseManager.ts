@@ -388,60 +388,48 @@ export class DatabaseManager {
 
         // Version 2 → 3: sqlite-vec virtual tables for native vector search
         if (version < 3) {
-            console.log('[DatabaseManager] Applying migration v2 → v3: vec0 virtual tables');
+            // PHASE-2D (Fix-2): the historical v3 step attempted to create
+            // a vec0 table with `embedding float` (no dimension), which
+            // sqlite-vec rejects with "At least one vector column is
+            // required". The fix is to skip that broken CREATE entirely
+            // and let the v8/v9 per-dimension migration below provision
+            // the working tables. We still bump user_version to 3 so the
+            // migration loop advances normally.
+            //
+            // The happy path (fresh install) is now COMPLETELY SILENT —
+            // no log line, no error. We only log when there's actual
+            // legacy cleanup to report (a prior install that DID create
+            // the broken tables).
             try {
-                // Create vec0 virtual table for chunk embeddings (dynamic dimension)
-                this.db.exec(`
-                    CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
-                        chunk_id INTEGER PRIMARY KEY,
-                        embedding float
-                    );
-                `);
-
-                // Create vec0 virtual table for summary embeddings (dynamic dimension)
-                this.db.exec(`
-                    CREATE VIRTUAL TABLE IF NOT EXISTS vec_summaries USING vec0(
-                        summary_id INTEGER PRIMARY KEY,
-                        embedding float
-                    );
-                `);
-
-                // Migrate existing chunk embeddings from BLOB column to vec0 table
-                this.migrateExistingEmbeddings();
-
-                console.log('[DatabaseManager] vec0 virtual tables created successfully');
+                this.tryProvisionLegacyVecTables();
+                if (this._lastLegacyCleanup > 0) {
+                    console.log(`[DatabaseManager] v3 migration: cleared ${this._lastLegacyCleanup} legacy broken vec0 table(s) (replaced by per-dim v8/v9)`);
+                    this._lastLegacyCleanup = 0;
+                }
             } catch (e) {
-                console.error('[DatabaseManager] vec0 migration failed (sqlite-vec may not be loaded):', e);
-                console.warn('[DatabaseManager] VectorStore will fall back to JS cosine similarity');
+                // Only log on ACTUAL failure, not on the historic "vec0
+                // constructor error: At least one vector column is
+                // required" which we now explicitly do NOT raise.
+                console.error('[DatabaseManager] v3 migration failed unexpectedly (non-fatal, will be retried at v8/v9):', e?.message || e);
             }
             this.db.pragma('user_version = 3');
         }
 
         // Version 3 → 4: Drop strict 768-dim vec0 tables to allow flexible embedding dimensions
         if (version < 4) {
-            console.log('[DatabaseManager] Applying migration v3 → v4: Drop strict dimension vec0 tables');
+            // PHASE-2D (Fix-2): same fix as v3 — silent on fresh installs.
+            // The only action this step used to take was DROP TABLE on
+            // tables that v3 just CREATED. Since v3 no longer creates
+            // them, and legacy repos already had them dropped in v3,
+            // there's nothing to do on the happy path.
             try {
-                this.db.exec('DROP TABLE IF EXISTS vec_chunks;');
-                this.db.exec('DROP TABLE IF EXISTS vec_summaries;');
-
-                this.db.exec(`
-                    CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
-                        chunk_id INTEGER PRIMARY KEY,
-                        embedding float
-                    );
-                `);
-
-                this.db.exec(`
-                    CREATE VIRTUAL TABLE IF NOT EXISTS vec_summaries USING vec0(
-                        summary_id INTEGER PRIMARY KEY,
-                        embedding float
-                    );
-                `);
-
-                this.migrateExistingEmbeddings();
-                console.log('[DatabaseManager] vec0 virtual tables recreated for flexible dimensions');
+                this.tryProvisionLegacyVecTables();
+                if (this._lastLegacyCleanup > 0) {
+                    console.log(`[DatabaseManager] v4 migration: cleared ${this._lastLegacyCleanup} legacy broken vec0 table(s)`);
+                    this._lastLegacyCleanup = 0;
+                }
             } catch (e) {
-                console.error('[DatabaseManager] vec0 migration v4 failed:', e);
+                console.error('[DatabaseManager] v4 migration failed (non-fatal):', e?.message || e);
             }
             this.db.pragma('user_version = 4');
         }
@@ -1854,6 +1842,47 @@ export class DatabaseManager {
             console.log(`[DatabaseManager] Ensured vec0 tables for dim=${dim}`);
         } catch (e) {
             console.error(`[DatabaseManager] Failed to create vec0 tables for dim=${dim}:`, e);
+        }
+    }
+
+    /**
+     * PHASE-2D (Fix-2): drop any orphan legacy vec0 tables from prior
+     * installs that DID create the broken schema, and bump a counter so
+     * the v3/v4 migration blocks can log a single line IF something was
+     * actually cleaned up. The happy path (fresh install from a clean
+     * git clone) drops nothing and emits no log line.
+     *
+     * Also returns the number of tables dropped via `this._lastLegacyCleanup`
+     * so the migration loop can include it in its log message.
+     */
+    private _lastLegacyCleanup: number = 0;
+    private tryProvisionLegacyVecTables(): void {
+        if (!this.db) return;
+        this._lastLegacyCleanup = 0;
+        // The two legacy tables from the broken v3/v4 schema are
+        // `vec_chunks` and `vec_summaries`. They have no dimension
+        // column so sqlite-vec would reject any CREATE that references
+        // them — but they CAN exist as orphans if a prior install DID
+        // create them before the fix landed.
+        const legacyNames = ['vec_chunks', 'vec_summaries'];
+        for (const name of legacyNames) {
+            try {
+                // probe existence with sqlite_master — DROP IF EXISTS is
+                // a no-op when the table is absent, but we want to
+                // distinguish "dropped" from "didn't exist" so the log
+                // is accurate.
+                const row = this.db.prepare(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name = ?"
+                ).get(name);
+                if (!row) continue;
+                this.db.exec(`DROP TABLE ${name};`);
+                this._lastLegacyCleanup++;
+                console.log(`[DatabaseManager] Dropped orphan legacy vec0 table: ${name}`);
+            } catch (_) {
+                // Best-effort: dropping an orphan should never crash
+                // startup. If DROP fails here, the v8/v9 per-dim
+                // migration below will still create the working tables.
+            }
         }
     }
 

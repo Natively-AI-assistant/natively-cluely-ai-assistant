@@ -1,6 +1,6 @@
 {
   "name": "natively",
-  "version": "2.8.0",
+  "version": "2.8.1",
   "main": "dist-electron/electron/main.js",
   "description": "Natively is a meeting notes app that uses AI to generate notes from your meetings.",
   "scripts": {
@@ -77,6 +77,8 @@
     "verify:packaged-local-assets": "node scripts/verify-packaged-local-assets.mjs",
     "verify:mac-app-local-assets": "node scripts/verify-packaged-local-assets.mjs",
     "smoke:packaged-local-fallback": "node scripts/smoke-packaged-local-fallback.mjs",
+    "smoke:onnx-packaging": "node scripts/smoke-onnx-packaging.mjs",
+    "release-gate": "node scripts/release-gate.mjs",
     "verify:memory-context": "npm run build:electron && node tests/intelligence/memory-context/run-verification.mjs",
     "verify:humanized-answers": "npm run build:electron && node scripts/verify-humanized-answers.mjs",
     "verify:spoken-quality": "npm run build:electron && node scripts/verify-spoken-quality.mjs"
@@ -296,6 +298,7 @@
     "mammoth": "^1.11.0",
     "marked": "^18.0.4",
     "onnxruntime-node": "1.22.0",
+    "onnxruntime-common": "1.22.0",
     "openai": "^6.22.0",
     "pdf-parse": "^2.4.5",
     "qrcode": "^1.5.4",
