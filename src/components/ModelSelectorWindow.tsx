@@ -29,14 +29,22 @@ const ModelSelectorWindow = () => {
 
 
     // Load Data
+    // StrictMode-safe: dev-mode mount→unmount→remount would otherwise issue a
+    // second `forceRestartOllama` IPC round-trip (and double-paint the spinner)
+    // on every launcher paint. The `loadModelsOnceRef` survives the second
+    // mount. Live updates from settings/model-changes still come through the
+    // `onModelChanged` IPC subscription below — the previous `focus` listener
+    // was redundant and high-frequency when toggling launcher ↔ overlay.
     useEffect(() => {
+        let cancelled = false;
+
         const loadModels = async () => {
             try {
                 // If we already have models, don't show loading to avoid flicker
                 if (availableModels.length === 0) {
                     setIsLoading(true);
                 }
-                
+
                 // 1. Get Stored Credentials (to know which Cloud providers are active)
                 const creds = await window.electronAPI?.getStoredCredentials?.();
 
@@ -129,6 +137,8 @@ const ModelSelectorWindow = () => {
                     // LiteLLM proxy may not be running — ignore.
                 }
 
+                if (cancelled) return;
+
                 localStorage.setItem('cached-models', JSON.stringify(models));
                 setAvailableModels(models);
 
@@ -142,20 +152,19 @@ const ModelSelectorWindow = () => {
             } catch (err) {
                 console.error("Failed to load models:", err);
             } finally {
-                setIsLoading(false);
+                if (!cancelled) setIsLoading(false);
             }
         };
 
         loadModels();
-        window.addEventListener('focus', loadModels);
 
         // Listen for changes
         const unsubscribe = window.electronAPI?.onModelChanged?.((modelId: string) => {
             setCurrentModel(modelId);
         });
         return () => {
+            cancelled = true;
             unsubscribe?.();
-            window.removeEventListener('focus', loadModels);
         };
     }, []);
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ToggleLeft, ToggleRight, Search, Calendar, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, LayoutGrid, RefreshCw, Eye, EyeOff, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle, User, UserSearch, Sparkles, ArrowUpRight } from 'lucide-react';
 import { generateMeetingPDF } from '../utils/pdfGenerator';
 import icon from "./icon.png";
@@ -96,6 +96,9 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     const [showModesOnboarding, setShowModesOnboarding] = useState(false);
     const [showProfileOnboarding, setShowProfileOnboarding] = useState(false);
     const [launchCount, setLaunchCount] = useState<number>(0);
+    // StrictMode-safe guard for mount-only side-effects: the dev build
+    // intentionally double-invokes effects to surface this class of bug.
+    const mountedOnceRef = useRef<boolean>(false);
 
     const fetchMeetings = () => {
         if (window.electronAPI && window.electronAPI.getRecentMeetings) {
@@ -138,27 +141,37 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     useEffect(() => {
         let mounted = true;
         console.log("Launcher mounted");
-        // Track launch count for showing the "What's New" pill
-        const storedCount = localStorage.getItem('natively_launch_count_v2.7');
-        const currentCount = storedCount ? parseInt(storedCount, 10) : 0;
-        const newCount = currentCount + 1;
-        localStorage.setItem('natively_launch_count_v2.7', newCount.toString());
-        if (mounted) {
-            setLaunchCount(newCount);
-        }
-        // Seed demo data if needed (safe to call always — runs ONCE on mount)
-        if (window.electronAPI && window.electronAPI.seedDemo) {
-            window.electronAPI.seedDemo().catch(err => console.error("Failed to seed demo:", err));
-        }
 
-        // Onboarding state — push to orchestrator. The orchestrator handles
-        // sequencing and timing; Launcher no longer auto-shows popovers.
-        const hasSeenModesOnboarding = localStorage.getItem('natively_seen_modes_onboarding_v5');
-        const hasSeenProfileOnboarding = localStorage.getItem('natively_seen_profile_onboarding_v1');
-        setOrchestratorUserState({
-            seenModesOnboarding: hasSeenModesOnboarding === 'true',
-            seenProfileOnboarding: hasSeenProfileOnboarding === 'true',
-        });
+        // StrictMode guard: React 18 dev mode runs effects (mount→unmount→mount)
+        // so non-idempotent side-effects (localStorage writes, IPC round-trips,
+        // counters) must be gated. `mountedOnceRef` survives the second mount.
+        if (mountedOnceRef.current) {
+            // Second StrictMode mount — keep subscriptions fresh, skip writes.
+        } else {
+            mountedOnceRef.current = true;
+
+            // Track launch count for showing the "What's New" pill
+            const storedCount = localStorage.getItem('natively_launch_count_v2.7');
+            const currentCount = storedCount ? parseInt(storedCount, 10) : 0;
+            const newCount = currentCount + 1;
+            localStorage.setItem('natively_launch_count_v2.7', newCount.toString());
+            if (mounted) {
+                setLaunchCount(newCount);
+            }
+            // Seed demo data if needed (safe to call always — runs ONCE on mount)
+            if (window.electronAPI && window.electronAPI.seedDemo) {
+                window.electronAPI.seedDemo().catch(err => console.error("Failed to seed demo:", err));
+            }
+
+            // Onboarding state — push to orchestrator. The orchestrator handles
+            // sequencing and timing; Launcher no longer auto-shows popovers.
+            const hasSeenModesOnboarding = localStorage.getItem('natively_seen_modes_onboarding_v5');
+            const hasSeenProfileOnboarding = localStorage.getItem('natively_seen_profile_onboarding_v1');
+            setOrchestratorUserState({
+                seenModesOnboarding: hasSeenModesOnboarding === 'true',
+                seenProfileOnboarding: hasSeenProfileOnboarding === 'true',
+            });
+        }
 
         // Sync initial undetectable state
         if (window.electronAPI?.getUndetectable) {
@@ -495,6 +508,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                         <AnimatePresence>
                             {showProfileOnboarding && (
                                 <motion.div
+                                    key="profile-onboarding-pill"
                                     initial={{ opacity: 0, y: 6, scale: 0.96, filter: "blur(4px)" }}
                                     animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
                                     exit={{ opacity: 0, y: -2, scale: 0.98, filter: "blur(2px)", transition: { duration: 0.15, ease: "easeOut" } }}
@@ -597,6 +611,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                         <AnimatePresence>
                             {showModesOnboarding && (
                                 <motion.div
+                                    key="modes-onboarding-pill"
                                     initial={{ opacity: 0, y: 6, scale: 0.96, filter: "blur(4px)" }}
                                     animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
                                     exit={{ opacity: 0, y: -2, scale: 0.98, filter: "blur(2px)", transition: { duration: 0.15, ease: "easeOut" } }}
@@ -802,6 +817,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                             <AnimatePresence>
                                                 {ollamaPullStatus !== 'idle' && (
                                                     <motion.div
+                                                        key="ollama-pull-pill"
                                                         initial={{ opacity: 0, scale: 0.9, y: 10 }}
                                                         animate={{ opacity: 1, scale: 1, y: 0 }}
                                                         exit={{ opacity: 0, scale: 0.9, y: 10 }}
@@ -1162,6 +1178,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                             <AnimatePresence>
                                                                 {activeMenuId === m.id && (
                                                                     <motion.div
+                                                                        key={`meeting-menu-${m.id}`}
                                                                         initial={{ opacity: 0, scale: 0.95, y: 10 }}
                                                                         animate={{ opacity: 1, scale: 1, y: 0 }}
                                                                         exit={{ opacity: 0, scale: 0.95, y: 5 }}
@@ -1244,6 +1261,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
             <AnimatePresence>
                 {showNotification && (
                     <motion.div
+                        key="refresh-toast"
                         initial={{ x: 300, opacity: 0, scale: 0.9 }}
                         animate={{ x: 0, opacity: 1, scale: 1 }}
                         exit={{ x: 300, opacity: 0, scale: 0.95 }}

@@ -507,6 +507,7 @@ ${contextString}`;
         <AnimatePresence>
             {isOpen && (
                 <motion.div
+                    key="meeting-chat-modal"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}

@@ -1461,11 +1461,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   useEffect(() => {
     // Load the persisted default model (not the runtime model)
-    // Each new meeting starts with the default from settings
+    // Each new meeting starts with the default from settings.
+    // StrictMode-safe: dev-mode mount→unmount→remount would otherwise set the
+    // runtime model twice, clobbering any session-only pick from `handleModelSelect`.
+    let cancelled = false;
     if (window.electronAPI?.getDefaultModel) {
       window.electronAPI
         .getDefaultModel()
         .then((result: any) => {
+          if (cancelled) return;
           if (result && result.model) {
             setCurrentModel(result.model);
             // Also set the runtime model to the default
@@ -1474,6 +1478,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         })
         .catch((err: any) => console.error('Failed to fetch default model:', err));
     }
+    return () => { cancelled = true; };
   }, []);
 
   const handleModelSelect = (modelId: string) => {

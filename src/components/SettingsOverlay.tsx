@@ -306,6 +306,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
             <AnimatePresence>
                 {isOpen && (
                     <motion.div
+                        key="provider-dropdown"
                         initial={{ opacity: 0, y: 4, scale: 0.98 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 4, scale: 0.98 }}
@@ -1389,6 +1390,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         <AnimatePresence>
             {isOpen && (
                 <motion.div
+                    key="settings-modal"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
