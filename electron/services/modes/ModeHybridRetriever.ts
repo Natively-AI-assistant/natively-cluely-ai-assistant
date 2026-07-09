@@ -124,6 +124,12 @@ const RERANK_CANDIDATE_POOL = 30;
 // total, well inside the retrieval budget.
 const RERANK_BATCH_SIZE = 6;
 
+function keylessManualRetrievalUsesLexical(): boolean {
+    const raw = String(process.env.NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL || '').trim().toLowerCase();
+    if (['0', 'false', 'off', 'disabled', 'no'].includes(raw)) return false;
+    return true;
+}
+
 // Escape XML special characters in text content
 function escapeXmlText(value: string): string {
     return value
@@ -670,6 +676,20 @@ export class ModeHybridRetriever {
     }
 
     /**
+     * Hotfix 2026-07-09: in keyless installs the active embedding provider can be
+     * the local MiniLM ONNX fallback. Running that query embedding on every typed
+     * manual chat turn stacks native ONNX arena pressure with STT/intent/LLM
+     * streaming. Use the existing lexical fallback for manual turns unless the
+     * env escape hatch disables this mitigation.
+     */
+    private shouldUseLexicalForLocalManualQuery(hasTranscript: boolean): boolean {
+        if (hasTranscript) return false;
+        if (!keylessManualRetrievalUsesLexical()) return false;
+        const provider = this.embeddingPipeline.getActiveProviderName?.();
+        return provider === 'local';
+    }
+
+    /**
      * Per-(modeId, reason) emission timestamps for throttling. An embedding-
      * provider outage during a 1-hour meeting can trigger fallback on every
      * transcript-final + every typed input; without throttling that's
@@ -992,8 +1012,12 @@ export class ModeHybridRetriever {
 
         let candidates: ChunkCandidate[] = [];
 
-        // Try hybrid retrieval first, fall back to lexical-only
-        if (this.isEmbeddingAvailable()) {
+        const usingLexicalForLocalManualQuery = this.shouldUseLexicalForLocalManualQuery(hasTranscript);
+
+        // Try hybrid retrieval first, fall back to lexical-only. Keyless/manual
+        // local-ONNX query embedding is intentionally treated like an unavailable
+        // embedding provider to reduce crash-prone native memory pressure.
+        if (this.isEmbeddingAvailable() && !usingLexicalForLocalManualQuery) {
             try {
                 candidates = await this.performHybridRetrieval(allCandidates, queryWords, queryText, adaptiveThreshold, files);
             } catch (error) {
@@ -1008,7 +1032,11 @@ export class ModeHybridRetriever {
                 candidates = this.performLexicalRetrieval(allCandidates, queryWords, adaptiveThreshold);
             }
         } else {
-            console.warn('[ModeHybridRetriever] Embedding provider unavailable, using lexical fallback');
+            if (usingLexicalForLocalManualQuery) {
+                console.warn('[ModeHybridRetriever] Local ONNX provider active for manual query; using lexical fallback');
+            } else {
+                console.warn('[ModeHybridRetriever] Embedding provider unavailable, using lexical fallback');
+            }
             this.emitFallbackTelemetry({
                 reason: 'embedding_unavailable',
                 candidateCount: allCandidates.length,
@@ -1028,7 +1056,7 @@ export class ModeHybridRetriever {
         // preferring chunks that can actually answer this question shape.
         candidates.sort((a, b) => this.rankScore(b, false) - this.rankScore(a, false));
 
-        const usedFallback = !this.isEmbeddingAvailable();
+        const usedFallback = !this.isEmbeddingAvailable() || usingLexicalForLocalManualQuery;
 
         // Phase 0 (observe only): compute the low-confidence signal from the
         // SCORED + sorted, PRE-dedup candidate list. Gated entirely behind the

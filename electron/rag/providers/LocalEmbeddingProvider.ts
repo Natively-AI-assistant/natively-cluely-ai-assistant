@@ -28,6 +28,7 @@ import { acquireOnnxSlot, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSess
 import {
     clearLoadSentinel as clearOnnxLoadSentinel,
     consumePoisonedOnnxLoad,
+    isSentinelWithinTtl,
     writeLoadSentinel as writeOnnxLoadSentinel,
 } from '../../utils/onnxLoadSentinel';
 import { ProviderStatusRegistry } from '../../services/ProviderStatusRegistry';
@@ -368,10 +369,11 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
  */
 export function consumeLocalEmbeddingSentinel(): { modelId: string; startedAt: number; attempt: number } | null {
   const consumed = consumePoisonedOnnxLoad('embeddings');
-  if (consumed) {
+  if (consumed && isSentinelWithinTtl(consumed)) {
     startupPoisoned = true;
+    return consumed;
   }
-  return consumed;
+  return null;
 }
 
 /**

@@ -232,6 +232,40 @@ export class DatabaseManager {
 
             this.db = new Database(this.dbPath);
             this.db.pragma('journal_mode = WAL');
+            // Hotfix 2026-07-09: with WAL enabled, background indexing workers
+            // and foreground chat reads/writes can briefly contend. Waiting is
+            // safer than throwing SQLITE_BUSY during startup or active sessions.
+            this.db.pragma('busy_timeout = 5000');
+            // Leave synchronous = FULL (the WAL default). NORMAL trades crash
+            // durability for throughput — a power loss between commit and
+            // fsync loses the transaction. The emergency-close path added in
+            // electron/main.ts (uncaughtException / SIGTERM / process-gone)
+            // checkpoint+closes the DB so the next launch never sees a stale
+            // WAL holding a kernel lock from a dead writer.
+
+            // 2026-07-09: detect crash-recovery conditions on startup. If we
+            // see a WAL file > 50MB or a `-wal` left over from a hard kill,
+            // log it so the user can correlate a slow/stuck launch with the
+            // previous session's crash. Anything >5MB after a clean previous
+            // session is unusual and worth surfacing; >50MB is "the previous
+            // session probably wrote a lot without checkpointing".
+            try {
+                const walPath = `${this.dbPath}-wal`;
+                const shmPath = `${this.dbPath}-shm`;
+                const walBytes = fs.existsSync(walPath) ? fs.statSync(walPath).size : 0;
+                const shmExists = fs.existsSync(shmPath);
+                if (walBytes >= 50 * 1024 * 1024) {
+                    console.warn(`[DB-RECOVERY] large WAL on open: ${walBytes} bytes at ${walPath} (previous session likely died mid-transaction). A TRUNCATE checkpoint is being run automatically.`);
+                } else if (walBytes >= 5 * 1024 * 1024) {
+                    console.log(`[DB-RECOVERY] non-trivial WAL on open: ${walBytes} bytes at ${walPath}`);
+                }
+                if (shmExists) {
+                    console.log(`[DB-RECOVERY] -shm index file present (typical after WAL-mode open; SQLite manages it).`);
+                }
+            } catch (recovErr: any) {
+                // Recovery detection is best-effort — never block startup.
+                console.warn('[DB-RECOVERY] detection check failed (non-fatal):', recovErr?.message || recovErr);
+            }
 
             // Load sqlite-vec extension for native vector search
             try {

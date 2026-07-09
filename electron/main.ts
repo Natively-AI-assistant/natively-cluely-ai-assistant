@@ -12,6 +12,7 @@ import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPref
 import * as crypto from "crypto"
 import path from "path"
 import fs from "fs"
+import os from "os"
 import dns from "dns"
 import { SystemAudioHealthClassifier } from "./audio/systemAudioHealthClassifier.mjs"
 import { autoUpdater } from "electron-updater"
@@ -90,6 +91,16 @@ process.stdout?.on?.('error', () => { });
 process.stderr?.on?.('error', () => { });
 
 process.on('uncaughtException', (err) => {
+  const reportPath = isNativeArchGateCrash(err)
+    ? null
+    : writeProcessReport('uncaughtException');
+  logCrashConsole('uncaughtException', {
+    error: formatCrashError(err),
+    reportPath,
+    skippedReport: isNativeArchGateCrash(err) ? 'native-arch-gate' : undefined,
+  });
+  emergencyCloseDatabase('uncaughtException');
+
   // First-line handler for the native-arch gate (thrown synchronously at
   // module-load above) and any other uncaught errors. The arch gate's
   // error message starts with '[nativeArch]' or '[nativeArch:packaged]' — for those,
@@ -136,7 +147,58 @@ process.on('uncaughtException', (err) => {
 });
 
 process.on('unhandledRejection', (reason, promise) => {
+  logCrashEvent('unhandledRejection', {
+    reason: formatCrashError(reason),
+    promise: String(promise),
+  });
   logToFile('[CRITICAL] Unhandled Rejection: ' + redactArgsForLog([reason]));
+  emergencyCloseDatabase('unhandledRejection');
+});
+
+// OS-level shutdown signals. macOS / Linux ship SIGTERM to apps before
+// SIGKILL, and Cmd+Q / Quit menu paths route through app.quit() which we
+// already cover in `before-quit`. These handlers cover the cases where the
+// OS kills the process directly: a hung process getting SIGTERM from
+// launchd, an interrupted `npm run app:dev` Ctrl+C, a tmux/SSH session
+// ending. Each does a synchronous checkpoint+close so the next launch
+// doesn't see a stale WAL holding a kernel lock from the dead process.
+//
+// IMPORTANT: register a handler WITHOUT process.exit()/app.exit() and Node
+// SUPPPRESSES the default exit — the dev workflow (`npm run app:dev` via
+// concurrently) breaks because Ctrl+C kills Vite but the Electron main
+// process keeps running, holding the port indefinitely. So we explicitly
+// call app.exit(0) AFTER the DB close on the dev-relevant signals
+// (SIGINT/SIGTERM). SIGHUP gets the DB close + breadcrumb only — a tmux
+// SSH disconnect shouldn't kill the app on principle, and SIGHUP is rarely
+// sent by anything on macOS.
+for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(sig, () => {
+    try {
+      logToFile(`[SIGNAL] received ${sig}`);
+      emergencyCloseDatabase(sig);
+    } catch {
+      /* never throw from a signal handler */
+    }
+    // app.exit(0) is the Electron-clean way to terminate synchronously —
+    // skips the "are you sure?" prompts and bypasses before-quit gracefully.
+    // We require() lazily because app may not exist pre-whenReady in a test
+    // harness (ELECTRON_RUN_AS_NODE).
+    try {
+      const { app: electronApp } = require('electron');
+      electronApp.exit(0);
+    } catch {
+      process.exit(0);
+    }
+  });
+}
+process.on('SIGHUP', () => {
+  try {
+    logToFile('[SIGNAL] received SIGHUP');
+    emergencyCloseDatabase('SIGHUP');
+  } catch {
+    /* never throw from a signal handler */
+  }
+  // No exit on SIGHUP — terminal disconnect shouldn't kill a desktop app.
 });
 
 // CQ-04 fix: do NOT call app.getPath() at module load time.
@@ -149,14 +211,222 @@ const getLogFile = (): string | null => {
     _logFile = path.join(app.getPath('documents'), 'natively_debug.log');
     return _logFile;
   } catch {
-    // app.ready not yet fired — return null, logToFile will skip silently
-    return null;
+    // app.ready may not have fired yet (including native module boot gates).
+    // Still write somewhere stable so a pre-ready crash leaves a reason behind.
+    const home = os.homedir?.();
+    _logFile = home
+      ? path.join(home, 'Documents', 'natively_debug.log')
+      : path.join(os.tmpdir(), 'natively_debug.log');
+    return _logFile;
   }
 };
 
 const originalLog = console.log;
 const originalWarn = console.warn;
 const originalError = console.error;
+
+function safeJsonForLog(value: unknown): string {
+  // Replacer-based JSON serializer safe for BigInt, Error, circular refs,
+  // Uint8Array, and other shapes that JSON.stringify throws on by default.
+  // Falls back to a plain-string form on any unexpected failure so a crash
+  // breadcrumb is never silently swallowed.
+  const seen = new WeakSet<object>();
+  try {
+    return JSON.stringify(value, (_k, v) => {
+      if (typeof v === 'bigint') return `<BigInt:${v.toString()}>`;
+      if (v instanceof Error) {
+        return {
+          __error: true,
+          name: v.name,
+          message: v.message,
+          stack: v.stack,
+          cause: v.cause,
+        };
+      }
+      if (v instanceof Uint8Array) return `<Uint8Array len=${v.length}>`;
+      if (v instanceof Buffer) return `<Buffer len=${v.length}>`;
+      if (v && typeof v === 'object') {
+        if (seen.has(v)) return '<circular>';
+        seen.add(v);
+      }
+      return v;
+    }) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function formatCrashError(value: unknown, depth = 0): Record<string, unknown> {
+  if (value instanceof Error) {
+    const cause = value.cause;
+    return {
+      name: value.name,
+      message: value.message,
+      stack: value.stack,
+      // Unwind ES2022 cause chains up to 5 deep — beyond that, just stringify.
+      cause: depth < 5 && cause instanceof Error
+        ? formatCrashError(cause, depth + 1)
+        : (cause != null ? String(cause) : undefined),
+    };
+  }
+  return { value: String(value) };
+}
+
+function getCrashDiagnostics(extra: Record<string, unknown> = {}): Record<string, unknown> {
+  // Wrap the whole body in try/catch — these calls all allocate or query the
+  // OS (memoryUsage, freemem, totalmem, app.isReady) and CAN throw under
+  // OOM / sandboxed test environments. If they throw, the original crash
+  // evidence must survive; we return a minimal fallback so the
+  // [CRASH:*] line still carries the pid/label that points at the crash.
+  try {
+    const mem = process.memoryUsage();
+    return {
+      pid: process.pid,
+      platform: process.platform,
+      arch: process.arch,
+      versions: {
+        electron: process.versions.electron,
+        chrome: process.versions.chrome,
+        node: process.versions.node,
+        v8: process.versions.v8,
+      },
+      uptimeSec: Math.round(process.uptime()),
+      appReady: app.isReady(),
+      appPackaged: app.isPackaged,
+      rssMB: mb(mem.rss),
+      heapUsedMB: mb(mem.heapUsed),
+      heapTotalMB: mb(mem.heapTotal),
+      externalMB: mb(mem.external),
+      arrayBuffersMB: mb(mem.arrayBuffers),
+      freeMemMB: mb(os.freemem()),
+      totalMemMB: mb(os.totalmem()),
+      wal: collectWalSnapshot(),
+      ...extra,
+    };
+  } catch (e: any) {
+    return {
+      pid: process.pid,
+      platform: process.platform,
+      arch: process.arch,
+      diagnosticError: e?.message || String(e),
+      ...extra,
+    };
+  }
+}
+
+function logCrashEvent(label: string, payload: Record<string, unknown>): void {
+  try {
+    logToFile(`[CRASH:${label}] ${safeJsonForLog(getCrashDiagnostics(payload))}`);
+  } catch (e: any) {
+    // Last-resort breadcrumb. If even this fails (e.g. logToFile itself), we
+    // at least surface the label so triage can tell WHICH crash event was
+    // dropped instead of seeing a missing line.
+    try { logToFile(`[CRASH:${label}] logging-failed: ${String(e?.message || e)}`); } catch { /* ignored */ }
+  }
+}
+
+function logCrashConsole(label: string, payload: Record<string, unknown>): void {
+  try {
+    const snapshot = getCrashDiagnostics(payload);
+    const line = `[CRASH:${label}] ${safeJsonForLog(snapshot)}`;
+    logToFile(line);
+    try {
+      process.stderr?.write?.(line + '\n');
+    } catch { /* stdout/stderr can be detached */ }
+  } catch (e: any) {
+    try { logToFile(`[CRASH:${label}] logging-failed: ${String(e?.message || e)}`); } catch { /* ignored */ }
+  }
+}
+
+// Module-scope emergency DB close. Called from EVERY crash path
+// (uncaughtException, unhandledRejection, SIGTERM/SIGINT/SIGHUP,
+// render-process-gone, child-process-gone, gpu-process-crashed) so a
+// hard kill still leaves a clean WAL and releases the OS-level file lock.
+// The next launch's `new Database(dbPath)` then never sees a stale WAL
+// holding a kernel lock from the dead writer (the documented launch-hang
+// class of bug). Idempotent: safe to call from multiple paths in the same
+// process. No-ops if the DB manager isn't initialized yet (early-boot
+// handler fires before DatabaseManager.getInstance() exists).
+//
+// The single-shot flag is set INSIDE the success branch — if checkpoint
+// or close throws (transient disk error, half-initialized DB), a later
+// crash path can still retry the close. Once the close succeeds, the
+// flag sticks and subsequent calls early-return.
+let _emergencyDbClosed = false;
+function emergencyCloseDatabase(reason: string): void {
+  if (_emergencyDbClosed) return;
+  try {
+    const { DatabaseManager } = require('./db/DatabaseManager');
+    const dbMgr = DatabaseManager.getInstance();
+    let checkpointOk = true;
+    try { dbMgr.checkpoint?.(); } catch (e: any) {
+      checkpointOk = false;
+      logToFile(`[DB-EMERGENCY] checkpoint failed during ${reason}: ${e?.message || e}`);
+    }
+    try { dbMgr.close?.(); } catch (e: any) {
+      // If checkpoint succeeded but close failed, the WAL is flushed but
+      // the lock isn't released — don't latch the flag; a later crash path
+      // can still try the close alone.
+      logToFile(`[DB-EMERGENCY] close failed during ${reason}: ${e?.message || e}`);
+      if (checkpointOk) return;
+    }
+    _emergencyDbClosed = true;
+    logToFile(`[DB-EMERGENCY] closed during ${reason}`);
+  } catch (e: any) {
+    // Even if the require itself fails (manager not yet bootstrapped),
+    // we still want the breadcrumb so triage can see we tried. Don't latch
+    // the flag — a later crash path may run after the manager bootstraps.
+    try { logToFile(`[DB-EMERGENCY] failed during ${reason}: ${e?.message || e}`); } catch { /* ignored */ }
+  }
+}
+
+// Returns true if this exception message looks like the routine native-arch
+// gate mismatch (handled by the dialog already). We do NOT write a process
+// report on that path because the user already knows the cause and a full
+// report would just leak env vars.
+function isNativeArchGateCrash(err: unknown): boolean {
+  return err instanceof Error && /^\[nativeArch(?::packaged)?\]/.test(err.message);
+}
+
+function writeProcessReport(label: string): string | null {
+  try {
+    const report = (process as any).report;
+    if (!report?.writeReport) return null;
+    const dir = path.dirname(getLogFile() || path.join(os.tmpdir(), 'natively_debug.log'));
+    try { fs.mkdirSync(dir, { recursive: true }); } catch { /* best-effort */ }
+    const file = path.join(dir, `natively-${label}-${Date.now()}.report.json`);
+    report.writeReport(file);
+    // REDACT environmentVariables from the report on disk. Node's process
+    // report includes the FULL process.env — that includes any API keys the
+    // user has in their shell (GEMINI_API_KEY, OPENAI_API_KEY, etc). Strip
+    // the env block before any other process can read the file. We keep the
+    // heap snapshot, libuv, JS stack, native stack — those are the actually
+    // useful crash artifacts.
+    try {
+      const raw = fs.readFileSync(file, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && 'environmentVariables' in parsed) {
+        delete parsed.environmentVariables;
+        parsed.environmentVariables = '[REDACTED: see natively_debug.log for env-free diagnostic context]';
+        fs.writeFileSync(file, JSON.stringify(parsed, null, 2));
+      }
+    } catch (e: any) {
+      // If we can't read/rewrite, delete the unredacted file rather than leak it.
+      try { fs.unlinkSync(file); } catch { /* best-effort */ }
+      logToFile(`[CRASH:${label}] process report redacted-failed; deleted: ${e?.message || e}`);
+      return null;
+    }
+    logToFile(`[CRASH:${label}] process report written (env redacted): ${file}`);
+    return file;
+  } catch (e: any) {
+    logToFile(`[CRASH:${label}] process report failed: ${e?.message || e}`);
+    return null;
+  }
+}
+
+function logStartupPhase(phase: string, meta: Record<string, unknown> = {}): void {
+  logToFile(`[STARTUP:${phase}] ${safeJsonForLog(getCrashDiagnostics(meta))}`);
+}
 
 // Lazy redactor import — pulled at first call so this file can boot even if
 // the redactor module fails to load (we fall back to a no-op transform).
@@ -198,11 +468,92 @@ function withTimeout<T>(promise: Promise<T>, ms: number, tag: string): Promise<T
 /** Maximum log file size before rotation (10 MB). */
 const LOG_MAX_BYTES = 10 * 1024 * 1024;
 
+// Per-launch reset: when this version of the app starts, an existing
+// natively_debug.log from a previous session is overwritten so the user
+// always sees only the CURRENT session's breadcrumbs. Opt-out via
+// NATIVELY_KEEP_PREVIOUS_LOG=1 (preserve the old log as natively_debug.log.prev
+// for forensics).
+//
+// CRITICAL FIX (2026-07-09): only TRUNCATE when the prior session ended
+// CLEANLY. If the prior session crashed (renderer-gone / fatal-main-error /
+// unknown / no marker at all — the common "force-quit then relaunch" path),
+// rotate the prior log to .prev so the crash evidence the user is trying to
+// debug survives the relaunch. Without this gate, the very common
+// "crash → force-quit → relaunch to capture logs" sequence the user relies
+// on would eat exactly the crash record they want to read.
+function shouldTruncatePriorLog(): boolean {
+  if (process.env.NATIVELY_KEEP_PREVIOUS_LOG === '1') return false;
+  try {
+    const { LifecycleTracker } = require('./utils/lifecycleTracker');
+    const crashed = LifecycleTracker.getInstance().didPreviousSessionCrash();
+    return !crashed;
+  } catch {
+    // LifecycleTracker unavailable (test harness / pre-whenReady): be
+    // conservative and ROTATE so we never destroy evidence we can't verify.
+    return false;
+  }
+}
+
+let _didStartupLogReset = false;
+function resetStartupLog(): void {
+  if (_didStartupLogReset) return;
+  _didStartupLogReset = true;
+  const logFile = getLogFile();
+  if (!logFile) return;
+  try { fs.mkdirSync(path.dirname(logFile), { recursive: true }); } catch { /* best-effort */ }
+  const truncate = shouldTruncatePriorLog();
+  try {
+    if (fs.existsSync(logFile)) {
+      if (truncate) {
+        // Clean prior session: blow away the previous log so the user only
+        // sees current-session breadcrumbs. Old contents are GONE.
+        fs.writeFileSync(logFile, '');
+      } else {
+        // Prior session crashed (or we can't tell): rotate to .prev so the
+        // crash evidence survives this relaunch. The user can read either
+        // file directly off disk.
+        const rotated = logFile + '.prev';
+        try { if (fs.existsSync(rotated)) fs.unlinkSync(rotated); } catch { /* best-effort */ }
+        try { fs.renameSync(logFile, rotated); } catch { /* best-effort */ }
+      }
+    }
+    // Only clear stale process-report files when we're also truncating the
+    // log. When rotating (prior crash), keep the previous report files too
+    // — they're part of the forensic picture the user is debugging.
+    if (truncate) {
+      try {
+        const dir = path.dirname(logFile);
+        for (const name of fs.readdirSync(dir)) {
+          if (/^natively-.*\.report\.json$/.test(name)) {
+            try { fs.unlinkSync(path.join(dir, name)); } catch { /* best-effort */ }
+          }
+        }
+      } catch { /* best-effort */ }
+    }
+  } catch (e: any) {
+    // Non-fatal: if we can't reset, just keep appending to whatever exists.
+    try { fs.appendFileSync(logFile, `[reset-failed] ${e?.message || e}\n`); } catch { /* ignored */ }
+  }
+  // Always write a marker line so the user (and we) can confirm what
+  // happened to the prior log.
+  try {
+    fs.appendFileSync(
+      logFile,
+      `${new Date().toISOString()} [STARTUP] log opened (prior=${truncate ? 'truncated' : 'rotated-to-prev'}) pid=${process.pid} version=${app.getVersion?.() ?? 'unknown'} platform=${process.platform} arch=${process.arch}\n`,
+    );
+  } catch { /* best-effort */ }
+}
+
 function logToFile(msg: string) {
   try {
+    // Lazy: reset the log exactly once per process, on the very first write.
+    // We reset on first write (not at module load) because getLogFile() may
+    // need app.whenReady() to resolve a stable userData path, AND because the
+    // whole point is to overwrite previous-run breadcrumbs.
+    resetStartupLog();
     const logFile = getLogFile();
-    // If the app isn't ready yet (path not available), skip silently.
     if (!logFile) return;
+    try { fs.mkdirSync(path.dirname(logFile), { recursive: true }); } catch { /* best-effort */ }
 
     // P2-1: rotate the log file when it exceeds LOG_MAX_BYTES so that long-running
     // sessions (or meetings with dense transcripts) don't fill the user's disk.
@@ -220,6 +571,27 @@ function logToFile(msg: string) {
     fs.appendFileSync(logFile, new Date().toISOString() + ' ' + msg + '\n');
   } catch (e) {
     // Ignore logging errors
+  }
+}
+
+function mb(n: number | undefined | null): number {
+  return Math.round(((n || 0) / 1024 / 1024) * 10) / 10;
+}
+
+function collectWalSnapshot(): Array<{ file: string; mb: number }> {
+  try {
+    const userData = app.isReady() ? app.getPath('userData') : path.dirname(getLogFile() || os.tmpdir());
+    return fs.readdirSync(userData)
+      .filter(name => name.endsWith('-wal'))
+      .map(name => {
+        const full = path.join(userData, name);
+        return { file: name, mb: mb(fs.statSync(full).size) };
+      })
+      .filter(x => x.mb > 0)
+      .sort((a, b) => b.mb - a.mb)
+      .slice(0, 5);
+  } catch {
+    return [];
   }
 }
 
@@ -580,6 +952,7 @@ export class AppState {
   private themeManager: ThemeManager
   private ragManager: RAGManager | null = null
   private modeReferenceRetryPromise: Promise<void> | null = null
+  private stabilityHeartbeatTimer: NodeJS.Timeout | null = null
   private knowledgeOrchestrator: any = null
   private tray: Tray | null = null
   private updateAvailable: boolean = false
@@ -688,7 +1061,7 @@ export class AppState {
     const settingsManager = SettingsManager.getInstance();
     this.isUndetectable = settingsManager.get('isUndetectable') ?? false;
     this.disguiseMode = normalizeDisguiseMode(settingsManager.get('disguiseMode'));
-    this._verboseLogging = settingsManager.get('verboseLogging') ?? false;
+    this._verboseLogging = settingsManager.get('verboseLogging') ?? true;
     setVerboseLoggingFlag(this._verboseLogging);
     console.log(`[AppState] Initialized with isUndetectable=${this.isUndetectable}, disguiseMode=${this.disguiseMode}, verboseLogging=${this._verboseLogging}`);
 
@@ -1168,6 +1541,44 @@ export class AppState {
 
     // Initialize Auto-Updater
     this.setupAutoUpdater()
+
+    this.startStabilityHeartbeat();
+  }
+
+  private startStabilityHeartbeat(): void {
+    if (this.stabilityHeartbeatTimer) return;
+    const emit = () => {
+      try {
+        const mem = process.memoryUsage();
+        const flags = {
+          ragConfidenceGate: isIntelligenceFlagEnabled('ragConfidenceGate'),
+          ragLocalRerank: isIntelligenceFlagEnabled('ragLocalRerank'),
+          ragSpeculativeRerank: isIntelligenceFlagEnabled('ragSpeculativeRerank'),
+          okfKnowledgePacks: isIntelligenceFlagEnabled('okfKnowledgePacks'),
+          okfHybridRetrieval: isIntelligenceFlagEnabled('okfHybridRetrieval'),
+          jitFinalAnswerEnforced: isIntelligenceFlagEnabled('jitFinalAnswerEnforced'),
+          hindsightMemory: isIntelligenceFlagEnabled('hindsightMemory'),
+        };
+        console.log('[StabilityHeartbeat]', {
+          rssMB: mb(mem.rss),
+          heapUsedMB: mb(mem.heapUsed),
+          heapTotalMB: mb(mem.heapTotal),
+          externalMB: mb(mem.external),
+          arrayBuffersMB: mb(mem.arrayBuffers),
+          freeMemMB: mb(os.freemem()),
+          totalMemMB: mb(os.totalmem()),
+          uptimeSec: Math.round(process.uptime()),
+          isMeetingActive: this.isMeetingActive,
+          flags,
+          wal: collectWalSnapshot(),
+        });
+      } catch (e: any) {
+        console.warn('[StabilityHeartbeat] skipped:', e?.message || e);
+      }
+    };
+    setTimeout(emit, 10_000).unref?.();
+    this.stabilityHeartbeatTimer = setInterval(emit, 30_000);
+    this.stabilityHeartbeatTimer.unref?.();
   }
 
   private sendToWindow(win: BrowserWindow | null | undefined, channel: string, ...args: any[]): boolean {
@@ -6140,10 +6551,12 @@ export class AppState {
 // Application initialization
 
 async function initializeApp() {
+  logStartupPhase('initializeApp:start');
   // 1. Enforce single instance — prevent duplicate dock icons from leftover processes.
   // In development mode with hot-reload this is still safe because electron is restarted
   // by the build step, not re-launched by concurrently while the old process is alive.
   const gotLock = app.requestSingleInstanceLock();
+  logStartupPhase('single-instance-lock', { gotLock });
   if (!gotLock) {
     console.log('[Main] Another instance is already running. Exiting this instance.');
     // Use app.exit(0) — app.quit() before whenReady can be deferred or no-op'd
@@ -6202,7 +6615,9 @@ async function initializeApp() {
   }
 
   // 2. Wait for app to be ready
+  logStartupPhase('before-app-whenReady');
   await app.whenReady()
+  logStartupPhase('after-app-whenReady', { userData: app.getPath('userData') });
 
   // 2a. PRE-EMPTIVE dock hide / activation-policy clamp: must happen before ANY
   // operation that causes macOS to register a dock entry (app.setName, the
@@ -6238,6 +6653,7 @@ async function initializeApp() {
   // singleton was constructed with cwd-relative paths at module-load time
   // (before app.whenReady), so we reconfigure here. Honors the user's
   // telemetry-enabled setting (default: on, local-only JSONL).
+  logStartupPhase('telemetry-configure:start');
   try {
     const { telemetryService } = require('./services/telemetry/TelemetryService');
     const userDataPath = app.getPath('userData');
@@ -6279,17 +6695,22 @@ async function initializeApp() {
     const remote = sinks.filter(s => s.name !== 'local-jsonl').map(s => s.name);
     console.log(`[Telemetry] sinks: local-jsonl${remote.length ? ' + ' + remote.join(' + ') : ' (remote unconfigured)'} release=${release}`);
     telemetryService.track({ name: 'app_start', properties: { platform: process.platform, release } });
+    logStartupPhase('telemetry-configure:complete', { release, remoteSinks: remote });
   } catch (err) {
     console.warn('[Init] TelemetryService configure threw (non-fatal):', err);
   }
 
   // Initialize CredentialsManager and load keys explicitly
   // This fixes the issue where keys (especially in production) aren't loaded in time for RAG/LLM
+  logStartupPhase('credentials-init:start');
   const { CredentialsManager } = require('./services/CredentialsManager');
   CredentialsManager.getInstance().init();
+  logStartupPhase('credentials-init:complete');
 
   // 4. Initialize State
+  logStartupPhase('app-state:get-instance:start');
   const appState = AppState.getInstance()
+  logStartupPhase('app-state:get-instance:complete')
 
   // Explicitly load credentials into helpers
   appState.processingHelper.loadStoredCredentials();
@@ -6486,7 +6907,11 @@ if (process.env.THINKING_MATRIX === '1') {
     }
   }
 
+  logStartupPhase('create-window:start');
   appState.createWindow()
+  logStartupPhase('create-window:complete', {
+    windowCount: BrowserWindow.getAllWindows().length,
+  });
 
   // Run the local-fallback preflight AFTER the launcher paints. We schedule
   // it via setTimeout so the visible launch is not blocked by:
@@ -6719,6 +7144,8 @@ if (process.env.THINKING_MATRIX === '1') {
     console.error('[Main] Failed to recover unprocessed meetings:', err);
   });
 
+  logStartupPhase('initializeApp:complete');
+
   // Note: We do NOT force dock show here anymore, respecting stealth mode.
 
   app.on("activate", () => {
@@ -6749,6 +7176,54 @@ if (process.env.THINKING_MATRIX === '1') {
     }
   })
 
+  function stopAppManagedHindsight(reason: string): void {
+    try {
+      const { HindsightManager } = require('./services/HindsightManager');
+      HindsightManager.getInstance().stopSync();
+    } catch { /* optional */ }
+  }
+
+  function checkpointDatabase(reason: string): void {
+    try {
+      const { DatabaseManager } = require('./db/DatabaseManager');
+      DatabaseManager.getInstance().checkpoint();
+    } catch (e) {
+      console.warn(`[main] DatabaseManager.checkpoint failed during ${reason} (non-fatal):`, e);
+    }
+  }
+
+  app.on('will-quit', () => {
+    stopAppManagedHindsight('will-quit');
+    checkpointDatabase('will-quit');
+  });
+
+  app.on('render-process-gone', (_event, webContents, details) => {
+    logCrashConsole('render-process-gone', {
+      details,
+      webContentsId: webContents?.id,
+      webContentsUrl: (() => { try { return webContents?.getURL?.(); } catch { return null; } })(),
+    });
+    console.warn('[main] render-process-gone:', details);
+    stopAppManagedHindsight('render-process-gone');
+    emergencyCloseDatabase('render-process-gone');
+  });
+
+  app.on('child-process-gone', (_event, details) => {
+    logCrashConsole('child-process-gone', { details });
+    console.warn('[main] child-process-gone:', details);
+    stopAppManagedHindsight('child-process-gone');
+    emergencyCloseDatabase('child-process-gone');
+  });
+
+  app.on('gpu-process-crashed', (_event, killed: boolean) => {
+    logCrashConsole('gpu-process-crashed', { killed });
+    emergencyCloseDatabase('gpu-process-crashed');
+  });
+
+  app.on('gpu-info-update', () => {
+    logToFile('[DIAG:gpu-info-update] GPU process info changed');
+  });
+
   // Scrub API keys from memory on quit to minimize exposure window
   app.on("before-quit", (event) => {
     console.log("App is quitting, cleaning up resources...");
@@ -6775,20 +7250,12 @@ if (process.env.THINKING_MATRIX === '1') {
     // PRAGMA wal_checkpoint(TRUNCATE) is synchronous and fast (<5ms
     // typically) and writes any pending WAL frames to the main .db
     // before exit. Idempotent and safe to call even when db is null.
-    try {
-      const { DatabaseManager } = require('./db/DatabaseManager');
-      DatabaseManager.getInstance().checkpoint();
-    } catch (e) {
-      console.warn('[main] DatabaseManager.checkpoint failed (non-fatal):', e);
-    }
+    checkpointDatabase('before-quit');
 
     // Stop an app-managed Hindsight server SYNCHRONOUSLY (kills the detached process group
     // → no orphaned Python/Postgres). No-op unless we spawned one. Must be sync: the app
     // can exit before any async kill completes.
-    try {
-      const { HindsightManager } = require('./services/HindsightManager');
-      HindsightManager.getInstance().stopSync();
-    } catch { /* optional */ }
+    stopAppManagedHindsight('before-quit');
 
     // Review-prompt service: close any in-flight session so total_usage_ms
     // captures this run, then flush the debounced state write (250ms window)
@@ -6931,4 +7398,19 @@ if (process.env.THINKING_MATRIX === '1') {
 }
 
 // Start the application
-initializeApp().catch(console.error)
+initializeApp().catch((err) => {
+  // Close DB BEFORE writing the process report so the next launch never
+  // sees a stale WAL from this half-open app. The helper is idempotent
+  // and safe even if DatabaseManager.getInstance() throws (early-boot
+  // failure where the DB was never opened).
+  try { emergencyCloseDatabase('initializeApp-failed'); } catch { /* best-effort */ }
+  const reportPath = isNativeArchGateCrash(err)
+    ? null
+    : writeProcessReport('initializeApp-failed');
+  logCrashConsole('initializeApp-failed', {
+    error: formatCrashError(err),
+    reportPath,
+    skippedReport: isNativeArchGateCrash(err) ? 'native-arch-gate' : undefined,
+  });
+  console.error(err);
+})

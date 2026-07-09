@@ -14,6 +14,7 @@ import { acquireOnnxSlot, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSess
 import {
     clearLoadSentinel as clearOnnxLoadSentinel,
     consumePoisonedOnnxLoad,
+    isSentinelWithinTtl,
     writeLoadSentinel as writeOnnxLoadSentinel,
 } from '../utils/onnxLoadSentinel';
 import { ProviderStatusRegistry } from '../services/ProviderStatusRegistry';
@@ -563,7 +564,7 @@ export function warmupIntentClassifier(): void {
  */
 export function consumeIntentClassifierSentinel(): { modelId: string; startedAt: number; attempt: number } | null {
     const consumed = consumePoisonedOnnxLoad('intent');
-    if (consumed) {
+    if (consumed && isSentinelWithinTtl(consumed)) {
         startupPoisoned = true;
         // Also seed the singleton's in-memory latch so a future explicit
         // `__resetForTests`/reinstall path still observes the poison. Use the
@@ -573,8 +574,9 @@ export function consumeIntentClassifierSentinel(): { modelId: string; startedAt:
                 `Recovered from previous launch: intent classifier crashed during load (attempt ${consumed.attempt}).`,
             );
         } catch { /* defensive — never let the consume helper itself throw */ }
+        return consumed;
     }
-    return consumed;
+    return null;
 }
 
 /**

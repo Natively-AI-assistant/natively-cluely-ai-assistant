@@ -46,6 +46,7 @@ import {
 import {
     clearLoadSentinel as clearOnnxLoadSentinel,
     consumePoisonedOnnxLoad,
+    isSentinelWithinTtl,
     writeLoadSentinel as writeOnnxLoadSentinel,
 } from '../utils/onnxLoadSentinel';
 
@@ -453,14 +454,15 @@ export type { LocalRerankerImpl };
  */
 export function consumeLocalRerankerSentinel(): { modelId: string; startedAt: number; attempt: number } | null {
     const consumed = consumePoisonedOnnxLoad('reranker');
-    if (consumed) {
+    if (consumed && isSentinelWithinTtl(consumed)) {
         startupPoisoned = true;
         try {
             const inst = getLocalReranker();
             inst.markStartupPoisoned();
         } catch { /* defensive */ }
+        return consumed;
     }
-    return consumed;
+    return null;
 }
 
 /**

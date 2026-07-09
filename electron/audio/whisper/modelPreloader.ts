@@ -24,6 +24,7 @@ import { resolveWhisperWorkerPath } from './workerPathResolver';
 import { acquireOnnxSlot, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSession } from '../../utils/onnxThreadConfig';
 import {
     consumePoisonedOnnxLoad,
+    isSentinelWithinTtl,
     clearLoadSentinel as clearOnnxLoadSentinel,
     writeLoadSentinel as writeOnnxLoadSentinel,
 } from '../../utils/onnxLoadSentinel';
@@ -243,11 +244,12 @@ class ModelPreloader {
 
     consumePoisonedLoadSentinel(): WhisperLoadSentinel | null {
         const sentinel = consumePoisonedOnnxLoad('whisper');
-        if (sentinel) {
+        if (sentinel && isSentinelWithinTtl(sentinel)) {
             console.warn(`[ModelPreloader] Previous process exited while loading ${sentinel.modelId}; recording recent-failure cooldown`);
             this.recordFailure(sentinel.modelId);
+            return sentinel;
         }
-        return sentinel;
+        return null;
     }
 
     /**
