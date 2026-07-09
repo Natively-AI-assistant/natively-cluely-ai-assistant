@@ -95,6 +95,8 @@ export class HindsightManager {
   private serverProcess: ChildProcess | null = null;
   private pollInterval: NodeJS.Timeout | null = null;
   private spawnAttempts = 0;
+  /** Session-local enablement used by auto-start. Never persisted across crashes. */
+  private sessionMemoryOverride = false;
   /** Where the spawned server's stdout/stderr is written (for failure diagnostics). */
   private logPath: string | null = null;
 
@@ -273,6 +275,7 @@ export class HindsightManager {
    */
   isAvailable(): boolean {
     if (!this.getHindsightConfig()) return false;
+    if (!this.memoryFlagOn()) return false;
     // Cold start: never health-checked yet (e.g. start() hasn't even run). Returning true
     // optimistically used to be safe — the server was assumed user-managed. Now that we
     // auto-spawn on first launch, an optimistic true while start() is still mid-spawn
@@ -296,25 +299,25 @@ export class HindsightManager {
   /** Is the memory feature flag enabled? (read fresh, never throws.) */
   private memoryFlagOn(): boolean {
     try {
+      if (this.sessionMemoryOverride) return true;
       const { isIntelligenceFlagEnabled } = require('../intelligence/intelligenceFlags');
       return Boolean(isIntelligenceFlagEnabled('hindsightMemory'));
     } catch {
-      return false;
+      return this.sessionMemoryOverride;
     }
   }
 
   /**
-   * Did the user opt into auto-starting the companion server? Mirrors `autoStartCommand()`'s
-   * default — ON unless explicitly disabled. Used by the self-healing auto-flip in start():
-   * we never flip the hindsightMemory flag unless the user actually wants auto-spawn. Never
-   * throws.
+   * Did the user opt into auto-starting the companion server? Hotfix 2026-07-09:
+   * default OFF. Zero-config default-on spawned heavy dev/source sidecars and made
+   * crash recovery fragile; users can still enable it explicitly in settings/env.
    */
   private isAutoStartEnabled(): boolean {
     try {
       const s = this.settings();
-      return (s?.get('hindsightAutoStart') as boolean | undefined) ?? true;
+      return (s?.get('hindsightAutoStart') as boolean | undefined) ?? false;
     } catch {
-      return true; // default-on, same as autoStartCommand
+      return false;
     }
   }
 
@@ -425,18 +428,21 @@ export class HindsightManager {
   private autoStartCommand(): string | null {
     try {
       const s = this.settings();
-      // Default ON (auto-start-when-installed, per the design) unless explicitly disabled.
-      const autoStart = (s?.get('hindsightAutoStart') as boolean | undefined) ?? true;
-      if (!autoStart) return null;
+      const explicit = (process.env.HINDSIGHT_SERVER_COMMAND
+        || (s?.get('hindsightServerCommand') as string | undefined)
+        || '').trim();
+      // Default OFF for stability: auto-starting a heavy local Python/Postgres
+      // sidecar should be an explicit opt-in. An explicit launch command counts
+      // as opt-in unless the user explicitly disabled auto-start.
+      const autoStartSetting = s?.get('hindsightAutoStart') as boolean | undefined;
+      if (autoStartSetting === false) return null;
+      if (autoStartSetting !== true && !explicit) return null;
       // CLOUD GUARD — Hindsight Cloud is user-managed (lives at a remote URL). We never try
       // to `bash scripts/...` against a remote URL — that would launch a local Python server
       // and ignore the configured Cloud target. The user is responsible for the Cloud
       // endpoint being healthy; the app only health-checks it.
       const cfg = this.getHindsightConfig();
       if (cfg && !isLocalTarget(cfg.baseUrl)) return null;
-      const explicit = (process.env.HINDSIGHT_SERVER_COMMAND
-        || (s?.get('hindsightServerCommand') as string | undefined)
-        || '').trim();
       if (explicit) return explicit;
       // Zero-config fallback: run the bundled launcher IFF it exists on disk. Quote the path
       // (it's absolute and may contain spaces, e.g. "/Users/.../Application Support/...").
@@ -509,6 +515,7 @@ export class HindsightManager {
       // children both binding port 8888. The pendingStart boolean closes that window.
       if (this.serverProcess || this.pendingStart) return;
       this.pendingStart = true;
+      this.reapPreviousManagedServer();
       const cfg = this.getHindsightConfig();
       if (!cfg) return;                 // no baseUrl → feature off, stay Noop
       // SELF-HEALING AUTO-FLIP — `hindsightMemory` is default-OFF in the flag registry
@@ -539,27 +546,12 @@ export class HindsightManager {
         !this.hindsightMemoryExplicitlyOff() &&
         !this.memoryFlagEnvForced()
       ) {
-        try {
-          const { setIntelligenceFlag } = require('../intelligence/intelligenceFlags');
-          // `setIntelligenceFlag` returns boolean (false = key rejected by registry guard,
-          // throw = SettingsManager write failed). Track both — a silent failure here means
-          // the spawn gate never opens, the user gets "Can't connect" forever, and they
-          // assume the spawn itself failed. Surface it.
-          const flipOk = setIntelligenceFlag('hindsightMemory', true);
-          if (flipOk === false) {
-            console.error('[HindsightManager] auto-flip rejected by flag registry — internal config error.');
-            this.broadcastStatus('spawn-failed', 'failed to enable long-term memory (internal config error — see log)');
-            return;
-          }
-          console.log('[HindsightManager] auto-enabling hindsightMemory flag (autoStart ON, baseUrl configured).');
-        } catch (e: any) {
-          // SettingsManager write threw (read-only disk, AV scanner, etc). This is the
-          // silent-failure case — without surfacing, the user has no signal that the
-          // reason nothing came up was the auto-flip itself, not the spawn.
-          console.error('[HindsightManager] auto-flip threw (non-fatal write failure):', e?.message);
-          this.broadcastStatus('spawn-failed', `failed to enable long-term memory: ${e?.message || 'unknown error'}`);
-          return;
-        }
+        // Hotfix 2026-07-09: do not persistently flip hindsightMemory just
+        // because autoStart is enabled. A crash after a persisted flip made the
+        // heavy sidecar come back forever with no UI escape hatch. Keep the
+        // enablement process-local for this launch only.
+        this.sessionMemoryOverride = true;
+        console.log('[HindsightManager] session-enabling hindsightMemory (autoStart ON, baseUrl configured).');
       }
       if (!this.memoryFlagOn()) return; // still off (autoStart explicitly disabled) → don't manage anything
 
@@ -712,6 +704,56 @@ export class HindsightManager {
     return this.logPath ?? this.resolveServerLogPath();
   }
 
+  private resolveManagedPidPath(): string | null {
+    try {
+      const path = require('path') as typeof import('path');
+      const { app } = require('electron') as typeof import('electron');
+      const userData = app?.getPath?.('userData');
+      return userData ? path.join(userData, 'hindsight-managed-server.pid') : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private writeManagedPid(pid: number): void {
+    try {
+      const pidPath = this.resolveManagedPidPath();
+      if (!pidPath) return;
+      const fs = require('fs') as typeof import('fs');
+      fs.writeFileSync(pidPath, `${pid}\n`, 'utf8');
+    } catch { /* best-effort */ }
+  }
+
+  private clearManagedPid(): void {
+    try {
+      const pidPath = this.resolveManagedPidPath();
+      if (!pidPath) return;
+      const fs = require('fs') as typeof import('fs');
+      if (fs.existsSync(pidPath)) fs.unlinkSync(pidPath);
+    } catch { /* best-effort */ }
+  }
+
+  private reapPreviousManagedServer(): void {
+    try {
+      const pidPath = this.resolveManagedPidPath();
+      if (!pidPath) return;
+      const fs = require('fs') as typeof import('fs');
+      if (!fs.existsSync(pidPath)) return;
+      const pid = Number(fs.readFileSync(pidPath, 'utf8').trim());
+      fs.unlinkSync(pidPath);
+      if (!Number.isFinite(pid) || pid <= 0) return;
+      try {
+        if (process.platform !== 'win32') process.kill(-pid, 'SIGKILL');
+        else require('child_process').execFileSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' });
+        console.warn(`[HindsightManager] reaped stale app-managed server process group from previous launch (pid=${pid}).`);
+      } catch {
+        try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
+      }
+    } catch (e: any) {
+      console.warn('[HindsightManager] stale-server reaper skipped (non-fatal):', e?.message);
+    }
+  }
+
   /** On a non-zero server exit, tail the captured log into the app log so the failure cause
    *  (missing module, bad key, port in use) is visible instead of a bare exit code. */
   private logServerFailureTail(): void {
@@ -860,10 +902,14 @@ export class HindsightManager {
         : spawn(argv![0], argv!.slice(1), { ...spawnOpts, shell: false });
       // The parent no longer needs the fd once the child owns it.
       if (outFd !== null) { try { require('fs').closeSync(outFd); } catch { /* noop */ } }
+      // Persist the app-managed root PID so the next launch can reap the process
+      // group if this Electron process dies before before-quit/stopSync runs.
+      if (this.serverProcess.pid) this.writeManagedPid(this.serverProcess.pid);
       // Don't let the detached child keep the parent event loop alive.
       this.serverProcess.unref?.();
       this.serverProcess.on('error', (err: any) => {
         console.error('[HindsightManager] failed to start server (is it installed?):', err?.message);
+        this.clearManagedPid();
         this.isAppManaged = false;
         this.serverProcess = null;
         if (this.pollInterval) { clearInterval(this.pollInterval); this.pollInterval = null; }
@@ -884,10 +930,12 @@ export class HindsightManager {
             this.broadcastStatus('spawn-failed', `server exited with code ${code}`);
           }
         }
+        this.clearManagedPid();
         this.serverProcess = null;
       });
     } catch (e: any) {
       console.error('[HindsightManager] exception spawning server:', e?.message);
+      this.clearManagedPid();
       this.isAppManaged = false;
       this.broadcastStatus('spawn-failed', `spawn exception: ${e?.message || 'unknown error'}`);
     }
@@ -947,6 +995,7 @@ export class HindsightManager {
         try { process.kill(-pid, 'SIGKILL'); }
         catch { try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ } }
       }
+      this.clearManagedPid();
       this.serverProcess = null;
       this.isAppManaged = false;
       console.log('[HindsightManager] app-managed server tree terminated on quit.');
