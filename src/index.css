@@ -18,6 +18,20 @@
 @tailwind components;
 @tailwind utilities;
 
+/* TEMPORARY LEAK-DIAGNOSIS (2026-07-10): when <html class="nofx"> is set via
+   the ?nofx=1 URL flag (see src/App.tsx), neutralize every backdrop-filter and
+   blur filter. These CPU-composited raster tiles are the suspected source of
+   the Windows native-RSS leak (launcher renderer + main grow in lockstep with
+   a flat JS heap). If RSS stays flat with ?nofx=1, this is the root cause.
+   Remove this block once the leak is fixed. !important beats Tailwind utils. */
+html.nofx *,
+html.nofx *::before,
+html.nofx *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  filter: none !important;
+}
+
 :root {
   /* System Fonts - SF Pro */
   --font-system: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";

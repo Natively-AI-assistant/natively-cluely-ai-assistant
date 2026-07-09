@@ -372,8 +372,16 @@ export class WindowHelper {
 
     this.launcherWindow.setContentProtection(this.contentProtection);
 
+    // TEMPORARY LEAK-DIAGNOSIS (2026-07-10): NATIVELY_NOFX=1 appends ?nofx=1 to
+    // the launcher URL, which disables all backdrop-filter/blur effects (see
+    // src/App.tsx + src/index.css). Used to test whether the Windows native-RSS
+    // leak is the CPU-composited blur raster-tile path. Remove after fix.
+    const nofxSuffix = process.env.NATIVELY_NOFX === '1' ? '&nofx=1' : '';
+    const launcherUrl = `${startUrl}?window=launcher${nofxSuffix}`;
+    if (nofxSuffix) console.warn('[LeakTest] NATIVELY_NOFX=1 → loading launcher with ?nofx=1 (blur effects OFF)');
+
     this.launcherWindow
-      .loadURL(`${startUrl}?window=launcher`)
+      .loadURL(launcherUrl)
       .then(() => console.log('[WindowHelper] loadURL success'))
       .catch((e) => {
         console.error('[WindowHelper] Failed to load URL:', e);
@@ -398,7 +406,7 @@ export class WindowHelper {
         console.warn(`[WindowHelper] dev: retrying launcher load (${launcherLoadRetries}/${MAX_LAUNCHER_LOAD_RETRIES}) in 1s…`);
         setTimeout(() => {
           if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
-            this.launcherWindow.loadURL(`${startUrl}?window=launcher`).catch(() => { /* next did-fail-load retries */ });
+            this.launcherWindow.loadURL(launcherUrl).catch(() => { /* next did-fail-load retries */ });
           }
         }, 1000);
       }
