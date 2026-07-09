@@ -153,6 +153,13 @@ export function verifyAll(repoRoot = process.cwd(), opts = {}) {
       continue;
     }
     const actual = binaryArch(abs);
+    if (String(actual).startsWith('unknown')) {
+      // `file -b` output can vary across macOS releases/locales. Unknown probe
+      // output is not proof of a wrong-arch binary, so fail open instead of
+      // blocking every launch with the native-arch dialog.
+      console.warn(`[nativeArch] could not classify ${rel} (${actual}); skipping arch gate for this file`);
+      continue;
+    }
     if (actual !== expected) {
       mismatches.push({
         path: rel,
