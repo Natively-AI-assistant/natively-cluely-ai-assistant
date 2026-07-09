@@ -1,0 +1,386 @@
+{
+  "name": "Jonathan A. Rivera",
+  "location": "Brooklyn, NY",
+  "phone": "(646) 555-0182",
+  "email": "jon.rivera.consulting@gmail.com",
+  "linkedin": "linkedin.com/in/jonathan-rivera-data",
+  "github": "github.com/jriveradata",
+  "fullName": "Jonathan A. Rivera",
+  "totalExperienceMonths": 0,
+  "full_name": "Jonathan A. Rivera",
+  "years_experience": "8",
+  "current_title": "Independent Analytics & Data Platform Consultant",
+  "current_company": "Self-employed",
+  "consulting_experience": "8 years independent; 13 production systems shipped/rebuilt",
+  "core_competencies": [
+    "customer-data pipelines",
+    "marketing-attribution modeling",
+    "revenue dashboards",
+    "dbt",
+    "Snowflake",
+    "BigQuery",
+    "Looker",
+    "Hightouch reverse-ETL",
+    "Shopify/Klaviyo/GA4/Segment",
+    "Mixpanel/Amplitude",
+    "Superset",
+    "FHIR/HIPAA pipelines"
+  ],
+  "engagement_examples": [
+    "Ironwood Outdoor Co.: rebuilt Klaviyo-attributed revenue model, recovered $1.9M mis-attributed rev",
+    "Birchline Financial: stood up Snowflake + dbt + Hightouch in 11 weeks; MQL-to-SQL 11.2%->17.8%",
+    "Cardinal Pediatrics: FHIR->BigQuery pipeline on 15-min cadence; HIPAA BAA compliant; recovered 480 visit slots/mo",
+    "Halberd Media: rescued 8 client dashboards; cleared 11 broken reports; retained 4 clients",
+    "Trellis & Vine: rebuilt attribution post-Magento replatform; duplicate customers 38%->4.1%",
+    "Northwind Press: migrated Looker->Superset with dbt + GitHub Actions CI/CD"
+  ],
+  "leadership_style": "senior IC / player-coach; comfortable solo or on team of 12",
+  "education": "not specified in resume excerpt",
+  "certifications": "not specified in resume excerpt",
+  "industries": [
+    "DTC",
+    "SaaS",
+    "healthcare",
+    "publishing",
+    "media agency"
+  ],
+  "tools_and_platforms": [
+    "Snowflake",
+    "BigQuery",
+    "dbt",
+    "Hightouch",
+    "Looker",
+    "Superset",
+    "Shopify",
+    "Klaviyo",
+    "GA4",
+    "Segment",
+    "Mixpanel",
+    "Amplitude",
+    "GitHub Actions",
+    "FHIR/athenahealth"
+  ],
+  "notable_achievements": [
+    "13 production systems built/rebuilt",
+    "compressed 6-month discovery to 4-week intake process",
+    "$1.9M revenue recovery at Ironwood",
+    "Lifted MQL-to-SQL 6.6 pts at Birchline",
+    "100% column-level dbt tests in CI",
+    "0 weekly ETL failures post-migration (from ~6)"
+  ],
+  "resume_truncation_flag": "yes - Northwind Press entry and later entries cut off mid-sentence",
+  "summary": "Independent analytics and data-platform consultant; 8 years; DTC/SaaS mid-market; senior IC or player-coach target",
+  "current_location": "Brooklyn, NY",
+  "employment_start": "2017-07",
+  "employment_end": "Present",
+  "roles": [
+    {
+      "company": "Ironwood Outdoor Co.",
+      "industry": "DTC outdoor gear",
+      "size": "~$28M GMV",
+      "title": "Lead Analytics Consultant",
+      "start": "2024-05",
+      "end": "Present",
+      "stack": [
+        "Klaviyo",
+        "Shopify",
+        "Segment",
+        "GA4",
+        "Looker"
+      ],
+      "highlights": [
+        "Rebuilt Klaviyo-attributed revenue model",
+        "Cut tracked events 41->14",
+        "Dropped weekly ETL failures ~6->0",
+        "Delivered 5 dashboards / 32 tiles",
+        "Recovered $1.9M mis-attributed repeat-customer revenue Q3-Q4 2024"
+      ]
+    },
+    {
+      "company": "Birchline Financial",
+      "industry": "B2B SaaS expense management",
+      "title": "Fractional Data Lead",
+      "start": "2025-03",
+      "end": "2025-08",
+      "stack": [
+        "Snowflake",
+        "dbt",
+        "Hightouch"
+      ],
+      "highlights": [
+        "Stood up Snowflake + dbt + Hightouch in 11 weeks vs 24 planned",
+        "47 dbt models, 100% column-level tests in CI",
+        "MQL-to-SQL 11.2%->17.8% in 90 days"
+      ]
+    },
+    {
+      "company": "Cardinal Pediatrics Group",
+      "industry": "Multi-clinic healthcare (22 locations)",
+      "title": "Data Engineering Consultant",
+      "start": "2024-02",
+      "end": "2025-01",
+      "stack": [
+        "FHIR",
+        "athenahealth",
+        "BigQuery"
+      ],
+      "highlights": [
+        "Replaced nightly SFTP with FHIR pipeline, 15-min cadence",
+        "HIPAA BAA-compliant de-identification",
+        "Surfaced 14% over-scheduling; recovered ~480 visit slots/month"
+      ]
+    },
+    {
+      "company": "Halberd Media",
+      "industry": "Independent agency",
+      "title": "Senior Analyst (embedded)",
+      "start": "2023-08",
+      "end": "2023-11",
+      "stack": [
+        "Mixpanel",
+        "Amplitude",
+        "GA4"
+      ],
+      "highlights": [
+        "Rescue engagement after senior analyst departed",
+        "Owned 8 active client dashboards",
+        "Cleared 11 broken reports in 30 days",
+        "Retained 4 at-risk clients"
+      ]
+    },
+    {
+      "company": "Trellis & Vine",
+      "industry": "DTC home goods",
+      "size": "~$9M Shopify Plus",
+      "title": "Analytics Consultant",
+      "start": "2023-04",
+      "end": "2024-09",
+      "stack": [
+        "Magento->Shopify Plus",
+        "first-party cookies"
+      ],
+      "highlights": [
+        "Rebuilt attribution after replatform",
+        "7-day identity graph",
+        "Duplicate customers 38%->4.1%",
+        "Cited in Series A pitch deck"
+      ]
+    },
+    {
+      "company": "Northwind Press",
+      "industry": "B2B publishing",
+      "size": "~60 employees",
+      "title": "Data Engineering Consultant",
+      "start": "2022-10",
+      "end": "2023-05",
+      "stack": [
+        "Looker",
+        "Superset (self-hosted)",
+        "dbt",
+        "GitHub Actions"
+      ],
+      "highlights": [
+        "Led 4-person team migrating Looker->Superset",
+        "Wrote dbt project + CI/CD + runbook"
+      ]
+    }
+  ],
+  "skills_tools": [
+    "Snowflake",
+    "BigQuery",
+    "dbt",
+    "Hightouch",
+    "Looker",
+    "Superset",
+    "Shopify",
+    "Klaviyo",
+    "Segment",
+    "GA4",
+    "Mixpanel",
+    "Amplitude",
+    "FHIR",
+    "athenahealth",
+    "GitHub Actions",
+    "first-party cookies/identity stitching"
+  ],
+  "domains": [
+    "DTC",
+    "SaaS",
+    "healthcare",
+    "publishing",
+    "agency"
+  ],
+  "notable_metrics": [
+    "13 production systems shipped/rebuilt",
+    "$1.9M mis-attributed revenue recovered",
+    "MQL-to-SQL +6.6pp",
+    "duplicate customers -33.9pp",
+    "480 visit slots/month recovered"
+  ],
+  "contact": "(646) 555-0182 | jon.rivera.consulting@gmail.com",
+  "current_employer": "Self-employed",
+  "current_dates": "July 2017 - Present",
+  "target_role": "senior IC or player-coach role",
+  "cloud_warehouses": [
+    "Snowflake",
+    "BigQuery"
+  ],
+  "transformation": [
+    "dbt"
+  ],
+  "reverse_etl": [
+    "Hightouch"
+  ],
+  "bi_tools": [
+    "Looker",
+    "Superset (self-hosted)"
+  ],
+  "analytics_tools": [
+    "Mixpanel",
+    "Amplitude",
+    "GA4",
+    "Klaviyo",
+    "Shopify"
+  ],
+  "languages_or_stacks": [
+    "dbt",
+    "GitHub Actions CI/CD",
+    "FHIR pipelines",
+    "Segment",
+    "server-side GA4"
+  ],
+  "compliance": [
+    "HIPAA BAA"
+  ],
+  "engagements_count": 13,
+  "systems_shipped_or_rebuilt": 13,
+  "pipelines_fhir": "athenahealth to BigQuery, 15-minute cadence",
+  "dbt_models_written": 47,
+  "dashboards_built": [
+    "Looker suite 5 dashboards 32 tiles"
+  ],
+  "stakeholder_audiences": [
+    "founder",
+    "CFO",
+    "go-to-market",
+    "clinical operations",
+    "merchandising"
+  ],
+  "project_management": [
+    "intake compressed from 6 months to 4 weeks",
+    "ran 11-week build vs 24-week plan",
+    "led four-person team"
+  ],
+  "domain_skills": [
+    "customer-data pipelines",
+    "marketing-attribution models",
+    "revenue dashboards",
+    "identity stitching",
+    "user-stitching identity graph",
+    "reverse-ETL",
+    "first-party cookie plan",
+    "de-identification",
+    "ETL reliability",
+    "QA templating"
+  ],
+  "soft_signals": [
+    "only data person in room",
+    "team of twelve",
+    "hands-off runbooks for junior analysts"
+  ],
+  "current_role": "Independent Analytics & Data Platform Consultant",
+  "current_role_type": "self-employed-1099",
+  "current_role_start": "July 2017",
+  "target_role_type": "senior-IC or player-coach",
+  "domain_expertise": [
+    "customer-data pipelines",
+    "marketing-attribution",
+    "revenue dashboards"
+  ],
+  "client_segments": [
+    "mid-market DTC",
+    "mid-market SaaS"
+  ],
+  "tools_warehouses": [
+    "Snowflake",
+    "BigQuery",
+    "dbt",
+    "Hightouch",
+    "Superset",
+    "Looker"
+  ],
+  "tools_analytics": [
+    "Mixpanel",
+    "Amplitude",
+    "GA4",
+    "Klaviyo",
+    "Shopify",
+    "Segment"
+  ],
+  "tools_pipeline": [
+    "FHIR",
+    "SFTP",
+    "GitHub Actions"
+  ],
+  "compliance_experience": [
+    "HIPAA BAA",
+    "de-identification"
+  ],
+  "team_sizes_managed": [
+    4
+  ],
+  "engagement_lengths": [
+    "3 months",
+    "5 months",
+    "11 months",
+    "11 weeks",
+    "overlapping 1-2 active clients"
+  ],
+  "notable_outcomes": [
+    "recovered $1.9M mis-attributed revenue",
+    "MQL-to-SQL 11.2% to 17.8%",
+    "weekly ETL failures 6 to 0",
+    "duplicate customers 38% to 4.1%",
+    "recovered 480 patient slots/month",
+    "eliminated 11 broken reports in 30 days",
+    "47 dbt models with 100% column-level tests passing"
+  ],
+  "industries_served": [
+    "DTC outdoor gear",
+    "B2B SaaS expense management",
+    "multi-clinic healthcare",
+    "independent marketing agency",
+    "DTC home goods",
+    "B2B publishing"
+  ],
+  "client_size_range": "~$9M-$28M GMV; 22-location practice; 60-employee publisher",
+  "mostRecentEmployer": "Self-employed (Independent Analytics & Data Platform Consultant)",
+  "topSkills": [],
+  "projects": [
+    {
+      "name": "Ironwood Outdoor Co. Klaviyo Attribution Rebuild",
+      "description": "Rebuilt Klaviyo-attributed revenue model, migrated event capture to native Shopify web pixel plus server-side GA4 (cutting tracked events from 41 to 14 and eliminating weekly ETL failures), and delivered a 5-dashboard Looker suite, recovering $1.9M in mis-attributed repeat-customer revenue across Q3-Q4 2024."
+    },
+    {
+      "name": "Birchline Financial Snowflake/dbt/Hightouch Stack Launch",
+      "description": "Stood up Birchline's first Snowflake account, dbt project, and Hightouch reverse-ETL layer in 11 weeks (vs. 24 planned), writing 47 dbt models with 100% column-level test coverage, enabling a go-to-market account-scoring model that lifted MQL-to-SQL conversion from 11.2% to 17.8%."
+    }
+  ],
+  "jdCompany": "the company",
+  "jdRole": "Senior Product Designer",
+  "requirementsMet": [
+    "Relevant experience present",
+    "Relevant experience present",
+    "Relevant experience present"
+  ],
+  "requirementsNotMet": [
+    "Gap to be assessed in interview",
+    "Gap to be assessed in interview"
+  ],
+  "expectedSalaryBand": null,
+  "id": "p05",
+  "edgeCase": "Freelance/consultant with 15 SHORT overlapping engagements over 8 years (2-6 months each, several concurrent). Each engagement lists client,",
+  "resumeFormat": "pdf",
+  "hasSecondDoc": false,
+  "mostRecentTitle": "Independent Analytics & Data Platform Consultant"
+}

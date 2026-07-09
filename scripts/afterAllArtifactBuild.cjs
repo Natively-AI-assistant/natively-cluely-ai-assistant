@@ -203,7 +203,13 @@ function buildStyledDmg({ appPath, outDmg, identity }) {
     '--hdiutil-quiet',
   ];
   if (fs.existsSync(VOLICON)) args.push('--volicon', VOLICON);
-  if (fs.existsSync(BACKGROUND)) args.push('--background', BACKGROUND);
+  // Background is opt-in. assets/dmg-background.png is 2640×1600 px = 660×400 pt at 4x,
+  // but create-dmg/Finder lays a non-@2x image 1:1 point-for-pixel into the 660×400-pt
+  // window, so the artwork renders off-scale/mis-positioned relative to the icon/drop-link.
+  // Ship the default white DMG window unless a correctly-sized background is explicitly enabled.
+  if (process.env.NATIVELY_DMG_BACKGROUND === '1' && fs.existsSync(BACKGROUND)) {
+    args.push('--background', BACKGROUND);
+  }
   if (identity) args.push('--codesign', identity); // sign the DMG container itself
   args.push(outDmg, stage);
 

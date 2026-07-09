@@ -212,3 +212,50 @@ describe('FINDING-004: KnowledgeOrchestrator ingest pipeline', () => {
         assert.ok(nodeCount2 <= nodeCount1 * 2, 'Re-ingest must replace not multiply');
     });
 });
+
+// ---------------------------------------------------------------------------
+// Code-review finding: the degenerate-extraction quality gate was only wired
+// for DocType.RESUME. An LLM that returns VALID JSON with title stuck at the
+// "Unknown Role" fallback and empty requirements/responsibilities (the JD
+// equivalent of "Unknown Candidate" + empty body) parses without throwing, so
+// the catch-based heuristic fallback never fires. This asserts the JD side now
+// gets the same treatment: the orchestrator must detect the degenerate JD and
+// switch to the deterministic heuristic, which can recover real data from the
+// same raw JD text.
+// ---------------------------------------------------------------------------
+describe('KnowledgeOrchestrator — degenerate JD extraction quality gate', () => {
+    let db, orchestrator, tmpJdFile;
+
+    const DEGENERATE_JD_GENERATE_CONTENT = async () => JSON.stringify({
+        title: 'Unknown Role', company: '', location: '',
+        description_summary: '', level: 'mid', employment_type: 'full_time',
+        min_years_experience: 0, compensation_hint: '',
+        requirements: [], nice_to_haves: [], responsibilities: [],
+        technologies: [], keywords: [],
+    });
+
+    beforeEach(() => {
+        db = new KnowledgeDatabaseManager(new Database(':memory:'));
+        db.initializeSchema();
+        orchestrator = new KnowledgeOrchestrator(db);
+        orchestrator.setGenerateContentFn(DEGENERATE_JD_GENERATE_CONTENT);
+        orchestrator.setEmbedFn(MOCK_EMBED_FN);
+        tmpJdFile = makeTempFile(JD_FIXTURE, '.txt');
+    });
+
+    afterEach(() => {
+        try { fs.unlinkSync(tmpJdFile); } catch {}
+        try { db.close?.(); } catch {}
+    });
+
+    test('a degenerate-but-valid LLM JD response is replaced by the deterministic heuristic', async () => {
+        const result = await orchestrator.ingestDocument(tmpJdFile, DocType.JD);
+        assert.equal(result.success, true, `Ingest failed: ${result.error}`);
+
+        const jd = orchestrator.activeJD?.structured_data;
+        assert.ok(jd, 'activeJD must be populated');
+        assert.notEqual(jd.title, 'Unknown Role', 'the degenerate LLM title must have been replaced by the heuristic');
+        assert.match(jd.title, /Senior Backend Engineer/i, 'heuristic recovers the real title from JD_FIXTURE');
+        assert.equal(jd._extraction_mode, 'heuristic', 'extraction_mode must record the fallback occurred');
+    });
+});

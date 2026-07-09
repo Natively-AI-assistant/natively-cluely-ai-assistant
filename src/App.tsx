@@ -14,7 +14,20 @@ import { NativelyQuotaBanner } from "./components/NativelyQuotaBanner"
 import { FreeTrialBanner }      from "./components/trial/FreeTrialBanner"
 import { FreeTrialModal }       from "./components/trial/FreeTrialModal"
 import { OrchestratorProvider, OrchestratedToasterHost, setUserState as setOrchestratorUserState, emitOrchestratorEvent } from "./components/onboarding/OrchestratedToasterHost"
-import { getOrchestrator } from "./lib/onboarding/orchestrator"
+import ReviewPromptHost from "./components/ReviewPromptHost"
+// NOTE: explicit `.ts` extension is load-bearing. Vite's default resolver
+// tries `.mjs` before `.ts` (see DEFAULT_EXTENSIONS in vite/dist/node/constants.js),
+// and this directory also has an `orchestrator.mjs` companion (kept for
+// `node --test`, which can't run TypeScript directly). An unqualified
+// specifier here silently resolved to the `.mjs` file's no-op stub
+// orchestrator instead of the real class — the entire onboarding flow
+// (permissions/browser-ext/trial-promo toasters) was silently inert, AND
+// the stub's getSnapshot() returned a fresh object every call, which
+// tripped useSyncExternalStore's referential-equality check into an
+// infinite re-render loop (React's "Maximum update depth exceeded"),
+// unmounting the whole tree — the black-screen root cause. Do not remove
+// the extension.
+import { getOrchestrator } from "./lib/onboarding/orchestrator.ts"
 import { AlertCircle, RefreshCw } from "lucide-react"
 import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity } from "./lib/overlayAppearance"
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
@@ -34,6 +47,31 @@ import { analytics } from "./lib/analytics/analytics.service"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import ModesSettings from "./components/settings/ModesSettings"
 import { ProfileIntelligenceSettings } from "./components/ProfileIntelligenceSettings"
+
+
+// DEV-ONLY: should the launcher mount an uncontrolled ReviewPromptHost?
+// Mirrors ReviewPromptHost.tsx's isDevForceShow() so a developer running
+// the real onboarding funnel is not forced into the review modal every
+// reload. Production builds are unconditionally false.
+function shouldMountDevReviewHost(): boolean {
+  try {
+    if (typeof window === 'undefined') return false
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dev: boolean = !!(import.meta as any)?.env?.DEV
+    if (!dev) return false
+    const params = new URLSearchParams(window.location?.search || '')
+    const explicit = params.get('review')
+    if (explicit === 'off') return false
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any
+    if (w.__reviewForceShow === false) return false
+    // Dev default ON. Developers who want to test the real funnel append
+    // ?review=off or set window.__reviewForceShow = false.
+    return true
+  } catch {
+    return false
+  }
+}
 
 const queryClient = new QueryClient()
 const CropperWindow = React.lazy(() => import('./components/Cropper'))
@@ -195,14 +233,30 @@ const App: React.FC = () => {
     if (!isLauncherWindow && !isDefault) return;
     let cancelled = false;
     let stopFn: (() => void) | null = null;
-    import('./lib/onboarding/orchestrator').then(({ getOrchestrator }) => {
+    // Explicit `.ts` extensions here for the same reason as the static
+    // import above — Vite resolves the sibling `.mjs` test companions first.
+    // We use `getOrchestrator()` (statically imported at line 30) directly —
+    // the previous dynamic `import('./lib/onboarding/orchestrator.ts')` was
+    // dead code: orchestrator.ts is already in the static graph (App.tsx:30
+    // and OrchestratedToasterHost.tsx:16), and the dynamic fetch just earned
+    // a Vite "mixed static+dynamic import" warning without saving bytes.
+    // stageCatalog stays dynamic — it is a `.mjs`-only module with no other
+    // importer, so the dynamic boundary is the only thing keeping it out of
+    // the launcher's initial bundle.
+    import('./lib/onboarding/stageCatalog.ts').then(({ STAGES, QUIET_WINDOW_STAGE }) => {
       if (cancelled) return;
-      import('./lib/onboarding/stageCatalog').then(({ STAGES, QUIET_WINDOW_STAGE }) => {
-        if (cancelled) return;
-        const orch = getOrchestrator();
-        orch.start([...STAGES, QUIET_WINDOW_STAGE]);
-        stopFn = () => orch.stop();
-      });
+      const orch = getOrchestrator();
+      orch.start([...STAGES, QUIET_WINDOW_STAGE]);
+      stopFn = () => orch.stop();
+      // DEV-ONLY: opt-in flag for review-prompt force-show. We do NOT
+      // mutate orchestrator state on boot — the host file
+      // (ReviewPromptHost.tsx) mounts an uncontrolled <ReviewPromptHost />
+      // whenever `isDevForceShow()` returns true (URL ?review=force, dev
+      // build default, or window.__reviewForceShow toggle). Clobbering
+      // markDismissed() here would silently rewrite every dev user's
+      // persisted onboarding ledger on every reload — defeating the point
+      // of testing the real funnel. Production builds are unaffected
+      // because isDevForceShow() defaults to false.
     });
     return () => {
       cancelled = true;
@@ -231,6 +285,22 @@ const App: React.FC = () => {
       emitOrchestratorEvent({ type: 'launcher:mounted' });
     }
   }, [isSettingsOpen, isModesOpen, isProfileOpen, isLauncherWindow, isDefault]);
+
+  // Escape closes the top-most open overlay (Settings > Modes > Profile).
+  // SettingsOverlay also listens for Escape internally; the duplicate keydown is
+  // a no-op there because the panel already closed by the time the handler fires.
+  useEffect(() => {
+    if (!isSettingsOpen && !isModesOpen && !isProfileOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      if (isSettingsOpen) { setIsSettingsOpen(false); return; }
+      if (isModesOpen)    { setIsModesOpen(false);    return; }
+      if (isProfileOpen)  { setIsProfileOpen(false);  return; }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isSettingsOpen, isModesOpen, isProfileOpen]);
 
 
 
@@ -919,6 +989,13 @@ const App: React.FC = () => {
       <OrchestratorProvider>
         <OrchestratedToasterHost />
       </OrchestratorProvider>
+
+      {/* DEV-ONLY: direct ReviewPromptHost mount for iterating on the modal UX.
+          Gated on import.meta.env.DEV plus the same opt-in flags the host
+          already respects (?review=force, window.__reviewForceShow). When
+          active, this bypasses the orchestrator entirely so the persisted
+          onboarding ledger is not modified. */}
+      {shouldMountDevReviewHost() && <ReviewPromptHost />}
 
       {/* Free trial countdown banner — only in launcher window while trial is active */}
       {(isLauncherWindow || isDefault) && activeTrial && (

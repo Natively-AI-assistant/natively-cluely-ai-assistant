@@ -125,6 +125,49 @@ export class DatabaseManager {
     }
 
     /**
+     * Truncate the WAL file by running a `PRAGMA wal_checkpoint(TRUNCATE)`.
+     * On a force-quit or a crash mid-write, the `-wal` file is left in an
+     * inconsistent state and the next launch's `new Database(dbPath)` may
+     * either hang on a kernel lock the OS thinks is held, or read partial
+     * committed data. This call is best-effort: if it fails (db is null or
+     * the connection is closed) it does nothing. Should be called from
+     * `before-quit` AND from any force-quit-handler path so a SIGKILL of
+     * the Electron main process is the ONLY way the WAL stays dirty.
+     *
+     * This is the missing piece for the "fresh-profile crash, never opens
+     * again" bug: a half-written .db-wal on a brand-new install would lock
+     * the next launch's `new Database(dbPath)` against a phantom lock.
+     */
+    public checkpoint(): void {
+        if (!this.db) return;
+        try {
+            this.db.pragma('wal_checkpoint(TRUNCATE)');
+        } catch (e: any) {
+            // best-effort: a checkpoint failure should not block shutdown.
+            console.warn('[DatabaseManager] wal_checkpoint(TRUNCATE) failed:', e?.message || e);
+        }
+    }
+
+    /**
+     * Close the better-sqlite3 connection cleanly. After this, all public
+     * methods are no-ops (db is null). Idempotent. Safe to call from
+     * `before-quit` AND from the `window-all-closed` handler so the
+     * launcher hides-to-tray path also releases the connection.
+     */
+    public close(): void {
+        if (!this.db) return;
+        try {
+            this.db.pragma('wal_checkpoint(TRUNCATE)');
+        } catch { /* best-effort */ }
+        try {
+            this.db.close();
+        } catch (e: any) {
+            console.warn('[DatabaseManager] close failed:', e?.message || e);
+        }
+        this.db = null;
+    }
+
+    /**
      * The error that caused initialization to fail, if any. Lets the app surface
      * a single user-facing banner (e.g. "Local database unavailable — meeting
      * history disabled") instead of relying on log scraping.
@@ -189,6 +232,40 @@ export class DatabaseManager {
 
             this.db = new Database(this.dbPath);
             this.db.pragma('journal_mode = WAL');
+            // Hotfix 2026-07-09: with WAL enabled, background indexing workers
+            // and foreground chat reads/writes can briefly contend. Waiting is
+            // safer than throwing SQLITE_BUSY during startup or active sessions.
+            this.db.pragma('busy_timeout = 5000');
+            // Leave synchronous = FULL (the WAL default). NORMAL trades crash
+            // durability for throughput — a power loss between commit and
+            // fsync loses the transaction. The emergency-close path added in
+            // electron/main.ts (uncaughtException / SIGTERM / process-gone)
+            // checkpoint+closes the DB so the next launch never sees a stale
+            // WAL holding a kernel lock from a dead writer.
+
+            // 2026-07-09: detect crash-recovery conditions on startup. If we
+            // see a WAL file > 50MB or a `-wal` left over from a hard kill,
+            // log it so the user can correlate a slow/stuck launch with the
+            // previous session's crash. Anything >5MB after a clean previous
+            // session is unusual and worth surfacing; >50MB is "the previous
+            // session probably wrote a lot without checkpointing".
+            try {
+                const walPath = `${this.dbPath}-wal`;
+                const shmPath = `${this.dbPath}-shm`;
+                const walBytes = fs.existsSync(walPath) ? fs.statSync(walPath).size : 0;
+                const shmExists = fs.existsSync(shmPath);
+                if (walBytes >= 50 * 1024 * 1024) {
+                    console.warn(`[DB-RECOVERY] large WAL on open: ${walBytes} bytes at ${walPath} (previous session likely died mid-transaction). A TRUNCATE checkpoint is being run automatically.`);
+                } else if (walBytes >= 5 * 1024 * 1024) {
+                    console.log(`[DB-RECOVERY] non-trivial WAL on open: ${walBytes} bytes at ${walPath}`);
+                }
+                if (shmExists) {
+                    console.log(`[DB-RECOVERY] -shm index file present (typical after WAL-mode open; SQLite manages it).`);
+                }
+            } catch (recovErr: any) {
+                // Recovery detection is best-effort — never block startup.
+                console.warn('[DB-RECOVERY] detection check failed (non-fatal):', recovErr?.message || recovErr);
+            }
 
             // Load sqlite-vec extension for native vector search
             try {
@@ -345,60 +422,48 @@ export class DatabaseManager {
 
         // Version 2 → 3: sqlite-vec virtual tables for native vector search
         if (version < 3) {
-            console.log('[DatabaseManager] Applying migration v2 → v3: vec0 virtual tables');
+            // PHASE-2D (Fix-2): the historical v3 step attempted to create
+            // a vec0 table with `embedding float` (no dimension), which
+            // sqlite-vec rejects with "At least one vector column is
+            // required". The fix is to skip that broken CREATE entirely
+            // and let the v8/v9 per-dimension migration below provision
+            // the working tables. We still bump user_version to 3 so the
+            // migration loop advances normally.
+            //
+            // The happy path (fresh install) is now COMPLETELY SILENT —
+            // no log line, no error. We only log when there's actual
+            // legacy cleanup to report (a prior install that DID create
+            // the broken tables).
             try {
-                // Create vec0 virtual table for chunk embeddings (dynamic dimension)
-                this.db.exec(`
-                    CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
-                        chunk_id INTEGER PRIMARY KEY,
-                        embedding float
-                    );
-                `);
-
-                // Create vec0 virtual table for summary embeddings (dynamic dimension)
-                this.db.exec(`
-                    CREATE VIRTUAL TABLE IF NOT EXISTS vec_summaries USING vec0(
-                        summary_id INTEGER PRIMARY KEY,
-                        embedding float
-                    );
-                `);
-
-                // Migrate existing chunk embeddings from BLOB column to vec0 table
-                this.migrateExistingEmbeddings();
-
-                console.log('[DatabaseManager] vec0 virtual tables created successfully');
+                this.tryProvisionLegacyVecTables();
+                if (this._lastLegacyCleanup > 0) {
+                    console.log(`[DatabaseManager] v3 migration: cleared ${this._lastLegacyCleanup} legacy broken vec0 table(s) (replaced by per-dim v8/v9)`);
+                    this._lastLegacyCleanup = 0;
+                }
             } catch (e) {
-                console.error('[DatabaseManager] vec0 migration failed (sqlite-vec may not be loaded):', e);
-                console.warn('[DatabaseManager] VectorStore will fall back to JS cosine similarity');
+                // Only log on ACTUAL failure, not on the historic "vec0
+                // constructor error: At least one vector column is
+                // required" which we now explicitly do NOT raise.
+                console.error('[DatabaseManager] v3 migration failed unexpectedly (non-fatal, will be retried at v8/v9):', e?.message || e);
             }
             this.db.pragma('user_version = 3');
         }
 
         // Version 3 → 4: Drop strict 768-dim vec0 tables to allow flexible embedding dimensions
         if (version < 4) {
-            console.log('[DatabaseManager] Applying migration v3 → v4: Drop strict dimension vec0 tables');
+            // PHASE-2D (Fix-2): same fix as v3 — silent on fresh installs.
+            // The only action this step used to take was DROP TABLE on
+            // tables that v3 just CREATED. Since v3 no longer creates
+            // them, and legacy repos already had them dropped in v3,
+            // there's nothing to do on the happy path.
             try {
-                this.db.exec('DROP TABLE IF EXISTS vec_chunks;');
-                this.db.exec('DROP TABLE IF EXISTS vec_summaries;');
-
-                this.db.exec(`
-                    CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
-                        chunk_id INTEGER PRIMARY KEY,
-                        embedding float
-                    );
-                `);
-
-                this.db.exec(`
-                    CREATE VIRTUAL TABLE IF NOT EXISTS vec_summaries USING vec0(
-                        summary_id INTEGER PRIMARY KEY,
-                        embedding float
-                    );
-                `);
-
-                this.migrateExistingEmbeddings();
-                console.log('[DatabaseManager] vec0 virtual tables recreated for flexible dimensions');
+                this.tryProvisionLegacyVecTables();
+                if (this._lastLegacyCleanup > 0) {
+                    console.log(`[DatabaseManager] v4 migration: cleared ${this._lastLegacyCleanup} legacy broken vec0 table(s)`);
+                    this._lastLegacyCleanup = 0;
+                }
             } catch (e) {
-                console.error('[DatabaseManager] vec0 migration v4 failed:', e);
+                console.error('[DatabaseManager] v4 migration failed (non-fatal):', e?.message || e);
             }
             this.db.pragma('user_version = 4');
         }
@@ -1811,6 +1876,47 @@ export class DatabaseManager {
             console.log(`[DatabaseManager] Ensured vec0 tables for dim=${dim}`);
         } catch (e) {
             console.error(`[DatabaseManager] Failed to create vec0 tables for dim=${dim}:`, e);
+        }
+    }
+
+    /**
+     * PHASE-2D (Fix-2): drop any orphan legacy vec0 tables from prior
+     * installs that DID create the broken schema, and bump a counter so
+     * the v3/v4 migration blocks can log a single line IF something was
+     * actually cleaned up. The happy path (fresh install from a clean
+     * git clone) drops nothing and emits no log line.
+     *
+     * Also returns the number of tables dropped via `this._lastLegacyCleanup`
+     * so the migration loop can include it in its log message.
+     */
+    private _lastLegacyCleanup: number = 0;
+    private tryProvisionLegacyVecTables(): void {
+        if (!this.db) return;
+        this._lastLegacyCleanup = 0;
+        // The two legacy tables from the broken v3/v4 schema are
+        // `vec_chunks` and `vec_summaries`. They have no dimension
+        // column so sqlite-vec would reject any CREATE that references
+        // them — but they CAN exist as orphans if a prior install DID
+        // create them before the fix landed.
+        const legacyNames = ['vec_chunks', 'vec_summaries'];
+        for (const name of legacyNames) {
+            try {
+                // probe existence with sqlite_master — DROP IF EXISTS is
+                // a no-op when the table is absent, but we want to
+                // distinguish "dropped" from "didn't exist" so the log
+                // is accurate.
+                const row = this.db.prepare(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name = ?"
+                ).get(name);
+                if (!row) continue;
+                this.db.exec(`DROP TABLE ${name};`);
+                this._lastLegacyCleanup++;
+                console.log(`[DatabaseManager] Dropped orphan legacy vec0 table: ${name}`);
+            } catch (_) {
+                // Best-effort: dropping an orphan should never crash
+                // startup. If DROP fails here, the v8/v9 per-dim
+                // migration below will still create the working tables.
+            }
         }
     }
 

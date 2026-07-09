@@ -1,0 +1,679 @@
+%PDF-1.3
+%ºß¬à
+3 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 4 0 R
+>>
+endobj
+4 0 obj
+<<
+/Length 5004
+>>
+stream
+0.200025 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 744. Td
+(MARISSA K. CHEN) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 730.5 Td
+(Seattle, WA | \(206\) 555-0179 | marissa.chen.dev@gmail.com | linkedin.com/in/marissachen-dev |) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 717. Td
+(github.com/mchen-cs) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 690. Td
+(PROFESSIONAL SUMMARY) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 676.5 Td
+(Staff Software Engineer with 9+ years of experience designing distributed systems, data pipelines, and developer) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 663. Td
+(tooling across fintech and cloud infrastructure. Returning Nimbus Systems engineer who led the rebuild of the) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 649.5 Td
+(company's core observability platform after rejoining in 2021. Comfortable owning ambiguous, cross-team technical) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 636. Td
+(strategy from whiteboard to production, and mentoring engineers across multiple orgs.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 609. Td
+(WORK EXPERIENCE) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 582. Td
+(Nimbus Systems  \(Boomerang: rejoined after 2.5 years away\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 568.5 Td
+(Staff Software Engineer                                  January 2024 - Present) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 555. Td
+(- Lead architect for the FlowForge metrics pipeline rewrite; consolidated 14 legacy collectors into a unified agent that) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 541.5 Td
+(cut customer observability spend by an average of 38% across 220+ enterprise accounts.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 528. Td
+(- Defined and drove the company's adoption of OpenTelemetry as the standard instrumentation layer, including a) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 514.5 Td
+(9-month migration plan negotiated with 5 product teams.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 501. Td
+(- Mentor four senior engineers; instituted a quarterly design-review forum that has been adopted org-wide.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 487.5 Td
+(- Own technical strategy for the "Always-On" availability initiative, which brought platform p99 latency from 1.4s to) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 474. Td
+(210ms and reduced customer-reported incidents by 62% YoY.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 447. Td
+(Senior Software Engineer                                 June 2021 - December 2023) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 433.5 Td
+(- Re-architected the ingestion service from a monolithic Java app into a Go-based modular pipeline that now handles) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 420. Td
+(4.2B events per day with 99.97% uptime.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 406.5 Td
+(- Built the team's first chaos-engineering harness, integrating it into the release pipeline and exposing 11) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 393. Td
+(previously-unknown failure modes before they hit production.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 379.5 Td
+(- Co-led the migration from on-prem Elasticsearch to a managed cluster across two regions; reduced query cost by) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 366. Td
+($1.1M annually.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 339. Td
+(Senior Software Engineer                                 August 2017 - May 2021) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 325.5 Td
+(Cobaltline Financial) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 312. Td
+(Seattle, WA \(Remote, 2020-2021\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 298.5 Td
+(- Designed and shipped the Ledger Reconciliation service used by the settlement team to reconcile 8.3M daily) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 285. Td
+(transactions across three clearing partners; reduced end-of-day close time from 6 hours to 38 minutes.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 271.5 Td
+(- Owned the migration of internal services from REST to gRPC, including a custom load-balancer that cut) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 258. Td
+(inter-service p95 latency by 47%.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 244.5 Td
+(- Promoted to Senior in 2019 after leading the rebuild of the firm's regulatory reporting tool, which handled SOC 2 and) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 231. Td
+(FinCEN submissions.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 204. Td
+(Software Engineer II                                     August 2015 - July 2017) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 190.5 Td
+(Nimbus Systems) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 177. Td
+(Seattle, WA) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 163.5 Td
+(- Built the original version of the NimbusTrace log search feature, which became the second-most-adopted product) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 150. Td
+(capability in the company's history.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 136.5 Td
+(- Reduced infrastructure costs by $340K/year by refactoring the company's metering service to batch writes to) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 123. Td
+(DynamoDB.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 109.5 Td
+(- On-call rotation lead for 12 months; authored the incident-response runbook still used today.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 82.5 Td
+(PROJECTS) Tj
+ET
+endstream
+endobj
+5 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 6 0 R
+>>
+endobj
+6 0 obj
+<<
+/Length 1834
+>>
+stream
+0.200025 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 744. Td
+(OpenTelemetry Collector Distribution for k8s \(Side Project\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 730.5 Td
+(- Maintained a Helm-based distribution of the OTel Collector downloaded 140K+ times from GitHub Container) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 717. Td
+(Registry; published a CNCF sandbox talk in 2023.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 690. Td
+(CFP-Review \(Open Source\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 676.5 Td
+(- Built a small CLI tool that helped conference program committees dedupe and rank talk submissions; used by) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 663. Td
+(RustConf 2022 and PyCon US 2023 program teams.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 636. Td
+(EDUCATION) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 609. Td
+(University of Washington, Seattle) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 595.5 Td
+(B.S. in Computer Science, with honors                              2011 - 2015) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 582. Td
+(GPA: 3.78/4.0) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 568.5 Td
+(Senior thesis: "Adaptive Sampling Strategies for High-Volume Time-Series Data") Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 541.5 Td
+(SKILLS) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 514.5 Td
+(Languages: Go, Java, Python, TypeScript, Rust \(working\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 501. Td
+(Systems: Kubernetes, Docker, Terraform, Envoy, Istio, Kafka, gRPC) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 487.5 Td
+(Data: Elasticsearch, ClickHouse, PostgreSQL, DynamoDB, Apache Flink) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 474. Td
+(Observability: OpenTelemetry, Prometheus, Grafana, Loki, Jaeger) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 460.5 Td
+(Practices: Distributed systems design, SRE principles, chaos engineering, technical mentoring, cross-team roadmap) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 447. Td
+(planning) Tj
+ET
+endstream
+endobj
+1 0 obj
+<</Type /Pages
+/Kids [3 0 R 5 0 R ]
+/Count 2
+>>
+endobj
+7 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+8 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+9 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+10 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+11 0 obj
+<<
+/Type /Font
+/BaseFont /Courier
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+12 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+13 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+14 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+15 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Roman
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+16 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+17 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Italic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+18 0 obj
+<<
+/Type /Font
+/BaseFont /Times-BoldItalic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+19 0 obj
+<<
+/Type /Font
+/BaseFont /ZapfDingbats
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+20 0 obj
+<<
+/Type /Font
+/BaseFont /Symbol
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+2 0 obj
+<<
+/ProcSet [/PDF /Text /ImageB /ImageC /ImageI]
+/Font <<
+/F1 7 0 R
+/F2 8 0 R
+/F3 9 0 R
+/F4 10 0 R
+/F5 11 0 R
+/F6 12 0 R
+/F7 13 0 R
+/F8 14 0 R
+/F9 15 0 R
+/F10 16 0 R
+/F11 17 0 R
+/F12 18 0 R
+/F13 19 0 R
+/F14 20 0 R
+>>
+/XObject <<
+>>
+>>
+endobj
+21 0 obj
+<<
+/Producer (jsPDF 4.2.1)
+/CreationDate (D:20260702223040+05'30')
+>>
+endobj
+22 0 obj
+<<
+/Type /Catalog
+/Pages 1 0 R
+/OpenAction [3 0 R /FitH null]
+/PageLayout /OneColumn
+>>
+endobj
+xref
+0 23
+0000000000 65535 f 
+0000007167 00000 n 
+0000008992 00000 n 
+0000000015 00000 n 
+0000000120 00000 n 
+0000005176 00000 n 
+0000005281 00000 n 
+0000007230 00000 n 
+0000007355 00000 n 
+0000007485 00000 n 
+0000007618 00000 n 
+0000007756 00000 n 
+0000007880 00000 n 
+0000008009 00000 n 
+0000008141 00000 n 
+0000008277 00000 n 
+0000008405 00000 n 
+0000008532 00000 n 
+0000008661 00000 n 
+0000008794 00000 n 
+0000008896 00000 n 
+0000009242 00000 n 
+0000009328 00000 n 
+trailer
+<<
+/Size 23
+/Root 22 0 R
+/Info 21 0 R
+/ID [ <F2B12829AD0E699A9E2F4555B1561200> <F2B12829AD0E699A9E2F4555B1561200> ]
+>>
+startxref
+9432
+%%EOF

@@ -1,0 +1,44 @@
+Job Description: Junior Software Developer
+
+Company: NorthBay Logistics Technologies
+Location: Hybrid — Tampa, FL (3 days in office, 2 remote)
+
+About Us
+NorthBay Logistics Technologies builds routing and dispatch software for mid-sized freight carriers across the Southeast. Our platform moves more than 40,000 shipments a month for customers ranging from 12-truck regional carriers to publicly traded 3PLs. We are a 38-person engineering and product team that ships continuously, keeps a flat structure, and invests heavily in early-career hiring because we believe in growing talent rather than buying it. Last year we promoted four junior engineers to mid-level and rotated two through our platform, mobile, and data teams.
+
+The Role
+We are hiring a Junior Software Developer to join our Routing Engine team. You will work alongside two senior engineers and a mid-level developer building the optimization services that assign loads to drivers in real time. This is an entry-level role; we expect to invest 6–12 months in structured onboarding, pair programming, and guided code review before you own features independently.
+
+What You Will Do
+- Write and maintain Java services that consume and produce JSON over REST, with guidance from senior engineers
+- Contribute to our PostgreSQL data layer by writing queries, reviewing schema changes, and adding indexes under supervision
+- Participate in daily standups, sprint planning, and retrospectives using our standard Scrum cadence
+- Add unit and integration tests using JUnit 5 and Testcontainers, with mentorship on what to cover and why
+- Debug production issues in our staging and lower environments, learning to read logs, traces, and metrics in Datadog
+- Write clear pull request descriptions and respond constructively to code review feedback
+- Document your work in our internal Confluence space so the rest of the team can build on it
+
+What You Bring (Requirements)
+- Bachelor’s degree in Computer Science, Software Engineering, or a related field, OR equivalent practical experience such as a completed coding bootcamp plus a portfolio of substantial projects
+- Working knowledge of at least one object-oriented language — Java, C#, or similar — from coursework, internships, or personal projects
+- Familiarity with basic data structures (arrays, lists, maps, trees) and when to use them
+- Understanding of SQL fundamentals: SELECT, JOIN, GROUP BY, and basic normalization
+- Exposure to version control with Git, including branching and pull requests
+- Comfort reading and writing technical documentation in English
+- Eagerness to learn, ask questions, and accept feedback as part of professional growth
+- Legal authorization to work in the United States
+
+Nice to Have
+- Coursework or project experience with REST APIs and HTTP basics
+- Familiarity with any cloud platform — AWS, GCP, or Azure — even at the free-tier level
+- Exposure to Docker, Kubernetes, or container concepts through a tutorial or side project
+- An open-source contribution, hackathon project, or personal GitHub repo you can show us
+
+What We Offer
+- Base salary of $68,000–$78,000 depending on experience, plus a discretionary annual bonus
+- Full medical, dental, and vision coverage with 100% of employee premiums paid
+- 4 weeks of PTO plus 11 company holidays
+- $1,500 annual learning budget for books, courses, and conferences
+- A defined mentorship pairing for your first year and a quarterly career development conversation
+
+NorthBay Logistics Technologies is an equal opportunity employer. We value diversity and do not discriminate on the basis of race, color, religion, national origin, sex, age, disability, sexual orientation, gender identity, or veteran status.

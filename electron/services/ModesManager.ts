@@ -5,6 +5,7 @@ import { ModeContextRetriever, type ModeRetrievalOptions } from './ModeContextRe
 import type { AnswerType } from '../llm/AnswerPlanner';
 import type { ActiveModeInfo } from '../llm/modeProfiles';
 import { classifyCustomContext, selectCustomContextForAnswer } from '../llm/customContextClassifier';
+import { diagLog } from '../llm/documentGroundedPrompt';
 
 /**
  * Drop sensitive (salary/pricing/strategy) chunks from a raw customContext blob
@@ -689,13 +690,50 @@ export class ModesManager {
         // first LIVE transcript turn never pays the cold-load cost inside its
         // retrieval budget. Only when the reranker is actually enabled — never
         // load a model nobody will use. Fire-and-forget, best-effort.
+        //
+        // Lazy download (2026-07-06): if the model isn't on disk yet, trigger
+        // a background download via LocalModelDownloadService. The download is
+        // idempotent — a parallel request from another mode activation just
+        // attaches to the same in-flight download. When it completes,
+        // prewarm() is fired so the reranker activates without the user
+        // having to reload the mode.
         try {
             // eslint-disable-next-line @typescript-eslint/no-var-requires
             const { isRagLocalRerankEnabled } = require('../intelligence/intelligenceFlags');
             if (files.length > 0 && isRagLocalRerankEnabled()) {
                 // eslint-disable-next-line @typescript-eslint/no-var-requires
                 const { getLocalReranker } = require('../rag/LocalReranker');
-                void getLocalReranker().prewarm?.();
+                const reranker = getLocalReranker();
+                void (async () => {
+                    try {
+                        const cached = await reranker.isCached();
+                        if (cached) {
+                            void reranker.prewarm?.();
+                            return;
+                        }
+                        // Not cached — kick off a background download. The
+                        // download service handles progress + persistence; we
+                        // just attach a one-shot prewarm on completion.
+                        try {
+                            // eslint-disable-next-line @typescript-eslint/no-var-requires
+                            const { LocalModelDownloadService } = require('./LocalModelDownloadService');
+                            // eslint-disable-next-line @typescript-eslint/no-var-requires
+                            const { RERANKER_PROVIDER_NAME } = require('../rag/rerankerDownloadProvider');
+                            // eslint-disable-next-line @typescript-eslint/no-var-requires
+                            const { RERANKER_MODEL_ID, RERANKER_DTYPE } = require('../rag/rerankerDownloadProvider');
+                            void LocalModelDownloadService.getInstance().start(
+                                RERANKER_PROVIDER_NAME,
+                                `${RERANKER_MODEL_ID}#${RERANKER_DTYPE}`,
+                            );
+                        } catch {
+                            // Service unavailable or download failed — fall
+                            // back to the old prewarm path. If the model is
+                            // not on disk, prewarm will fail silently and the
+                            // reranker will return null on first query.
+                            void reranker.prewarm?.();
+                        }
+                    } catch { /* prewarm-or-download both non-fatal */ }
+                })();
             }
         } catch { /* non-fatal — prewarm is an optimization, not a requirement */ }
     }
@@ -1038,8 +1076,17 @@ export class ModesManager {
                         excludeCustomContext,
                         allowRerank,
                         forceDocumentGrounding: true,
+                        followUpReferentHint: retrievalOptions?.followUpReferentHint,
+                        ...(retrievalOptions?.relaxed ? { topK: retrievalOptions.topK, tokenBudget: tokenBudget ?? 5200 } : {}),
                     },
                 );
+                diagLog('ModesManager hybrid-first branch', {
+                    query,
+                    usedFallback: hybridResult?.usedFallback,
+                    usedHybrid: hybridResult?.usedHybrid,
+                    hasContext: !!hybridResult?.formattedContext,
+                    tookHybrid: !!(hybridResult && !hybridResult.usedFallback && hybridResult.formattedContext),
+                });
                 if (hybridResult && !hybridResult.usedFallback && hybridResult.formattedContext) {
                     return hybridResult.formattedContext;
                 }
@@ -1107,6 +1154,73 @@ export class ModesManager {
             });
         } catch { /* non-fatal */ }
         return lexical;
+    }
+
+    /**
+     * Phase 5 — OKF-augmented mode context block.
+     *
+     * Wraps `modeContextBlock` (already produced by `buildRetrievedActiveModeContextBlock*`)
+     * with OKF Knowledge Cards + graph hints when:
+     *   1. `okfHybridRetrieval` flag is on, AND
+     *   2. the active mode has at least one reference file with a generated OKF pack.
+     *
+     * Returns the raw `modeContextBlock` unchanged when any condition fails — additive,
+     * never destructive. Used by both the manual `gemini-chat-stream` path and the WTA
+     * path (`WhatToAnswerLLM.generateStream`) so synthesis-question recovery reaches
+     * every caller, not just the manual path.
+     *
+     * Mirrors the block in `LLMHelper.ts:4640-4704` so the behaviour stays in lockstep;
+     * this is the canonical home for the logic.
+     */
+    public buildOkfAugmentedContextBlock(modeContextBlock: string, query: string, pinnedModeId?: string): string {
+        if (!modeContextBlock || !query) return modeContextBlock;
+        try {
+            const { isOkfHybridRetrievalEnabled, isOkfGraphExpansionEnabled } = require('../intelligence/intelligenceFlags');
+            if (!isOkfHybridRetrievalEnabled()) return modeContextBlock;
+            const { classifyQuestion } = require('./knowledge/QuestionClassifier');
+            const { queryOkfCards } = require('./knowledge/OkfRetriever');
+            const { formatCardsForPrompt, buildOkfEvidenceBlock } = require('./knowledge/OkfPromptFormatter');
+            const mode = this.resolveMode(pinnedModeId);
+            if (!mode) return modeContextBlock;
+            const files = this.getReferenceFiles(mode.id) || [];
+            if (files.length === 0) return modeContextBlock;
+            const { KnowledgeManager } = require('./knowledge/KnowledgeManager');
+            const km = KnowledgeManager.getInstance();
+            const classification = classifyQuestion(query);
+            const allScoredCards: any[] = [];
+            const packsForGraphExpansion: any[] = [];
+            for (const file of files) {
+                const pack = km.getPackForFile(file.id);
+                if (!pack || pack.cards.length === 0) continue;
+                const scored = queryOkfCards(pack, query, classification, { topN: 6, fileId: file.id });
+                allScoredCards.push(...scored);
+                packsForGraphExpansion.push(pack);
+            }
+            if (allScoredCards.length === 0) return modeContextBlock;
+            allScoredCards.sort((a: any, b: any) => b.score - a.score);
+            const topCards = allScoredCards.slice(0, 6);
+            const cardsBlock = formatCardsForPrompt(topCards);
+            let graphHints = '';
+            try {
+                if (isOkfGraphExpansionEnabled() && classification.targetEntities && classification.targetEntities.length > 0) {
+                    const { resolveStartNodeIds, expandGraph, formatGraphHintsForPrompt } = require('./knowledge/GraphRetriever');
+                    const allHints: any[] = [];
+                    for (const pack of packsForGraphExpansion) {
+                        const startIds = resolveStartNodeIds(pack, classification.targetEntities);
+                        if (startIds.length === 0) continue;
+                        allHints.push(...expandGraph(pack, startIds, 2));
+                    }
+                    graphHints = formatGraphHintsForPrompt(allHints);
+                }
+            } catch (_graphErr: any) {
+                console.warn('[ModesManager] OKF graph expansion skipped (non-fatal):', _graphErr?.message);
+            }
+            const combinedCardsBlock = graphHints ? `${cardsBlock}\n\n${graphHints}` : cardsBlock;
+            return buildOkfEvidenceBlock({ cardsBlock: combinedCardsBlock, rawChunkText: modeContextBlock });
+        } catch (_okfErr: any) {
+            console.warn('[ModesManager] OKF augmentation skipped (non-fatal):', _okfErr?.message);
+            return modeContextBlock;
+        }
     }
 
     /**

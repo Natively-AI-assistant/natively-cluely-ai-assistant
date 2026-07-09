@@ -56,6 +56,11 @@ interface ElectronAPI {
     isOllama: boolean;
   }>;
   getAvailableOllamaModels: () => Promise<string[]>;
+  getProviderStatuses: () => Promise<any[]>;
+  getProviderStatus: (id: string) => Promise<any | null>;
+  onProviderStatusChanged: (callback: (status: any) => void) => () => void;
+  getLocalFallbackPreflight: () => Promise<any | null>;
+  runLocalFallbackPreflight: () => Promise<any>;
   switchToOllama: (model?: string, url?: string) => Promise<{ success: boolean; error?: string }>;
   switchToGemini: (
     apiKey?: string,
@@ -221,7 +226,22 @@ interface ElectronAPI {
       | 'local-whisper',
   ) => Promise<{ success: boolean; error?: string }>;
   localWhisperGetModels: () => Promise<{ models: any[]; activeModelId: string }>;
-  localWhisperSetModel: (modelId: string) => Promise<{ success: boolean }>;
+  localWhisperGetRecoveryNotice: () => Promise<{
+    recovered: true;
+    badModelId: string;
+    fallbackModelId: string;
+    message: string;
+  } | null>;
+  // Generalized ONNX load-sentinel recovery surface (intent / embeddings /
+  // reranker). Whisper keeps its dedicated banner; the other three families
+  // share a single channel keyed by `family`.
+  onnxGetRecoveryNotice: (family: 'whisper' | 'intent' | 'embeddings' | 'reranker') => Promise<{
+    family: 'whisper' | 'intent' | 'embeddings' | 'reranker';
+    badModelId: string;
+    message: string;
+  } | null>;
+  onnxResetFamily: (family: 'whisper' | 'intent' | 'embeddings' | 'reranker') => Promise<{ success: boolean; error?: string }>;
+  localWhisperSetModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
   localWhisperResetToDefault: () => Promise<{ success: boolean; error?: string; modelId?: string }>;
   localWhisperGetChannelConfig: () => Promise<{
     enabled: boolean;
@@ -457,6 +477,7 @@ interface ElectronAPI {
   toggleModelSelector: (coords: { x: number; y: number; activate?: boolean }) => Promise<void>;
   modelSelectorCloseIfOpen: () => Promise<void>;
   forceRestartOllama: () => Promise<void>;
+  isOllamaReachable: () => Promise<boolean>;
 
   // Settings Window
   toggleSettingsWindow: (coords?: { x: number; y: number }) => Promise<void>;
@@ -967,6 +988,7 @@ interface ElectronAPI {
   // (structurally compatible) in src/types/electron.d.ts.
   skillsRefresh: () => Promise<unknown[]>;
   skillsOpenFolder: () => Promise<{ success: boolean; path: string; error?: string }>;
+  skillsDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
   skillsUpload: (
     payload: SkillUploadPayload,
     opts?: { autoInstall?: boolean }
@@ -1185,6 +1207,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Skills — local SKILL.md instructions surfaced in Settings and the overlay.
   skillsRefresh: () => ipcRenderer.invoke('skills:list'),
   skillsOpenFolder: () => ipcRenderer.invoke('skills:open-folder'),
+  // Per-skill management: hard-delete. Built-ins are refused inside the
+  // manager. Enable/disable is intentionally NOT exposed — users who don't
+  // want a skill delete it instead (see SkillsSettings.tsx).
+  skillsDelete: (id: string) => ipcRenderer.invoke('skills:delete', id),
   // Skill upload — step-3 wiring. `skillsUpload` is the general call (opts.autoInstall
   // defaults to false on the renderer side; main process uses ?? false). `skillsPreview`
   // is sugar for `autoInstall: false` — the renderer's confirm step calls `skillsUpload`
@@ -1246,6 +1272,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // LLM Model Management
   getCurrentLlmConfig: () => ipcRenderer.invoke('get-current-llm-config'),
   getAvailableOllamaModels: () => ipcRenderer.invoke('get-available-ollama-models'),
+  getProviderStatuses: () => ipcRenderer.invoke('get-provider-statuses'),
+  getProviderStatus: (id: string) => ipcRenderer.invoke('get-provider-status', id),
+  onProviderStatusChanged: (callback: (status: any) => void) => {
+    const subscription = (_: any, status: any) => callback(status);
+    ipcRenderer.on('provider-status-changed', subscription);
+    return () => ipcRenderer.removeListener('provider-status-changed', subscription);
+  },
+  getLocalFallbackPreflight: () => ipcRenderer.invoke('get-local-fallback-preflight'),
+  runLocalFallbackPreflight: () => ipcRenderer.invoke('run-local-fallback-preflight'),
   switchToOllama: (model?: string, url?: string) =>
     ipcRenderer.invoke('switch-to-ollama', model, url),
   switchToGemini: (apiKey?: string, modelId?: string) =>
@@ -1334,6 +1369,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     region?: string,
   ) => ipcRenderer.invoke('test-stt-connection', provider, apiKey, region),
   localWhisperGetModels: () => ipcRenderer.invoke('local-whisper-get-models'),
+  localWhisperGetRecoveryNotice: () => ipcRenderer.invoke('local-whisper-get-recovery-notice'),
+  onnxGetRecoveryNotice: (family) => ipcRenderer.invoke('onnx-get-recovery-notice', family),
+  onnxResetFamily: (family) => ipcRenderer.invoke('onnx-reset-family', family),
   localWhisperSetModel: (modelId: string) => ipcRenderer.invoke('local-whisper-set-model', modelId),
   // In-app recovery: resets the active local-Whisper model + per-channel
   // overrides back to the safe fallback. See electron/ipcHandlers.ts handler.
@@ -1852,6 +1890,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
+  // NOTE: onSkillsChanged broadcast subscription was removed. The main
+  // process no longer broadcasts on delete (the only mutation left); the
+  // Settings panel re-fetches via skillsRefresh after a successful delete,
+  // and the overlay's autocomplete picker is fetched once on mount — users
+  // who delete a skill in Settings then switch to the overlay will see the
+  // stale autocomplete until the next mount, which is acceptable for v1.
+
   // Model Management
   getDefaultModel: () => ipcRenderer.invoke('get-default-model'),
   setModel: (modelId: string) => ipcRenderer.invoke('set-model', modelId),
@@ -1860,6 +1905,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('toggle-model-selector', coords),
   modelSelectorCloseIfOpen: () => ipcRenderer.invoke('model-selector:close-if-open'),
   forceRestartOllama: () => ipcRenderer.invoke('force-restart-ollama'),
+  isOllamaReachable: () => ipcRenderer.invoke('is-ollama-reachable'),
 
   // Settings Window
   toggleSettingsWindow: (coords?: { x: number; y: number }) =>

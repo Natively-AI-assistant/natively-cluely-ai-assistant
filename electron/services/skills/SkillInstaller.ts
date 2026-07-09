@@ -339,6 +339,11 @@ export async function installUploadedSkill(
     name: preview.name,
     description: preview.description,
     source,
+    // Newly installed skills are enabled by default. The user's toggled
+    // enabled/disabled state lives in the .skills-state.json sidecar (see
+    // SkillsManager.setSkillEnabled); a fresh install implicitly clears any
+    // stale sidecar entry for this folder because we re-resolve from disk.
+    enabled: true,
   };
   return { success: true, skill, installedPath: targetDir };
 }

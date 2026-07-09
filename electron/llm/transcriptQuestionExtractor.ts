@@ -56,6 +56,17 @@ export interface ExtractedQuestion {
 // catches whole-turn greetings that survive as short meaningful-looking turns.
 const GREETING_ONLY = /^(hi|hello|hey|good (morning|afternoon|evening)|how are you|nice to meet you|thanks?|thank you|welcome|let'?s (get )?started|can you hear me|are you there)[\s!.,?]*$/i;
 
+// Social-pleasantry chit-chat that is grammatically a question ("did you have
+// any trouble finding parking?", "how was your weekend?", "did you find us
+// okay?") but is NOT a substantive interview question. These pass QUESTION_MARK
+// + INTERROGATIVE_LEAD, so without this the live speculative gate (0.75) fires a
+// WhatToAnswer suggestion on small-talk (E2E MiniMax campaign, F-DETECT round-13
+// p08). We DON'T drop these (they may precede a real question) — we cap their
+// confidence below the live gate so they don't trigger a suggestion on their own.
+// Anchored on the social TOPIC so a real question that merely contains the word
+// (e.g. "how did you architect the parking-lot allocation service?") is unaffected.
+const SOCIAL_PLEASANTRY = /\b(trouble |any (trouble|problem)s? )?(finding|find) (the office|us|parking|the parking|your way|this place|the building)\b|\bfind (us|the office|parking|the building|your way|this place)\s+(ok(ay)?|alright|all right)\b|\bhow (was|is|'?s) your (weekend|day|morning|week|commute|drive|trip|flight)\b|\bhow (are|'?re) you (doing|feeling|holding up)\b|\bhow'?s the weather\b|\bdid you (get|grab|have) (any |some )?(coffee|water|tea|lunch)\b|\b(traffic|parking|weather|commute) (was|is|been)\b|\bhow was the (traffic|commute|drive|trip|flight|parking)\b/i;
+
 // Interrogative signal: a question mark, or a leading wh-/aux question word.
 const QUESTION_MARK = /\?/;
 const INTERROGATIVE_LEAD = /^(\s*)(what|who|why|where|when|which|how|whose|whom|can|could|would|will|do|did|does|are|is|were|was|have|has|had|tell me|walk me|describe|explain|give me|share|let'?s talk about|talk about|i'?d like to (hear|know)|i want to (hear|know))\b/i;
@@ -156,7 +167,15 @@ function classifyType(q: string): ExtractedQuestionType {
     // require profile grounding — they're identity questions even without the
     // exact phrase "what is your name".
     if (/\b(your (full |first |last )?name|who are you|what'?s your name|what is your name)\b/.test(t)) return 'identity';
-    if (/\b(introduce yourself|tell me about yourself|describe yourself|about yourself)\b/.test(t)) return 'identity';
+    if (/\b(introduce yourself|introducing yourself|tell me about yourself|describe yourself|about yourself)\b/.test(t)) return 'identity';
+    // Intro/self-introduction openers ("quick self-introduction", "give a brief
+    // intro", "start us off with a brief self-intro", "introduction of yourself").
+    // The LIVE grounding gate keys on this classifier (NOT AnswerPlanner), so
+    // without these the auto-trigger skipped identity grounding and returned a
+    // clarification ("could you give me a bit more to go on?"). E2E MiniMax
+    // campaign round-13/14, F-VOICE live-path parity with AnswerPlanner.
+    if (/\bself[- ]?(introduc(tion|e)|intro)\b/.test(t)) return 'identity';
+    if (/\b(give|giving|provide|share|start (us |me |the team )?off with)\b.{0,30}\b(a |an )?(quick |brief |short |little )?(introduction|intro)\b/.test(t)) return 'identity';
     if (/\b(who (are|is) (the|this) (candidate|person|interviewee))\b/.test(t)) return 'identity';
 
     // Negotiation
@@ -312,6 +331,16 @@ export function extractLatestQuestion(
     if (hasMark && hasLead) confidence = 0.95;
     else if (hasMark || hasLead) confidence = 0.8;
     if (questionType !== 'general' && confidence < 0.8) confidence = 0.7;
+
+    // Social-pleasantry down-weight: a question-shaped chit-chat turn ("did you
+    // have any trouble finding parking?") should NOT clear the live speculative
+    // gate (0.75) on its own. Cap below the gate UNLESS the turn also carries a
+    // substantive classified type (a real question bundled after the pleasantry,
+    // e.g. "...found us okay? Great — walk me through your last project."), in
+    // which case classifyType already returned something other than 'general'.
+    if (SOCIAL_PLEASANTRY.test(latestQuestion) && questionType === 'general') {
+        confidence = Math.min(confidence, 0.5);
+    }
 
     return {
         detectedSpeaker: 'interviewer',

@@ -1,0 +1,202 @@
+{
+  "turns": [
+    {
+      "speaker": "interviewer",
+      "text": "Thanks for coming in today. Can you start by introducing yourself and telling me a little about your background?",
+      "isQuestion": true,
+      "qid": "Q1"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Hi, I'm a registered nurse with seven years of clinical experience, primarily in critical care.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "What was your most recent role, and what did a typical day look like for you?",
+      "isQuestion": true,
+      "qid": "Q2"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I most recently served as a bedside RN in a neuro-surgical ICU, managing complex patient assignments.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "How many years have you been working with interdisciplinary care coordination or case management?",
+      "isQuestion": true,
+      "qid": "Q3"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Coordination work has been woven into my shifts through rounds and discharge planning, but not as a standalone title.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Tell me about the NSICU Mobility Improvement Initiative you led — what was the goal and what did you do?",
+      "isQuestion": true,
+      "qid": "Q4"
+    },
+    {
+      "speaker": "candidate",
+      "text": "It was a unit-based project to increase early ambulation in neuro patients, with daily mobility goals and bedside tracking.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "What's the biggest achievement from your most recent position that you're proud of?",
+      "isQuestion": true,
+      "qid": "Q5"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Improving our unit's ambulation rates and reducing sedation days through the Move to Improve protocol.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Why are you interested in the Clinical Care Coordinator role at Mercy Ridge Health Network?",
+      "isQuestion": true,
+      "qid": "Q6"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I want to apply my bedside experience to a system-level role that improves transitions of care.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "You clearly meet the clinical experience requirement for this position. Can you walk me through that?",
+      "isQuestion": true,
+      "qid": "Q7"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I bring seven years of direct ICU care, plus CCRN and ACLS, which align with the patient acuity here.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "This role also asks for experience with electronic health records beyond basic charting, like Epic optimization or reporting. How would you approach that gap?",
+      "isQuestion": true,
+      "qid": "Q8"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I use Epic daily and I'm comfortable learning reporting modules quickly. I plan to take internal training early on.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Can you walk me through your education and any continuing education that prepared you for this role?",
+      "isQuestion": true,
+      "qid": "Q9"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I hold a BSN and complete annual CEUs in critical care and patient safety topics.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Tell me about a STAR-format challenge — a situation where you had to coordinate care across teams.",
+      "isQuestion": true,
+      "qid": "Q10"
+    },
+    {
+      "speaker": "candidate",
+      "text": "A sepsis patient needed rapid coordination between ICU, surgery, and pharmacy. I organized the timeline and closed loop on every order.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "What are your salary expectations for this role?",
+      "isQuestion": true,
+      "qid": "Q11"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I'm targeting something in line with local coordinator bands, and I'm open based on the full benefits picture.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Do you have any questions for me about the role or the team?",
+      "isQuestion": true,
+      "qid": "Q12"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Yes — what does a typical week look like, and how do you measure success in the first six months?",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "You mentioned leading the NSICU mobility initiative. How long did that take to roll out?",
+      "isQuestion": true,
+      "qid": "Q13"
+    },
+    {
+      "speaker": "candidate",
+      "text": "From kickoff to full unit adoption was roughly four months.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "This role involves occasional home visits across the network. Do you have a valid driver's license?",
+      "isQuestion": true,
+      "qid": "Q14"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Yes, I have a current driver's license and reliable transportation.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Nice — the morning commute wasn't too bad today, and the coffee in the lobby is actually decent.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Before we wrap, two quick ones: are you comfortable with on-call coverage, and do you have any upcoming travel that would affect a start date?",
+      "isQuestion": true,
+      "qid": "Q15"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I'm open to on-call and I don't have any travel planned, so I could start on standard notice.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Great — is there anything else you'd like us to know about you? And what interests you most about this opportunity?",
+      "isQuestion": true,
+      "qid": "Q16"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Just that I'm genuinely excited about this role and ready to contribute.",
+      "isQuestion": false,
+      "qid": null
+    }
+  ]
+}

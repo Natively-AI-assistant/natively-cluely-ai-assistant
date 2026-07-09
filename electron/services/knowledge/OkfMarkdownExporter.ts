@@ -60,6 +60,7 @@ export function okfTypeFor(card: KnowledgeCard): string {
     candidate_project: 'Candidate Project',
     candidate_education: 'Candidate Education',
     candidate_achievement: 'Candidate Achievement',
+    candidate_leadership: 'Candidate Leadership',
     candidate_skills: 'Candidate Skills',
     target_job_role: 'Target Job Role',
     target_job_requirements: 'Target Job Requirements',

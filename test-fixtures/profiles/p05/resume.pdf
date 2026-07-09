@@ -1,0 +1,1013 @@
+%PDF-1.3
+%ºß¬à
+3 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 4 0 R
+>>
+endobj
+4 0 obj
+<<
+/Length 5381
+>>
+stream
+0.200025 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 744. Td
+(JONATHAN A. RIVERA) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 730.5 Td
+(Brooklyn, NY 11215 | \(646\) 555-0182 | jon.rivera.consulting@gmail.com) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 717. Td
+(LinkedIn: linkedin.com/in/jonathan-rivera-data | GitHub: github.com/jriveradata) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 690. Td
+(SUMMARY) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 663. Td
+(Independent analytics and data-platform consultant with eight years of designing, building, and rescuing) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 649.5 Td
+(customer-data pipelines, marketing-attribution models, and revenue dashboards for mid-market DTC and SaaS) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 636. Td
+(companies. Known for compressing six-month discovery work into a four-week intake and for handing off runbooks) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 622.5 Td
+(that junior analysts can actually operate. Have shipped or rebuilt thirteen production systems across events,) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 609. Td
+(sessions, CRM, and warehouse layers. Comfortable being the only data person in the room and equally comfortable) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 595.5 Td
+(working inside a team of twelve. Looking for a senior IC or player-coach role where I can keep one hand on the data) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 582. Td
+(model and the other on delivery.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 555. Td
+(WORK EXPERIENCE) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 528. Td
+(Independent Analytics & Data Platform Consultant) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 514.5 Td
+(Self-employed / 1099 engagements, Brooklyn, NY) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 501. Td
+(July 2017 - Present) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 474. Td
+(Engagements follow. Dates overlap deliberately; any single calendar window contains 1-2 active clients.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 447. Td
+(- Ironwood Outdoor Co. \(DTC outdoor gear, ~$28M GMV\)  |  Lead Analytics Consultant  |  May 2024 - Present) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 433.5 Td
+(\(overlap with March 2025 engagement\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 420. Td
+(  Rebuilt the Klaviyo-attributed revenue model after the previous agency's sunsetting of UTM stitching. Migrated) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 406.5 Td
+(event capture from a custom Segment plan back to native Shopify web pixel plus server-side GA4, cutting tracked) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 393. Td
+(events from 41 to 14 and dropping weekly ETL failures from ~6 to 0. Delivered a Looker dashboard suite \(5) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 379.5 Td
+(dashboards, 32 tiles\) reviewed weekly by the founder and CFO. Outcome: marketing team recovered $1.9M in) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 366. Td
+(previously mis-attributed repeat-customer revenue across Q3-Q4 2024, per reconciled Shopify-Klaviyo-net rev.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 339. Td
+(- Birchline Financial \(B2B SaaS, expense management\)  |  Fractional Data Lead  |  March 2025 - August 2025) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 325.5 Td
+(  Stood up the company's first Snowflake account, dbt project, and Hightouch reverse-ETL layer in 11 weeks against) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 312. Td
+(a planned 24. Wrote 47 dbt models with 100% column-level tests passing in CI. Outcome: go-to-market team) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 298.5 Td
+(launched an account-scoring model that lifted MQL-to-SQL conversion from 11.2% to 17.8% in the first 90 days) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 285. Td
+(post-handoff, validated against held-out accounts.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 258. Td
+(- Cardinal Pediatrics Group \(multi-clinic healthcare, 22 locations\)  |  Data Engineering Consultant  |  February 2024 -) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 244.5 Td
+(January 2025) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 231. Td
+(  Replaced a brittle nightly SFTP ingestion chain with a FHIR-based pipeline pulling from athenahealth into BigQuery) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 217.5 Td
+(on a 15-minute cadence. Built de-identification wrapper compliant with the practice's HIPAA BAA. Outcome: clinical) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 204. Td
+(operations dashboard surfaced 14% over-scheduling in three clinics, leading to a scheduling-template change that) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 190.5 Td
+(recovered an estimated 480 patient-visit slots per month.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 163.5 Td
+(- Halberd Media \(independent agency\)  |  Senior Analyst \(embedded\)  |  August 2023 - November 2023) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 150. Td
+(  Three-month rescue engagement after their senior analyst departed. Took ownership of eight active client) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 136.5 Td
+(dashboards across Mixpanel, Amplitude, and GA4. Wrote a templated QA checklist adopted across the agency.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 123. Td
+(Outcome: eliminated a backlog of 11 broken client reports in the first 30 days, retained four clients Halberd expected) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 109.5 Td
+(to lose that quarter.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 82.5 Td
+(- Trellis & Vine \(DTC home goods, ~$9M Shopify Plus\)  |  Analytics Consultant  |  April 2023 - September 2024) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 69. Td
+(  Rebuilt attribution after a replatforming from Magento. Implemented a first-party cookie plan with a 7-day) Tj
+ET
+endstream
+endobj
+5 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 6 0 R
+>>
+endobj
+6 0 obj
+<<
+/Length 5617
+>>
+stream
+0.200025 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 744. Td
+(user-stitching identity graph. Outcome: reduced duplicate customer counts from 38% to 4.1% and gave the) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 730.5 Td
+(merchandising team a reliable repeat-customer LTV curve; CEO cited the work in their Series A pitch deck.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 703.5 Td
+(- Northwind Press \(B2B publishing, ~60 employees\)  |  Data Engineering Consultant  |  October 2022 - May 2023) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 690. Td
+(  Led a four-person team migrating off Looker onto a self-hosted Superset instance. Wrote the dbt project, CI/CD) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 676.5 Td
+(pipelines in GitHub Actions, and a runbook that two analysts now operate independently. Outcome: cut annual BI) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 663. Td
+(tooling cost from $182K to $43K with no reported downtime in the first eight months post-cutover.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 636. Td
+(- Filament Labs \(developer tools, Series B\)  |  Contract Analytics Lead  |  June 2022 - February 2023 \(concurrent with) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 622.5 Td
+(Northwind Press from Oct 2022\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 609. Td
+(  Built the company's first product-analytics function. Selected Heap over PostHog after a four-week eval written up) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 595.5 Td
+(as an internal memo. Instrumented 38 events across the SDK and web app. Outcome: weekly active developer count) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 582. Td
+(metric became the board's primary product-health KPI for the Series C raise 11 months later.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 555. Td
+(- Garden State Logistics \(mid-market 3PL, 412 employees\)  |  Data Consultant  |  January 2022 - June 2022) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 541.5 Td
+(  Replaced a 14-tab Excel revenue model with a dbt + Looker rebuild. The previous model took 9 hours of analyst) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 528. Td
+(time per weekly close; the new one runs in 11 minutes. Outcome: operations finance team closed books 3 business) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 514.5 Td
+(days faster in the month following handoff and reduced late-billing disputes by 22%.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 487.5 Td
+(- Quill & Quire Bookshop \(DTC + 11 retail, ~$6M\)  |  Analytics Consultant  |  May 2021 - December 2021) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 474. Td
+(  Sourced, negotiated, and implemented their first CDP \(Segment\). Outcome: enabled the founder's pivot to a) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 460.5 Td
+(membership model that grew from 0 to 3,400 paid members in the first 90 days after launch.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 433.5 Td
+(- Westmere Analytics \(analytics consultancy, embedded\)  |  Senior Consultant  |  September 2020 - April 2021) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 420. Td
+(  Worked as a billable contractor inside Westmere on a client engagement for a private-equity-backed fitness chain.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 406.5 Td
+(Built a 17-club cohort retention model in BigQuery. Outcome: PE deal team's diligence on the eventual add-on) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 393. Td
+(acquisition relied on my churn cohorts; deal closed Q2 2021.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 366. Td
+(- Verdant Studios \(B2C media, ~14 headcount\)  |  Marketing Analytics Lead \(contract\)  |  February 2020 - August) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 352.5 Td
+(2020) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 339. Td
+(  Replaced a Mixpanel-Segment-Klaviyo attribution chain that had been silently double-counting ~31% of) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 325.5 Td
+(conversions. Outcome: founder could finally see true paid-organic ratio and reallocated 28% of paid spend, lifting) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 312. Td
+(blended ROAS from 1.9x to 3.4x by week 14.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 285. Td
+(- Redfern & Co. Recruitment \(staffing, ~$40M revenue\)  |  Analytics Consultant  |  August 2019 - January 2020) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 271.5 Td
+(  Built a recruiter-performance scorecard in Metabase on top of a Postgres mirror of their Bullhorn ATS. Outcome:) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 258. Td
+(identified $740K in annualized revenue leakage from mis-routed candidates; CEO referenced the analysis at their) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 244.5 Td
+(2020 kickoff.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 217.5 Td
+(- Harborside Cycling \(DTC, single SKU\)  |  Analytics Consultant  |  November 2018 - July 2019) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 204. Td
+(  First solo consulting engagement. Built the company's first GA4-enhanced-ecommerce + Shopify dashboard suite.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 190.5 Td
+(Outcome: founder grew from ~$180K to $520K annual revenue using the funnel diagnostics from the dashboard as) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 177. Td
+(the primary decision-making tool.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 150. Td
+(- Cobalt Charter Schools \(charter network, 4 campuses\)  |  Reporting Analyst \(contract\)  |  July 2017 - October 2018) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 136.5 Td
+(  Longest-running early engagement and only non-customer-facing work. Replaced a network of 31 disconnected) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 123. Td
+(Excel reports with a single Power BI semantic model refreshed from SQL Server. Outcome: state compliance) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 109.5 Td
+(reporting time dropped from 3 weeks to 4 days; work was cited in the network's 2019 accountability filing.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 82.5 Td
+(EARLIER EXPERIENCE) Tj
+ET
+endstream
+endobj
+7 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 8 0 R
+>>
+endobj
+8 0 obj
+<<
+/Length 3113
+>>
+stream
+0.200025 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 744. Td
+(Marketing Analyst, Larchmont Provisions \(DTC grocery startup\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 730.5 Td
+(March 2016 - June 2017) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 717. Td
+(Built first attribution model and weekly growth deck. Team grew from 9 to 32 during tenure.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 690. Td
+(Marketing Coordinator, Mountain & Main Outfitters \(regional outdoor retailer\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 676.5 Td
+(June 2014 - February 2016) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 663. Td
+(Owned email calendar, in-store analytics, and the migration from Mailchimp to Klaviyo.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 636. Td
+(EDUCATION) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 609. Td
+(B.A., Economics, concentration in Statistics  |  Oberlin College  |  Oberlin, OH  |  2010 - 2014) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 595.5 Td
+(GPA 3.71/4.00. Senior thesis: "Cohort retention modeling for subscription businesses with missing payment data.") Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 568.5 Td
+(SKILLS) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 541.5 Td
+(Warehouses & data modeling: Snowflake, BigQuery, Databricks SQL, Postgres, dbt \(project runner and contributor to) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 528. Td
+(two open-source packages\), dimensional modeling, slowly-changing-dim patterns, identity resolution.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 501. Td
+(Analytics & BI: Looker \(LookML\), Looker Studio, Metabase, Superset, Power BI, Mode, Hex.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 474. Td
+(Events & product analytics: Segment \(incl. Protocols\), Rudderstack, mParticle, GA4 enhanced ecom, Mixpanel,) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 460.5 Td
+(Amplitude, Heap, PostHog, Snowplow.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 433.5 Td
+(CRM & reverse-ETL: Hightouch, Census, Klaviyo, Iterable, Attentive, HubSpot, Salesforce.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 406.5 Td
+(Languages & tooling: SQL \(daily, 8+ years\), Python \(pandas, numpy, dbt Python models, lightweight Airflow DAGs\),) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 393. Td
+(R \(occasional\), Bash, GitHub Actions, Terraform basics, Lightweight HTML/CSS for email and landing-page QA.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 366. Td
+(Soft skills: client intake and scoping, written status updates, runbook writing, mentoring junior analysts \(have) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 352.5 Td
+(onboarded 4 junior data hires into their next senior roles\), executive-level storytelling with numbers.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 325.5 Td
+(SELECTED PUBLIC WORK) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 298.5 Td
+(- Speaker, "Looker Dashboard Taxonomies That Survive Handoff," Looker Join 2023 \(virtual lightning talk\).) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 285. Td
+(- Author, "Identity Graphs for Sub-$50M Brands" - 14-part blog series on jonriveradata.substack.com \(1,800) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 271.5 Td
+(subscribers as of Aug 2025\).) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 258. Td
+(- Open-source contributor: dbt-utils \(3 merged PRs, 2023\), sqlfluff-templater-dbt \(2 merged PRs, 2024\).) Tj
+ET
+endstream
+endobj
+1 0 obj
+<</Type /Pages
+/Kids [3 0 R 5 0 R 7 0 R ]
+/Count 3
+>>
+endobj
+9 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+10 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+11 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+12 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+13 0 obj
+<<
+/Type /Font
+/BaseFont /Courier
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+14 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+15 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+16 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+17 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Roman
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+18 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+19 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Italic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+20 0 obj
+<<
+/Type /Font
+/BaseFont /Times-BoldItalic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+21 0 obj
+<<
+/Type /Font
+/BaseFont /ZapfDingbats
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+22 0 obj
+<<
+/Type /Font
+/BaseFont /Symbol
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+2 0 obj
+<<
+/ProcSet [/PDF /Text /ImageB /ImageC /ImageI]
+/Font <<
+/F1 9 0 R
+/F2 10 0 R
+/F3 11 0 R
+/F4 12 0 R
+/F5 13 0 R
+/F6 14 0 R
+/F7 15 0 R
+/F8 16 0 R
+/F9 17 0 R
+/F10 18 0 R
+/F11 19 0 R
+/F12 20 0 R
+/F13 21 0 R
+/F14 22 0 R
+>>
+/XObject <<
+>>
+>>
+endobj
+23 0 obj
+<<
+/Producer (jsPDF 4.2.1)
+/CreationDate (D:20260702221855+05'30')
+>>
+endobj
+24 0 obj
+<<
+/Type /Catalog
+/Pages 1 0 R
+/OpenAction [3 0 R /FitH null]
+/PageLayout /OneColumn
+>>
+endobj
+xref
+0 25
+0000000000 65535 f 
+0000014597 00000 n 
+0000016430 00000 n 
+0000000015 00000 n 
+0000000120 00000 n 
+0000005553 00000 n 
+0000005658 00000 n 
+0000011327 00000 n 
+0000011432 00000 n 
+0000014666 00000 n 
+0000014791 00000 n 
+0000014922 00000 n 
+0000015056 00000 n 
+0000015194 00000 n 
+0000015318 00000 n 
+0000015447 00000 n 
+0000015579 00000 n 
+0000015715 00000 n 
+0000015843 00000 n 
+0000015970 00000 n 
+0000016099 00000 n 
+0000016232 00000 n 
+0000016334 00000 n 
+0000016682 00000 n 
+0000016768 00000 n 
+trailer
+<<
+/Size 25
+/Root 24 0 R
+/Info 23 0 R
+/ID [ <8211A678F5253AF90BCAD3D3623E8DC6> <8211A678F5253AF90BCAD3D3623E8DC6> ]
+>>
+startxref
+16872
+%%EOF

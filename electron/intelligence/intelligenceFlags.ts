@@ -28,6 +28,8 @@
 // set). That's cheap enough for that cadence; there is deliberately no cache (see
 // readEnvOverride for why a cache would be wrong under esbuild inline-bundling).
 
+export type SourceOwnerEnforcementStage = 'off' | 'observe' | 'soft_block' | 'enforce';
+
 export type IntelligenceFlagKey =
   // Observe-only structured per-answer trace + context-inclusion report (Phase 3/12/13).
   | 'trace'
@@ -139,7 +141,23 @@ export type IntelligenceFlagKey =
   // ("I could not find that...") despite strong retrieved evidence existing.
   // Default ON everywhere — see SYSTEM_REFUSAL_RE / isFalseRefusal in
   // ipcHandlers.ts. Turning this OFF reverts to the prior log-only behavior.
-  | 'docGroundedFalseRefusalRepair';
+  | 'docGroundedFalseRefusalRepair'
+  // Custom-Mode Source Isolation (2026-07-06, hardening/v2.7.0): when ON, the
+  // SourceArbiter enforces the CustomModeExecutionContract at every layer
+  // (retrieval, prompt, validator, regen, SessionTracker write). When OFF,
+  // the arbiter logs the resolved contract as telemetry but does NOT block
+  // any path. Phase 4 ships the arbiter in observe-only mode (default OFF);
+  // Phase H flips this ON after we've collected telemetry confirming the
+  // contract is correctly built for every modeKind × answerType combination.
+  | 'customModeSourceEnforcement'
+  // Full-JIT final-answer law (2026-07-07, JD/Resume JIT pipeline fix). When ON,
+  // AOT-precomputed intro/identity/greeting text is demoted to EVIDENCE (a
+  // <candidate_identity_fact> context block) and the provider generates the
+  // user-visible final answer — instead of the AOT string being emitted verbatim.
+  // Default ON (the full-JIT policy is the intended behavior); flip OFF to
+  // restore the legacy AOT-emit fast paths if a latency/behavior regression is
+  // found in the field.
+  | 'jitFinalAnswerEnforced';
 
 interface FlagSpec {
   /** env var name (NATIVELY_* convention). */
@@ -203,20 +221,26 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   hindsightMemory: { env: 'NATIVELY_HINDSIGHT_MEMORY', setting: 'hindsightMemoryEnabled', default: false },
   hindsightLiveRecall: { env: 'NATIVELY_HINDSIGHT_LIVE_RECALL', setting: 'hindsightLiveRecallEnabled', default: false },
   hindsightPostMeetingRetain: { env: 'NATIVELY_HINDSIGHT_POST_MEETING_RETAIN', setting: 'hindsightPostMeetingRetainEnabled', default: false },
-  // Phase 0 — observe-only confidence telemetry. Default OFF.
+  // Phase 0 — observe-only confidence telemetry. Default OFF for stability
+  // (2026-07-09); re-enable explicitly after packaged-build soak testing.
   ragConfidenceGate: { env: 'NATIVELY_RAG_CONFIDENCE_GATE', setting: 'ragConfidenceGateEnabled', default: false },
-  // Phase 1 — local cross-encoder rerank escalation (manual/follow-up). Default OFF.
+  // Phase 1 — local cross-encoder rerank escalation (manual/follow-up).
+  // Default OFF for stability (2026-07-09): the local reranker adds another
+  // ONNX session during chat/streaming and can be re-enabled by env/settings.
   ragLocalRerank: { env: 'NATIVELY_RAG_LOCAL_RERANK', setting: 'ragLocalRerankEnabled', default: false },
   // Phase 2 — Reciprocal Rank Fusion across heterogeneous retrieval sources. Default OFF.
   ragRrfFusion: { env: 'NATIVELY_RAG_RRF_FUSION', setting: 'ragRrfFusionEnabled', default: false },
-  // Phase 3 — allow rerank on the live transcript path (prewarmed + budget-guarded). Default OFF.
+  // Phase 3 — allow rerank on the live transcript path (prewarmed + budget-guarded).
+  // Default OFF for stability (2026-07-09); enable explicitly after soak testing
+  // the local ONNX pressure profile on packaged builds.
   ragSpeculativeRerank: { env: 'NATIVELY_RAG_SPECULATIVE_RERANK', setting: 'ragSpeculativeRerankEnabled', default: false },
-  // OKF Hybrid Knowledge System — default ON in dev/test/benchmark contexts so
-  // the 19-question thesis benchmark and test suite exercise the real path;
-  // default OFF in production until validated end-to-end.
-  okfKnowledgePacks: { env: 'NATIVELY_OKF_KNOWLEDGE_PACKS', setting: 'okfKnowledgePacksEnabled', default: isInternalDevTestContext() },
-  okfMarkdownExport: { env: 'NATIVELY_OKF_MARKDOWN_EXPORT', setting: 'okfMarkdownExportEnabled', default: isInternalDevTestContext() },
-  okfHybridRetrieval: { env: 'NATIVELY_OKF_HYBRID_RETRIEVAL', setting: 'okfHybridRetrievalEnabled', default: isInternalDevTestContext() },
+  // OKF Hybrid Knowledge System — default OFF for stability (2026-07-09).
+  // These paths add background extraction/retrieval load and should be re-enabled
+  // explicitly after packaged-build soak testing.
+  okfKnowledgePacks: { env: 'NATIVELY_OKF_KNOWLEDGE_PACKS', setting: 'okfKnowledgePacksEnabled', default: false },
+  okfMarkdownExport: { env: 'NATIVELY_OKF_MARKDOWN_EXPORT', setting: 'okfMarkdownExportEnabled', default: false },
+  okfHybridRetrieval: { env: 'NATIVELY_OKF_HYBRID_RETRIEVAL', setting: 'okfHybridRetrievalEnabled', default: false },
+  // Entity/relation graph layer derived from OKF cards (Phase 4). Default OFF.
   okfGraphExpansion: { env: 'NATIVELY_OKF_GRAPH_EXPANSION', setting: 'okfGraphExpansionEnabled', default: false },
   okfKnowledgeUi: { env: 'NATIVELY_OKF_KNOWLEDGE_UI', setting: 'okfKnowledgeUiEnabled', default: false },
   okfUserEditableCards: { env: 'NATIVELY_OKF_USER_EDITABLE_CARDS', setting: 'okfUserEditableCardsEnabled', default: false },
@@ -231,6 +255,8 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   okfProfileKnowledgeUi: { env: 'NATIVELY_OKF_PROFILE_KNOWLEDGE_UI', setting: 'okfProfileKnowledgeUiEnabled', default: false },
   // Safety isolation gates — ON everywhere by default.
   docGroundedStrictIsolation: { env: 'NATIVELY_DOC_GROUNDED_STRICT_ISOLATION', setting: 'docGroundedStrictIsolationEnabled', default: true },
+  // Custom-Mode Source Isolation (2026-07-06, hardening/v2.7.0). Default OFF.
+  customModeSourceEnforcement: { env: 'NATIVELY_CUSTOM_MODE_SOURCE_ENFORCEMENT', setting: 'customModeSourceEnforcementEnabled', default: false },
   // NOTE (2026-07-02): the false-refusal REPAIR path is INERT unless
   // `okfHybridRetrieval` is also on — the repair gate keys off the active OKF
   // pack's entity/card-title overlap, which only exists when OKF packs are
@@ -238,6 +264,9 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   // honest refusal (the safe fallback) regardless of this flag. Toggling this
   // flag alone (without okfHybridRetrieval) has no effect.
   docGroundedFalseRefusalRepair: { env: 'NATIVELY_DOC_GROUNDED_FALSE_REFUSAL_REPAIR', setting: 'docGroundedFalseRefusalRepairEnabled', default: true },
+  // Full-JIT final-answer law (2026-07-07). Default OFF for stability
+  // (2026-07-09); can be re-enabled by env/settings after packaged soak tests.
+  jitFinalAnswerEnforced: { env: 'NATIVELY_JIT_FINAL_ANSWER_ENFORCED', setting: 'jitFinalAnswerEnforcedEnabled', default: false },
 };
 
 const ON_VALUES = new Set(['1', 'true', 'on', 'enabled', 'yes']);
@@ -301,6 +330,15 @@ export function isIntelligenceFlagEnvForced(key: IntelligenceFlagKey): boolean {
 
 /** True when the observe-only IntelligenceTrace should collect (Phase 12/13). */
 export const isIntelligenceTraceEnabled = (): boolean => isIntelligenceFlagEnabled('trace');
+
+/**
+ * True when the full-JIT final-answer law is enforced: AOT intro/identity/
+ * greeting text is demoted to evidence and the provider writes every
+ * user-visible final answer. Default ON. Flip OFF to restore the legacy
+ * AOT-emit fast paths.
+ */
+export const isJitFinalAnswerEnforced = (): boolean =>
+  isIntelligenceFlagEnabled('jitFinalAnswerEnforced');
 
 /**
  * True when the live long-range follow-up memory should read from the durable
@@ -415,6 +453,22 @@ export const isDocGroundedStrictIsolationEnabled = (): boolean =>
  */
 export const isDocGroundedFalseRefusalRepairEnabled = (): boolean =>
   isIntelligenceFlagEnabled('docGroundedFalseRefusalRepair');
+
+export function getSourceOwnerEnforcementStage(): SourceOwnerEnforcementStage {
+  try {
+    const raw = (process.env.NATIVELY_SOURCE_OWNER_ENFORCEMENT_STAGE || '').trim().toLowerCase();
+    if (raw === 'off' || raw === 'observe' || raw === 'soft_block' || raw === 'enforce') return raw;
+    if (isIntelligenceFlagEnabled('customModeSourceEnforcement')) return 'enforce';
+  } catch {
+    /* fall through */
+  }
+  return 'observe';
+}
+
+export function isSourceOwnerEnforcementBlocking(): boolean {
+  const stage = getSourceOwnerEnforcementStage();
+  return stage === 'soft_block' || stage === 'enforce';
+}
 
 /**
  * A snapshot of every flag's resolved state — handy for the IntelligenceTrace and

@@ -117,6 +117,15 @@ export interface ElectronAPI {
   // LLM Model Management
   getCurrentLlmConfig: () => Promise<{ provider: "ollama" | "gemini" | "custom" | "codex-cli"; model: string; isOllama: boolean }>
   getAvailableOllamaModels: () => Promise<string[]>
+  getProviderStatuses: () => Promise<any[]>
+  getProviderStatus: (id: string) => Promise<any | null>
+  onProviderStatusChanged: (callback: (status: any) => void) => () => void
+  // Returns the latest local-fallback preflight result, or `null` if the
+  // preflight has not yet run. The preflight is scheduled ~1.5s after the
+  // main window is created. Call `runLocalFallbackPreflight()` to force a
+  // fresh run.
+  getLocalFallbackPreflight: () => Promise<any | null>
+  runLocalFallbackPreflight: () => Promise<any>
   switchToOllama: (model?: string, url?: string) => Promise<{ success: boolean; error?: string }>
   switchToGemini: (apiKey?: string, modelId?: string) => Promise<{ success: boolean; error?: string }>
   testLlmConnection: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', apiKey?: string) => Promise<{ success: boolean; error?: string }>
@@ -359,6 +368,11 @@ export interface ElectronAPI {
   onGeminiStreamToken: (callback: (token: string, meta?: { streamId?: number }) => void) => () => void
   onGeminiStreamDone: (callback: (data?: { finalText?: string; streamId?: number }) => void) => () => void
   onGeminiStreamError: (callback: (error: string) => void) => () => void;
+
+  // NOTE: onSkillsChanged broadcast subscription was removed. Skills are
+  // toggled only via delete; the picker refreshes on Settings unmount, and
+  // the overlay fetches its own copy on mount. Add a broadcast here if/when
+  // a future "skill changed" event needs to cross surfaces live.
   cancelChatStream: () => void;
 
   // Model Management
@@ -368,6 +382,7 @@ export interface ElectronAPI {
   toggleModelSelector: (coords: { x: number; y: number; activate?: boolean }) => Promise<void>;
   modelSelectorCloseIfOpen: () => Promise<void>;
   forceRestartOllama: () => Promise<void>;
+  isOllamaReachable: () => Promise<boolean>;
 
   // Settings Window
   toggleSettingsWindow: (coords?: { x: number; y: number }) => Promise<void>;
@@ -604,6 +619,10 @@ export interface ElectronAPI {
   // Skills
   skillsRefresh: () => Promise<SkillSummary[]>;
   skillsOpenFolder: () => Promise<{ success: boolean; path: string; error?: string }>;
+  // Per-skill management: hard-delete. Built-ins are refused inside the
+  // manager. Enable/disable is intentionally NOT exposed on the renderer —
+  // users who don't want a skill delete it instead.
+  skillsDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
   // Skill upload — step-3 wiring. `skillsUpload(payload, { autoInstall: true })`
   // is a one-shot validate+install; `skillsPreview(payload)` always sets
   // `autoInstall: false` so the renderer can show a confirm card first.
@@ -786,6 +805,7 @@ export interface SkillSummary {
   name: string;
   description: string;
   source: 'builtin' | 'userData';
+  enabled: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -856,6 +876,8 @@ export interface PhoneMirrorInfo {
   qrDataUrl: string | null;
   clients: number;
   extensionConnected: boolean;
+  /** Resolved bind host — '127.0.0.1' for loopback-only, '0.0.0.0' when LAN-exposed. */
+  bindAddress: string;
 }
 
 declare global {

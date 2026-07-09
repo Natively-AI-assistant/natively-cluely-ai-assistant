@@ -34,9 +34,21 @@ test('ModeHybridRetriever: deduplicateChunks accepts a forceDocumentGrounding pa
   assert.match(hybridSrc, /private deduplicateChunks\(candidates: ChunkCandidate\[\], byRerank: boolean = false, forceDocumentGrounding: boolean = false\)/);
 });
 
-test('ModeHybridRetriever: defines dedupeGroupKey deriving a section-scoped key from the [Section N.N] chunk prefix', () => {
+test('ModeHybridRetriever (round-8): dedupeGroupKey keys by chunkIndex so within-section siblings survive dedup', () => {
   assert.match(hybridSrc, /private dedupeGroupKey\(candidate: ChunkCandidate\): string/);
-  assert.match(hybridSrc, /\^\\\[Section \(\[\\d\.\]\+\)/);
+  // Round-8 fix: doc-grounded dedup keys by chunkIndex (exact-dup suppression),
+  // NOT by section number — so the sibling chunks holding the rest of a
+  // multi-item answer are no longer deleted before top-K selection.
+  assert.match(hybridSrc, /return `\$\{candidate\.sourceId\}#chunk\$\{candidate\.chunkIndex\}`;/);
+  // And it must NOT re-introduce the section-collapse key.
+  assert.doesNotMatch(hybridSrc, /return sectionMatch \? `\$\{candidate\.sourceId\}#\$\{sectionMatch\[1\]\}`/);
+});
+
+test('ModeHybridRetriever (round-8): enforceTokenBudget applies a per-section CAP two-pass for doc-grounded', () => {
+  // With siblings surviving dedup, a section-cap prevents one section from
+  // monopolising top-K while still admitting the answer-bearing siblings.
+  assert.match(hybridSrc, /SECTION_CAP/);
+  assert.match(hybridSrc, /enforceTokenBudget\(candidates: ChunkCandidate\[\], budget: number, byRerank: boolean = false, topK: number = DEFAULT_TOP_K, guaranteePerFile = false, forceDocumentGrounding = false\)/);
 });
 
 test('ModeHybridRetriever: dedup key falls back to per-chunk (not per-file) when no section prefix exists', () => {
@@ -101,21 +113,40 @@ test('ipcHandlers: Hindsight live recall is gated off for document-grounded turn
 
 // ---------------------------------------------------------------------------
 // Behavioral simulation of the dedup key logic
+//
+// ROUND-8 UPDATE (seminar-fix-2): the OKF Phase-1 F4 fix keyed doc-grounded
+// dedup by `sourceId#sectionNumber`, which collapsed to ONE chunk per section and
+// DELETED the sibling chunks holding the rest of a multi-item answer (four phases,
+// hyperparameters, model list). That was proven to be the LIVE landing-failure
+// mechanism (PHASE0_FORENSICS.md, seminar-fix-2). The fix keys by
+// `sourceId#chunkIndex` (exact-dup suppression only); within-section siblings now
+// SURVIVE dedup, and a per-section CAP in enforceTokenBudget prevents any one
+// section from monopolising top-K. The F4 INTENT ("multiple distinct sections
+// survive") is PRESERVED a fortiori — every distinct chunk survives.
 // ---------------------------------------------------------------------------
 function simulateDedupeGroupKey(candidate) {
-  const sectionMatch = candidate.text.match(/^\[Section ([\d.]+)/);
-  return sectionMatch ? `${candidate.sourceId}#${sectionMatch[1]}` : `${candidate.sourceId}#chunk${candidate.chunkIndex}`;
+  // Mirrors ModeHybridRetriever.dedupeGroupKey (doc-grounded): key by chunkIndex.
+  return `${candidate.sourceId}#chunk${candidate.chunkIndex}`;
 }
 
-test('simulation: two different sections of the same file produce two distinct dedup keys', () => {
+test('simulation: two different sections of the same file produce two distinct dedup keys (F4 intent preserved)', () => {
   const a = { sourceId: 'file1', chunkIndex: 0, text: '[Section 2.1.2 | p13-14] OpenVLA-OFT ...' };
   const b = { sourceId: 'file1', chunkIndex: 5, text: '[Section 3.4 | p57-58] AutoGen ...' };
   assert.notEqual(simulateDedupeGroupKey(a), simulateDedupeGroupKey(b));
 });
 
-test('simulation: the same section from the same file (different chunk offsets) collapses to one dedup key', () => {
+test('simulation (round-8): within-section SIBLING chunks now SURVIVE dedup (distinct keys) — the multi-item-answer fix', () => {
+  // Two chunks of the SAME section (§2.1.2) at different offsets must now produce
+  // DISTINCT keys so the sibling holding the rest of a list is not deleted.
   const a = { sourceId: 'file1', chunkIndex: 0, text: '[Section 2.1.2 | p13-14] OpenVLA-OFT replaces autoregressive...' };
   const b = { sourceId: 'file1', chunkIndex: 1, text: '[Section 2.1.2 | p13-14] ...continued discussion of OpenVLA-OFT' };
+  assert.notEqual(simulateDedupeGroupKey(a), simulateDedupeGroupKey(b));
+});
+
+test('simulation: an EXACT-duplicate chunk (same section, same chunkIndex) still collapses to one key', () => {
+  // True exact duplicates (same file, same chunk offset) are still suppressed.
+  const a = { sourceId: 'file1', chunkIndex: 3, text: '[Section 2.1.2 | p13-14] OpenVLA-OFT ...' };
+  const b = { sourceId: 'file1', chunkIndex: 3, text: '[Section 2.1.2 | p13-14] OpenVLA-OFT ...' };
   assert.equal(simulateDedupeGroupKey(a), simulateDedupeGroupKey(b));
 });
 

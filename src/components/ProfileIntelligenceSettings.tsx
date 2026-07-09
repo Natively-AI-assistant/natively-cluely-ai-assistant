@@ -567,6 +567,18 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
     const hasProfileAccess = isPremium || isTrialActive;
     const theme = useResolvedTheme();
 
+    // Escape closes the panel — matches SettingsOverlay behavior. App.tsx also
+    // listens; the duplicate keydown is a no-op once the panel is gone.
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape') return;
+            e.preventDefault();
+            onClose();
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [onClose]);
+
     const [activeSection, setActiveSection] = useState('identity');
 
     // ── Sliding indicator refs ─────────────────────────────────────────────────

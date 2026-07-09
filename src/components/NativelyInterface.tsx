@@ -22,7 +22,7 @@ import {
 import {
   mergeRollingTranscriptFinal,
   mergeRollingTranscriptPartial,
-} from '../../electron/utils/rollingTranscriptState';
+} from '../../electron/utils/rollingTranscriptState.ts';
 import { categorizeSttError } from '../lib/sttErrorMapper';
 
 import type { SkillSummary } from '../types/electron';
@@ -1052,9 +1052,24 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   useEffect(() => {
     window.electronAPI?.skillsRefresh?.()
-      .then((list: SkillSummary[]) => setAvailableSkills(Array.isArray(list) ? list : []))
+      // Filter disabled skills out of the autocomplete picker as a defensive
+      // measure — the SkillsManager still carries an `enabled` field (set via
+      // a future IPC that doesn't exist yet today) and the server-side gate
+      // in ipcHandlers.ts honors it. Today every skill returned by
+      // skillsRefresh has enabled === true, so this filter is a no-op; once
+      // a future feature exposes disable, the picker already filters correctly.
+      .then((list: SkillSummary[]) => setAvailableSkills(
+        Array.isArray(list) ? list.filter(s => s.enabled !== false) : [],
+      ))
       .catch(() => {});
   }, []);
+
+  // NOTE: live-refresh subscription removed (onSkillsChanged broadcast went
+  // with the toggle UI). The picker is fetched once on mount. Users who
+  // delete a skill in Settings then switch back to the overlay will see a
+  // stale autocomplete until the next mount — acceptable for v1. A future
+  // fix could re-fetch on overlay focus, but that's a polish item separate
+  // from this feature.
 
   useEffect(() => {
     let mounted = true;
@@ -1446,11 +1461,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   useEffect(() => {
     // Load the persisted default model (not the runtime model)
-    // Each new meeting starts with the default from settings
+    // Each new meeting starts with the default from settings.
+    // StrictMode-safe: dev-mode mount→unmount→remount would otherwise set the
+    // runtime model twice, clobbering any session-only pick from `handleModelSelect`.
+    let cancelled = false;
     if (window.electronAPI?.getDefaultModel) {
       window.electronAPI
         .getDefaultModel()
         .then((result: any) => {
+          if (cancelled) return;
           if (result && result.model) {
             setCurrentModel(result.model);
             // Also set the runtime model to the default
@@ -1459,6 +1478,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         })
         .catch((err: any) => console.error('Failed to fetch default model:', err));
     }
+    return () => { cancelled = true; };
   }, []);
 
   const handleModelSelect = (modelId: string) => {

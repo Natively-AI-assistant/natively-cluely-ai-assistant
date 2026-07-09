@@ -231,10 +231,9 @@ describe('HindsightManager.healthCheck + isAvailable', () => {
   });
 });
 
-// autoStartCommand() — the zero-config default that fixes the "never auto-starts" bug.
-// These reach the private method directly (JS has no real privacy); they verify the
-// command resolution precedence + the script-existence gating that keeps a packaged build
-// (no bundled script) from spawning a broken `bash <missing>`.
+// autoStartCommand() — explicit opt-in launcher resolution. Hotfix 2026-07-09
+// makes zero-config auto-start default OFF; explicit HINDSIGHT_SERVER_COMMAND or
+// hindsightAutoStart=true can still enable local sidecar spawning.
 describe('HindsightManager.autoStartCommand (zero-config default)', () => {
   const COMMAND_ENV = 'HINDSIGHT_SERVER_COMMAND';
   let savedCwd;
@@ -247,17 +246,8 @@ describe('HindsightManager.autoStartCommand (zero-config default)', () => {
     assert.equal(cmd, 'my-custom-launcher --foo');
   });
 
-  test('defaults to `bash "<abs scripts/hindsight-start.sh>"` when the script exists on disk', async () => {
-    // Tests run from the project root, where scripts/hindsight-start.sh is present.
-    const cmd = HindsightManager.getInstance().autoStartCommand();
-    assert.ok(cmd, 'expected a defaulted command');
-    assert.match(cmd, /^bash "/);
-    assert.match(cmd, /scripts[/\\]hindsight-start\.sh"$/);
-    // The path between the quotes must be absolute and actually exist.
-    const m = cmd.match(/^bash "(.+)"$/);
-    assert.ok(m, 'command should be `bash "<path>"`');
-    const fs = await import('node:fs');
-    assert.ok(fs.existsSync(m[1]), `defaulted script path should exist: ${m[1]}`);
+  test('default local launcher stays off until autoStart is explicitly enabled', async () => {
+    assert.equal(HindsightManager.getInstance().autoStartCommand(), null);
   });
 
   test('locateLauncherScript returns null + no default when the script is absent (packaged-build degrade)', async () => {
@@ -312,17 +302,11 @@ describe('HindsightManager.augmentPath (Finder-launch PATH caveat)', () => {
 // covered by the existing pre-fix tests (the OFF path stays Noop) plus production
 // runtime verification (the auto-enable log line + persisted settings flip).
 describe('HindsightManager.start() self-healing auto-flip (unit)', () => {
-  // isAutoStartEnabled mirrors autoStartCommand's default: ON unless explicitly disabled.
-  // The helper uses SettingsManager via try/catch and falls back to true (ON) when the
-  // settings store is unavailable — same defense-in-depth posture.
-  test('isAutoStartEnabled() returns true when the SettingsManager is unavailable (defense-in-depth default)', () => {
-    // The electron stub at module-load time installed a working SettingsManager, but
-    // the helper's try/catch around settings() should swallow any failure and return
-    // the default true. We don't assert this directly (the bundled SettingsManager is
-    // hard to make throw) — but the helper's logic is identical to autoStartCommand's,
-    // which IS tested above. This test is documentation that the default is ON.
-    assert.equal(HindsightManager.getInstance().isAutoStartEnabled(), true,
-      'autoStart defaults to true under any working SettingsManager');
+  // isAutoStartEnabled now defaults OFF. Local sidecar startup must be explicit
+  // to avoid spawning heavy Python/Postgres trees on every dev/source launch.
+  test('isAutoStartEnabled() defaults false unless explicitly enabled', () => {
+    assert.equal(HindsightManager.getInstance().isAutoStartEnabled(), false,
+      'autoStart defaults to false for stability');
   });
 
   test('start() with NO baseUrl exits at the getHindsightConfig guard (no flip, no spawn)', async () => {
@@ -333,14 +317,7 @@ describe('HindsightManager.start() self-healing auto-flip (unit)', () => {
     await assert.doesNotReject(() => HindsightManager.getInstance().start());
   });
 
-  test('start() with baseUrl but UNREACHABLE server and flag already ON → spawn attempted (not Noop)', async () => {
-    // With the flag ON + baseUrl set + autoStart ON (default), start() proceeds past
-    // the flag check, calls healthCheck (fails against unreachable port), then tries to
-    // spawn the launcher. This documents the INTENDED end state of fix #1: a user with
-    // the companion installed + a saved baseUrl + autoStart ON will trigger a real spawn.
-    // We DON'T assert spawn here (that would invoke bash); we just assert start() doesn't
-    // throw + reaches the post-healthCheck branch by checking that no "staying Noop"
-    // log line was emitted.
+  test('start() with baseUrl but UNREACHABLE server and flag already ON stays Noop unless autoStart is explicit', async () => {
     process.env.HINDSIGHT_BASE_URL = 'http://127.0.0.1:59999';
     process.env.NATIVELY_HINDSIGHT_MEMORY = '1'; // flag ON
     const logs = [];
@@ -348,15 +325,11 @@ describe('HindsightManager.start() self-healing auto-flip (unit)', () => {
     console.log = (...a) => logs.push(a.join(' '));
     try {
       await HindsightManager.getInstance().start();
-      // With flag ON, the "no flip" branch is taken — the user must already be opted in.
-      const flipLogs = logs.filter((m) => m.includes('auto-enabling hindsightMemory flag'));
-      assert.equal(flipLogs.length, 0, 'flag already ON → no auto-flip log expected');
-      // The "staying Noop until a server appears" log indicates the spawn path was
-      // NOT entered (autoStartCommand returned null). With the default ON, that line
-      // should NOT appear.
+      const flipLogs = logs.filter((m) => m.includes('session-enabling hindsightMemory'));
+      assert.equal(flipLogs.length, 0, 'flag already ON → no session auto-enable log expected');
       const noopLogs = logs.filter((m) => m.includes('staying Noop until a server appears'));
-      assert.equal(noopLogs.length, 0,
-        'flag ON + autoStart ON default → spawn path should be entered, not Noop');
+      assert.equal(noopLogs.length, 1,
+        'flag ON alone is not enough — autoStart must be explicitly enabled');
     } finally {
       console.log = orig;
       delete process.env.NATIVELY_HINDSIGHT_MEMORY;

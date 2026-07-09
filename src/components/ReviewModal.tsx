@@ -68,8 +68,6 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
     onDismissForever,
     onSubmitted,
     prefillName = "",
-    prefillRole = "",
-    prefillCompany = "",
     hardwareId,
     appVersion = "",
     buildChannel = "",
@@ -79,33 +77,37 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
 }) => {
     const reduced = useReducedMotion() ?? false
     const [step, setStep] = useState<Step>("review")
+    // Read the latest step inside ESC/keydown handlers without making the
+    // effect's dependency array include `step` (which would re-attach the
+    // window listener on every step transition). The ref always points at
+    // the current `step` value, so the soft-dismiss guard (`step === "review"`)
+    // works correctly even after Keep-anonymous flips step without touching
+    // submitting/testimonialBusy.
+    const stepRef = useRef<Step>("review")
+    useEffect(() => { stepRef.current = step }, [step])
     const [rating, setRating] = useState<number>(0)
     const [hoverRating, setHoverRating] = useState<number>(0)
     const [text, setText] = useState("")
     const [submitting, setSubmitting] = useState(false)
     const [submitError, setSubmitError] = useState<string | null>(null)
 
-    // Testimonial state
+    // Testimonial state. Public use is the default and assumed-on (the
+    // permission was the noisy/extra "Allow Natively..." toggle). The
+    // remaining meaningful toggle is whether to display the user's name
+    // publicly or default to "Anonymous Natively user".
     const [reviewId, setReviewId] = useState<string | null>(null)
     // SOFT PREFILL only — prefilled values are held in *separate* state, NOT
     // copied into the live form fields. The user must explicitly opt in to
     // use each prefill via the chip button.
     const [name, setName] = useState("")
-    const [role, setRole] = useState("")
-    const [company, setCompany] = useState("")
     const [namePrefillUsed, setNamePrefillUsed] = useState(false)
-    const [rolePrefillUsed, setRolePrefillUsed] = useState(false)
-    const [companyPrefillUsed, setCompanyPrefillUsed] = useState(false)
-    const [canUsePublicly, setCanUsePublicly] = useState(false)
     const [displayNamePublicly, setDisplayNamePublicly] = useState(false)
     const [testimonialBusy, setTestimonialBusy] = useState(false)
     const [testimonialError, setTestimonialError] = useState<string | null>(null)
 
     const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
-    const namePrefillSuggested    = !namePrefillUsed    && !name    && !!prefillName?.trim()
-    const rolePrefillSuggested    = !rolePrefillUsed    && !role    && !!prefillRole?.trim()
-    const companyPrefillSuggested = !companyPrefillUsed && !company && !!prefillCompany?.trim()
+    const namePrefillSuggested = !namePrefillUsed && !name && !!prefillName?.trim()
 
     // Reset state when modal opens fresh.
     useEffect(() => {
@@ -118,12 +120,7 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
             setSubmitError(null)
             setReviewId(null)
             setName("")
-            setRole("")
-            setCompany("")
             setNamePrefillUsed(false)
-            setRolePrefillUsed(false)
-            setCompanyPrefillUsed(false)
-            setCanUsePublicly(false)
             setDisplayNamePublicly(false)
             setTestimonialBusy(false)
             setTestimonialError(null)
@@ -153,15 +150,17 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
 
     const closeModal = () => onClose()
 
-    const dismissLaterAndClose = () => {
-        if (step === "review") void onDismissLater?.()
+    const dismissLaterAndClose = useCallback(() => {
+        // Use the ref so the soft-dismiss guard stays correct even if the
+        // effect that owns this callback doesn't re-run on every step flip.
+        if (stepRef.current === "review") void onDismissLater?.()
         closeModal()
-    }
+    }, [onDismissLater])
 
-    const dismissForeverAndClose = () => {
-        if (step === "review") void onDismissForever?.()
+    const dismissForeverAndClose = useCallback(() => {
+        if (stepRef.current === "review") void onDismissForever?.()
         closeModal()
-    }
+    }, [onDismissForever])
 
     const handleSubmitReview = async () => {
         if (rating < 1 || rating > 5 || text.length > MAX_CHARS || submitting) return
@@ -203,9 +202,11 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
         try {
             const res = await updateTestimonial(reviewId, {
                 name: name.trim() || null,
-                role: role.trim() || null,
-                company: company.trim() || null,
-                can_use_publicly: canUsePublicly,
+                role: null,
+                company: null,
+                // Public use is the assumed default. The single user-facing
+                // toggle below controls whether the name is shown.
+                can_use_publicly: true,
                 display_name_publicly: displayNamePublicly,
                 hardware_id: hardwareId || null,
             })
@@ -291,36 +292,14 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
                                 key="testimonial"
                                 name={name}
                                 setName={setName}
-                                role={role}
-                                setRole={setRole}
-                                company={company}
-                                setCompany={setCompany}
                                 prefillName={prefillName}
-                                prefillRole={prefillRole}
-                                prefillCompany={prefillCompany}
                                 namePrefillSuggested={namePrefillSuggested}
-                                rolePrefillSuggested={rolePrefillSuggested}
-                                companyPrefillSuggested={companyPrefillSuggested}
                                 onAcceptNamePrefill={() => {
                                     if (prefillName) {
                                         setName(prefillName.trim())
                                         setNamePrefillUsed(true)
                                     }
                                 }}
-                                onAcceptRolePrefill={() => {
-                                    if (prefillRole) {
-                                        setRole(prefillRole.trim())
-                                        setRolePrefillUsed(true)
-                                    }
-                                }}
-                                onAcceptCompanyPrefill={() => {
-                                    if (prefillCompany) {
-                                        setCompany(prefillCompany.trim())
-                                        setCompanyPrefillUsed(true)
-                                    }
-                                }}
-                                canUsePublicly={canUsePublicly}
-                                setCanUsePublicly={setCanUsePublicly}
                                 displayNamePublicly={displayNamePublicly}
                                 setDisplayNamePublicly={setDisplayNamePublicly}
                                 busy={testimonialBusy}
@@ -334,7 +313,6 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
                         {step === "thanks" && (
                             <StepThanks
                                 key="thanks"
-                                canUsePublicly={canUsePublicly}
                                 displayNamePublicly={displayNamePublicly}
                                 onClose={closeModal}
                                 reduced={reduced}
@@ -616,21 +594,9 @@ const StepReview: React.FC<StepReviewProps> = ({
 interface StepTestimonialProps {
     name: string
     setName: (s: string) => void
-    role: string
-    setRole: (s: string) => void
-    company: string
-    setCompany: (s: string) => void
     prefillName?: string
-    prefillRole?: string
-    prefillCompany?: string
     namePrefillSuggested: boolean
-    rolePrefillSuggested: boolean
-    companyPrefillSuggested: boolean
     onAcceptNamePrefill: () => void
-    onAcceptRolePrefill: () => void
-    onAcceptCompanyPrefill: () => void
-    canUsePublicly: boolean
-    setCanUsePublicly: (b: boolean) => void
     displayNamePublicly: boolean
     setDisplayNamePublicly: (b: boolean) => void
     busy: boolean
@@ -642,11 +608,11 @@ interface StepTestimonialProps {
 }
 
 const StepTestimonial: React.FC<StepTestimonialProps> = ({
-    name, setName, role, setRole, company, setCompany,
-    prefillName = "", prefillRole = "", prefillCompany = "",
-    namePrefillSuggested, rolePrefillSuggested, companyPrefillSuggested,
-    onAcceptNamePrefill, onAcceptRolePrefill, onAcceptCompanyPrefill,
-    canUsePublicly, setCanUsePublicly, displayNamePublicly, setDisplayNamePublicly,
+    name, setName,
+    prefillName = "",
+    namePrefillSuggested,
+    onAcceptNamePrefill,
+    displayNamePublicly, setDisplayNamePublicly,
     busy, error,
     onSave, onSkip, onClose, reduced,
 }) => {
@@ -661,7 +627,7 @@ const StepTestimonial: React.FC<StepTestimonialProps> = ({
                 <div className="flex items-center gap-2">
                     <Star size={14} className="text-amber-400" />
                     <h2 id="review-modal-title-testimonial" className="text-sm font-medium text-[#E9E9E9] tracking-wide">
-                        Share as a testimonial?
+                        Want to be credited?
                     </h2>
                 </div>
                 <motion.button
@@ -687,47 +653,16 @@ const StepTestimonial: React.FC<StepTestimonialProps> = ({
                     disabled={busy}
                     reduced={reduced}
                 />
-                <Field
-                    label="Role / Title"
-                    value={role}
-                    onChange={setRole}
-                    suggestion={prefillRole?.trim() ?? ""}
-                    onAcceptSuggestion={onAcceptRolePrefill}
-                    isSuggestionAvailable={rolePrefillSuggested}
-                    disabled={busy}
-                    reduced={reduced}
-                />
-                <Field
-                    label="Company"
-                    value={company}
-                    onChange={setCompany}
-                    suggestion={prefillCompany?.trim() ?? ""}
-                    onAcceptSuggestion={onAcceptCompanyPrefill}
-                    isSuggestionAvailable={companyPrefillSuggested}
-                    disabled={busy}
-                    reduced={reduced}
-                />
 
-                <div className="space-y-2 pt-2">
+                <div className="pt-2">
                     <Checkbox
-                        checked={canUsePublicly}
-                        onChange={setCanUsePublicly}
-                        label="Allow Natively to use this review publicly"
+                        checked={displayNamePublicly}
+                        onChange={setDisplayNamePublicly}
+                        label="Show my name publicly"
                         disabled={busy}
+                        hint="Otherwise shown as Anonymous Natively user."
                         reduced={reduced}
                     />
-                    <div className={canUsePublicly ? "" : "opacity-50 pointer-events-none"}>
-                        <Checkbox
-                            checked={displayNamePublicly}
-                            onChange={setDisplayNamePublicly}
-                            label="Show my name publicly"
-                            disabled={busy || !canUsePublicly}
-                            hint={canUsePublicly
-                                ? "Otherwise shown as Anonymous Natively user."
-                                : "Enable public use first."}
-                            reduced={reduced}
-                        />
-                    </div>
                 </div>
 
                 <AnimatePresence>
@@ -895,13 +830,12 @@ const Checkbox: React.FC<CheckboxProps> = ({ checked, onChange, label, hint, dis
 // ─── Step 3: thanks ───────────────────────────────────────────────────────
 
 interface StepThanksProps {
-    canUsePublicly: boolean
     displayNamePublicly: boolean
     onClose: () => void
     reduced: boolean
 }
 
-const StepThanks: React.FC<StepThanksProps> = ({ canUsePublicly, displayNamePublicly, onClose, reduced }) => {
+const StepThanks: React.FC<StepThanksProps> = ({ displayNamePublicly, onClose, reduced }) => {
     return (
         <motion.div
             initial={{ opacity: 0, scale: reduced ? 1 : 0.92, y: reduced ? 0 : 14 }}
@@ -943,11 +877,9 @@ const StepThanks: React.FC<StepThanksProps> = ({ canUsePublicly, displayNamePubl
                     delay: reduced ? 0 : 0.26,
                 }}
             >
-                {canUsePublicly
-                    ? (displayNamePublicly
-                        ? "Your name will appear alongside the testimonial."
-                        : "It will appear as Anonymous Natively user.")
-                    : "Your feedback was saved. We'll keep it private."}
+                {displayNamePublicly
+                    ? "Your name will appear alongside the testimonial."
+                    : "It will appear as Anonymous Natively user."}
             </motion.p>
 
             <motion.button

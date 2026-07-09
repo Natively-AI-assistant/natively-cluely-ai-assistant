@@ -1,0 +1,209 @@
+{
+  "name": "Marissa K. Chen",
+  "location": "Seattle, WA",
+  "phone": "(206) 555-0179",
+  "email": "marissa.chen.dev@gmail.com",
+  "linkedin": "linkedin.com/in/marissachen-dev",
+  "github": "github.com/mchen-cs",
+  "current_title": "Staff Software Engineer",
+  "current_company": "Nimbus Systems",
+  "total_experience_years": "9+",
+  "education": "B.S. Computer Science, University of Washington, 2015, GPA 3.78",
+  "skills": [
+    "Go",
+    "Java",
+    "Python",
+    "TypeScript",
+    "Rust",
+    "Kubernetes",
+    "Docker",
+    "Terraform",
+    "Envoy",
+    "Istio",
+    "Kafka",
+    "gRPC",
+    "Elasticsearch",
+    "ClickHouse",
+    "PostgreSQL",
+    "DynamoDB",
+    "Apache Flink",
+    "OpenTelemetry",
+    "Prometheus",
+    "Grafana",
+    "Loki",
+    "Jaeger"
+  ],
+  "work_history": [
+    {
+      "company": "Nimbus Systems",
+      "title": "Staff Software Engineer",
+      "start": "2024-01",
+      "end": "Present"
+    },
+    {
+      "company": "Nimbus Systems",
+      "title": "Senior Software Engineer",
+      "start": "2021-06",
+      "end": "2023-12"
+    },
+    {
+      "company": "Cobaltline Financial",
+      "title": "Senior Software Engineer",
+      "start": "2017-08",
+      "end": "2021-05"
+    },
+    {
+      "company": "Nimbus Systems",
+      "title": "Software Engineer II",
+      "start": "2015-08",
+      "end": "2017-07"
+    }
+  ],
+  "fullName": "Marissa K. Chen",
+  "totalExperienceMonths": 0,
+  "topSkills": [
+    "Go",
+    "Java",
+    "Python",
+    "TypeScript",
+    "Rust",
+    "Kubernetes",
+    "Docker",
+    "Terraform"
+  ],
+  "projects": [
+    {
+      "name": "OpenTelemetry Collector Distribution for k8s",
+      "verifiableFact": "Maintained a Helm-based distribution of the OTel Collector downloaded 140K+ times from GitHub Container Registry; published a CNCF sandbox talk in 2023."
+    },
+    {
+      "name": "CFP-Review",
+      "verifiableFact": "Built a small CLI tool that helped conference program committees dedupe and rank talk submissions; used by RustConf 2022 and PyCon US 2023 program teams."
+    }
+  ],
+  "years_experience": "9+",
+  "core_skills": [
+    "Go",
+    "Java",
+    "Python",
+    "TypeScript",
+    "Rust",
+    "Kubernetes",
+    "Docker",
+    "Terraform",
+    "Envoy",
+    "Istio",
+    "Kafka",
+    "gRPC",
+    "Elasticsearch",
+    "ClickHouse",
+    "PostgreSQL",
+    "DynamoDB",
+    "Apache Flink",
+    "OpenTelemetry",
+    "Prometheus",
+    "Grafana",
+    "Loki",
+    "Jaeger"
+  ],
+  "distributed_systems": true,
+  "data_pipelines": true,
+  "developer_tooling": true,
+  "fintech_experience": true,
+  "cloud_infrastructure": true,
+  "observability_platform": true,
+  "previous_employer_return": true,
+  "leadership_signals": [
+    "Lead architect",
+    "Mentor four senior engineers",
+    "instituted quarterly design-review forum",
+    "org-wide adoption",
+    "own technical strategy",
+    "Promoted to Senior",
+    "On-call rotation lead"
+  ],
+  "scale_metrics": [
+    "4.2B events/day",
+    "220+ enterprise accounts",
+    "8.3M daily transactions",
+    "99.97% uptime",
+    "140K+ downloads",
+    "p99 1.4s to 210ms",
+    "$1.1M annual cost reduction"
+  ],
+  "core_languages": [
+    "Go",
+    "Java",
+    "Python",
+    "TypeScript",
+    "Rust"
+  ],
+  "previous_company": "Cobaltline Financial",
+  "nimbus_tenure": "2015-2017, 2021-present",
+  "observability_focus": true,
+  "opentelemetry_adoption": true,
+  "chaos_engineering": true,
+  "kubernetes_skills": true,
+  "mentorship": true,
+  "domain_experience": [
+    "distributed systems",
+    "data pipelines",
+    "observability",
+    "developer tooling",
+    "fintech",
+    "cloud infrastructure"
+  ],
+  "previous_employers": [
+    "Nimbus Systems",
+    "Cobaltline Financial"
+  ],
+  "notable_achievements": [
+    "Cut customer observability spend by 38% across 220+ enterprise accounts",
+    "Brought platform p99 latency from 1.4s to 210ms",
+    "Reduced customer-reported incidents by 62% YoY",
+    "Built ingestion service handling 4.2B events/day with 99.97% uptime",
+    "Reduced query cost by $1.1M annually",
+    "Reduced end-of-day close time from 6 hours to 38 minutes for 8.3M daily transactions",
+    "Cut inter-service p95 latency by 47% via gRPC migration",
+    "Maintained OTel Collector Helm distribution with 140K+ downloads"
+  ],
+  "open_source": [
+    "OpenTelemetry Collector Distribution for k8s",
+    "CFP-Review CLI tool"
+  ],
+  "cloud_infrastructure_experience": true,
+  "go": true,
+  "java": true,
+  "python": true,
+  "kubernetes": true,
+  "opentelemetry": true,
+  "prometheus": true,
+  "grafana": true,
+  "sre_principles": true,
+  "mentoring": true,
+  "design_reviews": true,
+  "grpc": true,
+  "elasticsearch": true,
+  "kafka": true,
+  "terraform": true,
+  "staff_level_ic": true,
+  "cross_team_strategy": true,
+  "mostRecentEmployer": "Nimbus Systems",
+  "jdCompany": "Northwind Logistics",
+  "jdRole": "Senior Platform Engineer",
+  "requirementsMet": [
+    "Relevant experience present",
+    "Relevant experience present",
+    "Relevant experience present"
+  ],
+  "requirementsNotMet": [
+    "Gap to be assessed in interview",
+    "Gap to be assessed in interview"
+  ],
+  "expectedSalaryBand": null,
+  "id": "p08",
+  "edgeCase": "Engineer with a BOOMERANG employer: worked at \"Nimbus Systems\" 2015-2018 as Software Engineer, LEFT, then RETURNED to \"Nimbus Systems\" 2021-",
+  "resumeFormat": "pdf",
+  "hasSecondDoc": false,
+  "mostRecentTitle": "Staff Software Engineer"
+}

@@ -1,13 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowRight, Loader, Check } from 'lucide-react';
 import { motion } from 'framer-motion';
+// Static import keeps Vite from warning about a "mixed" dynamic+static import
+// graph for analytics.service (App.tsx, Launcher.tsx, NativelyInterface.tsx,
+// and SettingsOverlay.tsx all import it statically). The previous
+// `import('../../lib/analytics/analytics.service')` was a tiny "split off
+// the analytics chunk" gesture, but it triggered Vite's dynamic-import
+// warning at build time and made the chunk boundary platform-dependent.
+import { analytics } from '../../lib/analytics/analytics.service';
 
 interface ConnectCalendarButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
     variant?: 'default' | 'dark';
     onConnect?: () => void;
 }
 
-const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className = '', variant = 'default', ...props }) => {
+const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className = '', variant = 'default', onConnect, ...props }) => {
     const [loading, setLoading] = useState(false);
     const [connected, setConnected] = useState(false);
 
@@ -16,10 +23,12 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
             window.electronAPI.getCalendarStatus().then(status => {
                 setConnected(status.connected);
                 if (status.connected) {
-                    props.onConnect?.();
+                    onConnect?.();
                 }
             });
         }
+        // Only check the persisted calendar status on mount; callers may pass inline callbacks.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const handleClick = async (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -31,11 +40,9 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
             const res = await window.electronAPI.calendarConnect();
             if (res.success) {
                 setConnected(true);
-                props.onConnect?.();
-                // Track calendar connection
-                import('../../lib/analytics/analytics.service').then(({ analytics }) => {
-                    analytics.trackCalendarConnected();
-                });
+                onConnect?.();
+                // Track calendar connection (analytics imported statically above)
+                analytics.trackCalendarConnected();
             }
         } catch (err) {
             console.error(err);

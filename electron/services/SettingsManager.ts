@@ -56,6 +56,9 @@ export interface AppSettings {
     knowledgeMode?: boolean;
     phoneMirrorEnabled?: boolean;
     phoneMirrorExposeOnLan?: boolean;
+    // External optional provider. Default false: do not spawn Ollama unless
+    // the user selects an Ollama model or explicitly opts into auto-start.
+    autoStartOllama?: boolean;
     // ── Smart Browser Context v2 ───────────────────────────────────────────
     // Manual browser capture is always available (no flag). These control the
     // AUTOMATIC behaviour. Defaults (read at the use sites): coding auto-detect

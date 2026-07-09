@@ -42,6 +42,10 @@ change.md
 
 # Generated migration patches — private, not for public repo
 *.patch
+# Exception: the patches/ directory holds patch-package commits that MUST
+# be checked in (they re-apply automatically in postinstall). This line
+# keeps them tracked.
+!/patches/*.patch
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
@@ -79,6 +83,10 @@ node_modules/
 jspm_packages/
 dist-electron/
 dist/
+
+# husky auto-generated machinery — only the user-facing hook files
+# (e.g. .husky/pre-commit) are committed.
+.husky/_
 
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/

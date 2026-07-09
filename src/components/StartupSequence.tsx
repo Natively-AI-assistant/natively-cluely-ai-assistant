@@ -8,10 +8,23 @@ interface StartupSequenceProps {
 
 const StartupSequence: React.FC<StartupSequenceProps> = ({ onComplete }) => {
     useEffect(() => {
+        // Primary dismiss at 2.2s (matches the logo animation length).
         const timer = setTimeout(() => {
             onComplete();
         }, 2200);
-        return () => clearTimeout(timer);
+        // Hard-cap safety net: no matter what, the splash must never persist past
+        // 5s. If the primary timer's onComplete is ever prevented from advancing
+        // the app (e.g. a throw upstream, a dropped state update), this guarantees
+        // the launcher is revealed rather than leaving the user staring at the
+        // black logo — the "stuck at logo" failure mode. Idempotent: onComplete
+        // just flips showStartup=false, so a double-call is harmless.
+        const hardCap = setTimeout(() => {
+            try { onComplete(); } catch { /* never let the splash trap the user */ }
+        }, 5000);
+        return () => {
+            clearTimeout(timer);
+            clearTimeout(hardCap);
+        };
     }, [onComplete]);
 
     return (

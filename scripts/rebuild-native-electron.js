@@ -40,23 +40,8 @@ const path = require('path');
 
 const MODULES = ['better-sqlite3', 'keytar'];
 
-/**
- * Resolve the true hardware architecture, immune to Rosetta translation.
- * Under Rosetta, `process.arch`/`os.arch()` report 'x64' on arm64 silicon —
- * the exact lie that poisons native builds. macOS sysctl reports hardware truth.
- */
-function detectHardwareArch() {
-  if (os.platform() !== 'darwin') return process.arch;
-  try {
-    const isArm = execFileSync('sysctl', ['-in', 'hw.optional.arm64'], { encoding: 'utf8' }).trim();
-    if (isArm === '1') return 'arm64';
-    // hw.optional.arm64 absent/0 → genuine Intel hardware
-    return 'x64';
-  } catch {
-    // sysctl missing (non-macOS reached here?) — fall back to process arch
-    return process.arch;
-  }
-}
+// Shared hardware-arch probe — see electron/lib/nativeArch.mjs for the why.
+const { detectHardwareArch } = require('../electron/lib/nativeArch.cjs');
 
 function getElectronVersion(root) {
   try {

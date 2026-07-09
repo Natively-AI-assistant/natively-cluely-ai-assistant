@@ -1,7 +1,7 @@
 // ipcHandlers.ts
 
 import * as crypto from 'crypto';
-import { app, BrowserWindow, dialog, ipcMain, shell, systemPreferences } from 'electron';
+import { app, BrowserWindow, dialog, desktopCapturer, ipcMain, shell, systemPreferences } from 'electron';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -16,6 +16,7 @@ import { formatEnvelopeForPrompt } from './services/browser-context/formatEnvelo
 import { BrowserMetadataClassifierService } from './services/browser-context/BrowserMetadataClassifierService';
 import type { BrowserContextCategory, SafeWebsiteMetadata } from './services/browser-context/types';
 import { SettingsManager } from './services/SettingsManager';
+import { ProviderStatusRegistry } from './services/ProviderStatusRegistry';
 import { SkillsManager } from './services/SkillsManager';
 import { DEFAULT_BUILTIN_SKILL_IDS, type SkillUploadPayload } from './services/skills/SkillValidator';
 
@@ -23,21 +24,23 @@ import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
 import type { StreamRouteOptions } from './llm/streamContextPolicy';
-import { buildLiveFallbackAnswer } from './llm/manualProfileIntelligence';
+import { buildProfileJitPrompt } from './llm/ProfileJitPromptBuilder';
+import { decideSessionWritePolicy, type FinalGenerationMode, type SessionWriteDecision } from './llm/FinalAnswerGenerationPolicy';
 import { isCodeVerificationEnabled } from './llm/codeVerification/verificationEnabled';
 import { CodingStreamGate } from './llm/codingStreamGate';
 import { PiLatencyTrace } from './services/telemetry/PiLatencyTracer';
 import { beginTrace, commitTrace } from './intelligence/IntelligenceTrace';
 import { ProfileTreeService } from './intelligence/ProfileTreeService';
-import { isIntelligenceFlagEnabled } from './intelligence/intelligenceFlags';
+import { isIntelligenceFlagEnabled, getSourceOwnerEnforcementStage } from './intelligence/intelligenceFlags';
 import { recordAttribution, hindsightModeFor, type AttributionInput } from './intelligence/IntelligenceAttribution';
 import { routeContext, isBackwardLookingQuery } from './intelligence/ContextRouter';
 import { SearchOrchestrator, type SearchCandidate } from './intelligence/SearchOrchestrator';
 import { CHAT_MODE_PROMPT } from './llm/prompts';
 import { isAssistantIdentityQuestion, profileFactsReady } from './llm/manualProfileIntelligence';
-import { buildManualProfileBackendAnswer } from './llm/profileAnswerBackend';
 import { shouldAutoAttachManualTranscriptContext } from './llm/manualTranscriptContextPolicy';
+import { buildManualProfileEvidenceRoute } from './llm/profileAnswerBackend';
 import { DOC_GROUNDED_TOKEN_BUDGET } from './services/ModeContextRetriever';
+import { detectIncompleteNumericAnswer, completenessRegenFabricates, isDocGroundedAnswerType } from './llm/documentGroundedPrompt';
 
 // Generic tokens excluded when splitting OKF entity names / card titles into
 // distinctive words for the document-grounded false-refusal gate (2026-07-02).
@@ -927,6 +930,17 @@ export function initializeIpcHandlers(appState: AppState): void {
             const candidateId = skillPrefixMatch[1];
             const skill = SkillsManager.getInstance().getSkill(candidateId);
             if (skill) {
+              // Disabled skills still resolve by name but must NOT inject their
+              // instructions into the prompt — the user turned them off in
+              // Settings → Skills. Surface a clear error rather than silently
+              // proceeding (which would invoke the skill anyway).
+              if (skill.enabled === false) {
+                event.sender.send(
+                  'gemini-stream-error',
+                  `Skill "/${skill.id}" is disabled. Enable it in Settings → Skills.`,
+                );
+                return;
+              }
               skillPromptBlock = SkillsManager.getInstance().buildPromptBlock(skill);
               const strippedQuery = skillPrefixMatch[2].trim();
               message = strippedQuery || `Please help me with the ${skill.name} skill.`;
@@ -964,6 +978,75 @@ export function initializeIpcHandlers(appState: AppState): void {
           speakerPerspective: 'user',
           activeMode: manualActiveMode,
         });
+
+        // Custom-Mode Source Disambiguation (2026-07-06): build the
+        // CustomModeExecutionContract ONCE and resolve the turn's SOURCE
+        // OWNERSHIP from it. The arbiter derives `sourceAuthority` from the
+        // active MODE (not from the question's wording), and
+        // `resolveSourceOwnership` turns that into the single decision the
+        // fast-path gate + profile-evidence gate below both consult:
+        //   - `profileAllowed`: may the deterministic profile fast-path run?
+        //   - `shouldClarifyInsteadOfProfile`: doc/transcript mode + an explicit
+        //     "my resume/project" ask → emit a source-honest switch line instead
+        //     of leaking the profile OR giving an odd "not in the document".
+        // This REPLACES the brittle `answerType !== 'lecture_answer'` fast-path
+        // guard that missed the five other document answer shapes (list_answer,
+        // definitional_answer, …) — the reported leak.
+        // Hoisted to handler scope; null when the arbiter throws (best-effort).
+        let manualSourceContract: import('./llm/customModeExecutionContract').CustomModeExecutionContract | null = null;
+        let manualOwnership: import('./llm/sourceOwnership').SourceOwnershipDecision | null = null;
+        const _hasProfileFactsForTurn = Boolean(llmHelper.getKnowledgeOrchestrator?.()?.activeResume?.structured_data);
+        try {
+          const { buildCustomModeExecutionContract, logArbitratedContract } = require('./llm/customModeExecutionContract');
+          const { resolveSourceOwnership } = require('./llm/sourceOwnership');
+          const _docGrounded = manualActiveMode?.documentGroundedCustomModeActive === true;
+          const _hasRefFiles = Boolean((manualActiveMode && (manualActiveMode as any).hasReferenceFiles) ?? false);
+          const _hasCustomPrompt = Boolean((manualActiveMode && (manualActiveMode as any).hasCustomPrompt) ?? false);
+          const _hasLiveTranscript = Boolean(intelligenceManager.getFormattedContext(100)?.trim());
+          const _hasProfileFacts = _hasProfileFactsForTurn;
+          const _hasMeetingRag = Boolean(false); // meeting_rag is gated by chat:sendMessage IPC, not in this path
+          const _hasLongTermMemory = Boolean(isIntelligenceFlagEnabled('hindsightLiveRecall') && isIntelligenceFlagEnabled('hindsightMemory'));
+          manualSourceContract = buildCustomModeExecutionContract({
+            question: String(message || ''),
+            streamRoute: 'manual_chat_stream',
+            modeId: manualActiveMode?.id ?? null,
+            modeUniqueId: manualActiveMode?.id ?? null,
+            answerType: answerPlan.answerType,
+            isCustomMode: manualActiveMode?.isCustom === true,
+            isDocGroundedCustomModeActive: _docGrounded,
+            hasReferenceFiles: _hasRefFiles,
+            hasCustomPrompt: _hasCustomPrompt,
+            hasLiveTranscript: _hasLiveTranscript,
+            hasProfileFacts: _hasProfileFacts,
+            hasMeetingRag: _hasMeetingRag,
+            hasLongTermMemory: _hasLongTermMemory,
+          });
+          logArbitratedContract(manualSourceContract, String(message || ''));
+          manualOwnership = resolveSourceOwnership({
+            question: String(message || ''),
+            contract: manualSourceContract,
+            profileContextPolicy: answerPlan.profileContextPolicy,
+            answerType: answerPlan.answerType,
+            hasProfileFacts: _hasProfileFacts,
+          });
+          if (isIntelligenceFlagEnabled('trace')) {
+            console.log('[SOURCE-OWNERSHIP]', JSON.stringify({
+              owner: manualOwnership.owner,
+              profileAllowed: manualOwnership.profileAllowed,
+              explicitProfileAsk: manualOwnership.explicitProfileAsk,
+              shouldClarifyInsteadOfProfile: manualOwnership.shouldClarifyInsteadOfProfile,
+              reason: manualOwnership.reason,
+              answerType: answerPlan.answerType,
+            }));
+          }
+        } catch (arbiterErr: any) {
+          // SourceArbiter is best-effort — a failure here MUST NOT break the chat
+          // path. manualOwnership stays null; the fast-path gate below falls back
+          // to the legacy `!== 'lecture_answer'` guard (never MORE permissive).
+          if (isIntelligenceFlagEnabled('trace')) {
+            console.warn('[SOURCE-ARBITER] skipped (non-fatal):', arbiterErr?.message);
+          }
+        }
         let isCodingChat = isCodingAnswerType(answerPlan.answerType);
         chatTrace.mark('answer_type_selected', { answerType: answerPlan.answerType, isCoding: isCodingChat });
         piTelemetry.emit('pi_answer_plan_created', { answerType: answerPlan.answerType, surface: 'manual', isCoding: isCodingChat, profilePolicy: answerPlan.profileContextPolicy, answerStyle: answerPlan.answerStyle });
@@ -1183,77 +1266,156 @@ export function initializeIpcHandlers(appState: AppState): void {
           return null;
         }
 
-        // Manual Profile Intelligence preflight: simple profile facts must not fall
-        // through to generic CHAT_MODE_PROMPT, where the assistant identity can win
-        // over the loaded candidate identity. Structured resume/JD facts are ready
-        // before embeddings/AOT, so answer these deterministically with no provider.
-        // SAFETY (code-review 2026-06-06b CRITICAL): the deterministic fast-path
-        // runs BEFORE the safety route, so a stealth/evasion ask that also trips an
-        // intro/skill pattern could get a candidate answer instead of the decline.
-        // Skip the fast-path entirely for a stealth/evasion question AND for any
-        // CONTRACT-ENFORCED type (safety/link/source/product-about) so those always
-        // flow through the contract-injected streamChat below.
+        // Manual Profile Intelligence JIT preflight: deterministic code may select
+        // source-aware evidence, but it must NOT write the final user-visible answer.
+        // Selected evidence is packed into a compact prompt block and the provider
+        // writes the final answer below through the normal streamChat path.
         const isStealthChat = isStealthEvasionQuestion(message);
-        const fastPathEligible = !imagePaths?.length && !isCodingChat
+        const legacyDocGuardEligible = answerPlan.answerType !== 'lecture_answer';
+        // Staged source-owner enforcement (plan §6): `off` bypasses the resolver
+        // decision entirely (legacy doc-guard only); every other stage
+        // (observe/soft_block/enforce) honors the resolver. Default resolves to a
+        // blocking posture, so this pass stays leak-safe unless explicitly dialed
+        // to `off` via NATIVELY_SOURCE_OWNER_ENFORCEMENT_STAGE.
+        const _ownerEnforcementOff = getSourceOwnerEnforcementStage() === 'off';
+        const sourceOwnershipAllowsProfile = (manualOwnership && !_ownerEnforcementOff)
+          ? manualOwnership.profileAllowed
+          : legacyDocGuardEligible;
+        const profileEvidenceEligible = !imagePaths?.length && !isCodingChat
           && !isAssistantIdentityQuestion(message)
           && !isStealthChat
           && answerPlan.answerType !== 'ethical_usage_answer'
           && answerPlan.answerType !== 'project_link_answer'
           && answerPlan.answerType !== 'source_code_evidence_answer'
           && answerPlan.answerType !== 'project_about_answer'
-          // Document-grounded custom mode (audit 2026-06-27, real-path fix):
-          // when the planner rewrote the type to lecture_answer (because the
-          // active mode is document-grounded and the ask is NOT an explicit
-          // profile request — see AnswerPlanner explicitDocumentModeProfileAsk),
-          // the deterministic profile fast-path MUST be skipped so it cannot
-          // emit a resume/project answer (TalentScope etc.) over the uploaded
-          // material. We gate on the ANSWER TYPE, not the mode flag, so a
-          // legitimate "how does my thesis relate to my work experience"
-          // (which the planner leaves as a profile type) still gets the fast path.
-          && answerPlan.answerType !== 'lecture_answer';
-        if (fastPathEligible) {
+          && sourceOwnershipAllowsProfile;
+
+        let finalGenerationMode: FinalGenerationMode = 'jit_llm';
+        let sessionWriteDecision: SessionWriteDecision = decideSessionWritePolicy({
+          finalGenerationMode,
+          validationOk: true,
+          sourceContractHonored: true,
+        });
+        let selectedProfileEvidence: import('./llm/manualProfileIntelligence').ManualProfileRouteResult | null = null;
+        let profileJitPrompt: ReturnType<typeof buildProfileJitPrompt> | null = null;
+
+        // SOURCE-HONEST CLARIFICATION: doc/transcript mode + an EXPLICIT profile
+        // ask is an explicit internal refusal, so it may bypass provider generation;
+        // it must not contain profile facts and is not authoritative memory.
+        if (manualOwnership?.shouldClarifyInsteadOfProfile && !_ownerEnforcementOff
+            && !isCodingChat && !imagePaths?.length && !isStealthChat) {
+          try {
+            const { buildSourceSwitchClarification } = require('./llm/sourceOwnership');
+            const clarify = buildSourceSwitchClarification(manualOwnership.owner);
+            if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) return null;
+            event.sender.send('gemini-stream-token', clarify);
+            event.sender.send('gemini-stream-done', { finalText: clarify });
+            try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), clarify); } catch (_) { /* noop */ }
+            try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), clarify); } catch (_) { /* noop */ }
+            const clarifyWrite = decideSessionWritePolicy({ finalGenerationMode: 'source_safe_refusal', validationOk: true, sourceContractHonored: true });
+            intelligenceManager.addAssistantMessage(clarify, clarifyWrite);
+            intelligenceManager.logUsage('chat', message, clarify);
+            chatTrace.markFirstUseful({ via: 'source_switch_clarification' });
+            chatTrace.mark('response_completed', { chars: clarify.length, deterministic: false, finalGenerationMode: 'source_safe_refusal' });
+            chatTrace.finish({ chars: clarify.length });
+            iTrace.setRouting({ answerType: answerPlan.answerType, deterministicFastPathUsed: false }).noteFallback('source_switch_clarification');
+            if (isIntelligenceFlagEnabled('trace')) {
+              console.log('[SOURCE-GUARD] blocked source=profile reason=explicit_profile_ask_in_reference_mode', {
+                owner: manualOwnership.owner, modeId: manualActiveMode?.id,
+              });
+            }
+            commitTrace(iTrace);
+            _emitAttr({ answer_type: answerPlan.answerType });
+            return null;
+          } catch (clarErr: any) {
+            console.warn('[SOURCE-GUARD] clarify emit skipped (non-fatal):', clarErr?.message);
+          }
+        }
+
+        if (profileEvidenceEligible) {
           try {
             const orchestrator = llmHelper.getKnowledgeOrchestrator?.();
-            const { route: fastPath, routeLog } = buildManualProfileBackendAnswer({
+            const { route: evidenceRoute, routeLog } = buildManualProfileEvidenceRoute({
               question: message,
               orchestrator,
               source: 'manual_input',
+              // Stage 4/5: pass the routed answer type so the selector emits the
+              // FULL source-tagged JD/resume evidence for the JD-source and
+              // resume+JD shapes (not just title/company).
+              answerType: answerPlan.answerType,
             });
-            if (fastPath || routeLog.profileFactsReady) {
-              console.log('[ProfileIntelligence] manual route', routeLog);
+            if (evidenceRoute || routeLog.profileFactsReady) {
+              console.log('[ProfileIntelligence] manual evidence route', routeLog);
             }
-            if (fastPath) {
-              if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) return null;
-              event.sender.send('gemini-stream-token', fastPath.answer);
-              event.sender.send('gemini-stream-done', { finalText: fastPath.answer });
-              try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), fastPath.answer); } catch (_) { /* noop */ }
-              try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), fastPath.answer); } catch (_) { /* noop */ }
-              intelligenceManager.addAssistantMessage(fastPath.answer);
-              intelligenceManager.logUsage('chat', message, fastPath.answer);
-              chatTrace.markFirstUseful({ via: 'profile_fast_path' });
-              chatTrace.mark('response_completed', { chars: fastPath.answer.length, deterministic: true });
-              chatTrace.finish({ chars: fastPath.answer.length });
-              iTrace.setRouting({
-                answerType: fastPath.answerType,
-                deterministicFastPathUsed: true,
-                profileFactsReady: routeLog.profileFactsReady,
-                promptContainsProfileContext: true,
+            if (evidenceRoute) {
+              selectedProfileEvidence = evidenceRoute;
+              profileJitPrompt = buildProfileJitPrompt({
+                question: message,
+                answerType: evidenceRoute.answerType,
+                answerShape: evidenceRoute.answerShape,
+                sourceOwner: manualOwnership?.owner ?? evidenceRoute.sourceOwner,
+                sourceAuthority: manualSourceContract?.sourceAuthority,
+                contract: manualSourceContract,
+                evidence: evidenceRoute,
+                styleInstructions: formatAnswerPlanForPrompt(answerPlan, false),
+                maxAnswerWords: answerPlan.answerStyle === 'detailed' ? 180 : 90,
               });
-              iTrace.noteContext({ source: 'profile_tree', trustLevel: 'high', requested: true, retrieved: true, included: true, reason: 'manual_fast_path' });
-              commitTrace(iTrace);
-              // ATTRIBUTION: the ProfileTree deterministic fast path actually answered —
-              // first-person, providerUsed=false (bug #2: prove the fast path fired).
-              _emitAttr({
-                answer_type: fastPath.answerType,
-                profile_tree_used: true,
-                profile_tree_fast_path_used: true,
-                structured_resume_used: true,
-                structured_jd_used: (fastPath.selectedContextLayers || []).includes('jd'),
+              const profileJitBlock = `${profileJitPrompt.systemPrompt}\n\n${profileJitPrompt.userPrompt}`;
+              context = context ? `${profileJitBlock}\n\n${context}` : profileJitBlock;
+              // Stage-0 honest diagnostics: evidence presence is measured from the
+              // SOURCE-TAGGED EvidenceItems that actually reached the JIT prompt —
+              // never from selectedContextLayers (a layer being "selected" is not
+              // proof its evidence rendered). buildActiveProfileContext supplies the
+              // provenance (activeJDId/Hash) so a JD question can be reconciled. The
+              // full diagnostic object rides on chatTrace (structured, PII-safe) +
+              // a single console line; `structured_jd_used` (the attribution field)
+              // is now derived from evidence, not from the layer flag.
+              try {
+                const { computeEvidenceDiagnostics } = require('./llm/manualProfileIntelligence');
+                const { buildActiveProfileContext, summarizeActiveProfileContext } = require('./llm/ActiveProfileContext');
+                const orchDiag = llmHelper.getKnowledgeOrchestrator?.();
+                const activeCtx = buildActiveProfileContext(orchDiag);
+                const provenance = summarizeActiveProfileContext(activeCtx);
+                const diag = computeEvidenceDiagnostics(evidenceRoute);
+                const jdEvidenceCount = diag?.jdEvidenceCount ?? 0;
+                const resumeEvidenceCount = diag?.resumeEvidenceCount ?? 0;
+                const evidenceDiagnostics = {
+                  ...provenance,
+                  answerType: evidenceRoute.answerType,
+                  sourceOwner: manualOwnership?.owner ?? evidenceRoute.sourceOwner,
+                  jdEvidenceCount,
+                  resumeEvidenceCount,
+                  hasProfileJDBlock: jdEvidenceCount > 0,
+                  hasProfileResumeBlock: resumeEvidenceCount > 0,
+                  renderedEvidenceSourceTypes: diag?.renderedEvidenceSourceTypes ?? [],
+                  selectedContextLayers: evidenceRoute.selectedContextLayers,
+                  excludedContextLayers: evidenceRoute.excludedContextLayers,
+                  exactQuestionIncluded: profileJitPrompt.exactQuestionIncluded,
+                  finalGenerationMode,
+                  providerActuallyDispatched: false, // flipped at real dispatch (Phase 7)
+                };
+                chatTrace.mark('profile_evidence_diagnostics' as any, evidenceDiagnostics);
+                if (isIntelligenceFlagEnabled('trace')) {
+                  console.log('[ProfileIntelligence] evidence diagnostics', evidenceDiagnostics);
+                }
+                // Honest attribution: JD counts as used ONLY when source-tagged JD
+                // evidence actually rendered — replaces the old
+                // `Boolean(jd) && layers.includes('jd')` proxy.
+                _attr.structured_jd_used = jdEvidenceCount > 0;
+              } catch { /* diagnostics only */ }
+              chatTrace.mark('profile_evidence_selected' as any, {
+                answerType: evidenceRoute.answerType,
+                evidenceItems: evidenceRoute.items.length,
+                promptChars: profileJitPrompt.promptChars,
+                finalGenerationMode,
               });
-              return null;
+              iTrace.noteContext({ source: 'profile_tree', trustLevel: 'high', requested: true, retrieved: true, included: true, reason: 'manual_jit_evidence_selection' });
+              _attr.profile_tree_used = true;
+              _attr.profile_tree_fast_path_used = false;
+              _attr.structured_resume_used = evidenceRoute.items.some((item) => item.sourceKind === 'profile_resume' || item.sourceKind === 'projects');
             }
           } catch (profileRouteError: any) {
-            console.warn('[ProfileIntelligence] manual route preflight failed; falling back to generic chat:', profileRouteError?.message || profileRouteError);
+            console.warn('[ProfileIntelligence] manual evidence preflight failed; falling back to generic chat:', profileRouteError?.message || profileRouteError);
           }
         }
 
@@ -1347,8 +1509,25 @@ export function initializeIpcHandlers(appState: AppState): void {
           // turns are kept so follow-up pronoun resolution ("tell me more about
           // that") still works. Non-document-grounded chat keeps the full snapshot.
           let snapshotForContext = autoContextSnapshot;
-          if (answerPlan.answerType === 'lecture_answer' && manualActiveMode?.documentGroundedCustomModeActive) {
+          // Custom-Mode Source Isolation (2026-07-06, hardening/v2.7.0): the
+          // prior-assistant-turn strip previously fired ONLY for `lecture_answer`.
+          // For any other doc-grounded answer type the un-stripped rolling snapshot
+          // (which includes prior assistant turns and may carry Natively / generic
+          // content from earlier turns) was passed through to the model as
+          // `priorContext` in `buildDocumentGroundedUserContent`, even though the
+          // doc-grounded block labels it "for pronoun resolution only". The weak
+          // production model still mirrors phrasing out of it. Widen the strip to
+          // every doc-grounded turn.
+          const _stripFires = manualActiveMode?.documentGroundedCustomModeActive && isDocGroundedAnswerType(answerPlan.answerType);
+          if (_stripFires) {
             snapshotForContext = stripPriorAssistantTurns(autoContextSnapshot);
+            if (isIntelligenceFlagEnabled('trace')) {
+              console.log('[SOURCE-GUARD] blocked source=prior_assistant_facts reason=document_grounded_contract', {
+                answerType: answerPlan.answerType,
+                modeId: manualActiveMode?.id,
+                strippedLength: autoContextSnapshot.length - snapshotForContext.length,
+              });
+            }
           }
           if (snapshotForContext.trim().length > 0) {
             context = snapshotForContext;
@@ -1383,6 +1562,11 @@ export function initializeIpcHandlers(appState: AppState): void {
           'identity_answer', 'profile_fact_answer', 'experience_answer', 'project_answer',
           'project_followup_answer', 'skills_answer', 'skill_experience_answer',
           'jd_fit_answer', 'gap_analysis_answer', 'behavioral_interview_answer', 'negotiation_answer',
+          // JD-source + resume+JD shapes (2026-07-07): they need their answer
+          // contract (template + style) prepended too, so the model produces the
+          // right JD/fit/gap/intro shape instead of collapsing to a generic reply.
+          'jd_summary_answer', 'jd_requirements_answer', 'jd_fact_answer',
+          'resume_jd_fit_answer', 'resume_jd_gap_answer', 'resume_jd_intro_answer',
           // Manual regression 2026-06-12: sales/lecture answers ALSO need their
           // contract — without it the model had no voice instruction and fell
           // back to "I'm Natively, an AI assistant. I don't have a product."
@@ -1393,7 +1577,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         const wantsCandidateContract = CANDIDATE_CONTRACT_TYPES.has(answerPlan.answerType)
           // a styled question ALWAYS gets the contract so the style reaches the model.
           || (answerPlan.answerStyle && answerPlan.answerStyle !== 'default');
-        if (wantsCandidateContract && !isContractEnforced && !isCodingChat) {
+        if (wantsCandidateContract && !isContractEnforced && !isCodingChat && !selectedProfileEvidence) {
           const candidateContract = formatAnswerPlanForPrompt(answerPlan, false);
           // HUMAN-LIKENESS (task Phase 12): append the anti-corporate-filler directive for
           // spoken candidate/sales answers so they sound like a person, not a brochure.
@@ -1409,7 +1593,21 @@ export function initializeIpcHandlers(appState: AppState): void {
             const jdA = (orchA as any)?.activeJD?.structured_data ?? null;
             if (profileFactsReady(resumeA)) {
               _attr.structured_resume_used = answerPlan.profileContextPolicy !== 'forbidden';
-              _attr.structured_jd_used = Boolean(jdA) && answerPlan.requiredContextLayers.includes('jd');
+              // Honest JD attribution on the candidate-contract path: the JD only
+              // counts as used when the `jd` layer is routed AND the active JD has
+              // real structured content that will render into the grounding block —
+              // never on `Boolean(jd) && layer` alone (an empty/degenerate JD with
+              // the layer nominally selected must NOT read as "JD used").
+              const jdLayerRouted = answerPlan.requiredContextLayers.includes('jd')
+                && !answerPlan.forbiddenContextLayers.includes('jd');
+              const jdHasContent = Boolean(jdA) && (
+                jdA.title || jdA.company || jdA.description_summary
+                || (Array.isArray(jdA.requirements) && jdA.requirements.length > 0)
+                || (Array.isArray(jdA.responsibilities) && jdA.responsibilities.length > 0)
+                || (Array.isArray(jdA.technologies) && jdA.technologies.length > 0)
+                || (Array.isArray(jdA.keywords) && jdA.keywords.length > 0)
+              );
+              _attr.structured_jd_used = jdLayerRouted && jdHasContent;
               _attr.hybrid_rag_used = answerPlan.requiredContextLayers.includes('resume') || answerPlan.requiredContextLayers.includes('jd');
             }
           } catch { /* attribution only */ }
@@ -1448,8 +1646,17 @@ export function initializeIpcHandlers(appState: AppState): void {
         // recall call itself at the source is simpler and more robust than
         // trying to strip it back out downstream.
         const _isDocGroundedTurn = manualActiveMode?.documentGroundedCustomModeActive === true;
+        // Full-JIT source-owner law (§8): Hindsight is non-authoritative long-term
+        // memory. It is blocked for reference-file / profile / unknown owners and
+        // permitted only as low-trust background for `mixed`/`transcript`. When no
+        // ownership was resolved (manualOwnership null — plain chat, no custom-mode
+        // source contract) the legacy meeting-recall use case is preserved.
+        const _hindsightOwnerAllows = (manualOwnership && !_ownerEnforcementOff)
+          ? (manualOwnership.owner === 'mixed' || manualOwnership.owner === 'transcript')
+          : true;
         if (!isCodingChat && !isContractEnforced
             && !(_isDocGroundedTurn && isIntelligenceFlagEnabled('docGroundedStrictIsolation'))
+            && _hindsightOwnerAllows
             && isIntelligenceFlagEnabled('hindsightLiveRecall')
             && isIntelligenceFlagEnabled('hindsightMemory')
             && _liveHsCfg
@@ -1465,7 +1672,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               const recallMs = Date.now() - t0;
               const facts = memories.map((m) => m?.text?.trim()).filter(Boolean) as string[];
               if (facts.length > 0) {
-                const memBlock = `RELEVANT LONG-TERM MEMORY (from prior meetings — may be incomplete):\n${facts.map((f) => `- ${f}`).join('\n')}\nUse these only if they help answer the question; ignore if irrelevant.`;
+                const memBlock = `<long_term_memory trust="low" authority="non_authoritative">\nThese memories are from prior meetings, may be incomplete, and must not override current sources. Use only if they help answer the question; ignore if irrelevant.\n${facts.map((f) => `- ${f}`).join('\n')}\n</long_term_memory>`;
                 context = context ? `${memBlock}\n\n${context}` : memBlock;
                 _attr.hindsight_recall_used = true;
                 _attr.hindsight_recall_count = facts.length;
@@ -1509,7 +1716,23 @@ export function initializeIpcHandlers(appState: AppState): void {
         // either way, docGroundedActive is true and the retriever's gate 4 fires.
         const docGroundedOrUnknown = manualActiveMode == null
           || manualActiveMode.documentGroundedCustomModeActive === true;
-        if (!isCodingChat && answerPlan.profileContextPolicy !== 'forbidden' && !docGroundedOrUnknown) {
+        // SOURCE-OWNERSHIP GATE (belt-and-suspenders, 2026-07-06): also require
+        // the resolved ownership to permit the profile. This shares the ONE
+        // ownership decision with the fast-path gate above so profile PII can
+        // never enter via the OKF card retriever in a reference_files_only /
+        // transcript_only mode, independent of the doc-grounded flag path.
+        // When the arbiter threw (manualOwnership null) this defaults to the
+        // legacy behavior (profile permitted) — the docGroundedOrUnknown check
+        // above still fires, so no regression and no new leak.
+        const ownershipAllowsProfileEvidence = manualOwnership ? manualOwnership.profileAllowed : true;
+        // Mutual exclusion with the JIT profile route: when selectManualProfileEvidence
+        // already supplied a compact, source-labelled allowed_evidence block (and the
+        // system prompt told the model to answer ONLY from it), skip the OKF profile
+        // cards. Otherwise both blocks prepend profile facts with different framing —
+        // the JIT "answer only from allowed_evidence" instruction and the OKF generic
+        // CONTEXT header contradict, wasting tokens/latency. Not a leak (both are
+        // owner-gated), but the double-injection is redundant.
+        if (!isCodingChat && !selectedProfileEvidence && answerPlan.profileContextPolicy !== 'forbidden' && !docGroundedOrUnknown && ownershipAllowsProfileEvidence) {
           try {
             const { retrieveProfileEvidence } = require('./services/knowledge/OkfProfileRetriever') as typeof import('./services/knowledge/OkfProfileRetriever');
             const profileEvidence = retrieveProfileEvidence({
@@ -1588,7 +1811,19 @@ export function initializeIpcHandlers(appState: AppState): void {
             // path so the knowledge intercept + active-mode injection HONOR the
             // answer type's forbidden layers (no profile for coding/technical/
             // sales/lecture) and scope custom context by the real answer type.
-            { answerType: answerPlan.answerType, forbiddenContextLayers: answerPlan.forbiddenContextLayers },
+            // Round-7 Failure-2: for a document-grounded follow-up, pass the
+            // previous assistant answer as followUpReferentHint so the retriever
+            // can resolve an anaphoric query ("What processor controls it?") to
+            // the previously-named subject. Retrieval-scoring only — the hint is
+            // never added to the model-visible prompt (the doc-grounded prompt
+            // still strips prior assistant turns), so anti-contamination holds.
+            {
+              answerType: answerPlan.answerType,
+              forbiddenContextLayers: answerPlan.forbiddenContextLayers,
+              ...(manualActiveMode?.documentGroundedCustomModeActive === true
+                ? { followUpReferentHint: (intelligenceManager.getLastAssistantMessage() || '').trim() || undefined }
+                : {}),
+            },
           );
 
           // Coding chat STREAMS LIVE through a gate that holds tokens only until
@@ -1726,23 +1961,14 @@ export function initializeIpcHandlers(appState: AppState): void {
           // insufficient-context line, so a live answer is NEVER blank when a safe
           // fallback exists (Issue 1 / spec). Only when !manualFirstUseful.
           if (!manualFirstUseful && !fullResponse.trim()) {
-            let fb = '';
-            try {
-              const orchFb = llmHelper.getKnowledgeOrchestrator?.();
-              const resumeFb = (orchFb as any)?.activeResume?.structured_data ?? null;
-              const jdFb = (orchFb as any)?.activeJD?.structured_data ?? null;
-              if (resumeFb && answerPlan.profileContextPolicy === 'required') {
-                fb = buildLiveFallbackAnswer({ question: message, answerType: answerPlan.answerType, profile: resumeFb, jobDescription: jdFb }) || '';
-              }
-            } catch { /* best effort */ }
-            if (!fb) {
-              fb = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
-                ? "I don't have enough context from the conversation to answer that yet."
-                : 'Let me come back to that in just a moment.';
-            }
+            const fb = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
+              ? "I don't have enough context from the allowed source to answer that yet."
+              : "The model did not produce an answer in time, so I won't guess from your profile.";
+            finalGenerationMode = 'provider_error_no_answer';
+            sessionWriteDecision = decideSessionWritePolicy({ finalGenerationMode, validationOk: false, criticalViolations: ['provider_timeout_no_answer'] });
             fullResponse = fb;
             sendChunk(fb);
-            chatTrace.mark('fallback_answer_used' as any, { answerType: answerPlan.answerType });
+            chatTrace.mark('fallback_answer_used' as any, { answerType: answerPlan.answerType, finalGenerationMode });
           }
 
           // Keep the RAW response (with the hidden <verification_spec>) for
@@ -1861,24 +2087,44 @@ export function initializeIpcHandlers(appState: AppState): void {
               }
 
               // Phase 4/7: CRITICAL-violation REPAIR (manual path). A profile/
-              // identity answer must never answer as "Natively / an AI" or falsely
+              // identity answer must never answer as "Natively / an AI", falsely
               // refuse ("I can't share that", "I don't have your resume loaded")
-              // when the profile IS loaded. On such a violation we do ONE bounded
-              // regeneration grounded in the candidate facts and hand the renderer
-              // a corrective finalText (in-place replace via gemini-stream-done).
-              // Only fires on a real detected violation → zero happy-path latency.
-              const CRITICAL_CODES = new Set(['assistant_identity_leak', 'false_no_access_refusal', 'false_no_experience_refusal']);
+              // when the profile IS loaded, OR cite a specific metric/number the
+              // resume never stated (audit finding, Phase 3: validateProfileEvidence
+              // was detecting `unsupported_metric` but the violation was LOG-ONLY —
+              // no repair, no strip, delivered to the user verbatim). On such a
+              // violation we do ONE bounded regeneration grounded in the candidate
+              // facts and hand the renderer a corrective finalText (in-place replace
+              // via gemini-stream-done). Only fires on a real detected violation →
+              // zero happy-path latency. Sourced from profileValidation.violations
+              // (validateProfileEvidence), which already composes the base
+              // validateProfileOutput checks — so this is now the single
+              // enforcement point for both classes of critical violation.
+              const CRITICAL_CODES = new Set(['assistant_identity_leak', 'false_no_access_refusal', 'false_no_experience_refusal', 'unsupported_metric']);
+              const _docGroundedBlocksRepair = manualActiveMode?.documentGroundedCustomModeActive;
               const critical = profileAvailable
                 && answerPlan.profileContextPolicy === 'required'
-                && validateProfileOutput({ answer: fullResponse, plan: answerPlan, profileAvailable: true, candidateDirected: true })
-                  .violations.find(v => v.severity === 'error' && CRITICAL_CODES.has(v.code));
+                // Custom-Mode Source Isolation (2026-07-06, hardening/v2.7.0):
+                // skip profile repair for doc-grounded modes — re-injecting
+                // activeResume/activeJD would contradict the contract.
+                && !_docGroundedBlocksRepair
+                && profileValidation.violations.find(v => v.severity === 'error' && CRITICAL_CODES.has(v.code));
+              if (_docGroundedBlocksRepair && profileAvailable && answerPlan.profileContextPolicy === 'required' && isIntelligenceFlagEnabled('trace')) {
+                console.log('[SOURCE-GUARD] blocked source=profile_resume reason=document_grounded_contract', {
+                  answerType: answerPlan.answerType,
+                  modeId: manualActiveMode?.id,
+                  repairPath: 'profileFallbackRepair',
+                });
+              }
               if (critical && _chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
                 try {
                   const orch2 = llmHelper.getKnowledgeOrchestrator?.();
                   let facts = '';
                   try { facts = (await orch2?.processQuestion?.(message))?.contextBlock || ''; } catch { /* best effort */ }
                   if (!facts) facts = `${JSON.stringify(activeResume || {})}`;
-                  const repairInstruction = buildProfileRepairInstruction({ ok: false, violations: [critical] } as any);
+                  const repairInstruction = critical.code === 'unsupported_metric'
+                    ? profileValidation.repairInstruction || buildProfileRepairInstruction({ ok: false, violations: [critical] } as any)
+                    : buildProfileRepairInstruction({ ok: false, violations: [critical] } as any);
                   const safeFacts = sanitizeRepairPromptText(facts, 8000);
                   const safeQuestion = sanitizeRepairPromptText(message, 1000);
                   // Wrap the directive so MiniMax can't echo it as the answer (F-PROMPT,
@@ -1910,7 +2156,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                   });
                   const repairedTrim = repaired.trim();
                   if (repairedTrim.length >= 5) {
-                    const reCheck = validateProfileOutput({ answer: repairedTrim, plan: answerPlan, profileAvailable: true, candidateDirected: true });
+                    const reCheck = validateProfileEvidence({ answer: repairedTrim, plan: answerPlan, evidence, profileAvailable, candidateDirected: true });
                     const stillCritical = reCheck.violations.some(v => v.severity === 'error' && CRITICAL_CODES.has(v.code));
                     if (!stillCritical) {
                       fullResponse = repairedTrim;
@@ -2000,29 +2246,29 @@ export function initializeIpcHandlers(appState: AppState): void {
                 piTelemetry.emit('pi_candidate_sanitizer_applied', { answerType: answerPlan.answerType, repaired: true, needsFallback: true, markerCount: sani.removedMarkers.length });
                 // The whole answer was assistant-meta. Build a deterministic
                 // profile-grounded replacement instead of shipping an empty/broken one.
-                const orchS = llmHelper.getKnowledgeOrchestrator?.();
-                const fb = buildManualProfileBackendAnswer({ question: message, orchestrator: orchS, source: 'manual_input' });
-                if (fb?.route?.answer && fb.route.answer.trim().length >= 15) {
-                  fullResponse = fb.route.answer;
-                  finalText = fb.route.answer;
-                  console.warn('[ProfileIntelligence] candidate answer was all assistant-meta; used deterministic fallback', { answerType: answerPlan.answerType });
+                // Custom-Mode Source Isolation (2026-07-06, hardening/v2.7.0):
+                // for a document-grounded custom mode we MUST NOT fall back to
+                // resume/JD — that would inject Natively / project / candidate
+                // facts into a session that the contract forbids. Skip both
+                // fallbacks; ship a doc-grounded honest line instead.
+                if (manualActiveMode?.documentGroundedCustomModeActive) {
+                  console.warn('[SourceGuard] blocked profile fallback reason=document_grounded_contract', { answerType: answerPlan.answerType });
                 } else {
-                  // Manual regression 2026-06-12 (stress seq_056): the backend has
-                  // NO fast-path for behavioral/jd-fit asks, so an all-assistant-
-                  // meta answer ("I'm Natively, I don't have personal experiences")
-                  // shipped UNREPAIRED. buildLiveFallbackAnswer covers those
-                  // profile routes (grounded experience/intro line) — an honest
-                  // grounded line always beats an identity leak.
-                  try {
-                    const resumeS = (orchS as any)?.activeResume?.structured_data ?? null;
-                    const jdS = (orchS as any)?.activeJD?.structured_data ?? null;
-                    const lf = resumeS ? buildLiveFallbackAnswer({ question: message, answerType: answerPlan.answerType, profile: resumeS, jobDescription: jdS }) : null;
-                    if (lf && lf.trim().length >= 15) {
-                      fullResponse = lf;
-                      finalText = lf;
-                      console.warn('[ProfileIntelligence] assistant-meta answer replaced with grounded live fallback', { answerType: answerPlan.answerType });
-                    }
-                  } catch { /* keep sanitized-but-thin answer */ }
+                  // Full-JIT policy (2026-07-07): if the provider's entire answer is
+                  // assistant-meta, do NOT repair with deterministic profile prose.
+                  // Emit a transparent source-safe failure and keep it out of
+                  // SessionTracker as authoritative conversation memory.
+                  const safe = "The model produced an invalid assistant-identity answer, so I won't guess from your profile. Please try again.";
+                  fullResponse = safe;
+                  finalText = safe;
+                  finalGenerationMode = 'provider_error_no_answer';
+                  sessionWriteDecision = decideSessionWritePolicy({
+                    finalGenerationMode,
+                    validationOk: false,
+                    criticalViolations: ['assistant_identity_misfire_no_jit_answer'],
+                    sourceContractHonored: false,
+                  });
+                  console.warn('[ProfileIntelligence] candidate answer was all assistant-meta; deterministic profile fallback blocked', { answerType: answerPlan.answerType });
                 }
               }
               // Audit 2026-06-16 (H3): a PRODUCT-ABOUT question ("what is Natively built with",
@@ -2062,6 +2308,11 @@ export function initializeIpcHandlers(appState: AppState): void {
               const misfire = detectAssistantVoiceMisfire(fullResponse);
               if (misfire.isMisfire) {
                 _attr.assistant_voice_guard_triggered = true;
+                // RC3 fold-in (round 2, 2026-07-05): never ship a NEEDY
+                // clarification ("Could you give me a bit more to go on?") when a
+                // profile is loaded — answer the standard grounded version of the
+                // question instead. Clarification-seeking is only the last resort
+                // when no grounded fallback exists.
                 const honest = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
                   ? "I don't have enough context from the conversation to answer that yet."
                   : answerPlan.answerType === 'sales_answer'
@@ -2204,6 +2455,20 @@ export function initializeIpcHandlers(appState: AppState): void {
           }
 
           // ── DOCUMENT-GROUNDED GROUNDEDNESS / GREETING VALIDATOR ───────────────
+          // One-shot observability: when the gate fires (or doesn't) on a doc-
+          // grounded turn, log the [SOURCE-GUARD] decision so post-mortem traces
+          // can prove which guards were active. Cheap (single console.log per turn)
+          // and gated behind the `trace` intelligence flag (default OFF in prod).
+          if (isIntelligenceFlagEnabled('trace') && manualActiveMode?.documentGroundedCustomModeActive) {
+            const _docGateFires = isDocGroundedAnswerType(answerPlan.answerType);
+            console.log('[SOURCE-GUARD] doc-grounded-validator-gate', {
+              answerType: answerPlan.answerType,
+              gateFires: _docGateFires,
+              modeId: manualActiveMode.id,
+              blockedFromSessionTracker: false, // updated below
+              reason: _docGateFires ? 'post_stream_validator_required' : 'answer_type_not_doc_grounded',
+            });
+          }
           // (audit 2026-06-27, real-path fix — backstop to the prompt-source
           // greeting override above). The production serverModel
           // (gemini-3.1-flash-lite) is weak and was emitting the canned greeting
@@ -2213,14 +2478,26 @@ export function initializeIpcHandlers(appState: AppState): void {
           // reject only unambiguous failures (greeting / empty / exact repeat of
           // the immediately-prior answer), regenerate ONCE with a stricter prompt
           // bound to the retrieved material, and — critically — block an invalid
+          // (Custom-Mode Source Isolation 2026-07-06: gate widened to all six
+          // doc-grounded answer shapes, not just `lecture_answer` — see the
+          // `isDocGroundedAnswerType` helper exported from documentGroundedPrompt.)
           // answer from ever entering SessionTracker. The brittle "answer says
           // not-mentioned while a chunk contains the entity term" signal is
           // LOG-ONLY (per review): a chunk often contains the term without
           // actually answering, so forcing a regen there risks overwriting an
           // honest "not in the material" with a hallucination.
           let blockedFromSessionTracker = false;
-          if (answerPlan.answerType === 'lecture_answer'
-            && manualActiveMode?.documentGroundedCustomModeActive
+          // Custom-Mode Source Isolation (2026-07-06, hardening/v2.7.0): the
+          // doc-grounded greeting/empty/exact-repeat + completeness validator
+          // previously fired ONLY for `lecture_answer`, so a `list_answer` /
+          // `exact_numeric_answer` / `definitional_answer` / `document_followup_answer`
+          // turn could ship a greeting/incomplete/invented answer that then
+          // poisoned SessionTracker and the rolling 100s snapshot for the next
+          // question (the observed "Natively" leak). We widen the gate to every
+          // doc-grounded answer shape — the validator itself (`validateDocumentGroundedAnswer`)
+          // is already pure, has unit coverage, and is answer-type-aware.
+          if (manualActiveMode?.documentGroundedCustomModeActive
+            && isDocGroundedAnswerType(answerPlan.answerType)
             && _chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
             try {
               const GREETING_RE = /^\s*(?:hey|hi|hello)[!,.]?\s*(?:there)?[!,.]?\s*(?:what would you like help with|how can i help|what can i (?:help|do)(?: you with| for you)?|how may i (?:help|assist))\b/i;
@@ -2241,8 +2518,17 @@ export function initializeIpcHandlers(appState: AppState): void {
                 // many chunks as the main answer path did. The 1800-token default
                 // was calibrated for seminar notes; a 66-page thesis may have the
                 // answer in a chunk that 1800 tokens can't reach.
+                // SOURCE-AWARE HINTS (2026-07-06): expand with generic concept
+                // synonyms so the validator's re-retrieval matches the same
+                // sections the main answer path saw (recall parity), within the
+                // reference files only.
+                let _valRetrievalQuery = message;
+                try {
+                  const { expandQueryWithHints } = require('./llm/documentGroundedPrompt');
+                  _valRetrievalQuery = expandQueryWithHints(String(message || ''));
+                } catch { _valRetrievalQuery = message; }
                 docContextBlock = ModesManager.getInstance().buildRetrievedActiveModeContextBlock(
-                  message, undefined, DOC_GROUNDED_TOKEN_BUDGET, 'lecture_answer', true, undefined, { forceDocumentGrounding: true },
+                  _valRetrievalQuery, undefined, DOC_GROUNDED_TOKEN_BUDGET, 'lecture_answer', true, undefined, { forceDocumentGrounding: true },
                 ) || '';
               } catch (reErr: any) {
                 console.warn('[DocGrounded] re-retrieval for validator failed (non-fatal):', reErr?.message);
@@ -2468,10 +2754,49 @@ export function initializeIpcHandlers(appState: AppState): void {
                 }
               } catch { /* never throws into the answer path */ }
 
+              // COMPLETENESS detector (round-7 Failure-3). A confident, non-refusal
+              // answer to a multi-value question ("what specs / rates / success
+              // rates / GPU memory?") frequently drops a value that is LITERALLY
+              // present in the retrieved excerpts (gemini-flash-lite stops after the
+              // first figure — e.g. gives 96GB but omits the 16GB deployment VRAM,
+              // or 480+25Hz but omits the 50Hz control rate). This is an INCOMPLETE
+              // answer the old validator never caught (it only fired on refusals).
+              // We detect it GENERICALLY: collect distinct number+unit tokens that
+              // appear in the retrieved block, and flag the answer when it names
+              // some of them (so it IS a numeric/factual answer on-topic) but omits
+              // OTHERS that are present in the block. Re-ask shows the block and
+              // asks for all values — it can only surface IN-BLOCK values, so it
+              // never fabricates. Tightly gated: needs a numeric answer + ≥2 extra
+              // distinct in-block values missing, and only for questions that ask
+              // for a set/multiple values.
+              let incompleteMissing: string[] = [];
+              let isIncomplete = false;
+              try {
+                // A PURE refusal (short, dominated by "not found", no values)
+                // skips completeness. An answer that DOES surface values but
+                // hedges on a sub-part ("...96 GB. The model is not mentioned.")
+                // is NOT a refusal — it is exactly the incomplete answer we want
+                // to complete, so it must NOT be gated out here.
+                const answerIsRefusalLike = isFalseRefusal
+                  || (isSystemOwnRefusalPhrase && trimmed.length < 120)
+                  || (trimmed.length < 120
+                      && /^(?:\s*I could not find|.*\bnot (?:directly )?(?:mentioned|found|present)\b)/i.test(trimmed)
+                      && !/\d[\d,]*(?:\.\d+)?\s?(?:gb|mb|hz|kg|mm|%|dof|steps?|episodes?)/i.test(trimmed));
+                const detect = detectIncompleteNumericAnswer({
+                  question: message,
+                  answer: trimmed,
+                  retrievedBlock: docContextBlock,
+                  answerIsRefusal: answerIsRefusalLike,
+                });
+                incompleteMissing = detect.missing;
+                isIncomplete = detect.incomplete;
+              } catch { incompleteMissing = []; isIncomplete = false; }
+
               const reason = isGreeting ? 'greeting'
                 : isEmpty ? 'empty'
                 : isExactRepeat ? 'exact_repeat_of_prior_answer'
                 : isFalseRefusal ? 'false_refusal'
+                : isIncomplete ? 'incomplete'
                 : null;
 
               if (reason) {
@@ -2482,7 +2807,22 @@ export function initializeIpcHandlers(appState: AppState): void {
                 // simple grounding prompt is sufficient.
                 let regen = '';
                 try {
-                  const strictPrompt = reason === 'false_refusal'
+                  const strictPrompt = reason === 'incomplete'
+                    ? [
+                        'You gave a partial answer. The document excerpts below contain ADDITIONAL relevant values you left out.',
+                        'Re-answer the question COMPLETELY, including EVERY value that appears in the excerpts for this question.',
+                        `Values present in the excerpts that your previous answer omitted: ${incompleteMissing.slice(0, 8).join(', ')}.`,
+                        'Include those ONLY if they are genuinely part of the answer to this question — never invent a value that is not in the excerpts below.',
+                        'Answer in natural sentences (or a short list). Do not restate the question.',
+                        '',
+                        '## DOCUMENT EXCERPTS',
+                        docContextBlock || '(no retrieved material)',
+                        '',
+                        `QUESTION: ${message}`,
+                        '',
+                        'COMPLETE ANSWER (include all applicable values from the excerpts):',
+                      ].join('\n')
+                    : reason === 'false_refusal'
                     ? [
                         'You are synthesizing an answer from the document excerpts below.',
                         'IMPORTANT: The excerpts DO contain relevant information for this question.',
@@ -2536,19 +2876,96 @@ export function initializeIpcHandlers(appState: AppState): void {
                 // For false_refusal regen, also reject if the model still refuses
                 // after the synthesis-focused prompt — treat it as a true not-found
                 // and fall through to the safe failure line so telemetry is honest.
-                const regenIsStillRefusing = reason === 'false_refusal'
-                  && /not (?:directly )?(?:mentioned|in (?:the|my) (?:uploaded|seminar|thesis|retrieved) (?:material|sections?|document)|found in|present in)|(?:^|(?<=[.!?]\s+))I could not find\b/i.test(regenTrim);
-                const regenValid = regenTrim.length >= 8
+                const regenIsStillRefusing = (reason === 'false_refusal' || reason === 'incomplete')
+                  && /not (?:directly )?(?:mentioned|in (?:the|my) (?:uploaded|seminar|thesis|retrieved) (?:material|sections?|document)|found in|present in|specified)|do(?:es)? not (?:specify|mention|state|provide)|(?:^|(?<=[.!?]\s+))I could not find\b/i.test(regenTrim);
+                // Anti-fabrication guard for the completeness re-ask: reject the
+                // regen if it introduced ANY number+unit value that is NOT present
+                // in the retrieved block (the re-ask must only surface in-block
+                // values, never invent one). Zero-fabrication is sacred.
+                let incompleteRegenFabricates = false;
+                let incompleteRecoveredValue = true; // non-incomplete reasons don't gate on this
+                if (reason === 'incomplete' && regenTrim) {
+                  try {
+                    incompleteRegenFabricates = completenessRegenFabricates(regenTrim, docContextBlock);
+                    // Accept the completeness re-ask ONLY if it actually recovered
+                    // ≥1 of the flagged missing values. A re-ask that just re-hedges
+                    // without adding a value (the D-question case) recovers nothing
+                    // → rejected, and the original honest answer stands.
+                    const { extractNumericUnitTokens: _ext } = require('./llm/documentGroundedPrompt');
+                    const regenVals: Set<string> = _ext(regenTrim);
+                    incompleteRecoveredValue = incompleteMissing.some((mv) => regenVals.has(mv));
+                  } catch { incompleteRegenFabricates = false; incompleteRecoveredValue = false; }
+                }
+                // Custom-Mode Source Isolation (2026-07-06, hardening/v2.7.0) Phase 6:
+                  // contract-safe regen — re-run the source-contract validator on the
+                  // regen output. The regen prompt itself only carries the retrieved
+                  // doc excerpts + question (no persona, profile, prior-assistant, or
+                  // Hindsight), but the model can still echo forbidden-source signals
+                  // ("my project", "Natively") it picked up from the retrieved block.
+                  // We block those before accepting the regen.
+                  let regenContractHonored = true;
+                  if (regenTrim && manualActiveMode?.documentGroundedCustomModeActive) {
+                    try {
+                      const { buildCustomModeExecutionContract, validateAgainstSourceContract } = require('./llm/customModeExecutionContract');
+                      const _regenContract = buildCustomModeExecutionContract({
+                        question: String(message || ''),
+                        streamRoute: 'manual_chat_stream',
+                        modeId: manualActiveMode?.id ?? null,
+                        modeUniqueId: manualActiveMode?.id ?? null,
+                        answerType: answerPlan.answerType,
+                        isCustomMode: manualActiveMode?.isCustom === true,
+                        isDocGroundedCustomModeActive: true,
+                        hasReferenceFiles: true,
+                        hasCustomPrompt: true,
+                        hasLiveTranscript: false,
+                        hasProfileFacts: false,
+                        hasMeetingRag: false,
+                        hasLongTermMemory: false,
+                      });
+                      const _regenCheck = validateAgainstSourceContract({
+                        contract: _regenContract,
+                        question: String(message || ''),
+                        answer: regenTrim,
+                        retrievedBlock: docContextBlock || '',
+                      });
+                      regenContractHonored = _regenCheck.ok;
+                      if (!_regenCheck.ok && isIntelligenceFlagEnabled('trace')) {
+                        console.log('[SOURCE-GUARD] regen-rejected-by-contract', {
+                          reason: _regenCheck.reason,
+                          entityLeaks: _regenCheck.entityLeaks,
+                          unsupportedTokens: _regenCheck.unsupportedTokens,
+                          listMissing: _regenCheck.listMissing,
+                        });
+                      }
+                    } catch (regenContractErr: any) {
+                      // best effort — never break the regen path on validator error
+                      if (isIntelligenceFlagEnabled('trace')) {
+                        console.warn('[SOURCE-GUARD] regen-contract check skipped (non-fatal):', regenContractErr?.message);
+                      }
+                    }
+                  }
+                  const regenValid = regenTrim.length >= 8
                   && !GREETING_RE.test(regenTrim)
                   && !/what would you like help with/i.test(regenTrim)
                   && regenTrim !== priorAnswer
-                  && !regenIsStillRefusing;
+                  && !regenIsStillRefusing
+                  && !incompleteRegenFabricates
+                  && incompleteRecoveredValue
+                  && regenContractHonored;
                 if (regenValid) {
                   fullResponse = regenTrim;
                   finalText = regenTrim;
                   _attr.assistant_voice_guard_triggered = true;
                   piTelemetry.emit('pi_doc_grounded_regenerated', { reason });
                   console.warn('[DocGrounded] regeneration applied', { reason, chars: regenTrim.length });
+                } else if (reason === 'incomplete') {
+                  // The ORIGINAL answer was valid — just missing some values — and
+                  // the completeness re-ask didn't cleanly improve it (refused,
+                  // fabricated, or empty). KEEP the original answer; NEVER downgrade
+                  // a correct-but-incomplete answer to a refusal. Leave finalText
+                  // unset so the already-streamed original stands.
+                  piTelemetry.emit('pi_doc_grounded_completeness_kept_original', {});
+                  console.warn('[DocGrounded] completeness re-ask did not cleanly improve — keeping original answer', { missing: incompleteMissing.slice(0, 6) });
                 } else {
                   // Retry didn't help → ship a SAFE failure line (NOT a greeting),
                   // referencing the uploaded material (not "the conversation"), and
@@ -2600,8 +3017,16 @@ export function initializeIpcHandlers(appState: AppState): void {
             // Document-grounded invalid answers (greeting/empty/exact-repeat that
             // didn't recover on regen) are BLOCKED here so they cannot contaminate
             // the next question's rolling context (audit 2026-06-27).
-            if (fullResponse.trim().length > 0 && !blockedFromSessionTracker) {
-              intelligenceManager.addAssistantMessage(fullResponse);
+            // Full-JIT write-gating law: a provider-error/no-answer or
+            // critical-unrepaired line that fell through to the completion store
+            // (deadline-timeout fallback, assistant-meta misfire) carries a
+            // do_not_store decision. It must NOT become authoritative
+            // conversational memory or be logged as a real turn. blockedFromSessionTracker
+            // (the doc-grounded validator gate) is kept as a separate guard.
+            if (fullResponse.trim().length > 0
+                && !blockedFromSessionTracker
+                && !sessionWriteDecision.blockedFromSessionTracker) {
+              intelligenceManager.addAssistantMessage(fullResponse, sessionWriteDecision);
               // Log Usage for streaming chat
               intelligenceManager.logUsage('chat', message, fullResponse);
               // Conversation Memory V2 (Phase 11): record this turn so a later bare
@@ -2698,32 +3123,28 @@ export function initializeIpcHandlers(appState: AppState): void {
           }
         } catch (streamError: any) {
           console.error('[IPC] Streaming error:', streamError);
-          // Classify the provider failure (marker-only telemetry) and, when the route
-          // can answer deterministically (a profile-required answer), emit the
-          // deterministic profile fallback instead of a blank error — no empty answer
-          // when a safe fallback exists. The fallback uses buildManualProfileBackendAnswer
-          // (the DETERMINISTIC profile backend, NO LLM), so it cannot contain assistant-
-          // meta and does not need the candidate sanitizer — same as the happy-path
-          // profile fast-path which also emits this builder's output directly. It is
-          // gated to profileContextPolicy==='required', so it can NEVER fire for a
-          // coding/technical answer (those are 'forbidden') — no profile-into-coding leak.
+          // Classify the provider failure (marker-only telemetry). Full-JIT policy:
+          // provider failure must NOT be repaired with deterministic profile prose.
+          // If no user-visible tokens were produced, emit a transparent provider-error
+          // line and keep it out of SessionTracker.
           try {
             const klass = classifyProviderError(streamError);
             piTelemetry.emit('pi_provider_error_classified', { kind: klass.kind, outage: klass.isOutage, retryable: klass.retryable, surface: 'manual' });
-            if (klass.isOutage && answerPlan.profileContextPolicy === 'required' && !fullResponse.trim()) {
-              const orchE = llmHelper.getKnowledgeOrchestrator?.();
-              const fb = buildManualProfileBackendAnswer({ question: message, orchestrator: orchE, source: 'manual_input' });
-              if (fb?.route?.answer && fb.route.answer.trim().length >= 15 && _chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
-                piTelemetry.emit('provider_fallback_used', { surface: 'manual', kind: klass.kind, answerType: answerPlan.answerType });
-                event.sender.send('gemini-stream-token', fb.route.answer);
-                event.sender.send('gemini-stream-done', { finalText: fb.route.answer });
-                try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), fb.route.answer); PhoneMirrorService.getInstance().publishDone(String(myStreamId), fb.route.answer); } catch (_) { /* noop */ }
-                intelligenceManager.addAssistantMessage(fb.route.answer);
-                // ATTRIBUTION: the provider failed but a grounded deterministic fallback
-                // (ProfileTree) answered — keep one record per delivered answer (LOW fix).
-                _emitAttr({ answer_type: fb.route.answerType, profile_tree_used: true, profile_tree_fast_path_used: true, structured_resume_used: true });
-                return null;
-              }
+            if (answerPlan.profileContextPolicy === 'required' && !fullResponse.trim()
+                && _chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
+              const safe = "The model failed before generating an answer, so I won't guess from your profile. Please try again.";
+              finalGenerationMode = 'provider_error_no_answer';
+              sessionWriteDecision = decideSessionWritePolicy({
+                finalGenerationMode,
+                validationOk: false,
+                criticalViolations: ['provider_error_no_answer'],
+              });
+              event.sender.send('gemini-stream-token', safe);
+              event.sender.send('gemini-stream-done', { finalText: safe });
+              try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), safe); PhoneMirrorService.getInstance().publishDone(String(myStreamId), safe); } catch (_) { /* noop */ }
+              intelligenceManager.addAssistantMessage(safe, sessionWriteDecision);
+              _emitAttr({ answer_type: answerPlan.answerType, profile_tree_used: false, profile_tree_fast_path_used: false, structured_resume_used: false });
+              return null;
             }
           } catch (classifyErr: any) { console.warn('[IPC] provider-error classify/fallback skipped:', classifyErr?.message); }
           if (_chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
@@ -3377,6 +3798,25 @@ export function initializeIpcHandlers(appState: AppState): void {
     return os.type();
   });
 
+  safeHandle('get-provider-statuses', async () => {
+    return ProviderStatusRegistry.getInstance().getAll();
+  });
+
+  safeHandle('get-provider-status', async (_evt, id: string) => {
+    return ProviderStatusRegistry.getInstance().getStatus(id);
+  });
+
+  safeHandle('get-local-fallback-preflight', async () => {
+    const { getLatestLocalFallbackPreflight } = require('./services/LocalFallbackPreflight');
+    return getLatestLocalFallbackPreflight();
+  });
+
+  safeHandle('run-local-fallback-preflight', async () => {
+    const llmHelper = appState.processingHelper.getLLMHelper();
+    const { runLocalFallbackPreflight } = require('./services/LocalFallbackPreflight');
+    return runLocalFallbackPreflight({ ollamaSelected: llmHelper.isUsingOllama?.() === true });
+  });
+
   // LLM Model Management Handlers
   safeHandle('get-current-llm-config', async () => {
     try {
@@ -3403,8 +3843,25 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // Liveness probe distinct from get-available-ollama-models. Lets callers tell
+  // "Ollama daemon is down" apart from "Ollama is up but has no models pulled"
+  // so they don't destructively restart a healthy daemon (see ModelSelectorWindow).
+  safeHandle('is-ollama-reachable', async () => {
+    try {
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      return await llmHelper.isOllamaReachable();
+    } catch {
+      return false;
+    }
+  });
+
   safeHandle('switch-to-ollama', async (_, model?: string, url?: string) => {
     try {
+      const { OllamaManager } = require('./services/OllamaManager');
+      const status = await OllamaManager.getInstance().ensureRunning({ reason: 'selected-model', selectedModel: model, url });
+      if (status.health === 'missing_optional_dependency' || status.health === 'unavailable') {
+        return { success: false, error: status.message };
+      }
       const llmHelper = appState.processingHelper.getLLMHelper();
       await llmHelper.switchToOllama(model, url);
       // Warm + pin the local model off the hot path so the FIRST live question
@@ -3424,6 +3881,12 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('force-restart-ollama', async () => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
+      // Gate on user selection — fresh users should never have Ollama spawned
+      // by a stray IPC the renderer fires on mount.
+      if (!llmHelper.isUsingOllama()) {
+        console.log('[IPC force-restart-ollama] Ollama not selected — no-op.');
+        return { success: false, reason: 'ollama-not-selected' };
+      }
       const success = await llmHelper.forceRestartOllama();
       return { success };
     } catch (error: any) {
@@ -3434,10 +3897,15 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('restart-ollama', async () => {
     try {
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      if (!llmHelper.isUsingOllama()) {
+        console.log('[IPC restart-ollama] Ollama not selected — no-op.');
+        return false;
+      }
       // First try to kill it if it's running
-      await appState.processingHelper.getLLMHelper().forceRestartOllama();
+      await llmHelper.forceRestartOllama();
 
-      // The forceRestartOllama now calls OllamaManager.getInstance().init() internally
+      // The forceRestartOllama now calls OllamaManager.ensureRunning internally
       // so we don't need to do it again here.
 
       return true;
@@ -3449,9 +3917,17 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('ensure-ollama-running', async () => {
     try {
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      if (!llmHelper.isUsingOllama()) {
+        console.log('[IPC ensure-ollama-running] Ollama not selected — no-op.');
+        return { success: false, reason: 'ollama-not-selected' };
+      }
       const { OllamaManager } = require('./services/OllamaManager');
-      await OllamaManager.getInstance().init();
-      return { success: true };
+      const status = await OllamaManager.getInstance().ensureRunning({
+        reason: 'user-action',
+        selectedModel: llmHelper.getCurrentModel(),
+      });
+      return { success: status.health === 'ready' || status.health === 'degraded', status };
     } catch (error: any) {
       return { success: false, message: error.message };
     }
@@ -3496,6 +3972,27 @@ export function initializeIpcHandlers(appState: AppState): void {
       appState.getIntelligenceManager().resetEngine();
       // Re-init IntelligenceManager
       appState.getIntelligenceManager().initializeLLMs();
+
+      // 2026-07-05 fix: this handler updated the CHAT client (llmHelper.setApiKey)
+      // but never told RAGManager's EmbeddingPipeline about the new Gemini key —
+      // only ProcessingHelper.loadStoredCredentials (boot-time) and the Ollama-pull
+      // completion handler (main.ts bootstrapOllamaEmbeddings) did that. A key
+      // entered here via Settings never reached the embedder, so reference files
+      // stayed marked lexical_only and mode retrieval kept falling back to lexical
+      // (users see "reference files not indexing" until app restart). Mirror the
+      // same re-init + retry the Ollama-pull path already does.
+      if (keyChanged) {
+        const ragManager = appState.getRAGManager();
+        if (ragManager) {
+          ragManager.initializeEmbeddings({
+            openaiKey: cm.getOpenaiApiKey() || process.env.OPENAI_API_KEY || undefined,
+            geminiKey: apiKey || undefined,
+            ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
+            providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })(),
+          });
+          appState.scheduleModeReferenceIndexRetry();
+        }
+      }
 
       // Hindsight: an app-managed companion server inherited the OLD key in its env at
       // spawn — it won't pick up the new one until restart. Surface the hint (log + IPC),
@@ -3554,6 +4051,23 @@ export function initializeIpcHandlers(appState: AppState): void {
       appState.getIntelligenceManager().resetEngine();
       // Re-init IntelligenceManager
       appState.getIntelligenceManager().initializeLLMs();
+
+      // 2026-07-05 fix: see set-gemini-api-key for full rationale — this handler
+      // updated the chat client but never re-initialized RAGManager's
+      // EmbeddingPipeline with the new OpenAI key, so reference files stayed
+      // lexical_only until app restart. Mirror the Ollama-pull re-init pattern.
+      if (keyChanged) {
+        const ragManager = appState.getRAGManager();
+        if (ragManager) {
+          ragManager.initializeEmbeddings({
+            openaiKey: apiKey || undefined,
+            geminiKey: cm.getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || undefined,
+            ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
+            providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })(),
+          });
+          appState.scheduleModeReferenceIndexRetry();
+        }
+      }
 
       // Hindsight: see set-gemini-api-key for rationale (only when the key changed).
       if (keyChanged) {
@@ -5131,8 +5645,53 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle('local-whisper-get-recovery-notice', async () => {
+    return appState.takeLocalWhisperRecoveryNotice?.() ?? null;
+  });
+
+  // Generalized ONNX load-sentinel IPCs. One notice channel takes a
+  // `family` argument so the renderer can pull intent / embeddings /
+  // reranker notices through a single path. Each is one-shot drained
+  // through AppState so a renderer reload does not see the same notice
+  // twice. `onnx-reset-family` is the public "retry now" hook mirroring
+  // the existing `local-whisper-reset-to-default`.
+  safeHandle('onnx-get-recovery-notice', async (_: any, family: 'whisper' | 'intent' | 'embeddings' | 'reranker') => {
+    if (!family) return null;
+    return appState.takeOnnxRecoveryNotice?.(family) ?? null;
+  });
+
+  safeHandle('onnx-reset-family', async (_: any, family: 'whisper' | 'intent' | 'embeddings' | 'reranker') => {
+    try {
+      if (family === 'intent') {
+        const { clearIntentClassifierPoison } = require('./llm/IntentClassifier');
+        clearIntentClassifierPoison();
+        return { success: true };
+      }
+      if (family === 'embeddings') {
+        const { clearLocalEmbeddingPoison } = require('./rag/providers/LocalEmbeddingProvider');
+        clearLocalEmbeddingPoison();
+        return { success: true };
+      }
+      if (family === 'reranker') {
+        const { clearLocalRerankerPoison } = require('./rag/LocalReranker');
+        clearLocalRerankerPoison();
+        return { success: true };
+      }
+      // Whisper reset uses the existing dedicated IPC below; keep this
+      // handler future-proof so a stray family arg is a no-op rather than
+      // an error.
+      return { success: false, error: `No poison reset path for family '${family}'` };
+    } catch (e: any) {
+      return { success: false, error: e?.message || String(e) };
+    }
+  });
+
   safeHandle('local-whisper-set-model', async (_, modelId: string) => {
     try {
+      const { MODEL_CATALOG_IDS } = require('./audio/whisper/modelManager');
+      if (!MODEL_CATALOG_IDS.has(modelId)) {
+        return { success: false, error: `Unknown local Whisper model: ${modelId}` };
+      }
       SettingsManager.getInstance().set('localWhisperModel', modelId);
       return { success: true };
     } catch (e: any) {
@@ -5192,6 +5751,13 @@ export function initializeIpcHandlers(appState: AppState): void {
     async (_, cfg: { enabled?: boolean; micModelId?: string; systemModelId?: string }) => {
       try {
         const sm = SettingsManager.getInstance();
+        const { MODEL_CATALOG_IDS } = require('./audio/whisper/modelManager');
+        if (typeof cfg?.micModelId === 'string' && cfg.micModelId && !MODEL_CATALOG_IDS.has(cfg.micModelId)) {
+          return { success: false, error: `Unknown local Whisper mic model: ${cfg.micModelId}` };
+        }
+        if (typeof cfg?.systemModelId === 'string' && cfg.systemModelId && !MODEL_CATALOG_IDS.has(cfg.systemModelId)) {
+          return { success: false, error: `Unknown local Whisper system model: ${cfg.systemModelId}` };
+        }
         if (typeof cfg?.enabled === 'boolean') sm.set('localWhisperPerChannelEnabled', cfg.enabled);
         if (typeof cfg?.micModelId === 'string') sm.set('localWhisperModelMic', cfg.micModelId);
         if (typeof cfg?.systemModelId === 'string')
@@ -7739,7 +8305,43 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('permissions:check', async () => {
     if (process.platform === 'darwin') {
       const mic = systemPreferences.getMediaAccessStatus('microphone');
-      const screen = systemPreferences.getMediaAccessStatus('screen');
+      const rawScreen = systemPreferences.getMediaAccessStatus('screen');
+
+      // macOS reports the Screen Recording grant unreliably via
+      // getMediaAccessStatus('screen'): a genuinely-granted permission is
+      // frequently surfaced as 'denied' / 'not-determined' until the process is
+      // relaunched. Trusting that raw string produces a false "TCC blocked"
+      // signal that makes the onboarding orchestrator (stageCatalog.ts
+      // reEligibility) re-raise the permissions toaster forever and defeats the
+      // dismiss button. When the raw status is anything other than 'granted',
+      // fall back to a capture probe (the same signal main.ts's
+      // resolveMacScreenCaptureCapability trusts) — if we can enumerate screen
+      // sources, the permission is effectively granted.
+      let screen = rawScreen;
+      if (rawScreen !== 'granted' && rawScreen !== 'restricted') {
+        try {
+          // desktopCapturer.getSources can block indefinitely on TCC (see
+          // main.ts:448 + resolveMacScreenCaptureCapability, which wraps the
+          // same probe in a 5 s timeout). This handler is awaited on the
+          // launcher render path (App.tsx checkPermissions().then(...)), so an
+          // un-bounded hang would freeze the onboarding user-state feed. Race
+          // the probe against a 5 s deadline and treat a timeout as not-granted.
+          const sources = await Promise.race([
+            desktopCapturer.getSources({
+              types: ['screen'],
+              thumbnailSize: { width: 1, height: 1 },
+            }),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('screen-capture-probe-timeout')), 5000),
+            ),
+          ]);
+          const capturable = sources.some((s) => s.id.startsWith('screen:'));
+          if (capturable) screen = 'granted';
+        } catch {
+          // Probe failed or timed out — keep the raw status (treat as not-granted).
+        }
+      }
+
       return { microphone: mic, screen, platform: 'darwin' };
     }
     // Windows/Linux: no TCC — permissions handled by OS at install/first-use time
@@ -8663,6 +9265,27 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // Hard-delete a user-installed skill. Built-ins are blocked inside
+  // SkillsManager.deleteSkill (they'd be silently re-seeded by
+  // ensureBuiltinSkills()). Errors are surfaced as { success, error } so the
+  // preload bridge doesn't need a try/catch.
+  safeHandle('skills:delete', async (_evt, id: string) => {
+    try {
+      return SkillsManager.getInstance().deleteSkill(id);
+    } catch (e: any) {
+      console.warn('[IPC] skills:delete error:', e?.message || e);
+      return { success: false, error: e?.message || 'failed to delete skill' };
+    }
+  });
+
+  // NOTE: skills:set-enabled IPC was removed. SkillsManager.setSkillEnabled()
+  // remains as a defense-in-depth gate in case future code paths want to
+  // disable skills without going through delete (e.g., a per-mode default
+  // skill concept, a "never invoke during sensitive flows" toggle, etc.). The
+  // skillPromptBlock injection site at line ~930 still consults skill.enabled
+  // before calling buildPromptBlock(), so any caller that flips it via a
+  // direct SkillsManager call gets the gate for free.
+
   // Step 3 of the Skill Upload feature — validate (and optionally install)
   // an uploaded skill payload. Errors are NEVER thrown across the IPC
   // boundary; they're surfaced as { stage: 'failed', errors: [...] } so the
@@ -8734,9 +9357,35 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('phone-mirror:set-lan', async (_, exposeOnLan: boolean) => {
+    const service = PhoneMirrorService.getInstance();
     try {
-      return await PhoneMirrorService.getInstance().setExposeOnLan(!!exposeOnLan);
+      return await service.setExposeOnLan(!!exposeOnLan);
     } catch (e: any) {
+      // LAN exposure is a deliberate security widening — bound 0.0.0.0 lets any
+      // device on the Wi-Fi connect with the pairing token. Surface a modal
+      // confirmation; only flip the toggle if the user picks "Allow".
+      if (e?.name === 'LANBindConfirmationRequired') {
+        const win = appState.getMainWindow() ?? undefined;
+        const response = dialog.showMessageBoxSync(win as BrowserWindow | undefined, {
+          type: 'warning',
+          message: 'Allow LAN access?',
+          detail:
+            'This will bind Natively to 0.0.0.0:4123 so any device on this Wi-Fi network can connect with the pairing token. Continue?',
+          buttons: ['Cancel', 'Allow LAN access'],
+          defaultId: 0,
+          cancelId: 0,
+        });
+        if (response !== 1) {
+          return { ok: false, declined: true };
+        }
+        service.markLanBindDialogShown();
+        try {
+          return await service.setExposeOnLan(!!exposeOnLan);
+        } catch (e2: any) {
+          console.error('[IPC] phone-mirror:set-lan retry error:', e2);
+          return { error: e2?.message || 'failed to update lan setting' };
+        }
+      }
       console.error('[IPC] phone-mirror:set-lan error:', e);
       return { error: e?.message || 'failed to update lan setting' };
     }
@@ -9002,6 +9651,57 @@ export function initializeIpcHandlers(appState: AppState): void {
           answerType: phoneAnswerPlan.answerType,
           forbiddenContextLayers: phoneAnswerPlan.forbiddenContextLayers,
         };
+        const phonePlanForOwnership = phoneAnswerPlan;
+
+        // SOURCE-OWNERSHIP GATE (2026-07-06): the phone-mirror path mirrors the
+        // desktop chat and is a second answer surface. It has no deterministic
+        // profile fast-path today, but an EXPLICIT "my resume/project" ask in a
+        // reference_files_only / transcript_only mode must get the same
+        // source-honest switch line here rather than a doc-grounded refusal.
+        try {
+          const { buildCustomModeExecutionContract } = require('./llm/customModeExecutionContract');
+          const { resolveSourceOwnership, buildSourceSwitchClarification } = require('./llm/sourceOwnership');
+          const _pMode = phoneActiveMode;
+          const _pHasProfile = Boolean(llmHelper.getKnowledgeOrchestrator?.()?.activeResume?.structured_data);
+          const _pContract = buildCustomModeExecutionContract({
+            question: String(message || ''),
+            streamRoute: 'phone_mirror',
+            modeId: _pMode?.id ?? null,
+            modeUniqueId: _pMode?.id ?? null,
+            answerType: phonePlanForOwnership?.answerType ?? null,
+            isCustomMode: _pMode?.isCustom === true,
+            isDocGroundedCustomModeActive: _pMode?.documentGroundedCustomModeActive === true,
+            hasReferenceFiles: Boolean((_pMode as any)?.hasReferenceFiles),
+            hasCustomPrompt: Boolean((_pMode as any)?.hasCustomPrompt),
+            hasLiveTranscript: Boolean(context && String(context).trim()),
+            hasProfileFacts: _pHasProfile,
+            hasMeetingRag: false,
+            hasLongTermMemory: false,
+          });
+          const _pOwn = resolveSourceOwnership({
+            question: String(message || ''),
+            contract: _pContract,
+            profileContextPolicy: phonePlanForOwnership?.profileContextPolicy ?? 'allowed',
+            answerType: phonePlanForOwnership?.answerType ?? 'unknown_answer',
+            hasProfileFacts: _pHasProfile,
+          });
+          if (_pOwn.shouldClarifyInsteadOfProfile && _phoneChatLatestId === myPhoneId) {
+            const clarify = buildSourceSwitchClarification(_pOwn.owner);
+            try { phoneMirror.publishToken(String(myStreamId), clarify); } catch (_) {}
+            try { phoneMirror.publishDone(String(myStreamId), clarify); } catch (_) {}
+            win?.webContents.send('gemini-stream-token', clarify, { streamId: myStreamId });
+            win?.webContents.send('gemini-stream-done', { streamId: myStreamId });
+            intelligenceManager.addAssistantMessage(clarify);
+            intelligenceManager.logUsage('chat', message, clarify);
+            if (isIntelligenceFlagEnabled('trace')) {
+              console.log('[SOURCE-GUARD] phone: blocked source=profile reason=explicit_profile_ask_in_reference_mode', { owner: _pOwn.owner });
+            }
+            return;
+          }
+        } catch (pOwnErr: any) {
+          // Best-effort — never break the phone path on the ownership check.
+          if (isIntelligenceFlagEnabled('trace')) console.warn('[SOURCE-GUARD] phone ownership check skipped (non-fatal):', pOwnErr?.message);
+        }
         const stream = llmHelper.streamChat(message, undefined, context, CHAT_MODE_PROMPT, false, false, [], phoneController.signal, undefined, phoneRouteOptions);
         let full = '';
         let phoneSuperseded = false;

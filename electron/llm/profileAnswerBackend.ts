@@ -1,13 +1,14 @@
 import {
   logManualProfileRoute,
   profileFactsReady,
-  tryBuildManualProfileFastPathAnswer,
+  selectManualProfileEvidence,
   type ManualProfileRouteLog,
   type ManualProfileRouteResult,
   type ManualProfileSource,
   type StructuredJobFacts,
   type StructuredProfileFacts,
 } from './manualProfileIntelligence';
+import type { AnswerType } from './AnswerPlanner';
 
 type MaybeStructured<T> = T | null | undefined;
 
@@ -24,6 +25,9 @@ export interface BuildManualProfileBackendAnswerInput {
   question: string;
   orchestrator?: ProfileAnswerBackendOrchestrator | null;
   source?: ManualProfileSource;
+  /** Pre-computed planner answer type — enables full JD/resume evidence for the
+   * JD-source and resume+JD shapes (Stage 4/5). */
+  answerType?: AnswerType;
 }
 
 export interface BuildManualProfileBackendAnswerResult {
@@ -40,19 +44,21 @@ const activeJobFacts = (
   orchestrator?: ProfileAnswerBackendOrchestrator | null,
 ): MaybeStructured<StructuredJobFacts> => orchestrator?.activeJD?.structured_data ?? null;
 
-export const buildManualProfileBackendAnswer = ({
+export const buildManualProfileEvidenceRoute = ({
   question,
   orchestrator,
   source = 'manual_input',
+  answerType,
 }: BuildManualProfileBackendAnswerInput): BuildManualProfileBackendAnswerResult => {
   const profile = activeResumeFacts(orchestrator);
   const jobDescription = activeJobFacts(orchestrator);
   const ready = profileFactsReady(profile);
-  const route = tryBuildManualProfileFastPathAnswer({
+  const route = selectManualProfileEvidence({
     question,
     profile,
     jobDescription,
     source,
+    answerType,
   });
 
   return {
@@ -66,3 +72,6 @@ export const buildManualProfileBackendAnswer = ({
     profileFactsReady: ready,
   };
 };
+
+/** @deprecated Full-JIT policy: use buildManualProfileEvidenceRoute. */
+export const buildManualProfileBackendAnswer = buildManualProfileEvidenceRoute;

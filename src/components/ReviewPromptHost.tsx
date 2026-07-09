@@ -243,8 +243,11 @@ const ReviewPromptHost: React.FC<ReviewPromptHostProps> = ({ paused, isOpen: isO
         return res || { ok: false, error: "no_api" }
     }, [])
 
-    const handleTestimonial = useCallback(async (payload: any) => {
-        const res = await window.electronAPI?.reviewUpdateTestimonial?.(payload)
+    const handleTestimonial = useCallback(async (reviewId: string, payload: any) => {
+        const res = await window.electronAPI?.reviewUpdateTestimonial?.({
+            review_id: reviewId,
+            ...payload,
+        })
         if (isDevForceShow()) {
             setTimeout(() => {
                 isOpenRef.current = true
