@@ -1879,6 +1879,17 @@ export class AppState {
           return await llmHelper.generateContentStructured(joinContents(contents));
         });
 
+        // Stronger-model recovery fn for degenerate structured extraction (e.g. a
+        // resume that flash-lite parsed to a name with an EMPTY body → 0 atomic
+        // nodes). `escalate` skips the cheap tier (flash-lite / Groq) and asks the
+        // Natively server for its stronger model, so the retry actually lands on a
+        // better model instead of re-running the same tier that just failed.
+        if (typeof this.knowledgeOrchestrator.setStrongGenerateContentFn === 'function') {
+          this.knowledgeOrchestrator.setStrongGenerateContentFn(async (contents: any[]) => {
+            return await llmHelper.generateContentStructured(joinContents(contents), { escalate: true });
+          });
+        }
+
         // Low-latency generation for LIVE negotiation coaching (spoken in real
         // time): Flash-first chain so the tactical note appears fast. The AOT
         // negotiation script + all extraction keep the quality-first fn above.
@@ -6285,15 +6296,53 @@ export class AppState {
   // reset sharingType) and drive the dock to hidden, retrying against the OS
   // ground truth so a late ready-to-show dock re-show is corrected.
   public applyInitialUndetectableState(): void {
-    if (process.platform !== 'darwin') return;
-    if (!this.isUndetectable) return;
-    this.reassertAllContentProtection();
-    const focusWindow = this.windowHelper.getMainWindow();
     // Longer retry budget than the toggle path (~2.5s vs ~0.8s): at startup the
     // dock re-show lands at the launcher's ready-to-show, which on a cold launch
     // can arrive later than the toggle path's 6-retry window. Extra isVisible()
     // re-checks are cheap and stop early via the isUndetectable guard.
-    this._enforceDockState(true, focusWindow, 0, 18);
+    this.reassertUndetectableStealth(18);
+  }
+
+  // Re-drive the app back to a fully-stealth state after any operation that can
+  // silently undo it — used by both startup convergence (above) and, critically,
+  // every launcher window show (WindowHelper.switchToLauncher).
+  //
+  // WHY launcher shows leak stealth: the launcher is a REGULAR macOS window (no
+  // `type: 'panel'`, no skipTaskbar — unlike the overlay NSPanel). Calling
+  // .show()+.focus() on it while the app is in accessory policy with the dock
+  // tile hidden re-activates the app as a foreground app, which makes macOS
+  // re-register it and REVEAL the dock tile — silently undoing app.dock.hide().
+  // This is the "Natively icon appears in the dock after Stop meeting" bug:
+  // endMeeting() swaps overlay→launcher, the activating show re-shows the tile,
+  // and nothing re-asserted stealth afterward. It is intermittent because macOS
+  // asynchronously coalesces and sometimes drops activation-policy/dock calls.
+  //
+  // This routes through the SAME self-verifying _enforceDockState() loop the
+  // toggle path uses: it polls app.dock.isVisible() (the OS ground truth) and
+  // re-applies dock.hide() + content protection until reality matches intent,
+  // so it cannot be defeated by a dropped call or a late re-show. Cheap and safe
+  // to call redundantly — it no-ops immediately off-darwin or when not
+  // undetectable, and stops early via the isUndetectable guard inside the loop.
+  public reassertUndetectableStealth(maxAttempts: number = 10): void {
+    if (process.platform !== 'darwin') return;
+    if (!this.isUndetectable) return;
+    // Collapse any in-flight enforcement chain from a PRIOR re-assert before
+    // starting a fresh one — same discipline as setUndetectable(). Without this,
+    // a burst of launcher shows (rapid Stop→Start→Stop, or a cold-start
+    // convergence overlapping a ready-to-show switchToLauncher) would spawn
+    // several overlapping _enforceDockState chains. They are idempotent and
+    // self-cancelling (all want dock hidden; each stops early once app.dock
+    // reports hidden or the isUndetectable guard flips), so this is not a
+    // correctness fix — it just avoids redundant isVisible() polling. The newest
+    // re-assert owns the dock; the intent (want-hidden) is unchanged, so
+    // cancelling the older timers loses nothing.
+    for (const timer of this._dockReassertTimers) {
+      clearTimeout(timer);
+    }
+    this._dockReassertTimers = [];
+    this.reassertAllContentProtection();
+    const focusWindow = this.windowHelper.getMainWindow();
+    this._enforceDockState(true, focusWindow, 0, maxAttempts);
   }
 
   // --- Mouse Passthrough (Adapted from public PR #113 — verify premium interaction) ---

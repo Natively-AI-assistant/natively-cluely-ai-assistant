@@ -3279,7 +3279,14 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (launcherWin && !launcherWin.isDestroyed()) {
       launcherWin.webContents.send('settings:open-tab', tab);
       if (appState.getUndetectable()) {
+        // This is the ONE launcher show that does not funnel through
+        // WindowHelper.switchToLauncher() (which re-asserts stealth centrally).
+        // Even the non-activating showInactive() can make macOS re-register a
+        // regular (non-panel) window and reveal the hidden dock tile, so re-drive
+        // stealth here through the same self-verifying _enforceDockState() loop —
+        // otherwise this path is a dock-leak bypass in undetectable mode.
         launcherWin.showInactive();
+        appState.reassertUndetectableStealth();
       } else {
         launcherWin.show();
         launcherWin.focus();

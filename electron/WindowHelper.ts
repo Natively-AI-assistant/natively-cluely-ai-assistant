@@ -1030,6 +1030,28 @@ export class WindowHelper {
     if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
       this.overlayWindow.hide();
     }
+
+    // ─── RE-ASSERT STEALTH AFTER THE ACTIVATING SHOW ───────────────────────
+    // The launcher is a REGULAR macOS window (no `type: 'panel'`, no
+    // skipTaskbar). show()+focus() above re-activates the app as a foreground
+    // app, which on macOS re-registers it and REVEALS the dock tile that
+    // app.dock.hide() had suppressed — silently breaking undetectable mode.
+    // This is the root cause of "the Natively icon appears in the dock after
+    // Stop meeting" (endMeeting swaps overlay→launcher via this method). It is
+    // intermittent because macOS coalesces/drops activation-policy changes.
+    //
+    // Fix it HERE — at the single choke point every launcher show funnels
+    // through (Stop meeting, screenshot restore, cold-start convergence) — so no
+    // caller can leak the tile. reassertUndetectableStealth() no-ops unless we
+    // are on darwin AND currently undetectable, and drives the dock back to
+    // hidden through the self-verifying _enforceDockState() loop (polls the OS
+    // ground truth app.dock.isVisible() and retries until it sticks), so a
+    // dropped or late dock op cannot defeat it. `inactive` shows (showInactive,
+    // no focus) don't foreground the app, but we re-assert anyway: it's cheap,
+    // idempotent, and guards against macOS revealing the tile on a bare show.
+    if (process.platform === 'darwin' && this.appState.getUndetectable()) {
+      this.appState.reassertUndetectableStealth();
+    }
   }
 
   // Simplified setWindowMode that just calls switchers
