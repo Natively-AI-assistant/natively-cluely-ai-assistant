@@ -321,7 +321,7 @@ class ZeroShotClassifier {
         // moment will retry the full init automatically.
         if (!hasEnoughMemoryForOnnxSession()) {
             console.warn(
-                `[IntentClassifier] skipping zero-shot worker load — free memory below ${getMinFreeGBForOnnxSession()}GB floor`,
+                `[IntentClassifier] skipping zero-shot worker load — available memory below ${getMinFreeGBForOnnxSession()}GB floor`,
             );
             this.loadingPromise = Promise.resolve().then(() => { this.loadingPromise = null; });
             return;

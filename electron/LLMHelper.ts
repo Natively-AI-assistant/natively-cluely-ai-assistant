@@ -502,11 +502,7 @@ export class LLMHelper {
   }
 
   public setApiKey(apiKey: string) {
-    this.apiKey = apiKey;
-    this.client = new GoogleGenAI({
-      apiKey: apiKey,
-      httpOptions: { apiVersion: "v1alpha" }
-    })
+    const trimmed = (apiKey || '').trim();
     // Cache resource names are scoped to the old key's project — drop them so
     // we don't reuse a stale/expired-key cache (the root cause behind the
     // "API key expired" cache.create failures). Also clear the vision circuit
@@ -515,6 +511,17 @@ export class LLMHelper {
     this.visionHealth.delete('gemini_flash');
     this.visionHealth.delete('gemini_pro');
     this.textHealth.delete('gemini_flash'); // text race uses gemini_flash — retry fresh key immediately
+    if (!trimmed) {
+      this.apiKey = null;
+      this.client = null;
+      console.log("[LLMHelper] Gemini API Key cleared.");
+      return;
+    }
+    this.apiKey = trimmed;
+    this.client = new GoogleGenAI({
+      apiKey: trimmed,
+      httpOptions: { apiVersion: "v1alpha" }
+    })
     console.log("[LLMHelper] Gemini API Key updated.");
   }
 
@@ -528,24 +535,48 @@ export class LLMHelper {
   }
 
   public setGroqApiKey(apiKey: string) {
-    this.groqClient = new Groq({ apiKey });
+    const trimmed = (apiKey || '').trim();
     this._groqLocalDisabled = false;
     this.visionHealth.delete('groq'); // fresh key → retry immediately, skip auth cooldown
     this.textHealth.delete('groq');
+    if (!trimmed) {
+      this.groqApiKey = null;
+      this.groqClient = null;
+      console.log("[LLMHelper] Groq API Key cleared.");
+      return;
+    }
+    this.groqApiKey = trimmed;
+    this.groqClient = new Groq({ apiKey: trimmed });
     console.log("[LLMHelper] Groq API Key updated.");
   }
 
   public setOpenaiApiKey(apiKey: string) {
-    this.openaiApiKey = apiKey;
-    this.openaiClient = new OpenAI({ apiKey });
+    const trimmed = (apiKey || '').trim();
     this.visionHealth.delete('openai'); // fresh key → retry immediately, skip auth cooldown
+    this.textHealth.delete('openai');
+    if (!trimmed) {
+      this.openaiApiKey = null;
+      this.openaiClient = null;
+      console.log("[LLMHelper] OpenAI API Key cleared.");
+      return;
+    }
+    this.openaiApiKey = trimmed;
+    this.openaiClient = new OpenAI({ apiKey: trimmed });
     console.log("[LLMHelper] OpenAI API Key updated.");
   }
 
   public setClaudeApiKey(apiKey: string) {
-    this.claudeApiKey = apiKey;
-    this.claudeClient = new Anthropic({ apiKey });
+    const trimmed = (apiKey || '').trim();
     this.visionHealth.delete('claude'); // fresh key → retry immediately, skip auth cooldown
+    this.textHealth.delete('claude');
+    if (!trimmed) {
+      this.claudeApiKey = null;
+      this.claudeClient = null;
+      console.log("[LLMHelper] Claude API Key cleared.");
+      return;
+    }
+    this.claudeApiKey = trimmed;
+    this.claudeClient = new Anthropic({ apiKey: trimmed });
     console.log("[LLMHelper] Claude API Key updated.");
   }
 
@@ -910,6 +941,16 @@ export class LLMHelper {
   private isCodexCliModel(modelId: string): boolean {
     return modelId === "codex-cli" || modelId.startsWith("codex-cli:");
   }
+
+  private isCodexAvailable(): boolean {
+    if (!this.codexCliConfig.enabled) return false;
+    try {
+      const { CodexOAuthService } = require('./services/CodexOAuthService');
+      return CodexOAuthService.getInstance().getStatus().signedIn === true;
+    } catch {
+      return false;
+    }
+  }
   // ---------------------------
 
   private currentModelId: string = GEMINI_FLASH_MODEL;
@@ -1045,7 +1086,7 @@ export class LLMHelper {
   }
 
   private async generateWithCodexCli(userContent: string, systemPrompt?: string, fastMode = false, imagePaths?: string[], signal?: AbortSignal): Promise<string> {
-    if (!this.codexCliConfig.enabled) throw new Error('Codex CLI transport is disabled.');
+    if (!this.isCodexAvailable()) throw new Error('Codex CLI transport is disabled or ChatGPT is signed out.');
     const model = this.getSelectedCodexCliModel(fastMode);
     // System prompt is sent separately as `body.instructions` (the
     // Responses-API field the Codex backend uses for system content),
@@ -1068,7 +1109,7 @@ export class LLMHelper {
   }
 
   private async *streamWithCodexCli(userContent: string, systemPrompt?: string, fastMode = false, imagePaths?: string[], signal?: AbortSignal): AsyncGenerator<string, void, unknown> {
-    if (!this.codexCliConfig.enabled) throw new Error('Codex CLI transport is disabled.');
+    if (!this.isCodexAvailable()) throw new Error('Codex CLI transport is disabled or ChatGPT is signed out.');
     const model = this.getSelectedCodexCliModel(fastMode);
     // See note in generateWithCodexCli — system prompt is sent
     // separately as `body.instructions`, not concatenated.
@@ -1731,8 +1772,8 @@ ANSWER DIRECTLY:`;
     const systemPrompt = this.injectLanguageInstruction(basePrompt);
 
     try {
-      if (this.codexCliConfig.enabled) {
-        // Codex CLI takes priority when enabled — same precedence as in chat().
+      if (this.isCodexAvailable()) {
+        // Codex CLI takes priority when available — same precedence as in chat().
         try {
           const text = await this.chatWithGemini(promptMessage, undefined, suggestionContext, true);
           if (text && text.trim().length > 0) return this.processResponse(text);
@@ -2327,11 +2368,11 @@ const isMultimodal = !!(imagePaths?.length);
       // call getSelectedCodexCliModel(true) → fastModel → 0 tokens → fallback).
       // Fixes issue #315.
       const fastModeAppliesNS = this.groqFastTextMode && !isMultimodal && (
-        this.codexCliConfig.enabled ||
+        this.isCodexAvailable() ||
         this.isGroqModel(this.currentModelId) ||
         this.currentModelId === 'natively'
       ) && !this.isCodexCliModel(this.currentModelId);
-      if (fastModeAppliesNS && this.codexCliConfig.enabled) {
+      if (fastModeAppliesNS && this.isCodexAvailable()) {
         console.log(`[LLMHelper] ⚡️ Fast Text Mode Active. Routing to Codex CLI...`);
         try {
           return await this.generateWithCodexCli(cloudUserContent, openaiSystemPrompt, true);
@@ -2360,7 +2401,7 @@ const isMultimodal = !!(imagePaths?.length);
         return await this.callOllama(combinedMessages.gemini, imagePaths, undefined);
       }
 
-      if (this.isCodexCliModel(this.currentModelId) && this.codexCliConfig.enabled) {
+      if (this.isCodexCliModel(this.currentModelId) && this.isCodexAvailable()) {
         return await this.generateWithCodexCli(cloudUserContent, openaiSystemPrompt, false, cloudImagePaths);
       }
 
@@ -2455,7 +2496,7 @@ const isMultimodal = !!(imagePaths?.length);
           hasNatively: this.hasNatively(),
           hasGroq: Boolean(this.groqClient),
           groqDisabled: this._groqLocalDisabled,
-          hasCodex: this.codexCliConfig.enabled,
+          hasCodex: this.isCodexAvailable(),
           hasGemini: Boolean(this.client),
           hasOpenAI: Boolean(this.openaiClient),
           hasClaude: Boolean(this.claudeClient),
@@ -2578,14 +2619,33 @@ const isMultimodal = !!(imagePaths?.length);
    */
   public async generateContentStructured(
     message: string,
-    // The Gemini block now always leads with flash-lite (the fastest, cheapest
-    // model), then flash, then pro — so `preferFast` no longer changes ordering
-    // (flash-lite is already first). The param is retained for API compatibility
-    // with latency-critical callers (e.g. live negotiation coaching).
+    // The Gemini block leads with flash-lite (fastest, cheapest) then 3.5-flash.
+    // `preferFast` no longer changes ordering (flash-lite is already first); it is
+    // retained for API compatibility with latency-critical callers (live coaching).
+    //
+    // STRUCTURED-EXTRACTION ROUTING (resume/JD/other document ingestion): the
+    // Gemini chain here is intentionally flash-lite → 3.5-flash ONLY. A real
+    // head-to-head on the actual extraction code showed flash-lite fully extracts
+    // (18 nodes) fastest; 3.5-flash is the correct single fallback; Gemini Pro
+    // gives NO quality gain at ~4× latency; MiniMax-M3 severely UNDER-extracts. So
+    // Pro/MiniMax/Groq are deliberately excluded from this path. Own-provider keys
+    // (OpenAI/Claude/own-Gemini) are still tried first when present; the Natively
+    // fallback carries `purpose:'extraction'` so the server runs its own
+    // flash-lite→3.5-flash-only loop (never MiniMax/Pro/Scout). The MAX_ROTATIONS
+    // loop below gives the 3-cycle retry-then-fail behavior.
     opts?: { preferFast?: boolean },
   ): Promise<string> {
     type ProviderAttempt = { name: string; execute: () => Promise<string> };
     const providers: ProviderAttempt[] = [];
+    const permanentFailureKeyFor = (name: string): string => {
+      if (name.startsWith('Gemini')) return 'gemini';
+      if (name.startsWith('OpenAI')) return 'openai';
+      if (name.startsWith('Claude')) return 'claude';
+      if (name.startsWith('Groq')) return 'groq';
+      if (name.startsWith('Codex')) return 'codex';
+      if (name.startsWith('Natively')) return 'natively';
+      return name;
+    };
     // `opts.preferFast` retained for API compatibility; ordering no longer
     // depends on it (the Gemini block always leads with flash-lite).
     void opts;
@@ -2593,7 +2653,7 @@ const isMultimodal = !!(imagePaths?.length);
     // Priority 0: Codex CLI (when enabled). Structured-JSON workloads still
     // benefit from the user's selected backend; downstream callers run their
     // own JSON-extraction regex so prose-around-JSON is tolerated.
-    if (this.codexCliConfig.enabled) {
+    if (this.isCodexAvailable()) {
       providers.push({
         name: `Codex CLI (${this.codexCliConfig.model})`,
         execute: () => this.generateWithCodexCli(message),
@@ -2611,14 +2671,14 @@ const isMultimodal = !!(imagePaths?.length);
       providers.push({ name: `Claude (${CLAUDE_MODEL})`, execute: () => this.generateWithClaude(message) });
     }
 
-    // Priority 3: Gemini cascade — flash-lite → flash → pro (cheapest/fastest
+    // Priority 3: Gemini cascade — flash-lite → 3.5-flash ONLY (cheapest/fastest
     // first). Each model is a distinct provider so the rotation falls through
-    // lite → flash → pro on failure, and each carries its OWN circuit key so a
-    // saturated tier (repeated 429s) trips independently without burning the
-    // others' backoff. Pro keeps its pre-skip when its breaker is OPEN; lite and
-    // flash always lead (withRetry fast-fails an open key anyway).
-    // `preferFast` no longer reorders — flash-lite already leads — but is honored
-    // by keeping the cheapest model first.
+    // lite → flash on failure, and each carries its OWN circuit key so a saturated
+    // tier (repeated 429s) trips independently without burning the other's backoff.
+    // Gemini PRO is intentionally EXCLUDED from structured extraction: benchmarked
+    // on the real extraction code it gave no quality gain over flash-lite at ~4×
+    // latency. MiniMax is likewise excluded (it under-extracts). This is the
+    // flash-lite→3.5-flash extraction pattern.
     if (this.client) {
       const buildGeminiProvider = (modelId: string): ProviderAttempt => ({
         name: `Gemini (${modelId})`,
@@ -2643,16 +2703,6 @@ const isMultimodal = !!(imagePaths?.length);
       });
       providers.push(buildGeminiProvider(GEMINI_FLASH_LITE_MODEL));
       providers.push(buildGeminiProvider(GEMINI_FLASH_MODEL));
-      // Pro is skipped only when its own breaker is OPEN (saturated tier) so we
-      // don't waste a slot + backoff — lite/flash above already cover the fast path.
-      if (!this.isCircuitOpen(GEMINI_PRO_MODEL)) {
-        providers.push(buildGeminiProvider(GEMINI_PRO_MODEL));
-      }
-    }
-
-    // Priority 5: Groq (Fallback despite JSON hallucination risks)
-    if (this.groqClient) {
-      providers.push({ name: `Groq (${GROQ_MODEL}) fallback`, execute: () => this.generateWithGroq(message) }); // intentional: structured-gen last-resort uses stable baseline model, not user selection
     }
 
     // Priority 6: Ollama (on-device fallback — last resort, no cloud dependency)
@@ -2689,7 +2739,11 @@ const isMultimodal = !!(imagePaths?.length);
     if (nativelyKeyForStructured) {
       providers.push({
         name: 'Natively API',
-        execute: () => this.generateWithNatively(message)
+        // Structured extraction: tell the server this is an extraction request so
+        // it runs its dedicated flash-lite→3.5-flash-only loop (3 cycles then
+        // hard-fail) and NEVER falls through to MiniMax/Pro/Scout. Older servers
+        // ignore the unknown field and route via their normal flash-first chain.
+        execute: () => this.generateWithNatively(message, undefined, undefined, { purpose: 'extraction' })
       });
     }
 
@@ -2704,6 +2758,7 @@ const isMultimodal = !!(imagePaths?.length);
     // in the UI so users on the affected path (Profile Intelligence ingest
     // with Claude — see #185) get a real diagnosis instead of a dead end.
     const lastFailureByProvider = new Map<string, string>();
+    const permanentlyDeadProviders = new Set<string>();
     for (let rotation = 0; rotation < MAX_ROTATIONS; rotation++) {
       if (rotation > 0) {
         const backoffMs = 1000 * rotation;
@@ -2712,6 +2767,10 @@ const isMultimodal = !!(imagePaths?.length);
       }
 
       for (const provider of providers) {
+        const permanentFailureKey = permanentFailureKeyFor(provider.name);
+        if (permanentlyDeadProviders.has(permanentFailureKey)) {
+          continue;
+        }
         try {
           console.log(`[LLMHelper] 🧠 Structured generation: trying ${provider.name}...`);
           const result = await provider.execute();
@@ -2725,6 +2784,10 @@ const isMultimodal = !!(imagePaths?.length);
           const reason = (error?.message ?? String(error)).toString().slice(0, 240);
           console.warn(`[LLMHelper] ⚠️ Structured generation: ${provider.name} failed: ${reason}`);
           lastFailureByProvider.set(provider.name, reason);
+          if (isPermanentKeyError(error)) {
+            permanentlyDeadProviders.add(permanentFailureKey);
+            console.warn(`[LLMHelper] ${permanentFailureKey} marked unavailable for this structured-generation call after permanent auth/account failure.`);
+          }
         }
       }
     }
@@ -2782,7 +2845,7 @@ const isMultimodal = !!(imagePaths?.length);
   /**
    * Routes AI generation through the Natively API backend (Gemini-powered).
    */
-  private async generateWithNatively(userMessage: string, systemPrompt?: string, imagePaths?: string[]): Promise<string> {
+  private async generateWithNatively(userMessage: string, systemPrompt?: string, imagePaths?: string[], opts?: { purpose?: 'extraction' }): Promise<string> {
     this.assertOutboundScopes('natively', userMessage, imagePaths);
     // Prefer the in-memory field; fall back to CredentialsManager for the direct-routing path
     // where currentModelId === 'natively' but setNativelyKey() wasn't called yet.
@@ -2817,6 +2880,16 @@ const isMultimodal = !!(imagePaths?.length);
     // Signal fast mode so the server routes to Groq Llama 3.3 (text-only, key-rotated).
     // Only sent for text-only requests — server ignores it when images are present.
     if (this.groqFastTextMode) body.fast_mode = true;
+
+    // EXTRACTION hint: opt-in signal that this is a structured document extraction
+    // (resume/JD). The server routes it through a dedicated flash-lite→3.5-flash
+    // loop (3 cycles, then hard-fail) and NEVER escalates to MiniMax/Pro/Scout.
+    // Advisory + backward-compatible: older servers drop the unknown field and use
+    // their normal flash-first chain. Never combined with fast_mode (opposite intents).
+    if (opts?.purpose === 'extraction') {
+      body.purpose = 'extraction';
+      delete body.fast_mode;
+    }
 
     // Send images as a structured array so the server can build proper Gemini inlineData parts.
     // Embedding base64 in the text content would be truncated at 4000 chars and treated as text.
@@ -3619,13 +3692,13 @@ const isMultimodal = !!(imagePaths?.length);
     }
 
     // ──────────────────────────────────────────────────────────────────
-    // Codex CLI runs FIRST when enabled — same priority as in chat() so
+    // Codex CLI runs FIRST when available — same priority as in chat() so
     // every AI feature that flows through generateWithVisionFallback
     // (analyzeImageFiles, generateRollingScript, debugSolutionWithImages,
     // extractProblemFromImages, generateSolution) honors the user's pick.
     // On failure we fall back to the cloud tier rotation below.
     // ──────────────────────────────────────────────────────────────────
-    if (this.codexCliConfig.enabled) {
+    if (this.isCodexAvailable()) {
       try {
         console.log(`[LLMHelper] 🚀 [Codex CLI] Attempting (${this.codexCliConfig.model}, ${isMultimodal ? imagePaths.length + ' image(s)' : 'text-only'})...`);
         const text = await this.generateWithCodexCli(userPrompt, systemPrompt, false, isMultimodal ? imagePaths : undefined);
@@ -3844,7 +3917,7 @@ const isMultimodal = !!(imagePaths?.length);
       if (this.hasNatively()) {
         providers.push({ name: 'Natively API', execute: () => this.streamWithNatively(userContent, openaiSystemPrompt, imagePaths, abortSignal) });
       }
-      if (this.codexCliConfig.enabled) {
+      if (this.isCodexAvailable()) {
         providers.push({ name: `Codex CLI (${this.codexCliConfig.model})`, execute: () => this.streamWithCodexCli(userContent, openaiSystemPrompt, false, imagePaths, abortSignal) });
       }
       if (this.openaiClient) {
@@ -3875,7 +3948,7 @@ const isMultimodal = !!(imagePaths?.length);
         // CACHE: pass system separately so Groq prefix-cache hits across turns.
         providers.push({ name: `Groq (${textGroq})`, execute: () => this.streamWithGroq(userContent, textGroq, groqSystemForCache, abortSignal) });
       }
-      if (this.codexCliConfig.enabled) {
+      if (this.isCodexAvailable()) {
         providers.push({ name: `Codex CLI (${this.codexCliConfig.model})`, execute: () => this.streamWithCodexCli(userContent, openaiSystemPrompt, false, undefined, abortSignal) });
       }
       if (this.openaiClient) {
@@ -4867,12 +4940,12 @@ const isMultimodal = !!(imagePaths?.length);
     // the providers fast-mode actually routes to. Otherwise picking Gemini/Claude/OpenAI
     // in the UI is silently ignored because fast-mode returns before model routing runs.
     const fastModeApplies = this.groqFastTextMode && !isMultimodal && (
-      this.codexCliConfig.enabled ||
+      this.isCodexAvailable() ||
       this.isGroqModel(this.currentModelId) ||
       this.currentModelId === 'natively'
     ) && !this.isCodexCliModel(this.currentModelId);
     if (fastModeApplies) {
-      if (this.codexCliConfig.enabled) {
+      if (this.isCodexAvailable()) {
         console.log(`[LLMHelper] ⚡️ Fast Text Mode Active (Streaming). Routing to Codex CLI...`);
         try {
           yield* this.streamWithCodexCli(userContent, finalSystemPrompt, true, undefined, abortSignal);
@@ -4920,7 +4993,7 @@ const isMultimodal = !!(imagePaths?.length);
       return;
     }
 
-    if (this.isCodexCliModel(this.currentModelId) && this.codexCliConfig.enabled) {
+    if (this.isCodexCliModel(this.currentModelId) && this.isCodexAvailable()) {
       yield* this.streamWithCodexCli(userContent, finalSystemPrompt, false, imagePaths, abortSignal);
       return;
     }
@@ -6476,7 +6549,7 @@ const isMultimodal = !!(imagePaths?.length);
    * ("Let me come back to that in just a moment."). Mirrors isUsingOllama().
    */
   public isUsingCodexCli(): boolean {
-    return Boolean(this.codexCliConfig?.enabled) && (
+    return this.isCodexAvailable() && (
       this.isCodexCliModel(this.currentModelId) || this.groqFastTextMode === true
     );
   }
@@ -7070,8 +7143,8 @@ const isMultimodal = !!(imagePaths?.length);
       }
     }
 
-    // ATTEMPT 2: Codex CLI (if user has it enabled — text-only path)
-    if (this.codexCliConfig.enabled) {
+    // ATTEMPT 2: Codex CLI (if user has it enabled and signed in — text-only path)
+    if (this.isCodexAvailable()) {
       console.log(`[LLMHelper] Attempting Codex CLI for summary...`);
       try {
         const text = await this.withTimeout(
@@ -7268,10 +7341,16 @@ const isMultimodal = !!(imagePaths?.length);
       this.geminiModel = modelId;
     }
 
-    if (apiKey) {
-      this.apiKey = apiKey;
+    if (apiKey !== undefined) {
+      const trimmed = apiKey.trim();
+      if (!trimmed) {
+        this.apiKey = null;
+        this.client = null;
+        throw new Error("No Gemini API key provided and no existing client");
+      }
+      this.apiKey = trimmed;
       this.client = new GoogleGenAI({
-        apiKey: apiKey,
+        apiKey: trimmed,
         httpOptions: { apiVersion: "v1alpha" }
       });
     } else if (!this.client) {

@@ -35,13 +35,13 @@
 
 import path from 'path';
 import fs from 'fs';
-import os from 'os';
 import { Worker } from 'worker_threads';
 import { app } from 'electron';
 import {
     acquireOnnxSlot,
     hasEnoughMemoryForOnnxSession,
     getMinFreeGBForOnnxSession,
+    getAvailableMemoryGB,
 } from '../utils/onnxThreadConfig';
 import {
     clearLoadSentinel as clearOnnxLoadSentinel,
@@ -328,9 +328,9 @@ class LocalRerankerImpl {
         // `loadFailed = true` on a gate refusal (that's reserved for actual
         // load errors); a later, less-pressured moment can retry.
         if (!hasEnoughMemoryForOnnxSession()) {
-            const freeGB = (os.freemem() / 1024 ** 3).toFixed(1);
+            const availGB = getAvailableMemoryGB().toFixed(1);
             throw new Error(
-                `insufficient free memory (${freeGB}GB < ${getMinFreeGBForOnnxSession()}GB) — skipping reranker load`,
+                `insufficient available memory (${availGB}GB < ${getMinFreeGBForOnnxSession()}GB) — skipping reranker load`,
             );
         }
 

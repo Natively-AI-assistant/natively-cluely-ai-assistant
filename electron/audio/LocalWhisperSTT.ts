@@ -617,9 +617,9 @@ export class LocalWhisperSTT extends EventEmitter {
         // is latency-critical (~750ms real-time streaming) and would deadlock
         // behind a queued embedding batch.
         if (!hasEnoughMemoryForOnnxSession()) {
-            const freeGB = (process.memoryUsage().heapUsed / 1024 ** 3).toFixed(1);
+            const heapGB = (process.memoryUsage().heapUsed / 1024 ** 3).toFixed(1);
             throw new Error(
-                `[LocalWhisperSTT] insufficient free memory (<${getMinFreeGBForOnnxSession()}GB) — Whisper init refused (heaped=${freeGB}GB)`,
+                `[LocalWhisperSTT] insufficient available memory (<${getMinFreeGBForOnnxSession()}GB) — Whisper init refused (heaped=${heapGB}GB)`,
             );
         }
 

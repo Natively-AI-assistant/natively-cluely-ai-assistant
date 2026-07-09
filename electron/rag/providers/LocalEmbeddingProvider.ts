@@ -312,7 +312,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     // behavior); a later, less-pressured moment will retry automatically.
     if (!hasEnoughMemoryForOnnxSession()) {
       throw new Error(
-        `insufficient free memory (<${getMinFreeGBForOnnxSession()}GB) — skipping local embedder load`,
+        `insufficient available memory (<${getMinFreeGBForOnnxSession()}GB) — skipping local embedder load`,
       );
     }
 

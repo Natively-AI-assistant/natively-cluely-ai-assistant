@@ -259,3 +259,83 @@ describe('KnowledgeOrchestrator — degenerate JD extraction quality gate', () =
         assert.equal(jd._extraction_mode, 'heuristic', 'extraction_mode must record the fallback occurred');
     });
 });
+
+// ---------------------------------------------------------------------------
+// Degenerate extraction → deterministic heuristic fallback.
+//
+// Reproduces the real user log: the extraction model returned VALID JSON with a
+// name but an EMPTY body, which parsed fine, so `Created 0 atomic nodes` and the
+// profile was effectively empty. Under the flash-lite→3.5-flash extraction
+// pattern there is NO stronger model to escalate to (Pro/MiniMax are excluded by
+// design), so on a degenerate-but-valid result the orchestrator falls to the
+// deterministic heuristic, which recovers name/experience/education from the raw
+// text. These tests pin that behavior (and that a GOOD parse is left untouched).
+// ---------------------------------------------------------------------------
+describe('KnowledgeOrchestrator — degenerate resume → heuristic fallback', () => {
+    let db, orchestrator, tmpResumeFile;
+
+    // Degenerate: a NAME but an empty body — the exact "0 nodes" bug.
+    const DEGENERATE_RESUME = () => JSON.stringify({
+        identity: { name: 'Sarah Chen', email: '', phone: '', location: '', linkedin: '', github: '', website: '', summary: '' },
+        skills: [], experience: [], projects: [], education: [],
+        achievements: [], certifications: [], leadership: [],
+    });
+
+    // A FULL, non-degenerate parse — what the model returns on a good run.
+    const GOOD_RESUME = () => JSON.stringify({
+        identity: { name: 'Sarah Chen', email: 'sarah.chen@gmail.com', phone: '', location: 'San Francisco, CA', linkedin: '', github: '', website: '', summary: '' },
+        skills: ['TypeScript', 'React', 'PostgreSQL'],
+        experience: [
+            { company: 'Stripe', role: 'Senior Software Engineer', start_date: '2021-03', end_date: null, bullets: ['Led fraud detection pipeline'] },
+            { company: 'Notion', role: 'Software Engineer', start_date: '2018-06', end_date: '2021-02', bullets: ['Built commenting system'] },
+        ],
+        projects: [{ name: 'PriceX', description: 'Price comparison extension', technologies: ['React'], url: '' }],
+        education: [{ institution: 'Stanford', degree: 'BS', field: 'CS', start_date: '2012-09', end_date: '2016-06', gpa: '' }],
+        achievements: [], certifications: [], leadership: [],
+    });
+
+    beforeEach(() => {
+        db = new KnowledgeDatabaseManager(new Database(':memory:'));
+        db.initializeSchema();
+        orchestrator = new KnowledgeOrchestrator(db);
+        orchestrator.setEmbedFn(MOCK_EMBED_FN);
+        tmpResumeFile = makeTempFile(RESUME_FIXTURE, '.txt');
+    });
+
+    afterEach(() => {
+        try { fs.unlinkSync(tmpResumeFile); } catch {}
+        try { db.close?.(); } catch {}
+    });
+
+    test('degenerate LLM result → deterministic heuristic recovers a body', async () => {
+        orchestrator.setGenerateContentFn(DEGENERATE_RESUME);
+
+        const result = await orchestrator.ingestDocument(tmpResumeFile, DocType.RESUME);
+        assert.equal(result.success, true, `Ingest failed: ${result.error}`);
+
+        // The RESUME_FIXTURE has clean section headers, so the heuristic recovers a body.
+        const profile = orchestrator.getProfileData();
+        assert.ok(profile.experience.length > 0, 'heuristic must recover experience from the raw text');
+        assert.ok(profile.nodeCount > 0, 'atomic nodes must be created from the recovered body');
+        assert.equal(orchestrator.activeResume?.structured_data?._extraction_mode, 'heuristic');
+    });
+
+    test('there is no strong-model escalation hook (extraction is flash-lite→3.5-flash only)', () => {
+        // The stronger-model escalation was removed — extraction never escalates to
+        // Pro/MiniMax. This guards against re-introducing a strong-fn setter.
+        assert.equal(typeof orchestrator.setStrongGenerateContentFn, 'undefined');
+    });
+
+    test('GOOD (non-degenerate) primary parse is kept as an LLM result (no heuristic swap)', async () => {
+        orchestrator.setGenerateContentFn(GOOD_RESUME);
+
+        const result = await orchestrator.ingestDocument(tmpResumeFile, DocType.RESUME);
+        assert.equal(result.success, true, `Ingest failed: ${result.error}`);
+
+        const profile = orchestrator.getProfileData();
+        assert.equal(profile.identity.name, 'Sarah Chen');
+        assert.ok(profile.experience.length >= 2);
+        assert.ok(profile.nodeCount > 0);
+        assert.notEqual(orchestrator.activeResume?.structured_data?._extraction_mode, 'heuristic');
+    });
+});

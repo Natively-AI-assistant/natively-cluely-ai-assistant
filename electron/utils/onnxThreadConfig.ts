@@ -45,6 +45,8 @@
 // here before posting `init` to their worker.
 
 import os from 'os';
+import { execFileSync } from 'child_process';
+import fs from 'fs';
 
 export interface OnnxThreadBounds {
     intraOpNumThreads: number;
@@ -173,16 +175,108 @@ export async function acquireOnnxSlot(priority: OnnxSlotPriority = 'normal'): Pr
     };
 }
 
+// ── Available-memory measurement ───────────────────────────────────────────
+//
+// CRITICAL: `os.freemem()` is the WRONG metric for "can I afford to load a
+// model right now". On macOS it returns ONLY the truly-free page list, which
+// the kernel deliberately keeps near-zero — idle RAM is used as file cache
+// (inactive/speculative pages) and reclaimed instantly on demand. On a healthy
+// 16-48GB Mac `os.freemem()` routinely reads 100-400MB, so a 2GB floor tested
+// against it refuses EVERY local ONNX session (embedder, reranker, intent
+// classifier, Whisper) essentially always — even with tens of GB reclaimable.
+// This silently killed on-device embeddings/RAG for keyless users (the model
+// is installed and preflight-verified, but the gate wrongly reports OOM).
+//
+// The right metric is AVAILABLE memory (free + reclaimable), which is what
+// Activity Monitor / `top` mean by "available":
+//   - macOS:  vm_stat → (free + inactive + speculative) * page_size
+//   - Linux:  /proc/meminfo → MemAvailable
+//   - other:  fall back to os.freemem() (best effort; Windows os.freemem() is
+//             already closer to "available" than macOS's).
+//
+// Measurement is cached briefly (the value only needs to gate a burst of model
+// loads at ingest/boot; spawning `vm_stat` per chunk would be wasteful).
+
+const AVAIL_MEM_CACHE_TTL_MS = 1000;
+let availMemCache: { gb: number; at: number } | null = null;
+
+/** macOS: parse `vm_stat` into available GB (free + inactive + speculative). */
+function readMacAvailableGB(): number | null {
+    // execFileSync (no shell) — args are fixed literals, no injection surface.
+    const out = execFileSync('vm_stat', [], { encoding: 'utf8', timeout: 1000 });
+    // "Mach Virtual Memory Statistics: (page size of 16384 bytes)"
+    const pageSize = Number.parseInt(out.match(/page size of (\d+) bytes/)?.[1] || '4096', 10);
+    const pages = (label: string): number => {
+        const m = out.match(new RegExp(`${label}:\\s+(\\d+)\\.`));
+        return m ? Number.parseInt(m[1], 10) : 0;
+    };
+    const free = pages('Pages free');
+    const inactive = pages('Pages inactive');
+    const speculative = pages('Pages speculative');
+    if (!Number.isFinite(pageSize) || pageSize <= 0) return null;
+    const bytes = (free + inactive + speculative) * pageSize;
+    return bytes / 1024 ** 3;
+}
+
+/** Linux: read MemAvailable (kB) from /proc/meminfo. */
+function readLinuxAvailableGB(): number | null {
+    const meminfo = fs.readFileSync('/proc/meminfo', 'utf8');
+    const kb = Number.parseInt(meminfo.match(/^MemAvailable:\s+(\d+)\s+kB/m)?.[1] || '', 10);
+    if (!Number.isFinite(kb)) return null;
+    return (kb * 1024) / 1024 ** 3;
+}
+
 /**
- * Free-memory floor for admitting a new ONNX session. Returns true if the
- * system has at least `NATIVELY_ONNX_MIN_FREE_GB` (default 2.0 GB) free.
+ * Best-effort AVAILABLE (not merely free) system memory in GB. Falls back to
+ * `os.freemem()` when the platform-specific probe is unavailable or throws.
+ * Cached for AVAIL_MEM_CACHE_TTL_MS to avoid spawning vm_stat per model load.
+ *
+ * Override for tests / incident tuning with NATIVELY_ONNX_AVAILABLE_MEM_GB
+ * (a fixed value forces the gate deterministically).
+ */
+export function getAvailableMemoryGB(): number {
+    const override = process.env.NATIVELY_ONNX_AVAILABLE_MEM_GB;
+    if (override) {
+        const n = Number.parseFloat(override);
+        if (Number.isFinite(n) && n >= 0) return n;
+    }
+
+    const now = Date.now();
+    if (availMemCache && now - availMemCache.at < AVAIL_MEM_CACHE_TTL_MS) {
+        return availMemCache.gb;
+    }
+
+    let gb: number | null = null;
+    try {
+        if (process.platform === 'darwin') gb = readMacAvailableGB();
+        else if (process.platform === 'linux') gb = readLinuxAvailableGB();
+    } catch {
+        gb = null;
+    }
+    // Fallback: os.freemem(). On Windows this is already reasonable; on
+    // macOS/Linux it only lands here if the probe failed, and it's a
+    // conservative (low) estimate — the gate fails toward refusing, which is
+    // the pre-existing behavior, so we never regress.
+    if (gb == null || !Number.isFinite(gb)) {
+        gb = os.freemem() / 1024 ** 3;
+    }
+
+    availMemCache = { gb, at: now };
+    return gb;
+}
+
+/**
+ * Available-memory floor for admitting a new ONNX session. Returns true if the
+ * system has at least `NATIVELY_ONNX_MIN_FREE_GB` (default 2.0 GB) of
+ * AVAILABLE memory (free + OS-reclaimable cache), NOT merely `os.freemem()`.
+ * See getAvailableMemoryGB() for why the distinction is load-bearing on macOS.
  *
  * Fails OPEN (returns true) if the measurement itself throws — refusing on
  * a measurement failure would block the app for no real reason.
  */
 export function hasEnoughMemoryForOnnxSession(): boolean {
     try {
-        return (os.freemem() / 1024 ** 3) >= readMinFreeGB();
+        return getAvailableMemoryGB() >= readMinFreeGB();
     } catch {
         return true;
     }

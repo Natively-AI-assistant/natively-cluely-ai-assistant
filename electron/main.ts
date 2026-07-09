@@ -1948,17 +1948,6 @@ export class AppState {
           return await llmHelper.generateContentStructured(joinContents(contents));
         });
 
-        // Stronger-model recovery fn for degenerate structured extraction (e.g. a
-        // resume that flash-lite parsed to a name with an EMPTY body → 0 atomic
-        // nodes). `escalate` skips the cheap tier (flash-lite / Groq) and asks the
-        // Natively server for its stronger model, so the retry actually lands on a
-        // better model instead of re-running the same tier that just failed.
-        if (typeof this.knowledgeOrchestrator.setStrongGenerateContentFn === 'function') {
-          this.knowledgeOrchestrator.setStrongGenerateContentFn(async (contents: any[]) => {
-            return await llmHelper.generateContentStructured(joinContents(contents), { escalate: true });
-          });
-        }
-
         // Low-latency generation for LIVE negotiation coaching (spoken in real
         // time): Flash-first chain so the tactical note appears fast. The AOT
         // negotiation script + all extraction keep the quality-first fn above.
