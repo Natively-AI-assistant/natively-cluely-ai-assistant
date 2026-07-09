@@ -101,6 +101,29 @@ try {
   // auto-reload handler recovers it.
 }
 
+// ============================================================================
+// TEMPORARY LEAK-DIAGNOSIS TEST HOOKS (2026-07-10) — remove after the Windows
+// native-RSS-leak (OOM-freeze on boot) is root-caused. Each is env-gated and a
+// no-op unless the flag is set, so they never affect normal runs. See the
+// per-process procMem field added to StabilityHeartbeat for attribution.
+//
+//   NATIVELY_DISABLE_GPU=1        → app.disableHardwareAcceleration() — tests
+//                                   whether the leak is Chromium GPU/compositor
+//                                   shared memory (top hypothesis). If RSS stays
+//                                   flat with this set, the GPU process is it.
+//   NATIVELY_DISABLE_STT_PREWARM=1 → skip prewarmSttProviders() (gated at the
+//                                   call site in AppState).
+//   NATIVELY_ONNX_MIN_FREE_GB=999 → (existing) disables ALL local ONNX workers.
+// ============================================================================
+try {
+  if (process.env.NATIVELY_DISABLE_GPU === '1') {
+    app.disableHardwareAcceleration();
+    console.warn('[LeakTest] NATIVELY_DISABLE_GPU=1 → hardware acceleration DISABLED for this run');
+  }
+} catch (e) {
+  console.warn('[LeakTest] disableHardwareAcceleration failed:', e);
+}
+
 /**
  * Whether THIS build carries a real Developer ID signature.
  *
@@ -1628,6 +1651,25 @@ export class AppState {
           jitFinalAnswerEnforced: isIntelligenceFlagEnabled('jitFinalAnswerEnforced'),
           hindsightMemory: isIntelligenceFlagEnabled('hindsightMemory'),
         };
+        // PER-PROCESS memory breakdown (2026-07-10 leak diagnosis): the
+        // main-process RSS above cannot tell us WHICH process is growing.
+        // app.getAppMetrics() reports RSS per Chromium process (Browser=main,
+        // GPU, Tab=renderer, Utility). This makes a native RSS climb
+        // attributable: if the GPU process is the one ballooning on Windows,
+        // the "Browser"/main RSS and the "GPU" RSS diverge here. Guarded so a
+        // failure never breaks the heartbeat.
+        let procMem: Array<{ type: string; rssMB: number; pid: number }> = [];
+        try {
+          const { app: eApp } = require('electron');
+          procMem = (eApp.getAppMetrics?.() || [])
+            .map((m: any) => ({
+              type: m.type,
+              rssMB: m.memory?.workingSetSize ? Math.round(m.memory.workingSetSize / 1024) : 0, // KB→MB
+              pid: m.pid,
+            }))
+            .sort((a: any, b: any) => b.rssMB - a.rssMB);
+        } catch { /* getAppMetrics unavailable pre-ready — skip */ }
+
         console.log('[StabilityHeartbeat]', {
           rssMB: mb(mem.rss),
           heapUsedMB: mb(mem.heapUsed),
@@ -1640,6 +1682,13 @@ export class AppState {
           isMeetingActive: this.isMeetingActive,
           flags,
           wal: collectWalSnapshot(),
+          // Per-process working-set RSS (MB) — the leak-attribution field.
+          procMem,
+          testHooks: {
+            gpuDisabled: process.env.NATIVELY_DISABLE_GPU === '1',
+            sttPrewarmDisabled: process.env.NATIVELY_DISABLE_STT_PREWARM === '1',
+            onnxFloorGB: process.env.NATIVELY_ONNX_MIN_FREE_GB || null,
+          },
         });
       } catch (e: any) {
         console.warn('[StabilityHeartbeat] skipped:', e?.message || e);
@@ -3366,6 +3415,11 @@ export class AppState {
    * prevent duplicate construction.
    */
   public prewarmSttProviders(): void {
+    // TEMPORARY LEAK-DIAGNOSIS gate (2026-07-10) — remove after root cause.
+    if (process.env.NATIVELY_DISABLE_STT_PREWARM === '1') {
+      console.warn('[LeakTest] NATIVELY_DISABLE_STT_PREWARM=1 → skipping STT pre-warm this run');
+      return;
+    }
     if (this.googleSTT && this.googleSTT_User) return;
     try {
       if (!this.googleSTT) {
