@@ -221,28 +221,27 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   hindsightMemory: { env: 'NATIVELY_HINDSIGHT_MEMORY', setting: 'hindsightMemoryEnabled', default: false },
   hindsightLiveRecall: { env: 'NATIVELY_HINDSIGHT_LIVE_RECALL', setting: 'hindsightLiveRecallEnabled', default: false },
   hindsightPostMeetingRetain: { env: 'NATIVELY_HINDSIGHT_POST_MEETING_RETAIN', setting: 'hindsightPostMeetingRetainEnabled', default: false },
-  // Phase 0 — observe-only confidence telemetry. Permanently ON (2026-07-06
-  // user directive — flip the smart-retrieval stack on by default).
-  ragConfidenceGate: { env: 'NATIVELY_RAG_CONFIDENCE_GATE', setting: 'ragConfidenceGateEnabled', default: true },
+  // Phase 0 — observe-only confidence telemetry. Default OFF for stability
+  // (2026-07-09); re-enable explicitly after packaged-build soak testing.
+  ragConfidenceGate: { env: 'NATIVELY_RAG_CONFIDENCE_GATE', setting: 'ragConfidenceGateEnabled', default: false },
   // Phase 1 — local cross-encoder rerank escalation (manual/follow-up).
-  // Permanently ON (2026-07-06 user directive).
-  ragLocalRerank: { env: 'NATIVELY_RAG_LOCAL_RERANK', setting: 'ragLocalRerankEnabled', default: true },
+  // Default OFF for stability (2026-07-09): the local reranker adds another
+  // ONNX session during chat/streaming and can be re-enabled by env/settings.
+  ragLocalRerank: { env: 'NATIVELY_RAG_LOCAL_RERANK', setting: 'ragLocalRerankEnabled', default: false },
   // Phase 2 — Reciprocal Rank Fusion across heterogeneous retrieval sources. Default OFF.
   ragRrfFusion: { env: 'NATIVELY_RAG_RRF_FUSION', setting: 'ragRrfFusionEnabled', default: false },
   // Phase 3 — allow rerank on the live transcript path (prewarmed + budget-guarded).
-  // Permanently ON (2026-07-06 user directive — safe by construction; prewarmed at mode
-  // activation and runs inside the existing raceWithBudget(1500ms) envelope).
-  ragSpeculativeRerank: { env: 'NATIVELY_RAG_SPECULATIVE_RERANK', setting: 'ragSpeculativeRerankEnabled', default: true },
-  // OKF Hybrid Knowledge System — permanently ON in all contexts (2026-07-06
-  // user directive — flip the OKF stack on by default). Originally ON in dev/test
-  // and OFF in production until validated end-to-end; the 19-question thesis
-  // benchmark now drives production behavior too.
-  okfKnowledgePacks: { env: 'NATIVELY_OKF_KNOWLEDGE_PACKS', setting: 'okfKnowledgePacksEnabled', default: true },
-  okfMarkdownExport: { env: 'NATIVELY_OKF_MARKDOWN_EXPORT', setting: 'okfMarkdownExportEnabled', default: true },
-  okfHybridRetrieval: { env: 'NATIVELY_OKF_HYBRID_RETRIEVAL', setting: 'okfHybridRetrievalEnabled', default: true },
-  // Entity/relation graph layer derived from OKF cards (Phase 4).
-  // Permanently ON (2026-07-06 user directive).
-  okfGraphExpansion: { env: 'NATIVELY_OKF_GRAPH_EXPANSION', setting: 'okfGraphExpansionEnabled', default: true },
+  // Default OFF for stability (2026-07-09); enable explicitly after soak testing
+  // the local ONNX pressure profile on packaged builds.
+  ragSpeculativeRerank: { env: 'NATIVELY_RAG_SPECULATIVE_RERANK', setting: 'ragSpeculativeRerankEnabled', default: false },
+  // OKF Hybrid Knowledge System — default OFF for stability (2026-07-09).
+  // These paths add background extraction/retrieval load and should be re-enabled
+  // explicitly after packaged-build soak testing.
+  okfKnowledgePacks: { env: 'NATIVELY_OKF_KNOWLEDGE_PACKS', setting: 'okfKnowledgePacksEnabled', default: false },
+  okfMarkdownExport: { env: 'NATIVELY_OKF_MARKDOWN_EXPORT', setting: 'okfMarkdownExportEnabled', default: false },
+  okfHybridRetrieval: { env: 'NATIVELY_OKF_HYBRID_RETRIEVAL', setting: 'okfHybridRetrievalEnabled', default: false },
+  // Entity/relation graph layer derived from OKF cards (Phase 4). Default OFF.
+  okfGraphExpansion: { env: 'NATIVELY_OKF_GRAPH_EXPANSION', setting: 'okfGraphExpansionEnabled', default: false },
   okfKnowledgeUi: { env: 'NATIVELY_OKF_KNOWLEDGE_UI', setting: 'okfKnowledgeUiEnabled', default: false },
   okfUserEditableCards: { env: 'NATIVELY_OKF_USER_EDITABLE_CARDS', setting: 'okfUserEditableCardsEnabled', default: false },
   // OKF Profile Intelligence — default ON in dev/test/benchmark contexts so the
@@ -265,9 +264,9 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   // honest refusal (the safe fallback) regardless of this flag. Toggling this
   // flag alone (without okfHybridRetrieval) has no effect.
   docGroundedFalseRefusalRepair: { env: 'NATIVELY_DOC_GROUNDED_FALSE_REFUSAL_REPAIR', setting: 'docGroundedFalseRefusalRepairEnabled', default: true },
-  // Full-JIT final-answer law (2026-07-07). Default ON — AOT intro/identity/
-  // greeting is demoted to evidence and the provider writes the final answer.
-  jitFinalAnswerEnforced: { env: 'NATIVELY_JIT_FINAL_ANSWER_ENFORCED', setting: 'jitFinalAnswerEnforcedEnabled', default: true },
+  // Full-JIT final-answer law (2026-07-07). Default OFF for stability
+  // (2026-07-09); can be re-enabled by env/settings after packaged soak tests.
+  jitFinalAnswerEnforced: { env: 'NATIVELY_JIT_FINAL_ANSWER_ENFORCED', setting: 'jitFinalAnswerEnforcedEnabled', default: false },
 };
 
 const ON_VALUES = new Set(['1', 'true', 'on', 'enabled', 'yes']);

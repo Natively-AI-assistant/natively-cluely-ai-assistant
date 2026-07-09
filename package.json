@@ -1,6 +1,6 @@
 {
   "name": "natively",
-  "version": "2.8.2",
+  "version": "2.8.4",
   "main": "dist-electron/electron/main.js",
   "description": "Natively is a meeting notes app that uses AI to generate notes from your meetings.",
   "scripts": {
@@ -17,8 +17,8 @@
     "electron:dev": "npm run build && npm run build:electron && cross-env NODE_ENV=development electron .",
     "electron:build": "npm run build:electron && cross-env NODE_ENV=production electron .",
     "app:dev": "concurrently \"npm run dev -- --port 5180 --strictPort\" \"wait-on http://localhost:5180 && npm run electron:dev\"",
-    "app:build": "npm run build && npm run typecheck:electron && npm run build:electron && cross-env NATIVELY_BUILD_ALL_MAC_ARCHES=1 npm run build:native && node scripts/ensure-sharp-mac-deps.js && node scripts/ensure-sqlite-vec.js && npm run verify:packaged-local-assets && electron-builder",
-    "app:build:signed": "npm run build && npm run typecheck:electron && npm run build:electron && cross-env NATIVELY_BUILD_ALL_MAC_ARCHES=1 npm run build:native && node scripts/ensure-sharp-mac-deps.js && node scripts/ensure-sqlite-vec.js && npm run verify:packaged-local-assets && electron-builder --config electron-builder.signed.cjs",
+    "app:build": "npm run build && npm run typecheck:electron && npm run build:electron && cross-env NATIVELY_BUILD_ALL_MAC_ARCHES=1 npm run build:native && node scripts/ensure-sharp-mac-deps.js && node scripts/ensure-sqlite-vec.js && npm run verify:packaged-local-assets && (electron-builder; code=$?; node scripts/rebuild-native-electron.js; exit $code)",
+    "app:build:signed": "npm run build && npm run typecheck:electron && npm run build:electron && cross-env NATIVELY_BUILD_ALL_MAC_ARCHES=1 npm run build:native && node scripts/ensure-sharp-mac-deps.js && node scripts/ensure-sqlite-vec.js && npm run verify:packaged-local-assets && (electron-builder --config electron-builder.signed.cjs; code=$?; node scripts/rebuild-native-electron.js; exit $code)",
     "watch": "tsc -p electron/tsconfig.json --watch",
     "start": "npm run app:dev",
     "dist": "npm run app:build",
@@ -216,7 +216,9 @@
         "repo": "natively-cluely-ai-assistant",
         "releaseType": "release"
       }
-    ]
+    ],
+    "npmRebuild": false,
+    "beforePack": "./scripts/rebuild-native-for-target.cjs"
   },
   "keywords": [],
   "author": "",
@@ -330,5 +332,6 @@
   },
   "overrides": {
     "onnxruntime-node": "1.22.0"
-  }
+  },
+  "nativelySigned": true
 }

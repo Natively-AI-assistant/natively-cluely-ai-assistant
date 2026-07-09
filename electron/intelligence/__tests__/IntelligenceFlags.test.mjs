@@ -26,7 +26,8 @@ const ENV_KEYS = [
   'NATIVELY_OKF_GRAPH_EXPANSION', 'NATIVELY_OKF_KNOWLEDGE_UI', 'NATIVELY_OKF_USER_EDITABLE_CARDS',
   'NATIVELY_OKF_PROFILE_PACKS', 'NATIVELY_OKF_PROFILE_HYBRID_RETRIEVAL', 'NATIVELY_OKF_PROFILE_MARKDOWN_EXPORT',
   'NATIVELY_OKF_PROFILE_GRAPH_EXPANSION', 'NATIVELY_OKF_PROFILE_KNOWLEDGE_UI',
-  'NATIVELY_DOC_GROUNDED_STRICT_ISOLATION', 'NATIVELY_DOC_GROUNDED_FALSE_REFUSAL_REPAIR',
+  'NATIVELY_DOC_GROUNDED_STRICT_ISOLATION', 'NATIVELY_CUSTOM_MODE_SOURCE_ENFORCEMENT',
+  'NATIVELY_DOC_GROUNDED_FALSE_REFUSAL_REPAIR', 'NATIVELY_JIT_FINAL_ANSWER_ENFORCED',
 ];
 
 // The full flag set — Meeting Notes V3 product flags intentionally ship default ON;
@@ -43,7 +44,8 @@ const ALL_FLAG_KEYS = [
   'okfKnowledgeUi', 'okfUserEditableCards',
   'okfProfilePacks', 'okfProfileHybridRetrieval', 'okfProfileMarkdownExport',
   'okfProfileGraphExpansion', 'okfProfileKnowledgeUi',
-  'docGroundedStrictIsolation', 'docGroundedFalseRefusalRepair',
+  'docGroundedStrictIsolation', 'customModeSourceEnforcement', 'docGroundedFalseRefusalRepair',
+  'jitFinalAnswerEnforced',
 ];
 
 const DEFAULT_ON_KEYS = new Set([
