@@ -88,6 +88,13 @@ export const OrchestratedToasterHost: React.FC = () => {
             // and re-triggers via macTCCBlocked user-state.
             try { localStorage.setItem('natively_perms_shown_v1', '1'); } catch {}
             window.electronAPI?.onboardingSetFlag?.('permsShown', true).catch(() => {});
+            // Reflect permsShown in the live orchestrator user-state *now*.
+            // Without this, `permsShown` stays false in-session (it is only
+            // re-read from localStorage on the next App.tsx effect / relaunch),
+            // so stageCatalog's `skipWhen: permsShown && !macTCCBlocked` never
+            // becomes true and the RAF drain loop re-raises this toaster on the
+            // very next frame — making the X button appear to do nothing.
+            orch.setUserState({ permsShown: true });
             onDismiss('permissions')();
           }}
         />

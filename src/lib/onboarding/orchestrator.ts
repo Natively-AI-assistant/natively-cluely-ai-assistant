@@ -177,6 +177,12 @@ export class OnboardingOrchestrator {
   // snapshot reference and re-render. Persisted `state.version` (string) is
   // unrelated.
   private revision = 0;
+  // Toasters the user explicitly dismissed THIS session. Not persisted — a
+  // genuinely-blocked permission (macTCCBlocked) is still re-raised on the next
+  // launch. This exists so an explicit dismiss (the X button) is not undone on
+  // the very next RAF frame by a still-true reEligibility predicate, which is
+  // what made the X appear to do nothing for a re-eligible stage.
+  private dismissedThisSession = new Set<ToasterId>();
 
   constructor() {
     this.state = loadState();
@@ -394,6 +400,9 @@ export class OnboardingOrchestrator {
   // ─── Decision engine ──────────────────────────────────────────
 
   shouldShowToaster(id: ToasterId, ctx: Ctx, config: StageConfig): boolean {
+    // 0. Explicitly dismissed this session — never re-raise until next launch.
+    if (this.dismissedThisSession.has(id)) return false;
+
     // 1. Hard skip — user-state
     if (config.skipWhen?.(ctx.userState)) return false;
 
@@ -431,6 +440,10 @@ export class OnboardingOrchestrator {
   // ─── Toaster dismissal / skip ─────────────────────────────────
 
   markDismissed(id: ToasterId): void {
+    // Record the explicit dismiss for this session so the drain loop does not
+    // instantly re-raise a re-eligible stage (e.g. permissions while
+    // macTCCBlocked is genuinely true) on the next animation frame.
+    this.dismissedThisSession.add(id);
     this.completeToaster(id, false);
   }
 
