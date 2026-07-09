@@ -46,6 +46,61 @@ if (!app.isPackaged) {
   require('dotenv').config();
 }
 
+// ============================================================================
+// FONTATIONS RENDERER-CRASH MITIGATION (2026-07-10) — user crash report on
+// macOS 27.0 (26A5378j), Electron 33.4.11 / Chromium 130.
+//
+// Chromium's Rust "Fontations" font backend (font hinting + variable-font
+// normalized-coordinate path) traps with EXC_BREAKPOINT / SIGTRAP on the
+// renderer's main thread (CrRendererMain) while shaping text on macOS 26/27.
+// Faulting frames from the real crash report:
+//   fontations_ffi$cxxbridge1$BridgeHintingInstance$operator$sizeof
+//   fontations_ffi$cxxbridge1$BridgeNormalizedCoords$operator$sizeof
+// Disabling the feature falls Chromium back to the legacy CoreText path, which
+// is stable. Related upstream: electron/electron#49522 (no upstream fix).
+//
+// TIMING: this MUST run before app.whenReady() / before the first GPU+renderer
+// command line is assembled, or Chromium ignores the switch. This is bundle
+// load (top of main), which satisfies it. Do NOT move it next to the
+// disable-background-timer-throttling switch later in initializeApp() — that
+// runs AFTER whenReady and is too late for a feature flag.
+//
+// SCOPE: darwin + macOS 26+ only (Darwin kernel major >= 25 — same mapping as
+// ipcHandlers.ts get-os-name). Sequoia (macOS 15 / Darwin 24) and Windows keep
+// the faster Rust backend.
+//
+// ESCAPE HATCH (NATIVELY_* convention):
+//   NATIVELY_DISABLE_FONTATIONS=0 → force-KEEP Fontations even on macOS 26+
+//   NATIVELY_DISABLE_FONTATIONS=1 → force-DISABLE on any platform/version
+//   (unset)                       → auto: disable on darwin macOS 26+ only
+// ============================================================================
+try {
+  const fontationsOverride = process.env.NATIVELY_DISABLE_FONTATIONS;
+  let shouldDisableFontations: boolean;
+  if (fontationsOverride === '0') {
+    shouldDisableFontations = false;
+  } else if (fontationsOverride === '1') {
+    shouldDisableFontations = true;
+  } else {
+    const darwinMajor =
+      process.platform === 'darwin'
+        ? parseInt(os.release().split('.')[0] || '0', 10)
+        : 0;
+    shouldDisableFontations = darwinMajor >= 25; // Darwin 25 = macOS 26
+  }
+  if (shouldDisableFontations) {
+    // NOTE: this is the ONLY disable-features append in the codebase
+    // (verified 2026-07-10). Chromium keeps only the LAST --disable-features
+    // value, so if a second disabled feature is ever added it MUST be combined
+    // into one comma-separated value here rather than a second appendSwitch.
+    app.commandLine.appendSwitch('disable-features', 'Fontations');
+  }
+} catch {
+  // Never let the mitigation itself break boot. Worst case: Fontations stays
+  // enabled and the (rare) font crash remains possible — the render-process-gone
+  // auto-reload handler recovers it.
+}
+
 /**
  * Whether THIS build carries a real Developer ID signature.
  *
@@ -358,20 +413,34 @@ function emergencyCloseDatabase(reason: string): void {
   try {
     const { DatabaseManager } = require('./db/DatabaseManager');
     const dbMgr = DatabaseManager.getInstance();
-    let checkpointOk = true;
-    try { dbMgr.checkpoint?.(); } catch (e: any) {
-      checkpointOk = false;
-      logToFile(`[DB-EMERGENCY] checkpoint failed during ${reason}: ${e?.message || e}`);
-    }
-    try { dbMgr.close?.(); } catch (e: any) {
-      // If checkpoint succeeded but close failed, the WAL is flushed but
-      // the lock isn't released — don't latch the flag; a later crash path
-      // can still try the close alone.
+    // REGRESSION FIX (2026-07-10): do NOT wal_checkpoint(TRUNCATE) here.
+    // This function runs ONLY from crash paths (uncaughtException,
+    // unhandledRejection, SIGTERM/SIGINT, SIGHUP, render/child/gpu-process-gone,
+    // initializeApp-failed). A TRUNCATE checkpoint fired from a crashing or
+    // half-initialized process — or interrupted by the macOS SIGTERM→SIGKILL
+    // race — can leave natively.db-wal/-shm half-truncated, which then BLOCKS
+    // the next `new Database()` open and bricks every subsequent launch on both
+    // macOS and Windows (the "loads once, crashes, then never opens again" bug).
+    // We now ONLY release the handle (drop the OS lock) and let SQLite's own
+    // automatic WAL recovery replay the log safely on the next clean open —
+    // exactly how v2.7.0 (which never checkpointed on crash) behaved. The clean
+    // quit path (checkpointDatabase / before-quit / will-quit) still checkpoints
+    // because there the process is HEALTHY.
+    try {
+      if (typeof dbMgr.closeWithoutCheckpoint === 'function') {
+        dbMgr.closeWithoutCheckpoint();
+      } else {
+        // Defensive fallback for an older manager shape — close is still
+        // better than leaving the handle open, even if it checkpoints.
+        dbMgr.close?.();
+      }
+    } catch (e: any) {
       logToFile(`[DB-EMERGENCY] close failed during ${reason}: ${e?.message || e}`);
-      if (checkpointOk) return;
+      // Don't latch — a later crash path can retry the close.
+      return;
     }
     _emergencyDbClosed = true;
-    logToFile(`[DB-EMERGENCY] closed during ${reason}`);
+    logToFile(`[DB-EMERGENCY] closed (no checkpoint) during ${reason}`);
   } catch (e: any) {
     // Even if the require itself fails (manager not yet bootstrapped),
     // we still want the breadcrumb so triage can see we tried. Don't latch
@@ -7246,15 +7315,112 @@ if (process.env.THINKING_MATRIX === '1') {
     checkpointDatabase('will-quit');
   });
 
+  // Crash-loop guard: reload timestamps per webContentsId.
+  const rendererReloadHistory = new Map<number, number[]>();
+  const RENDERER_RELOAD_MAX = 3;            // max auto-reloads ...
+  const RENDERER_RELOAD_WINDOW_MS = 60_000; // ... within this rolling window
+
   app.on('render-process-gone', (_event, webContents, details) => {
+    const urlNow = (() => { try { return webContents?.getURL?.() || ''; } catch { return ''; } })();
     logCrashConsole('render-process-gone', {
       details,
       webContentsId: webContents?.id,
-      webContentsUrl: (() => { try { return webContents?.getURL?.(); } catch { return null; } })(),
+      webContentsUrl: urlNow || null,
     });
     console.warn('[main] render-process-gone:', details);
     stopAppManagedHindsight('render-process-gone');
-    emergencyCloseDatabase('render-process-gone');
+
+    // RECOVERY (2026-07-10): a renderer crash (e.g. the Fontations font trap on
+    // macOS 26/27 — see the disable-features mitigation at top-of-module) kills
+    // only the render process; the BrowserWindow and the main process survive.
+    // Previously we only logged + closed the DB, leaving a blank/dead launcher
+    // that the user reads as "the app crashed and won't come back." Now we
+    // reload the dead webContents with a crash-loop backoff.
+    //
+    // CRITICAL: do NOT emergencyCloseDatabase on the RECOVER path. That call is
+    // irreversible (it nulls the singleton DB with no reopen path), so closing
+    // it here would hand the reloaded renderer a dead main-process DB (no
+    // history/modes/persistence). The renderer does not own the DB — main does,
+    // synchronously — so a renderer crash cannot corrupt it. We only close the
+    // DB on TERMINAL paths (quit / non-crash / give-up).
+    const reason = details?.reason;
+    const isCrash = reason === 'crashed' || reason === 'abnormal-exit';
+
+    // Never fight an intentional teardown, and don't reload a clean/intentional
+    // exit or an intentional kill — treat those as terminal (preserve the
+    // original crash-path behavior so the WAL lock is released cleanly).
+    if (!isCrash || appState.isQuitting?.()) {
+      emergencyCloseDatabase('render-process-gone');
+      return;
+    }
+
+    // Only auto-reload real user-facing windows. Transient/hidden helpers
+    // (cropper = screenshot overlay; model-selector = hidden preload with a
+    // known forceRestartOllama side-effect) should NOT be blindly reloaded —
+    // they get recreated on next open. Reload launcher / settings / overlay.
+    const isRecoverableWindow =
+      urlNow === '' /* URL unavailable — assume the main launcher */ ||
+      /[?&]window=(launcher|settings|overlay)\b/.test(urlNow) ||
+      !/[?&]window=/.test(urlNow) /* no window tag → the default launcher */;
+    if (!isRecoverableWindow) {
+      logToFile(`[main] render-process-gone: not auto-reloading transient window (${urlNow})`);
+      return;
+    }
+
+    const id = webContents?.id;
+    if (typeof id !== 'number' || !webContents || webContents.isDestroyed?.()) {
+      // WebContents gone entirely — recreate the launcher via the existing
+      // helper (idempotent: no-ops if a launcher already exists). Keep the DB
+      // OPEN so the recreated renderer is fully functional.
+      try {
+        appState.createWindow();
+        logToFile('[main] render-process-gone: webContents destroyed, recreated launcher window');
+      } catch (e: any) {
+        logToFile(`[main] render-process-gone: window recreate failed: ${e?.message || e}`);
+      }
+      return;
+    }
+
+    const now = Date.now();
+    const history = (rendererReloadHistory.get(id) || []).filter(
+      (t) => now - t < RENDERER_RELOAD_WINDOW_MS
+    );
+
+    if (history.length >= RENDERER_RELOAD_MAX) {
+      // Crash loop: stop reloading. NOW it is terminal — release the DB cleanly
+      // and surface a single dialog. Do not loop.
+      rendererReloadHistory.delete(id);
+      logCrashConsole('render-process-gone-loop-giveup', {
+        webContentsId: id,
+        reloadsInWindow: history.length,
+        windowMs: RENDERER_RELOAD_WINDOW_MS,
+      });
+      emergencyCloseDatabase('render-process-gone-loop-giveup');
+      try {
+        // dialog is not imported at module top — require it lazily (matches
+        // the native-arch gate handler's pattern above).
+        const { dialog } = require('electron');
+        dialog.showErrorBox(
+          'Natively — display error',
+          'A window keeps crashing while rendering. Please restart Natively. ' +
+          'If this continues, update to the latest version.'
+        );
+      } catch { /* dialog best-effort */ }
+      return;
+    }
+
+    // Under the cap → reload. Keep the DB OPEN (main owns it; it is healthy).
+    history.push(now);
+    rendererReloadHistory.set(id, history);
+    logToFile(
+      `[main] render-process-gone: auto-reloading webContents ${id} ` +
+      `(attempt ${history.length}/${RENDERER_RELOAD_MAX} within ${RENDERER_RELOAD_WINDOW_MS}ms)`
+    );
+    try {
+      webContents.reloadIgnoringCache();
+    } catch (e: any) {
+      logToFile(`[main] render-process-gone: reload failed: ${e?.message || e}`);
+    }
   });
 
   app.on('child-process-gone', (_event, details) => {

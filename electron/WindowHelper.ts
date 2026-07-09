@@ -379,8 +379,36 @@ export class WindowHelper {
         console.error('[WindowHelper] Failed to load URL:', e);
       });
 
-    this.launcherWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    let launcherLoadRetries = 0;
+    const MAX_LAUNCHER_LOAD_RETRIES = 10;
+    this.launcherWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
       console.error(`[WindowHelper] did-fail-load: ${errorCode} ${errorDescription}`);
+      // DEV SELF-HEAL (2026-07-10): in dev, the renderer loads from the Vite
+      // server at http://localhost:5180. If that server is momentarily
+      // unavailable (a slow first `npm start`, an HMR reconnect, or a stale
+      // server from a prior run being replaced), the load fails and — with no
+      // retry — the window stays permanently black (its native backgroundColor).
+      // That is the "loads fine the first time, then stuck at the logo/black
+      // screen on subsequent launches" symptom on Windows dev. A bounded retry
+      // converts "permanent black" into "black for ~1s, then loads."
+      //
+      // errorCode -3 = ERR_ABORTED (a superseded/intentional nav — do NOT retry).
+      if (isDev && errorCode !== -3 && launcherLoadRetries < MAX_LAUNCHER_LOAD_RETRIES) {
+        launcherLoadRetries += 1;
+        console.warn(`[WindowHelper] dev: retrying launcher load (${launcherLoadRetries}/${MAX_LAUNCHER_LOAD_RETRIES}) in 1s…`);
+        setTimeout(() => {
+          if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
+            this.launcherWindow.loadURL(`${startUrl}?window=launcher`).catch(() => { /* next did-fail-load retries */ });
+          }
+        }, 1000);
+      }
+    });
+
+    // Reset the retry counter once a load actually succeeds, so a LATER
+    // transient failure (e.g. an HMR blip mid-session) gets its own fresh
+    // retry budget instead of being starved by earlier retries.
+    this.launcherWindow.webContents.on('did-finish-load', () => {
+      launcherLoadRetries = 0;
     });
 
     // Pipe renderer-side diagnostics into the main-process log file. Without
@@ -621,8 +649,22 @@ export class WindowHelper {
 
     // On Windows/Linux: intercept close and hide to tray instead of quitting,
     // unless the app is actually quitting (e.g. from tray "Quit" menu).
+    //
+    // DEV EXCEPTION (2026-07-10): in dev, hide-to-tray leaves a headless
+    // electron process alive after you close the window. When you then Ctrl+C
+    // the `npm start` terminal, Windows does not reliably deliver SIGINT/SIGTERM
+    // to that GUI process, so it survives as a ZOMBIE holding the single-instance
+    // lock, port 5180, and open natively.db-wal/-shm handles. The NEXT `npm start`
+    // then either self-exits on the lost lock or loads a dead dev server →
+    // "loads once, then stuck at logo/black forever." In dev we therefore let a
+    // window close actually quit the app, so no zombie survives between runs.
     if (process.platform !== 'darwin') {
       this.launcherWindow.on('close', (e) => {
+        if (isDev) {
+          // Let the close proceed and quit — no hide-to-tray in dev.
+          this.appState.setQuitting(true);
+          return;
+        }
         if (!this.appState.isQuitting()) {
           e.preventDefault();
           this.launcherWindow?.hide();

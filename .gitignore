@@ -396,3 +396,7 @@ Sample thesis for testing.pdf
 
 # Live-smoke harness scratch dir (created at runtime by scripts/smoke-document-grounded.js)
 /.smoke-sandbox/
+
+# User-submitted crash reports / debug logs (device + session diagnostics — never commit)
+user log/
+*.ips

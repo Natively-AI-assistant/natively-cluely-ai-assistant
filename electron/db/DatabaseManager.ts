@@ -153,6 +153,10 @@ export class DatabaseManager {
      * methods are no-ops (db is null). Idempotent. Safe to call from
      * `before-quit` AND from the `window-all-closed` handler so the
      * launcher hides-to-tray path also releases the connection.
+     *
+     * This path DOES checkpoint (TRUNCATE) because it runs from a HEALTHY
+     * process (clean quit). Do NOT call this from a crash handler — use
+     * `closeWithoutCheckpoint()` there instead (see below).
      */
     public close(): void {
         if (!this.db) return;
@@ -163,6 +167,38 @@ export class DatabaseManager {
             this.db.close();
         } catch (e: any) {
             console.warn('[DatabaseManager] close failed:', e?.message || e);
+        }
+        this.db = null;
+    }
+
+    /**
+     * Crash-safe close: release the connection WITHOUT running a
+     * wal_checkpoint(TRUNCATE).
+     *
+     * REGRESSION FIX (2026-07-10): v2.8.1 wired an emergency
+     * checkpoint+close into every crash handler (uncaughtException,
+     * unhandledRejection, SIGTERM/SIGINT, render-process-gone, …). But a
+     * TRUNCATE checkpoint run from a CRASHING or half-initialized process
+     * — or interrupted by the macOS SIGTERM→SIGKILL race — can leave
+     * `natively.db-wal` / `natively.db-shm` half-truncated, which then
+     * BLOCKS the next `new Database()` open (SQLITE_BUSY on Windows'
+     * mandatory locks, or an unreconcilable WAL on macOS). That converted a
+     * one-time crash into a permanent "app never boots again" brick on both
+     * platforms. v2.7.0 never checkpointed on crash — it let SQLite's own
+     * automatic WAL recovery replay the log safely on the next open, which
+     * is exactly what we restore here.
+     *
+     * So on a crash we ONLY close the handle (to drop the OS lock) and let
+     * SQLite auto-recover the WAL next launch. `better_sqlite3`'s `close()`
+     * itself does NOT checkpoint (only our `close()` wrapper above does), so
+     * calling the raw handle close is checkpoint-free.
+     */
+    public closeWithoutCheckpoint(): void {
+        if (!this.db) return;
+        try {
+            this.db.close();
+        } catch (e: any) {
+            console.warn('[DatabaseManager] closeWithoutCheckpoint failed:', e?.message || e);
         }
         this.db = null;
     }
@@ -205,6 +241,56 @@ export class DatabaseManager {
         }
     }
 
+    /**
+     * Open the better-sqlite3 connection, self-healing a poisoned WAL sidecar
+     * left by an unclean prior exit / interrupted crash-time checkpoint.
+     *
+     * On the first open failure whose code indicates lock contention or a torn
+     * WAL (SQLITE_BUSY / SQLITE_IOERR / SQLITE_CORRUPT / SQLITE_NOTADB /
+     * SQLITE_CANTOPEN / SQLITE_PROTOCOL), delete the `-wal` and `-shm` sidecars
+     * (NOT the main `.db`, which holds the last committed state) and retry the
+     * open exactly once. If the retry also fails, the original error propagates
+     * so the ctor's catch degrades to `db: null` (meeting history/modes
+     * disabled) instead of hanging — same as before, but only as a last resort.
+     *
+     * See the REGRESSION FIX note on closeWithoutCheckpoint() for the root cause.
+     */
+    private openWithWalSelfHeal(): Database.Database {
+        try {
+            return new Database(this.dbPath);
+        } catch (openErr: any) {
+            const code = String(openErr?.code || '');
+            const healable =
+                /SQLITE_BUSY|SQLITE_IOERR|SQLITE_CORRUPT|SQLITE_NOTADB|SQLITE_CANTOPEN|SQLITE_PROTOCOL/.test(code) ||
+                /database is locked|disk I\/O error|file is not a database|malformed/i.test(String(openErr?.message || ''));
+            if (!healable) throw openErr;
+
+            console.warn(
+                `[DB-RECOVERY] initial open failed (${code || openErr?.message}); ` +
+                `clearing stale WAL sidecars (-wal/-shm) and retrying once. ` +
+                `This recovers an install bricked by an interrupted crash-time checkpoint.`
+            );
+            for (const suffix of ['-wal', '-shm'] as const) {
+                const sidecar = `${this.dbPath}${suffix}`;
+                try {
+                    if (fs.existsSync(sidecar)) {
+                        fs.unlinkSync(sidecar);
+                        console.warn(`[DB-RECOVERY] removed stale ${suffix} sidecar at ${sidecar}`);
+                    }
+                } catch (rmErr: any) {
+                    // If we cannot remove the sidecar (permissions, or a zombie
+                    // process still holds the handle on Windows), the retry will
+                    // fail and the original error propagates. Log and continue.
+                    console.warn(`[DB-RECOVERY] could not remove ${suffix} sidecar: ${rmErr?.message || rmErr}`);
+                }
+            }
+            // Retry ONCE. Let any error here propagate to the ctor catch.
+            const db = new Database(this.dbPath);
+            console.warn('[DB-RECOVERY] reopened successfully after clearing WAL sidecars ✅');
+            return db;
+        }
+    }
+
     private init() {
         try {
             console.log(`[DatabaseManager] Initializing database at ${this.dbPath}`);
@@ -230,7 +316,20 @@ export class DatabaseManager {
                 }
             }
 
-            this.db = new Database(this.dbPath);
+            // SELF-HEAL (2026-07-10): open the DB, and if the open fails
+            // because a prior crash left a poisoned WAL sidecar, clear the
+            // stale -wal/-shm and retry ONCE. Background: v2.8.1 ran a
+            // wal_checkpoint(TRUNCATE) from crash handlers; if that was
+            // interrupted it left natively.db-wal/-shm in a state that made
+            // this very open throw (SQLITE_BUSY on Windows' mandatory locks,
+            // SQLITE_IOERR/CORRUPT/NOTADB on a torn WAL) — permanently bricking
+            // every subsequent launch. The main .db holds the last COMMITTED
+            // state; a dirty/uncheckpointed WAL only contains not-yet-merged
+            // frames, so deleting the sidecars and reopening recovers the DB to
+            // its last consistent commit rather than leaving the app unbootable.
+            // Any user already bricked by a shipped v2.8.x build self-heals on
+            // the next launch with this — they do NOT need to hand-delete files.
+            this.db = this.openWithWalSelfHeal();
             this.db.pragma('journal_mode = WAL');
             // Hotfix 2026-07-09: with WAL enabled, background indexing workers
             // and foreground chat reads/writes can briefly contend. Waiting is
@@ -255,7 +354,7 @@ export class DatabaseManager {
                 const walBytes = fs.existsSync(walPath) ? fs.statSync(walPath).size : 0;
                 const shmExists = fs.existsSync(shmPath);
                 if (walBytes >= 50 * 1024 * 1024) {
-                    console.warn(`[DB-RECOVERY] large WAL on open: ${walBytes} bytes at ${walPath} (previous session likely died mid-transaction). A TRUNCATE checkpoint is being run automatically.`);
+                    console.warn(`[DB-RECOVERY] large WAL on open: ${walBytes} bytes at ${walPath} (previous session likely died mid-transaction). SQLite will auto-recover it on this open; a manual TRUNCATE checkpoint runs only on the next clean quit.`);
                 } else if (walBytes >= 5 * 1024 * 1024) {
                     console.log(`[DB-RECOVERY] non-trivial WAL on open: ${walBytes} bytes at ${walPath}`);
                 }
