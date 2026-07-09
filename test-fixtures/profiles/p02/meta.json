@@ -1,0 +1,240 @@
+{
+  "name": "Jordan Avery Mitchell",
+  "email": "jmitchell.cs@outlook.com",
+  "phone": "(512) 555-0148",
+  "linkedin": "linkedin.com/in/jordanmitchelldev",
+  "github": "github.com/jmitchell-dev",
+  "location": "Austin, TX",
+  "fullName": "Jordan Avery Mitchell",
+  "totalExperienceMonths": 0,
+  "current_title": "Recent CS graduate / seeking entry-level software engineer role",
+  "skills": {
+    "languages": [
+      "Python",
+      "JavaScript (ES6+)",
+      "TypeScript",
+      "Java",
+      "Go",
+      "SQL",
+      "HTML/CSS"
+    ],
+    "frameworks_tools": [
+      "React",
+      "Node.js",
+      "Express",
+      "Flask",
+      "FastAPI",
+      "PyTorch",
+      "Pandas",
+      "NumPy",
+      "Git",
+      "Docker",
+      "PostgreSQL",
+      "SQLite",
+      "MongoDB",
+      "Tailwind CSS"
+    ],
+    "cloud_devops": [
+      "AWS (S3, EC2, Lambda basics)",
+      "GitHub Actions",
+      "Vercel",
+      "Render",
+      "Linux CLI"
+    ],
+    "practices": [
+      "REST API design",
+      "unit/integration testing (Jest, Pytest)"
+    ]
+  },
+  "topSkills": [
+    "Python",
+    "JavaScript",
+    "TypeScript",
+    "Java",
+    "Go",
+    "SQL",
+    "React",
+    "Node.js"
+  ],
+  "projects": [
+    {
+      "name": "BookSwap",
+      "verifiableFact": "Peer-to-peer campus textbook exchange platform"
+    },
+    {
+      "name": "CropYield",
+      "verifiableFact": "CNN-based crop yield prediction"
+    },
+    {
+      "name": "TaskOrbit",
+      "verifiableFact": "CLI task and habit manager"
+    }
+  ],
+  "summary": "Recent BS CS graduate from UT Austin with full-stack and ML project experience; seeking entry-level backend or full-stack SWE role.",
+  "relevant_coursework": [
+    "Data Structures and Algorithms",
+    "Algorithms Design and Analysis",
+    "Operating Systems",
+    "Database Systems",
+    "Computer Networks",
+    "Software Engineering",
+    "Machine Learning",
+    "Web Development",
+    "Linear Algebra",
+    "Discrete Mathematics",
+    "Cloud Computing Fundamentals"
+  ],
+  "achievements": [
+    {
+      "event": "HackTX 2024",
+      "award": "1st Place, Education Track (out of 62 teams)",
+      "date": "November 2024",
+      "location": "Austin, TX",
+      "details": "Led 4-person team building AI lecture summarizer (Whisper + GPT-4); built React frontend and FastAPI backend; 94% judged accuracy on 50-minute sample; awarded $1,500"
+    }
+  ],
+  "experience_level": "Entry-level / new graduate",
+  "preferred_roles": [
+    "entry-level software engineer",
+    "backend",
+    "full-stack"
+  ],
+  "education": "BS Computer Science, Minor in Mathematics, University of Texas at Austin, GPA 3.78/4.0, Expected May 2025",
+  "graduation_date": "May 2025",
+  "years_experience": "0 (entry-level / recent graduate)",
+  "target_role": "Entry-level software engineer (backend or full-stack)",
+  "languages": [
+    "Python",
+    "JavaScript (ES6+)",
+    "TypeScript",
+    "Java",
+    "Go",
+    "SQL",
+    "HTML/CSS"
+  ],
+  "frameworks": [
+    "React",
+    "Node.js",
+    "Express",
+    "Flask",
+    "FastAPI",
+    "PyTorch",
+    "Pandas",
+    "NumPy",
+    "Tailwind CSS"
+  ],
+  "databases": [
+    "PostgreSQL",
+    "SQLite",
+    "MongoDB"
+  ],
+  "cloud_devops": [
+    "AWS S3",
+    "AWS EC2",
+    "AWS Lambda (basics)",
+    "GitHub Actions",
+    "Vercel",
+    "Render",
+    "Docker",
+    "Linux CLI"
+  ],
+  "core_skills": [
+    "Full-stack web development",
+    "Machine learning",
+    "REST API design",
+    "Unit/integration testing (Jest, Pytest, testify)",
+    "Data structures and algorithms",
+    "CI/CD pipelines",
+    "Authentication (JWT, bcrypt)"
+  ],
+  "notable_projects": [
+    {
+      "name": "BookSwap",
+      "description": "Full-stack peer-to-peer textbook exchange platform",
+      "stack": [
+        "React",
+        "Node.js",
+        "Express",
+        "PostgreSQL",
+        "JWT",
+        "bcrypt",
+        "Stripe",
+        "Twilio"
+      ],
+      "highlights": [
+        "84 users during 4-week beta",
+        "Cut search latency from 420ms to 95ms",
+        "91% test coverage not applicable; uses Jest/Pytest - this project uses Node"
+      ]
+    },
+    {
+      "name": "CropYield",
+      "description": "CNN-based crop yield prediction using ResNet-50",
+      "stack": [
+        "Python",
+        "PyTorch",
+        "Pandas",
+        "Dask",
+        "Flask",
+        "Plotly"
+      ],
+      "highlights": [
+        "R^2 = 0.81 on USDA Sentinel-2 dataset",
+        "Processed 12 GB data"
+      ]
+    },
+    {
+      "name": "TaskOrbit",
+      "description": "CLI task/habit manager",
+      "stack": [
+        "Go",
+        "SQLite",
+        "GitHub Actions",
+        "Homebrew"
+      ],
+      "highlights": [
+        "91% line coverage",
+        "230+ Homebrew installs in 6 weeks"
+      ]
+    }
+  ],
+  "soft_skills": [
+    "Team leadership (4-person team)",
+    "Demo/presentation to engineering judges",
+    "Shipping under tight deadlines (24-hour hackathon)"
+  ],
+  "certifications": "None listed",
+  "experience_years": "Entry-level / recent graduate",
+  "current_role": "Seeking entry-level software engineer role",
+  "graduation": "Expected May 2025",
+  "gpa": "3.78/4.0",
+  "role_seeking": "entry-level software engineer (backend or full-stack)",
+  "practices": [
+    "REST API design",
+    "unit/integration testing (Jest, Pytest)",
+    "CI/CD"
+  ],
+  "coursework": [
+    "Data Structures and Algorithms",
+    "Algorithms Design and Analysis",
+    "Operating Systems",
+    "Database Systems",
+    "Computer Networks",
+    "Software Engineering",
+    "Machine Learning",
+    "Web Development",
+    "Linear Algebra",
+    "Discrete Mathematics",
+    "Cloud Computing Fundamentals"
+  ],
+  "requirementsMet": [],
+  "requirementsNotMet": [],
+  "id": "p02",
+  "edgeCase": "Fresh computer-science graduate, NO full-time work experience. 1-page resume: education, 3 academic/personal projects, no internships, cours",
+  "resumeFormat": "pdf",
+  "hasSecondDoc": false,
+  "jdRole": "Junior Software Developer",
+  "jdCompany": "NorthBay Logistics Technologies",
+  "mostRecentEmployer": "Self-Directed Project (BookSwap)",
+  "mostRecentTitle": "Full-Stack Developer"
+}

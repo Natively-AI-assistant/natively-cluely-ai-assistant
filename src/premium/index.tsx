@@ -18,7 +18,8 @@ const nullAdCampaigns = (
   _appStartTime?: number,
   _lastMeetingEndTime?: number | null,
   _isProcessingMeeting?: boolean,
-  _hasNativelyApi?: boolean
+  _hasNativelyApi?: boolean,
+  _enabled?: boolean,
 ) => ({
   activeAd: null as string | null,
   dismissAd: (_campaignId?: string) => {},

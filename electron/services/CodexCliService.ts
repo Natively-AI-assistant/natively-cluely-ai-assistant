@@ -308,11 +308,23 @@ export class CodexCliService {
     const body = this.buildRequestBody(options);
     const headers = this.buildHeaders();
 
-    // Manual deadline (in addition to AbortSignal) so an open connection
-    // that stops emitting data still gets killed.
+    // Idle-timeout guard: aborts the HTTP connection if no bytes arrive for
+    // `timeoutMs` ms. The timer RESETS on every yielded delta, so a long
+    // answer that is actively streaming (even slowly) is never cut off.
+    // This is intentionally NOT a wall-clock cap from request start — that
+    // would abort long but healthy responses (e.g. gpt-5.5 with a large
+    // system prompt routinely takes >30s total). The outer
+    // raceStreamWithDeadline() already handles the first-useful-token
+    // deadline and the inter-token stall guard independently; this guard
+    // serves as a belt-and-suspenders kill for a truly stuck HTTP connection
+    // (server accepted the request but sends nothing at all for timeoutMs).
     const deadlineController = new AbortController();
-    const deadlineTimer = setTimeout(() => deadlineController.abort(), options.timeoutMs);
-    // Combine user-supplied signal with our deadline.
+    let deadlineTimer: ReturnType<typeof setTimeout> = setTimeout(() => deadlineController.abort(), options.timeoutMs);
+    const resetDeadline = () => {
+      clearTimeout(deadlineTimer);
+      deadlineTimer = setTimeout(() => deadlineController.abort(), options.timeoutMs);
+    };
+    // Combine user-supplied signal with our idle-timeout signal.
     const combinedSignal = combineSignals(options.signal, deadlineController.signal);
     const cleanup = () => {
       clearTimeout(deadlineTimer);
@@ -322,6 +334,7 @@ export class CodexCliService {
     try {
       const deltas = this.fetchDeltas(body, headers, combinedSignal.signal, options);
       for await (const delta of deltas) {
+        resetDeadline();
         yield delta;
       }
     } finally {
@@ -489,7 +502,9 @@ export class CodexCliService {
     let refreshedOnce = false;
 
     while (true) {
-      if (signal.aborted) throw new Error('Codex request aborted.');
+      if (signal.aborted) {
+        throw new Error('Codex request aborted.');
+      }
 
       // Re-mint headers on each attempt so a 401-retry uses the FRESH
       // access token (after the refresh succeeded, not before).
@@ -510,7 +525,9 @@ export class CodexCliService {
         });
       } catch (e: any) {
         // AbortError: re-throw so the generator halts cleanly.
-        if (e?.name === 'AbortError') throw new Error('Codex request aborted.');
+        if (e?.name === 'AbortError') {
+          throw new Error('Codex request aborted.');
+        }
         // Network error: retry with backoff.
         if (attempt >= TRANSIENT_RETRY_MAX) {
           throw new Error(`Codex request failed after ${TRANSIENT_RETRY_MAX} retries: ${e?.message || e}`);
@@ -603,13 +620,44 @@ export class CodexCliService {
     const reader = response.body.getReader();
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
-    let sawTerminalDone = false;
+    // Tracks whether the stream for THIS response has finished normally.
+    // Set to `true` when ANY of the following happens:
+    //   - a terminal event arrives: response.completed / .incomplete / .failed
+    //   - the SSE body closes cleanly (reader.read() returns done: true)
+    //
+    // Once set, an AbortError on a subsequent reader.read() is a benign
+    // cleanup event (the ChatGPT OAuth endpoint keeps the SSE body open
+    // with :keepalive for ~30s after the model finishes; if our outer
+    // controller.abort() fires during that window, the still-bound
+    // fetch rejects reader.read() with AbortError — even though the
+    // response was already fully delivered). Surfacing such an abort
+    // as "Codex request aborted." is the bug this flag was added to
+    // address.
+    //
+    // CRITICAL: this flag MUST also cover the clean-close path (`done:
+    // true`) below. The 30s-late AbortError can ALSO fire on a stream
+    // that finished via `done: true` without a terminal event name we
+    // recognize (in practice chatgpt.com sometimes sends the final
+    // delta + closes the body without emitting response.completed).
+    let sawTerminalEvent = false;
     let terminalError: Error | null = null;
     try {
       while (true) {
-        if (signal.aborted) throw new Error('Codex request aborted.');
+        if (signal.aborted) {
+          throw new Error('Codex request aborted.');
+        }
         const { value, done } = await reader.read();
-        if (done) break;
+        if (done) {
+          // Body closed cleanly (server sent EOF, or our own prior
+          // reader.cancel() in the finally of an earlier code path
+          // unwound the body). This IS a successful completion — deltas
+          // were already flushed. Set sawTerminalEvent so any future
+          // AbortError on the catch's swallow predicate treats this
+          // stream as post-completion cleanup, in case the abort
+          // signal fires after the loop exits.
+          sawTerminalEvent = true;
+          break;
+        }
         buffer += decoder.decode(value, { stream: true });
 
         // SSE messages are separated by a blank line ("\n\n" in
@@ -621,10 +669,17 @@ export class CodexCliService {
           buffer = buffer.slice(idx + (buffer[idx] === '\r' ? 4 : 2));
           const parsed = parseSseEvent(raw);
           if (!parsed) continue;
-          if (parsed.data === '[DONE]') {
-            sawTerminalDone = true;
-            continue;
-          }
+          // The `[DONE]` sentinel was historically used by the old
+          // chat-completions SSE protocol to signal end-of-stream. The
+          // new Responses API uses `response.completed` / .incomplete /
+          // .failed events instead — those drive sawTerminalEvent
+          // (the flag that gates the post-completion AbortError
+          // swallow). We intentionally IGNORE `[DONE]` here: ignoring
+          // it lets the parser keep reading the body until the real
+          // terminal event arrives or the body closes, which matches
+          // the natively path at LLMHelper.ts:4897-4900 (also ignores
+          // `[DONE]` and relies on the terminal event).
+          if (parsed.data === '[DONE]') continue;
           let json: any;
           try {
             json = JSON.parse(parsed.data);
@@ -641,8 +696,20 @@ export class CodexCliService {
               : new Error(errMsg);
             break;
           }
+          // Real terminal events on the Responses SSE stream. Once
+          // any of these arrive, we know the model has finished and
+          // the deltas have all been yielded. From here on, ANY
+          // AbortError on reader.read() is post-completion cleanup
+          // noise — don't surface it.
+          if (json && (json.type === 'response.completed' ||
+              json.type === 'response.incomplete' ||
+              json.type === 'response.failed')) {
+            sawTerminalEvent = true;
+            break;
+          }
         }
         if (terminalError) break;
+        if (sawTerminalEvent) break;
       }
       // Drain any trailing buffer (last event without trailing blank line).
       if (buffer.trim()) {
@@ -658,23 +725,68 @@ export class CodexCliService {
                 ? new TransientStreamError(errMsg)
                 : new Error(errMsg);
             }
+            if (json && (json.type === 'response.completed' ||
+                json.type === 'response.incomplete' ||
+                json.type === 'response.failed')) {
+              sawTerminalEvent = true;
+            }
           } catch { /* not JSON, ignore */ }
         }
       }
     } catch (e: any) {
-      if (e?.name === 'AbortError' || /aborted/i.test(String(e?.message))) {
-        // Surface partials; the caller's generator will see the abort.
-        throw new Error('Codex request aborted.');
+      // POST-COMPLETION SWALLOW: an AbortError thrown by reader.read()
+      // AFTER we've seen a terminal event is benign. The ChatGPT OAuth
+      // endpoint keeps the SSE body open with trailing :keepalive for
+      // ~30s after the model finishes; any outer controller.abort()
+      // (supersession, user stop, deadline teardown) that fires in
+      // that window rejects the reader.read() with AbortError, which
+      // is a cleanup event — NOT a stream error. The deltas were
+      // already flushed upstream before the terminal event arrived.
+      const isAbort = e?.name === 'AbortError' || /aborted/i.test(String(e?.message));
+      if (isAbort && sawTerminalEvent) {
+        // Best-effort log; the IPC handler's catch at ipcHandlers.ts:2299
+        // uses the message text to classify, so swallowing here is what
+        // removes the "Codex request aborted." log line from the user's
+        // session.
+        if (process.env.CODEX_DEBUG) {
+          console.warn('[Codex] parseSseStream: reader throw AFTER normal completion; swallowed.', {
+            stage: 'post_completion_cleanup',
+            reason: e?.name || 'unknown',
+          });
+        }
+        return;
       }
+      // Pre-completion abort: still surface as before. The outer
+      // raceStreamWithDeadline / chatStreamGuard consumes this for
+      // supersession/cancel; user's gemini-stream-error UI is the
+      // correct signal in that case (matches Escape / Cmd+R behaviour).
+      if (isAbort) throw new Error('Codex request aborted.');
       throw e;
     } finally {
-      try { reader.releaseLock(); } catch { /* already released */ }
+      // CANCEL — not releaseLock — to actively tear down the HTTP
+      // body. The natively path at LLMHelper.ts:4935 uses the same
+      // pattern; releaseLock() only drops the consumer lock on the
+      // stream and leaves the body open on the server. The ChatGPT
+      // OAuth endpoint specifically keeps the SSE body alive for
+      // ~30s after the model finishes; if our outer controller fires
+      // a real abort (supersession of the next user request, user
+      // presses Cmd+R, etc.) during that window, the still-open body
+      // throws AbortError on the next reader.read() — the very error
+      // the catch above swallows when sawTerminalEvent is true.
+      //
+      // reader.cancel() returns a Promise. We attach .catch() because
+      // the synchronous try/catch around a Promise-returning call does
+      // NOT catch Promise rejections — those surface as
+      // unhandledRejection events which Electron's main process treats
+      // as fatal under --unhandled-rejections=strict. The reject is
+      // benign (the body is already torn down by the abort path or by
+      // a prior cancel) — we just need to absorb it.
+      reader.cancel().catch(() => { /* already torn down */ });
     }
     if (terminalError) throw terminalError;
     // We intentionally don't require [DONE] — some servers omit it; an
     // open stream that just ends is treated as successful (the deltas
     // already produced the response).
-    void sawTerminalDone;
   }
 
   // ---------------------------------------------------------------------------

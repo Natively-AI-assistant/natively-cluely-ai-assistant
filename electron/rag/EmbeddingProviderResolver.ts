@@ -8,6 +8,10 @@ import { ProviderScopeError, assertProviderDataScopes, type ProviderDataScopePol
 export interface AppAPIConfig {
   openaiKey?: string;
   geminiKey?: string;
+  // Optional Gemini key POOL for rotation + per-key 429 cooldown. When present,
+  // ALL of these (plus geminiKey) are handed to GeminiEmbeddingProvider so a
+  // rate-limited key is skipped for the others instead of hard-failing the index.
+  geminiKeys?: string[];
   ollamaUrl?: string; // e.g. 'http://localhost:11434'
   providerDataScopes?: ProviderDataScopePolicy;
   // Optional overrides for the Gemini embedding model/dims (internal escape hatch
@@ -34,6 +38,23 @@ export class EmbeddingProviderResolver {
    * Stabilizing the probe keeps the active space stable and avoids the thrash.
    * Local/Ollama probes are cheap + deterministic, so they aren't retried.
    */
+  /**
+   * Assemble the ordered, de-duped Gemini key pool for embedding rotation:
+   *   config.geminiKeys[]  →  config.geminiKey  →  env GEMINI_API_KEY(_2.._6) / GOOGLE_API_KEY
+   * Env keys are included so a packaged app (which may only have process env) still
+   * gets rotation, and so the mission's multi-key .env is used automatically.
+   */
+  static buildGeminiKeyPool(config: AppAPIConfig): string[] {
+    const pool: string[] = [];
+    const add = (k?: string) => { const v = (k || '').trim(); if (v) pool.push(v); };
+    for (const k of config.geminiKeys || []) add(k);
+    add(config.geminiKey);
+    for (const name of ['GEMINI_API_KEY', 'GEMINI_API_KEY_2', 'GEMINI_API_KEY_3', 'GEMINI_API_KEY_4', 'GEMINI_API_KEY_5', 'GEMINI_API_KEY_6', 'GOOGLE_API_KEY']) {
+      add(process.env[name]);
+    }
+    return [...new Set(pool)];
+  }
+
   private static async probeAvailable(provider: IEmbeddingProvider): Promise<boolean> {
     const isCloud = EmbeddingProviderResolver.CLOUD_PROVIDER_NAMES.has(provider.name);
     const attempts = isCloud ? EmbeddingProviderResolver.CLOUD_PROBE_ATTEMPTS : 1;
@@ -70,7 +91,10 @@ export class EmbeddingProviderResolver {
         }
       }
     }
-    if (config.geminiKey) {
+    // Build the Gemini key pool: explicit geminiKeys[] ∪ single geminiKey ∪
+    // GEMINI_API_KEY(_2.._6)/GOOGLE_API_KEY from env. De-duped, order-preserving.
+    const geminiPool = EmbeddingProviderResolver.buildGeminiKeyPool(config);
+    if (geminiPool.length > 0) {
       try {
         assertProviderDataScopes('gemini_embeddings', ['embeddings'], config.providerDataScopes);
         // Rollback lever: NATIVELY_GEMINI_EMBED_MODEL / _DIMS env vars pin the model
@@ -79,7 +103,7 @@ export class EmbeddingProviderResolver {
         const envModel = process.env.NATIVELY_GEMINI_EMBED_MODEL;
         const envDims = process.env.NATIVELY_GEMINI_EMBED_DIMS ? Number(process.env.NATIVELY_GEMINI_EMBED_DIMS) : undefined;
         candidates.push(new GeminiEmbeddingProvider(
-          config.geminiKey,
+          geminiPool,
           config.geminiEmbeddingModel ?? envModel,
           config.geminiEmbeddingDims ?? (Number.isFinite(envDims) ? envDims : undefined),
         ));

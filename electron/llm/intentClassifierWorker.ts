@@ -1,4 +1,6 @@
 import { parentPort } from 'worker_threads';
+import { getBoundedOnnxSessionOptions } from '../utils/onnxThreadConfig';
+import { classifyWorkerFailure } from '../utils/workerStatus';
 
 if (!parentPort) throw new Error('intentClassifierWorker must be run as a Worker thread');
 
@@ -28,9 +30,10 @@ async function ensureLoaded(msg: any): Promise<void> {
     pipe = await pipeline(
       'zero-shot-classification',
       'Xenova/mobilebert-uncased-mnli',
-      { local_files_only: !!msg.isPackaged }
+      { local_files_only: !!msg.isPackaged, session_options: getBoundedOnnxSessionOptions() }
     );
     console.log('[IntentClassifierWorker] Zero-shot classifier loaded successfully.');
+    parentPort!.postMessage({ type: 'status', status: { type: 'ready', backend: 'onnx', modelPath: msg.localModelPath } });
   })();
 
   try {
@@ -38,6 +41,17 @@ async function ensureLoaded(msg: any): Promise<void> {
   } catch (e) {
     loadingPromise = null;
     pipe = null;
+    const failure = classifyWorkerFailure(e);
+    parentPort!.postMessage({
+      type: 'status',
+      status: {
+        type: failure.recoverable ? 'degraded' : 'failed',
+        backend: 'regex',
+        reason: failure.reason,
+        message: failure.message,
+        recoverable: failure.recoverable,
+      },
+    });
     throw e;
   }
 }

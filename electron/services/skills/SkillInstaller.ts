@@ -217,13 +217,8 @@ export async function installUploadedSkill(
     existsOnDisk = stat.isDirectory();
   } catch (e) {
     // ENOENT is the expected case for a fresh install. Anything else is
-    // a real I/O error and we'll let the staging loop surface it.
-    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
-      // Don't try to be clever — just retry the write under the staging
-      // loop so the error message is consistent.
-    } else {
-      existsOnDisk = false;
-    }
+    // a real I/O error — let the staging loop surface it with a
+    // consistent message rather than trying to be clever here.
   }
   if (existsOnDisk) {
     return {
@@ -344,6 +339,11 @@ export async function installUploadedSkill(
     name: preview.name,
     description: preview.description,
     source,
+    // Newly installed skills are enabled by default. The user's toggled
+    // enabled/disabled state lives in the .skills-state.json sidecar (see
+    // SkillsManager.setSkillEnabled); a fresh install implicitly clears any
+    // stale sidecar entry for this folder because we re-resolve from disk.
+    enabled: true,
   };
   return { success: true, skill, installedPath: targetDir };
 }
@@ -415,19 +415,21 @@ export function reapStaleUploadStages(
 
 /**
  * Index the payload's base64 by relative path so the write loop can look
- * each file up by name without re-scanning the array. For `kind: 'file'`
- * payloads the relPath is `SKILL.md` (the validator normalized it).
+ * each file up by name without re-scanning the array.
+ *
+ * IMPORTANT: for `kind: 'file'` payloads the single uploaded file is ALWAYS
+ * keyed as `SKILL.md`, regardless of the user's original filename. The
+ * on-disk contract that `SkillsManager.loadUserSkills()` reads is
+ * `<skill-dir>/SKILL.md` exactly — a file written under any other name
+ * (e.g. `code-simplifier.md`) is invisible to the loader, so the skill
+ * would silently never appear in the UI. The validator already treats the
+ * single uploaded file as the SKILL.md for parsing; we mirror that on disk.
  */
 function collectBase64ByPath(payload: SkillUploadPayload): Map<string, string> {
   const out = new Map<string, string>();
   if (payload.kind === 'file') {
-    // The validator may have substituted 'SKILL.md' if the user's filename
-    // was bad; we mirror that here so the write loop finds the entry.
-    const lower = payload.filename.toLowerCase();
-    const relPath = lower.endsWith('.md') && !(/[\\/]/.test(payload.filename) || payload.filename.includes('..'))
-      ? payload.filename.replace(/\\/g, '/').replace(/^\/+/, '')
-      : 'SKILL.md';
-    out.set(relPath, payload.contentBase64);
+    // Single-file upload → the on-disk file is always SKILL.md.
+    out.set('SKILL.md', payload.contentBase64);
   } else {
     for (const f of payload.files) {
       const relPath = f.path.replace(/\\/g, '/').replace(/^\/+/, '');

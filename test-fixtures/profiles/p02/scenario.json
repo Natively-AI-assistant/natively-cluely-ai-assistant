@@ -1,0 +1,202 @@
+{
+  "turns": [
+    {
+      "speaker": "interviewer",
+      "text": "Hi, thanks for joining us today. Could you start by giving a brief self-introduction?",
+      "isQuestion": true,
+      "qid": "Q1"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Hi, I'm a recent CS graduate with a focus on software development. Excited to be here.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Can you tell me about your most recent role or professional experience?",
+      "isQuestion": true,
+      "qid": "Q2"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I don't have full-time work experience yet, but I've done internships and projects during college.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "How many years of experience do you have with Python, your top skill?",
+      "isQuestion": true,
+      "qid": "Q3"
+    },
+    {
+      "speaker": "candidate",
+      "text": "About three years, including coursework, personal projects, and hackathons.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "I see BookSwap on your resume. Can you walk me through that project?",
+      "isQuestion": true,
+      "qid": "Q4"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Sure. BookSwap is a web app where users can trade books locally. I built the backend with Python and Django.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "What's the biggest achievement from your most recent position?",
+      "isQuestion": true,
+      "qid": "Q5"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Since I haven't held a full-time role, my biggest achievement was leading BookSwap to a top-five finish at our university hackathon.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Why are you interested in this role at our company?",
+      "isQuestion": true,
+      "qid": "Q6"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I admire your team's work on scalable systems, and I want to grow as a developer in that environment.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Nice weather we're having today, by the way. Let me ask: do you meet the requirement we discussed in the job description?",
+      "isQuestion": true,
+      "qid": "Q7"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Yes, I meet the core technical requirements, including Python and backend development experience.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Are there any requirements from the job description that you don't currently meet?",
+      "isQuestion": true,
+      "qid": "Q8"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I have limited experience with the specific cloud platform mentioned, but I'm eager to learn it quickly.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Can you tell me about your education?",
+      "isQuestion": true,
+      "qid": "Q9"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I graduated with a B.S. in Computer Science, with coursework in algorithms, databases, and software engineering.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Tell me about a challenging situation you faced in a project and how you handled it.",
+      "isQuestion": true,
+      "qid": "Q10"
+    },
+    {
+      "speaker": "candidate",
+      "text": "During BookSwap, our database kept timing out. I redesigned the queries and added caching, which fixed the issue.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "What are your salary expectations for this role?",
+      "isQuestion": true,
+      "qid": "Q11"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I'm flexible and open to discussing a fair offer based on the market and my skills.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Do you have any questions for us?",
+      "isQuestion": true,
+      "qid": "Q12"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Yes. What does onboarding look like, and how is performance reviewed in the first year?",
+      "isQuestion": true,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "How long did that database redesign take you to complete?",
+      "isQuestion": true,
+      "qid": "Q13"
+    },
+    {
+      "speaker": "candidate",
+      "text": "It took about two weeks of iterative work and testing.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Do you have a valid driver's license?",
+      "isQuestion": true,
+      "qid": "Q14"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I don't currently have one, but I can get one if the role requires travel.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Great chatting with you. I really enjoyed hearing about BookSwap.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Looking at your resume, which project taught you the most, and would you want to work on something similar here?",
+      "isQuestion": true,
+      "qid": "Q15"
+    },
+    {
+      "speaker": "candidate",
+      "text": "BookSwap taught me the most about backend architecture, and yes, I'd love to work on similar systems here.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Final question: where do you see yourself professionally in three years, and how does this role fit that plan?",
+      "isQuestion": true,
+      "qid": "Q16"
+    },
+    {
+      "speaker": "candidate",
+      "text": "In three years, I see myself as a full-stack developer, and this role is a strong step toward that goal.",
+      "isQuestion": false,
+      "qid": null
+    }
+  ]
+}

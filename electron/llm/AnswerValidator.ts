@@ -157,6 +157,12 @@ const inferLanguage = (answer: string, explicit?: string): string => {
   if (/\bjava\b/i.test(answer)) return 'java';
   if (/\bc\+\+|cpp\b/i.test(answer)) return 'cpp';
   if (/\bsql\b/i.test(answer)) return 'sql';
+  // React / JSX: detect import, hooks, or JSX element signals before falling
+  // back to python. Covers the common model error of fencing TSX/JSX as
+  // ```python (the prior CODING_CONTRACT specified "language tag ```python").
+  if (/\bimport\s+React\b|\buseState\s*\(|\buseEffect\s*\(|\buseRef\s*\(|\bclassName\s*=|<[A-Z][a-zA-Z]*[\s/>]/.test(answer)) {
+    return 'tsx';
+  }
   return 'python';
 };
 
@@ -411,7 +417,51 @@ export const validateAnswerStructure = (
     return validateExplicitCodingContract(explicitContract, answer);
   }
 
+  // dsa_question_answer (named algorithm problems: "reverse a linked list")
+  // keeps the six-section validator. coding_question_answer (general
+  // implementation: "write a React stopwatch") goes through the lighter
+  // impl validator that only requires a code block and corrects a wrong
+  // fence tag (the canonical bug: model fences JSX as ```python).
+  if (answerType === 'coding_question_answer') {
+    return validateImplAnswer(answer);
+  }
+
   return validateCodingMarkdown(answer);
+};
+
+/**
+ * Light validator for general implementation answers (coding_question_answer).
+ * Only requires a language-tagged code block. Detects and repairs JSX/React
+ * code that the model misfenced as ```python — a contract-induced error from
+ * the old CODING_CONTRACT that always said "language tag ```python".
+ */
+const validateImplAnswer = (answer: string): AnswerValidationResult => {
+  const trimmed = (answer || '').trim();
+  const codeBlock = extractFirstCodeBlock(trimmed);
+  if (!codeBlock) {
+    return { ok: false, missingSections: ['Code'], hasCodeBlock: false, hasComplexity: false };
+  }
+
+  const isJsx = /\bimport\s+React\b|\buseState\s*\(|\buseEffect\s*\(|\buseRef\s*\(|\bclassName\s*=|<[A-Z][a-zA-Z]*[\s/>]/.test(codeBlock.code);
+  // Note: codeBlock.language defaults to 'python' when the fence had no tag
+  // (see extractFirstCodeBlock). Treat empty/undefined as "no tag" so an
+  // untagged JSX fence still triggers repair — empty-tag is as wrong as
+  // mis-tagging as python.
+  const langRaw = (codeBlock.language || '').toLowerCase();
+  const wrongTag = isJsx && langRaw !== 'tsx' && langRaw !== 'jsx';
+  if (wrongTag) {
+    // Build the actual opening-fence substring from the matched block (NOT
+    // from codeBlock.language — the language is the *normalized* tag and may
+    // differ from the literal opening). The block begins with ```, optional
+    // tag, then \n. Replace just that prefix with ```tsx\n so the body is
+    // untouched.
+    const openingMatch = codeBlock.block.match(/^```([^\n]*)\n/);
+    const actualOpening = openingMatch ? openingMatch[0] : '```\n';
+    const fixed = trimmed.replace(actualOpening, '```tsx\n');
+    return { ok: false, missingSections: [], hasCodeBlock: true, hasComplexity: false, repaired: fixed };
+  }
+
+  return { ok: true, missingSections: [], hasCodeBlock: true, hasComplexity: hasComplexity(trimmed) };
 };
 
 /**

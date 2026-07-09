@@ -56,6 +56,11 @@ interface ElectronAPI {
     isOllama: boolean;
   }>;
   getAvailableOllamaModels: () => Promise<string[]>;
+  getProviderStatuses: () => Promise<any[]>;
+  getProviderStatus: (id: string) => Promise<any | null>;
+  onProviderStatusChanged: (callback: (status: any) => void) => () => void;
+  getLocalFallbackPreflight: () => Promise<any | null>;
+  runLocalFallbackPreflight: () => Promise<any>;
   switchToOllama: (model?: string, url?: string) => Promise<{ success: boolean; error?: string }>;
   switchToGemini: (
     apiKey?: string,
@@ -81,6 +86,37 @@ interface ElectronAPI {
   setLitellmConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number }) => Promise<{ success: boolean; error?: string }>;
   getAvailableLiteLLMModels: () => Promise<string[]>;
   setNativelyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
+  // ── In-app review / testimonial prompt ─────────────────────────────────
+  reviewGetPromptState: () => Promise<{
+    ok: boolean;
+    local?: {
+      has_reviewed: boolean;
+      dismissed_count: number;
+      dont_show_again: boolean;
+      last_prompted_at: string | null;
+      last_dismissed_at: string | null;
+      next_eligible_at: string | null;
+      session_count: number;
+      total_usage_ms: number;
+    };
+    backend?: { ok: boolean; state?: any; eligible?: boolean; reason?: string } | null;
+    eligible?: { eligible: boolean; reason: string };
+    error?: string;
+  }>;
+  reviewRecordSession: () => Promise<{ ok: boolean; error?: string }>;
+  reviewFlushSession: () => Promise<{ ok: boolean; totals?: { session_count: number; total_usage_ms: number; usage_ms: number; counted: boolean }; error?: string }>;
+  reviewMarkShown: () => Promise<{ ok: boolean; error?: string }>;
+  reviewDismissLater: () => Promise<{ ok: boolean; error?: string }>;
+  reviewDismissForever: () => Promise<{ ok: boolean; error?: string }>;
+  reviewSubmit: (payload: { rating: number; review_text: string | null }) => Promise<{ ok: boolean; id?: string; error?: string; status?: number }>;
+  reviewUpdateTestimonial: (payload: {
+    review_id: string;
+    name: string | null;
+    role: string | null;
+    company: string | null;
+    can_use_publicly: boolean;
+    display_name_publicly: boolean;
+  }) => Promise<{ ok: boolean; error?: string; status?: number }>;
   getNativelyPricing: () => Promise<{
     ok: boolean;
     currency?: string;
@@ -190,7 +226,22 @@ interface ElectronAPI {
       | 'local-whisper',
   ) => Promise<{ success: boolean; error?: string }>;
   localWhisperGetModels: () => Promise<{ models: any[]; activeModelId: string }>;
-  localWhisperSetModel: (modelId: string) => Promise<{ success: boolean }>;
+  localWhisperGetRecoveryNotice: () => Promise<{
+    recovered: true;
+    badModelId: string;
+    fallbackModelId: string;
+    message: string;
+  } | null>;
+  // Generalized ONNX load-sentinel recovery surface (intent / embeddings /
+  // reranker). Whisper keeps its dedicated banner; the other three families
+  // share a single channel keyed by `family`.
+  onnxGetRecoveryNotice: (family: 'whisper' | 'intent' | 'embeddings' | 'reranker') => Promise<{
+    family: 'whisper' | 'intent' | 'embeddings' | 'reranker';
+    badModelId: string;
+    message: string;
+  } | null>;
+  onnxResetFamily: (family: 'whisper' | 'intent' | 'embeddings' | 'reranker') => Promise<{ success: boolean; error?: string }>;
+  localWhisperSetModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
   localWhisperResetToDefault: () => Promise<{ success: boolean; error?: string; modelId?: string }>;
   localWhisperGetChannelConfig: () => Promise<{
     enabled: boolean;
@@ -363,7 +414,7 @@ interface ElectronAPI {
   generateDiagram: (text?: string) => Promise<{ enabled: boolean; diagram: any }>;
   getIntelligenceFlags: () => Promise<Array<{ key: string; enabled: boolean; setting: string; env: string; default: boolean }>>;
   setIntelligenceFlag: (key: string, value: boolean | null) => Promise<{ success: boolean; enabled?: boolean; error?: string }>;
-  getHindsightConfig: () => Promise<{ baseUrl: string; hasApiKey: boolean; autoStart: boolean; serverCommand: string; llmProvider: string; available: boolean }>;
+  getHindsightConfig: () => Promise<{ baseUrl: string; hasApiKey: boolean; autoStart: boolean; serverCommand: string; llmProvider: string; available: boolean; mode: 'local' | 'cloud'; synthetic: boolean; explicitlyDisabled: boolean; authFailed: boolean }>;
   setHindsightConfig: (cfg: { baseUrl?: string; apiKey?: string; autoStart?: boolean; serverCommand?: string; llmProvider?: string }) => Promise<{ success: boolean; healthy?: boolean; error?: string }>;
   testHindsightConnection: () => Promise<{ healthy: boolean; error?: string }>;
   updateMeetingTitle: (id: string, title: string) => Promise<boolean>;
@@ -426,6 +477,7 @@ interface ElectronAPI {
   toggleModelSelector: (coords: { x: number; y: number; activate?: boolean }) => Promise<void>;
   modelSelectorCloseIfOpen: () => Promise<void>;
   forceRestartOllama: () => Promise<void>;
+  isOllamaReachable: () => Promise<boolean>;
 
   // Settings Window
   toggleSettingsWindow: (coords?: { x: number; y: number }) => Promise<void>;
@@ -711,6 +763,10 @@ interface ElectronAPI {
   // JD & Research API
   profileUploadJD: (filePath: string) => Promise<{ success: boolean; error?: string }>;
   profileDeleteJD: () => Promise<{ success: boolean; error?: string }>;
+  // OKF Profile Intelligence (2026-07-02).
+  knowledgeExportProfilePack: () => Promise<{ success: boolean; path?: string; fileCount?: number; error?: string; violations?: Array<{ path: string; reason: string }> }>;
+  knowledgeListProfilePacks: () => Promise<{ success: boolean; error?: string; packs: Array<{ id: string; fileName: string; cardCount: number; entityCount: number; packVersion: number; updatedAt: string; cardsByType: Record<string, number> }> }>;
+  knowledgeGetProfilePack: (kind: string) => Promise<{ success: boolean; error?: string; pack?: { id: string; fileName: string; packVersion: number; updatedAt: string; cards: Array<{ id: string; type: string; title: string; conceptId: string; body: string; confidence: string; tags: string[]; entities: string[]; sourceQuotes: string[]; pii: boolean }> } }>;
   profileResearchCompany: (
     companyName: string,
   ) => Promise<{ success: boolean; dossier?: any; error?: string }>;
@@ -841,6 +897,22 @@ interface ElectronAPI {
     name: string;
     templateType: string;
   }) => Promise<{ success: boolean; mode?: any; error?: string }>;
+  modesGenerateFromBrief: (params: {
+    brief: string;
+    requiresGrounding?: boolean;
+    templateHint?: string;
+    key?: string;
+    persist?: boolean;
+  }) => Promise<{
+    success: boolean;
+    mode?: any;
+    draft?: any;
+    attempts?: number;
+    issues?: any[];
+    persisted?: boolean;
+    error?: string;
+  }>;
+  e2eInvoke: (channel: string, ...args: any[]) => Promise<any>;
   modesUpdate: (
     id: string,
     updates: { name?: string; templateType?: string; customContext?: string },
@@ -860,6 +932,16 @@ interface ElectronAPI {
     modeId: string,
   ) => Promise<{ success: boolean; statuses?: Array<{ fileId: string; fileName: string; status: string; chunkCount: number }>; error?: string }>;
   onModeFileIndexStatus: (callback: (data: { modeId: string; fileId?: string }) => void) => () => void;
+  onKnowledgeIndexProgress: (callback: (data: { fileId: string; status: string; startedAt?: number; finishedAt?: number; error?: string }) => void) => () => void;
+  knowledgeListPacks: (modeId: string) => Promise<{ success: boolean; packs: Array<{ id: string; sourceId: string; fileName: string; cardCount: number; entityCount: number; relationCount: number; packVersion: number; updatedAt: string }>; error?: string }>;
+  knowledgeGetPack: (fileId: string) => Promise<{ success: boolean; pack: any | null; error?: string }>;
+  knowledgeRegeneratePack: (params: { fileId: string; modeId: string; fileName: string }) => Promise<{ success: boolean; status?: string; pack?: any; error?: string }>;
+  knowledgeExportPack: (fileId: string) => Promise<{ success: boolean; cancelled?: boolean; exportedFileCount?: number; destRoot?: string; error?: string }>;
+  knowledgeEditCard: (params: { cardId: string; title?: string; body?: string; entities?: string[]; tags?: string[] }) => Promise<{ success: boolean; card?: any; error?: string }>;
+  knowledgeApproveCard: (cardId: string) => Promise<{ success: boolean; card?: any; error?: string }>;
+  knowledgeRejectCard: (cardId: string) => Promise<{ success: boolean; card?: any; error?: string }>;
+  knowledgeRestoreCardVersion: (params: { cardId: string; versionId: string }) => Promise<{ success: boolean; card?: any; error?: string }>;
+  knowledgeGetCardHistory: (cardId: string) => Promise<{ success: boolean; versions: any[]; error?: string }>;
   modesGetNoteSections: (modeId: string) => Promise<
     Array<{
       id: string;
@@ -906,6 +988,7 @@ interface ElectronAPI {
   // (structurally compatible) in src/types/electron.d.ts.
   skillsRefresh: () => Promise<unknown[]>;
   skillsOpenFolder: () => Promise<{ success: boolean; path: string; error?: string }>;
+  skillsDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
   skillsUpload: (
     payload: SkillUploadPayload,
     opts?: { autoInstall?: boolean }
@@ -1124,6 +1207,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Skills — local SKILL.md instructions surfaced in Settings and the overlay.
   skillsRefresh: () => ipcRenderer.invoke('skills:list'),
   skillsOpenFolder: () => ipcRenderer.invoke('skills:open-folder'),
+  // Per-skill management: hard-delete. Built-ins are refused inside the
+  // manager. Enable/disable is intentionally NOT exposed — users who don't
+  // want a skill delete it instead (see SkillsSettings.tsx).
+  skillsDelete: (id: string) => ipcRenderer.invoke('skills:delete', id),
   // Skill upload — step-3 wiring. `skillsUpload` is the general call (opts.autoInstall
   // defaults to false on the renderer side; main process uses ?? false). `skillsPreview`
   // is sugar for `autoInstall: false` — the renderer's confirm step calls `skillsUpload`
@@ -1185,6 +1272,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // LLM Model Management
   getCurrentLlmConfig: () => ipcRenderer.invoke('get-current-llm-config'),
   getAvailableOllamaModels: () => ipcRenderer.invoke('get-available-ollama-models'),
+  getProviderStatuses: () => ipcRenderer.invoke('get-provider-statuses'),
+  getProviderStatus: (id: string) => ipcRenderer.invoke('get-provider-status', id),
+  onProviderStatusChanged: (callback: (status: any) => void) => {
+    const subscription = (_: any, status: any) => callback(status);
+    ipcRenderer.on('provider-status-changed', subscription);
+    return () => ipcRenderer.removeListener('provider-status-changed', subscription);
+  },
+  getLocalFallbackPreflight: () => ipcRenderer.invoke('get-local-fallback-preflight'),
+  runLocalFallbackPreflight: () => ipcRenderer.invoke('run-local-fallback-preflight'),
   switchToOllama: (model?: string, url?: string) =>
     ipcRenderer.invoke('switch-to-ollama', model, url),
   switchToGemini: (apiKey?: string, modelId?: string) =>
@@ -1202,6 +1298,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setLitellmConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number }) => ipcRenderer.invoke('set-litellm-config', config),
   getAvailableLiteLLMModels: () => ipcRenderer.invoke('get-available-litellm-models'),
   setNativelyApiKey: (apiKey: string) => ipcRenderer.invoke('set-natively-api-key', apiKey),
+
+  // ── In-app review / testimonial prompt ─────────────────────────────────
+  reviewGetPromptState: () => ipcRenderer.invoke('review:get-prompt-state'),
+  reviewRecordSession: () => ipcRenderer.invoke('review:record-session'),
+  reviewFlushSession: () => ipcRenderer.invoke('review:flush-session'),
+  reviewMarkShown: () => ipcRenderer.invoke('review:mark-shown'),
+  reviewDismissLater: () => ipcRenderer.invoke('review:dismiss-later'),
+  reviewDismissForever: () => ipcRenderer.invoke('review:dismiss-forever'),
+  reviewSubmit: (payload: { rating: number; review_text: string | null }) => ipcRenderer.invoke('review:submit', payload),
+  reviewUpdateTestimonial: (payload: {
+    review_id: string;
+    name: string | null;
+    role: string | null;
+    company: string | null;
+    can_use_publicly: boolean;
+    display_name_publicly: boolean;
+  }) => ipcRenderer.invoke('review:update-testimonial', payload),
   getNativelyPricing: () => ipcRenderer.invoke('get-natively-pricing'),
   getNativelyUsage: () => ipcRenderer.invoke('get-natively-usage'),
   getStoredCredentials: () => ipcRenderer.invoke('get-stored-credentials'),
@@ -1256,6 +1369,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     region?: string,
   ) => ipcRenderer.invoke('test-stt-connection', provider, apiKey, region),
   localWhisperGetModels: () => ipcRenderer.invoke('local-whisper-get-models'),
+  localWhisperGetRecoveryNotice: () => ipcRenderer.invoke('local-whisper-get-recovery-notice'),
+  onnxGetRecoveryNotice: (family) => ipcRenderer.invoke('onnx-get-recovery-notice', family),
+  onnxResetFamily: (family) => ipcRenderer.invoke('onnx-reset-family', family),
   localWhisperSetModel: (modelId: string) => ipcRenderer.invoke('local-whisper-set-model', modelId),
   // In-app recovery: resets the active local-Whisper model + per-channel
   // overrides back to the safe fallback. See electron/ipcHandlers.ts handler.
@@ -1774,6 +1890,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
+  // NOTE: onSkillsChanged broadcast subscription was removed. The main
+  // process no longer broadcasts on delete (the only mutation left); the
+  // Settings panel re-fetches via skillsRefresh after a successful delete,
+  // and the overlay's autocomplete picker is fetched once on mount — users
+  // who delete a skill in Settings then switch to the overlay will see the
+  // stale autocomplete until the next mount, which is acceptable for v1.
+
   // Model Management
   getDefaultModel: () => ipcRenderer.invoke('get-default-model'),
   setModel: (modelId: string) => ipcRenderer.invoke('set-model', modelId),
@@ -1782,6 +1905,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('toggle-model-selector', coords),
   modelSelectorCloseIfOpen: () => ipcRenderer.invoke('model-selector:close-if-open'),
   forceRestartOllama: () => ipcRenderer.invoke('force-restart-ollama'),
+  isOllamaReachable: () => ipcRenderer.invoke('is-ollama-reachable'),
 
   // Settings Window
   toggleSettingsWindow: (coords?: { x: number; y: number }) =>
@@ -2149,6 +2273,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // JD & Research API
   profileUploadJD: (filePath: string) => ipcRenderer.invoke('profile:upload-jd', filePath),
   profileDeleteJD: () => ipcRenderer.invoke('profile:delete-jd'),
+  // OKF Profile Intelligence (2026-07-02): export the profile OKF bundle (explicit
+  // user action, premium + okfProfileMarkdownExport gated) and read pack data for
+  // the (flag-gated) Knowledge inspector UI.
+  knowledgeExportProfilePack: () => ipcRenderer.invoke('knowledge:export-profile-pack'),
+  knowledgeListProfilePacks: () => ipcRenderer.invoke('knowledge:list-profile-packs'),
+  knowledgeGetProfilePack: (kind: string) => ipcRenderer.invoke('knowledge:get-profile-pack', kind),
   profileResearchCompany: (companyName: string) =>
     ipcRenderer.invoke('profile:research-company', companyName),
   profileGenerateNegotiation: (force?: boolean) =>
@@ -2299,6 +2429,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   modesGetActive: () => ipcRenderer.invoke('modes:get-active'),
   modesCreate: (params: { name: string; templateType: string }) =>
     ipcRenderer.invoke('modes:create', params),
+  modesGenerateFromBrief: (params: {
+    brief: string;
+    requiresGrounding?: boolean;
+    templateHint?: string;
+    key?: string;
+    persist?: boolean;
+  }) => ipcRenderer.invoke('modes:generate-from-brief', params),
+  // E2E test bridge — generic invoke for the __e2e__:* handlers, which only exist
+  // when the main process was started with NATIVELY_E2E=1. No-op surface in a
+  // shipped app (the handlers aren't registered, so invoke rejects).
+  e2eInvoke: (channel: string, ...args: any[]) =>
+    ipcRenderer.invoke(channel, ...args),
   modesUpdate: (
     id: string,
     updates: { name?: string; templateType?: string; customContext?: string },
@@ -2312,11 +2454,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
   modesDeleteReferenceFile: (id: string) => ipcRenderer.invoke('modes:delete-reference-file', id),
   modesGetReferenceFileStatus: (modeId: string) =>
     ipcRenderer.invoke('modes:get-reference-file-status', modeId),
+  knowledgeListPacks: (modeId: string) => ipcRenderer.invoke('knowledge:list-packs', modeId),
+  knowledgeGetPack: (fileId: string) => ipcRenderer.invoke('knowledge:get-pack', fileId),
+  knowledgeRegeneratePack: (params: { fileId: string; modeId: string; fileName: string }) =>
+    ipcRenderer.invoke('knowledge:regenerate-pack', params),
+  knowledgeExportPack: (fileId: string) => ipcRenderer.invoke('knowledge:export-pack', fileId),
+  knowledgeEditCard: (params: { cardId: string; title?: string; body?: string; entities?: string[]; tags?: string[] }) =>
+    ipcRenderer.invoke('knowledge:edit-card', params),
+  knowledgeApproveCard: (cardId: string) => ipcRenderer.invoke('knowledge:approve-card', cardId),
+  knowledgeRejectCard: (cardId: string) => ipcRenderer.invoke('knowledge:reject-card', cardId),
+  knowledgeRestoreCardVersion: (params: { cardId: string; versionId: string }) =>
+    ipcRenderer.invoke('knowledge:restore-card-version', params),
+  knowledgeGetCardHistory: (cardId: string) => ipcRenderer.invoke('knowledge:get-card-history', cardId),
   onModeFileIndexStatus: (callback: (data: { modeId: string; fileId?: string }) => void) => {
     const subscription = (_: any, data: { modeId: string; fileId?: string }) => callback(data);
     ipcRenderer.on('mode-file-index-status', subscription);
     return () => {
       ipcRenderer.removeListener('mode-file-index-status', subscription);
+    };
+  },
+  onKnowledgeIndexProgress: (callback: (data: { fileId: string; status: string; startedAt?: number; finishedAt?: number; error?: string }) => void) => {
+    const subscription = (_: any, data: any) => callback(data);
+    ipcRenderer.on('knowledge-index-progress', subscription);
+    return () => {
+      ipcRenderer.removeListener('knowledge-index-progress', subscription);
     };
   },
   modesGetNoteSections: (modeId: string) => ipcRenderer.invoke('modes:get-note-sections', modeId),

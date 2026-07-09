@@ -750,8 +750,7 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({ initia
     }
 
     return (
-        <div className="space-y-4" data-interface-theme={interfaceTheme}>
-
+        <div className="space-y-6 animated fadeIn" data-interface-theme={interfaceTheme}>
 
             {isPremium ? (
                 <Card>
@@ -783,17 +782,15 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({ initia
                     animate="visible"
                     className="space-y-4"
                 >
+                    <header>
+                        <h3 className="text-lg font-bold text-text-primary mb-1">Natively Pro</h3>
+                        <p className="text-xs text-text-secondary mb-5">
+                            Unlock the full Natively Pro toolkit.
+                        </p>
+                    </header>
+
                     {/* ── Choose-your-plan hero ────────────────────────────── */}
                     <div className="space-y-3">
-                        {/* Title row */}
-                        <motion.div variants={itemVariants} className="px-0.5 pt-1">
-                            <h2 className="text-[18px] font-bold tracking-[-0.02em] text-text-primary leading-tight">
-                                Choose your plan
-                            </h2>
-                            <p className="text-[12px] text-text-tertiary mt-1 leading-snug">
-                                Unlock the full Natively Pro toolkit.
-                            </p>
-                        </motion.div>
 
                         {/* Two-card pricing grid — asymmetric: lifetime ~16px taller */}
                         <div className="grid grid-cols-2 gap-3 items-stretch">

@@ -1,0 +1,60 @@
+MARGARET "MEG" DONOVAN
+Atlanta, GA | (404) 555-2187 | meg.donovan.email@gmail.com | linkedin.com/in/megdonovan-data | github.com/megdonovan-data
+
+SUMMARY
+
+Former high-school mathematics teacher transitioning into data analytics after a two-year career break spent on caregiving and structured reskilling. Completed an intensive data-analytics bootcamp and built two end-to-end portfolio projects in SQL and Python. Six years of classroom experience translating complex quantitative concepts for diverse audiences, plus a track record of designing assessments, tracking student outcomes, and communicating findings to administrators and parents. Looking for an entry-level Data Analyst role where strong analytical thinking and clear communication will translate to business impact.
+
+WORK EXPERIENCE
+
+Mathematics Teacher (Grades 9-12)
+Westlake High School, Fulton County Public Schools, Atlanta, GA
+August 2017 - June 2023
+
+- Taught Algebra I, Algebra II, Geometry, and AP Statistics to 125+ students per year across four course-prep periods, with consistent year-over-year pass-rate gains of 5-8 percentage points on Georgia Milestones EOC assessments.
+- Built and maintained a gradebook and progress-monitoring system in Excel and Google Sheets using VLOOKUP, conditional formatting, and pivot tables to track 400+ student data points per semester; produced weekly dashboards for the math department lead and quarterly reports for the school principal.
+- Designed a new unit-level common-assessment framework adopted by all five math teachers on the 9th-grade team, reducing score-variance between sections by roughly 22% on shared rubric scoring.
+- Coached 14 students through a district-level data-science competition in 2022; team reached the top 10 of 47 Georgia high-school entries, working through dataset cleaning, descriptive statistics, and a 10-minute presentation of findings.
+- Mentored two first-year teachers through the district's new-instructor program; both were rated "Effective" or higher on their first-year evaluation rubric.
+- Chose to leave in June 2023 to care for a family member through a major surgery and a year-long recovery.
+
+CAREER BREAK / FAMILY CAREGIVING
+July 2023 - August 2025
+
+Took a planned two-year break from formal employment to provide full-time care for a parent recovering from surgery and subsequent health complications. During this period, completed a 9-month professional data-analytics bootcamp (Spring 2024 - Winter 2024), earned the Google Data Analytics Professional Certificate (August 2024), and built two portfolio projects now published on GitHub. Returned to the workforce actively in August 2025.
+
+PROJECTS
+
+1. Nashville Housing Market: Price Drivers and Foreclosure Risk
+github.com/megdonovan-data/nashville-housing-analysis | SQL, Excel
+
+- Cleaned and analyzed a public dataset of 56,000+ Davidson County property records (2014-2024) using PostgreSQL: standardized addresses, parsed sale dates, handled nulls in acreage and finished-square-foot columns, and joined parcel data with county assessor land-use codes.
+- Identified three statistically meaningful price drivers via correlation and multiple-regression-style queries: finished square footage, year built, and proximity-to-downtown buckets (R-squared approximately 0.71 on a held-out 20% sample).
+- Built a foreclosure-risk flag using a CASE expression on days-on-market, sale-type code, and prior-year tax delinquency, then validated the flag against 2024 outcomes (precision 0.68, recall 0.74).
+- Delivered a written report and a 12-slide deck recommending three actionable signals for a small real-estate investor client persona.
+
+2. Cyclistic Bike-Share: Annual Member vs. Casual Rider Behavior
+github.com/megdonovan-data/cyclistic-rider-segmentation | Python, pandas, matplotlib, Jupyter
+
+- Performed exploratory data analysis on 5.7 million Divvy/Bikeshare trip records (June 2023 - May 2024) using pandas: parsed datetimes, handled missing station IDs, and engineered trip-duration, hour-of-day, day-of-week, and weekend flags.
+- Compared 2024 ridership patterns between annual members and casual riders; found that members account for roughly 64% of trips but generate ~71% of weekday commute-hour rides, while casual riders account for ~78% of weekend leisure rides longer than 30 minutes.
+- Produced five visualizations (matplotlib) including a ridership heatmap by hour-and-day, a trip-duration histogram by rider type, and a monthly trend chart showing a 2.1x seasonal swing for casual riders vs. 1.3x for members.
+- Recommended a weekend-targeted digital-marketing campaign as the highest-leverage conversion lever; estimated based on observed usage patterns that converting 5% of eligible casual riders could add 70,000+ trips annually.
+
+EDUCATION
+
+Bachelor of Science in Mathematics Education, May 2017
+University of Georgia, Athens, GA
+Cumulative GPA: 3.7 / 4.0
+
+CERTIFICATES AND TRAINING
+
+- Google Data Analytics Professional Certificate, Coursera, August 2024
+- Data Analytics Bootcamp, CareerFoundry (part-time, ~9 months), 2024
+
+SKILLS
+
+Languages and tools: SQL (PostgreSQL, MySQL), Python (pandas, NumPy, matplotlib, seaborn, Jupyter), Excel (pivot tables, VLOOKUP/XLOOKUP, charts, Power Query basics), Google Sheets, Tableau (Public, foundational), Git/GitHub
+Analytics: exploratory data analysis, data cleaning, descriptive statistics, correlation and basic regression, A/B thinking, dashboard reporting, written findings for non-technical audiences
+Teaching and communication: lesson and assessment design, rubric building, presenting quantitative findings clearly to mixed audiences, mentoring and peer coaching
+Other: data privacy basics (FERPA-aware from teaching background), Google Workspace, Microsoft Office, basic stakeholder interviewing from parent-teacher conferences and IEP meetings

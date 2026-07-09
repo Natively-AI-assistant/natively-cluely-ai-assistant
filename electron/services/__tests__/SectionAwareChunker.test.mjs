@@ -69,12 +69,13 @@ test('section-aware chunker: keeps heading + body together when section fits in 
 
 test('section-aware chunker: anchors each window chunk in a long section with the heading', () => {
   const src = read('electron/services/ModeContextRetriever.ts');
-  // Long-section branch: each window chunk is built as `${headingLine}\n${window}`.
-  // Without this anchor, the second/third window of a long section would lose
-  // its heading and rank lower on a heading-keyword query.
-  assert.match(
-    src,
-    /const chunkText = headingLine\s*\n\s*\?\s*`\$\{headingLine\}\\n\$\{window\.join\(' '\)\}`\s*\n\s*:\s*window\.join\(' '\)/,
+  // Long-section branch (non-fineChunk / default path): each window chunk is
+  // built as `${headingLine}\n${window}`. Without this anchor, the second/third
+  // window of a long section would lose its heading and rank lower on a
+  // heading-keyword query. (Variable renamed to `ct` in the 2026-06-28 refactor
+  // that split the default vs document-grounded fine-chunk paths.)
+  assert.ok(
+    src.includes("const ct = headingLine ? `${headingLine}\\n${window.join(' ')}` : window.join(' ')"),
     'chunkText must anchor every window chunk in a long section with the heading',
   );
 });
@@ -128,5 +129,100 @@ test('section-aware chunker: same change is mirrored in ModeHybridRetriever.ts',
     src,
     oldLoopPattern,
     'ModeHybridRetriever chunker must not use the old pure word-window loop',
+  );
+});
+
+// MEDIUM #1 (audit 2026-06-29): the document-grounded fine-chunk path is
+// the path the entire real-path fix depends on for OpenVLA-OFT-style
+// flat-prose fixtures. Source-assertion coverage of the SUBCHUNK_WORDS=45
+// sentence-split branch.
+test('section-aware chunker: fineChunk path uses SUBCHUNK_WORDS=45 sentence-split', () => {
+  const src = read('electron/services/ModeContextRetriever.ts');
+  // The fine-chunk sub-budget is the documented 45 words.
+  assert.match(
+    src,
+    /const\s+SUBCHUNK_WORDS\s*=\s*45\b/,
+    'fineChunk path must define SUBCHUNK_WORDS = 45',
+  );
+  // The split-into-units helper must run before the emit loop (sentence /
+  // line boundary split, not a global word window).
+  assert.match(
+    src,
+    /const\s+units\s*=\s*splitIntoUnits\(rawBody\)/,
+    'fineChunk path must call splitIntoUnits(rawBody) to break on sentence/line boundaries',
+  );
+  // The emit-on-overflow check at SUBCHUNK_WORDS boundary.
+  assert.match(
+    src,
+    /pendingWords\s*>\s*0\s*&&\s*pendingWords\s*\+\s*uw\s*>\s*SUBCHUNK_WORDS/,
+    'fineChunk emit-on-overflow must use SUBCHUNK_WORDS as the bound',
+  );
+});
+
+test('section-aware chunker: fineChunk path is gated on forceDocumentGrounding', () => {
+  const src = read('electron/services/ModeContextRetriever.ts');
+  // The fineChunk path is reachable only when forceDocumentGrounding=true —
+  // the default path (fineChunk=false) must remain byte-for-byte unchanged
+  // from the prior audit so non-doc-grounded custom modes are unaffected.
+  assert.match(
+    src,
+    /function\s+chunkText\s*\(\s*content:\s*string,\s*fineChunk:\s*boolean\s*=\s*false\s*\)/,
+    'chunkText signature must include a fineChunk=false default',
+  );
+  // The legacy path branches on `if (!fineChunk)` and the doc-grounded
+  // sub-chunk path lives in the else (so legacy non-doc-grounded custom
+  // modes are byte-for-byte unchanged).
+  assert.match(
+    src,
+    /if\s*\(\s*!fineChunk\s*\)\s*\{/,
+    'chunkText must branch the legacy path on `if (!fineChunk)` so doc-grounded runs use the else (sentence-split SUBCHUNK_WORDS path)',
+  );
+});
+
+// Round-7 safety net (2026-07-01, hardened after test-engineer review):
+// pathological inputs (all-caps policy text, CSV blobs, scan OCR without
+// sentence punctuation, one giant single-paragraph markdown) can collapse
+// the fineChunk path to a single chunk when there are no headings AND no
+// sentence boundaries AND no paragraph boundaries. The safety net first
+// tries paragraph-boundary splitting at \n\s*\n+ when fineChunk produces
+// fewer than 3 chunks for a >=600-word document; if the doc has only 1
+// paragraph (the canonical pathological case), it falls back to a forced
+// SUBCHUNK_WORDS word-window split.
+test('section-aware chunker: paragraph-fallback safety net when fineChunk produces <3 chunks on a >=600-word doc', () => {
+  const src = read('electron/services/ModeContextRetriever.ts');
+  // The safety net is reachable only when fineChunk && chunks.length < 3
+  // && totalWords >= 600. It splits content on \n\s*\n+ paragraph boundaries
+  // and re-emits as paragraph-level chunks, then sub-splits long paragraphs
+  // on SUBCHUNK_WORDS word windows. If only 1 paragraph emerges, the
+  // word-window fallback catches the canonical pathological case.
+  assert.match(
+    src,
+    /if\s*\(\s*fineChunk\s*&&\s*chunks\.length\s*<\s*3\s*\)/,
+    'chunkText must guard paragraph-fallback on `fineChunk && chunks.length < 3`',
+  );
+  assert.match(
+    src,
+    /const\s+totalWords\s*=\s*chunks\.reduce\(\(n,\s*c\)\s*=>\s*n\s*\+\s*c\.split\(\/\\s\+\/\)\.filter\(Boolean\)\.length,\s*0\)/,
+    'safety net must compute totalWords from existing chunks before deciding to fall back',
+  );
+  assert.match(
+    src,
+    /const\s+paragraphs\s*=\s*content\s*\.\s*split\(\s*\/\\n\\s\*\\n\+\/\s*\)/,
+    'safety net must split content on \\n\\s*\\n+ paragraph boundaries',
+  );
+  // Hardened threshold (test-engineer 2026-07-01): paragraphs.length >= 2
+  // (was >= 3; the canonical pathological single-paragraph case was uncovered).
+  assert.match(
+    src,
+    /if\s*\(\s*paragraphs\.length\s*>=\s*2\s*\)/,
+    'safety net must fire when paragraphs.length >= 2 (was >= 3; relaxation fixes canonical single-paragraph pathological case)',
+  );
+  // Canonical pathological fallback: paragraphs.length === 1 with >= 600 words.
+  // Forces a SUBCHUNK_WORDS word-window split so topK gets multiple candidates
+  // for scan OCR / all-caps policy text / single-paragraph markdown.
+  assert.match(
+    src,
+    /else if\s*\(\s*paragraphs\.length\s*===\s*1\s*&&\s*paragraphs\[0\]\.split\(\/\\s\+\/\)\.filter\(Boolean\)\.length\s*>=\s*600\s*\)/,
+    'safety net must include a single-paragraph word-window fallback for canonical pathological inputs (scan OCR / all-caps / single-paragraph markdown)',
   );
 });

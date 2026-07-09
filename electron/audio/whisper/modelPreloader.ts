@@ -21,6 +21,13 @@ import { app } from 'electron';
 import path from 'path';
 import { buildWorkerInitMessage } from './inferenceConfig';
 import { resolveWhisperWorkerPath } from './workerPathResolver';
+import { acquireOnnxSlot, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSession } from '../../utils/onnxThreadConfig';
+import {
+    consumePoisonedOnnxLoad,
+    isSentinelWithinTtl,
+    clearLoadSentinel as clearOnnxLoadSentinel,
+    writeLoadSentinel as writeOnnxLoadSentinel,
+} from '../../utils/onnxLoadSentinel';
 
 // Recent preload failure cooldown: tracks modelIds that just failed to init
 // so we don't hammer them on every app launch / settings toggle / hotkey.
@@ -28,6 +35,20 @@ import { resolveWhisperWorkerPath } from './workerPathResolver';
 // re-attempted across restarts. TTL is short (5 min) — the recovery path is
 // the new local-whisper-reset-to-default IPC.
 const RECENT_FAILURE_TTL_MS = 5 * 60 * 1000;
+
+// Cross-launch disk sentinel: re-exports of the generalized module keyed on
+// the 'whisper' family. The original `WhisperLoadSentinel` type is preserved
+// as a structural superset of the generalized record, so call sites and the
+// existing `WhisperLoadSentinel.test.mjs` keep compiling without changes.
+// `family` is widened to the full `OnnxFamily` union so the generalized
+// module's return type assigns cleanly into this alias.
+import type { OnnxFamily } from '../../utils/onnxLoadSentinel';
+export type WhisperLoadSentinel = {
+    family: OnnxFamily;
+    modelId: string;
+    startedAt: number;
+    attempt: number;
+};
 
 function recentFailuresPath(): string {
     return path.join(app.getPath('userData'), 'whisper-recent-failures.json');
@@ -65,6 +86,18 @@ function saveRecentFailures(m: Map<string, number>): void {
     }
 }
 
+// Whisper-family thin shims over the generalized module so existing call
+// sites in `electron/main.ts` and `electron/audio/LocalWhisperSTT.ts` keep
+// working byte-identically. New families wire the generalized primitives
+// directly (no shim).
+export function writeLoadSentinel(modelId: string): void {
+    writeOnnxLoadSentinel('whisper', modelId);
+}
+
+export function clearLoadSentinel(modelId?: string): void {
+    clearOnnxLoadSentinel('whisper', modelId);
+}
+
 class ModelPreloader {
     private warmWorker: Worker | null = null;
     private warmModelId: string | null = null;
@@ -97,6 +130,18 @@ class ModelPreloader {
             return;
         }
 
+        // Cross-loader ONNX gate — REFUSE silently if memory is tight. Do NOT
+        // surface as a worker error here, or the 5-min persisted failure
+        // cooldown above would block future preloads. The user can retry by
+        // toggling Settings → Audio when memory frees up. Acquire the slot
+        // at HIGH priority (Whisper is latency-critical).
+        if (!hasEnoughMemoryForOnnxSession()) {
+            console.warn(
+                `[ModelPreloader] skipping preload for ${modelId} — free memory below ${getMinFreeGBForOnnxSession()}GB floor (silent skip, not a worker error)`,
+            );
+            return;
+        }
+
         // Cancel any in-progress load for a different model
         if (this.loadingWorker) {
             this.loadingWorker.terminate();
@@ -125,11 +170,40 @@ class ModelPreloader {
             this.pendingModelId = null;
             return;
         }
+        // Acquire the shared ONNX slot BEFORE spawning the worker. The release
+        // function is wired into the worker's error/exit handlers below — the
+        // slot stays held for the lifetime of the worker's session.
+        let slotRelease: (() => void) | null = null;
+        acquireOnnxSlot('high').then((release) => {
+            slotRelease = release;
+        }).catch(() => { /* should never reject */ });
+
+        writeLoadSentinel(modelId);
         const w = new Worker(workerPath);
         this.loadingWorker = w;
+        // Stash release on the worker object so takeWarmWorker() can hand it
+        // off cleanly when LocalWhisperSTT picks up this warm worker.
+        (w as any).__slotRelease = () => {
+            if (slotRelease) { slotRelease(); slotRelease = null; }
+        };
+        w.on('exit', (code) => {
+            if (code === 0) {
+                clearLoadSentinel(modelId);
+            } else {
+                this.recordFailure(modelId);
+            }
+            if (this.loadingWorker === w) {
+                this.loadingWorker = null;
+                this.pendingModelId = null;
+                this.loading = false;
+            }
+            (w as any).__slotRelease?.();
+        });
+        w.on('error', () => { (w as any).__slotRelease?.(); });
 
         w.on('message', (msg: any) => {
             if (msg.type === 'ready') {
+                clearLoadSentinel(modelId);
                 console.log(`[ModelPreloader] Worker warm for ${modelId}`);
                 this.warmWorker = w;
                 this.loadingWorker = null;
@@ -139,6 +213,7 @@ class ModelPreloader {
             } else if (msg.type === 'error') {
                 console.warn(`[ModelPreloader] Worker init failed: ${msg.message}`);
                 this.recordFailure(modelId);
+                clearLoadSentinel(modelId);
                 w.terminate();
                 this.loadingWorker = null;
                 this.pendingModelId = null;
@@ -161,6 +236,20 @@ class ModelPreloader {
         const expiry = Date.now() + RECENT_FAILURE_TTL_MS;
         this.recentFailures.set(modelId, expiry);
         saveRecentFailures(this.recentFailures);
+    }
+
+    recordLoadFailure(modelId: string): void {
+        this.recordFailure(modelId);
+    }
+
+    consumePoisonedLoadSentinel(): WhisperLoadSentinel | null {
+        const sentinel = consumePoisonedOnnxLoad('whisper');
+        if (sentinel && isSentinelWithinTtl(sentinel)) {
+            console.warn(`[ModelPreloader] Previous process exited while loading ${sentinel.modelId}; recording recent-failure cooldown`);
+            this.recordFailure(sentinel.modelId);
+            return sentinel;
+        }
+        return null;
     }
 
     /**
@@ -193,9 +282,15 @@ class ModelPreloader {
     takeWarmWorker(modelId: string): Worker | null {
         if (this.warmModelId === modelId && this.warmWorker) {
             const w = this.warmWorker;
+            // Slot ownership transfers with the worker. The consumer
+            // (LocalWhisperSTT) installs its own exit/error handlers via
+            // attachWorkerListeners(); those handlers read the slot release
+            // we stashed on the worker (see preload() below). We do NOT
+            // remove the preloader's existing exit/error listeners — they're
+            // already wired to the slot release, so the consumer's new
+            // listeners run AFTER and just re-call the same idempotent
+            // release (no-op).
             w.removeAllListeners('message');
-            w.removeAllListeners('error');
-            w.removeAllListeners('exit');
             this.warmWorker = null;
             this.warmModelId = null;
             console.log(`[ModelPreloader] Handing off warm worker for ${modelId}`);

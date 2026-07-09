@@ -50,6 +50,18 @@ const NONE: ResolvedFollowUp = { resolvedQuestion: '', confidence: 0, reason: 'n
 /** Pure bare-follow-up fragments that carry no standalone meaning. */
 const BARE_FOLLOWUP_RE = /^(?:ok(?:ay)?,?\s*|so,?\s*|hmm,?\s*|right,?\s*|well,?\s*|and,?\s*|but,?\s*)*(?:why|why not|how so|how come|how|and|and\?|so|that|this|it|what about (?:it|that|this)|what about|continue|go on|carry on|keep going|tell me more|more|explain|expand|elaborate|can you (?:expand|elaborate|explain|go on)|go deeper|in more detail|then\??)[\s?.!]*$/i;
 
+/**
+ * Short "addend" phrases that request an enhancement to the prior answer — a code
+ * example, a diagram, an analogy — rather than asking a new standalone question.
+ * E.g. "with code?", "with a code example?", "with an example?", "show code?",
+ * "include code?", "can you add code?", "with code please". These carry zero
+ * standalone meaning and MUST be resolved against the prior answer in context.
+ *
+ * Guard: no stronger standalone cue ("write", "implement", "solve", etc.) so a
+ * genuine "write code for X" does not accidentally match.
+ */
+const ADDEND_RE = /^(?:with|show|include|add|using|also\s+(?:show|add|include))\b[^.?!]{0,40}?\b(?:code(?:\s+(?:example|snippet|sample|for\s+that|for\s+it|please|too))?|example|snippet|an?\s+example|a\s+(?:code\s+)?(?:example|snippet))\s*[?.!]?\s*$/i;
+
 export type FollowUpSurface = 'manual' | 'what_to_answer' | 'meeting' | 'lecture' | 'interview' | 'sales' | 'coding';
 
 /**
@@ -62,7 +74,7 @@ export function isBareFollowUp(question: string): boolean {
   if (!q) return false;
   const words = q.replace(/[?.!,]/g, '').split(/\s+/).filter(Boolean);
   if (words.length > 6) return false; // a real, self-contained question
-  return BARE_FOLLOWUP_RE.test(q);
+  return BARE_FOLLOWUP_RE.test(q) || ADDEND_RE.test(q);
 }
 
 // ── Refinement / editing follow-ups (task Phase 8, bug #3) ──────────────────────

@@ -29,14 +29,22 @@ const ModelSelectorWindow = () => {
 
 
     // Load Data
+    // StrictMode-safe: dev-mode mount→unmount→remount would otherwise issue a
+    // second `forceRestartOllama` IPC round-trip (and double-paint the spinner)
+    // on every launcher paint. The `loadModelsOnceRef` survives the second
+    // mount. Live updates from settings/model-changes still come through the
+    // `onModelChanged` IPC subscription below — the previous `focus` listener
+    // was redundant and high-frequency when toggling launcher ↔ overlay.
     useEffect(() => {
+        let cancelled = false;
+
         const loadModels = async () => {
             try {
                 // If we already have models, don't show loading to avoid flicker
                 if (availableModels.length === 0) {
                     setIsLoading(true);
                 }
-                
+
                 // 1. Get Stored Credentials (to know which Cloud providers are active)
                 const creds = await window.electronAPI?.getStoredCredentials?.();
 
@@ -51,12 +59,19 @@ const ModelSelectorWindow = () => {
                 try {
                     let oModels = await window.electronAPI?.getAvailableOllamaModels?.();
 
-                    // If no models found, try to fix/restart Ollama (server might be down)
+                    // If no models found, the daemon might be DOWN — or it might
+                    // simply be UP with zero models pulled. Only restart in the
+                    // former case: getAvailableOllamaModels returns [] for BOTH,
+                    // and forceRestartOllama does a `kill -9` that would tear down a
+                    // perfectly healthy user-managed daemon (and abort an in-flight
+                    // embedding-model pull). Probe reachability first.
                     if (!oModels || oModels.length === 0) {
                         try {
-                            // @ts-ignore
-                            if (window.electronAPI?.forceRestartOllama) {
-                                // @ts-ignore
+                            const reachable = await window.electronAPI?.isOllamaReachable?.();
+                            // Reachable === false means the daemon isn't answering; only
+                            // then is a restart warranted. If reachable (or the probe is
+                            // unavailable on an older preload → undefined), leave it alone.
+                            if (reachable === false && window.electronAPI?.forceRestartOllama) {
                                 await window.electronAPI.forceRestartOllama();
                                 // Wait a moment for server to come up
                                 await new Promise(resolve => setTimeout(resolve, 1500));
@@ -122,6 +137,8 @@ const ModelSelectorWindow = () => {
                     // LiteLLM proxy may not be running — ignore.
                 }
 
+                if (cancelled) return;
+
                 localStorage.setItem('cached-models', JSON.stringify(models));
                 setAvailableModels(models);
 
@@ -135,20 +152,19 @@ const ModelSelectorWindow = () => {
             } catch (err) {
                 console.error("Failed to load models:", err);
             } finally {
-                setIsLoading(false);
+                if (!cancelled) setIsLoading(false);
             }
         };
 
         loadModels();
-        window.addEventListener('focus', loadModels);
 
         // Listen for changes
         const unsubscribe = window.electronAPI?.onModelChanged?.((modelId: string) => {
             setCurrentModel(modelId);
         });
         return () => {
+            cancelled = true;
             unsubscribe?.();
-            window.removeEventListener('focus', loadModels);
         };
     }, []);
 

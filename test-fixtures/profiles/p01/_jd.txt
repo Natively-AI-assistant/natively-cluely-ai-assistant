@@ -1,0 +1,53 @@
+Senior Staff Software Engineer, Core Infrastructure
+
+Company: Pillarstream, Inc.
+Location: San Francisco, CA (Hybrid, 3 days onsite) or Remote (US)
+Team: Platform Engineering
+Reports to: Director of Distributed Systems
+
+About Pillarstream
+
+Pillarstream is a Series D infrastructure company building the data movement and orchestration layer for modern engineering teams. Our platform processes over 9 petabytes of event data daily and powers mission-critical pipelines for more than 400 customers, including four of the Fortune 50. Founded in 2018 by former engineers at Stripe, Confluent, and Google, we are a team of 220 and have raised $215M from Sequoia, Index Ventures, and Greylock. We move fast, ship often, and care deeply about reliability because our customers depend on us for workloads they cannot afford to lose.
+
+The Role
+
+We are hiring a Senior Staff Software Engineer to join the Core Infrastructure group, the team responsible for the control plane, multi-tenant scheduler, and storage substrate that every other product at Pillarstream is built on. This is a hands-on technical leadership role: you will design and ship large-scale distributed systems, drive cross-team technical initiatives, set engineering standards for reliability and operability, and serve as a primary on-call leader during major incidents.
+
+You will work closely with the CTO, engineering leadership, and senior engineers across Product, SRE, and Security to evolve a system that already handles tens of thousands of concurrent workflows per second and is growing rapidly.
+
+What You Will Do
+
+- Lead the design and implementation of core distributed systems components, including our multi-tenant workflow scheduler, stateful job queue, and metadata service.
+- Own the reliability and performance posture of services you and your team build, including SLO definition, capacity planning, and incident response.
+- Drive technical strategy across the Platform org, producing RFCs and architectural documents reviewed by engineering leadership.
+- Mentor staff and senior engineers, perform design reviews, and raise the technical bar through code review and pairing.
+- Participate in the on-call rotation as a primary escalation point (PagerDuty, roughly one week every six to eight weeks), leading incident command during severe outages.
+- Partner with Product and SRE to translate customer needs into platform capabilities, and with Security to maintain SOC 2 and FedRAMP-aligned controls.
+- Identify and drive cost-efficiency initiatives across compute, storage, and network usage.
+
+What We Are Looking For
+
+- 8 or more years of professional software engineering experience, with at least 4 years building production distributed systems at scale.
+- Deep expertise in Go or Java, including concurrency primitives, memory and GC behavior, and performance tuning.
+- Strong systems fundamentals: consensus protocols, distributed transactions, consistent hashing, failure detection, and exactly-once or at-least-once delivery semantics.
+- Hands-on experience operating Kubernetes in production, including custom controllers, operators, and admission webhooks.
+- Demonstrated track record of leading complex technical projects across multiple teams, from RFC through rollout.
+- Proven ability to lead during production incidents, coordinate across teams, and drive blameless post-mortems.
+- Excellent written communication; you can produce clear architectural documents and technical specs.
+
+Nice to Have
+
+- Experience with control plane systems, schedulers, or workflow engines (Airflow, Temporal, Argo, Cadence, or similar).
+- Familiarity with gRPC, Protocol Buffers, Apache Kafka, and modern observability stacks (OpenTelemetry, Prometheus, Grafana, Tempo).
+- Contributions to open source infrastructure projects.
+- Experience with multi-region active-active deployments, cross-region replication, or cell-based architectures.
+- Background in regulated environments (SOC 2, HIPAA, FedRAMP) or in building platforms that serve other engineering teams internally.
+
+Compensation and Benefits
+
+- Base salary range: $245,000 to $310,000, plus meaningful equity in a Series D company.
+- Comprehensive medical, dental, and vision coverage, with premiums fully covered for employees and 80% for dependents.
+- 401(k) with 4% match, unlimited PTO with a 20-day minimum, paid parental leave (16 weeks), and a $2,500 annual learning stipend.
+- Top-tier home office setup, quarterly team offsites, and a commuter benefits program.
+
+Pillarstream is an equal opportunity employer. We celebrate diversity and are committed to building an inclusive environment for all employees.

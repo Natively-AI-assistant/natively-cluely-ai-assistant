@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react" // forcing refresh
+import React, { useState, useEffect, useCallback, useSyncExternalStore } from "react" // forcing refresh
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { ToastProvider, ToastViewport } from "./components/ui/toast"
 import NativelyInterface from "./components/NativelyInterface"
@@ -10,18 +10,29 @@ import SettingsOverlay from "./components/SettingsOverlay"
 import StartupSequence from "./components/StartupSequence"
 import { AnimatePresence, motion } from "framer-motion"
 import UpdateBanner from "./components/UpdateBanner"
-import { SupportToaster } from "./components/SupportToaster"
 import { NativelyQuotaBanner } from "./components/NativelyQuotaBanner"
 import { FreeTrialBanner }      from "./components/trial/FreeTrialBanner"
 import { FreeTrialModal }       from "./components/trial/FreeTrialModal"
-import { TrialPromoToaster }    from "./components/trial/TrialPromoToaster"
-import { PermissionsToaster }   from "./components/onboarding/PermissionsToaster"
-import { BrowserExtensionToaster } from "./components/onboarding/BrowserExtensionToaster"
+import { OrchestratorProvider, OrchestratedToasterHost, setUserState as setOrchestratorUserState, emitOrchestratorEvent } from "./components/onboarding/OrchestratedToasterHost"
+import ReviewPromptHost from "./components/ReviewPromptHost"
+// NOTE: explicit `.ts` extension is load-bearing. Vite's default resolver
+// tries `.mjs` before `.ts` (see DEFAULT_EXTENSIONS in vite/dist/node/constants.js),
+// and this directory also has an `orchestrator.mjs` companion (kept for
+// `node --test`, which can't run TypeScript directly). An unqualified
+// specifier here silently resolved to the `.mjs` file's no-op stub
+// orchestrator instead of the real class — the entire onboarding flow
+// (permissions/browser-ext/trial-promo toasters) was silently inert, AND
+// the stub's getSnapshot() returned a fresh object every call, which
+// tripped useSyncExternalStore's referential-equality check into an
+// infinite re-render loop (React's "Maximum update depth exceeded"),
+// unmounting the whole tree — the black-screen root cause. Do not remove
+// the extension.
+import { getOrchestrator } from "./lib/onboarding/orchestrator.ts"
 import { AlertCircle, RefreshCw } from "lucide-react"
 import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity } from "./lib/overlayAppearance"
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
 import { isMac } from "./utils/platformUtils"
-import { trackAppOpen, markToasterAsShown } from "./lib/toasterGating"
+import { trackAppOpen } from "./lib/toasterGating"
 import {
   JDAwarenessToaster,
   ProfileFeatureToaster,
@@ -36,6 +47,31 @@ import { analytics } from "./lib/analytics/analytics.service"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import ModesSettings from "./components/settings/ModesSettings"
 import { ProfileIntelligenceSettings } from "./components/ProfileIntelligenceSettings"
+
+
+// DEV-ONLY: should the launcher mount an uncontrolled ReviewPromptHost?
+// Mirrors ReviewPromptHost.tsx's isDevForceShow() so a developer running
+// the real onboarding funnel is not forced into the review modal every
+// reload. Production builds are unconditionally false.
+function shouldMountDevReviewHost(): boolean {
+  try {
+    if (typeof window === 'undefined') return false
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dev: boolean = !!(import.meta as any)?.env?.DEV
+    if (!dev) return false
+    const params = new URLSearchParams(window.location?.search || '')
+    const explicit = params.get('review')
+    if (explicit === 'off') return false
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any
+    if (w.__reviewForceShow === false) return false
+    // Dev default ON. Developers who want to test the real funnel append
+    // ?review=off or set window.__reviewForceShow = false.
+    return true
+  } catch {
+    return false
+  }
+}
 
 const queryClient = new QueryClient()
 const CropperWindow = React.lazy(() => import('./components/Cropper'))
@@ -145,10 +181,8 @@ const App: React.FC = () => {
   // API check
   const [hasNativelyApi, setHasNativelyApi] = useState<boolean>(false);
 
-  // ── Onboarding / promo toasters ───────────────────────────
-  const [showPermissionsToaster, setShowPermissionsToaster] = useState(false);
-  const [showTrialPromo,         setShowTrialPromo]         = useState(false);
-
+  // ── Onboarding toasters now handled by OnboardingOrchestrator ──
+  // (No local state for permissions / trial promo toasters.)
 
   // ── Free Trial global state ────────────────────────────────
   const [activeTrial, setActiveTrial] = useState<{
@@ -158,6 +192,29 @@ const App: React.FC = () => {
   const [showTrialExpiredModal, setShowTrialExpiredModal] = useState(false);
 
   const isAppReady = !isSettingsWindow && !isOverlayWindow && !isModelSelectorWindow && !showStartup && !isSettingsOpen && isLauncherMainView && !isProfileOpen;
+
+  // Gate useAdCampaigns behind orchestrator eligibility. Ads only self-schedule
+  // when (a) the orchestrator is ready (no other toaster active) and (b) the
+  // `ads` stage's prerequisites have been met. We approximate (b) with the
+  // simple "no orchestrated toaster is active" gate — useAdCampaigns has its
+  // own eligibility logic for which ad to show.
+  const orch = (isLauncherWindow || isDefault) ? getOrchestrator() : null;
+  // Stable subscribe/snapshot refs for useSyncExternalStore — without these,
+  // .bind() creates a new function on every render, causing the store to
+  // tear down and re-subscribe unnecessarily.
+  const orchSubscribe = React.useCallback(
+    (cb: () => void) => orch ? orch.subscribe(cb) : () => {},
+    [orch],
+  );
+  const orchSnapshot = React.useCallback(
+    () => orch ? orch.getSnapshot() : null,
+    [orch],
+  );
+  const orchState = useSyncExternalStore(orchSubscribe, orchSnapshot);
+  const orchestratorAllowsAds = orchState
+    ? orchState.activeToasterId === null
+    : false;
+
   const { activeAd, dismissAd } = useAdCampaigns(
     planDetails,
     hasProfile,
@@ -165,8 +222,85 @@ const App: React.FC = () => {
     appStartTime,
     lastMeetingEndTime,
     isProcessingMeeting,
-    hasNativelyApi
+    hasNativelyApi,
+    orchestratorAllowsAds
   );
+
+  // Start the onboarding orchestrator (launcher window only). Stages are
+  // registered lazily; the drain loop only runs while foreground + homepage
+  // mounted.
+  useEffect(() => {
+    if (!isLauncherWindow && !isDefault) return;
+    let cancelled = false;
+    let stopFn: (() => void) | null = null;
+    // Explicit `.ts` extensions here for the same reason as the static
+    // import above — Vite resolves the sibling `.mjs` test companions first.
+    // We use `getOrchestrator()` (statically imported at line 30) directly —
+    // the previous dynamic `import('./lib/onboarding/orchestrator.ts')` was
+    // dead code: orchestrator.ts is already in the static graph (App.tsx:30
+    // and OrchestratedToasterHost.tsx:16), and the dynamic fetch just earned
+    // a Vite "mixed static+dynamic import" warning without saving bytes.
+    // stageCatalog stays dynamic — it is a `.mjs`-only module with no other
+    // importer, so the dynamic boundary is the only thing keeping it out of
+    // the launcher's initial bundle.
+    import('./lib/onboarding/stageCatalog.ts').then(({ STAGES, QUIET_WINDOW_STAGE }) => {
+      if (cancelled) return;
+      const orch = getOrchestrator();
+      orch.start([...STAGES, QUIET_WINDOW_STAGE]);
+      stopFn = () => orch.stop();
+      // DEV-ONLY: opt-in flag for review-prompt force-show. We do NOT
+      // mutate orchestrator state on boot — the host file
+      // (ReviewPromptHost.tsx) mounts an uncontrolled <ReviewPromptHost />
+      // whenever `isDevForceShow()` returns true (URL ?review=force, dev
+      // build default, or window.__reviewForceShow toggle). Clobbering
+      // markDismissed() here would silently rewrite every dev user's
+      // persisted onboarding ledger on every reload — defeating the point
+      // of testing the real funnel. Production builds are unaffected
+      // because isDevForceShow() defaults to false.
+    });
+    return () => {
+      cancelled = true;
+      stopFn?.();
+    };
+  }, [isLauncherWindow, isDefault]);
+
+  // Push user-state patches to the orchestrator as plan/profile state evolves.
+  useEffect(() => {
+    setOrchestratorUserState({
+      isPremium: isPremiumActive,
+      hasProfile,
+      hasNativelyKey: hasNativelyApi,
+      hasTrialToken: !!activeTrial,
+    });
+  }, [isPremiumActive, hasProfile, hasNativelyApi, activeTrial]);
+
+  // Pause the orchestrator while Settings/Modes/Profile panels are open so
+  // toasters don't fire over the user's settings interaction.
+  useEffect(() => {
+    if (!isLauncherWindow && !isDefault) return;
+    const anyPanelOpen = isSettingsOpen || isModesOpen || isProfileOpen;
+    if (anyPanelOpen) {
+      emitOrchestratorEvent({ type: 'launcher:unmounted' });
+    } else {
+      emitOrchestratorEvent({ type: 'launcher:mounted' });
+    }
+  }, [isSettingsOpen, isModesOpen, isProfileOpen, isLauncherWindow, isDefault]);
+
+  // Escape closes the top-most open overlay (Settings > Modes > Profile).
+  // SettingsOverlay also listens for Escape internally; the duplicate keydown is
+  // a no-op there because the panel already closed by the time the handler fires.
+  useEffect(() => {
+    if (!isSettingsOpen && !isModesOpen && !isProfileOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      if (isSettingsOpen) { setIsSettingsOpen(false); return; }
+      if (isModesOpen)    { setIsModesOpen(false);    return; }
+      if (isProfileOpen)  { setIsProfileOpen(false);  return; }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isSettingsOpen, isModesOpen, isProfileOpen]);
 
 
 
@@ -309,50 +443,48 @@ const App: React.FC = () => {
       setShowTrialExpiredModal(false);
     });
 
-    // ── Onboarding toasters ──────────────────────────────────
+    // ── Onboarding orchestrator — push user-state patches ─────
+    // The orchestrator owns scheduling; we just feed it the latest user state.
     if (isLauncherWindow || isDefault) {
-      const permsShown = localStorage.getItem('natively_perms_shown_v1');
-      if (!permsShown) {
-        // First ever launch — show permissions toaster
-        setShowPermissionsToaster(true);
+      // Permissions state — first launch vs returning mac with revoked TCC.
+      const permsShown = localStorage.getItem('natively_perms_shown_v1') === '1';
+      const seenModes = localStorage.getItem('natively_seen_modes_onboarding_v5') === 'true';
+      const seenProfile = localStorage.getItem('natively_seen_profile_onboarding_v1') === 'true';
+
+      const maybeCheck = window.electronAPI?.checkPermissions;
+      if (maybeCheck) {
+        maybeCheck()
+          .then((p) => {
+            const blocked = (s?: string) => s === 'denied' || s === 'restricted';
+            const macTCCBlocked = p?.platform === 'darwin' && (blocked(p.microphone) || blocked(p.screen));
+            setOrchestratorUserState({
+              permsShown,
+              macTCCBlocked,
+              seenModesOnboarding: seenModes,
+              seenProfileOnboarding: seenProfile,
+              extensionSupported: true, // updated by phoneMirrorGetInfo below
+            });
+          })
+          .catch(() => {
+            setOrchestratorUserState({ permsShown, seenModesOnboarding: seenModes, seenProfileOnboarding: seenProfile });
+          });
       } else {
-        // Returning launch: re-check live TCC status. A macOS permission grant
-        // can be DROPPED out from under a returning user — most commonly after
-        // an app update changes the code signature (macOS may re-evaluate /
-        // invalidate the Screen Recording or Microphone grant for the new
-        // binary), or if the user revoked it in System Settings. In that state
-        // askForMediaAccess() returns denied WITHOUT a prompt (macOS only
-        // prompts from 'not-determined'), so the app would silently fail to
-        // capture with nothing on screen. Surface the recoverable permissions
-        // card (it deep-links to the exact System Settings pane) instead of the
-        // trial promo when mic/screen is denied or restricted. The main process
-        // also broadcasts a denied banner at startup, but that targets the
-        // in-overlay meeting surface — at launch the user is on the launcher,
-        // so this launcher-side check is what they actually see.
-        const showTrialPromoFallback = () => {
-          // Subsequent launches — trial promo will self-gate via TrialPromoToaster
-          const trialShown = localStorage.getItem('natively_trial_promo_ts');
-          if (!trialShown) {
-            setShowTrialPromo(true);
-          }
-        };
-        const maybeSurfacePermissions = window.electronAPI?.checkPermissions;
-        if (maybeSurfacePermissions) {
-          maybeSurfacePermissions()
-            .then((p) => {
-              const blocked = (s?: string) => s === 'denied' || s === 'restricted';
-              if (p?.platform === 'darwin' && (blocked(p.microphone) || blocked(p.screen))) {
-                setShowPermissionsToaster(true);
-              } else {
-                showTrialPromoFallback();
-              }
-            })
-            .catch(showTrialPromoFallback);
-        } else {
-          // Non-macOS or API unavailable — preserve the original behaviour.
-          showTrialPromoFallback();
-        }
+        setOrchestratorUserState({ permsShown, seenModesOnboarding: seenModes, seenProfileOnboarding: seenProfile });
       }
+
+      // Donation status (support toaster gate)
+      window.electronAPI?.getDonationStatus?.()
+        .then(s => setOrchestratorUserState({ donationShouldShow: s?.shouldShow ?? false }))
+        .catch(() => {});
+
+      // Extension connection state
+      window.electronAPI?.phoneMirrorGetInfo?.()
+        .then(info => setOrchestratorUserState({
+          extensionConnected: info?.extensionConnected ?? false,
+          extensionSupported: true,
+          isV2_8_OrNewer: true, // min version handled inside the stage skipWhen
+        }))
+        .catch(() => {});
     }
 
     // Listen for open-settings-tab events from other windows (e.g. overlay Modes button)
@@ -527,7 +659,9 @@ const App: React.FC = () => {
         // deep-links to System Settings. This is the recoverable surface for
         // the "I press Start Natively and nothing happens" report.
         if (result.code === 'mic-permission-denied') {
-          setShowPermissionsToaster(true);
+          // Route through the orchestrator: mark mac TCC as blocked so the
+          // permissions stage becomes re-eligible.
+          setOrchestratorUserState({ macTCCBlocked: true });
         }
       }
     } catch (err) {
@@ -538,7 +672,7 @@ const App: React.FC = () => {
       // serialized error .code across ipcRenderer.invoke — keep the recovery
       // working so the denial never regresses to a silent failure.
       if ((err as { code?: string })?.code === 'mic-permission-denied') {
-        setShowPermissionsToaster(true);
+        setOrchestratorUserState({ macTCCBlocked: true });
       }
     }
   };
@@ -849,10 +983,19 @@ const App: React.FC = () => {
       </AnimatePresence>
 
       <UpdateBanner />
-      <SupportToaster />
       <NativelyQuotaBanner />
 
+      {/* Orchestrated onboarding toasters (single-slot, controlled by OnboardingOrchestrator) */}
+      <OrchestratorProvider>
+        <OrchestratedToasterHost />
+      </OrchestratorProvider>
 
+      {/* DEV-ONLY: direct ReviewPromptHost mount for iterating on the modal UX.
+          Gated on import.meta.env.DEV plus the same opt-in flags the host
+          already respects (?review=force, window.__reviewForceShow). When
+          active, this bypasses the orchestrator entirely so the persisted
+          onboarding ledger is not modified. */}
+      {shouldMountDevReviewHost() && <ReviewPromptHost />}
 
       {/* Free trial countdown banner — only in launcher window while trial is active */}
       {(isLauncherWindow || isDefault) && activeTrial && (
@@ -862,40 +1005,6 @@ const App: React.FC = () => {
           onUpgrade={() => openSettingsExclusive('api')}
         />
       )}
-
-      {/* Permissions toaster — first ever launch */}
-      <PermissionsToaster
-        isOpen={showPermissionsToaster}
-        onDismiss={() => {
-          localStorage.setItem('natively_perms_shown_v1', '1');
-          window.electronAPI?.onboardingSetFlag?.('permsShown', true).catch(() => {});
-          setShowPermissionsToaster(false);
-          // Show the trial promo immediately after permissions setup (with a 1.5s transition delay)
-          setTimeout(() => {
-            setShowTrialPromo(true);
-          }, 1500);
-        }}
-      />
-
-      {/* Trial promo toaster — 5s after restart (self-gates via localStorage + conditions) */}
-      <TrialPromoToaster
-        isOpen={showTrialPromo}
-        hasNativelyKey={hasNativelyApi}
-        hasTrialToken={!!activeTrial}
-        onDismiss={() => setShowTrialPromo(false)}
-        onStartTrial={async () => {
-          const res = await window.electronAPI?.startTrial?.();
-          if (!res?.ok) throw new Error(res?.error || 'Could not start trial');
-          if (res.expires_at) {
-            setActiveTrial({ expiresAt: res.expires_at, usage: res.usage ?? { ai: 0, stt_seconds: 0, search: 0 } });
-          }
-          setShowTrialPromo(false);
-        }}
-        onManualSetup={() => {
-          setShowTrialPromo(false);
-          openSettingsExclusive('api');
-        }}
-      />
 
       {/* Post-trial upgrade modal — shown when trial expires */}
       {(isLauncherWindow || isDefault) && showTrialExpiredModal && (
@@ -915,10 +1024,6 @@ const App: React.FC = () => {
             setActiveTrial(null);
           }}
         />
-      )}
-      {/* Browser extension onboarding toaster — 12s after launch, only on v2.8.0+ when not connected (self-gates) */}
-      {(isLauncherWindow || isDefault) && (
-        <BrowserExtensionToaster />
       )}
 
       {/* Ad toasters */}

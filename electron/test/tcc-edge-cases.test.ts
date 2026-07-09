@@ -25,6 +25,10 @@ interface MockSystemPreferences {
   getMediaAccessStatusCalls: string[];
   screenSources: string[];
   screenProbeError: Error | null;
+  // When true, the probe never resolves — models desktopCapturer.getSources
+  // blocking indefinitely on TCC (the reason the handler races it against a
+  // timeout).
+  screenProbeHangs: boolean;
 }
 
 const mockPrefs: MockSystemPreferences = {
@@ -34,6 +38,7 @@ const mockPrefs: MockSystemPreferences = {
   getMediaAccessStatusCalls: [],
   screenSources: ['screen:0:0'],
   screenProbeError: null,
+  screenProbeHangs: false,
 };
 
 const mockSystemPreferences = {
@@ -49,6 +54,7 @@ const mockSystemPreferences = {
 
 const mockDesktopCapturer = {
   async getSources(): Promise<Array<{ id: string }>> {
+    if (mockPrefs.screenProbeHangs) return new Promise<Array<{ id: string }>>(() => {});
     if (mockPrefs.screenProbeError) throw mockPrefs.screenProbeError;
     return mockPrefs.screenSources.map((id) => ({ id }));
   },
@@ -164,6 +170,39 @@ async function resolveMacScreenCaptureCapabilityTEST(
       error: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+// Reimplementation of the `permissions:check` screen-resolution logic
+// (ipcHandlers.ts safeHandle('permissions:check')). The onboarding toaster maps
+// a non-granted screen status to macTCCBlocked, which the orchestrator uses to
+// re-raise the permissions toaster forever. macOS reports a genuinely-granted
+// Screen Recording grant as 'denied'/'not-determined' until relaunch, so the
+// handler falls back to a desktopCapturer probe: if screens are enumerable, the
+// permission is effectively granted. The probe is raced against a deadline
+// because desktopCapturer.getSources can block indefinitely on TCC — a timeout
+// is treated as not-granted, exactly like a thrown probe error.
+async function resolvePermissionsCheckScreenTEST(
+  getStatusFn: (type: 'microphone' | 'screen') => string,
+  getSourcesFn: () => Promise<Array<{ id: string }>>,
+  probeTimeoutMs = 5000
+): Promise<string> {
+  const rawScreen = getStatusFn('screen');
+  let screen = rawScreen;
+  if (rawScreen !== 'granted' && rawScreen !== 'restricted') {
+    try {
+      const sources = await Promise.race([
+        getSourcesFn(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('screen-capture-probe-timeout')), probeTimeoutMs),
+        ),
+      ]);
+      const capturable = sources.some((s) => s.id.startsWith('screen:'));
+      if (capturable) screen = 'granted';
+    } catch {
+      // Probe failed or timed out — keep the raw status (treat as not-granted).
+    }
+  }
+  return screen;
 }
 
 // ── Test helpers ───────────────────────────────────────────────────────────
@@ -466,6 +505,85 @@ async function testMicAccessGranted() {
   return pass;
 }
 
+async function testPermissionsCheckGrantedButMisreadReportsGranted() {
+  console.log();
+  console.log('─'.repeat(60));
+  console.log('TEST: permissions:check reports "granted" when screen misread as denied but probe succeeds');
+  console.log('─'.repeat(60));
+
+  // macOS misreports a genuinely-granted grant as 'denied' pre-relaunch.
+  mockPrefs.screenStatus = 'denied';
+  mockPrefs.screenSources = ['screen:0:0'];
+  mockPrefs.screenProbeError = null;
+
+  const screen = await resolvePermissionsCheckScreenTEST(
+    mockSystemPreferences.getMediaAccessStatus.bind(mockSystemPreferences),
+    mockDesktopCapturer.getSources.bind(mockDesktopCapturer)
+  );
+  // The onboarding toaster's macTCCBlocked = blocked(screen); 'granted' clears it.
+  const pass = screen === 'granted';
+  console.log(`  Resolved screen: ${screen} (expected: granted)`);
+  console.log(`  ✅ PASS: ${pass ? 'YES' : 'NO'}`);
+
+  mockPrefs.screenStatus = 'granted';
+  mockPrefs.screenSources = ['screen:0:0'];
+  return pass;
+}
+
+async function testPermissionsCheckGenuinelyDeniedStaysDenied() {
+  console.log();
+  console.log('─'.repeat(60));
+  console.log('TEST: permissions:check keeps "denied" when probe finds no screens (genuine block)');
+  console.log('─'.repeat(60));
+
+  mockPrefs.screenStatus = 'denied';
+  mockPrefs.screenSources = [];
+  mockPrefs.screenProbeError = null;
+
+  const screen = await resolvePermissionsCheckScreenTEST(
+    mockSystemPreferences.getMediaAccessStatus.bind(mockSystemPreferences),
+    mockDesktopCapturer.getSources.bind(mockDesktopCapturer)
+  );
+  // A genuine block must remain not-granted so the toaster still surfaces.
+  const pass = screen === 'denied';
+  console.log(`  Resolved screen: ${screen} (expected: denied)`);
+  console.log(`  ✅ PASS: ${pass ? 'YES' : 'NO'}`);
+
+  mockPrefs.screenStatus = 'granted';
+  mockPrefs.screenSources = ['screen:0:0'];
+  return pass;
+}
+
+async function testPermissionsCheckProbeTimeoutStaysDenied() {
+  console.log();
+  console.log('─'.repeat(60));
+  console.log('TEST: permissions:check keeps "denied" when probe hangs (TCC block → timeout)');
+  console.log('─'.repeat(60));
+
+  // desktopCapturer.getSources can block indefinitely on TCC. A hang must not
+  // wedge the handler — the timeout race resolves it as not-granted so the
+  // launcher render path never freezes.
+  mockPrefs.screenStatus = 'denied';
+  mockPrefs.screenProbeHangs = true;
+
+  const startedAt = Date.now();
+  const screen = await resolvePermissionsCheckScreenTEST(
+    mockSystemPreferences.getMediaAccessStatus.bind(mockSystemPreferences),
+    mockDesktopCapturer.getSources.bind(mockDesktopCapturer),
+    50 // short deadline so the test doesn't wait 5 s
+  );
+  const elapsed = Date.now() - startedAt;
+  // A hung probe must resolve (not wedge) and stay not-granted.
+  const pass = screen === 'denied' && elapsed < 5000;
+  console.log(`  Resolved screen: ${screen} (expected: denied) after ${elapsed}ms`);
+  console.log(`  ✅ PASS: ${pass ? 'YES' : 'NO'}`);
+
+  mockPrefs.screenStatus = 'granted';
+  mockPrefs.screenProbeHangs = false;
+  mockPrefs.screenSources = ['screen:0:0'];
+  return pass;
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────
 async function main() {
   console.log('═'.repeat(60));
@@ -485,6 +603,9 @@ async function main() {
     await testDeniedAndProbeEmptyBlocksSystemAudio(),
     await testDeniedAndProbeErrorBlocksSystemAudio(),
     await testRestrictedBlocksWithPolicyMessage(),
+    await testPermissionsCheckGrantedButMisreadReportsGranted(),
+    await testPermissionsCheckGenuinelyDeniedStaysDenied(),
+    await testPermissionsCheckProbeTimeoutStaysDenied(),
     await testMicAccessDenied(),
     await testMicAccessGranted(),
   ];

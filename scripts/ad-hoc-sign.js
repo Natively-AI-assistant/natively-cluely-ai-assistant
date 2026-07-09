@@ -1,6 +1,84 @@
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+
+// ─── Packed native-arch guard ───
+// better-sqlite3 + keytar ship a SINGLE compiled binary each (no per-arch
+// loader), so a build on an Apple-Silicon Mac can silently embed arm64 binaries
+// in the x64 (`Natively.dmg`) pack — every Intel Mac then boots into main.ts's
+// nativeArchGate "Architecture mismatch" dialog. scripts/rebuild-native-for-target.cjs
+// (beforeBuild) rebuilds them for the correct target arch; THIS guard verifies
+// the binaries actually inside the packed .app match the target arch and FAILS
+// the build if they don't — closing the silent-ship hole. Runs for both the
+// default (ad-hoc) and signed configs since both inherit this afterPack.
+const ARCH_VERIFY_TARGETS = [
+    path.join('better-sqlite3', 'build', 'Release', 'better_sqlite3.node'),
+    path.join('keytar', 'build', 'Release', 'keytar.node'),
+];
+
+/** electron-builder ArchType enum / string → Node arch string. */
+function ebArchToName(arch) {
+    if (arch === 1 || arch === 'x64' || arch === 'x86_64') return 'x64';
+    if (arch === 3 || arch === 'arm64' || arch === 'aarch64') return 'arm64';
+    return String(arch);
+}
+
+/** Mach-O arch of a .node via `file -b`, normalized to a Node arch string. */
+function binaryArchOf(absPath) {
+    const out = execFileSync('file', ['-b', absPath], { encoding: 'utf8' });
+    if (/\barm64\b/.test(out)) return 'arm64';
+    if (/\bx86_64\b/.test(out)) return 'x64';
+    return `unknown (${out.trim()})`;
+}
+
+/**
+ * Assert every guarded .node inside the packed .app matches the target arch.
+ * Throws (failing the build) on any mismatch. Missing files are tolerated (a
+ * dep layout change should not hard-fail here — the runtime gate still catches
+ * a genuinely absent binary), but a WRONG arch is fatal.
+ */
+function verifyPackedNativeArch(appPath, targetArchName) {
+    if (targetArchName !== 'x64' && targetArchName !== 'arm64') {
+        console.warn(`[Arch Guard] Non-mac/unknown target arch "${targetArchName}" — skipping packed-arch verification.`);
+        return;
+    }
+    const unpackedModules = path.join(appPath, 'Contents', 'Resources', 'app.asar.unpacked', 'node_modules');
+    const mismatches = [];
+    for (const rel of ARCH_VERIFY_TARGETS) {
+        const abs = path.join(unpackedModules, rel);
+        if (!fs.existsSync(abs)) {
+            console.warn(`[Arch Guard] not present in pack (skipping): ${rel}`);
+            continue;
+        }
+        const actual = binaryArchOf(abs);
+        if (String(actual).startsWith('unknown')) {
+            // FAIL OPEN on unclassifiable `file -b` output, matching the deliberate
+            // policy in electron/lib/nativeArch.mjs:156-161. `file`'s phrasing varies
+            // across macOS releases/locales; unknown output is NOT proof of a
+            // wrong-arch binary. A build-time false-negative is still caught by the
+            // runtime boot gate (main.ts nativeArchGate), whereas failing closed here
+            // would block every release on a benign `file` wording change — the exact
+            // fragility class behind the v2.8.1→v2.8.2 boot-dialog regression.
+            console.warn(`[Arch Guard] could not classify ${rel} (${actual}); skipping arch check for this file`);
+            continue;
+        }
+        if (actual === targetArchName) {
+            console.log(`[Arch Guard] OK ${rel} → ${actual} (target ${targetArchName})`);
+        } else {
+            mismatches.push({ rel, actual, expected: targetArchName });
+        }
+    }
+    if (mismatches.length > 0) {
+        const lines = mismatches.map((m) => `  - ${m.rel}: packed ${m.actual}, target needs ${m.expected}`);
+        throw new Error(
+            `[Arch Guard] FATAL: packed native binaries do not match the ${targetArchName} target:\n` +
+            lines.join('\n') +
+            `\n\nThe ${targetArchName === 'x64' ? 'Intel (Natively.dmg)' : 'Apple-Silicon (Natively-arm64.dmg)'} build would crash on launch. ` +
+            `Ensure scripts/rebuild-native-for-target.cjs (build.beforeBuild) is wired and ran for this arch.`
+        );
+    }
+    console.log(`[Arch Guard] All packed native binaries match target arch ${targetArchName} ✅`);
+}
 
 // ─── Helper Disguise Configuration ───
 // Display name used for helper processes in Activity Monitor
@@ -60,6 +138,13 @@ exports.default = async function (context) {
     const appOutDir = context.appOutDir;
     const appName = context.packager.appInfo.productFilename;
     const appPath = path.join(appOutDir, `${appName}.app`);
+
+    // ── Step 0: Verify packed native binaries match the target arch ──
+    // MUST run before signing and before any early return (signed path returns
+    // early once it detects a Developer ID identity). A wrong-arch binary here
+    // means the DMG for this arch would crash on launch — fail loudly now.
+    const targetArchName = ebArchToName(context.arch);
+    verifyPackedNativeArch(appPath, targetArchName);
 
     // ── Step 1: Disguise helper display names (before signing) ──
     // This MUST run regardless of the signing path: it edits helper Info.plist

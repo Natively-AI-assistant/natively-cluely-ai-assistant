@@ -50,6 +50,36 @@ function makePipeline({ space = SPACE_A, ready = true } = {}) {
     };
 }
 
+// Pipeline whose PRIMARY batch path throws, but whose fallback path succeeds in
+// a DIFFERENT space — models Gemini exhaustion promoting the local provider.
+// `activeSpace` starts as the primary space and flips to the fallback space once
+// promotion happens, exactly like the real EmbeddingPipeline.
+function makeFallbackPipeline({ primarySpace = SPACE_A, fallbackSpace = SPACE_B, fallbackThrows = false } = {}) {
+    const calls = { query: 0, batch: [], fallback: 0, primary: 0 };
+    let activeSpace = primarySpace;
+    return {
+        calls,
+        isReady: () => true,
+        getActiveSpaceKey: () => activeSpace,
+        getEmbeddingForQuery: async () => { calls.query++; return [1, 0, 0, 0]; },
+        getEmbeddings: async () => {
+            calls.primary++;
+            throw new Error('primary provider exhausted (429)');
+        },
+        getEmbeddingsWithFallback: async (texts) => {
+            calls.batch.push(texts.length);
+            // Mirror the real pipeline: primary throws, fallback takes over.
+            calls.primary++;
+            calls.fallback++;
+            if (fallbackThrows) throw new Error('fallback provider ALSO failed');
+            activeSpace = fallbackSpace; // promotion flips the active space
+            const embeddings = texts.map(t => (t.includes('enterprise') ? [0.95, 0.05, 0, 0] : [0, 1, 0, 0]));
+            return { embeddings, space: fallbackSpace, provider: 'local', dimensions: 4 };
+        },
+        getEmbedding: async (t) => (t.includes('enterprise') ? [0.95, 0.05, 0, 0] : [0, 1, 0, 0]),
+    };
+}
+
 const FILE = {
     id: 'f1', modeId: 'm1', fileName: 'pricing.md', createdAt: '',
     content: 'enterprise plan pricing details include SSO support and audit logs for every customer account region',
@@ -162,5 +192,57 @@ describe('W3: hot-path retrieval', () => {
         });
         assert.ok(result.chunks.length > 0, 'semantic match still works cold');
         assert.ok(result.usedHybrid);
+    });
+});
+
+describe('W3: fallback promotion (MEDIUM #5)', () => {
+    test('primary fails → fallback succeeds → chunks stamped with the FALLBACK space', async () => {
+        const pipeline = makeFallbackPipeline({ primarySpace: SPACE_A, fallbackSpace: SPACE_B });
+        const r = new ModeHybridRetriever(db, mockVectorStore, pipeline);
+        await r.indexFile(FILE);
+
+        // The persisted vectors must carry the FALLBACK space, not the primary —
+        // otherwise loadPersistedEmbeddings (which filters on the now-active
+        // fallback space) would silently skip every chunk we just wrote.
+        const chunks = db.prepare('SELECT * FROM mode_reference_chunks WHERE file_id = ?').all('f1');
+        assert.ok(chunks.length >= 1);
+        assert.ok(chunks[0].embedding instanceof Buffer, 'fallback vector persisted as BLOB');
+        assert.equal(chunks[0].embedding_space, SPACE_B, 'stamped with fallback space, not primary');
+
+        // indexFile must route through the fallback-aware path exactly once.
+        assert.equal(pipeline.calls.fallback, 1, 'fallback path used once');
+        assert.deepEqual(r.getFileIndexStatus('f1'), { status: 'ready', chunkCount: chunks.length });
+    });
+
+    test('promoted-space file is queryable in the fallback space (no cross-space skip)', async () => {
+        const pipeline = makeFallbackPipeline({ primarySpace: SPACE_A, fallbackSpace: SPACE_B });
+        const r = new ModeHybridRetriever(db, mockVectorStore, pipeline);
+        await r.indexFile(FILE);
+
+        // After promotion the active space is SPACE_B and the stored vectors are
+        // SPACE_B, so retrieval must load them from disk (no ephemeral re-embed).
+        pipeline.calls.batch.length = 0;
+        pipeline.calls.query = 0;
+        const result = await r.retrieve({
+            query: 'tell me about the enterprise plan pricing structure',
+            modeId: 'm1', files: [FILE], tokenBudget: 1000, topK: 3,
+        });
+        assert.ok(result.chunks.length > 0, 'retrieved from promoted-space vectors');
+        assert.equal(pipeline.calls.query, 1, 'exactly one query embed');
+        assert.equal(pipeline.calls.batch.length, 0, 'ZERO chunk re-embeds — persisted fallback vectors used');
+    });
+
+    test('primary AND fallback fail → status failed, chunk TEXT still persisted (lexical survives)', async () => {
+        const pipeline = makeFallbackPipeline({ fallbackThrows: true });
+        const r = new ModeHybridRetriever(db, mockVectorStore, pipeline);
+        await r.indexFile(FILE);
+
+        // Not 'lexical_only' (that's the embedder-unavailable case) — this is a
+        // genuine indexing FAILURE after the embedder was available but both
+        // providers threw. Chunk text is still kept so lexical retrieval works.
+        assert.equal(r.getFileIndexStatus('f1').status, 'failed');
+        const chunks = db.prepare('SELECT * FROM mode_reference_chunks WHERE file_id = ?').all('f1');
+        assert.ok(chunks.length >= 1, 'chunk text persisted for lexical fallback');
+        assert.equal(chunks[0].embedding, null, 'no vector stored on double-failure');
     });
 });

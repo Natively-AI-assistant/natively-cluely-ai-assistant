@@ -5,6 +5,7 @@ import { ModeContextRetriever, type ModeRetrievalOptions } from './ModeContextRe
 import type { AnswerType } from '../llm/AnswerPlanner';
 import type { ActiveModeInfo } from '../llm/modeProfiles';
 import { classifyCustomContext, selectCustomContextForAnswer } from '../llm/customContextClassifier';
+import { diagLog } from '../llm/documentGroundedPrompt';
 
 /**
  * Drop sensitive (salary/pricing/strategy) chunks from a raw customContext blob
@@ -30,6 +31,13 @@ import {
     SHARED_MODE_PREFIX,
     SHARED_MODE_PREFIX_SHORT,
 } from '../llm/prompts';
+
+/**
+ * OKF Profile Intelligence (migration v23): the reserved mode profile OKF packs
+ * hang off. Never a user mode — filtered from getModes(), rejected by
+ * setActiveMode. Kept in sync with ProfilePackBuilder.PROFILE_OKF_MODE_ID.
+ */
+export const PROFILE_OKF_RESERVED_MODE_ID = '__profile_okf__';
 
 export type ModeTemplateType =
     | 'general'
@@ -187,8 +195,28 @@ export function encodeModeContextPayload(value: unknown): string {
     return JSON.stringify(value).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
 }
 
+// OKF Phase 7: reference-file content length threshold above which
+// KnowledgeManager.generateForFile (deterministic extraction) is routed
+// through KnowledgeIndexQueue's background path instead of running
+// synchronously inline with addReferenceFile. 300k chars ≈ 150-200 pages of
+// dense text — well above the 66-page/128k-char benchmark thesis this
+// feature was tuned against (which stays comfortably on the synchronous
+// path, preserving existing test/smoke-script assumptions that the pack is
+// queryable immediately after addReferenceFile returns).
+const OKF_BACKGROUND_INDEX_THRESHOLD_CHARS = 300_000;
+
 const DOCUMENT_SOURCE_RE = /\b(uploaded|attached|provided|reference|source material|course material|seminar material|lecture material|presentation|slides?|deck|papers?|pdfs?|files?|documents?|docs?|notes?|attached material|uploaded content|provided material)\b/i;
-const DOCUMENT_CONSTRAINT_RE = /\b(source[-\s]?of[-\s]?truth|from the files?|from the documents?|from the uploaded|answer(?:s|ing)?\s+from\s+(?:the\s+)?(?:uploaded|attached|provided|reference|files?|documents?)|based on (?:uploaded|provided|attached|the\s+(?:uploaded|attached|provided|reference)|my\s+(?:uploaded|attached|provided|reference|files?|documents?|docs?|notes?|papers?|slides?|presentation))|use only|only use|rely only|use\s+the\s+(?:uploaded|attached|provided|reference|files?|documents?|docs?|notes?|papers?|slides?|presentation)|(?:stick to|restrict to|limit to|draw from)\s+the\s+(?:uploaded|attached|provided|reference|files?|documents?|docs?|notes?|papers?|slides?|presentation|material)|do not use knowledge outside|(?:don['’]?t|do not)\s+(?:use|rely on|draw on)\s+(?:anything\s+)?(?:outside|beyond|other than)|ground(?:ed)? (?:your )?answers? in|ground(?:ed)? in)\b/i;
+// Broadened 2026-07-05 (code-review audit) after confirming false negatives on
+// realistic, clearly-grounded user phrasings: "Please only answer based on the
+// PDF I uploaded" (based-on...I-uploaded word order), "Stick strictly to the
+// material in the file" ("stick to" not immediately adjacent to "the X"),
+// "Only reference what is in the notes, do not add anything not written there"
+// (no exact-phrase match), "always check the file first before answering" (a
+// very common plain-English grounding instruction with no prior alternative
+// at all). Each addition below is anchored to an explicit source noun so it
+// still requires unambiguous document-grounding intent, not just any
+// restrictive-sounding sentence.
+const DOCUMENT_CONSTRAINT_RE = /\b(source[-\s]?of[-\s]?truth|from the files?|from the documents?|from the uploaded|answer(?:s|ing)?\s+from\s+(?:the\s+)?(?:uploaded|attached|provided|reference|files?|documents?)|based on (?:uploaded|provided|attached|the\s+(?:uploaded|attached|provided|reference)|my\s+(?:uploaded|attached|provided|reference|files?|documents?|docs?|notes?|papers?|slides?|presentation))|based on the [a-z]+ i(?:'ve| have)?\s+(?:uploaded|attached|provided|shared|given)|use only|only use|only reference|only rely|rely only|use\s+the\s+(?:uploaded|attached|provided|reference|files?|documents?|docs?|notes?|papers?|slides?|presentation)|(?:stick to|restrict to|limit to|draw from)(?:\s+\w+){0,2}\s+(?:the\s+)?(?:uploaded|attached|provided|reference|files?|documents?|docs?|notes?|papers?|slides?|presentation|material)|(?:material|content|info(?:rmation)?)\s+in\s+the\s+(?:file|document|pdf|notes?|slides?|presentation)|do not use knowledge outside|(?:don['’]?t|do not)\s+(?:use|rely on|draw on|add)\s+(?:anything\s+)?(?:outside|beyond|other than|not\s+(?:written|mentioned|present|found)\s+(?:there|in))|ground(?:ed)? (?:your )?answers? in|ground(?:ed)? in|(?:check|read|refer to|consult|verify|look at)\s+the\s+(?:file|document|pdf|notes?|slides?|presentation|material)\s+(?:first|before))\b/i;
 
 export interface ActiveModeDocumentGroundingInfo {
     isCustom: boolean;
@@ -256,6 +284,10 @@ function rowToSection(row: any): ModeNoteSection {
 export class ModesManager {
     private static instance: ModesManager;
     private readonly modeContextRetriever = new ModeContextRetriever();
+    /** Normalized [0,1] top-score confidence from the most recent
+     *  buildRetrievedActiveModeContextBlock call. Read by the doc-grounded
+     *  false-refusal gate. See getLastRetrievalConfidence. */
+    private lastRetrievalConfidence = 0;
 
     private constructor() {}
 
@@ -269,7 +301,17 @@ export class ModesManager {
     // ── Modes ─────────────────────────────────────────────────────
 
     public getModes(): Mode[] {
-        const modes = DatabaseManager.getInstance().getModes().map(rowToMode);
+        const modes = DatabaseManager.getInstance().getModes()
+            // OKF Profile Intelligence (2026-07-02): the '__profile_okf__' reserved
+            // mode (template_type '__reserved__', migration v23) exists ONLY to
+            // satisfy the knowledge_packs.mode_id NOT NULL + FK constraint for profile
+            // OKF packs. It is not a user-facing mode and must never appear in the
+            // mode list, be pinnable/activatable, or be matched by document-grounded
+            // retrieval's getPacksByModeId — filter it out at the single read choke
+            // point so every downstream consumer (UI list, resolveMode, retrieval)
+            // is transparently protected.
+            .filter((row: any) => row.template_type !== '__reserved__')
+            .map(rowToMode);
 
         // Always enforce 'general' at the very top of the list.
         // L1: id is the secondary sort key for stable ordering when two modes
@@ -429,6 +471,22 @@ export class ModesManager {
         // persisted chunk vectors (mode_reference_chunks / index_state) have no
         // FK on purpose (the table is owned by the retriever) — drop them
         // explicitly BEFORE the cascade removes the file rows we enumerate.
+        //
+        // CORRECTION (OKF hardening pass, 2026-07-01): this codebase never
+        // runs `PRAGMA foreign_keys = ON` (confirmed zero references
+        // anywhere in electron/), so declared FK CASCADE clauses are
+        // actually inert — `DatabaseManager.deleteMode` below is a bare
+        // `DELETE FROM modes` that does NOT remove `mode_reference_files`
+        // rows either. That's a pre-existing gap outside OKF's scope to fix
+        // wholesale here; explicitly clean up the OKF knowledge_* rows for
+        // this mode's reference files, same reasoning as the chunk-vector
+        // cleanup right below.
+        try {
+            const { KnowledgeManager } = require('./knowledge/KnowledgeManager');
+            KnowledgeManager.getInstance().deleteForMode(id);
+        } catch (err: any) {
+            console.warn('[ModesManager] OKF knowledge cleanup on deleteMode skipped (non-fatal):', err?.message);
+        }
         try {
             for (const file of this.getReferenceFiles(id)) {
                 this.modeContextRetriever.removeReferenceFileIndex(file.id);
@@ -439,6 +497,18 @@ export class ModesManager {
     }
 
     public setActiveMode(id: string | null): void {
+        // OKF Profile Intelligence (2026-07-02): the reserved '__profile_okf__'
+        // mode (migration v23) exists ONLY to satisfy the knowledge_packs.mode_id
+        // FK for profile OKF packs. It is filtered out of getModes(), so a
+        // renderer's modes:set-active would look it up as `undefined` and skip the
+        // pro-gate — but the DB row still exists, so an UPDATE would activate a
+        // phantom mode that no longer appears in the list to switch away from.
+        // Reject it (and any future reserved mode) here at the single write choke
+        // point so it can never become active/pinned.
+        if (id === PROFILE_OKF_RESERVED_MODE_ID) {
+            console.warn('[ModesManager] setActiveMode: refusing to activate the reserved profile OKF mode');
+            return;
+        }
         DatabaseManager.getInstance().setActiveMode(id);
         this.invalidateActiveModeCache();
     }
@@ -457,13 +527,66 @@ export class ModesManager {
         extractedPageCount?: number;
     }): ModeReferenceFile {
         const id = `ref_${crypto.randomUUID()}`;
+        // FIX 2026-07-01: forward pageCount + extractedPageCount to the DB.
+        // Previously these fields were accepted on the input params but dropped
+        // before the INSERT, leaving NULL page_count on every row written after
+        // the v18→v19 migration. Upstream consumers (ModeContextRetriever
+        // reportReferenceFilePageCounts telemetry) then triggered their
+        // 3000-char heuristic instead of using the real pdf-parse-extracted
+        // count. Round 1 — see also v22 backfill migration for existing rows.
         DatabaseManager.getInstance().addReferenceFile({
             id,
             modeId: params.modeId,
             fileName: params.fileName,
             content: params.content,
+            pageCount: params.pageCount,
+            extractedPageCount: params.extractedPageCount,
         });
         this.invalidateActiveModeCache();
+        // OKF Phase 2/7 (2026-07-01): generate a Knowledge Pack alongside the
+        // existing chunk pipeline. Heuristic v1 extraction is pure string
+        // work — fast enough on typical documents (~2-5s on the 66-page
+        // benchmark thesis) to run synchronously without a perceptible
+        // upload-UI stall, but for a genuinely large document (the exact
+        // case KnowledgeIndexQueue's background path exists for — see its
+        // header comment) blocking would be user-visible. Route through
+        // KnowledgeIndexQueue.generateForFileInBackground for content over
+        // OKF_BACKGROUND_INDEX_THRESHOLD_CHARS; small/typical files stay
+        // synchronous so callers (including this method's own return value
+        // and the existing test/smoke-script suite) can rely on the pack
+        // being queryable immediately after addReferenceFile returns, same
+        // as before this change. A thrown error is caught and logged inside
+        // generateForFile itself (returns {status:'failed'}, never throws)
+        // and additionally guarded here. No-ops when okfKnowledgePacks is
+        // OFF (production default) — the flag is checked HERE, before the
+        // sync-vs-background routing, so a large-document upload with the
+        // feature off never even enqueues a background job (senior review
+        // MEDIUM, 2026-07-01: previously generateForFileInBackground was
+        // invoked unconditionally for >300k content and only generateForFile
+        // INSIDE checked the flag, so a flag-off large upload still spun up a
+        // queue promise + broadcast queued/running/done progress events for
+        // nothing). The synchronous branch was already safe — generateForFile
+        // short-circuits on the flag — but gating up front keeps the chunk
+        // path completely untouched when OKF is off.
+        try {
+            const { isOkfKnowledgePacksEnabled } = require('../intelligence/intelligenceFlags') as typeof import('../intelligence/intelligenceFlags');
+            if (isOkfKnowledgePacksEnabled()) {
+                const { KnowledgeManager } = require('./knowledge/KnowledgeManager') as typeof import('./knowledge/KnowledgeManager');
+                const fileInput = {
+                    id, modeId: params.modeId, fileName: params.fileName, content: params.content,
+                    pageCount: params.pageCount, extractedPageCount: params.extractedPageCount,
+                };
+                if (params.content.length > OKF_BACKGROUND_INDEX_THRESHOLD_CHARS) {
+                    void KnowledgeManager.getInstance().generateForFileInBackground(fileInput).catch((err: any) => {
+                        console.warn('[ModesManager] OKF background knowledge pack generation failed (non-fatal):', err?.message);
+                    });
+                } else {
+                    KnowledgeManager.getInstance().generateForFile(fileInput);
+                }
+            }
+        } catch (err: any) {
+            console.warn('[ModesManager] OKF knowledge pack generation skipped (non-fatal):', err?.message);
+        }
         return {
             id,
             modeId: params.modeId,
@@ -480,6 +603,16 @@ export class ModesManager {
         this.invalidateActiveModeCache();
         // PI v3 (W3): drop the persisted chunk vectors + index state too.
         try { this.modeContextRetriever.removeReferenceFileIndex(id); } catch { /* non-fatal */ }
+        // OKF Phase 2: invalidate the file's Knowledge Pack (the knowledge_*
+        // tables also cascade-delete via FK on mode_reference_files deletion,
+        // but this explicit call makes the intent visible and works even if
+        // FK cascading is disabled in a given SQLite build).
+        try {
+            const { KnowledgeManager } = require('./knowledge/KnowledgeManager') as typeof import('./knowledge/KnowledgeManager');
+            KnowledgeManager.getInstance().deleteForFile(id);
+        } catch (err: any) {
+            console.warn('[ModesManager] OKF knowledge pack invalidation skipped (non-fatal):', err?.message);
+        }
     }
 
     // ── PI v3 (W3): upload-time reference-file indexing ───────────
@@ -497,14 +630,51 @@ export class ModesManager {
         this.modeContextRetriever.setSharedEmbeddingPipeline(pipeline);
     }
 
-    /** Re-index files that fell back before the embedding provider became ready. */
+    /** Re-index files that fell back before the embedding provider became ready,
+     *  OR whose stored vectors are in a now-stale embedding space (fallback
+     *  promotion flips the active space; getFileIndexStatus reports those 'ready'
+     *  files as 'pending', which retryLexicalOnlyFiles re-indexes — MEDIUM #3).
+     *
+     *  MEDIUM #2: only descend into a mode when at least one of its files is in a
+     *  retry-eligible state, so a user with many fully-indexed modes doesn't pay
+     *  an O(modes × files) re-scan + per-file indexFile entry on every kick. */
     public async retryAllLexicalOnlyFiles(): Promise<void> {
+        const RETRY_ELIGIBLE = new Set(['lexical_only', 'failed', 'pending']);
         for (const mode of this.getModes()) {
             const files = this.getReferenceFiles(mode.id);
-            if (files.length > 0) {
-                await this.modeContextRetriever.retryLexicalOnlyFiles(files).catch(() => { /* logged inside */ });
-            }
+            if (files.length === 0) continue;
+            // Cheap status read (no embedding work) gates the expensive retry.
+            const hasEligible = files.some(f => {
+                try {
+                    return RETRY_ELIGIBLE.has(this.modeContextRetriever.getReferenceFileIndexStatus(f.id).status);
+                } catch {
+                    return true; // status lookup failed → let the retry decide
+                }
+            });
+            if (!hasEligible) continue;
+            await this.modeContextRetriever.retryLexicalOnlyFiles(files).catch(() => { /* logged inside */ });
         }
+    }
+
+    /** Modes that have at least one retry-eligible reference file. Used by the
+     *  main process to broadcast 'done' only for modes that were actually
+     *  re-indexed (LOW #8), instead of spamming every mode on every kick. */
+    public getModesWithRetryEligibleFiles(): string[] {
+        const RETRY_ELIGIBLE = new Set(['lexical_only', 'failed', 'pending']);
+        const out: string[] = [];
+        for (const mode of this.getModes()) {
+            const files = this.getReferenceFiles(mode.id);
+            if (files.length === 0) continue;
+            const hasEligible = files.some(f => {
+                try {
+                    return RETRY_ELIGIBLE.has(this.modeContextRetriever.getReferenceFileIndexStatus(f.id).status);
+                } catch {
+                    return true;
+                }
+            });
+            if (hasEligible) out.push(mode.id);
+        }
+        return out;
     }
 
     /** Kick indexing for every not-yet-ready file of a mode (mode activation prewarm). */
@@ -520,13 +690,50 @@ export class ModesManager {
         // first LIVE transcript turn never pays the cold-load cost inside its
         // retrieval budget. Only when the reranker is actually enabled — never
         // load a model nobody will use. Fire-and-forget, best-effort.
+        //
+        // Lazy download (2026-07-06): if the model isn't on disk yet, trigger
+        // a background download via LocalModelDownloadService. The download is
+        // idempotent — a parallel request from another mode activation just
+        // attaches to the same in-flight download. When it completes,
+        // prewarm() is fired so the reranker activates without the user
+        // having to reload the mode.
         try {
             // eslint-disable-next-line @typescript-eslint/no-var-requires
             const { isRagLocalRerankEnabled } = require('../intelligence/intelligenceFlags');
             if (files.length > 0 && isRagLocalRerankEnabled()) {
                 // eslint-disable-next-line @typescript-eslint/no-var-requires
                 const { getLocalReranker } = require('../rag/LocalReranker');
-                void getLocalReranker().prewarm?.();
+                const reranker = getLocalReranker();
+                void (async () => {
+                    try {
+                        const cached = await reranker.isCached();
+                        if (cached) {
+                            void reranker.prewarm?.();
+                            return;
+                        }
+                        // Not cached — kick off a background download. The
+                        // download service handles progress + persistence; we
+                        // just attach a one-shot prewarm on completion.
+                        try {
+                            // eslint-disable-next-line @typescript-eslint/no-var-requires
+                            const { LocalModelDownloadService } = require('./LocalModelDownloadService');
+                            // eslint-disable-next-line @typescript-eslint/no-var-requires
+                            const { RERANKER_PROVIDER_NAME } = require('../rag/rerankerDownloadProvider');
+                            // eslint-disable-next-line @typescript-eslint/no-var-requires
+                            const { RERANKER_MODEL_ID, RERANKER_DTYPE } = require('../rag/rerankerDownloadProvider');
+                            void LocalModelDownloadService.getInstance().start(
+                                RERANKER_PROVIDER_NAME,
+                                `${RERANKER_MODEL_ID}#${RERANKER_DTYPE}`,
+                            );
+                        } catch {
+                            // Service unavailable or download failed — fall
+                            // back to the old prewarm path. If the model is
+                            // not on disk, prewarm will fail silently and the
+                            // reranker will return null on first query.
+                            void reranker.prewarm?.();
+                        }
+                    } catch { /* prewarm-or-download both non-fatal */ }
+                })();
             }
         } catch { /* non-fatal — prewarm is an optimization, not a requirement */ }
     }
@@ -759,8 +966,38 @@ export class ModesManager {
         const custom = isCustomMode(mode);
         const hasReferenceFiles = files.some(file => file.content.trim());
         const hasCustomPrompt = mode.customContext.trim().length > 0;
-        const documentGrounded = custom && hasReferenceFiles && detectCustomModeDocumentGrounding(mode.customContext);
-        const documentGroundedCustomModeActive = custom && hasCustomPrompt && documentGrounded && hasReferenceFiles;
+        // A mode is "document-grounded" if it has reference files AND a custom
+        // prompt that declares source-of-truth on the uploaded material. We
+        // intentionally do NOT gate this on `custom` (= templateType === 'general'
+        // && name !== 'General') because users legitimately create deeply
+        // document-grounded prompts for built-in templates (e.g. a Seminar
+        // mode that explicitly says "answer only from the uploaded seminar file"
+        // — see live repro: a team-meet mode with 2k chars of doc-grounded
+        // customContext + 1 PDF, but documentGrounded=false because custom=false
+        // → retrieval never fires → model says "please upload your document").
+        const documentGrounded = hasReferenceFiles && detectCustomModeDocumentGrounding(mode.customContext);
+        // CRITICAL (code-review audit 2026-07-05, following the fix above):
+        // `documentGroundedCustomModeActive` — NOT `documentGrounded` — is the
+        // flag every production retrieval/prompt-shaping call site actually
+        // reads (WhatToAnswerLLM.ts forceDocumentGrounding, both LLMHelper.ts
+        // active-mode-injection sites, IntelligenceEngine.ts's context
+        // suppression + profile bypass, ipcHandlers.ts's Hindsight/OKF
+        // isolation gates and phone-chat). `documentGrounded` alone is
+        // essentially write-only (only 2 diagnostic console.log fields read
+        // it) — broadening ONLY `documentGrounded` (as an earlier, incomplete
+        // fix did) left every real behavior still gated on the unbroadened
+        // `custom` requirement below, so the original "please upload your
+        // document" bug persisted for built-in-template modes even after
+        // that fix landed. The name retains "CustomMode" for historical/API
+        // -compat reasons (~65 call sites reference this exact field name)
+        // but it no longer requires `isCustomMode` — any mode (built-in
+        // template or user-created) with reference files + a document-
+        // grounded prompt now activates the full doc-grounded behavior.
+        // `hasCustomPrompt` and `hasReferenceFiles` are both already implied
+        // by `documentGrounded` (empty customContext can't match either
+        // regex; documentGrounded requires hasReferenceFiles) — kept as
+        // explicit conjuncts only for readability/defense-in-depth.
+        const documentGroundedCustomModeActive = hasCustomPrompt && documentGrounded && hasReferenceFiles;
         return {
             isCustom: custom,
             hasReferenceFiles,
@@ -785,7 +1022,26 @@ export class ModesManager {
             ...retrievalOptions,
         });
 
+        // Side-channel the normalized top-score CONFIDENCE for this call
+        // (2026-07-02) for DIAGNOSTICS only (surfaced by the debug
+        // modes:build-retrieved-context IPC). NOTE: the document-grounded
+        // false-refusal gate deliberately does NOT use this — retrieval score
+        // proved unreliable there because the forced-doc-grounding section
+        // boost inflates off-topic queries (an off-topic "FIFA World Cup?"
+        // out-scored a genuine "research questions?" on the real thesis). The
+        // gate uses OKF entity/title overlap instead (see ipcHandlers). Kept
+        // because it's honest, cheap diagnostic data. Overwritten on every
+        // call; synchronous write (no await), so no cross-question clobber.
+        this.lastRetrievalConfidence = result.topScoreConfidence ?? 0;
+
         return result.formattedContext;
+    }
+
+    /** Normalized [0,1] retrieval confidence from the most recent
+     *  buildRetrievedActiveModeContextBlock call (0 if it retrieved nothing).
+     *  DIAGNOSTICS only — NOT used by the false-refusal gate (see setter). */
+    public getLastRetrievalConfidence(): number {
+        return this.lastRetrievalConfidence;
     }
 
     /**
@@ -820,8 +1076,17 @@ export class ModesManager {
                         excludeCustomContext,
                         allowRerank,
                         forceDocumentGrounding: true,
+                        followUpReferentHint: retrievalOptions?.followUpReferentHint,
+                        ...(retrievalOptions?.relaxed ? { topK: retrievalOptions.topK, tokenBudget: tokenBudget ?? 5200 } : {}),
                     },
                 );
+                diagLog('ModesManager hybrid-first branch', {
+                    query,
+                    usedFallback: hybridResult?.usedFallback,
+                    usedHybrid: hybridResult?.usedHybrid,
+                    hasContext: !!hybridResult?.formattedContext,
+                    tookHybrid: !!(hybridResult && !hybridResult.usedFallback && hybridResult.formattedContext),
+                });
                 if (hybridResult && !hybridResult.usedFallback && hybridResult.formattedContext) {
                     return hybridResult.formattedContext;
                 }
@@ -889,6 +1154,73 @@ export class ModesManager {
             });
         } catch { /* non-fatal */ }
         return lexical;
+    }
+
+    /**
+     * Phase 5 — OKF-augmented mode context block.
+     *
+     * Wraps `modeContextBlock` (already produced by `buildRetrievedActiveModeContextBlock*`)
+     * with OKF Knowledge Cards + graph hints when:
+     *   1. `okfHybridRetrieval` flag is on, AND
+     *   2. the active mode has at least one reference file with a generated OKF pack.
+     *
+     * Returns the raw `modeContextBlock` unchanged when any condition fails — additive,
+     * never destructive. Used by both the manual `gemini-chat-stream` path and the WTA
+     * path (`WhatToAnswerLLM.generateStream`) so synthesis-question recovery reaches
+     * every caller, not just the manual path.
+     *
+     * Mirrors the block in `LLMHelper.ts:4640-4704` so the behaviour stays in lockstep;
+     * this is the canonical home for the logic.
+     */
+    public buildOkfAugmentedContextBlock(modeContextBlock: string, query: string, pinnedModeId?: string): string {
+        if (!modeContextBlock || !query) return modeContextBlock;
+        try {
+            const { isOkfHybridRetrievalEnabled, isOkfGraphExpansionEnabled } = require('../intelligence/intelligenceFlags');
+            if (!isOkfHybridRetrievalEnabled()) return modeContextBlock;
+            const { classifyQuestion } = require('./knowledge/QuestionClassifier');
+            const { queryOkfCards } = require('./knowledge/OkfRetriever');
+            const { formatCardsForPrompt, buildOkfEvidenceBlock } = require('./knowledge/OkfPromptFormatter');
+            const mode = this.resolveMode(pinnedModeId);
+            if (!mode) return modeContextBlock;
+            const files = this.getReferenceFiles(mode.id) || [];
+            if (files.length === 0) return modeContextBlock;
+            const { KnowledgeManager } = require('./knowledge/KnowledgeManager');
+            const km = KnowledgeManager.getInstance();
+            const classification = classifyQuestion(query);
+            const allScoredCards: any[] = [];
+            const packsForGraphExpansion: any[] = [];
+            for (const file of files) {
+                const pack = km.getPackForFile(file.id);
+                if (!pack || pack.cards.length === 0) continue;
+                const scored = queryOkfCards(pack, query, classification, { topN: 6, fileId: file.id });
+                allScoredCards.push(...scored);
+                packsForGraphExpansion.push(pack);
+            }
+            if (allScoredCards.length === 0) return modeContextBlock;
+            allScoredCards.sort((a: any, b: any) => b.score - a.score);
+            const topCards = allScoredCards.slice(0, 6);
+            const cardsBlock = formatCardsForPrompt(topCards);
+            let graphHints = '';
+            try {
+                if (isOkfGraphExpansionEnabled() && classification.targetEntities && classification.targetEntities.length > 0) {
+                    const { resolveStartNodeIds, expandGraph, formatGraphHintsForPrompt } = require('./knowledge/GraphRetriever');
+                    const allHints: any[] = [];
+                    for (const pack of packsForGraphExpansion) {
+                        const startIds = resolveStartNodeIds(pack, classification.targetEntities);
+                        if (startIds.length === 0) continue;
+                        allHints.push(...expandGraph(pack, startIds, 2));
+                    }
+                    graphHints = formatGraphHintsForPrompt(allHints);
+                }
+            } catch (_graphErr: any) {
+                console.warn('[ModesManager] OKF graph expansion skipped (non-fatal):', _graphErr?.message);
+            }
+            const combinedCardsBlock = graphHints ? `${cardsBlock}\n\n${graphHints}` : cardsBlock;
+            return buildOkfEvidenceBlock({ cardsBlock: combinedCardsBlock, rawChunkText: modeContextBlock });
+        } catch (_okfErr: any) {
+            console.warn('[ModesManager] OKF augmentation skipped (non-fatal):', _okfErr?.message);
+            return modeContextBlock;
+        }
     }
 
     /**

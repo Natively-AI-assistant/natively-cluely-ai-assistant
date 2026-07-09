@@ -87,7 +87,13 @@ export function getModelCapabilities(modelId: string, isOllama: boolean): ModelC
   if (isOllama) {
     const size = parseOllamaSize(id);
     // Default to small when size is unknown (safer for memory/context).
-    const tier: ModelTier = (size != null && size >= 13) ? 'local-large' : 'local-small';
+    // Threshold lowered from 13B → 7B: modern 7-9B code models (qwen2.5-coder:7b,
+    // qwen3:8b, llama3.1:8b, deepseek-coder-v2:16b-lite) handle the full system
+    // prompt and produce multi-section coding answers comfortably. The old 13B
+    // threshold silently capped them at 180 output tokens (num_predict in
+    // streamWithOllama), truncating answers mid-function and producing the canned
+    // "Let me come back to that" fallback on follow-up turns.
+    const tier: ModelTier = (size != null && size >= 7) ? 'local-large' : 'local-small';
     const b = TIER_BUDGETS[tier];
     // Family-specific native context window override.
     let maxCtx = b.max;

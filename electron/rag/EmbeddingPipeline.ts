@@ -79,9 +79,12 @@ export class EmbeddingPipeline {
     private _isConfigImprovement(prev: AppAPIConfig, next: AppAPIConfig): boolean {
         const hasNew = (prevVal: string | undefined, nextVal: string | undefined) =>
             !prevVal && !!nextVal;
+        // A larger Gemini key pool is also an improvement (more rotation headroom).
+        const poolGrew = (next.geminiKeys?.length || 0) > (prev.geminiKeys?.length || 0);
         return (
             hasNew(prev.openaiKey, next.openaiKey) ||
             hasNew(prev.geminiKey, next.geminiKey) ||
+            poolGrew ||
             hasNew(prev.ollamaUrl, next.ollamaUrl)
         );
     }
@@ -151,10 +154,26 @@ export class EmbeddingPipeline {
     }
 
     /**
-     * Check if pipeline is ready
+     * Check if pipeline is ready to serve an embed() call WITHOUT a slow
+     * cold-load first.
+     *
+     * 2026-07-05 fix: previously this only checked `provider !== null`, which
+     * is true the instant _doInitialize() assigns LocalEmbeddingProvider as a
+     * fallback — before its ONNX worker has actually loaded the model (that
+     * only happens lazily on the first real embed() call, and can take up to
+     * 60s cold). Callers using isReady() as a synchronous "is it safe to use
+     * this right now" gate (ModeHybridRetriever.isEmbeddingAvailable(), used
+     * inside a live per-query retrieval budget) would see `true`, take the
+     * hybrid-retrieval branch, then stall for up to 60s on the first query
+     * during that narrow startup window.
+     * `provider.isLoaded?.()` is optional — cloud HTTP providers (Gemini/
+     * OpenAI/Ollama) have no meaningful "warm-up" state (every embed() call
+     * is already just a network round-trip), so they simply don't implement
+     * it and this defaults to true for them, preserving existing behavior for
+     * every provider except the local fallback.
      */
     isReady(): boolean {
-        return this.provider !== null;
+        return this.provider !== null && (this.provider.isLoaded?.() ?? true);
     }
 
     /**
@@ -504,12 +523,12 @@ export class EmbeddingPipeline {
         });
     }
 
-    async getEmbeddingsWithFallback(texts: string[]): Promise<{ embeddings: number[][]; space: string }> {
+    async getEmbeddingsWithFallback(texts: string[]): Promise<{ embeddings: number[][]; space: string; provider?: string; dimensions?: number }> {
         try {
             const embeddings = await this.getEmbeddings(texts);
             const space = this.getActiveSpaceKey();
             if (!space) throw new Error('Embedding provider has no active space');
-            return { embeddings, space };
+            return { embeddings, space, provider: this.provider?.name, dimensions: this.provider?.dimensions };
         } catch (primaryError) {
             const fallback = this.fallbackProvider;
             // If no fallback is configured, or the primary IS already the fallback
@@ -544,9 +563,25 @@ export class EmbeddingPipeline {
                     this.db.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES ('last_embedding_space', ?)").run(fallback.space);
                 } catch (dbErr: any) {
                     console.warn('[EmbeddingPipeline] Failed to persist fallback space:', dbErr?.message || dbErr);
+                    // MEDIUM #4: a swallowed persist failure means next launch can't
+                    // read back the promoted space, leaving freshly-local vectors
+                    // perpetually "pending" with no UI signal. Surface it so the
+                    // renderer can warn the user that a re-index may be required.
+                    try {
+                        const { BrowserWindow } = require('electron');
+                        BrowserWindow.getAllWindows().forEach((win: any) => {
+                            if (!win.isDestroyed()) {
+                                win.webContents.send('embedding:space-persist-failed', {
+                                    fallbackProvider: fallback.name,
+                                    space: fallback.space,
+                                    reason: dbErr?.message || String(dbErr),
+                                });
+                            }
+                        });
+                    } catch { /* non-fatal — best-effort renderer notice */ }
                 }
             }
-            return { embeddings, space: fallback.space };
+            return { embeddings, space: fallback.space, provider: fallback.name, dimensions: fallback.dimensions };
         }
     }
 
@@ -605,6 +640,22 @@ export class EmbeddingPipeline {
      */
     get localSpaceKey(): string | null {
         return this.fallbackProvider?.space ?? null;
+    }
+
+    /**
+     * Fraction (0-1) of the active provider's key pool that is currently healthy
+     * (not cooling from a 429), or null when the provider doesn't expose pool
+     * health (e.g. a single-key or non-Gemini provider — treat as healthy).
+     * Lets a caller doing an indexing burst then an immediate query decide
+     * whether to settle a moment first, rather than a blind delay every time.
+     */
+    get primaryPoolHealth(): number | null {
+        const p = this.provider as any;
+        if (p && typeof p.healthyKeyCount === 'function' && typeof p.keyPoolSize === 'function') {
+            const total = p.keyPoolSize();
+            return total > 0 ? p.healthyKeyCount() / total : null;
+        }
+        return null;
     }
 
     async getEmbeddingForQueryLocalOnly(text: string): Promise<number[] | null> {

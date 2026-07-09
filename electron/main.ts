@@ -1,7 +1,18 @@
+// ============================================================================
+// NATIVE-ARCH BOOT GATE — see electron/nativeArchGate.ts.
+//
+// This MUST be the first import in this file. esbuild hoists all imports
+// to the top of the bundled init_main() function in source order; by
+// placing the gate first, we ensure init_nativeArchGate() runs before
+// init_DatabaseManager() (which is what loads better-sqlite3).
+// ============================================================================
+import './nativeArchGate';
+
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPreferences, screen, desktopCapturer } from "electron"
 import * as crypto from "crypto"
 import path from "path"
 import fs from "fs"
+import os from "os"
 import dns from "dns"
 import { SystemAudioHealthClassifier } from "./audio/systemAudioHealthClassifier.mjs"
 import { autoUpdater } from "electron-updater"
@@ -34,7 +45,6 @@ dns.lookup = function(hostname: any, options: any, callback: any) {
 if (!app.isPackaged) {
   require('dotenv').config();
 }
-
 
 /**
  * Whether THIS build carries a real Developer ID signature.
@@ -81,11 +91,114 @@ process.stdout?.on?.('error', () => { });
 process.stderr?.on?.('error', () => { });
 
 process.on('uncaughtException', (err) => {
+  const reportPath = isNativeArchGateCrash(err)
+    ? null
+    : writeProcessReport('uncaughtException');
+  logCrashConsole('uncaughtException', {
+    error: formatCrashError(err),
+    reportPath,
+    skippedReport: isNativeArchGateCrash(err) ? 'native-arch-gate' : undefined,
+  });
+  emergencyCloseDatabase('uncaughtException');
+
+  // First-line handler for the native-arch gate (thrown synchronously at
+  // module-load above) and any other uncaught errors. The arch gate's
+  // error message starts with '[nativeArch]' or '[nativeArch:packaged]' — for those,
+  // render the appropriate fix dialog and exit 1. For everything else, fall
+  // through to the original logToFile behavior.
+  if (err instanceof Error && /^\[nativeArch(?::packaged)?\]/.test(err.message)) {
+    const packaged = err.message.startsWith('[nativeArch:packaged]');
+    const detail = err.message.replace(/^\[nativeArch(?::packaged)?\]\s*/, '').replace(/^Architecture mismatch:\s*/, '');
+    // PHASE-2E (CRITICAL fix): tag this fatal exit so the NEXT launch sees
+    // a "previous session ended unexpectedly" marker with reason
+    // fatal-main-error — instead of mis-reading it as a generic crash.
+    // MUST happen here, in this branch, because this handler is the FIRST
+    // one to match the [nativeArch] prefix and exit()s before any other
+    // uncaughtException handler (including the one inside nativeArchGate.ts
+    // and the one in LifecycleTracker) gets a chance to run.
+    try {
+      const { LifecycleTracker } = require('./utils/lifecycleTracker');
+      LifecycleTracker.getInstance().setQuitReason('fatal-main-error', {
+        source: 'native-arch-gate',
+        message: detail.slice(0, 200), // bounded — don't spam the marker
+      });
+    } catch { /* best-effort */ }
+    try {
+      // Lazy-require electron so this handler doesn't fire before
+      // app.whenReady() if the bundle is loaded in a non-Electron context.
+      const { dialog, app: electronApp } = require('electron');
+      // showErrorBox is modal and blocks until the user clicks OK.
+      dialog.showErrorBox(
+        packaged
+          ? 'Natively was built for a different chip — please reinstall'
+          : 'Native modules are wrong architecture — run this command to fix:',
+        detail,
+      );
+      electronApp.exit(1);
+    } catch {
+      // Electron not loaded (running under bare Node in a test) — exit
+      // cleanly with the error text on stderr.
+      console.error('[nativeArch] ' + detail);
+      process.exit(1);
+    }
+    return;
+  }
   logToFile('[CRITICAL] Uncaught Exception: ' + redactArgsForLog([err]));
 });
 
 process.on('unhandledRejection', (reason, promise) => {
+  logCrashEvent('unhandledRejection', {
+    reason: formatCrashError(reason),
+    promise: String(promise),
+  });
   logToFile('[CRITICAL] Unhandled Rejection: ' + redactArgsForLog([reason]));
+  emergencyCloseDatabase('unhandledRejection');
+});
+
+// OS-level shutdown signals. macOS / Linux ship SIGTERM to apps before
+// SIGKILL, and Cmd+Q / Quit menu paths route through app.quit() which we
+// already cover in `before-quit`. These handlers cover the cases where the
+// OS kills the process directly: a hung process getting SIGTERM from
+// launchd, an interrupted `npm run app:dev` Ctrl+C, a tmux/SSH session
+// ending. Each does a synchronous checkpoint+close so the next launch
+// doesn't see a stale WAL holding a kernel lock from the dead process.
+//
+// IMPORTANT: register a handler WITHOUT process.exit()/app.exit() and Node
+// SUPPPRESSES the default exit — the dev workflow (`npm run app:dev` via
+// concurrently) breaks because Ctrl+C kills Vite but the Electron main
+// process keeps running, holding the port indefinitely. So we explicitly
+// call app.exit(0) AFTER the DB close on the dev-relevant signals
+// (SIGINT/SIGTERM). SIGHUP gets the DB close + breadcrumb only — a tmux
+// SSH disconnect shouldn't kill the app on principle, and SIGHUP is rarely
+// sent by anything on macOS.
+for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(sig, () => {
+    try {
+      logToFile(`[SIGNAL] received ${sig}`);
+      emergencyCloseDatabase(sig);
+    } catch {
+      /* never throw from a signal handler */
+    }
+    // app.exit(0) is the Electron-clean way to terminate synchronously —
+    // skips the "are you sure?" prompts and bypasses before-quit gracefully.
+    // We require() lazily because app may not exist pre-whenReady in a test
+    // harness (ELECTRON_RUN_AS_NODE).
+    try {
+      const { app: electronApp } = require('electron');
+      electronApp.exit(0);
+    } catch {
+      process.exit(0);
+    }
+  });
+}
+process.on('SIGHUP', () => {
+  try {
+    logToFile('[SIGNAL] received SIGHUP');
+    emergencyCloseDatabase('SIGHUP');
+  } catch {
+    /* never throw from a signal handler */
+  }
+  // No exit on SIGHUP — terminal disconnect shouldn't kill a desktop app.
 });
 
 // CQ-04 fix: do NOT call app.getPath() at module load time.
@@ -98,14 +211,222 @@ const getLogFile = (): string | null => {
     _logFile = path.join(app.getPath('documents'), 'natively_debug.log');
     return _logFile;
   } catch {
-    // app.ready not yet fired — return null, logToFile will skip silently
-    return null;
+    // app.ready may not have fired yet (including native module boot gates).
+    // Still write somewhere stable so a pre-ready crash leaves a reason behind.
+    const home = os.homedir?.();
+    _logFile = home
+      ? path.join(home, 'Documents', 'natively_debug.log')
+      : path.join(os.tmpdir(), 'natively_debug.log');
+    return _logFile;
   }
 };
 
 const originalLog = console.log;
 const originalWarn = console.warn;
 const originalError = console.error;
+
+function safeJsonForLog(value: unknown): string {
+  // Replacer-based JSON serializer safe for BigInt, Error, circular refs,
+  // Uint8Array, and other shapes that JSON.stringify throws on by default.
+  // Falls back to a plain-string form on any unexpected failure so a crash
+  // breadcrumb is never silently swallowed.
+  const seen = new WeakSet<object>();
+  try {
+    return JSON.stringify(value, (_k, v) => {
+      if (typeof v === 'bigint') return `<BigInt:${v.toString()}>`;
+      if (v instanceof Error) {
+        return {
+          __error: true,
+          name: v.name,
+          message: v.message,
+          stack: v.stack,
+          cause: v.cause,
+        };
+      }
+      if (v instanceof Uint8Array) return `<Uint8Array len=${v.length}>`;
+      if (v instanceof Buffer) return `<Buffer len=${v.length}>`;
+      if (v && typeof v === 'object') {
+        if (seen.has(v)) return '<circular>';
+        seen.add(v);
+      }
+      return v;
+    }) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function formatCrashError(value: unknown, depth = 0): Record<string, unknown> {
+  if (value instanceof Error) {
+    const cause = value.cause;
+    return {
+      name: value.name,
+      message: value.message,
+      stack: value.stack,
+      // Unwind ES2022 cause chains up to 5 deep — beyond that, just stringify.
+      cause: depth < 5 && cause instanceof Error
+        ? formatCrashError(cause, depth + 1)
+        : (cause != null ? String(cause) : undefined),
+    };
+  }
+  return { value: String(value) };
+}
+
+function getCrashDiagnostics(extra: Record<string, unknown> = {}): Record<string, unknown> {
+  // Wrap the whole body in try/catch — these calls all allocate or query the
+  // OS (memoryUsage, freemem, totalmem, app.isReady) and CAN throw under
+  // OOM / sandboxed test environments. If they throw, the original crash
+  // evidence must survive; we return a minimal fallback so the
+  // [CRASH:*] line still carries the pid/label that points at the crash.
+  try {
+    const mem = process.memoryUsage();
+    return {
+      pid: process.pid,
+      platform: process.platform,
+      arch: process.arch,
+      versions: {
+        electron: process.versions.electron,
+        chrome: process.versions.chrome,
+        node: process.versions.node,
+        v8: process.versions.v8,
+      },
+      uptimeSec: Math.round(process.uptime()),
+      appReady: app.isReady(),
+      appPackaged: app.isPackaged,
+      rssMB: mb(mem.rss),
+      heapUsedMB: mb(mem.heapUsed),
+      heapTotalMB: mb(mem.heapTotal),
+      externalMB: mb(mem.external),
+      arrayBuffersMB: mb(mem.arrayBuffers),
+      freeMemMB: mb(os.freemem()),
+      totalMemMB: mb(os.totalmem()),
+      wal: collectWalSnapshot(),
+      ...extra,
+    };
+  } catch (e: any) {
+    return {
+      pid: process.pid,
+      platform: process.platform,
+      arch: process.arch,
+      diagnosticError: e?.message || String(e),
+      ...extra,
+    };
+  }
+}
+
+function logCrashEvent(label: string, payload: Record<string, unknown>): void {
+  try {
+    logToFile(`[CRASH:${label}] ${safeJsonForLog(getCrashDiagnostics(payload))}`);
+  } catch (e: any) {
+    // Last-resort breadcrumb. If even this fails (e.g. logToFile itself), we
+    // at least surface the label so triage can tell WHICH crash event was
+    // dropped instead of seeing a missing line.
+    try { logToFile(`[CRASH:${label}] logging-failed: ${String(e?.message || e)}`); } catch { /* ignored */ }
+  }
+}
+
+function logCrashConsole(label: string, payload: Record<string, unknown>): void {
+  try {
+    const snapshot = getCrashDiagnostics(payload);
+    const line = `[CRASH:${label}] ${safeJsonForLog(snapshot)}`;
+    logToFile(line);
+    try {
+      process.stderr?.write?.(line + '\n');
+    } catch { /* stdout/stderr can be detached */ }
+  } catch (e: any) {
+    try { logToFile(`[CRASH:${label}] logging-failed: ${String(e?.message || e)}`); } catch { /* ignored */ }
+  }
+}
+
+// Module-scope emergency DB close. Called from EVERY crash path
+// (uncaughtException, unhandledRejection, SIGTERM/SIGINT/SIGHUP,
+// render-process-gone, child-process-gone, gpu-process-crashed) so a
+// hard kill still leaves a clean WAL and releases the OS-level file lock.
+// The next launch's `new Database(dbPath)` then never sees a stale WAL
+// holding a kernel lock from the dead writer (the documented launch-hang
+// class of bug). Idempotent: safe to call from multiple paths in the same
+// process. No-ops if the DB manager isn't initialized yet (early-boot
+// handler fires before DatabaseManager.getInstance() exists).
+//
+// The single-shot flag is set INSIDE the success branch — if checkpoint
+// or close throws (transient disk error, half-initialized DB), a later
+// crash path can still retry the close. Once the close succeeds, the
+// flag sticks and subsequent calls early-return.
+let _emergencyDbClosed = false;
+function emergencyCloseDatabase(reason: string): void {
+  if (_emergencyDbClosed) return;
+  try {
+    const { DatabaseManager } = require('./db/DatabaseManager');
+    const dbMgr = DatabaseManager.getInstance();
+    let checkpointOk = true;
+    try { dbMgr.checkpoint?.(); } catch (e: any) {
+      checkpointOk = false;
+      logToFile(`[DB-EMERGENCY] checkpoint failed during ${reason}: ${e?.message || e}`);
+    }
+    try { dbMgr.close?.(); } catch (e: any) {
+      // If checkpoint succeeded but close failed, the WAL is flushed but
+      // the lock isn't released — don't latch the flag; a later crash path
+      // can still try the close alone.
+      logToFile(`[DB-EMERGENCY] close failed during ${reason}: ${e?.message || e}`);
+      if (checkpointOk) return;
+    }
+    _emergencyDbClosed = true;
+    logToFile(`[DB-EMERGENCY] closed during ${reason}`);
+  } catch (e: any) {
+    // Even if the require itself fails (manager not yet bootstrapped),
+    // we still want the breadcrumb so triage can see we tried. Don't latch
+    // the flag — a later crash path may run after the manager bootstraps.
+    try { logToFile(`[DB-EMERGENCY] failed during ${reason}: ${e?.message || e}`); } catch { /* ignored */ }
+  }
+}
+
+// Returns true if this exception message looks like the routine native-arch
+// gate mismatch (handled by the dialog already). We do NOT write a process
+// report on that path because the user already knows the cause and a full
+// report would just leak env vars.
+function isNativeArchGateCrash(err: unknown): boolean {
+  return err instanceof Error && /^\[nativeArch(?::packaged)?\]/.test(err.message);
+}
+
+function writeProcessReport(label: string): string | null {
+  try {
+    const report = (process as any).report;
+    if (!report?.writeReport) return null;
+    const dir = path.dirname(getLogFile() || path.join(os.tmpdir(), 'natively_debug.log'));
+    try { fs.mkdirSync(dir, { recursive: true }); } catch { /* best-effort */ }
+    const file = path.join(dir, `natively-${label}-${Date.now()}.report.json`);
+    report.writeReport(file);
+    // REDACT environmentVariables from the report on disk. Node's process
+    // report includes the FULL process.env — that includes any API keys the
+    // user has in their shell (GEMINI_API_KEY, OPENAI_API_KEY, etc). Strip
+    // the env block before any other process can read the file. We keep the
+    // heap snapshot, libuv, JS stack, native stack — those are the actually
+    // useful crash artifacts.
+    try {
+      const raw = fs.readFileSync(file, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && 'environmentVariables' in parsed) {
+        delete parsed.environmentVariables;
+        parsed.environmentVariables = '[REDACTED: see natively_debug.log for env-free diagnostic context]';
+        fs.writeFileSync(file, JSON.stringify(parsed, null, 2));
+      }
+    } catch (e: any) {
+      // If we can't read/rewrite, delete the unredacted file rather than leak it.
+      try { fs.unlinkSync(file); } catch { /* best-effort */ }
+      logToFile(`[CRASH:${label}] process report redacted-failed; deleted: ${e?.message || e}`);
+      return null;
+    }
+    logToFile(`[CRASH:${label}] process report written (env redacted): ${file}`);
+    return file;
+  } catch (e: any) {
+    logToFile(`[CRASH:${label}] process report failed: ${e?.message || e}`);
+    return null;
+  }
+}
+
+function logStartupPhase(phase: string, meta: Record<string, unknown> = {}): void {
+  logToFile(`[STARTUP:${phase}] ${safeJsonForLog(getCrashDiagnostics(meta))}`);
+}
 
 // Lazy redactor import — pulled at first call so this file can boot even if
 // the redactor module fails to load (we fall back to a no-op transform).
@@ -147,11 +468,92 @@ function withTimeout<T>(promise: Promise<T>, ms: number, tag: string): Promise<T
 /** Maximum log file size before rotation (10 MB). */
 const LOG_MAX_BYTES = 10 * 1024 * 1024;
 
+// Per-launch reset: when this version of the app starts, an existing
+// natively_debug.log from a previous session is overwritten so the user
+// always sees only the CURRENT session's breadcrumbs. Opt-out via
+// NATIVELY_KEEP_PREVIOUS_LOG=1 (preserve the old log as natively_debug.log.prev
+// for forensics).
+//
+// CRITICAL FIX (2026-07-09): only TRUNCATE when the prior session ended
+// CLEANLY. If the prior session crashed (renderer-gone / fatal-main-error /
+// unknown / no marker at all — the common "force-quit then relaunch" path),
+// rotate the prior log to .prev so the crash evidence the user is trying to
+// debug survives the relaunch. Without this gate, the very common
+// "crash → force-quit → relaunch to capture logs" sequence the user relies
+// on would eat exactly the crash record they want to read.
+function shouldTruncatePriorLog(): boolean {
+  if (process.env.NATIVELY_KEEP_PREVIOUS_LOG === '1') return false;
+  try {
+    const { LifecycleTracker } = require('./utils/lifecycleTracker');
+    const crashed = LifecycleTracker.getInstance().didPreviousSessionCrash();
+    return !crashed;
+  } catch {
+    // LifecycleTracker unavailable (test harness / pre-whenReady): be
+    // conservative and ROTATE so we never destroy evidence we can't verify.
+    return false;
+  }
+}
+
+let _didStartupLogReset = false;
+function resetStartupLog(): void {
+  if (_didStartupLogReset) return;
+  _didStartupLogReset = true;
+  const logFile = getLogFile();
+  if (!logFile) return;
+  try { fs.mkdirSync(path.dirname(logFile), { recursive: true }); } catch { /* best-effort */ }
+  const truncate = shouldTruncatePriorLog();
+  try {
+    if (fs.existsSync(logFile)) {
+      if (truncate) {
+        // Clean prior session: blow away the previous log so the user only
+        // sees current-session breadcrumbs. Old contents are GONE.
+        fs.writeFileSync(logFile, '');
+      } else {
+        // Prior session crashed (or we can't tell): rotate to .prev so the
+        // crash evidence survives this relaunch. The user can read either
+        // file directly off disk.
+        const rotated = logFile + '.prev';
+        try { if (fs.existsSync(rotated)) fs.unlinkSync(rotated); } catch { /* best-effort */ }
+        try { fs.renameSync(logFile, rotated); } catch { /* best-effort */ }
+      }
+    }
+    // Only clear stale process-report files when we're also truncating the
+    // log. When rotating (prior crash), keep the previous report files too
+    // — they're part of the forensic picture the user is debugging.
+    if (truncate) {
+      try {
+        const dir = path.dirname(logFile);
+        for (const name of fs.readdirSync(dir)) {
+          if (/^natively-.*\.report\.json$/.test(name)) {
+            try { fs.unlinkSync(path.join(dir, name)); } catch { /* best-effort */ }
+          }
+        }
+      } catch { /* best-effort */ }
+    }
+  } catch (e: any) {
+    // Non-fatal: if we can't reset, just keep appending to whatever exists.
+    try { fs.appendFileSync(logFile, `[reset-failed] ${e?.message || e}\n`); } catch { /* ignored */ }
+  }
+  // Always write a marker line so the user (and we) can confirm what
+  // happened to the prior log.
+  try {
+    fs.appendFileSync(
+      logFile,
+      `${new Date().toISOString()} [STARTUP] log opened (prior=${truncate ? 'truncated' : 'rotated-to-prev'}) pid=${process.pid} version=${app.getVersion?.() ?? 'unknown'} platform=${process.platform} arch=${process.arch}\n`,
+    );
+  } catch { /* best-effort */ }
+}
+
 function logToFile(msg: string) {
   try {
+    // Lazy: reset the log exactly once per process, on the very first write.
+    // We reset on first write (not at module load) because getLogFile() may
+    // need app.whenReady() to resolve a stable userData path, AND because the
+    // whole point is to overwrite previous-run breadcrumbs.
+    resetStartupLog();
     const logFile = getLogFile();
-    // If the app isn't ready yet (path not available), skip silently.
     if (!logFile) return;
+    try { fs.mkdirSync(path.dirname(logFile), { recursive: true }); } catch { /* best-effort */ }
 
     // P2-1: rotate the log file when it exceeds LOG_MAX_BYTES so that long-running
     // sessions (or meetings with dense transcripts) don't fill the user's disk.
@@ -169,6 +571,27 @@ function logToFile(msg: string) {
     fs.appendFileSync(logFile, new Date().toISOString() + ' ' + msg + '\n');
   } catch (e) {
     // Ignore logging errors
+  }
+}
+
+function mb(n: number | undefined | null): number {
+  return Math.round(((n || 0) / 1024 / 1024) * 10) / 10;
+}
+
+function collectWalSnapshot(): Array<{ file: string; mb: number }> {
+  try {
+    const userData = app.isReady() ? app.getPath('userData') : path.dirname(getLogFile() || os.tmpdir());
+    return fs.readdirSync(userData)
+      .filter(name => name.endsWith('-wal'))
+      .map(name => {
+        const full = path.join(userData, name);
+        return { file: name, mb: mb(fs.statSync(full).size) };
+      })
+      .filter(x => x.mb > 0)
+      .sort((a, b) => b.mb - a.mb)
+      .slice(0, 5);
+  } catch {
+    return [];
   }
 }
 
@@ -446,6 +869,25 @@ interface SttStatusPayload {
   channel: 'user' | 'interviewer';
   reconnectAttempts?: number;
 }
+
+export interface LocalWhisperRecoveryNotice {
+  recovered: true;
+  badModelId: string;
+  fallbackModelId: string;
+  message: string;
+}
+
+/** Family-keyed recovery notice for the generalized ONNX load sentinel.
+ *  Each `family` corresponds to one of the local model consumers wired to
+ *  `electron/utils/onnxLoadSentinel.ts`. Renderer pulls via the
+ *  `onnx-get-recovery-notice` IPC, one-shot drained through AppState. */
+export type OnnxRecoveryFamily = 'whisper' | 'intent' | 'embeddings' | 'reranker';
+export interface OnnxRecoveryNotice {
+  family: OnnxRecoveryFamily;
+  badModelId: string;
+  message: string;
+}
+
 type ScreenshotCaptureKind = 'full' | 'selective';
 
 interface ScreenshotCaptureSession {
@@ -478,6 +920,7 @@ import { PhoneMirrorService } from "./services/PhoneMirrorService"
 import { setVerboseLoggingFlag } from "./verboseLog"
 import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
+import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
 
 // Valid disguise modes. The persisted setting is untyped on disk and historical
@@ -509,6 +952,7 @@ export class AppState {
   private themeManager: ThemeManager
   private ragManager: RAGManager | null = null
   private modeReferenceRetryPromise: Promise<void> | null = null
+  private stabilityHeartbeatTimer: NodeJS.Timeout | null = null
   private knowledgeOrchestrator: any = null
   private tray: Tray | null = null
   private updateAvailable: boolean = false
@@ -587,6 +1031,11 @@ export class AppState {
   private _dockReassertTimers: NodeJS.Timeout[] = []; // Self-verifying dock-enforcement retry timers
   private _ollamaBootstrapPromise: Promise<void> | null = null;
   private screenshotCaptureInProgress: boolean = false;
+  private localWhisperRecoveryNotice: LocalWhisperRecoveryNotice | null = null;
+  // Family-keyed stash for the generalized ONNX load-sentinel recovery
+  // notices (intent / embeddings / reranker). Whisper keeps its dedicated
+  // channel for backward-compat with the shipped renderer banner.
+  private onnxRecoveryNotices: Partial<Record<OnnxRecoveryFamily, OnnxRecoveryNotice>> = {};
 
 
   // Processing events
@@ -612,7 +1061,7 @@ export class AppState {
     const settingsManager = SettingsManager.getInstance();
     this.isUndetectable = settingsManager.get('isUndetectable') ?? false;
     this.disguiseMode = normalizeDisguiseMode(settingsManager.get('disguiseMode'));
-    this._verboseLogging = settingsManager.get('verboseLogging') ?? false;
+    this._verboseLogging = settingsManager.get('verboseLogging') ?? true;
     setVerboseLoggingFlag(this._verboseLogging);
     console.log(`[AppState] Initialized with isUndetectable=${this.isUndetectable}, disguiseMode=${this.disguiseMode}, verboseLogging=${this._verboseLogging}`);
 
@@ -651,6 +1100,12 @@ export class AppState {
           // crashes on init with a confusing "model not found" and the user
           // is locked out of audio until they manually clear settings.
           //
+          // Also consume the Whisper load sentinel before validation/preload. If
+          // it exists, the previous process died while loading that model natively
+          // (before JS error handlers could persist a cooldown). Reset any
+          // matching selection headlessly so one bad ONNX model cannot brick
+          // startup.
+          //
           // Validate BOTH the global setting AND the per-channel overrides
           // (when per-channel mode is enabled). Per-channel validation runs
           // here because the per-channel id is read at meeting-start time
@@ -658,6 +1113,28 @@ export class AppState {
           // un-validated here means a corrupt per-channel id would still
           // crash the meeting even though the global gate passes.
           const FALLBACK = 'Xenova/whisper-tiny.en';
+          const poisoned = modelPreloader.consumePoisonedLoadSentinel?.();
+          if (poisoned?.modelId) {
+            let resetAny = false;
+            for (const key of ['localWhisperModel', 'localWhisperModelMic', 'localWhisperModelSystem'] as const) {
+              if (settingsManager.get(key) === poisoned.modelId) {
+                settingsManager.set(key, FALLBACK);
+                resetAny = true;
+              }
+            }
+            if (resetAny) {
+              const message = `Recovered from a local transcription model crash. Reset ${poisoned.modelId} to ${FALLBACK}.`;
+              console.warn(`[AppState] ${message}`);
+              this.setLocalWhisperRecoveryNotice({
+                recovered: true,
+                badModelId: poisoned.modelId,
+                fallbackModelId: FALLBACK,
+                message,
+              });
+            } else {
+              console.warn(`[AppState] Previous local Whisper load for ${poisoned.modelId} did not finish cleanly; current settings no longer reference it.`);
+            }
+          }
           const rawModelId = settingsManager.get('localWhisperModel') ?? FALLBACK;
           const modelId = MODEL_CATALOG_IDS.has(rawModelId) ? rawModelId : FALLBACK;
           if (modelId !== rawModelId) {
@@ -722,6 +1199,56 @@ export class AppState {
       } catch (e) {
         // Non-fatal — recording still works, just with a cold-start delay
         console.warn('[AppState] Local Whisper preload skipped:', e);
+      }
+    });
+
+    // Generalized ONNX load-sentinel consume (intent / embeddings / reranker).
+    // Runs UNCONDITIONALLY — these families are loaded on demand and a poisoned
+    // disk sentinel must be consumed regardless of the user's STT selection.
+    // Each consumer seeds its own in-memory poison flag so the first call
+    // (warmup, embed, rerank) fast-fails and the user sees a degraded
+    // experience instead of a crashloop.
+    setImmediate(() => {
+      try {
+        const { consumeIntentClassifierSentinel } = require('./llm/IntentClassifier');
+        const { consumeLocalEmbeddingSentinel } = require('./rag/providers/LocalEmbeddingProvider');
+        const { consumeLocalRerankerSentinel } = require('./rag/LocalReranker');
+
+        const intentPoisoned = consumeIntentClassifierSentinel();
+        if (intentPoisoned) {
+          const message = `Recovered from an intent classifier crash. ${intentPoisoned.modelId} is skipped this launch — falling back to regex/heuristic intent.`;
+          console.warn(`[AppState] ${message}`);
+          this.setOnnxRecoveryNotice('intent', {
+            family: 'intent',
+            badModelId: intentPoisoned.modelId,
+            message,
+          });
+        }
+
+        const embeddingPoisoned = consumeLocalEmbeddingSentinel();
+        if (embeddingPoisoned) {
+          const message = `Recovered from a local embedding crash. ${embeddingPoisoned.modelId} is skipped this launch — retrieval falls back to lexical.`;
+          console.warn(`[AppState] ${message}`);
+          this.setOnnxRecoveryNotice('embeddings', {
+            family: 'embeddings',
+            badModelId: embeddingPoisoned.modelId,
+            message,
+          });
+        }
+
+        const rerankerPoisoned = consumeLocalRerankerSentinel();
+        if (rerankerPoisoned) {
+          const message = `Recovered from a local reranker crash. ${rerankerPoisoned.modelId} is skipped this launch — retrieval falls back to cosine top-K.`;
+          console.warn(`[AppState] ${message}`);
+          this.setOnnxRecoveryNotice('reranker', {
+            family: 'reranker',
+            badModelId: rerankerPoisoned.modelId,
+            message,
+          });
+        }
+      } catch (e: any) {
+        // Non-fatal — a missing or broken consume helper must never brick startup.
+        console.warn('[AppState] ONNX sentinel consume skipped (non-fatal):', e?.message || e);
       }
     });
 
@@ -998,6 +1525,10 @@ export class AppState {
 
     this.setupIntelligenceEvents()
 
+    ProviderStatusRegistry.getInstance().setBroadcaster((channel, payload) => {
+      this.broadcast(channel, payload);
+    });
+
     // Intent-classifier warmup is scheduled after the launcher is visible so
     // transformers/ONNX initialization cannot contend with the first paint.
 
@@ -1010,6 +1541,44 @@ export class AppState {
 
     // Initialize Auto-Updater
     this.setupAutoUpdater()
+
+    this.startStabilityHeartbeat();
+  }
+
+  private startStabilityHeartbeat(): void {
+    if (this.stabilityHeartbeatTimer) return;
+    const emit = () => {
+      try {
+        const mem = process.memoryUsage();
+        const flags = {
+          ragConfidenceGate: isIntelligenceFlagEnabled('ragConfidenceGate'),
+          ragLocalRerank: isIntelligenceFlagEnabled('ragLocalRerank'),
+          ragSpeculativeRerank: isIntelligenceFlagEnabled('ragSpeculativeRerank'),
+          okfKnowledgePacks: isIntelligenceFlagEnabled('okfKnowledgePacks'),
+          okfHybridRetrieval: isIntelligenceFlagEnabled('okfHybridRetrieval'),
+          jitFinalAnswerEnforced: isIntelligenceFlagEnabled('jitFinalAnswerEnforced'),
+          hindsightMemory: isIntelligenceFlagEnabled('hindsightMemory'),
+        };
+        console.log('[StabilityHeartbeat]', {
+          rssMB: mb(mem.rss),
+          heapUsedMB: mb(mem.heapUsed),
+          heapTotalMB: mb(mem.heapTotal),
+          externalMB: mb(mem.external),
+          arrayBuffersMB: mb(mem.arrayBuffers),
+          freeMemMB: mb(os.freemem()),
+          totalMemMB: mb(os.totalmem()),
+          uptimeSec: Math.round(process.uptime()),
+          isMeetingActive: this.isMeetingActive,
+          flags,
+          wal: collectWalSnapshot(),
+        });
+      } catch (e: any) {
+        console.warn('[StabilityHeartbeat] skipped:', e?.message || e);
+      }
+    };
+    setTimeout(emit, 10_000).unref?.();
+    this.stabilityHeartbeatTimer = setInterval(emit, 30_000);
+    this.stabilityHeartbeatTimer.unref?.();
   }
 
   private sendToWindow(win: BrowserWindow | null | undefined, channel: string, ...args: any[]): boolean {
@@ -1131,7 +1700,10 @@ export class AppState {
     this.broadcast('meeting-state-changed', { isActive: this.isMeetingActive });
   }
 
-  private scheduleModeReferenceIndexRetry(): void {
+  // Public so the reference-file upload IPC handler can kick a retry for a
+  // file that landed in 'failed'/'lexical_only' during the embedder warm-up
+  // window (the boot-time scheduler only sees files that existed at start).
+  public scheduleModeReferenceIndexRetry(): void {
     if (this.modeReferenceRetryPromise) return;
     const pipeline = this.ragManager?.getEmbeddingPipeline();
     if (!pipeline) return;
@@ -1140,8 +1712,12 @@ export class AppState {
       const { ModesManager } = require('./services/ModesManager');
       const modesManager = ModesManager.getInstance();
       await modesManager.retryAllLexicalOnlyFiles().catch(() => { /* logged inside */ });
-      for (const mode of modesManager.getModes()) {
-        this.broadcast('mode-file-index-status', { modeId: mode.id, phase: 'done' });
+      // Capture which modes actually had retry-eligible files BEFORE the retry,
+      // so we only nudge those renderers to re-fetch status (LOW #8) instead of
+      // broadcasting a no-op 'done' to every mode on every pipeline-ready event.
+      const affectedModeIds: string[] = modesManager.getModesWithRetryEligibleFiles();
+      for (const modeId of affectedModeIds) {
+        this.broadcast('mode-file-index-status', { modeId, phase: 'done' });
       }
     }).catch(() => { /* provider unavailable — lexical fallback remains valid */ })
       .finally(() => { this.modeReferenceRetryPromise = null; });
@@ -1150,6 +1726,55 @@ export class AppState {
   private async bootstrapOllamaEmbeddings() {
     this._ollamaBootstrapPromise = (async () => {
       try {
+        // SKIP when a cloud embedding provider is already available. Pulling the
+        // 274MB `nomic-embed-text` on first launch is pure waste for users who
+        // have an OpenAI/Gemini key (the RAG pipeline resolves to that cloud
+        // provider anyway), and the background pull was racing the ModelSelector
+        // window's forceRestartOllama `kill -9` — leaving a "Setting up AI
+        // memory… 0%" pill stuck forever. Only bootstrap Ollama embeddings when
+        // there is NO cloud key, i.e. Ollama is genuinely the intended provider.
+        try {
+          const { CredentialsManager } = require('./services/CredentialsManager');
+          const cm = CredentialsManager.getInstance();
+          const hasCloudEmbeddingKey =
+            !!(cm.getOpenaiApiKey() || process.env.OPENAI_API_KEY) ||
+            !!(cm.getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY);
+          if (hasCloudEmbeddingKey) {
+            console.log('[AppState] Skipping Ollama embeddings bootstrap — a cloud embedding provider is configured.');
+            return;
+          }
+        } catch (guardErr: any) {
+          // Credential lookup failed — fall through and attempt the bootstrap.
+          console.warn('[AppState] Ollama bootstrap cloud-key guard failed (non-fatal):', guardErr?.message);
+        }
+
+        // PHASE-2C: capability resolver — even when no cloud key is
+        // configured, the user may have explicitly disabled Ollama (or
+        // configured a non-Ollama local provider). Without this gate, a fresh
+        // install's `spawn ollama` is wasted work that fills the log with
+        // ENOENT noise and can race the ModelSelector force-restart path.
+        // Only attempt to bootstrap when the user has not opted out.
+        try {
+          const { SettingsManager } = require('./services/SettingsManager');
+          const settings = SettingsManager.getInstance();
+          // Best-effort check — any missing key returns undefined and is
+          // treated as "no opt-out" (the bootstrap proceeds, matching
+          // pre-fix behavior). This is intentionally permissive: we only
+          // short-circuit when the user has clearly said NO.
+          const explicitNoOllama =
+            settings.get?.('disableOllamaBootstrap') === true ||
+            settings.get?.('localProvider') === 'none' ||
+            settings.get?.('localProvider') === 'cloud';
+          if (explicitNoOllama) {
+            console.log('[AppState] Skipping Ollama embeddings bootstrap — user has opted out (disableOllamaBootstrap/localProvider).');
+            return;
+          }
+        } catch (settingsErr: any) {
+          // Settings lookup is best-effort; failure here just falls through
+          // to the prior behavior.
+          console.warn('[AppState] Ollama bootstrap opt-out check failed (non-fatal):', settingsErr?.message);
+        }
+
         const { OllamaBootstrap } = require('./rag/OllamaBootstrap');
         const bootstrap = new OllamaBootstrap();
 
@@ -1191,6 +1816,16 @@ export class AppState {
         const cm = CredentialsManager.getInstance();
         const openaiKey = cm.getOpenaiApiKey() || process.env.OPENAI_API_KEY;
         const geminiKey = cm.getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+        // Gemini embedding key POOL: credential key + all GEMINI_API_KEY(_2.._6)/GOOGLE
+        // env keys, de-duped. Lets the embedding provider rotate off a rate-limited
+        // key (429 → per-key cooldown → next key) instead of failing the index.
+        const geminiKeys = (() => {
+          const pool: string[] = [];
+          const add = (k?: string) => { const v = (k || '').trim(); if (v && !pool.includes(v)) pool.push(v); };
+          add(cm.getGeminiApiKey());
+          for (const n of ['GEMINI_API_KEY', 'GEMINI_API_KEY_2', 'GEMINI_API_KEY_3', 'GEMINI_API_KEY_4', 'GEMINI_API_KEY_5', 'GEMINI_API_KEY_6', 'GOOGLE_API_KEY']) add(process.env[n]);
+          return pool;
+        })();
 
         const providerDataScopes = (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })();
         this.ragManager = new RAGManager({
@@ -1199,6 +1834,7 @@ export class AppState {
             extPath: db.getExtPath(),
             openaiKey,
             geminiKey,
+            geminiKeys,
             ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
             providerDataScopes
         });
@@ -1407,6 +2043,37 @@ export class AppState {
       `(canAutoInstall=${autoInstall}, signedBuild=${isSignedBuild()}, platform=${process.platform})`
     )
 
+    // PHASE-2A: log current + feed config on startup so a mis-pointed `latest.yml`
+    // is immediately diagnosable from the log (and from any user bug report).
+    //
+    // NOTE: electron-updater@6.x deprecated `getFeedURL()` — when no explicit URL
+    // was set via `setFeedURL()`, the method returns the literal string
+    // "Deprecated. Do not use it." instead of resolving from `package.json`.
+    // Read the `publish` block directly so the diagnostic reflects truth.
+    try {
+      const pkgPath = path.join(app.getAppPath(), 'package.json')
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+      const publish = pkg?.build?.publish || pkg?.publish
+      let feedLabel: string
+      if (Array.isArray(publish) && publish.length > 0) {
+        // electron-builder allows a publish array (multi-channel). Log them all.
+        feedLabel = publish
+          .map((p: any) => `${p.provider || 'unknown'}:${p.owner ? `${p.owner}/${p.repo ?? ''}` : (p.url || '(default)')}`)
+          .join(', ')
+      } else if (publish && typeof publish === 'object') {
+        feedLabel = `${publish.provider || 'unknown'}:${publish.owner ? `${publish.owner}/${publish.repo ?? ''}` : (publish.url || '(default)')}`
+      } else if (publish) {
+        feedLabel = String(publish)
+      } else {
+        feedLabel = 'auto (publish in package.json)'
+      }
+      console.log(
+        `[AutoUpdater] currentVersion=${app.getVersion()} channel=${autoUpdater.channel} feed=${feedLabel}`
+      )
+    } catch (feedErr) {
+      console.warn('[AutoUpdater] Could not read feed URL:', feedErr)
+    }
+
     // Default to latest (stable) channel - matches latest.yml generated by electron-builder
     autoUpdater.channel = 'latest'
     console.log(`[AutoUpdater] Channel: ${autoUpdater.channel}`)
@@ -1417,6 +2084,30 @@ export class AppState {
     })
 
     autoUpdater.on("update-available", async (info) => {
+      // PHASE-2A: refuse non-upgrades (downgrade, equal, malformed). electron-updater
+      // normally already filters this, but we belt-and-brace it: a stale latest.yml on
+      // GitHub (or a republish with the wrong tag) must NEVER cause us to invite the
+      // user to "update" to a version older than or equal to what they're running.
+      const currentVersion = app.getVersion()
+      const remoteVersion = (info?.version ?? '').toString().replace(/^v/, '')
+      if (!AppState.isRealUpgrade(currentVersion, remoteVersion)) {
+        console.warn(
+          '[AutoUpdater] Ignoring non-upgrade update:',
+          `current=${currentVersion} remote=${remoteVersion} channel=${autoUpdater.channel}`
+        )
+        this.updateAvailable = false
+        this.updateDownloadState = 'idle'
+        this.downloadedUpdateInfo = null
+        // Treat as "not available" so the UI doesn't show a stale banner.
+        this.broadcast('update-not-available', {
+          version: currentVersion,
+          ignored: true,
+          reason: 'non-upgrade',
+          remote: remoteVersion
+        })
+        return
+      }
+
       console.log("[AutoUpdater] Update available:", info.version)
       this.updateAvailable = true
       this.updateDownloadState = 'available'
@@ -1544,8 +2235,63 @@ export class AppState {
     return false;
   }
 
+  /**
+   * PHASE-2A: Is `remote` strictly newer than `current` (both semver-ish)?
+   *
+   * Used as the GATE on the production autoUpdater path so a stale or repointed
+   * `latest.yml` can never invite the user to "update" to a version <= theirs.
+   *
+   * Rules:
+   *   - Accept only well-formed X[.Y[.Z[.B]]] (digits). Anything else → false.
+   *   - Leading 'v' (e.g. "v2.8.0") and pre-release suffixes ("2.8.0-beta.1") are
+   *     stripped before comparison so a stable build never accepts a beta as a
+   *     downgrade (and vice versa).
+   *   - Strict greater-than. Equal or older → false.
+   */
+  static isRealUpgrade(current: string, remote: string): boolean {
+    const stripPre = (v: string) => v.replace(/^v/, '').replace(/-.*$/, '')
+    const parse = (v: string): number[] | null => {
+      const parts = stripPre(v).split('.')
+      if (parts.length < 1 || parts.length > 4) return null
+      const out: number[] = []
+      for (const p of parts) {
+        if (!/^\d+$/.test(p)) return null
+        const n = parseInt(p, 10)
+        if (!Number.isFinite(n) || n < 0) return null
+        out.push(n)
+      }
+      // Pad to 4 parts for stable comparison (major.minor.patch.build).
+      while (out.length < 4) out.push(0)
+      return out
+    }
+    const c = parse(current)
+    const r = parse(remote)
+    if (!c || !r) return false
+    for (let i = 0; i < 4; i++) {
+      if (r[i] > c[i]) return true
+      if (r[i] < c[i]) return false
+    }
+    return false
+  }
 
   public async quitAndInstallUpdate(): Promise<void> {
+    // PHASE-2A: belt-and-brace guard against applying a downgrade or no-op update.
+    // The `update-downloaded` path can only be reached after `update-available`
+    // passed isRealUpgrade, but renderer/UI bugs could call this IPC directly.
+    const currentVersion = app.getVersion()
+    const downloadedVersion = (this.downloadedUpdateInfo?.version ?? '').toString().replace(/^v/, '')
+    if (!downloadedVersion) {
+      console.error('[AutoUpdater] quitAndInstall called but no downloaded update info')
+      return
+    }
+    if (!AppState.isRealUpgrade(currentVersion, downloadedVersion)) {
+      console.warn(
+        '[AutoUpdater] Refusing to apply non-upgrade update:',
+        `current=${currentVersion} downloaded=${downloadedVersion}`
+      )
+      this.broadcast('update-error', `Refusing non-upgrade update (${currentVersion} → ${downloadedVersion})`)
+      return
+    }
     console.log('[AutoUpdater] quitAndInstall called - applying update...')
 
     // Real in-place install + relaunch. Available on signed macOS builds and on
@@ -1553,6 +2299,15 @@ export class AppState {
     // unpack the staged ZIP, swap the .app, and relaunch.
     if (canAutoInstall()) {
       console.log('[AutoUpdater] Performing real quitAndInstall (signed/auto-installable build)')
+      // PHASE-2E: tag this quit so the next-launch marker doesn't report it
+      // as a "previous session crashed" event.
+      try {
+        const { LifecycleTracker } = require('./utils/lifecycleTracker');
+        LifecycleTracker.getInstance().setQuitReason('updater-quit-install', {
+          fromVersion: app.getVersion(),
+          toVersion: downloadedVersion,
+        });
+      } catch { /* best-effort */ }
       setImmediate(() => {
         try {
           // isSilent=false (show installer UI on Windows), forceRunAfter=true (relaunch).
@@ -4843,6 +5598,26 @@ export class AppState {
     return this.windowHelper.getMainWindow()
   }
 
+  public setLocalWhisperRecoveryNotice(notice: LocalWhisperRecoveryNotice): void {
+    this.localWhisperRecoveryNotice = notice;
+  }
+
+  public takeLocalWhisperRecoveryNotice(): LocalWhisperRecoveryNotice | null {
+    const notice = this.localWhisperRecoveryNotice;
+    this.localWhisperRecoveryNotice = null;
+    return notice;
+  }
+
+  public setOnnxRecoveryNotice(family: OnnxRecoveryFamily, notice: OnnxRecoveryNotice): void {
+    this.onnxRecoveryNotices[family] = notice;
+  }
+
+  public takeOnnxRecoveryNotice(family: OnnxRecoveryFamily): OnnxRecoveryNotice | null {
+    const notice = this.onnxRecoveryNotices[family];
+    if (notice) delete this.onnxRecoveryNotices[family];
+    return notice ?? null;
+  }
+
   public getWindowHelper(): WindowHelper {
     return this.windowHelper
   }
@@ -5776,10 +6551,12 @@ export class AppState {
 // Application initialization
 
 async function initializeApp() {
+  logStartupPhase('initializeApp:start');
   // 1. Enforce single instance — prevent duplicate dock icons from leftover processes.
   // In development mode with hot-reload this is still safe because electron is restarted
   // by the build step, not re-launched by concurrently while the old process is alive.
   const gotLock = app.requestSingleInstanceLock();
+  logStartupPhase('single-instance-lock', { gotLock });
   if (!gotLock) {
     console.log('[Main] Another instance is already running. Exiting this instance.');
     // Use app.exit(0) — app.quit() before whenReady can be deferred or no-op'd
@@ -5803,8 +6580,44 @@ async function initializeApp() {
     }
   });
 
+  // PHASE-2E: install lifecycle tracking BEFORE app.whenReady() so we never
+  // miss a renderer crash, GPU crash, or worker death that occurs during
+  // initial window creation.
+  try {
+    const { LifecycleTracker } = require('./utils/lifecycleTracker');
+    const consoleLog: (msg: string, meta?: Record<string, unknown>) => void = (msg, meta) => {
+      // Use the same redaction policy as logToFile — never log secrets.
+      const safeMeta = meta
+        ? Object.fromEntries(
+            Object.entries(meta).map(([k, v]) => {
+              if (/key|secret|token|password|auth|credential/i.test(k)) return [k, '[REDACTED]'];
+              return [k, v];
+            })
+          )
+        : undefined;
+      console.log(msg, safeMeta ?? '');
+      logToFile(msg + ' ' + (safeMeta ? JSON.stringify(safeMeta) : ''));
+    };
+    LifecycleTracker.getInstance().install(consoleLog);
+    // Surface "previous session crashed" — useful for the user-facing
+    // diagnostics UI, and free insurance for the very report that triggered
+    // this work.
+    const prev = LifecycleTracker.getInstance().readPreviousSessionMarker();
+    if (prev && LifecycleTracker.getInstance().didPreviousSessionCrash()) {
+      console.warn(
+        `[Lifecycle] previous session ended unexpectedly: ` +
+        `pid=${prev.pid} lastEvent=${prev.lastEvent} reason=${prev.quitReason ?? 'unknown'} ` +
+        `startedAt=${prev.startedAt} lastEventAt=${prev.lastEventAt}`
+      );
+    }
+  } catch (err) {
+    console.warn('[Main] LifecycleTracker install failed (non-fatal):', err);
+  }
+
   // 2. Wait for app to be ready
+  logStartupPhase('before-app-whenReady');
   await app.whenReady()
+  logStartupPhase('after-app-whenReady', { userData: app.getPath('userData') });
 
   // 2a. PRE-EMPTIVE dock hide / activation-policy clamp: must happen before ANY
   // operation that causes macOS to register a dock entry (app.setName, the
@@ -5840,6 +6653,7 @@ async function initializeApp() {
   // singleton was constructed with cwd-relative paths at module-load time
   // (before app.whenReady), so we reconfigure here. Honors the user's
   // telemetry-enabled setting (default: on, local-only JSONL).
+  logStartupPhase('telemetry-configure:start');
   try {
     const { telemetryService } = require('./services/telemetry/TelemetryService');
     const userDataPath = app.getPath('userData');
@@ -5881,17 +6695,22 @@ async function initializeApp() {
     const remote = sinks.filter(s => s.name !== 'local-jsonl').map(s => s.name);
     console.log(`[Telemetry] sinks: local-jsonl${remote.length ? ' + ' + remote.join(' + ') : ' (remote unconfigured)'} release=${release}`);
     telemetryService.track({ name: 'app_start', properties: { platform: process.platform, release } });
+    logStartupPhase('telemetry-configure:complete', { release, remoteSinks: remote });
   } catch (err) {
     console.warn('[Init] TelemetryService configure threw (non-fatal):', err);
   }
 
   // Initialize CredentialsManager and load keys explicitly
   // This fixes the issue where keys (especially in production) aren't loaded in time for RAG/LLM
+  logStartupPhase('credentials-init:start');
   const { CredentialsManager } = require('./services/CredentialsManager');
   CredentialsManager.getInstance().init();
+  logStartupPhase('credentials-init:complete');
 
   // 4. Initialize State
+  logStartupPhase('app-state:get-instance:start');
   const appState = AppState.getInstance()
+  logStartupPhase('app-state:get-instance:complete')
 
   // Explicitly load credentials into helpers
   appState.processingHelper.loadStoredCredentials();
@@ -5907,6 +6726,21 @@ async function initializeApp() {
   // Initialize IPC handlers before window creation
   initializeIpcHandlers(appState)
 
+  // Start the in-app review session ledger. This is intentionally main-process
+  // owned so renderer reloads don't double-count app sessions. Also sync the
+  // backend prompt-state once so cross-install dismissals/reviews are honored.
+  try {
+    const { ReviewService, getReviewApiKey, getReviewHardwareId } = require('./services/ReviewService');
+    const reviewService = ReviewService.getInstance();
+    reviewService.recordSessionStart();
+    const apiKey = getReviewApiKey();
+    getReviewHardwareId()
+      .then((hwid: string | null) => reviewService.syncWithBackend(apiKey, hwid))
+      .catch(() => {});
+  } catch (err) {
+    console.warn('[Init] ReviewService recordSessionStart failed (non-fatal):', err);
+  }
+
   // Generic, provider-agnostic local-model download service. Owns the
   // in-flight state for Whisper (today) and any future local model family
   // (vision, embeddings, …). Instantiated BEFORE createWindow so the
@@ -5917,6 +6751,15 @@ async function initializeApp() {
     const { LocalModelDownloadService, createWhisperDownloadProvider } = require('./services/LocalModelDownloadService');
     const downloadService = LocalModelDownloadService.getInstance();
     downloadService.registerProvider(createWhisperDownloadProvider());
+    // 2026-07-06: lazy download for the reranker (smart-retrieval Phase 1).
+    // The 283 MB bge-reranker-base model is no longer bundled — it is fetched
+    // on first document-grounded mode activation via ModesManager.
+    try {
+        const { createRerankerDownloadProvider } = require('./rag/rerankerDownloadProvider');
+        downloadService.registerProvider(createRerankerDownloadProvider());
+    } catch (e: any) {
+        console.warn('[main] Reranker download provider registration failed (non-fatal):', e?.message);
+    }
   } catch (e: any) {
     console.warn('[main] LocalModelDownloadService init failed (non-fatal):', e?.message);
   }
@@ -5924,8 +6767,30 @@ async function initializeApp() {
   // Apply the full disguise payload (names, dock icon, AUMID) early
   appState.applyInitialDisguise();
 
-  // Start the Ollama lifecycle manager
-  OllamaManager.getInstance().init().catch(console.error);
+  // Ollama is an external optional provider. Do not spawn it on startup unless
+  // the user explicitly selected/opted into it; Natively's packaged fallback
+  // stack must work without Ollama installed.
+  try {
+    const settingsManager = SettingsManager.getInstance();
+    const defaultModel = CredentialsManager.getInstance().getDefaultModel();
+    const shouldStartOllama =
+      settingsManager.get('autoStartOllama') === true ||
+      defaultModel.startsWith('ollama-') ||
+      defaultModel.startsWith('ollama:') ||
+      process.env.NATIVELY_AUTO_START_OLLAMA === '1';
+    if (shouldStartOllama) {
+      OllamaManager.getInstance().ensureRunning({
+        reason: settingsManager.get('autoStartOllama') === true ? 'auto-start-setting' : 'startup-selected',
+        selectedModel: defaultModel,
+      }).catch((err: any) => console.warn('[OllamaManager] Startup ensureRunning failed (non-fatal):', err?.message || err));
+    } else {
+      OllamaManager.getInstance().skipStartup('Ollama not selected; startup skipped');
+      console.log('[OllamaManager] Skipping Ollama startup; Ollama provider not selected');
+    }
+  } catch (err: any) {
+    console.warn('[OllamaManager] Startup selection check failed (non-fatal):', err?.message || err);
+    OllamaManager.getInstance().skipStartup('Ollama startup skipped after selection check failure');
+  }
 
   // NOTE: CredentialsManager.init() and loadStoredCredentials() are already called
   // above before this block — do NOT call them again here to avoid double key-load.
@@ -6042,7 +6907,40 @@ if (process.env.THINKING_MATRIX === '1') {
     }
   }
 
+  logStartupPhase('create-window:start');
   appState.createWindow()
+  logStartupPhase('create-window:complete', {
+    windowCount: BrowserWindow.getAllWindows().length,
+  });
+
+  // Run the local-fallback preflight AFTER the launcher paints. We schedule
+  // it via setTimeout so the visible launch is not blocked by:
+  //   - native module requires (onnxruntime-node, sqlite-vec)
+  //   - transformers.js / @huggingface/transformers probe
+  //   - reading the bundled model file sizes
+  // The preflight itself never blocks the main thread for more than a few
+  // hundred ms; we add a second safety net: if the app is quitting when
+  // the timer fires, skip the preflight (its writes to ProviderStatusRegistry
+  // would still succeed but its reads of process.resourcesPath / app.getPath
+  // can throw during teardown). Also wrapped in try/catch so a synchronous
+  // throw in the require() or in runLocalFallbackPreflight cannot crash
+  // the main process. Idempotent: runLocalFallbackPreflight is single-flighted.
+  const preflightTimer = setTimeout(() => {
+    if (appState.isQuitting?.()) {
+      console.log('[LocalFallbackPreflight] skipped — app is quitting');
+      return;
+    }
+    try {
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      const { runLocalFallbackPreflight } = require('./services/LocalFallbackPreflight');
+      runLocalFallbackPreflight({ ollamaSelected: llmHelper.isUsingOllama?.() === true })
+        .catch((err: any) => console.warn('[LocalFallbackPreflight] failed to run (non-fatal):', err?.message || err));
+    } catch (err: any) {
+      console.warn('[LocalFallbackPreflight] scheduling failed (non-fatal):', err?.message || err);
+    }
+  }, Number(process.env.NATIVELY_LOCAL_PREFLIGHT_DELAY_MS || '1500'));
+  // Don't let the preflight timer keep the process alive past quit.
+  if (preflightTimer && typeof preflightTimer.unref === 'function') preflightTimer.unref();
 
   // Defer the zero-shot intent classifier warmup until after the launcher has
   // had a chance to paint and settle. The classifier still lazy-loads on first
@@ -6246,6 +7144,8 @@ if (process.env.THINKING_MATRIX === '1') {
     console.error('[Main] Failed to recover unprocessed meetings:', err);
   });
 
+  logStartupPhase('initializeApp:complete');
+
   // Note: We do NOT force dock show here anymore, respecting stealth mode.
 
   app.on("activate", () => {
@@ -6276,28 +7176,103 @@ if (process.env.THINKING_MATRIX === '1') {
     }
   })
 
+  function stopAppManagedHindsight(reason: string): void {
+    try {
+      const { HindsightManager } = require('./services/HindsightManager');
+      HindsightManager.getInstance().stopSync();
+    } catch { /* optional */ }
+  }
+
+  function checkpointDatabase(reason: string): void {
+    try {
+      const { DatabaseManager } = require('./db/DatabaseManager');
+      DatabaseManager.getInstance().checkpoint();
+    } catch (e) {
+      console.warn(`[main] DatabaseManager.checkpoint failed during ${reason} (non-fatal):`, e);
+    }
+  }
+
+  app.on('will-quit', () => {
+    stopAppManagedHindsight('will-quit');
+    checkpointDatabase('will-quit');
+  });
+
+  app.on('render-process-gone', (_event, webContents, details) => {
+    logCrashConsole('render-process-gone', {
+      details,
+      webContentsId: webContents?.id,
+      webContentsUrl: (() => { try { return webContents?.getURL?.(); } catch { return null; } })(),
+    });
+    console.warn('[main] render-process-gone:', details);
+    stopAppManagedHindsight('render-process-gone');
+    emergencyCloseDatabase('render-process-gone');
+  });
+
+  app.on('child-process-gone', (_event, details) => {
+    logCrashConsole('child-process-gone', { details });
+    console.warn('[main] child-process-gone:', details);
+    stopAppManagedHindsight('child-process-gone');
+    emergencyCloseDatabase('child-process-gone');
+  });
+
+  app.on('gpu-process-crashed', (_event, killed: boolean) => {
+    logCrashConsole('gpu-process-crashed', { killed });
+    emergencyCloseDatabase('gpu-process-crashed');
+  });
+
+  app.on('gpu-info-update', () => {
+    logToFile('[DIAG:gpu-info-update] GPU process info changed');
+  });
+
   // Scrub API keys from memory on quit to minimize exposure window
   app.on("before-quit", (event) => {
     console.log("App is quitting, cleaning up resources...");
     appState.setQuitting(true);
 
-    // Stop an app-managed Hindsight server SYNCHRONOUSLY (kills the detached process group
-    // → no orphaned Python/Postgres). No-op unless we spawned one. Must be sync: the app
-    // can exit before any async kill completes.
-    try {
-      const { HindsightManager } = require('./services/HindsightManager');
-      HindsightManager.getInstance().stopSync();
-    } catch { /* optional */ }
-
-    // Stop the default-output watcher so the setInterval doesn't keep calling
-    // into the native module while V8 is tearing down. Without this, quitting
-    // mid-meeting extends shutdown by 1–2s on slow CoreAudio teardown because
-    // the next tick fires after Electron has begun releasing native handles.
+    // Stop the default-output watcher immediately after setting the quitting
+    // flag so any straggler interval tick observes _isQuitting before native
+    // audio handles start tearing down.
     try {
       appState.stopDefaultOutputWatcherForShutdown?.();
     } catch (e) {
       console.error('[main] Failed to stop DefaultOutputWatcher during shutdown:', e);
     }
+
+    // 2026-07-08: TRUNCATE the SQLite WAL file early in shutdown.
+    // On a force-quit (e.g. user ⌘Q during a meeting, macOS sending
+    // SIGKILL after a hang, or `kill -9` from the auto-update flow) the
+    // `-wal` file may be left mid-transaction. The next launch's
+    // `new Database(dbPath)` then either:
+    //   1. Hangs on a kernel lock the OS believes is held by the dead
+    //      process (the user sees a frozen launcher), or
+    //   2. Reads partial data, fails a migration, and degrades to
+    //      `db: null` silently.
+    // PRAGMA wal_checkpoint(TRUNCATE) is synchronous and fast (<5ms
+    // typically) and writes any pending WAL frames to the main .db
+    // before exit. Idempotent and safe to call even when db is null.
+    checkpointDatabase('before-quit');
+
+    // Stop an app-managed Hindsight server SYNCHRONOUSLY (kills the detached process group
+    // → no orphaned Python/Postgres). No-op unless we spawned one. Must be sync: the app
+    // can exit before any async kill completes.
+    stopAppManagedHindsight('before-quit');
+
+    // Review-prompt service: close any in-flight session so total_usage_ms
+    // captures this run, then flush the debounced state write (250ms window)
+    // synchronously so a user dismissing the prompt 100ms before quit isn't
+    // re-prompted on next launch. Idempotent with the renderer's
+    // beforeunload path (which also calls review:flush-session).
+    try {
+      const { ReviewService, getReviewApiKey, getReviewHardwareId } = require('./services/ReviewService');
+      const reviewService = ReviewService.getInstance();
+      const totals = reviewService.beforeQuit();
+      if (totals.counted) {
+        const apiKey = getReviewApiKey();
+        getReviewHardwareId()
+          .then((hwid: string | null) => reviewService.reportUsage(apiKey, hwid, totals.usage_ms))
+          .catch(() => {});
+      }
+    } catch { /* optional */ }
 
     // Local-model download service: synchronously flush the in-flight state
     // map to disk and terminate every live worker. Without this, a quit
@@ -6368,6 +7343,22 @@ if (process.env.THINKING_MATRIX === '1') {
       console.error('[Main] PhoneMirror dispose failed:', err)
     );
 
+    // Best-effort WAL checkpoint so a crash/force-quit followed by immediate
+    // relaunch has less recovery work and fewer chances to trip over a large
+    // or stale natively.db-wal. Must be synchronous and must never block quit.
+    // 2026-07-08: now uses the new `close()` method which checkpoints AND
+    // closes the better-sqlite3 connection so the file lock is released
+    // before the process exits. A stale lock on a brand-new user profile
+    // would cause the next launch to hang on `new Database(dbPath)`.
+    try {
+      const { DatabaseManager } = require('./db/DatabaseManager');
+      const dbMgr = DatabaseManager.getInstance();
+      dbMgr.checkpoint?.();
+      dbMgr.close?.();
+    } catch (e) {
+      console.error('[Main] Failed to checkpoint/close database during shutdown:', e);
+    }
+
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().scrubMemory();
@@ -6387,6 +7378,17 @@ if (process.env.THINKING_MATRIX === '1') {
     } catch (e) {
       console.error('[Main] Failed to clear screenshot queues on quit:', e);
     }
+
+    // PHASE-2E: mark this as a clean exit so the next-launch marker doesn't
+    // show "previous session crashed". Last write wins — placed at the end
+    // of the cleanup handler so a throw earlier in the chain still leaves
+    // the marker with the originating quit reason.
+    try {
+      const { LifecycleTracker } = require('./utils/lifecycleTracker');
+      // Only mark clean if no specific quit reason was set (e.g. an
+      // updater install). Those should retain their explicit reason.
+      LifecycleTracker.getInstance().markCleanExit();
+    } catch { /* best-effort */ }
   })
 
 
@@ -6396,4 +7398,19 @@ if (process.env.THINKING_MATRIX === '1') {
 }
 
 // Start the application
-initializeApp().catch(console.error)
+initializeApp().catch((err) => {
+  // Close DB BEFORE writing the process report so the next launch never
+  // sees a stale WAL from this half-open app. The helper is idempotent
+  // and safe even if DatabaseManager.getInstance() throws (early-boot
+  // failure where the DB was never opened).
+  try { emergencyCloseDatabase('initializeApp-failed'); } catch { /* best-effort */ }
+  const reportPath = isNativeArchGateCrash(err)
+    ? null
+    : writeProcessReport('initializeApp-failed');
+  logCrashConsole('initializeApp-failed', {
+    error: formatCrashError(err),
+    reportPath,
+    skippedReport: isNativeArchGateCrash(err) ? 'native-arch-gate' : undefined,
+  });
+  console.error(err);
+})

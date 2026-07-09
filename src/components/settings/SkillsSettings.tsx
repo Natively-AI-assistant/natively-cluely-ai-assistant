@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Check,
     CheckCircle,
@@ -6,9 +6,8 @@ import {
     FileUp,
     FolderOpen,
     RefreshCw,
-    Upload,
+    Trash2,
     X,
-    Zap,
 } from 'lucide-react';
 import type {
     SkillSummary,
@@ -75,7 +74,22 @@ export const SkillsSettings: React.FC = () => {
     } | null>(null);
     const [installing, setInstalling] = useState(false);
     const [uploading, setUploading] = useState(false);
+    // Per-skill in-flight tracking for delete. A Set (not boolean) so each
+    // row can independently be "currently mutating" — without this,
+    // double-clicking Delete fires two concurrent rmSyncs.
+    const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+    // Inline two-step confirmation state. Track the single row currently
+    // waiting for a confirm/cancel rather than a per-row boolean — only one
+    // row can ever be in confirm-mode at once (clicking another row's trash
+    // moves the focus, doesn't stack). null = no row awaiting confirmation.
+    const [confirmingId, setConfirmingId] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState(false);
+    // Counter for dragenter/dragleave. A simple boolean flag would flicker
+    // every time the cursor crossed a child boundary inside the card (icon,
+    // heading, button) — those boundaries DO fire dragleave. Tracking the
+    // depth via a counter means we only clear the highlight when the cursor
+    // has fully exited the entire card.
+    const dragDepthRef = useRef(0);
     const [showAdvanced, setShowAdvanced] = useState(false);
 
     const loadSkills = useCallback(async () => {
@@ -96,10 +110,50 @@ export const SkillsSettings: React.FC = () => {
         }
     }, []);
 
+    // Tiny helper for set-(Set<string>) with one new value — used by the
+    // delete handler to flip the in-flight bit. Functional update so
+    // concurrent setter calls don't clobber each other.
+    const markInFlight = (
+        setter: React.Dispatch<React.SetStateAction<Set<string>>>,
+        id: string,
+        inFlight: boolean,
+    ) => setter(prev => {
+        const next = new Set(prev);
+        if (inFlight) next.add(id);
+        else next.delete(id);
+        return next;
+    });
+
     useEffect(() => {
         loadSkills();
     }, [loadSkills]);
 
+    // Auto-cancel the inline confirm state after 6s of inactivity so a stale
+    // "Delete / Cancel" affordance never lingers if the user gets distracted
+    // mid-click. The cleanup function cancels the timer if the user clicks
+    // again (or commits the delete) before the timeout fires, so a fast user
+    // never sees the row snap out of confirm-mode unexpectedly.
+    useEffect(() => {
+        if (confirmingId === null) return;
+        const timer = window.setTimeout(() => setConfirmingId(null), 6000);
+        return () => window.clearTimeout(timer);
+    }, [confirmingId]);
+
+    // Escape dismisses the inline confirm — mirrors the keyboard convention
+    // every other modal/popover in this app follows. Listener is attached
+    // only while a row is in confirm-mode so we don't add a global keydown
+    // when nothing else needs it.
+    useEffect(() => {
+        if (confirmingId === null) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.stopPropagation();
+                setConfirmingId(null);
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [confirmingId]);
     const openFolder = async () => {
         try {
             if (typeof window.electronAPI?.skillsOpenFolder !== 'function') {
@@ -114,10 +168,19 @@ export const SkillsSettings: React.FC = () => {
         }
     };
 
-    // Run validate-only (autoInstall: false). The result is either a
-    // 'validated' stage (we show the preview card), an 'installed' stage
-    // (shouldn't happen here — autoInstall: false — but treat it as
-    // success), or 'failed' (we show the first error in the status banner).
+    // Shared upload runner used by both stages of the upload flow:
+    //   - handleFilePicked → runUpload(payload, false) for the preview
+    //     card (autoInstall:false → uploader returns stage:'validated')
+    //   - handleInstall → runUpload(preview.payload, true) to commit
+    //     (autoInstall:true → uploader returns stage:'installed')
+    //
+    // On any outcome other than 'failed', the status banner is cleared.
+    // On 'failed', the first error is surfaced in the status banner AND
+    // the preview card is preserved (if present) so the user can see
+    // "what they tried" alongside "why it failed". On unexpected stages
+    // (anything other than validated/installed/failed) we log + surface
+    // a generic error rather than failing silently — see handleInstall
+    // for the defensive always-refresh list behavior.
     const runUpload = useCallback(
         async (payload: SkillUploadPayload, autoInstall: boolean): Promise<UploadSkillOutcome | null> => {
             if (typeof window.electronAPI?.skillsUpload !== 'function') {
@@ -171,8 +234,6 @@ export const SkillsSettings: React.FC = () => {
     // are NOT supported here — users wanting to install a folder of files
     // should use the Advanced "open skills folder" escape hatch and drop files
     // manually into the OS file explorer. This avoids the complexity of
-    // async-recursive DataTransferItem traversal in the renderer.
-    // us a complete FileList in one shot. This avoids the complexity of
     // async-recursive DataTransferItem traversal in the renderer.
     const handleDrop = async (e: React.DragEvent) => {
         e.preventDefault();
@@ -258,6 +319,61 @@ export const SkillsSettings: React.FC = () => {
         setStatus(null);
     };
 
+    // Two-step delete flow. First click on the trash icon enters confirm-mode
+    // for that row (no destructive call yet) — `requestDeleteSkill`. Second
+    // click on the inline "Delete" button (the red one) actually invokes
+    // `skillsDelete` — `commitDeleteSkill`. Built-ins don't render a trash
+    // icon at all (gated in the row JSX below) so this handler only runs
+    // for user-installed skills. The previous version raised a native browser
+    // dialog — that modal froze the renderer, broke the panel's visual
+    // language, and made the destructive action feel larger than it actually
+    // is (the original SKILL.md file is still on disk and can be re-uploaded,
+    // so this is reversible — the phrasing "cannot be undone" was misleading).
+    const requestDeleteSkill = (id: string) => {
+        if (deletingIds.has(id)) return; // already deleting — ignore
+        setSuccess(null);
+        setStatus(null);
+        // Move the confirm focus to the row that was clicked. If the user
+        // clicks a different row's trash, that row becomes the active one
+        // instead of stacking — there is at most one confirm-mode row at a
+        // time, which matches the user's mental model ("I am confirming ONE
+        // thing") and avoids the `Multiple confirms on screen` confusion that
+        // per-row booleans invite.
+        setConfirmingId((prev) => (prev === id ? null : id));
+    };
+
+    const commitDeleteSkill = async (id: string, name: string) => {
+        if (typeof window.electronAPI?.skillsDelete !== 'function') {
+            setStatus(BRIDGE_MISSING_MSG);
+            setConfirmingId(null);
+            return;
+        }
+        if (deletingIds.has(id)) return;
+        // Clear the confirm-mode immediately — the row is now deleting and
+        // we want to show the spinner / restoring muted state, not the
+        // confirm UI. If the delete fails, the row will already be reloaded
+        // and the user can re-click trash to retry.
+        setConfirmingId(null);
+        // Banner hygiene: clear BOTH success and status so a stale red banner
+        // from a prior action doesn't linger above a fresh green one.
+        setSuccess(null);
+        setStatus(null);
+        markInFlight(setDeletingIds, id, true);
+        try {
+            const result = await window.electronAPI.skillsDelete(id);
+            if (result?.success) {
+                setSuccess(`Deleted "${name}".`);
+                await loadSkills();
+            } else {
+                setStatus(result?.error || 'Could not delete skill.');
+            }
+        } catch (error: any) {
+            setStatus(error?.message || 'Could not delete skill.');
+        } finally {
+            markInFlight(setDeletingIds, id, false);
+        }
+    };
+
     // Truncate the instructions preview to RENDER_PREVIEW_MAX chars + ellipsis.
     // Main process already does this at 280, but the renderer enforces a
     // tighter cap so the confirm card never wraps to 6+ lines.
@@ -283,34 +399,45 @@ export const SkillsSettings: React.FC = () => {
                 </button>
             </div>
 
-            {/* Upload card — drop target. */}
+            {/* Upload card — drop target. Mirrors the Advanced "Skills Folder"
+                card layout for visual consistency: icon + heading on the
+                left, action button on the right, description below. */}
             <div
                 onDragOver={(e) => {
                     e.preventDefault();
-                    setIsDragging(true);
+                    if (dragDepthRef.current === 0) setIsDragging(true);
+                    dragDepthRef.current += 1;
                 }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={handleDrop}
+                onDragLeave={() => {
+                    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+                    if (dragDepthRef.current === 0) setIsDragging(false);
+                }}
+                onDrop={(e) => {
+                    dragDepthRef.current = 0;
+                    setIsDragging(false);
+                    handleDrop(e);
+                }}
                 className={[
-                    'bg-bg-card rounded-xl border-2 border-dashed transition-colors p-5',
+                    'rounded-xl border transition-colors p-4 bg-bg-card',
                     isDragging
-                        ? 'border-accent-primary bg-bg-subtle/40'
-                        : 'border-border-subtle',
+                        ? 'border-accent-primary bg-accent-primary/5'
+                        : 'border-dashed border-border-subtle hover:border-accent-primary/40',
                 ].join(' ')}
             >
-                <div className="flex items-start gap-3 mb-3">
-                    <div className="w-9 h-9 rounded-lg bg-bg-input border border-border-subtle flex items-center justify-center shrink-0">
-                        <Upload size={16} className="text-accent-primary" />
-                    </div>
+                <div className="flex items-center justify-between gap-4">
                     <div className="min-w-0">
-                        <h4 className="text-sm font-semibold text-text-primary">Upload a skill</h4>
-                        <p className="text-xs text-text-secondary leading-relaxed mt-0.5">
-                            Drop a <code className="text-[11px] font-mono">SKILL.md</code> file here, or use the button below to pick one. To add a folder of skill files, use the Advanced "open skills folder" option.
+                        <div className="flex items-center gap-2 mb-1">
+                            <FileUp size={15} className="text-text-secondary" />
+                            <h4 className="text-sm font-semibold text-text-primary">Upload skill</h4>
+                        </div>
+                        <p className="text-xs text-text-secondary">
+                            Drop a SKILL.md file here, or click Upload to pick one. For folders, use the Advanced option below.
                         </p>
+                        {uploading && (
+                            <p className="text-[11px] text-text-tertiary animate-pulse mt-2">Uploading…</p>
+                        )}
                     </div>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                    <label className="cursor-pointer">
+                    <label className="cursor-pointer shrink-0">
                         <input
                             type="file"
                             accept=".md,text/markdown"
@@ -324,17 +451,14 @@ export const SkillsSettings: React.FC = () => {
                         />
                         <span
                             className={[
-                                'inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border-subtle bg-bg-input hover:bg-bg-elevated text-xs font-medium text-text-primary transition-colors',
+                                'inline-flex items-center px-4 py-2 rounded-lg text-xs font-semibold transition-colors shrink-0',
+                                'bg-accent-primary hover:bg-accent-primary/90 text-white',
                                 uploading ? 'opacity-60 pointer-events-none' : '',
                             ].join(' ')}
                         >
-                            <FileUp size={13} strokeWidth={2.5} />
-                            Upload SKILL.md
+                            Upload
                         </span>
                     </label>
-                    {uploading && (
-                        <span className="text-[11px] text-text-tertiary">Uploading…</span>
-                    )}
                 </div>
             </div>
 
@@ -450,8 +574,14 @@ export const SkillsSettings: React.FC = () => {
                             className="group bg-bg-card rounded-lg border border-border-subtle px-3 py-2.5 hover:border-border-muted transition-colors"
                         >
                             <div className="flex items-center justify-between gap-3">
+                                {/* Left side: [Name] [/id] — name + slug only.
+                                    Built-in vs Local is no longer distinguished
+                                    visually per-row (user requested removal of
+                                    the badge). Source classification still
+                                    drives whether the delete affordance
+                                    renders — built-ins have no delete button
+                                    because SkillsManager would refuse the call. */}
                                 <div className="flex items-center gap-2 min-w-0">
-                                    <Zap size={13} className="text-accent-primary shrink-0" />
                                     <span className="text-sm font-medium text-text-primary truncate">
                                         {skill.name}
                                     </span>
@@ -459,9 +589,58 @@ export const SkillsSettings: React.FC = () => {
                                         /{skill.id}
                                     </span>
                                 </div>
-                                <span className="text-[10px] uppercase tracking-wider text-text-tertiary shrink-0 px-1.5 py-0.5 rounded bg-bg-input border border-border-subtle">
-                                    {skill.source === 'builtin' ? 'Built-in' : 'Local'}
-                                </span>
+                                {/* Right side: delete affordance only (no badge).
+                                    Built-ins render nothing here; user-installed
+                                    skills render the trash icon (hover-reveal
+                                    via the MeetingDetails.tsx:696 idiom) or the
+                                    inline 2-step confirm after first click. The
+                                    delete affordance itself does NOT need a
+                                    fixed-width wrapper anymore — the natural
+                                    button width is stable and there's no badge
+                                    to anchor to. */}
+                                <div className="flex items-center gap-1 shrink-0">
+                                    {skill.source !== 'builtin' && (
+                                        confirmingId === skill.id ? (
+                                            <div
+                                                role="group"
+                                                aria-live="polite"
+                                                aria-label={`Confirm delete ${skill.name}`}
+                                                className="flex items-center gap-2 select-none"
+                                            >
+                                                <span className="text-[11px] text-text-secondary hidden sm:inline">
+                                                    Delete <span className="font-medium text-text-primary">{skill.name}</span>?
+                                                </span>
+                                                <button
+                                                    onClick={() => setConfirmingId(null)}
+                                                    className="px-2.5 py-1 rounded-md border border-border-subtle bg-bg-input text-text-secondary text-[11px] font-medium hover:bg-bg-elevated hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-muted transition-colors"
+                                                    title="Cancel (Escape)"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    onClick={() => commitDeleteSkill(skill.id, skill.name)}
+                                                    disabled={deletingIds.has(skill.id)}
+                                                    className="px-2.5 py-1 rounded-md bg-red-500 text-white text-[11px] font-semibold hover:bg-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                                                    title="Delete this skill"
+                                                >
+                                                    {deletingIds.has(skill.id) ? 'Deleting…' : 'Delete'}
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-1 opacity-0 translate-y-1 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:translate-y-0 [@media(hover:none)]:opacity-100 transition-all duration-[160ms] ease-out select-none">
+                                                <button
+                                                    onClick={() => requestDeleteSkill(skill.id)}
+                                                    disabled={deletingIds.has(skill.id)}
+                                                    className="p-1.5 rounded-lg text-text-secondary hover:text-red-400 hover:bg-red-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                                                    title="Delete skill"
+                                                    aria-label={`Delete ${skill.name}`}
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
+                                        )
+                                    )}
+                                </div>
                             </div>
                             {skill.description && (
                                 <p className="text-[11px] text-text-secondary mt-1 ml-5 leading-snug line-clamp-2">
@@ -488,7 +667,7 @@ export const SkillsSettings: React.FC = () => {
             <div className="pt-1">
                 <button
                     onClick={() => setShowAdvanced((s) => !s)}
-                    className="text-[11px] text-text-tertiary hover:text-text-secondary transition-colors"
+                    className="text-xs font-semibold uppercase tracking-wider text-text-tertiary hover:text-text-secondary transition-colors"
                 >
                     {showAdvanced ? '▾' : '▸'} Advanced: open skills folder
                 </button>
@@ -509,7 +688,7 @@ export const SkillsSettings: React.FC = () => {
                             </div>
                             <button
                                 onClick={openFolder}
-                                className="px-4 py-2 rounded-lg bg-bg-input hover:bg-bg-elevated border border-border-subtle text-xs font-medium text-text-primary transition-colors shrink-0"
+                                className="px-4 py-2 rounded-lg bg-accent-primary hover:bg-accent-primary/90 text-white text-xs font-semibold transition-colors shrink-0"
                             >
                                 Open Folder
                             </button>

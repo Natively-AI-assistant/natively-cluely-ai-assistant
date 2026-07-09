@@ -3,46 +3,27 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Heart, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
-import { isToasterAllowed, markToasterAsShown } from '../lib/toasterGating';
 
 interface SupportToasterProps {
+    isOpen: boolean;
+    onDismiss: () => void;
     className?: string;
 }
 
-export const SupportToaster: React.FC<SupportToasterProps> = ({ className }) => {
+export const SupportToaster: React.FC<SupportToasterProps> = ({ isOpen, onDismiss, className }) => {
     const isLight = useResolvedTheme() === 'light';
     const reduced = useReducedMotion() ?? false;
-    const [isVisible, setIsVisible] = useState(false);
     const [hasDonated, setHasDonated] = useState(false);
     const [isButtonHovered, setIsButtonHovered] = useState(false);
 
+    // Fetch donation status once on mount — orchestrator already gates via
+    // DonationManager.shouldShowToaster equivalent. We still fetch so the
+    // hasDonated UI works correctly.
     useEffect(() => {
-        let mounted = true;
-
-        const checkStatus = async () => {
-            // Wait 10s before checking
-            await new Promise(resolve => setTimeout(resolve, 10000));
-
-            try {
-                if (!window.electronAPI?.getDonationStatus) return;
-
-                const status = await window.electronAPI.getDonationStatus();
-                if (mounted) {
-                    setHasDonated(status.hasDonated);
-                    if (status.shouldShow && isToasterAllowed('support')) {
-                        setIsVisible(true);
-                        markToasterAsShown('support');
-                        window.electronAPI.markDonationToastShown();
-                    }
-                }
-            } catch (e) {
-                console.error("Failed to check donation status:", e);
-            }
-        };
-
-        checkStatus();
-
-        return () => { mounted = false; };
+        if (!window.electronAPI?.getDonationStatus) return;
+        window.electronAPI.getDonationStatus()
+            .then(status => setHasDonated(status.hasDonated))
+            .catch(e => console.error('Failed to check donation status:', e));
     }, []);
 
 
@@ -57,17 +38,17 @@ export const SupportToaster: React.FC<SupportToasterProps> = ({ className }) => 
                     console.log("User returned from support link after >20s. Presuming donation.");
                     await window.electronAPI?.setDonationComplete();
                     setHasDonated(true);
-                    setIsVisible(false);
+                    onDismiss();
                 }
                 clickTimeRef.current = null;
             }
         };
         window.addEventListener('focus', handleFocus);
         return () => window.removeEventListener('focus', handleFocus);
-    }, []);
+    }, [onDismiss]);
 
     const handleDismiss = () => {
-        setIsVisible(false);
+        onDismiss();
     };
 
     const handleSupport = () => {
@@ -79,7 +60,7 @@ export const SupportToaster: React.FC<SupportToasterProps> = ({ className }) => 
         }
     };
 
-    if (!isVisible) return null;
+    if (!isOpen) return null;
 
     const t1 = isLight ? '#1C1C1E' : '#FFFFFF';
     const t2 = isLight ? 'rgba(0,0,0,0.76)' : 'rgba(255,255,255,0.72)';
@@ -89,7 +70,7 @@ export const SupportToaster: React.FC<SupportToasterProps> = ({ className }) => 
 
     return (
         <AnimatePresence>
-            {isVisible && (
+            {isOpen && (
                 <div className={`fixed inset-0 z-[9999] flex items-center justify-center ${isLight ? 'bg-black/20 backdrop-blur-[4px]' : 'bg-black/60 backdrop-blur-[4px]'}`}>
                     <style>
                         {`

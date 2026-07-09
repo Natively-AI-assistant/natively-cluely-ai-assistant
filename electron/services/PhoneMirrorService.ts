@@ -27,6 +27,21 @@ export interface PhoneMirrorInfo {
   clients: number;
   /** True when a companion browser extension is connected over /ws (capture-ready). */
   extensionConnected: boolean;
+  /** Resolved bind host ('127.0.0.1' or '0.0.0.0') so the UI can show "loopback only" / "LAN". */
+  bindAddress: string;
+}
+
+/**
+ * Thrown by setExposeOnLan when the caller tries to flip ON LAN exposure without
+ * first confirming via the IPC-layer `dialog.showMessageBoxSync` prompt. The
+ * IPC handler catches this, prompts the user, and either flips the sentinel
+ * + retries or returns { declined: true } so the toggle stays off.
+ */
+export class LANBindConfirmationRequired extends Error {
+  constructor() {
+    super('LAN bind requires explicit user confirmation');
+    this.name = 'LANBindConfirmationRequired';
+  }
 }
 
 export type StreamEvent =
@@ -127,6 +142,10 @@ export class PhoneMirrorService {
   private server: http.Server | null = null;
   private wss: WebSocketServer | null = null;
   private port = 0;
+  // Resolved bind host for the HTTP/WS listener. '127.0.0.1' when LAN is off
+  // (loopback only), '0.0.0.0' when LAN is on (any interface). Mirrored into
+  // PhoneMirrorInfo.bindAddress so the renderer can label it.
+  private bindAddress: '127.0.0.1' | '0.0.0.0' = '127.0.0.1';
   // Phone token: LAN-scoped. Serves the phone HTML page (`/`) and authenticates
   // phone WebSocket clients. Embedded in the QR/pairing URL, which travels over
   // plaintext HTTP on the LAN when exposeOnLan is on — so it is per-session (NOT
@@ -196,6 +215,13 @@ export class PhoneMirrorService {
   private metadataClassifier:
     | ((meta: unknown) => Promise<{ autoPolicy: string; category?: string }>)
     | null = null;
+  /**
+   * Per-session sentinel: once the IPC layer has shown the "Allow LAN access?"
+   * dialog and the user picked "Allow", subsequent calls to setExposeOnLan(true)
+   * do not re-prompt. Resets on app restart so a fresh run gets a fresh
+   * confirmation. Cleared by markLanBindDialogShown() in the IPC handler.
+   */
+  private hasShownLanBindDialog = false;
 
   static getInstance(): PhoneMirrorService {
     if (!PhoneMirrorService._instance) PhoneMirrorService._instance = new PhoneMirrorService();
@@ -241,12 +267,30 @@ export class PhoneMirrorService {
   }
 
   async setExposeOnLan(value: boolean): Promise<PhoneMirrorInfo> {
+    // LAN exposure binds the server to 0.0.0.0 so any device on the same Wi-Fi
+    // can connect with the pairing token. That is a deliberate security widening,
+    // so require an explicit confirmation in the IPC handler — the per-session
+    // sentinel short-circuits the prompt for subsequent in-session flips.
+    // The phone token is also rotated on every flip (see _start → generateToken)
+    // to invalidate any prior QR that may have already leaked to the LAN.
+    if (value === true && !this.hasShownLanBindDialog) {
+      throw new LANBindConfirmationRequired();
+    }
     SettingsManager.getInstance().set('phoneMirrorExposeOnLan', value);
     if (!this.isRunning()) {
       this.exposeOnLan = value;
       return this.snapshot();
     }
     return this.restart({ exposeOnLan: value });
+  }
+
+  /**
+   * IPC-layer helper: flip the per-session "user has confirmed LAN bind" sentinel
+   * AFTER the dialog has returned an explicit Allow. Without this the next
+   * setExposeOnLan(true) would re-prompt unnecessarily.
+   */
+  markLanBindDialogShown(): void {
+    this.hasShownLanBindDialog = true;
   }
 
   async rotateToken(): Promise<PhoneMirrorInfo> {
@@ -792,6 +836,7 @@ export class PhoneMirrorService {
         qrDataUrl: null,
         clients: 0,
         extensionConnected: false,
+        bindAddress: this.exposeOnLan ? '0.0.0.0' : '127.0.0.1',
       };
       this.cachedInfo = info;
       return info;
@@ -829,6 +874,7 @@ export class PhoneMirrorService {
       qrDataUrl,
       clients: this.phoneClientCount(),
       extensionConnected: this.hasExtensionClient(),
+      bindAddress: this.bindAddress,
     };
     this.cachedInfo = info;
     return info;
@@ -866,6 +912,9 @@ export class PhoneMirrorService {
     const port = await listenWithProbe(server, host, basePort, PORT_PROBE_RANGE);
     this.server = server;
     this.port = port;
+    // Cache the resolved bind host for snapshot() — the UI uses it to render
+    // "loopback only" vs "(LAN)" in the Enable status row.
+    this.bindAddress = host;
 
     const wss = new WebSocketServer({ noServer: true });
     this.wss = wss;

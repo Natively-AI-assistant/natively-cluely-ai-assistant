@@ -10,10 +10,13 @@ import type { WorkerInitMessage } from './types';
  * quantizing the decoder to q8 (decoder is token-level, much more robust to
  * quantization and dominates inference time, so the speedup is large).
  *
- * Apple Silicon (CoreML) is the exception — the ONNX Runtime CoreML EP has
- * limited operator coverage for pre-quantized ONNX ops; feeding it fp32
- * keeps the entire encoder graph on Metal/ANE instead of falling back to
- * CPU per-subgraph. Use uniform fp32 there.
+ * Apple Silicon (CoreML) used to take a uniform fp32 path because the ORT
+ * CoreML EP had limited operator coverage for pre-quantized ONNX ops. As of
+ * the 2026-07 audit the default is now the same per-module q8/fp32 map as
+ * every other platform — modern CoreML handles the fp32 encoder fine and
+ * the q8 decoder is the dominant speed win. A user can opt BACK to fp32
+ * via the `whisperAppleSiliconDtype` setting (see resolveAppleSiliconDtype
+ * below) if WER regresses on their hardware.
  */
 export interface InferenceConfig {
     executionProviders: string[];
@@ -123,13 +126,46 @@ export function buildWorkerInitMessage(modelId: string): WorkerInitMessage {
     };
 }
 
+/**
+ * Apple Silicon dtype override — lets a user opt back to uniform fp32 if
+ * the new per-module q8 default regresses WER on their hardware. Read from
+ * SettingsManager (`whisperAppleSiliconDtype`); missing/unknown → the new
+ * per-module default. Returns null on SettingsManager unavailable (test
+ * contexts) so the resolver falls through to its own default.
+ */
+function resolveAppleSiliconDtype(): string | Record<string, string> | null {
+    try {
+        // Lazy require: SettingsManager touches electron's app, which isn't
+        // available in unit-test contexts. Any throw here means "no override".
+        const { SettingsManager } = require('../../services/SettingsManager');
+        const raw = SettingsManager.getInstance().get('whisperAppleSiliconDtype');
+        if (raw === 'fp32' || raw === 'q8' || raw === 'q4' || raw === 'int8') {
+            return 'fp32';
+        }
+        if (raw === 'mixed') {
+            return WHISPER_SAFE_DTYPE;
+        }
+        return null; // unknown / not set → caller uses its default
+    } catch {
+        return null;
+    }
+}
+
 export function resolveInferenceConfig(): InferenceConfig {
     const { platform, arch } = process;
 
     if (platform === 'darwin' && arch === 'arm64') {
-        // Apple Silicon — CoreML uses Metal GPU + ANE. Feed it fp32 ONNX
-        // and let CoreML re-quantize internally; it's tuned for this path.
-        return { executionProviders: ['coreml', 'cpu'], dtype: 'fp32' };
+        // Apple Silicon — CoreML uses Metal GPU + ANE. Default changed in
+        // 2026-07 from uniform fp32 → mixed per-module (fp32 encoder + q8
+        // decoders), matching every other platform. The q8 decoder is the
+        // dominant speed win and modern CoreML handles the mixed-precision
+        // graph cleanly. A user can override back to fp32 via the
+        // `whisperAppleSiliconDtype` setting if their WER regresses.
+        const override = resolveAppleSiliconDtype();
+        return {
+            executionProviders: ['coreml', 'cpu'],
+            dtype: override ?? WHISPER_SAFE_DTYPE,
+        };
     }
 
     if (platform === 'win32') {

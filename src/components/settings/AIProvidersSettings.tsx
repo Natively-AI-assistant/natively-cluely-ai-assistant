@@ -840,13 +840,15 @@ export const AIProvidersSettings: React.FC = () => {
 
     return (
         <div className="space-y-5 animated fadeIn pb-10">
+            <header>
+                <h3 className="text-lg font-bold text-text-primary mb-1">AI Providers</h3>
+                <p className="text-xs text-text-secondary mb-5">
+                    Pick a default model and connect the cloud, local, or custom providers you want available.
+                </p>
+            </header>
+
             {/* Default Model for Chat */}
             <div className="space-y-5">
-                <div>
-                    <h3 className="text-sm font-bold text-text-primary mb-1">Default Model for Chat</h3>
-                    <p className="text-xs text-text-secondary mb-2">Primary model for new chats. Other configured models act as fallbacks.</p>
-                </div>
-
                 <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle flex items-center justify-between">
                     <div>
                         <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-0">Active Model</label>

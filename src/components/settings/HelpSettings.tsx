@@ -897,22 +897,19 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
     return (
         <div className="w-full h-full flex flex-col animated fadeIn pb-10">
-            <div className="mb-6 shrink-0">
-                <h2 className={`text-2xl font-bold text-text-primary flex items-center gap-3`}>
-                    <HelpCircle className="w-6 h-6 text-accent-primary" />
-                    Help & Setup Guide
-                </h2>
-                <p className={`text-sm text-text-secondary mt-3 max-w-2xl`}>
+            <header className="mb-2 shrink-0">
+                <h3 className="text-lg font-bold text-text-primary mb-1">Help & Setup Guide</h3>
+                <p className="text-xs text-text-secondary mb-2">
                     Learn how to deeply configure Natively. Everything from providing the right API scopes to executing conversational interviews seamlessly is covered below.
                 </p>
-            </div>
+            </header>
 
             <div className="flex-1 space-y-2">
 
                 {onNavigate && (
                     <div
                         onClick={() => onNavigate('natively-api')}
-                        className="mb-8 group cursor-pointer bg-bg-card hover:bg-bg-item-surface border border-border-subtle hover:border-white transition-all rounded-2xl flex items-center justify-between p-4 px-5 shadow-sm hover:shadow-md"
+                        className="mb-6 group cursor-pointer bg-bg-card hover:bg-bg-item-surface border border-border-subtle hover:border-white transition-all rounded-2xl flex items-center justify-between p-4 px-5 shadow-sm hover:shadow-md"
                     >
                         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 flex-1">
                             <div className="w-10 h-10 shrink-0 rounded-xl bg-bg-item-surface border border-border-subtle flex items-center justify-center group-hover:bg-bg-elevated transition-colors">

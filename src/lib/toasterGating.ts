@@ -1,10 +1,16 @@
 /**
  * Centralized utility to manage display rules and gating for all toasters.
- * 
+ *
  * Rules:
  * 1. Never show more than one toaster in a single app start (session-level gate).
  * 2. If a toaster was shown, do not show it again until the app has been opened at least 5 times
  *    OR at least 24 hours have passed since it was last shown.
+ *
+ * @deprecated The OnboardingOrchestrator (src/lib/onboarding/orchestrator.ts) now owns
+ * sequencing, eligibility evaluation, and cooldown tracking. The legacy helpers below
+ * remain functional so existing call sites keep working — they delegate internally to
+ * the orchestrator where applicable. New code should NOT use these helpers; instead
+ * declare stages in src/lib/onboarding/stageCatalog.ts.
  */
 
 const OPENS_COUNT_KEY = 'natively_app_opens_count';
@@ -45,7 +51,10 @@ export function getAppOpensCount(): number {
 
 /**
  * Checks if a specific toaster is allowed to be shown right now.
- * 
+ *
+ * @deprecated Prefer the OnboardingOrchestrator's stage catalog. This legacy helper
+ * is retained only for backward compatibility with existing call sites.
+ *
  * @param toasterId Unique identifier for the toaster (e.g. 'trial_promo', 'support', 'permissions', or ad IDs)
  * @returns true if allowed, false if gated
  */
@@ -99,7 +108,9 @@ export function isToasterAllowed(toasterId: string): boolean {
 
 /**
  * Marks a toaster as shown, updating session and persistent cooldown records.
- * 
+ *
+ * @deprecated Prefer the OnboardingOrchestrator's markDismissed/markSkipped.
+ *
  * @param toasterId Unique identifier for the toaster
  */
 export function markToasterAsShown(toasterId: string): void {

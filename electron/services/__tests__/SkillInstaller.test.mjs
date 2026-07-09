@@ -145,6 +145,38 @@ describe('installUploadedSkill — happy path', () => {
     assert.deepEqual(stageLeftovers, [], 'no leftover stage dirs after success');
   });
 
+  test('single-file payload with a non-SKILL.md filename still writes SKILL.md on disk', async () => {
+    // REGRESSION: a file uploaded as `code_simplifier.md` (or any name other
+    // than SKILL.md) used to be written to disk under its ORIGINAL name, e.g.
+    // `<id>/code_simplifier.md`. SkillsManager.loadUserSkills() reads
+    // `<id>/SKILL.md` EXACTLY, so the skill was invisible in the UI even
+    // though install reported success. The installer must always write the
+    // single uploaded file as SKILL.md.
+    const payload = makeFilePayload({
+      filename: 'code_simplifier.md',
+      name: 'code-simplifier',
+      description: 'Simplifies code.',
+    });
+    const result = await installUploadedSkill(payload, roots);
+
+    assert.equal(result.success, true);
+    assert.equal(result.skill.id, 'code-simplifier');
+
+    // The on-disk file MUST be SKILL.md — not code_simplifier.md.
+    const installedFiles = listFiles(path.join(roots.skillsRoot, 'code-simplifier'));
+    assert.deepEqual(installedFiles, ['SKILL.md'],
+      'single-file upload must land as SKILL.md regardless of the uploaded filename');
+    assert.ok(
+      !fs.existsSync(path.join(roots.skillsRoot, 'code-simplifier', 'code_simplifier.md')),
+      'the original filename must NOT be used on disk',
+    );
+
+    // And the content must be intact.
+    const content = fs.readFileSync(
+      path.join(roots.skillsRoot, 'code-simplifier', 'SKILL.md'), 'utf8');
+    assert.ok(content.includes('name: code-simplifier'));
+  });
+
   test('folder payload installs SKILL.md + references/ + assets/ + LICENSE', async () => {
     const payload = makeFolderPayload([
       folderFile('SKILL.md', b64(makeSkillMd({ name: 'folder-skill' }))),

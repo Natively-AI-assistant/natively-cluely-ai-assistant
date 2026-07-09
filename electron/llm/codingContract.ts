@@ -62,6 +62,35 @@ Every heading is mandatory and must appear verbatim (with the \`## \` prefix). E
 export const CODING_CONTRACT_TINY = `Coding/DSA answers MUST use these EXACT markdown headings, in order, nothing before the first: "## Approach", "## Technique / Data Structure / Algorithm Used", "## Code" (one fenced block with a language tag), "## Dry Run", "## Complexity" (Time + Space, each "O(...) because ..."), "## Interviewer Follow-up Points". Never start with code. A missing/renamed heading is a failure.`;
 
 /**
+ * Contract for GENERAL IMPLEMENTATION tasks (React components, scripts, utilities,
+ * UI builds) that are NOT classic DSA / LeetCode / interview algorithm questions.
+ * Used by `CODING_IMPL_TEMPLATE` in AnswerPlanner for `coding_question_answer`.
+ *
+ * Why a separate contract: the DSA six-section template (CODING_CONTRACT) forces
+ * every coding answer into an interview-walkthrough shape ("## Approach / ##
+ * Technique / ## Code / ## Dry Run / ## Complexity / ## Interviewer Follow-up
+ * Points") with a python fence. That is wrong for "write a React stopwatch" or
+ * "build me a CSV parser" — the user wants ready-to-run code, not an essay. This
+ * contract keeps the no-leak / no-Natively rules but asks for code-first output
+ * with the CORRECT language tag and a short explanation. The repair layer also
+ * sniffs for JSX/React content and corrects a `python` fence to `tsx` defensively.
+ */
+export const CODING_CONTRACT_IMPL = `IMPLEMENTATION RESPONSE CONTRACT:
+- Write the complete code in ONE fenced code block with the CORRECT language tag:
+  - React / JSX / TSX → \`\`\`tsx
+  - TypeScript (non-JSX) → \`\`\`typescript
+  - JavaScript (non-JSX) → \`\`\`javascript
+  - Python → \`\`\`python
+  - SQL → \`\`\`sql
+  (match the language the user asked for or implied)
+- After the code, write a SHORT explanation (3–6 sentences) covering key design
+  decisions and any non-obvious parts.
+- Do NOT use the DSA interview section headings (## Approach / ## Technique /
+  ## Dry Run / ## Complexity / ## Interviewer Follow-up Points) unless the user
+  explicitly asks for them.
+- This is a complete, ready-to-run implementation — not an interview walkthrough.`;
+
+/**
  * Optional verification-spec instruction. Appended to the coding prompt ONLY
  * when code-execution verification is enabled. Asks the model to emit a hidden
  * machine-readable test block AFTER the six sections so Natively can run the

