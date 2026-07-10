@@ -1146,6 +1146,12 @@ export function initializeIpcHandlers(appState: AppState): void {
         // gates below consult it in ADDITION to (never instead of) the legacy
         // ownership decision, so Context OS can only ever be MORE restrictive.
         let turnContract: import('./intelligence/context-os').TurnContextContract | null = null;
+        // CONTEXT OS (H3): the retrieved factual evidence block for THIS turn,
+        // captured when the doc-grounded validator builds it, so the post-answer
+        // claim-persistence path can verify each claim against the SAME evidence
+        // the answer was grounded in (buildAssistantClaims). Empty when no
+        // document evidence was retrieved (profile/general turns).
+        let capturedEvidenceBlock = '';
         try {
           if (manualSourceContract) {
             const { buildTurnContractIfEnabled } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
@@ -2792,6 +2798,10 @@ export function initializeIpcHandlers(appState: AppState): void {
               } catch (okfRetryErr: any) {
                 console.warn('[DocGrounded] OKF card augmentation for validator skipped (non-fatal):', okfRetryErr?.message);
               }
+              // CONTEXT OS (H3): capture the exact retrieved evidence block so the
+              // post-answer claim-verification path can check each claim against
+              // the SAME evidence the answer was grounded in.
+              if (docContextBlock) capturedEvidenceBlock = docContextBlock;
               // False-refusal detector: does the answer claim "not mentioned / not
               // found" while at least two meaningful question terms ARE present in
               // the retrieved excerpts? This is an actionable signal — it means the
@@ -3292,19 +3302,67 @@ export function initializeIpcHandlers(appState: AppState): void {
               // no content) so contamination incidents replay from the trace.
               if (turnContract && isIntelligenceFlagEnabled('contextOsMemorySafetyEnabled')) {
                 try {
-                  const { extractCandidateClaims } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                  const {
+                    buildAssistantClaims,
+                    parseModeSnippets,
+                  } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
                   const { DatabaseManager } = require('./db/DatabaseManager');
                   const dbm = DatabaseManager.getInstance();
-                  const { randomUUID } = require('crypto') as typeof import('crypto');
-                  for (const claimText of extractCandidateClaims(fullResponse).slice(0, 20)) {
+                  // H3: build a real EvidencePack from the exact retrieved block
+                  // this answer was grounded in, then VERIFY each extracted claim
+                  // against it. A claim is 'verified' ONLY when a factual evidence
+                  // item substantially covers it (>=0.6 content-word overlap) —
+                  // otherwise 'unverified'. Aborted/refusal answers never reach
+                  // this point (blockedFromSessionTracker / write-decision gate).
+                  const _tc = turnContract;
+                  const evItems = (() => {
+                    if (!capturedEvidenceBlock.trim()) return [];
+                    const snippets = parseModeSnippets(capturedEvidenceBlock);
+                    const texts = snippets.length > 0 ? snippets.map((s) => s.text) : [capturedEvidenceBlock];
+                    return texts.filter((t) => t && t.trim()).map((text, i) => ({
+                      evidenceId: `${_tc.turnId}:ev:${i}`,
+                      sourceKind: 'mode_reference_chunk' as const,
+                      sourceId: _tc.activeModeId ?? 'active-mode',
+                      sourceOwner: 'reference_files' as const,
+                      authority: 'evidence' as const,
+                      trustLevel: 'user_uploaded',
+                      text,
+                      supports: { property: _tc.requestedProperty },
+                      score: { final: 0.6 },
+                      reasonIncluded: 'captured generation evidence',
+                    }));
+                  })();
+                  const verifyPack: import('./intelligence/context-os').EvidencePack = {
+                    packId: `${_tc.turnId}:verifypack:1`,
+                    version: 1,
+                    turnId: _tc.turnId,
+                    sourceOwner: _tc.sourceOwner,
+                    requestedProperty: _tc.requestedProperty,
+                    items: evItems,
+                    rejected: [],
+                    coverage: { hasDirectEvidence: evItems.length > 0, propertySatisfied: false, entityMatched: evItems.length > 0, sourceOwnerSatisfied: true, confidence: evItems.length ? 0.6 : 0 },
+                    conflicts: [],
+                    answerPolicy: 'answer',
+                  };
+                  const claims = buildAssistantClaims({
+                    answer: fullResponse,
+                    contract: { turnId: _tc.turnId, sourceOwner: _tc.sourceOwner, requestedProperty: _tc.requestedProperty },
+                    evidencePack: verifyPack,
+                  }).slice(0, 20);
+                  for (const claim of claims) {
+                    // Invariant: a verified claim MUST carry evidence IDs (enforced
+                    // in the DAO too). buildAssistantClaims guarantees this, but we
+                    // defensively downgrade any verified-without-evidence claim.
+                    const status = (claim.validationStatus === 'verified' && claim.evidenceIds.length === 0)
+                      ? 'unverified' : claim.validationStatus;
                     dbm.saveAssistantClaim({
-                      claimId: randomUUID(),
-                      turnId: turnContract.turnId,
-                      claimText,
-                      sourceOwner: turnContract.sourceOwner,
-                      requestedProperty: turnContract.requestedProperty,
-                      validationStatus: 'unverified',
-                      evidenceIds: [],
+                      claimId: claim.claimId,
+                      turnId: claim.turnId,
+                      claimText: claim.claimText,
+                      sourceOwner: claim.sourceOwner,
+                      requestedProperty: claim.requestedProperty,
+                      validationStatus: status,
+                      evidenceIds: claim.evidenceIds,
                     });
                   }
                   dbm.saveTurnContextContract({

@@ -335,6 +335,20 @@ export class DatabaseManager {
             // and foreground chat reads/writes can briefly contend. Waiting is
             // safer than throwing SQLITE_BUSY during startup or active sessions.
             this.db.pragma('busy_timeout = 5000');
+            // Enforce foreign keys on the shared connection. Several delete paths
+            // (deleteMeeting, deleteMode, deleteKnowledgePack) do a bare parent-row
+            // DELETE and rely ENTIRELY on `ON DELETE CASCADE` to reap child rows
+            // (transcripts, ai_interactions, chunks, chunk_summaries). SQLite ships
+            // with foreign_keys OFF per-connection, so those cascades are inert
+            // unless something enables the pragma. Historically the ONLY place that
+            // did was the premium KnowledgeDatabaseManager's constructor — meaning
+            // FK enforcement silently depended on the premium module loading. If
+            // premium failed to load (source-available build, packaging regression),
+            // every meeting/mode/pack delete would orphan its children. Enable it
+            // here, unconditionally, on the one shared connection all writes use.
+            // Must run OUTSIDE any transaction (SQLite no-ops `foreign_keys` if set
+            // mid-transaction) and BEFORE migrations — both hold here.
+            this.db.pragma('foreign_keys = ON');
             // Leave synchronous = FULL (the WAL default). NORMAL trades crash
             // durability for throughput — a power loss between commit and
             // fsync loses the transaction. The emergency-close path added in
@@ -1253,7 +1267,156 @@ export class DatabaseManager {
             this.db.pragma('user_version = 23');
         }
 
+        // Version 23 → 24: Context OS memory safety (docs/context-os/, Phase 9).
+        // assistant_claims separates factual CLAIMS from conversational assistant
+        // messages: a claim starts `unverified` and only `verified` claims (with
+        // evidence pointers) may ever be re-used as evidence in a later turn.
+        // turn_context_contracts persists the privacy-safe per-turn source
+        // decision so contamination incidents can be reproduced from the trace.
+        // Both tables are ADDITIVE — no existing table or write path changes.
+        if (version < 24) {
+            console.log('[DatabaseManager] Applying migration v23 → v24: Context OS assistant_claims + turn_context_contracts');
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS assistant_claims (
+                    claim_id TEXT PRIMARY KEY,
+                    turn_id TEXT NOT NULL,
+                    claim_text TEXT NOT NULL,
+                    source_owner TEXT NOT NULL,
+                    requested_property TEXT,
+                    validation_status TEXT NOT NULL DEFAULT 'unverified',
+                    evidence_ids_json TEXT NOT NULL DEFAULT '[]',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    contradicted_by_claim_id TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_assistant_claims_turn ON assistant_claims(turn_id);
+                CREATE INDEX IF NOT EXISTS idx_assistant_claims_status ON assistant_claims(validation_status);
+
+                CREATE TABLE IF NOT EXISTS turn_context_contracts (
+                    turn_id TEXT PRIMARY KEY,
+                    surface TEXT NOT NULL,
+                    active_mode_id TEXT,
+                    answer_shape TEXT NOT NULL,
+                    source_owner TEXT NOT NULL,
+                    requested_property TEXT,
+                    allowed_sources_json TEXT NOT NULL DEFAULT '[]',
+                    forbidden_sources_json TEXT NOT NULL DEFAULT '[]',
+                    memory_write_policy_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS idx_turn_contracts_surface ON turn_context_contracts(surface);
+            `);
+            this.db.pragma('user_version = 24');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
+    }
+
+    // ============================================
+    // Context OS — assistant claims + turn contracts (v24, Phase 9)
+    // ============================================
+
+    /** Insert an extracted assistant claim (default validation_status='unverified'). */
+    public saveAssistantClaim(claim: {
+        claimId: string;
+        turnId: string;
+        claimText: string;
+        sourceOwner: string;
+        requestedProperty?: string | null;
+        validationStatus?: 'unverified' | 'verified' | 'contradicted';
+        evidenceIds?: string[];
+    }): void {
+        if (!this.db) return;
+        // Context OS invariant (Phase 7): a VERIFIED claim MUST carry evidence
+        // IDs — a verified claim with no provenance is exactly the contamination
+        // trap the claims table exists to prevent. Enforce fail-closed at the DAO
+        // boundary: downgrade rather than store an unprovable "verified" row.
+        let status = claim.validationStatus ?? 'unverified';
+        const evidenceIds = claim.evidenceIds ?? [];
+        if (status === 'verified' && evidenceIds.length === 0) {
+            console.warn('[DatabaseManager] refusing to store verified claim without evidence IDs — downgrading to unverified');
+            status = 'unverified';
+        }
+        try {
+            this.db.prepare(`
+                INSERT OR REPLACE INTO assistant_claims
+                    (claim_id, turn_id, claim_text, source_owner, requested_property, validation_status, evidence_ids_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                claim.claimId,
+                claim.turnId,
+                claim.claimText,
+                claim.sourceOwner,
+                claim.requestedProperty ?? null,
+                status,
+                JSON.stringify(evidenceIds),
+            );
+        } catch (e) {
+            console.error('[DatabaseManager] saveAssistantClaim failed:', e);
+        }
+    }
+
+    /** Only VERIFIED claims may be re-used as evidence (memory-safety invariant). */
+    public getVerifiedAssistantClaims(limit = 50): any[] {
+        if (!this.db) return [];
+        try {
+            return this.db.prepare(`
+                SELECT * FROM assistant_claims
+                WHERE validation_status = 'verified'
+                ORDER BY created_at DESC LIMIT ?
+            `).all(limit);
+        } catch (e) {
+            console.error('[DatabaseManager] getVerifiedAssistantClaims failed:', e);
+            return [];
+        }
+    }
+
+    /** Mark a stored claim contradicted by newer evidence (never deleted — audit trail). */
+    public markAssistantClaimContradicted(claimId: string, contradictedByClaimId?: string | null): void {
+        if (!this.db) return;
+        try {
+            this.db.prepare(`
+                UPDATE assistant_claims
+                SET validation_status = 'contradicted', contradicted_by_claim_id = ?
+                WHERE claim_id = ?
+            `).run(contradictedByClaimId ?? null, claimId);
+        } catch (e) {
+            console.error('[DatabaseManager] markAssistantClaimContradicted failed:', e);
+        }
+    }
+
+    /** Persist the privacy-safe per-turn contract snapshot (no content, source kinds only). */
+    public saveTurnContextContract(row: {
+        turnId: string;
+        surface: string;
+        activeModeId?: string | null;
+        answerShape: string;
+        sourceOwner: string;
+        requestedProperty?: string | null;
+        allowedSources: string[];
+        forbiddenSources: string[];
+        memoryWritePolicy: Record<string, boolean>;
+    }): void {
+        if (!this.db) return;
+        try {
+            this.db.prepare(`
+                INSERT OR REPLACE INTO turn_context_contracts
+                    (turn_id, surface, active_mode_id, answer_shape, source_owner, requested_property,
+                     allowed_sources_json, forbidden_sources_json, memory_write_policy_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                row.turnId,
+                row.surface,
+                row.activeModeId ?? null,
+                row.answerShape,
+                row.sourceOwner,
+                row.requestedProperty ?? null,
+                JSON.stringify(row.allowedSources),
+                JSON.stringify(row.forbiddenSources),
+                JSON.stringify(row.memoryWritePolicy),
+            );
+        } catch (e) {
+            console.error('[DatabaseManager] saveTurnContextContract failed:', e);
+        }
     }
 
     // ============================================
@@ -1489,16 +1652,15 @@ export class DatabaseManager {
     /**
      * Explicit cascade delete for a knowledge_sources row and everything
      * hanging off it (packs, cards, entities, relations, index versions).
-     * This codebase never enables `PRAGMA foreign_keys = ON` (confirmed:
-     * zero references anywhere in electron/), so the `ON DELETE CASCADE`
-     * clauses declared on these tables in the v19→v20/v20→v21 migrations are
-     * inert — SQLite silently ignores FK actions when enforcement is off. A
-     * bare `DELETE FROM knowledge_sources` would leave every dependent row
-     * permanently orphaned (unreclaimable disk growth, since a re-upload
-     * mints a fresh random file id that never matches the orphaned rows).
-     * Deletes in dependency order (children before the pack, pack before
-     * the source) inside one transaction so a mid-delete failure can't
-     * leave a partially-cleaned pack.
+     *
+     * NOTE (2026-07-10): `PRAGMA foreign_keys = ON` is now enabled directly in
+     * initialize() on the shared connection, so the `ON DELETE CASCADE` clauses
+     * on these tables ARE enforced at runtime and a bare parent delete would
+     * cascade. This method's manual, dependency-ordered delete is kept as
+     * belt-and-suspenders: it is harmless with FK enforcement on, and it keeps
+     * this path correct (and self-documenting about the reap order) regardless of
+     * pragma state. Deletes children before the pack, pack before the source,
+     * inside one transaction so a mid-delete failure can't leave a partial pack.
      */
     public deleteKnowledgeSource(id: string): void {
         if (!this.db) return;
