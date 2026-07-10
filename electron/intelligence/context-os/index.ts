@@ -39,6 +39,12 @@ export {
   type PropertyEvidenceValidationResult,
 } from './propertyEvidenceValidator';
 export {
+  buildDocumentEvidencePackFromBlock,
+  renderGoverningFactualBlock,
+  type ContextOsGenerationContext,
+  type ContextOsModeSnapshot,
+} from './generationContext';
+export {
   mapAnswerTypeToAnswerShape,
   mapPlannerVoice,
   isContextOsEnabledForSurface,
