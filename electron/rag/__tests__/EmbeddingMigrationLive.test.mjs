@@ -157,7 +157,7 @@ describe('REAL v0→v16 migration on a persisted file DB (mandate #2)', () => {
     // is gated on `embedding_space IS NULL` so it cannot clobber the v2 stamp.
     const dm2 = newDM(db);
     dm2.runMigrations();
-    assert.equal(db.pragma('user_version', { simple: true }), 16, 'version stays 16');
+    assert.equal(db.pragma('user_version', { simple: true }), 24, 'version stays 24');
     assert.equal(
       db.prepare("SELECT embedding_space FROM meetings WHERE id='gem768'").get().embedding_space,
       SPACE_V2,
@@ -194,7 +194,7 @@ describe('REAL v0→v16 migration on a persisted file DB (mandate #2)', () => {
     // Reopen the SAME file — proves the ALTER + backfill were durably committed.
     const db2 = new Database(file);
     try {
-      assert.equal(db2.pragma('user_version', { simple: true }), 16);
+      assert.equal(db2.pragma('user_version', { simple: true }), 24);
       assert.equal(db2.prepare("SELECT embedding_space FROM meetings WHERE id='gem768'").get().embedding_space, 'gemini:gemini-embedding-001:768');
     } finally {
       db2.close();

@@ -2027,12 +2027,18 @@ export class AppState {
         // We await waitForReady() so uploads during boot wait for the pipeline
         // instead of immediately throwing 'not ready'.
         const self = this;
-        this.knowledgeOrchestrator.setEmbedFn(async (text: string) => {
+        const embedWithProducerMetadata = async (text: string) => {
           const pipeline = self.ragManager?.getEmbeddingPipeline();
           if (!pipeline) throw new Error('RAG pipeline not available');
           await pipeline.waitForReady();
-          return await pipeline.getEmbedding(text);
+          return await pipeline.getEmbeddingWithFallback(text);
+        };
+        this.knowledgeOrchestrator.setEmbedFn(async (text: string) => {
+          return (await embedWithProducerMetadata(text)).embedding;
         });
+        if (typeof this.knowledgeOrchestrator.setEmbedWithMetadataFn === 'function') {
+          this.knowledgeOrchestrator.setEmbedWithMetadataFn(embedWithProducerMetadata);
+        }
         // Report the active document-embedder's composite space so the orchestrator
         // can detect knowledge nodes embedded in an OLD space (e.g. after a
         // gemini-embedding-001 → -2 upgrade) and re-embed them, instead of silently

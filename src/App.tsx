@@ -819,7 +819,7 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary context="Launcher">
     <div className="h-full min-h-0 w-full relative bg-transparent">
-      <HindsightStatusBanner />
+      <HindsightStatusBanner variant="floating-card" />
       <AnimatePresence>
         {showStartup ? (
           <motion.div

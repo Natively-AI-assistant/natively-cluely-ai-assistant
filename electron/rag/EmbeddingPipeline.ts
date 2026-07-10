@@ -491,22 +491,37 @@ export class EmbeddingPipeline {
      * Routes through embedWithTimeout() so a frozen API cannot stall the live indexer.
      */
     async getEmbedding(text: string): Promise<number[]> {
-        if (!this.provider) {
+        const result = await this.getEmbeddingWithFallback(text);
+        return result.embedding;
+    }
+
+    /**
+     * Get a single document embedding with metadata from the provider that actually
+     * produced the vector. Callers that persist vectors MUST prefer this over the
+     * bare getEmbedding() when they also persist an embedding_space label: a
+     * primary→fallback promotion can happen inside this call.
+     */
+    async getEmbeddingWithFallback(text: string): Promise<{ embedding: number[]; space: string; provider?: string; dimensions?: number }> {
+        const active = this.provider;
+        if (!active) {
             throw new Error('Embedding provider not initialized');
         }
         try {
-            return await this.embedWithTimeout(this.provider, text, 'live-chunk');
+            const embedding = await this.embedWithTimeout(active, text, 'live-chunk');
+            const space = active.space;
+            if (!space) throw new Error('Embedding provider has no active space');
+            return { embedding, space, provider: active.name, dimensions: active.dimensions };
         } catch (primaryError) {
             const fallback = this.fallbackProvider;
-            if (!fallback || fallback === this.provider) throw primaryError;
+            if (!fallback || fallback === active) throw primaryError;
             console.warn(
-                `[EmbeddingPipeline] Primary single embedding failed via ${this.provider?.name ?? 'unknown'}; ` +
+                `[EmbeddingPipeline] Primary single embedding failed via ${active.name}; ` +
                 `falling back to ${fallback.name}:`,
                 primaryError instanceof Error ? primaryError.message : primaryError
             );
             const embedding = await this.embedWithTimeout(fallback, text, 'fallback-live-chunk');
             this.promoteFallbackProvider(fallback);
-            return embedding;
+            return { embedding, space: fallback.space, provider: fallback.name, dimensions: fallback.dimensions };
         }
     }
 
@@ -541,11 +556,21 @@ export class EmbeddingPipeline {
     }
 
     async getEmbeddingsWithFallback(texts: string[]): Promise<{ embeddings: number[][]; space: string; provider?: string; dimensions?: number }> {
+        // Capture the active provider BEFORE the await. A concurrent
+        // promoteFallbackProvider() (triggered by another caller failing over)
+        // can reassign this.provider while getEmbeddings() is in flight; re-reading
+        // this.provider / getActiveSpaceKey() afterward would stamp embeddings that
+        // were produced by the OLD provider with the NEW provider's space label,
+        // corrupting cosine comparability of persisted vectors. Derive ALL returned
+        // metadata from the same reference that produced the embeddings — mirroring
+        // what the fallback path below already does with its local `fallback` ref.
+        const active = this.provider;
         try {
+            if (!active) throw new Error('Embedding provider not initialized');
             const embeddings = await this.getEmbeddings(texts);
-            const space = this.getActiveSpaceKey();
+            const space = active.space;
             if (!space) throw new Error('Embedding provider has no active space');
-            return { embeddings, space, provider: this.provider?.name, dimensions: this.provider?.dimensions };
+            return { embeddings, space, provider: active.name, dimensions: active.dimensions };
         } catch (primaryError) {
             const fallback = this.fallbackProvider;
             // If no fallback is configured, or the primary IS already the fallback

@@ -331,7 +331,10 @@
     "sqlite-vec-darwin-x64": "^0.1.7-alpha.2"
   },
   "overrides": {
-    "onnxruntime-node": "1.22.0"
+    "onnxruntime-node": "1.22.0",
+    "react-reconciler": {
+      "react": "$react"
+    }
   },
   "nativelySigned": true
 }

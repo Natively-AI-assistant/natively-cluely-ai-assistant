@@ -119,38 +119,32 @@ export class LiveRAGIndexer {
 
             console.log(`[LiveRAGIndexer] Saved ${indexedChunks.length} chunks (${this.chunkCounter} total) for meeting ${meetingId}`);
 
-            // 5. Embed each chunk (fire-and-forget per chunk, but sequential to avoid rate limits)
+            // 5. Embed the new chunks as one coherent batch. getEmbeddingsWithFallback()
+            // returns metadata from the SAME provider that produced the vectors, so a
+            // primary→fallback promotion cannot leave early chunks in the old space while
+            // the meeting is stamped with the new one.
             if (this.embeddingPipeline.isReady()) {
                 // Foreground gate (manual regression 2026-06-12): yield to any
-                // in-flight manual/WTA answer between chunk embeds — storeEmbedding
-                // is a synchronous DB write that otherwise contends with answers.
+                // in-flight manual/WTA answer before the synchronous DB writes below.
                 const { ForegroundGate } = require('../services/ForegroundGate') as typeof import('../services/ForegroundGate');
                 let embeddedCount = 0;
-                for (let i = 0; i < chunkIds.length; i++) {
-                    try {
-                        await ForegroundGate.waitUntilIdle();
-                        const embedding = await this.embeddingPipeline.getEmbedding(indexedChunks[i].text);
-                        this.vectorStore.storeEmbedding(chunkIds[i], embedding);
+                try {
+                    await ForegroundGate.waitUntilIdle();
+                    const { embeddings, space, provider, dimensions } = await this.embeddingPipeline.getEmbeddingsWithFallback(
+                        indexedChunks.map((chunk) => chunk.text)
+                    );
+                    for (let i = 0; i < chunkIds.length && i < embeddings.length; i++) {
+                        this.vectorStore.storeEmbedding(chunkIds[i], embeddings[i]);
                         embeddedCount++;
-                    } catch (err) {
-                        console.warn(`[LiveRAGIndexer] Failed to embed chunk ${chunkIds[i]}:`, err);
-                        // Continue with remaining chunks — partial indexing is better than none
                     }
+                    if (embeddedCount > 0 && provider && space && dimensions) {
+                        this.vectorStore.stampMeetingSpaceIfUnset(meetingId, provider, dimensions, space);
+                    }
+                } catch (err) {
+                    console.warn(`[LiveRAGIndexer] Failed to embed live chunk batch for ${meetingId}:`, err);
                 }
                 this.indexedChunkCount += embeddedCount;
                 console.log(`[LiveRAGIndexer] Embedded ${embeddedCount}/${chunkIds.length} chunks (${this.indexedChunkCount} total with embeddings)`);
-
-                // Stamp the meeting's embedding space so these live chunks are (a) searchable
-                // in-session (search filters on embedding_space) and (b) NOT swept into the
-                // "unknown-space" re-index. Only stamps if currently NULL.
-                if (embeddedCount > 0) {
-                    const providerName = this.embeddingPipeline.getActiveProviderName();
-                    const space = this.embeddingPipeline.getActiveSpaceKey();
-                    const dims = this.embeddingPipeline.getActiveDimensions();
-                    if (providerName && space && dims) {
-                        this.vectorStore.stampMeetingSpaceIfUnset(meetingId, providerName, dims, space);
-                    }
-                }
             } else {
                 console.log('[LiveRAGIndexer] Embedding pipeline not ready, chunks saved without embeddings');
             }
