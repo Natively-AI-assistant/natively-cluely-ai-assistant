@@ -143,6 +143,11 @@ export type TurnSurface =
 
 export type SourceAuthority =
   | 'reference_files_only'
+  /** Real-custom-mode-repair: reference files own ambiguous nouns by default,
+   *  but explicit résumé/JD/transcript switches are allowed for this turn
+   *  (unlike `reference_files_only`, which forbids them). Mirrors
+   *  ModeSourceContract.sourceAuthority in electron/services/modeSourceContract.ts. */
+  | 'reference_files_primary'
   | 'reference_files_plus_transcript'
   | 'transcript_only'
   | 'profile_only'

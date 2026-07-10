@@ -1248,6 +1248,10 @@ export class IntelligenceEngine extends EventEmitter {
                     hasProfileFacts: _wtaHasProfile,
                     hasMeetingRag: false,
                     hasLongTermMemory: false,
+                    // Real-custom-mode-repair: the mode snapshot's PERSISTED
+                    // contract is authoritative — see
+                    // docs/context-os/real-custom-mode-repair/06_ROOT_CAUSE_REPORT.md.
+                    persistedSourceAuthority: (snapshotModeInfo as any)?.sourceContract?.sourceAuthority ?? null,
                 });
                 const _wtaOwn = resolveSourceOwnership({
                     question: String(_wtaQ),
@@ -2387,6 +2391,7 @@ export class IntelligenceEngine extends EventEmitter {
                 hasProfileFacts: hasProfile,
                 hasMeetingRag: false,
                 hasLongTermMemory: false,
+                persistedSourceAuthority: docInfo?.sourceContract?.sourceAuthority ?? null,
             });
             return buildTurnContractIfEnabled({
                 surface,

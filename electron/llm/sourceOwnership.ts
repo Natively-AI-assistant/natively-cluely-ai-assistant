@@ -116,6 +116,22 @@ export function resolveSourceOwnership(input: ResolveSourceOwnershipInput): Sour
           : `${authority}:reference_files_owner`,
       };
     }
+    case 'reference_files_primary': {
+      // Real-custom-mode-repair: unlike `reference_files_only`, this
+      // authority explicitly ALLOWS a switch — an explicit "my resume/
+      // project" ask grants the profile for THIS turn (mode default stays
+      // reference_files for the next turn, per ModeSourceContract semantics
+      // in docs/context-os/real-custom-mode-repair/05_PRODUCT_SOURCE_POLICY.md).
+      return {
+        owner: explicitProfileAsk && hasProfileFacts ? 'profile' : 'reference_files',
+        profileAllowed: explicitProfileAsk && hasProfileFacts,
+        explicitProfileAsk,
+        shouldClarifyInsteadOfProfile: explicitProfileAsk && !hasProfileFacts,
+        reason: explicitProfileAsk
+          ? (hasProfileFacts ? `${authority}:explicit_profile_switch_granted` : `${authority}:explicit_profile_ask_no_facts_clarify`)
+          : `${authority}:reference_files_owner`,
+      };
+    }
     case 'profile_only': {
       return {
         owner: 'profile',

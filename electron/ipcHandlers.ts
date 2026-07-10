@@ -1106,6 +1106,12 @@ export function initializeIpcHandlers(appState: AppState): void {
             hasProfileFacts: _hasProfileFacts,
             hasMeetingRag: _hasMeetingRag,
             hasLongTermMemory: _hasLongTermMemory,
+            // Real-custom-mode-repair (2026-07-11): the mode's PERSISTED,
+            // explicit ModeSourceContract is authoritative — see
+            // docs/context-os/real-custom-mode-repair/06_ROOT_CAUSE_REPORT.md.
+            // Replaces the live regex-heuristic chain above (still used as
+            // fallback when no mode is active / arbiter threw).
+            persistedSourceAuthority: manualActiveMode?.sourceContract?.sourceAuthority ?? null,
           });
           logArbitratedContract(manualSourceContract, String(message || ''));
           manualOwnership = resolveSourceOwnership({
@@ -1170,15 +1176,20 @@ export function initializeIpcHandlers(appState: AppState): void {
               hasProfileFacts: _hasProfileFactsForTurn,
               hasLiveTranscript: Boolean(intelligenceManager.getFormattedContext(100)?.trim()),
             });
-            if (turnContract && isIntelligenceFlagEnabled('trace')) {
-              const { buildContextOsTrace, logContextOsTrace } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
-              logContextOsTrace(buildContextOsTrace({
-                contract: turnContract,
-                sourceAuthority: manualSourceContract.sourceAuthority,
-                question: String(message || ''),
-                finalAction: 'answer', // provisional; the post-stream trace records the real outcome
-              }));
-            }
+            // Real-custom-mode-repair (2026-07-11), Phase 4/7: the trace used to
+            // be emitted HERE with a hardcoded `finalAction: 'answer'` — before
+            // the clarification short-circuit below had even run. That produced
+            // exactly the misleading contradiction the incident investigation
+            // found (`sourceOwner=clarify` next to `finalAction=answer` on the
+            // SAME turn — see docs/context-os/real-custom-mode-repair/
+            // 04_AUTHORITY_CONFLICT_REPORT.md). The trace is now logged ONLY
+            // after the clarification decision is known (right after the
+            // short-circuit block below): if clarification fires, THAT block
+            // logs `finalAction: 'clarify'` and returns; if it doesn't
+            // (wrong turn shape, flag off, or sourceOwner !== 'clarify'), the
+            // fallthrough log right after it records the real `'answer'`
+            // outcome. No trace line is ever emitted before the outcome it
+            // describes is determined.
           }
         } catch (contextOsErr: any) {
           // Context OS is additive — a kernel failure must never break chat.
@@ -1468,6 +1479,26 @@ export function initializeIpcHandlers(appState: AppState): void {
               console.warn('[CONTEXT-OS] clarification short-circuit skipped (non-fatal):', clarErr?.message);
             }
           }
+        }
+
+        // Real-custom-mode-repair (2026-07-11), Phase 4/7: this is the REAL,
+        // non-provisional `finalAction` trace log for this turn — reached only
+        // when the clarification short-circuit above did NOT fire (it already
+        // logged 'clarify' and returned). Emitted once per turn, so a trace
+        // consumer can never see a `sourceOwner=clarify` line paired with a
+        // hardcoded 'answer' outcome that doesn't reflect what actually
+        // happened, closing the authority-conflict trace gap identified in
+        // docs/context-os/real-custom-mode-repair/04_AUTHORITY_CONFLICT_REPORT.md.
+        if (turnContract && isIntelligenceFlagEnabled('trace')) {
+          try {
+            const { buildContextOsTrace, logContextOsTrace } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+            logContextOsTrace(buildContextOsTrace({
+              contract: turnContract,
+              sourceAuthority: manualSourceContract?.sourceAuthority ?? 'ask_if_ambiguous',
+              question: String(message || ''),
+              finalAction: 'answer',
+            }));
+          } catch { /* tracing must never break an answer */ }
         }
 
         const legacyDocGuardEligible = answerPlan.answerType !== 'lecture_answer';
@@ -10149,6 +10180,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             hasProfileFacts: _pHasProfile,
             hasMeetingRag: false,
             hasLongTermMemory: false,
+            persistedSourceAuthority: (_pMode as any)?.sourceContract?.sourceAuthority ?? null,
           });
           const _pOwn = resolveSourceOwnership({
             question: String(message || ''),

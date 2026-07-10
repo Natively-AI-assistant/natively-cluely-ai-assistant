@@ -83,6 +83,11 @@ export interface CustomModeExecutionContract {
 
 export type SourceAuthority =
   | 'reference_files_only'
+  /** Real-custom-mode-repair: reference files own ambiguous nouns by default,
+   *  but explicit résumé/JD/transcript switches are still allowed (unlike
+   *  `reference_files_only`, which forbids them). Mirrors
+   *  ModeSourceContract.sourceAuthority — see electron/services/modeSourceContract.ts. */
+  | 'reference_files_primary'
   | 'profile_only'
   | 'transcript_only'
   | 'reference_files_plus_transcript'
@@ -120,6 +125,19 @@ export interface ContractBuildInput {
   // When set, `project` disambiguates to that source. When unset, the contract
   // marks `sourceAuthority = 'ask_if_ambiguous'` and `evidenceRequired = false`.
   userExplicitSource?: 'reference_files' | 'profile' | 'transcript' | null;
+  /**
+   * Real-custom-mode-repair (2026-07-11): the mode's PERSISTED
+   * ModeSourceContract.sourceAuthority (electron/services/modeSourceContract.ts),
+   * when the caller has it available. When present, this is AUTHORITATIVE —
+   * it replaces the legacy heuristic chain below (isDocGroundedCustomModeActive
+   * + hasProfileFacts + hasLiveTranscript inference) entirely, closing the root
+   * cause of the P0 contamination incident: a mode's source authority silently
+   * re-derived (and could flip) on every turn from a live regex match against
+   * the prompt text, defaulting to `general_mixed` (everything allowed) with no
+   * user visibility whenever the regex pair didn't match. Absent → legacy
+   * heuristic (backward compatible for callers that haven't been updated yet).
+   */
+  persistedSourceAuthority?: SourceAuthority | null;
 }
 
 // ── Construction ──────────────────────────────────────────────────────────
@@ -162,10 +180,14 @@ export function buildCustomModeExecutionContract(input: ContractBuildInput): Cus
     hasMeetingRag,
     hasLongTermMemory,
     userExplicitSource,
+    persistedSourceAuthority,
   } = input;
 
-  // 1. Determine source authority
-  const sourceAuthority: SourceAuthority = (() => {
+  // 1. Determine source authority. The PERSISTED contract (when supplied) is
+  // authoritative — see persistedSourceAuthority doc comment above. This
+  // replaces the legacy live-heuristic chain, which is kept ONLY as the
+  // fallback for callers that haven't threaded the persisted value through yet.
+  const sourceAuthority: SourceAuthority = persistedSourceAuthority ?? (() => {
     if (isDocGroundedCustomModeActive && hasReferenceFiles) {
       return userExplicitSource === 'transcript'
         ? 'reference_files_plus_transcript'
@@ -236,6 +258,36 @@ export function buildCustomModeExecutionContract(input: ContractBuildInput): Cus
       referentOnly.add('prior_assistant_referent');
       break;
     }
+    case 'reference_files_primary': {
+      // Real-custom-mode-repair: reference files own ambiguous nouns by
+      // default (evidence), but an EXPLICIT user source switch this turn
+      // ("answer from my resume instead") grants that source as evidence too
+      // — unlike `reference_files_only`, which is a hard prison. Without an
+      // explicit switch, profile/JD/transcript stay forbidden as evidence
+      // (never a silent mix), matching the seminar-mode product semantics in
+      // docs/context-os/real-custom-mode-repair/05_PRODUCT_SOURCE_POLICY.md.
+      allowed.add('reference_files');
+      allowed.add('active_mode_pinned');
+      allowed.add('custom_context');
+      if (userExplicitSource === 'profile' && hasProfileFacts) {
+        allowed.add('profile_resume');
+        allowed.add('profile_jd');
+        allowed.add('projects');
+      } else {
+        for (const s of PROFILE_SOURCES) forbidden.add(s);
+      }
+      if (userExplicitSource === 'transcript' && hasLiveTranscript) {
+        allowed.add('live_transcript');
+        if (hasMeetingRag) allowed.add('meeting_rag');
+      } else {
+        forbidden.add('live_transcript');
+        forbidden.add('meeting_rag');
+      }
+      for (const s of MEMORY_SOURCES) forbidden.add(s);
+      forbidden.add('prior_assistant_facts');
+      referentOnly.add('prior_assistant_referent');
+      break;
+    }
     case 'profile_only': {
       allowed.add('profile_resume');
       allowed.add('profile_jd');
@@ -284,11 +336,13 @@ export function buildCustomModeExecutionContract(input: ContractBuildInput): Cus
   }
 
   // 3. Evidence contract
-  const evidenceRequired = sourceAuthority === 'reference_files_only'
-    || sourceAuthority === 'reference_files_plus_transcript'
+  const isReferenceFilesAuthority = sourceAuthority === 'reference_files_only'
+    || sourceAuthority === 'reference_files_primary'
+    || sourceAuthority === 'reference_files_plus_transcript';
+  const evidenceRequired = isReferenceFilesAuthority
     || isDocGroundedAnswerType(answerType);
   const evidenceNamespace: 'reference_files' | 'live_transcript' | 'all_active' =
-    sourceAuthority === 'reference_files_only' || sourceAuthority === 'reference_files_plus_transcript'
+    isReferenceFilesAuthority
       ? 'reference_files'
       : sourceAuthority === 'transcript_only' || sourceAuthority === 'profile_plus_transcript'
         ? 'live_transcript'

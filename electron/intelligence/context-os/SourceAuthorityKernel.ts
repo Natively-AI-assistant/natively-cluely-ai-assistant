@@ -208,6 +208,10 @@ export class SourceAuthorityKernel {
     // reference-file or transcript mode, an explicit "my resume" ask must
     // CLARIFY (source-honest switch offer, matching the legacy resolver's
     // shouldClarifyInsteadOfProfile) — never silently grant the profile.
+    // `reference_files_primary` is the one authority that explicitly ALLOWS a
+    // profile switch (unlike `reference_files_only`/`_plus_transcript`, which
+    // must clarify instead of silently granting it) — see
+    // docs/context-os/real-custom-mode-repair/05_PRODUCT_SOURCE_POLICY.md.
     const strictNonProfileMode = input.sourceAuthority === 'reference_files_only'
       || input.sourceAuthority === 'reference_files_plus_transcript'
       || input.sourceAuthority === 'transcript_only';
@@ -223,6 +227,7 @@ export class SourceAuthorityKernel {
 
     switch (input.sourceAuthority) {
       case 'reference_files_only':
+      case 'reference_files_primary':
       case 'reference_files_plus_transcript':
         return input.hasReferenceFiles ? 'reference_files' : 'clarify';
 
@@ -248,8 +253,8 @@ export class SourceAuthorityKernel {
         // source-owned thing AND at least TWO source universes actually exist
         // for it to be ambiguous BETWEEN (H1 fix, code-review 2026-07-10).
         // With zero or one universe there is nothing to disambiguate — answer
-        // normally ('unknown' owner → conservative general answer). This stops
-        // false-clarify on ordinary general-knowledge questions.
+        // normally. This stops false-clarify on ordinary general-knowledge
+        // questions.
         const universeCount = (input.hasReferenceFiles ? 1 : 0)
           + (input.hasProfileFacts ? 1 : 0)
           + (input.hasLiveTranscript ? 1 : 0);
@@ -352,6 +357,7 @@ export class SourceAuthorityKernel {
   private conflictPolicyFor(sourceAuthority: SourceAuthority): ConflictPolicy {
     switch (sourceAuthority) {
       case 'reference_files_only':
+      case 'reference_files_primary':
       case 'reference_files_plus_transcript':
         return 'reference_files_win';
       case 'profile_only':
