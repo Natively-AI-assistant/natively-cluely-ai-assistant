@@ -140,6 +140,22 @@ try {
   console.warn('[LeakTest] disableHardwareAcceleration failed:', e);
 }
 
+// MASTER LOCAL-MODEL KILL-SWITCH (2026-07-11) — diagnostic.
+// NATIVELY_NO_LOCAL_MODELS=1 blocks EVERY on-device model from loading at
+// startup: the ONNX local-embedding fallback, the zero-shot intent classifier,
+// the BGE reranker, Whisper STT prewarm, the LocalFallbackPreflight probe, AND
+// the Ollama bootstrap. NOTHING local is invoked. If the app boots and stays
+// stable (no native-RSS leak / UNRESPONSIVE) with this set — while it leaks
+// without it — the on-device model path is confirmed as the cause of the
+// Windows freeze (which only engages that path because cloud embedding auth
+// fails there but works on the dev Mac). A no-op unless the flag is set.
+function localModelsDisabled(): boolean {
+  return process.env.NATIVELY_NO_LOCAL_MODELS === '1';
+}
+if (localModelsDisabled()) {
+  console.warn('[LeakTest] NATIVELY_NO_LOCAL_MODELS=1 → ALL local models (ONNX embedding/intent/reranker, Whisper prewarm, preflight, Ollama) are DISABLED this run');
+}
+
 /**
  * Whether THIS build carries a real Developer ID signature.
  *
@@ -1883,6 +1899,10 @@ export class AppState {
   private async bootstrapOllamaEmbeddings() {
     this._ollamaBootstrapPromise = (async () => {
       try {
+        if (localModelsDisabled()) {
+          console.warn('[LeakTest] Skipping Ollama embeddings bootstrap (NATIVELY_NO_LOCAL_MODELS=1)');
+          return;
+        }
         // SKIP when a cloud embedding provider is already available. Pulling the
         // 274MB `nomic-embed-text` on first launch is pure waste for users who
         // have an OpenAI/Gemini key (the RAG pipeline resolves to that cloud
@@ -6980,11 +7000,16 @@ async function initializeApp() {
     const settingsManager = SettingsManager.getInstance();
     const defaultModel = CredentialsManager.getInstance().getDefaultModel();
     const shouldStartOllama =
-      settingsManager.get('autoStartOllama') === true ||
-      defaultModel.startsWith('ollama-') ||
-      defaultModel.startsWith('ollama:') ||
-      process.env.NATIVELY_AUTO_START_OLLAMA === '1';
-    if (shouldStartOllama) {
+      !localModelsDisabled() && (
+        settingsManager.get('autoStartOllama') === true ||
+        defaultModel.startsWith('ollama-') ||
+        defaultModel.startsWith('ollama:') ||
+        process.env.NATIVELY_AUTO_START_OLLAMA === '1'
+      );
+    if (localModelsDisabled()) {
+      OllamaManager.getInstance().skipStartup('NATIVELY_NO_LOCAL_MODELS=1 — Ollama disabled for diagnostic');
+      console.warn('[LeakTest] Skipping Ollama startup (NATIVELY_NO_LOCAL_MODELS=1)');
+    } else if (shouldStartOllama) {
       OllamaManager.getInstance().ensureRunning({
         reason: settingsManager.get('autoStartOllama') === true ? 'auto-start-setting' : 'startup-selected',
         selectedModel: defaultModel,
@@ -7076,7 +7101,11 @@ if (process.env.THINKING_MATRIX === '1') {
   // credentials are loaded (so the provider can read its API key) and is
   // non-blocking — failures are logged and retried at meeting start.
   try {
-    appState.prewarmSttProviders();
+    if (localModelsDisabled()) {
+      console.warn('[LeakTest] Skipping STT pre-warm (NATIVELY_NO_LOCAL_MODELS=1)');
+    } else {
+      appState.prewarmSttProviders();
+    }
   } catch (err) {
     console.warn('[Init] STT pre-warm threw (non-fatal):', err);
   }
@@ -7152,6 +7181,10 @@ if (process.env.THINKING_MATRIX === '1') {
       console.log('[LocalFallbackPreflight] skipped — app is quitting');
       return;
     }
+    if (localModelsDisabled()) {
+      console.warn('[LeakTest] Skipping LocalFallbackPreflight (NATIVELY_NO_LOCAL_MODELS=1)');
+      return;
+    }
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
       const { runLocalFallbackPreflight } = require('./services/LocalFallbackPreflight');
@@ -7169,6 +7202,10 @@ if (process.env.THINKING_MATRIX === '1') {
   // use, so this only moves startup CPU work out of the visible launch path.
   setTimeout(() => {
     try {
+      if (localModelsDisabled()) {
+        console.warn('[LeakTest] Skipping intent-classifier warmup (NATIVELY_NO_LOCAL_MODELS=1)');
+        return;
+      }
       warmupIntentClassifier();
     } catch (err) {
       console.warn('[Init] Intent classifier warmup scheduling failed (non-fatal):', err);
