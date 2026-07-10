@@ -612,6 +612,12 @@ export class LocalWhisperSTT extends EventEmitter {
     /* ──────────────── Worker lifecycle ──────────────── */
 
     private async spawnWorker(): Promise<void> {
+        // DIAGNOSTIC (2026-07-11): NATIVELY_NO_LOCAL_MODELS=1 forbids the on-device
+        // Whisper ONNX worker (local-model leak-isolation test). local-whisper STT
+        // is opt-in, but gate the spawn so nothing on-device loads under the flag.
+        if (process.env.NATIVELY_NO_LOCAL_MODELS === '1') {
+            throw new Error('LocalWhisperSTT disabled (NATIVELY_NO_LOCAL_MODELS=1)');
+        }
         const warm = modelPreloader.takeWarmWorker(this.modelId);
         if (warm) {
             console.log(`[LocalWhisperSTT] Using preloaded warm worker for ${this.modelId}`);
