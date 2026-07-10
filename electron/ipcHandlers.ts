@@ -183,6 +183,95 @@ export function initializeIpcHandlers(appState: AppState): void {
     ipcMain.on(channel, listener);
   };
 
+  const broadcastCredentialsChanged = (): void => {
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) win.webContents.send('credentials-changed');
+    });
+  };
+
+  const refreshRuntimeDefaultIfUnavailable = async (): Promise<string | null> => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      const defaultModel = cm.getDefaultModel();
+      const curlProviders = cm.getCurlProviders() || [];
+      const legacyProviders = cm.getCustomProviders() || [];
+      const allProviders = [...curlProviders, ...legacyProviders];
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      const codexConfig = llmHelper.getCodexCliConfig();
+      let codexSignedIn = false;
+      try {
+        const { CodexOAuthService } = require('./services/CodexOAuthService');
+        codexSignedIn = CodexOAuthService.getInstance().getStatus().signedIn === true;
+      } catch { /* optional */ }
+
+      const has = (value?: string) => !!(value && value.trim().length > 0);
+      const isKnownGroqModel = (modelId: string): boolean => {
+        return modelId.startsWith('llama-')
+          || modelId.startsWith('mixtral-')
+          || modelId.startsWith('gemma-')
+          || modelId.startsWith('meta-llama/')
+          || modelId.startsWith('qwen/')
+          || modelId.startsWith('openai/gpt-oss-'); // Groq-hosted OpenAI OSS models, not OpenAI API models.
+      };
+      const modelAvailable = (modelId: string): boolean => {
+        if (!modelId) return false;
+        if (modelId === 'natively') return has(cm.getNativelyApiKey());
+        if (modelId.startsWith('codex-cli')) return codexConfig.enabled === true && codexSignedIn;
+        if (modelId.startsWith('litellm/')) return has(cm.getLitellmBaseURL());
+        if (modelId.startsWith('ollama-')) return true; // live Ollama probe happens at execution time
+        if (allProviders.some((p: any) => p?.id === modelId)) return true;
+        if (modelId.startsWith('gemini-') || modelId.startsWith('models/')) return has(cm.getGeminiApiKey());
+        // Check Groq before the broad OpenAI catch-all so Groq-hosted ids such as
+        // openai/gpt-oss-120b are gated by the Groq key, not the OpenAI key.
+        if (isKnownGroqModel(modelId)) return has(cm.getGroqApiKey());
+        if (modelId.startsWith('gpt-') || modelId.startsWith('o1-') || modelId.startsWith('o3-') || modelId.includes('openai')) return has(cm.getOpenaiApiKey());
+        if (modelId.startsWith('claude-')) return has(cm.getClaudeApiKey());
+        if (/^deepseek-v/i.test(modelId)) return has(cm.getDeepseekApiKey());
+        // Intentional conservative fallback: unknown model ids may belong to saved
+        // custom providers/extensions this helper cannot classify. Do not reset them
+        // automatically; execution-time routing remains the source of truth.
+        return true;
+      };
+
+      if (modelAvailable(defaultModel)) return null;
+
+      let litellmFallbackModel: string | null = null;
+      if (has(cm.getLitellmBaseURL())) {
+        try {
+          const baseURL = (cm.getLitellmBaseURL() || 'http://localhost:4000/v1').replace(/\/+$/, '');
+          const apiKey = cm.getLitellmApiKey();
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+          if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+          const resp = await fetch(`${baseURL}/models`, { method: 'GET', headers, signal: AbortSignal.timeout(2500) });
+          if (resp.ok) {
+            const data: any = await resp.json();
+            const firstModel = (data?.data || []).map((m: any) => m?.id).find(Boolean);
+            if (firstModel) litellmFallbackModel = `litellm/${firstModel}`;
+          }
+        } catch { /* LiteLLM fallback discovery best-effort */ }
+      }
+
+      const next = has(cm.getNativelyApiKey()) ? 'natively'
+        : has(cm.getGeminiApiKey()) ? 'gemini-3.5-flash'
+        : has(cm.getOpenaiApiKey()) ? 'gpt-5.4'
+        : has(cm.getClaudeApiKey()) ? 'claude-sonnet-4-6'
+        : has(cm.getGroqApiKey()) ? 'llama-3.3-70b-versatile'
+        : has(cm.getDeepseekApiKey()) ? 'deepseek-v4-flash'
+        : (codexConfig.enabled === true && codexSignedIn) ? 'codex-cli'
+        : litellmFallbackModel
+          || allProviders[0]?.id
+          || 'natively';
+      cm.setDefaultModel(next);
+      llmHelper.setModel(next, allProviders);
+      appState.broadcast('model-changed', next);
+      return next;
+    } catch (error: any) {
+      console.warn('[IPC] default model availability refresh failed:', error?.message || error);
+      return null;
+    }
+  };
+
   const escapeXmlText = (text: string): string =>
     text
       .replace(/&/g, '&amp;')
@@ -1046,6 +1135,48 @@ export function initializeIpcHandlers(appState: AppState): void {
             console.warn('[SOURCE-ARBITER] skipped (non-fatal):', arbiterErr?.message);
           }
         }
+
+        // ── CONTEXT OS (Phase 7, 2026-07-10) ────────────────────────────────
+        // Build the TurnContextContract from the SAME sourceAuthority the
+        // legacy arbiter computed, so the two systems agree by construction.
+        // Null when Context OS is off for this surface OR the arbiter failed —
+        // every consumer below treats null as "legacy behavior, unchanged".
+        // The contract separates answerShape/sourceOwner/requestedProperty/
+        // voicePerspective and issues least-privilege source capabilities; the
+        // gates below consult it in ADDITION to (never instead of) the legacy
+        // ownership decision, so Context OS can only ever be MORE restrictive.
+        let turnContract: import('./intelligence/context-os').TurnContextContract | null = null;
+        try {
+          if (manualSourceContract) {
+            const { buildTurnContractIfEnabled } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+            turnContract = buildTurnContractIfEnabled({
+              surface: 'manual_chat',
+              question: String(message || ''),
+              activeModeId: manualActiveMode?.id ?? null,
+              activeModeName: manualActiveMode?.name ?? null,
+              sourceAuthority: manualSourceContract.sourceAuthority,
+              answerType: answerPlan.answerType,
+              plannerVoicePerspective: answerPlan.voicePerspective,
+              hasReferenceFiles: Boolean((manualActiveMode as any)?.hasReferenceFiles),
+              hasProfileFacts: _hasProfileFactsForTurn,
+              hasLiveTranscript: Boolean(intelligenceManager.getFormattedContext(100)?.trim()),
+            });
+            if (turnContract && isIntelligenceFlagEnabled('trace')) {
+              const { buildContextOsTrace, logContextOsTrace } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+              logContextOsTrace(buildContextOsTrace({
+                contract: turnContract,
+                sourceAuthority: manualSourceContract.sourceAuthority,
+                question: String(message || ''),
+                finalAction: 'answer', // provisional; the post-stream trace records the real outcome
+              }));
+            }
+          }
+        } catch (contextOsErr: any) {
+          // Context OS is additive — a kernel failure must never break chat.
+          if (isIntelligenceFlagEnabled('trace')) {
+            console.warn('[CONTEXT-OS] contract build skipped (non-fatal):', contextOsErr?.message);
+          }
+        }
         let isCodingChat = isCodingAnswerType(answerPlan.answerType);
         chatTrace.mark('answer_type_selected', { answerType: answerPlan.answerType, isCoding: isCodingChat });
         piTelemetry.emit('pi_answer_plan_created', { answerType: answerPlan.answerType, surface: 'manual', isCoding: isCodingChat, profilePolicy: answerPlan.profileContextPolicy, answerStyle: answerPlan.answerStyle });
@@ -1270,6 +1401,66 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Selected evidence is packed into a compact prompt block and the provider
         // writes the final answer below through the normal streamChat path.
         const isStealthChat = isStealthEvasionQuestion(message);
+
+        // ── CONTEXT OS CLARIFICATION SHORT-CIRCUIT (Phase 4, invariant 14) ──
+        // When the kernel resolves sourceOwner='clarify' (a general/ambiguous
+        // mode where more than one source universe could own an ambiguous noun
+        // like "project"), the correct behavior is to ASK, not guess. This
+        // short-circuits BEFORE any factual retriever or provider call: no
+        // profile, no document, no Hindsight retrieval; no generation. The
+        // clarification is a fixed, source-honest, PII-free string that only
+        // offers the universes that actually exist this turn. It is stored as a
+        // conversational message but is NOT authoritative factual memory.
+        //
+        // Gated on `contextOsPropertyValidation` (the active-enforcement family
+        // flag, default OFF in prod) AND the contract existing AND not a
+        // coding/image/stealth turn. Flag OFF / null contract → legacy behavior
+        // (answer generated as before) — additive and reversible.
+        if (turnContract
+            && turnContract.sourceOwner === 'clarify'
+            && isIntelligenceFlagEnabled('contextOsPropertyValidation')
+            && !isCodingChat
+            && !imagePaths?.length
+            && !isStealthChat) {
+          try {
+            const { buildSourceClarification } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+            const clarify = buildSourceClarification({
+              hasReferenceFiles: Boolean((manualActiveMode as any)?.hasReferenceFiles),
+              hasProfileFacts: _hasProfileFactsForTurn,
+              hasLiveTranscript: Boolean(intelligenceManager.getFormattedContext(100)?.trim()),
+            });
+            if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) return null;
+            event.sender.send('gemini-stream-token', clarify);
+            event.sender.send('gemini-stream-done', { finalText: clarify });
+            try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), clarify); } catch (_) { /* noop */ }
+            try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), clarify); } catch (_) { /* noop */ }
+            const clarifyWrite = decideSessionWritePolicy({ finalGenerationMode: 'source_safe_refusal', validationOk: true, sourceContractHonored: true });
+            intelligenceManager.addAssistantMessage(clarify, clarifyWrite);
+            intelligenceManager.logUsage('chat', message, clarify);
+            chatTrace.markFirstUseful({ via: 'context_os_clarification' });
+            chatTrace.mark('response_completed', { chars: clarify.length, deterministic: true, finalGenerationMode: 'source_safe_refusal' });
+            chatTrace.finish({ chars: clarify.length });
+            iTrace.setRouting({ answerType: answerPlan.answerType, deterministicFastPathUsed: true }).noteFallback('context_os_clarification');
+            if (isIntelligenceFlagEnabled('trace')) {
+              const { buildContextOsTrace, logContextOsTrace } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+              logContextOsTrace(buildContextOsTrace({
+                contract: turnContract,
+                sourceAuthority: manualSourceContract?.sourceAuthority ?? 'ask_if_ambiguous',
+                question: String(message || ''),
+                usedSources: [],
+                finalAction: 'clarify',
+              }));
+            }
+            commitTrace(iTrace);
+            _emitAttr({ answer_type: answerPlan.answerType });
+            return null;
+          } catch (clarErr: any) {
+            if (isIntelligenceFlagEnabled('trace')) {
+              console.warn('[CONTEXT-OS] clarification short-circuit skipped (non-fatal):', clarErr?.message);
+            }
+          }
+        }
+
         const legacyDocGuardEligible = answerPlan.answerType !== 'lecture_answer';
         // Staged source-owner enforcement (plan §6): `off` bypasses the resolver
         // decision entirely (legacy doc-guard only); every other stage
@@ -1277,9 +1468,20 @@ export function initializeIpcHandlers(appState: AppState): void {
         // blocking posture, so this pass stays leak-safe unless explicitly dialed
         // to `off` via NATIVELY_SOURCE_OWNER_ENFORCEMENT_STAGE.
         const _ownerEnforcementOff = getSourceOwnerEnforcementStage() === 'off';
-        const sourceOwnershipAllowsProfile = (manualOwnership && !_ownerEnforcementOff)
+        // CONTEXT OS (Phase 7): the TurnContextContract must ALSO grant profile
+        // evidence for the fast path to run. Null contract (flag off / kernel
+        // error) → legacy behavior. This can only NARROW the legacy decision —
+        // never widen it — so wiring it is leak-safe by construction.
+        const _contractAllowsProfile = (() => {
+          if (!turnContract) return true; // legacy path decides alone
+          try {
+            const { allowsEvidence } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+            return allowsEvidence(turnContract, 'profile_resume') || allowsEvidence(turnContract, 'profile_project');
+          } catch { return true; }
+        })();
+        const sourceOwnershipAllowsProfile = ((manualOwnership && !_ownerEnforcementOff)
           ? manualOwnership.profileAllowed
-          : legacyDocGuardEligible;
+          : legacyDocGuardEligible) && _contractAllowsProfile;
         const profileEvidenceEligible = !imagePaths?.length && !isCodingChat
           && !isAssistantIdentityQuestion(message)
           && !isStealthChat
@@ -1641,7 +1843,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         const _hindsightOwnerAllows = (manualOwnership && !_ownerEnforcementOff)
           ? (manualOwnership.owner === 'mixed' || manualOwnership.owner === 'transcript')
           : true;
+        // CONTEXT OS (Phase 7): the contract's memoryReadPolicy must also allow
+        // Hindsight. Null contract → legacy decision alone. Narrowing only.
+        const _contractAllowsHindsight = turnContract ? turnContract.memoryReadPolicy.allowHindsight : true;
         if (!isCodingChat && !isContractEnforced
+            && _contractAllowsHindsight
             && !(_isDocGroundedTurn && isIntelligenceFlagEnabled('docGroundedStrictIsolation'))
             && _hindsightOwnerAllows
             && isIntelligenceFlagEnabled('hindsightLiveRecall')
@@ -1659,7 +1865,21 @@ export function initializeIpcHandlers(appState: AppState): void {
               const recallMs = Date.now() - t0;
               const facts = memories.map((m) => m?.text?.trim()).filter(Boolean) as string[];
               if (facts.length > 0) {
-                const memBlock = `<long_term_memory trust="low" authority="non_authoritative">\nThese memories are from prior meetings, may be incomplete, and must not override current sources. Use only if they help answer the question; ignore if irrelevant.\n${facts.map((f) => `- ${f}`).join('\n')}\n</long_term_memory>`;
+                // CONTEXT OS (Phase 10, 2026-07-10): when the turn contract
+                // exists, render the PROVENANCE-TAGGED memory block (per-fact
+                // source kind + id + confidence + validated flag, referent-only
+                // purpose) instead of bare bullets, so a recalled fact is
+                // distinguishable from a generated one. Legacy block otherwise.
+                let memBlock = '';
+                if (turnContract) {
+                  try {
+                    const { toRecalledMemoryEvidence, renderHindsightRecallBlock } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                    memBlock = renderHindsightRecallBlock(toRecalledMemoryEvidence(memories, turnContract));
+                  } catch { memBlock = ''; }
+                }
+                if (!memBlock) {
+                  memBlock = `<long_term_memory trust="low" authority="non_authoritative">\nThese memories are from prior meetings, may be incomplete, and must not override current sources. Use only if they help answer the question; ignore if irrelevant.\n${facts.map((f) => `- ${f}`).join('\n')}\n</long_term_memory>`;
+                }
                 context = context ? `${memBlock}\n\n${context}` : memBlock;
                 _attr.hindsight_recall_used = true;
                 _attr.hindsight_recall_count = facts.length;
@@ -1711,7 +1931,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         // When the arbiter threw (manualOwnership null) this defaults to the
         // legacy behavior (profile permitted) — the docGroundedOrUnknown check
         // above still fires, so no regression and no new leak.
-        const ownershipAllowsProfileEvidence = manualOwnership ? manualOwnership.profileAllowed : true;
+        // CONTEXT OS (Phase 7): capability check joins the legacy ownership
+        // decision (narrowing only — see _contractAllowsProfile above).
+        const ownershipAllowsProfileEvidence = (manualOwnership ? manualOwnership.profileAllowed : true)
+          && _contractAllowsProfile;
         // Mutual exclusion with the JIT profile route: when selectManualProfileEvidence
         // already supplied a compact, source-labelled allowed_evidence block (and the
         // system prompt told the model to answer ONLY from it), skip the OKF profile
@@ -2779,7 +3002,51 @@ export function initializeIpcHandlers(appState: AppState): void {
                 isIncomplete = detect.incomplete;
               } catch { incompleteMissing = []; isIncomplete = false; }
 
-              const reason = isGreeting ? 'greeting'
+              // ── CONTEXT OS property-aware validation (Phase 7, 2026-07-10) ──
+              // A CONFIDENT answer to a property question (funding / cost /
+              // controller / phases / …) whose retrieved evidence lacks that
+              // property's vocabulary is unsupported: topic overlap is not
+              // proof (collaboration ≠ funding). Ship the honest refusal
+              // instead. Gated on contextOsPropertyValidation (default OFF) +
+              // the turn contract existing; an honest refusal answer is never
+              // flagged (it makes no property claim). This check can only
+              // DOWNGRADE a confident-but-unsupported answer to an honest
+              // refusal — it never invents content, so it cannot fabricate.
+              let propertyUnsupported = false;
+              let propertyRefusalLine = '';
+              try {
+                if (turnContract
+                    && turnContract.sourceOwner === 'reference_files'
+                    && turnContract.requestedProperty !== 'unknown'
+                    && isIntelligenceFlagEnabled('contextOsPropertyValidation')
+                    && docContextBlock
+                    && trimmed.length >= 8) {
+                  const answerIsRefusal = /not (?:directly )?(?:mentioned|specified|stated|provided|found|present)|could ?n[o']t find|no (?:information|mention|data)/i.test(trimmed);
+                  if (!answerIsRefusal) {
+                    const { textCanProveProperty, buildInsufficientPropertyAnswer } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                    if (!textCanProveProperty(docContextBlock, turnContract.requestedProperty)) {
+                      propertyUnsupported = true;
+                      propertyRefusalLine = buildInsufficientPropertyAnswer({ property: turnContract.requestedProperty });
+                      piTelemetry.emit('pi_doc_grounded_validation_failed', { reason: 'property_unsupported' });
+                      if (isIntelligenceFlagEnabled('trace')) {
+                        console.log('[CONTEXT-OS] property_unsupported', {
+                          requestedProperty: turnContract.requestedProperty,
+                          answerChars: trimmed.length,
+                        });
+                      }
+                    }
+                  }
+                }
+              } catch { propertyUnsupported = false; }
+              if (propertyUnsupported && propertyRefusalLine) {
+                fullResponse = propertyRefusalLine;
+                finalText = propertyRefusalLine;
+                // An evidence-refusal is honest but not authoritative memory.
+                blockedFromSessionTracker = true;
+              }
+
+              const reason = propertyUnsupported ? null // handled above — no regen can conjure missing evidence
+                : isGreeting ? 'greeting'
                 : isEmpty ? 'empty'
                 : isExactRepeat ? 'exact_repeat_of_prior_answer'
                 : isFalseRefusal ? 'false_refusal'
@@ -3016,6 +3283,48 @@ export function initializeIpcHandlers(appState: AppState): void {
               intelligenceManager.addAssistantMessage(fullResponse, sessionWriteDecision);
               // Log Usage for streaming chat
               intelligenceManager.logUsage('chat', message, fullResponse);
+              // CONTEXT OS memory safety (Phase 9, 2026-07-10): persist the
+              // answer's factual CLAIMS separately from the conversational
+              // message, default validation_status='unverified'. Only VERIFIED
+              // claims (with evidence pointers) may ever re-enter a prompt as
+              // evidence — the write here does NOT make them reusable. Also
+              // snapshots the turn contract (privacy-safe: source kinds only,
+              // no content) so contamination incidents replay from the trace.
+              if (turnContract && isIntelligenceFlagEnabled('contextOsMemorySafetyEnabled')) {
+                try {
+                  const { extractCandidateClaims } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                  const { DatabaseManager } = require('./db/DatabaseManager');
+                  const dbm = DatabaseManager.getInstance();
+                  const { randomUUID } = require('crypto') as typeof import('crypto');
+                  for (const claimText of extractCandidateClaims(fullResponse).slice(0, 20)) {
+                    dbm.saveAssistantClaim({
+                      claimId: randomUUID(),
+                      turnId: turnContract.turnId,
+                      claimText,
+                      sourceOwner: turnContract.sourceOwner,
+                      requestedProperty: turnContract.requestedProperty,
+                      validationStatus: 'unverified',
+                      evidenceIds: [],
+                    });
+                  }
+                  dbm.saveTurnContextContract({
+                    turnId: turnContract.turnId,
+                    surface: turnContract.surface,
+                    activeModeId: turnContract.activeModeId,
+                    answerShape: turnContract.answerShape,
+                    sourceOwner: turnContract.sourceOwner,
+                    requestedProperty: turnContract.requestedProperty,
+                    allowedSources: turnContract.allowedSources.map((c) => c.sourceKind),
+                    forbiddenSources: turnContract.forbiddenSources,
+                    memoryWritePolicy: turnContract.memoryWritePolicy as any,
+                  });
+                } catch (claimErr: any) {
+                  // Claim persistence is additive telemetry — never break chat.
+                  if (isIntelligenceFlagEnabled('trace')) {
+                    console.warn('[CONTEXT-OS] claim persistence skipped (non-fatal):', claimErr?.message);
+                  }
+                }
+              }
               // Conversation Memory V2 (Phase 11): record this turn so a later bare
               // follow-up in this session can resolve against it. GATED on the flag
               // (2026-06-14 fix): previously recorded unconditionally, which retained raw
@@ -3979,10 +4288,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         const ragManager = appState.getRAGManager();
         if (ragManager) {
           ragManager.initializeEmbeddings({
-            openaiKey: cm.getOpenaiApiKey() || process.env.OPENAI_API_KEY || undefined,
+            openaiKey: cm.getOpenaiApiKey() || undefined,
             geminiKey: apiKey || undefined,
             ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
             providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })(),
+            explicitKeyManagement: true,
           });
           appState.scheduleModeReferenceIndexRetry();
         }
@@ -3993,6 +4303,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       // but only when the key genuinely changed.
       if (keyChanged) {
         try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('Gemini'); } catch { /* optional */ }
+        await refreshRuntimeDefaultIfUnavailable();
+        broadcastCredentialsChanged();
       }
 
       return { success: true };
@@ -4021,6 +4333,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Hindsight: see set-gemini-api-key for rationale (only when the key changed).
       if (keyChanged) {
         try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('Groq'); } catch { /* optional */ }
+        await refreshRuntimeDefaultIfUnavailable();
+        broadcastCredentialsChanged();
       }
 
       return { success: true };
@@ -4055,9 +4369,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         if (ragManager) {
           ragManager.initializeEmbeddings({
             openaiKey: apiKey || undefined,
-            geminiKey: cm.getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || undefined,
+            geminiKey: cm.getGeminiApiKey() || undefined,
             ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
             providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })(),
+            explicitKeyManagement: true,
           });
           appState.scheduleModeReferenceIndexRetry();
         }
@@ -4066,6 +4381,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Hindsight: see set-gemini-api-key for rationale (only when the key changed).
       if (keyChanged) {
         try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('OpenAI'); } catch { /* optional */ }
+        await refreshRuntimeDefaultIfUnavailable();
+        broadcastCredentialsChanged();
       }
 
       return { success: true };
@@ -4094,6 +4411,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Hindsight: see set-gemini-api-key for rationale (only when the key changed).
       if (keyChanged) {
         try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('Claude'); } catch { /* optional */ }
+        await refreshRuntimeDefaultIfUnavailable();
+        broadcastCredentialsChanged();
       }
 
       return { success: true };
@@ -4122,6 +4441,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Hindsight: see set-gemini-api-key for rationale (only when the key changed).
       if (keyChanged) {
         try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('DeepSeek'); } catch { /* optional */ }
+        await refreshRuntimeDefaultIfUnavailable();
+        broadcastCredentialsChanged();
       }
 
       return { success: true };
@@ -4142,10 +4463,18 @@ export function initializeIpcHandlers(appState: AppState): void {
       // nudge and erodes trust in the prompt.
       const prevKey = cm.getLitellmApiKey() || '';
       const prevUrl = cm.getLitellmBaseURL() || '';
-      const newKey = config?.apiKey || '';
+      const prevMaxTokens = cm.getLitellmMaxTokens();
       const newUrl = config?.baseURL || '';
-      const changed = prevKey !== newKey || prevUrl !== newUrl;
-      cm.setLitellmConfig(newKey, newUrl, config?.maxTokens);
+      const requestedKey = config?.apiKey || '';
+      const effectiveNewKey = newUrl.trim() ? (requestedKey.trim() || prevKey) : '';
+      const requestedMaxTokens = Number(config?.maxTokens);
+      const effectiveNewMaxTokens = Number.isFinite(requestedMaxTokens) && requestedMaxTokens > 0
+        ? Math.floor(requestedMaxTokens)
+        : undefined;
+      const changed = prevKey !== effectiveNewKey
+        || prevUrl !== newUrl
+        || (prevMaxTokens || undefined) !== effectiveNewMaxTokens;
+      cm.setLitellmConfig(requestedKey, newUrl, config?.maxTokens);
 
       // Update the LLMHelper with the EFFECTIVE stored key — a blank apiKey on
       // re-save means "keep the stored one" (the field is masked in Settings),
@@ -4162,6 +4491,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       // genuinely changed.
       if (changed) {
         try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('LiteLLM'); } catch { /* optional */ }
+        await refreshRuntimeDefaultIfUnavailable();
+        broadcastCredentialsChanged();
       }
 
       return { success: true };
@@ -4234,9 +4565,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // (Previously this refresh came transitively from the renderer's extra
       // setSttProvider() call, which we removed to kill the double-reconfigure
       // race — so the broadcast now has to happen here, at the source of truth.)
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('credentials-changed');
-      });
+      broadcastCredentialsChanged();
 
       // Auto-activate Natively Pro for pro/max/ultra API plans.
       // Skips silently if the user already has a Gumroad/Dodo lifetime license.
@@ -4864,6 +5193,8 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().saveCurlProvider(provider as any);
+      await refreshRuntimeDefaultIfUnavailable();
+      broadcastCredentialsChanged();
       return { success: true };
     } catch (error: any) {
       console.error('Error saving custom provider:', error);
@@ -4877,6 +5208,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Try deleting from both storages to be safe
       CredentialsManager.getInstance().deleteCurlProvider(id);
       CredentialsManager.getInstance().deleteCustomProvider(id);
+      await refreshRuntimeDefaultIfUnavailable();
+      broadcastCredentialsChanged();
       return { success: true };
     } catch (error: any) {
       console.error('Error deleting custom provider:', error);
@@ -5220,6 +5553,15 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('set-openai-stt-base-url', async (_, url: string) => {
     try {
+      // SSRF guard: the base URL is later used as the host of the STT upload,
+      // which carries the user's OpenAI key. Reject loopback/private/non-HTTPS
+      // targets before persisting. Empty clears back to api.openai.com.
+      const { validateSttBaseUrl } = require('./utils/curlUtils');
+      const urlCheck = validateSttBaseUrl(url);
+      if (!urlCheck.isValid) {
+        console.warn('[IPC] Blocked set-openai-stt-base-url', { reason: urlCheck.reason });
+        return { success: false, error: `Invalid STT base URL: ${urlCheck.reason}` };
+      }
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setOpenAiSttBaseUrl(url);
       // Reconfigure the active pipeline so the new endpoint is used immediately,
@@ -5297,6 +5639,15 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('set-azure-region', async (_, region: string) => {
     try {
+      // SSRF guard: region is interpolated into the Azure STT hostname
+      // (`https://${region}.stt.speech.microsoft.com/...`). Only accept the
+      // real region-slug shape so a renderer cannot redirect the key-bearing
+      // request to an arbitrary host.
+      const { isValidSttRegion } = require('./utils/curlUtils');
+      if (!isValidSttRegion(region)) {
+        console.warn('[IPC] Blocked set-azure-region: invalid region shape');
+        return { success: false, error: 'Invalid Azure region' };
+      }
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setAzureRegion(region);
 
@@ -5345,6 +5696,13 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('set-ibmwatson-region', async (_, region: string) => {
     try {
+      // SSRF guard: region is interpolated into the IBM Watson STT hostname
+      // (`https://api.${region}.speech-to-text.watson.cloud.ibm.com/...`).
+      const { isValidSttRegion } = require('./utils/curlUtils');
+      if (!isValidSttRegion(region)) {
+        console.warn('[IPC] Blocked set-ibmwatson-region: invalid region shape');
+        return { success: false, error: 'Invalid IBM Watson region' };
+      }
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setIbmWatsonRegion(region);
 
@@ -5369,6 +5727,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // here — NOT in the renderer — means the raw key never round-trips back into
   // renderer state, so the masked-key regression cannot recur.
   const { USE_STORED_KEY_SENTINEL, resolveSttTestKey } = require('./services/CredentialsManager');
+  const { isValidSttRegion } = require('./utils/curlUtils');
 
   safeHandle(
     'test-stt-connection',
@@ -5389,6 +5748,14 @@ export function initializeIpcHandlers(appState: AppState): void {
           return { success: false, error: resolved.error };
         }
         apiKey = resolved.apiKey;
+
+        // SSRF guard (defense in depth): for azure/ibmwatson the region param is
+        // interpolated into the endpoint hostname below. Reject anything that is
+        // not a real region slug before building the URL, mirroring the
+        // set-*-region setters.
+        if ((provider === 'azure' || provider === 'ibmwatson') && !isValidSttRegion(region)) {
+          return { success: false, error: 'Invalid region' };
+        }
 
         if (provider === 'deepgram') {
           const WebSocket = require('ws');
@@ -6143,7 +6510,11 @@ export function initializeIpcHandlers(appState: AppState): void {
   codexOAuth.on('login:complete', (info: any) => broadcastCodexLoginEvent('login:complete', info));
   codexOAuth.on('login:failed', (err: Error) => broadcastCodexLoginEvent('login:failed', { message: err?.message || String(err) }));
   codexOAuth.on('tokens:refreshed', (info: any) => broadcastCodexLoginEvent('tokens:refreshed', info));
-  codexOAuth.on('signed-out', () => broadcastCodexLoginEvent('signed-out', undefined));
+  codexOAuth.on('signed-out', async () => {
+    broadcastCodexLoginEvent('signed-out', undefined);
+    await refreshRuntimeDefaultIfUnavailable();
+    broadcastCredentialsChanged();
+  });
 
   safeHandle('codex:login-status', () => {
     try {

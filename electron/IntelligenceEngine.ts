@@ -1328,6 +1328,114 @@ export class IntelligenceEngine extends EventEmitter {
             const contextRoute = buildContextRoute(answerPlan);
             trace.mark('context_selected', summarizeContextRoute(contextRoute));
 
+            // ── CONTEXT OS (Phase 8, 2026-07-10) ────────────────────────────
+            // Build the WTA TurnContextContract from the SAME mode-derived
+            // sourceAuthority the legacy arbiter computes. Null when Context OS
+            // is off (flag) or the kernel fails — every consumer treats null as
+            // legacy behavior. Consumers below: (a) candidateProfile suppression
+            // when the contract denies profile evidence (doc-grounded WTA), and
+            // (b) the profile-repair gate (closes the WTA regen leak where the
+            // repair re-opened profile in doc-grounded turns — baseline §5.5).
+            // Narrowing only: the contract can only REMOVE context, never add.
+            let wtaTurnContract: import('./intelligence/context-os').TurnContextContract | null = null;
+            try {
+                const { buildCustomModeExecutionContract: _bldC } = require('./llm/customModeExecutionContract');
+                const { buildTurnContractIfEnabled } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                const _wtaQ2 = question || extractedQuestion.latestQuestion || lastInterviewerTurn || '';
+                const _hasProfile2 = Boolean((this.llmHelper.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data);
+                const _legacyContract2 = _bldC({
+                    question: String(_wtaQ2),
+                    streamRoute: 'wta_live',
+                    modeId: snapshotModeId ?? null,
+                    modeUniqueId: snapshotModeId ?? null,
+                    answerType: answerPlan.answerType,
+                    isCustomMode: snapshotModeInfo?.isCustom === true,
+                    isDocGroundedCustomModeActive: documentGroundedCustomModeActive,
+                    hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
+                    hasCustomPrompt: Boolean((snapshotModeInfo as any)?.hasCustomPrompt),
+                    hasLiveTranscript: true,
+                    hasProfileFacts: _hasProfile2,
+                    hasMeetingRag: false,
+                    hasLongTermMemory: false,
+                });
+                wtaTurnContract = buildTurnContractIfEnabled({
+                    surface: 'what_to_answer',
+                    question: String(_wtaQ2),
+                    activeModeId: snapshotModeId ?? null,
+                    activeModeName: snapshotModeInfo?.name ?? null,
+                    sourceAuthority: _legacyContract2.sourceAuthority,
+                    answerType: answerPlan.answerType,
+                    plannerVoicePerspective: answerPlan.voicePerspective,
+                    hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
+                    hasProfileFacts: _hasProfile2,
+                    hasLiveTranscript: true,
+                });
+                if (wtaTurnContract) {
+                    const { allowsEvidence } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                    const contractAllowsProfileWta = allowsEvidence(wtaTurnContract, 'profile_resume')
+                        || allowsEvidence(wtaTurnContract, 'profile_project');
+                    if (!contractAllowsProfileWta && candidateProfile) {
+                        // Doc-grounded / transcript-owned WTA turn: the candidate
+                        // profile grounding must not reach the prompt at all.
+                        candidateProfile = '';
+                        trace.mark('context_selected', { via: 'context_os_profile_suppressed', sourceOwner: wtaTurnContract.sourceOwner } as any);
+                    }
+                    if (isIntelligenceFlagEnabled('trace')) {
+                        const { buildContextOsTrace, logContextOsTrace } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                        logContextOsTrace(buildContextOsTrace({
+                            contract: wtaTurnContract,
+                            sourceAuthority: _legacyContract2.sourceAuthority,
+                            question: String(_wtaQ2),
+                            finalAction: 'answer',
+                        }));
+                    }
+                }
+            } catch (contextOsWtaErr: any) {
+                // Context OS is additive — a kernel failure must never break WTA.
+                if (isIntelligenceFlagEnabled('trace')) {
+                    console.warn('[CONTEXT-OS] WTA contract build skipped (non-fatal):', contextOsWtaErr?.message);
+                }
+            }
+
+            // ── CONTEXT OS CLARIFICATION SHORT-CIRCUIT (Phase 5, invariant 14) ──
+            // When the kernel resolves sourceOwner='clarify', WTA must ASK which
+            // source universe the user means instead of guessing. Short-circuits
+            // BEFORE the provider call (no generation). Gated on
+            // contextOsPropertyValidation (default OFF) + a non-speculative turn
+            // (a speculative pre-emission must never surface a clarification).
+            // Flag OFF / null contract → legacy behavior (answer generated).
+            if (wtaTurnContract
+                && wtaTurnContract.sourceOwner === 'clarify'
+                && isIntelligenceFlagEnabled('contextOsPropertyValidation')
+                && !isSpeculative) {
+                try {
+                    const { buildSourceClarification, buildContextOsTrace, logContextOsTrace } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                    const clarify = buildSourceClarification({
+                        hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
+                        hasProfileFacts: Boolean((this.llmHelper.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data),
+                        hasLiveTranscript: true, // WTA is always transcript-driven
+                    });
+                    this.session.addAssistantMessage(clarify);
+                    this.emit('suggested_answer', clarify, extractedQuestion.latestQuestion || question || 'inferred', 0.9);
+                    trace.mark('repair_used', { reason: 'context_os_clarification' });
+                    if (isIntelligenceFlagEnabled('trace')) {
+                        logContextOsTrace(buildContextOsTrace({
+                            contract: wtaTurnContract,
+                            sourceAuthority: wtaTurnContract.reason,
+                            question: String(extractedQuestion.latestQuestion || question || ''),
+                            usedSources: [],
+                            finalAction: 'clarify',
+                        }));
+                    }
+                    this.setMode('idle');
+                    return clarify;
+                } catch (clarErr: any) {
+                    if (isIntelligenceFlagEnabled('trace')) {
+                        console.warn('[CONTEXT-OS] WTA clarification short-circuit skipped (non-fatal):', clarErr?.message);
+                    }
+                }
+            }
+
             const screenContext = options?.screenContext;
             console.log('[IntelligenceEngine] Temporal RAG', {
                 previousResponses: temporalContext.previousResponses.length,
@@ -1654,7 +1762,19 @@ export class IntelligenceEngine extends EventEmitter {
             // the happy path adds ZERO latency.
             try {
                 const profileLoaded = Boolean(candidateProfile && candidateProfile.trim().length > 0);
-                if (profileLoaded && answerPlan.voicePerspective === 'first_person_candidate') {
+                // CONTEXT OS (Phase 8): the profile REPAIR may not re-open a
+                // source the contract denied (WTA regen leak — baseline §5.5).
+                // candidateProfile is already cleared above when the contract
+                // denies profile, so profileLoaded is false; this explicit
+                // check is defense-in-depth against future re-population.
+                const contractPermitsProfileRepair = (() => {
+                    if (!wtaTurnContract) return true;
+                    try {
+                        const { allowsEvidence } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                        return allowsEvidence(wtaTurnContract, 'profile_resume') || allowsEvidence(wtaTurnContract, 'profile_project');
+                    } catch { return true; }
+                })();
+                if (profileLoaded && contractPermitsProfileRepair && answerPlan.voicePerspective === 'first_person_candidate') {
                     // PI v3 (W6a): EVIDENCE-composing validation on the LIVE path —
                     // upgrades the output-only check to also flag FABRICATED
                     // metrics ("improved retention by 25%") absent from the
@@ -2111,12 +2231,37 @@ export class IntelligenceEngine extends EventEmitter {
             const context = this.buildPreparedTranscriptContext(120) || this.session.getFormattedContextWithInterim(60);
             const refinementRequest = userRequest || intent;
 
+            // CONTEXT OS (Phase 11, 2026-07-10): follow-up is no longer
+            // mode-blind. Build a contract for THIS surface from the active
+            // mode's authority; the refinement inherits the prior answer's
+            // source ownership ("make it shorter" after a doc-grounded answer
+            // must not introduce profile facts). An explicit source-switch ask
+            // gets a source-honest line instead of silently switching. Flag-
+            // gated + best-effort: null contract → legacy byte-for-byte.
+            let followUpContractRule: string | undefined;
+            try {
+                const contextOs = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                const fuContract = this.buildRecapFollowUpContract('follow_up', String(refinementRequest || ''));
+                if (fuContract) {
+                    const switchTo = contextOs.detectFollowUpSourceSwitch(String(refinementRequest || ''));
+                    if (switchTo && switchTo !== (fuContract.sourceOwner === 'reference_files' ? 'reference_files' : fuContract.sourceOwner)) {
+                        const line = 'Switching sources needs a fresh question — ask it directly and I\'ll answer from ' +
+                            (switchTo === 'profile' ? 'your profile.' : switchTo === 'reference_files' ? 'the uploaded material.' : 'the conversation.');
+                        this.emit('refined_answer', line, intent);
+                        this.setMode('idle');
+                        return line;
+                    }
+                    followUpContractRule = contextOs.buildFollowUpContractRule(fuContract);
+                }
+            } catch { /* Context OS is additive — never break follow-up */ }
+
             const generationId = ++this.currentGenerationId;
             let fullRefined = "";
             const stream = this.followUpLLM.generateStream(
                 lastMsg,
                 refinementRequest,
-                context
+                context,
+                followUpContractRule ? { contractRule: followUpContractRule } : undefined
             );
             let streamAborted = false;
 
@@ -2166,6 +2311,56 @@ export class IntelligenceEngine extends EventEmitter {
     }
 
     /**
+     * CONTEXT OS (Phase 11) — build the recap/follow-up TurnContextContract
+     * from the active mode's authority (the same SourceArbiter path every
+     * other surface uses). Returns null when Context OS is off for the
+     * recap/follow-up surface, on any error, or mid-boot — callers treat null
+     * as "legacy mode-blind behavior".
+     */
+    private buildRecapFollowUpContract(
+        surface: 'recap' | 'follow_up',
+        question: string,
+    ): import('./intelligence/context-os').TurnContextContract | null {
+        try {
+            const { buildCustomModeExecutionContract } = require('./llm/customModeExecutionContract');
+            const { buildTurnContractIfEnabled } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+            const { ModesManager } = require('./services/ModesManager');
+            const modeInfo = ModesManager.getInstance().getActiveModeInfo?.() ?? null;
+            const docInfo = ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.() ?? null;
+            const hasProfile = Boolean((this.llmHelper.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data);
+            const legacy = buildCustomModeExecutionContract({
+                question,
+                streamRoute: 'unknown',
+                modeId: modeInfo?.id ?? null,
+                modeUniqueId: modeInfo?.id ?? null,
+                answerType: 'follow_up_answer',
+                isCustomMode: modeInfo?.isCustom === true,
+                isDocGroundedCustomModeActive: docInfo?.documentGroundedCustomModeActive === true,
+                hasReferenceFiles: Boolean(docInfo?.hasReferenceFiles),
+                hasCustomPrompt: Boolean(docInfo?.hasCustomPrompt),
+                hasLiveTranscript: true,
+                hasProfileFacts: hasProfile,
+                hasMeetingRag: false,
+                hasLongTermMemory: false,
+            });
+            return buildTurnContractIfEnabled({
+                surface,
+                question,
+                activeModeId: modeInfo?.id ?? null,
+                activeModeName: modeInfo?.name ?? null,
+                sourceAuthority: legacy.sourceAuthority,
+                answerType: 'follow_up_answer',
+                plannerVoicePerspective: 'assistant_explanation',
+                hasReferenceFiles: Boolean(docInfo?.hasReferenceFiles),
+                hasProfileFacts: hasProfile,
+                hasLiveTranscript: true,
+            });
+        } catch {
+            return null;
+        }
+    }
+
+    /**
      * MODE 4: Recap (Summary)
      * Neutral conversation summary
      */
@@ -2187,9 +2382,19 @@ export class IntelligenceEngine extends EventEmitter {
                 return null;
             }
 
+            // CONTEXT OS (Phase 11, 2026-07-10): recap is no longer mode-blind.
+            // The contract's rule keeps profile/document/memory facts out of a
+            // transcript summary. Flag-gated; null → legacy byte-for-byte.
+            let recapContractRule: string | undefined;
+            try {
+                const contextOs = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                const recapContract = this.buildRecapFollowUpContract('recap', 'Recap the conversation so far');
+                if (recapContract) recapContractRule = contextOs.buildRecapContractRule(recapContract);
+            } catch { /* Context OS is additive — never break recap */ }
+
             const generationId = ++this.currentGenerationId;
             let fullSummary = "";
-            const stream = this.recapLLM.generateStream(context);
+            const stream = this.recapLLM.generateStream(context, recapContractRule ? { contractRule: recapContractRule } : undefined);
             let streamAborted = false;
 
             for await (const token of stream) {
