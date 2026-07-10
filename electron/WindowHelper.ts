@@ -377,8 +377,19 @@ export class WindowHelper {
     // src/App.tsx + src/index.css). Used to test whether the Windows native-RSS
     // leak is the CPU-composited blur raster-tile path. Remove after fix.
     const nofxSuffix = process.env.NATIVELY_NOFX === '1' ? '&nofx=1' : '';
-    const launcherUrl = `${startUrl}?window=launcher${nofxSuffix}`;
     if (nofxSuffix) console.warn('[LeakTest] NATIVELY_NOFX=1 → loading launcher with ?nofx=1 (blur effects OFF)');
+
+    // A/B KILL-SWITCH (2026-07-10): NATIVELY_DISABLE_ONBOARDING_ORCH=1 appends
+    // ?noorch=1, which makes App.tsx skip orch.start() entirely (no drain loop,
+    // no onboarding toasters). The onboarding orchestrator's drain loop was
+    // bisected to the 2026-07-04 native-memory-leak regression; this switch lets
+    // the same build be run with the orchestrator ON vs OFF to confirm the leak
+    // source in the field. The loop is now setTimeout-based (fixed), so this is
+    // a confirmation/rollback lever, not the fix itself.
+    const noOrchSuffix = process.env.NATIVELY_DISABLE_ONBOARDING_ORCH === '1' ? '&noorch=1' : '';
+    if (noOrchSuffix) console.warn('[LeakTest] NATIVELY_DISABLE_ONBOARDING_ORCH=1 → launcher with ?noorch=1 (onboarding orchestrator OFF)');
+
+    const launcherUrl = `${startUrl}?window=launcher${nofxSuffix}${noOrchSuffix}`;
 
     this.launcherWindow
       .loadURL(launcherUrl)

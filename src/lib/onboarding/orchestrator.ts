@@ -170,7 +170,13 @@ export class OnboardingOrchestrator {
   private state: OrchestratorState;
   private userState: UserState = DEFAULT_USER_STATE;
   private listeners = new Set<Listener>();
-  private rafHandle: number | null = null;
+  // Drain-loop handle. Historically this was a per-FRAME requestAnimationFrame
+  // that rescheduled itself forever (see the NATIVE-LEAK note on scheduleTick).
+  // It is now a low-frequency setTimeout so the renderer can go idle between
+  // ticks — a rAF loop keeps Chromium's compositor permanently non-idle, and
+  // under software compositing (Windows / macOS-GPU-fallback) that turns the
+  // launcher's always-on animations into unbounded native raster-tile churn.
+  private tickTimer: ReturnType<typeof setTimeout> | null = null;
   private running = false;
   private stageConfigs: StageConfig[] = [];
   // Bumped on every notify() so useSyncExternalStore consumers see a new
@@ -209,14 +215,14 @@ export class OnboardingOrchestrator {
     }
 
     this.persist();
-    this.scheduleTick();
+    this.ensureDraining();
   }
 
   stop(): void {
     this.running = false;
-    if (this.rafHandle !== null) {
-      cancelAnimationFrame(this.rafHandle);
-      this.rafHandle = null;
+    if (this.tickTimer !== null) {
+      clearTimeout(this.tickTimer);
+      this.tickTimer = null;
     }
   }
 
@@ -253,6 +259,11 @@ export class OnboardingOrchestrator {
   private notify(): void {
     this.revision++;
     this.listeners.forEach(l => l(this.state))
+    // A state change may have made a stage newly eligible (foreground regained,
+    // meeting ended, usage tick, user-state patch, slot freed on dismiss). Re-arm
+    // the drain timer if it had stopped. Idempotent — no-op if already ticking or
+    // fully drained. This is what replaces the old always-on per-frame loop.
+    this.ensureDraining();
   }
 
   // ─── Event bus ────────────────────────────────────────────────
@@ -337,19 +348,74 @@ export class OnboardingOrchestrator {
   }
 
   // ─── Drain loop ───────────────────────────────────────────────
+  //
+  // NATIVE-LEAK FIX (2026-07-10): this used to be a self-perpetuating
+  // requestAnimationFrame loop (scheduleTick → rAF → tick → scheduleTick) that
+  // rescheduled EVERY FRAME (~60fps) for the entire lifetime of the launcher
+  // window, regardless of whether there was any pending onboarding work. A
+  // never-idling rAF keeps Chromium's compositor permanently in the
+  // "BeginFrame pending" state, so it produces a real frame every vsync and
+  // never enters the idle path that reclaims raster tiles. Combined with the
+  // launcher's `repeat: Infinity` toaster animations, under SOFTWARE
+  // compositing (Windows 10, macOS-27 GPU-fallback) that drove unbounded
+  // PartitionAlloc raster-tile churn — a native (non-V8) memory leak that grew
+  // RSS to multiple GB with a flat JS heap and OOM-froze the app / crashed the
+  // renderer in fontations_ffi. Confirmed by per-day git bisect: introduced by
+  // the orchestrator (cf6a2f9, 2026-07-04), absent at 8836b40 (2026-07-03).
+  //
+  // The loop is now:
+  //   • a low-frequency setTimeout (DRAIN_INTERVAL_MS), NOT a rAF — a timer
+  //     does not request animation frames, so the renderer goes idle between
+  //     ticks and the compositor reclaims tiles normally;
+  //   • self-terminating: it stops scheduling once every stage is resolved
+  //     (drained) or the app leaves the evaluable state, and re-arms lazily via
+  //     ensureDraining() whenever a state-change event lands (see notify()).
+  // Time-based stage triggers (2–10s homepage-duration gates) still fire within
+  // one DRAIN_INTERVAL_MS, so the onboarding funnel is behaviourally unchanged.
 
-  private scheduleTick(): void {
+  private static readonly DRAIN_INTERVAL_MS = 1000;
+
+  /** Lazily (re)start the drain timer if there is still work to evaluate. */
+  private ensureDraining(): void {
     if (!this.running) return;
-    this.rafHandle = requestAnimationFrame(() => {
+    if (this.tickTimer !== null) return;          // already scheduled
+    if (this.isFullyDrained()) return;            // nothing left to show, ever
+    this.tickTimer = setTimeout(() => {
+      this.tickTimer = null;
       this.tick();
-      this.scheduleTick();
-    });
+    }, OnboardingOrchestrator.DRAIN_INTERVAL_MS);
   }
 
   private tick(): void {
     if (!this.running) return;
-    if (!this.shouldEvaluate()) return;
-    this.evaluateAndDispatch();
+    if (this.shouldEvaluate()) {
+      this.evaluateAndDispatch();
+    }
+    // Re-arm only while there is still an unresolved stage. When the queue is
+    // fully drained the timer stops entirely and the renderer stays idle until
+    // a new event (foreground/usage/meeting/user-state) calls ensureDraining().
+    this.ensureDraining();
+  }
+
+  /**
+   * True when no queued stage can ever be shown again this session — every
+   * stage is completed, skipped, or dismissed-this-session — so the drain
+   * timer has no reason to keep ticking. A time-gated stage that is merely
+   * "not yet eligible" is NOT drained (returns false) so its duration trigger
+   * still gets a chance to fire.
+   */
+  private isFullyDrained(): boolean {
+    if (this.state.activeToasterId !== null) return false; // a toaster is up
+    return this.state.queue.every(
+      id =>
+        this.state.completed[id] != null ||
+        this.state.skipped.has(id) ||
+        this.dismissedThisSession.has(id) ||
+        // A queued id with no registered config can never be shown (e.g. a
+        // legacy/persisted stage that no longer exists, or one whose config
+        // wasn't passed to start()), so it must not keep the drain loop alive.
+        !this.stageConfigs.some(c => c.id === id),
+    );
   }
 
   private shouldEvaluate(): boolean {

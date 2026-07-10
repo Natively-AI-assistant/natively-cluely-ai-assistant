@@ -246,6 +246,15 @@ const App: React.FC = () => {
   // mounted.
   useEffect(() => {
     if (!isLauncherWindow && !isDefault) return;
+    // A/B KILL-SWITCH (2026-07-10): ?noorch=1 (set by WindowHelper when
+    // NATIVELY_DISABLE_ONBOARDING_ORCH=1) skips the onboarding orchestrator
+    // entirely — no drain loop, no toasters. Lets the same build A/B the
+    // orchestrator ON vs OFF to confirm/deny the 2026-07-04 native-leak
+    // regression in the field. Remove once the leak fix is field-verified.
+    if (new URLSearchParams(window.location.search).get('noorch') === '1') {
+      console.warn('[LeakTest] ?noorch=1 → onboarding orchestrator DISABLED (orch.start skipped)');
+      return;
+    }
     let cancelled = false;
     let stopFn: (() => void) | null = null;
     // Explicit `.ts` extensions here for the same reason as the static
