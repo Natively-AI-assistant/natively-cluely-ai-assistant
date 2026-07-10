@@ -53,7 +53,9 @@ export {
   buildTurnContractForSurface,
   buildTurnContractIfEnabled,
   contractBlocks,
+  assertNoAuthorityContradiction,
   type BuildTurnContractForSurfaceInput,
+  type AuthorityContradictionCheck,
 } from './integration';
 export {
   extractCandidateClaims,

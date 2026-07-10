@@ -173,3 +173,35 @@ export function buildTurnContractIfEnabled(input: BuildTurnContractForSurfaceInp
 export function contractBlocks(contract: Pick<TurnContextContract, 'enforcement'> | null | undefined): boolean {
   return Boolean(contract && contract.enforcement === 'enforce');
 }
+
+// ── Authority-contradiction guard (real-custom-mode-repair, Phase 4/7) ──────
+//
+// The incident investigation found an apparent contradiction in the trace:
+// `sourceOwner=clarify` next to `finalAction=answer` on the same turn. Root
+// cause turned out to be a MISLEADING TRACE (a hardcoded provisional value
+// logged before the clarification decision ran — fixed at the ipcHandlers.ts
+// call site), not a genuine three-way authority disagreement — see
+// docs/context-os/real-custom-mode-repair/04_AUTHORITY_CONFLICT_REPORT.md.
+//
+// This assertion is a development/test-only tripwire against a REAL
+// regression of that class: it fires when enforcement is armed AND the
+// kernel decided `sourceOwner === 'clarify'` AND the caller nonetheless
+// recorded `finalAction === 'answer'` — i.e. a turn where Context OS
+// determined a clarification was required, enforcement was ON, and the
+// pipeline answered anyway. Never called in production hot paths; wire it
+// into tests and dev-only post-turn checks.
+export interface AuthorityContradictionCheck {
+  contract: Pick<TurnContextContract, 'sourceOwner' | 'enforcement'>;
+  finalAction: 'answer' | 'refuse_insufficient_evidence' | 'clarify' | 'fallback';
+}
+
+export function assertNoAuthorityContradiction(check: AuthorityContradictionCheck): void {
+  const { contract, finalAction } = check;
+  if (contract.enforcement === 'enforce' && contract.sourceOwner === 'clarify' && finalAction === 'answer') {
+    throw new Error(
+      '[CONTEXT-OS] authority contradiction: sourceOwner=clarify under enforce, but finalAction=answer. '
+      + 'A clarify decision under enforcement must never fall through to answer — see '
+      + 'docs/context-os/real-custom-mode-repair/04_AUTHORITY_CONFLICT_REPORT.md',
+    );
+  }
+}

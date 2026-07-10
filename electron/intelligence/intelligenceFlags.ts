@@ -293,9 +293,21 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   contextOsRecapFollowupEnabled: { env: 'NATIVELY_CONTEXT_OS_RECAP_FOLLOWUP', setting: 'contextOsRecapFollowupEnabled', default: isInternalDevTestContext() },
   contextOsEvidencePackEnabled: { env: 'NATIVELY_CONTEXT_OS_EVIDENCE_PACK', setting: 'contextOsEvidencePackEnabled', default: isInternalDevTestContext() },
   contextOsMemorySafetyEnabled: { env: 'NATIVELY_CONTEXT_OS_MEMORY_SAFETY', setting: 'contextOsMemorySafetyEnabled', default: isInternalDevTestContext() },
-  // Blocking behaviors stay default OFF everywhere until telemetry validates.
-  contextOsEnforceSourceCapabilities: { env: 'NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES', setting: 'contextOsEnforceSourceCapabilitiesEnabled', default: false },
-  contextOsPropertyValidation: { env: 'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION', setting: 'contextOsPropertyValidationEnabled', default: false },
+  // Real-custom-mode-repair (2026-07-11), Phase 7: these two flags gate the
+  // ONLY code paths that actually ACT on the kernel's decision (the
+  // clarification short-circuit and the hard capability gate). Before this
+  // fix both defaulted to `false` in EVERY environment, including internal
+  // dev/test — so the P0 incident's manual-test run computed the CORRECT
+  // sourceOwner=clarify decision but nothing downstream was required to obey
+  // it (docs/context-os/real-custom-mode-repair/04_AUTHORITY_CONFLICT_REPORT.md).
+  // Now ON by default in dev/test (same convention as the sibling Context OS
+  // flags above) so the enforcement path is actually exercised whenever the
+  // rest of Context OS is; production stays default OFF until telemetry
+  // validates the blocking behavior, per the incident's Phase 7 requirement
+  // that "production flags remain safely default-OFF unless deliberately
+  // rolled out."
+  contextOsEnforceSourceCapabilities: { env: 'NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES', setting: 'contextOsEnforceSourceCapabilitiesEnabled', default: isInternalDevTestContext() },
+  contextOsPropertyValidation: { env: 'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION', setting: 'contextOsPropertyValidationEnabled', default: isInternalDevTestContext() },
 };
 
 const ON_VALUES = new Set(['1', 'true', 'on', 'enabled', 'yes']);
