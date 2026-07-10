@@ -246,7 +246,7 @@
     "concurrently": "^9.1.0",
     "cross-env": "^7.0.3",
     "dotenv": "^17.3.1",
-    "electron": "^33.2.0",
+    "electron": "43.1.0",
     "electron-builder": "^26.8.1",
     "electron-is-dev": "^3.0.1",
     "electron-rebuild": "^3.2.9",

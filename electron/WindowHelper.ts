@@ -616,11 +616,35 @@ export class WindowHelper {
         console.log(`[Renderer:${tag}] dom-ready`);
       });
 
-      wc.on('console-message', (_event, level, message, line, sourceId) => {
-        // 0=verbose 1=info 2=warning 3=error. Only surface warning+ to avoid
-        // flooding the log with routine info/verbose renderer chatter.
-        if (level < 2) return;
-        const label = level === 3 ? 'ERROR' : 'WARN';
+      // console-message event: Electron changed this signature in v35. Old API
+      // (≤34) passed positional args (event, level:number, message, line,
+      // sourceId); new API (≥35) passes a single Event object with string
+      // `level` ('info'|'warning'|'error'|'debug'), `message`, `lineNumber`,
+      // `sourceId`. Support BOTH so this works whether or not the Electron bump
+      // is merged. Only surface warning+ to avoid flooding the log.
+      wc.on('console-message', (...args: any[]) => {
+        let label: 'WARN' | 'ERROR' | null = null;
+        let message = '';
+        let line: number | undefined;
+        let sourceId: unknown;
+        const first = args[0];
+        if (first && typeof first === 'object' && ('level' in first) && typeof first.level === 'string') {
+          // New (≥35) object form.
+          const lvl = first.level as string;
+          if (lvl !== 'warning' && lvl !== 'error') return;
+          label = lvl === 'error' ? 'ERROR' : 'WARN';
+          message = first.message ?? '';
+          line = first.lineNumber;
+          sourceId = first.sourceId;
+        } else {
+          // Old (≤34) positional form: (event, level, message, line, sourceId).
+          const level = args[1] as number;
+          if (typeof level !== 'number' || level < 2) return;
+          label = level === 3 ? 'ERROR' : 'WARN';
+          message = args[2] ?? '';
+          line = args[3];
+          sourceId = args[4];
+        }
         // sourceId can be a long file:// path; keep only the tail for readability.
         const src = typeof sourceId === 'string' ? sourceId.split('/').pop() : sourceId;
         console.error(`[Renderer:${tag}] console.${label} ${message} (${src}:${line})`);
