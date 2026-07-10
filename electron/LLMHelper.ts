@@ -2930,15 +2930,24 @@ const isMultimodal = !!(imagePaths?.length);
     // 8s hard cap: a `fetch failed` network error without this can stall the provider
     // waterfall for 25-30s before the OS-level TCP reset fires.
     const timeoutMs = 8000;
+    // Overall-deadline signal covers BOTH connect AND the body read below. Without
+    // a read-phase bound, a server that sends headers then hangs the body would
+    // stall `response.json()` forever (the 8s fetch-signal only covers connect).
+    // 45s is generous for a non-streaming completion body while still failing in
+    // bounded time.
+    const OVERALL_DEADLINE_MS = 45_000;
+    const overallController = new AbortController();
+    const overallTimer = setTimeout(() => overallController.abort(), OVERALL_DEADLINE_MS);
     let response: Response;
     try {
       response = await fetch(endpointUrl, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: AbortSignal.any([AbortSignal.timeout(timeoutMs), overallController.signal]),
       });
     } catch (fetchErr: any) {
+      clearTimeout(overallTimer);
       const durationMs = Math.round(nowMs() - requestStartedAt);
       console.error('[NativelyAPI] JSON pre-response failure', {
         requestId,
@@ -2954,60 +2963,67 @@ const isMultimodal = !!(imagePaths?.length);
       throw new Error(`Natively API request failed before response requestId=${requestId} endpoint=${endpointUrl} method=POST timeoutMs=${timeoutMs} durationMs=${durationMs} ${formatFetchError(fetchErr)}`);
     }
 
-    const serverRequestId = response.headers.get('x-request-id');
-    if (!response.ok) {
-      const errText = await response.text().catch(() => '');
-      let errData: any = {};
-      try { errData = errText ? JSON.parse(errText) : {}; } catch { errData = {}; }
-      console.error('[NativelyAPI] JSON HTTP failure', {
+    // The overall-deadline timer must be cleared on EVERY post-connect exit
+    // (http-error, parse-error, success) so it never fires after we're done and
+    // never leaks. The reads below are covered by overallController.signal.
+    try {
+      const serverRequestId = response.headers.get('x-request-id');
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        let errData: any = {};
+        try { errData = errText ? JSON.parse(errText) : {}; } catch { errData = {}; }
+        console.error('[NativelyAPI] JSON HTTP failure', {
+          requestId,
+          serverRequestId,
+          endpoint: endpointUrl,
+          method: 'POST',
+          stage: 'http_status',
+          status: response.status,
+          statusText: response.statusText,
+          model: this.currentModelId,
+          provider: 'natively',
+          timeoutMs,
+          durationMs: Math.round(nowMs() - requestStartedAt),
+          responseBody: errText.slice(0, 1000),
+        });
+        throw new Error(`Natively API HTTP ${response.status} requestId=${requestId} serverRequestId=${serverRequestId || 'n/a'} endpoint=${endpointUrl}: ${errData.error || errText.slice(0, 300) || 'unknown'}`);
+      }
+
+      let data: any;
+      try {
+        data = await response.json();
+      } catch (parseErr: any) {
+        console.error('[NativelyAPI] JSON parse failure', {
+          requestId,
+          serverRequestId,
+          endpoint: endpointUrl,
+          method: 'POST',
+          stage: 'after_response',
+          status: response.status,
+          model: this.currentModelId,
+          provider: 'natively',
+          durationMs: Math.round(nowMs() - requestStartedAt),
+          error: summarizeFetchError(parseErr),
+        });
+        throw new Error(`Natively API invalid JSON response requestId=${requestId} serverRequestId=${serverRequestId || 'n/a'} ${formatFetchError(parseErr)}`);
+      }
+      console.log('[NativelyAPI] JSON completed', {
         requestId,
         serverRequestId,
         endpoint: endpointUrl,
         method: 'POST',
-        stage: 'http_status',
         status: response.status,
-        statusText: response.statusText,
         model: this.currentModelId,
         provider: 'natively',
+        serverModel: data?.model,
         timeoutMs,
         durationMs: Math.round(nowMs() - requestStartedAt),
-        responseBody: errText.slice(0, 1000),
+        chars: typeof data?.content === 'string' ? data.content.length : 0,
       });
-      throw new Error(`Natively API HTTP ${response.status} requestId=${requestId} serverRequestId=${serverRequestId || 'n/a'} endpoint=${endpointUrl}: ${errData.error || errText.slice(0, 300) || 'unknown'}`);
+      return data.content || '';
+    } finally {
+      clearTimeout(overallTimer);
     }
-
-    let data: any;
-    try {
-      data = await response.json();
-    } catch (parseErr: any) {
-      console.error('[NativelyAPI] JSON parse failure', {
-        requestId,
-        serverRequestId,
-        endpoint: endpointUrl,
-        method: 'POST',
-        stage: 'after_response',
-        status: response.status,
-        model: this.currentModelId,
-        provider: 'natively',
-        durationMs: Math.round(nowMs() - requestStartedAt),
-        error: summarizeFetchError(parseErr),
-      });
-      throw new Error(`Natively API invalid JSON response requestId=${requestId} serverRequestId=${serverRequestId || 'n/a'} ${formatFetchError(parseErr)}`);
-    }
-    console.log('[NativelyAPI] JSON completed', {
-      requestId,
-      serverRequestId,
-      endpoint: endpointUrl,
-      method: 'POST',
-      status: response.status,
-      model: this.currentModelId,
-      provider: 'natively',
-      serverModel: data?.model,
-      timeoutMs,
-      durationMs: Math.round(nowMs() - requestStartedAt),
-      chars: typeof data?.content === 'string' ? data.content.length : 0,
-    });
-    return data.content || '';
   }
 
   /**
@@ -3183,12 +3199,16 @@ const isMultimodal = !!(imagePaths?.length);
     }
 
     // 5. Execute
+    // Bounded timeout: without it a hung user-configured endpoint stalls the
+    // whole session for ~2 min (Node's default socket timeout). 60s is generous
+    // for a non-streaming completion while still failing over in bounded time.
     try {
       const response = await axios({
         method: curlConfig.method || 'POST',
         url: url,
         headers: headers,
-        data: data
+        data: data,
+        timeout: 60_000,
       });
 
       // 6. Extract Answer
@@ -4848,8 +4868,47 @@ const isMultimodal = !!(imagePaths?.length);
       }
     }
 
+    // ── CONTEXT OS H1: typed EvidencePack GOVERNS the factual prompt ────────
+    // When the caller supplies a ContextOsGenerationContext AND the flag is on,
+    // the typed EvidencePack REPLACES the raw retrieved block as the factual
+    // authority: the document evidence is parsed (no re-retrieval) into typed
+    // items and rendered as <turn_context_contract> + <evidence_use_contract> +
+    // <evidence_pack>. The legacy `context`/`combinedContext` factual blocks are
+    // already excluded from doc-grounded facts (buildDocumentGroundedUserContent
+    // uses only `retrievedBlock`), so replacing that block makes the typed pack
+    // the SOLE factual source. Flag off / no generation context → unchanged.
+    let contextOsGoverningBlock = '';
+    let contextOsGovernedPack: import('./intelligence/context-os').EvidencePack | null = null;
+    try {
+      const _cog = routeOptions?.contextOsGeneration as import('./intelligence/context-os').ContextOsGenerationContext | undefined;
+      const { isIntelligenceFlagEnabled } = require('./intelligence/intelligenceFlags');
+      if (_cog && _cog.govern && forceDocumentGrounding && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
+        const { buildDocumentEvidencePackFromBlock, renderGoverningFactualBlock } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+        const pack = buildDocumentEvidencePackFromBlock(_cog.contract, evidenceBlockForPrompt || '');
+        const rendered = renderGoverningFactualBlock({ ..._cog, evidencePack: pack });
+        if (rendered) {
+          contextOsGoverningBlock = rendered;
+          contextOsGovernedPack = pack;
+          // Expose the governing pack back to the caller (validation/claims use
+          // the EXACT same pack — Phase 9 identity requirement).
+          (_cog as any).evidencePack = pack;
+        }
+      }
+    } catch (cogErr: any) {
+      console.warn('[LLMHelper] Context OS evidence-pack governance skipped (non-fatal):', cogErr?.message);
+    }
+
     let userContent: string;
-    if (forceDocumentGrounding && evidenceBlockForPrompt) {
+    if (contextOsGoverningBlock) {
+      // Typed pack is the factual authority. Question-first/last framing (same
+      // shape buildDocumentGroundedUserContent uses) around the typed block.
+      // priorContext (referent-only) is preserved for pronoun resolution.
+      const referent = callerSuppliedContextForPriorResolution
+        ? `\n\n## RECENT CONVERSATION (for pronoun resolution only — not a source of facts)\n${callerSuppliedContextForPriorResolution}`
+        : '';
+      userContent = `QUESTION: ${message}\n\n${contextOsGoverningBlock}${referent}\n\nNow answer this question using ONLY the evidence_pack above: ${message}`;
+      void contextOsGovernedPack; // referenced for clarity; pack surfaced via _cog
+    } else if (forceDocumentGrounding && evidenceBlockForPrompt) {
       const { buildDocumentGroundedUserContent } = require('./llm/documentGroundedPrompt');
       const shaped = buildDocumentGroundedUserContent({
         question: message,
@@ -4897,6 +4956,37 @@ const isMultimodal = !!(imagePaths?.length);
       userContent = combinedContext
         ? `CONTEXT:\n${combinedContext}\n\nUSER QUESTION:\n${message}`
         : message;
+    }
+
+    // ── CONTEXT OS PROMPT AUDIT (Phase 10, dev/test only) ──────────────────
+    // NATIVELY_CONTEXT_OS_PROMPT_AUDIT=1 records a REDACTED structural summary of
+    // the final factual prompt (block presence + counts + hashes, NEVER content,
+    // keys, or full prompt) to a process-global ring the E2E harness reads. Used
+    // to assert the typed pack GOVERNS and no raw legacy factual block leaks.
+    // Never enabled in production; content is never logged.
+    if (process.env.NATIVELY_CONTEXT_OS_PROMPT_AUDIT === '1') {
+      try {
+        const crypto = require('crypto') as typeof import('crypto');
+        const hash = (s: string) => crypto.createHash('sha1').update(s || '').digest('hex').slice(0, 12);
+        const uc = userContent;
+        const audit = {
+          model: this.currentModelId,
+          userContentLen: uc.length,
+          hasTypedEvidencePack: uc.includes('<evidence_pack'),
+          hasTurnContract: uc.includes('<turn_context_contract>'),
+          hasEvidenceUseContract: uc.includes('<evidence_use_contract>'),
+          // Raw legacy factual markers that MUST be absent when the typed pack governs.
+          hasRawCandidateProfile: /<candidate_profile>|<candidate_identity_fact>|<profile_jit_evidence_request>/.test(uc),
+          hasRawLongTermMemory: /RELEVANT LONG-TERM MEMORY|<long_term_memory/.test(uc),
+          hasRawUploadedReference: /## UPLOADED REFERENCE MATERIAL|## RETRIEVED EXCERPTS FROM UPLOADED DOCUMENT/.test(uc),
+          factualBlockCount: [uc.includes('<evidence_pack'), /## UPLOADED REFERENCE MATERIAL|## RETRIEVED EXCERPTS/.test(uc), /<candidate_profile>/.test(uc)].filter(Boolean).length,
+          userContentHash: hash(uc),
+          governedByTypedPack: Boolean(contextOsGoverningBlock),
+        };
+        const g = globalThis as any;
+        (g.__contextOsPromptAudit ||= []).push(audit);
+        if (g.__contextOsPromptAudit.length > 50) g.__contextOsPromptAudit.shift();
+      } catch { /* audit never affects the answer */ }
     }
 
     // Pre-work done; about to dispatch to a provider. The gap from here to the
