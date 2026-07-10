@@ -7267,7 +7267,17 @@ if (process.env.THINKING_MATRIX === '1') {
 
   // Restore Phone Mirror service if it was enabled in a previous session.
   // Failure here is non-fatal — the user can re-enable from Settings.
-  if (SettingsManager.getInstance().get('phoneMirrorEnabled')) {
+  //
+  // DIAGNOSTIC (2026-07-11): NATIVELY_DISABLE_PHONE_MIRROR=1 stops the PhoneMirror
+  // WebSocket server from ever starting. On the Windows repro, the launcher
+  // renderer's native RSS explodes (497→2008MB in ~4s, flat JS heap) within
+  // seconds of `[PhoneMirror] companion extension connected` — the same trigger
+  // in 3 separate logs. This flag lets the (frozen) user boot WITHOUT the WS
+  // server so the phone/companion extension can't connect. If the leak vanishes,
+  // PhoneMirror connect is confirmed as the trigger.
+  if (process.env.NATIVELY_DISABLE_PHONE_MIRROR === '1') {
+    console.warn('[LeakTest] NATIVELY_DISABLE_PHONE_MIRROR=1 → PhoneMirror WS server NOT started this run');
+  } else if (SettingsManager.getInstance().get('phoneMirrorEnabled')) {
     PhoneMirrorService.getInstance()
       .start({ exposeOnLan: !!SettingsManager.getInstance().get('phoneMirrorExposeOnLan'), persist: false })
       .catch((err) => console.error('[Init] PhoneMirror auto-start failed:', err));
