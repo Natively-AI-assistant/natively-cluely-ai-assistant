@@ -438,9 +438,21 @@ export class WindowHelper {
     // line naming the exact failing module/line on the user's machine.
     this.attachRendererDiagnostics(this.launcherWindow, 'launcher');
 
-    // if (isDev) {
-    //   this.launcherWindow.webContents.openDevTools({ mode: 'detach' }); // DEBUG: Open DevTools
-    // }
+    // DIAGNOSTIC (2026-07-11): NATIVELY_OPEN_DEVTOOLS=1 force-opens the launcher
+    // DevTools DETACHED (survives a renderer hang, unlike an in-window panel).
+    // For debugging the "window appears then freezes / renderer not responsive"
+    // report: open the Performance tab and record during the freeze — a single
+    // long yellow Scripting block = a JS main-thread loop; a flat gap with no JS
+    // = a compositor/GPU stall (the software-compositing blur path). Detached so
+    // it stays usable even when the launcher renderer stops pumping its loop.
+    if (process.env.NATIVELY_OPEN_DEVTOOLS === '1') {
+      try {
+        this.launcherWindow.webContents.openDevTools({ mode: 'detach' });
+        console.warn('[Diag] NATIVELY_OPEN_DEVTOOLS=1 → launcher DevTools opened (detached)');
+      } catch (e: any) {
+        console.warn('[Diag] openDevTools failed:', e?.message || e);
+      }
+    }
 
     // --- 2. Create Overlay Window (Hidden initially) ---
     // Always start centered on the primary display so the OS (macOS NSUserDefaults /
