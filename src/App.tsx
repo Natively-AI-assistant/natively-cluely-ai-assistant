@@ -137,6 +137,15 @@ const App: React.FC = () => {
 
   // State
   const [showStartup, setShowStartup] = useState(true);
+  // Stable identity: StartupSequence arms its dismissal timers in a
+  // useEffect(deps:[onComplete]). An inline closure would be a new identity on
+  // every App re-render — and the boot path re-renders many times (7-10 async
+  // IPCs each setState on resolve, plus orchestrator notifies). That would tear
+  // down and re-arm BOTH the 2.2s primary AND the 5s hard-cap timer on every
+  // render, so under a slow/re-render-heavy boot the hard-cap could keep
+  // resetting and never fire — the "stuck at the startup animation" symptom.
+  // Memoizing to [] makes the splash timers arm exactly once.
+  const dismissStartup = useCallback(() => setShowStartup(false), []);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<string>('general');
   const [isModesOpen, setIsModesOpen] = useState(false);
@@ -820,7 +829,7 @@ const App: React.FC = () => {
             animate={{ opacity: 1, scale: 1, transition: { duration: 0.5, ease: [0.23, 1, 0.32, 1] } }}
             exit={{ opacity: 0, scale: 1.04, pointerEvents: "none", transition: { duration: 0.55, ease: [0.4, 0, 0.2, 1] } }}
           >
-            <StartupSequence onComplete={() => setShowStartup(false)} />
+            <StartupSequence onComplete={dismissStartup} />
           </motion.div>
         ) : (
           <motion.div

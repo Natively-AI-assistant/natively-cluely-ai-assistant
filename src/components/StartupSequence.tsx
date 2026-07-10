@@ -7,10 +7,21 @@ interface StartupSequenceProps {
 }
 
 const StartupSequence: React.FC<StartupSequenceProps> = ({ onComplete }) => {
+    // Keep the latest onComplete in a ref so the timer effect can depend on []
+    // and arm EXACTLY ONCE for the splash's lifetime. If the effect depended on
+    // `onComplete` directly, an un-memoized caller (a new closure per parent
+    // re-render) would tear down and re-arm both timers on every render — and
+    // the boot path re-renders many times — so the 5s hard-cap safety net could
+    // keep resetting and never fire, trapping the user at the black splash. The
+    // ref makes the safety net immune to prop-identity churn regardless of how
+    // the caller passes onComplete.
+    const onCompleteRef = React.useRef(onComplete);
+    onCompleteRef.current = onComplete;
+
     useEffect(() => {
         // Primary dismiss at 2.2s (matches the logo animation length).
         const timer = setTimeout(() => {
-            onComplete();
+            onCompleteRef.current();
         }, 2200);
         // Hard-cap safety net: no matter what, the splash must never persist past
         // 5s. If the primary timer's onComplete is ever prevented from advancing
@@ -19,13 +30,16 @@ const StartupSequence: React.FC<StartupSequenceProps> = ({ onComplete }) => {
         // black logo — the "stuck at logo" failure mode. Idempotent: onComplete
         // just flips showStartup=false, so a double-call is harmless.
         const hardCap = setTimeout(() => {
-            try { onComplete(); } catch { /* never let the splash trap the user */ }
+            try { onCompleteRef.current(); } catch { /* never let the splash trap the user */ }
         }, 5000);
         return () => {
             clearTimeout(timer);
             clearTimeout(hardCap);
         };
-    }, [onComplete]);
+        // Mount-once: arm the dismissal timers a single time. onComplete is read
+        // through onCompleteRef so it is intentionally NOT a dependency.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     return (
         <div className="fixed inset-0 z-[100] bg-[#000000] flex items-center justify-center overflow-hidden">
