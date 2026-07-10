@@ -80,11 +80,18 @@ const EXPLICIT_PROFILE_POSSESSIVE_RE =
 // "from my resume", "on my cv", "in my profile", "according to my background".
 const EXPLICIT_PROFILE_PREPOSITIONAL_RE =
   /\b(?:from|on|in|per|according\s+to|based\s+on|using)\s+(?:my|mine|our)\b[\s\w-]{0,20}\b(?:resume|cv|profile|projects?|portfolio|experience|background|skills?|education|career)\b/i;
+// "according to the JD", "based on the job description", "does the JD require…" —
+// unlike a résumé (always possessive: "MY resume"), a job description is a
+// distinct artifact the user did not author, so it is commonly referenced with
+// the definite article rather than a possessive ("the JD says…", not "my JD").
+// GENERAL shape (any target-role JD, never a specific employer/document name).
+const EXPLICIT_JD_ARTICLE_RE =
+  /\b(?:the|this)\s+(?:job\s+description|jd)\b|\baccording\s+to\s+the\s+(?:job\s+description|jd)\b/i;
 
 /** Does the question explicitly claim first-person ownership of profile material? */
 export function isExplicitProfileAsk(question: string): boolean {
   const q = String(question || '');
-  return EXPLICIT_PROFILE_POSSESSIVE_RE.test(q) || EXPLICIT_PROFILE_PREPOSITIONAL_RE.test(q);
+  return EXPLICIT_PROFILE_POSSESSIVE_RE.test(q) || EXPLICIT_PROFILE_PREPOSITIONAL_RE.test(q) || EXPLICIT_JD_ARTICLE_RE.test(q);
 }
 
 /**
