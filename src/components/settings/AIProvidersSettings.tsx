@@ -184,6 +184,7 @@ export const AIProvidersSettings: React.FC = () => {
     // Max output tokens for proxied models. '' = Auto: per-model budget from the
     // proxy's /model/info (standard registry value), falling back to 8192.
     const [litellmMaxTokens, setLitellmMaxTokens] = useState('');
+    const [litellmModels, setLitellmModels] = useState<string[]>([]);
 
     // Status
     const [savedStatus, setSavedStatus] = useState<Record<string, boolean>>({});
@@ -229,7 +230,7 @@ export const AIProvidersSettings: React.FC = () => {
     const [defaultModel, setDefaultModel] = useState<string>('gemini-3.5-flash');
     const [fastResponseMode, setFastResponseMode] = useState(false);
     const [credentialsLoaded, setCredentialsLoaded] = useState(false);
-    const canUseFastMode = !!(hasStoredKey.groq || hasStoredKey.natively || codexOauthStatus.signedIn);
+    const canUseFastMode = !!(hasStoredKey.groq || hasStoredKey.natively || (codexCliConfig.enabled && codexOauthStatus.signedIn));
 
     // --- Dynamic Model Discovery ---
     const [preferredModels, setPreferredModels] = useState<Record<string, string>>({});
@@ -245,6 +246,7 @@ export const AIProvidersSettings: React.FC = () => {
     useEffect(() => {
         const loadCredentials = async () => {
             try {
+                setCredentialsLoaded(false);
                 // Load credentials FIRST so canUseFastMode is correct before we set fastResponseMode.
                 // If we set fastResponseMode before hasStoredKey is populated, the enforcement
                 // effect below fires with canUseFastMode=false and immediately resets fast mode
@@ -263,8 +265,9 @@ export const AIProvidersSettings: React.FC = () => {
                     });
                     // Prefill stored LiteLLM config so re-saving doesn't silently reset it.
                     // (baseURL is config, not a secret; the key stays masked/blank = keep.)
-                    if (creds.litellmBaseURL) setLitellmBaseURL(creds.litellmBaseURL);
-                    if (creds.litellmMaxTokens) setLitellmMaxTokens(String(creds.litellmMaxTokens));
+                    // Also clear the fields when another window removes the proxy.
+                    setLitellmBaseURL(creds.litellmBaseURL || '');
+                    setLitellmMaxTokens(creds.litellmMaxTokens ? String(creds.litellmMaxTokens) : '');
                     // Load preferred models
                     const pm: Record<string, string> = {};
                     if (creds.geminiPreferredModel) pm.gemini = creds.geminiPreferredModel;
@@ -296,9 +299,6 @@ export const AIProvidersSettings: React.FC = () => {
                 const fastMode = await window.electronAPI?.getGroqFastTextMode();
                 if (fastMode) setFastResponseMode(fastMode.enabled);
 
-                // Mark credentials as fully loaded so the enforcement effect can fire
-                setCredentialsLoaded(true);
-
                 // @ts-ignore
                 const custom = await window.electronAPI?.getCustomProviders();
                 if (custom) {
@@ -315,6 +315,11 @@ export const AIProvidersSettings: React.FC = () => {
                 // Check Ollama
                 checkOllama();
 
+                // Mark credentials as fully loaded only after custom/default model
+                // state is refreshed, so the stale-default guard doesn't reset a
+                // still-loading custom/LiteLLM/Codex selection.
+                setCredentialsLoaded(true);
+
             } catch (e) {
                 console.error("Failed to load settings:", e);
                 setCredentialsLoaded(true); // Unblock even on error
@@ -323,15 +328,87 @@ export const AIProvidersSettings: React.FC = () => {
         loadCredentials();
 
         // Listen for changes from other windows (2-way sync)
+        const unsubs: Array<() => void> = [];
         if (window.electronAPI?.onGroqFastTextChanged) {
             // @ts-ignore
-            const unsubscribe = window.electronAPI.onGroqFastTextChanged((enabled: boolean) => {
+            unsubs.push(window.electronAPI.onGroqFastTextChanged((enabled: boolean) => {
                 setFastResponseMode(enabled);
                 localStorage.setItem('natively_groq_fast_text', String(enabled));
-            });
-            return () => unsubscribe();
+            }));
         }
+        if (window.electronAPI?.onCredentialsChanged) {
+            // @ts-ignore
+            unsubs.push(window.electronAPI.onCredentialsChanged(() => {
+                loadCredentials();
+            }));
+        }
+        return () => { unsubs.forEach(unsub => unsub?.()); };
     }, []);
+
+    const isCodexReady = codexCliConfig.enabled && codexOauthStatus.signedIn;
+
+    const buildAvailableModelOptions = (): { id: string; name: string }[] => {
+        const opts: { id: string; name: string }[] = [];
+
+        if (hasStoredKey.natively) {
+            opts.push({ id: 'natively', name: 'Natively API' });
+        }
+
+        for (const [prov, cfg] of Object.entries(STANDARD_CLOUD_MODELS)) {
+            if (!hasStoredKey[prov as keyof typeof hasStoredKey]) continue;
+            cfg.ids.forEach((id, i) => opts.push({ id, name: cfg.names[i] }));
+            const pm = preferredModels[prov as keyof typeof preferredModels];
+            if (pm && !cfg.ids.includes(pm)) {
+                opts.push({ id: pm, name: prettifyModelId(pm) });
+            }
+        }
+        if (isCodexReady) {
+            opts.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${prettifyModelId(codexCliConfig.model)})` });
+            CODEX_CLI_MODEL_PRESETS.forEach(model => {
+                const id = codexCliSelectorId(model.id);
+                if (!opts.find(o => o.id === id)) {
+                    opts.push({ id, name: `${CODEX_CLI_MODEL.name}: ${model.name}` });
+                }
+            });
+        }
+        if (hasStoredKey.litellm) {
+            litellmModels.forEach(model => opts.push({ id: `litellm/${model}`, name: `${prettifyModelId(model)} (LiteLLM)` }));
+        }
+        customProviders.forEach(p => opts.push({ id: p.id, name: p.name }));
+        ollamaModels.forEach(m => opts.push({ id: `ollama-${m}`, name: `${m} (Local)` }));
+        return opts;
+    };
+
+    // Keep the persisted default model from pointing at a provider the user just
+    // removed/signed out of. This turns credential changes into immediate routing
+    // changes instead of waiting for a failing request to discover stale state.
+    useEffect(() => {
+        if (!credentialsLoaded) return;
+        const opts = buildAvailableModelOptions();
+        if (!defaultModel || opts.some(o => o.id === defaultModel) || opts.length === 0) return;
+        const next = opts[0].id;
+        setDefaultModel(next);
+        window.electronAPI?.setDefaultModel?.(next).catch(console.error);
+    }, [credentialsLoaded, defaultModel, hasStoredKey, preferredModels, isCodexReady, codexCliConfig.model, customProviders, ollamaModels, litellmModels]);
+
+    // Load LiteLLM model IDs only when the proxy is configured. The active-model
+    // selector should not expose stale `litellm/...` choices after the proxy is
+    // removed, but it should keep real proxy models selectable while configured.
+    useEffect(() => {
+        let cancelled = false;
+        if (!hasStoredKey.litellm) {
+            setLitellmModels([]);
+            return;
+        }
+        window.electronAPI?.getAvailableLiteLLMModels?.()
+            .then((models) => {
+                if (!cancelled) setLitellmModels(Array.isArray(models) ? models.filter(Boolean) : []);
+            })
+            .catch(() => {
+                if (!cancelled) setLitellmModels([]);
+            });
+        return () => { cancelled = true; };
+    }, [hasStoredKey.litellm, litellmBaseURL]);
 
     // Effect to enforce fast mode disabled if neither Groq key nor Natively API is configured.
     // Guard with credentialsLoaded so this never fires during the initial async load phase
@@ -678,6 +755,9 @@ export const AIProvidersSettings: React.FC = () => {
                 setSavedStatus(prev => ({ ...prev, litellm: true }));
                 setHasStoredKey(prev => ({ ...prev, litellm: true }));
                 setLitellmApiKey('');
+                window.electronAPI?.getAvailableLiteLLMModels?.()
+                    .then((models) => setLitellmModels(Array.isArray(models) ? models.filter(Boolean) : []))
+                    .catch(() => setLitellmModels([]));
                 setTimeout(() => setSavedStatus(prev => ({ ...prev, litellm: false })), 2000);
             }
         } catch (e) {
@@ -696,6 +776,7 @@ export const AIProvidersSettings: React.FC = () => {
                 setLitellmBaseURL('');
                 setLitellmApiKey('');
                 setLitellmMaxTokens('');
+                setLitellmModels([]);
             }
         } catch (e) {
             console.error('Failed to remove LiteLLM config:', e);
@@ -856,38 +937,7 @@ export const AIProvidersSettings: React.FC = () => {
                     </div>
                     <ModelSelect
                         value={defaultModel}
-                        options={(() => {
-                            const opts: { id: string; name: string }[] = [];
-
-                            if (hasStoredKey.natively) {
-                                opts.push({ id: 'natively', name: 'Natively API' });
-                            }
-
-                            for (const [prov, cfg] of Object.entries(STANDARD_CLOUD_MODELS)) {
-                                if (!hasStoredKey[prov as keyof typeof hasStoredKey]) continue;
-                                cfg.ids.forEach((id, i) => opts.push({ id, name: cfg.names[i] }));
-                                const pm = preferredModels[prov as keyof typeof preferredModels];
-                                if (pm && !cfg.ids.includes(pm)) {
-                                    opts.push({ id: pm, name: prettifyModelId(pm) });
-                                }
-                            }
-                            if (codexOauthStatus.signedIn || codexCliConfig.enabled) {
-                                opts.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${prettifyModelId(codexCliConfig.model)})` });
-                                CODEX_CLI_MODEL_PRESETS.forEach(model => {
-                                    const id = codexCliSelectorId(model.id);
-                                    if (!opts.find(o => o.id === id)) {
-                                        opts.push({ id, name: `${CODEX_CLI_MODEL.name}: ${model.name}` });
-                                    }
-                                });
-                            }
-                            customProviders.forEach(p => opts.push({ id: p.id, name: p.name }));
-                            ollamaModels.forEach(m => opts.push({ id: `ollama-${m}`, name: `${m} (Local)` }));
-
-                            if (defaultModel && !opts.find(o => o.id === defaultModel)) {
-                                opts.unshift({ id: defaultModel, name: prettifyModelId(defaultModel) });
-                            }
-                            return opts;
-                        })()}
+                        options={buildAvailableModelOptions()}
                         onChange={(val) => {
                             setDefaultModel(val);
                             // @ts-ignore - persist as default + update runtime + broadcast

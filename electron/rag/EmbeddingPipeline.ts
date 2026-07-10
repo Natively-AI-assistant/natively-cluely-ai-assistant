@@ -46,16 +46,15 @@ export class EmbeddingPipeline {
     }
 
     /**
-     * Initialize with provider config (picks best available provider)
-     * Idempotent: re-initialization only runs if the new config adds at least one
-     * key/URL that was not present in the last config (e.g., Ollama becomes available,
-     * or a cloud API key is loaded from CredentialsManager after startup).
-     * If the config is unchanged or strictly worse, the existing initPromise is returned.
+     * Initialize with provider config (picks best available provider).
+     * Idempotent when the effective config is unchanged, but reinitializes on
+     * removals as well as additions. A removed Settings key must demote the stale
+     * provider immediately instead of keeping the old client alive until restart.
      */
     async initialize(config: AppAPIConfig): Promise<void> {
-        // Skip if config is identical or has no new information
-        if (this._lastConfig && !this._isConfigImprovement(this._lastConfig, config)) {
-            console.log('[EmbeddingPipeline] Config unchanged or no new keys — skipping re-initialization');
+        // Skip only if the effective config is truly unchanged.
+        if (this._lastConfig && !this._isConfigChanged(this._lastConfig, config)) {
+            console.log('[EmbeddingPipeline] Config unchanged — skipping re-initialization');
             return this.initPromise ?? Promise.resolve();
         }
         this._lastConfig = { ...config };
@@ -73,19 +72,23 @@ export class EmbeddingPipeline {
     }
 
     /**
-     * Returns true if `next` provides at least one credential that `prev` did not have.
-     * Prevents redundant re-initialization when the same keys are passed again.
+     * Returns true when any provider-selection input changed in either direction.
+     * Removals are as important as additions: clearing a Settings-managed key must
+     * re-resolve away from that provider rather than keeping the stale instance.
      */
-    private _isConfigImprovement(prev: AppAPIConfig, next: AppAPIConfig): boolean {
-        const hasNew = (prevVal: string | undefined, nextVal: string | undefined) =>
-            !prevVal && !!nextVal;
-        // A larger Gemini key pool is also an improvement (more rotation headroom).
-        const poolGrew = (next.geminiKeys?.length || 0) > (prev.geminiKeys?.length || 0);
+    private _isConfigChanged(prev: AppAPIConfig, next: AppAPIConfig): boolean {
+        const norm = (value?: string) => (value || '').trim();
+        const normList = (values?: string[]) => (values || []).map(norm).filter(Boolean).join('\n');
+        const normScopes = (value: AppAPIConfig['providerDataScopes']) => JSON.stringify(value || {});
         return (
-            hasNew(prev.openaiKey, next.openaiKey) ||
-            hasNew(prev.geminiKey, next.geminiKey) ||
-            poolGrew ||
-            hasNew(prev.ollamaUrl, next.ollamaUrl)
+            norm(prev.openaiKey) !== norm(next.openaiKey) ||
+            norm(prev.geminiKey) !== norm(next.geminiKey) ||
+            norm(prev.ollamaUrl) !== norm(next.ollamaUrl) ||
+            normList(prev.geminiKeys) !== normList(next.geminiKeys) ||
+            norm(prev.geminiEmbeddingModel) !== norm(next.geminiEmbeddingModel) ||
+            (prev.geminiEmbeddingDims || 0) !== (next.geminiEmbeddingDims || 0) ||
+            normScopes(prev.providerDataScopes) !== normScopes(next.providerDataScopes) ||
+            Boolean(prev.explicitKeyManagement) !== Boolean(next.explicitKeyManagement)
         );
     }
 
@@ -400,8 +403,9 @@ export class EmbeddingPipeline {
                         error.message
                     );
 
-                    if (!useFallback && newRetryCount >= MAX_RETRIES && this.fallbackProvider) {
-                        // Primary provider exhausted. Downgrade the meeting to local fallback.
+                    if (!useFallback && (newRetryCount >= MAX_RETRIES || error?.permanentAuthFailure) && this.fallbackProvider) {
+                        // Primary provider exhausted, or failed with an auth/account error
+                        // that cannot self-heal on retry. Downgrade the meeting to local fallback.
                         await this.activateMeetingFallback(pending.meeting_id);
                     } else {
                         // Still have retries remaining — back-off and retry.
@@ -490,7 +494,20 @@ export class EmbeddingPipeline {
         if (!this.provider) {
             throw new Error('Embedding provider not initialized');
         }
-        return this.embedWithTimeout(this.provider, text, 'live-chunk');
+        try {
+            return await this.embedWithTimeout(this.provider, text, 'live-chunk');
+        } catch (primaryError) {
+            const fallback = this.fallbackProvider;
+            if (!fallback || fallback === this.provider) throw primaryError;
+            console.warn(
+                `[EmbeddingPipeline] Primary single embedding failed via ${this.provider?.name ?? 'unknown'}; ` +
+                `falling back to ${fallback.name}:`,
+                primaryError instanceof Error ? primaryError.message : primaryError
+            );
+            const embedding = await this.embedWithTimeout(fallback, text, 'fallback-live-chunk');
+            this.promoteFallbackProvider(fallback);
+            return embedding;
+        }
     }
 
     /**
@@ -552,36 +569,39 @@ export class EmbeddingPipeline {
                     (err)     => { clearTimeout(timer); reject(err); }
                 );
             });
-            // Promote fallback for subsequent mode query embeddings. Persisted mode
-            // vectors are only comparable within one active space; keeping the
-            // exhausted cloud provider active would make freshly-local vectors look
-            // perpetually pending and unusable. The promotion guard is a no-op when
-            // already promoted (idempotent under concurrent indexFile callers).
-            if (this.provider !== fallback) {
-                this.provider = fallback;
-                try {
-                    this.db.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES ('last_embedding_space', ?)").run(fallback.space);
-                } catch (dbErr: any) {
-                    console.warn('[EmbeddingPipeline] Failed to persist fallback space:', dbErr?.message || dbErr);
-                    // MEDIUM #4: a swallowed persist failure means next launch can't
-                    // read back the promoted space, leaving freshly-local vectors
-                    // perpetually "pending" with no UI signal. Surface it so the
-                    // renderer can warn the user that a re-index may be required.
-                    try {
-                        const { BrowserWindow } = require('electron');
-                        BrowserWindow.getAllWindows().forEach((win: any) => {
-                            if (!win.isDestroyed()) {
-                                win.webContents.send('embedding:space-persist-failed', {
-                                    fallbackProvider: fallback.name,
-                                    space: fallback.space,
-                                    reason: dbErr?.message || String(dbErr),
-                                });
-                            }
-                        });
-                    } catch { /* non-fatal — best-effort renderer notice */ }
-                }
-            }
+            this.promoteFallbackProvider(fallback);
             return { embeddings, space: fallback.space, provider: fallback.name, dimensions: fallback.dimensions };
+        }
+    }
+
+    private promoteFallbackProvider(fallback: IEmbeddingProvider): void {
+        // Promote fallback for subsequent mode query embeddings. Persisted mode
+        // vectors are only comparable within one active space; keeping the
+        // exhausted cloud provider active would make freshly-local vectors look
+        // perpetually pending and unusable. The promotion guard is a no-op when
+        // already promoted (idempotent under concurrent indexFile callers).
+        if (this.provider === fallback) return;
+        this.provider = fallback;
+        try {
+            this.db.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES ('last_embedding_space', ?)").run(fallback.space);
+        } catch (dbErr: any) {
+            console.warn('[EmbeddingPipeline] Failed to persist fallback space:', dbErr?.message || dbErr);
+            // MEDIUM #4: a swallowed persist failure means next launch can't
+            // read back the promoted space, leaving freshly-local vectors
+            // perpetually "pending" with no UI signal. Surface it so the
+            // renderer can warn the user that a re-index may be required.
+            try {
+                const { BrowserWindow } = require('electron');
+                BrowserWindow.getAllWindows().forEach((win: any) => {
+                    if (!win.isDestroyed()) {
+                        win.webContents.send('embedding:space-persist-failed', {
+                            fallbackProvider: fallback.name,
+                            space: fallback.space,
+                            reason: dbErr?.message || String(dbErr),
+                        });
+                    }
+                });
+            } catch { /* non-fatal — best-effort renderer notice */ }
         }
     }
 
@@ -600,17 +620,32 @@ export class EmbeddingPipeline {
         // active at the start of the query and matches its space.
         // embedQuery() uses a query-specific prefix for asymmetric models (e.g. Nomic).
         // Wrap with a manual timeout since embedQuery is not covered by embedWithTimeout directly.
-        return new Promise<number[]>((resolve, reject) => {
+        const runQuery = (p: IEmbeddingProvider, label: string) => new Promise<number[]>((resolve, reject) => {
             const timer = setTimeout(() => {
                 reject(new Error(
-                    `[EmbeddingPipeline] embedQuery() timed out after ${EMBED_TIMEOUT_MS}ms for live-query via ${provider.name}`
+                    `[EmbeddingPipeline] embedQuery() timed out after ${EMBED_TIMEOUT_MS}ms for ${label} via ${p.name}`
                 ));
             }, EMBED_TIMEOUT_MS);
-            provider.embedQuery(text).then(
+            p.embedQuery(text).then(
                 (result) => { clearTimeout(timer); resolve(result); },
                 (err)    => { clearTimeout(timer); reject(err); }
             );
         });
+
+        try {
+            return await runQuery(provider, 'live-query');
+        } catch (primaryError) {
+            const fallback = this.fallbackProvider;
+            if (!fallback || fallback === provider) throw primaryError;
+            console.warn(
+                `[EmbeddingPipeline] Primary query embedding failed via ${provider.name}; ` +
+                `falling back to ${fallback.name}:`,
+                primaryError instanceof Error ? primaryError.message : primaryError
+            );
+            const embedding = await runQuery(fallback, 'fallback-live-query');
+            this.promoteFallbackProvider(fallback);
+            return embedding;
+        }
     }
 
     /**
