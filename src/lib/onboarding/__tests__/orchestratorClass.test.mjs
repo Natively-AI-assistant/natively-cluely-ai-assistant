@@ -34,12 +34,22 @@ const STAGES_TS = join(__dirname, '..', 'stageCatalog.ts');
 
 // ── DOM polyfills the orchestrator class touches ───────────────────────────
 // A manual RAF queue: scheduleTick() recurses (tick → scheduleTick), so a
-// synchronous RAF would infinitely recurse. Instead we buffer callbacks and
-// flush exactly one frame at a time from the test, which is enough to run one
+// synchronous timer would infinitely recurse. Instead we buffer callbacks and
+// flush exactly one tick at a time from the test, which is enough to run one
 // evaluate/dispatch pass deterministically.
-let rafQueue = [];
-let rafId = 0;
+//
+// NATIVE-LEAK FIX (2026-07-10): the drain loop is now a self-terminating
+// setTimeout, NOT a per-frame requestAnimationFrame (the perpetual rAF was the
+// native memory leak — see orchestrator.ts scheduleTick note). A rAF polyfill
+// is intentionally NOT installed: if the class ever regresses to
+// requestAnimationFrame it throws ("requestAnimationFrame is not defined"),
+// which is the regression guard we want.
+let timerQueue = [];
+let timerSeq = 0;
 let mockNow = 0;
+
+const realSetTimeout = globalThis.setTimeout;
+const realClearTimeout = globalThis.clearTimeout;
 
 function installPolyfills() {
   const store = new Map();
@@ -49,29 +59,46 @@ function installPolyfills() {
     removeItem: (k) => store.delete(k),
     clear: () => store.clear(),
   };
-  globalThis.requestAnimationFrame = (cb) => {
-    const id = ++rafId;
-    rafQueue.push({ id, cb });
+  globalThis.performance = { now: () => mockNow };
+  // Deliberately NO requestAnimationFrame — the orchestrator must never use it
+  // again (the perpetual rAF loop was the leak). Manual setTimeout queue so the
+  // mock clock drives the drain cadence deterministically.
+  delete globalThis.requestAnimationFrame;
+  delete globalThis.cancelAnimationFrame;
+  globalThis.setTimeout = (cb, _ms) => {
+    const id = ++timerSeq;
+    timerQueue.push({ id, cb });
     return id;
   };
-  globalThis.cancelAnimationFrame = (id) => {
-    rafQueue = rafQueue.filter((e) => e.id !== id);
+  globalThis.clearTimeout = (id) => {
+    timerQueue = timerQueue.filter((e) => e.id !== id);
   };
-  globalThis.performance = { now: () => mockNow };
+}
+
+// eslint-disable-next-line no-unused-vars
+function restoreTimers() {
+  globalThis.setTimeout = realSetTimeout;
+  globalThis.clearTimeout = realClearTimeout;
 }
 
 /**
- * Run exactly one buffered RAF frame. The orchestrator's scheduleTick() does
- * `tick(); scheduleTick();`, so each callback runs one evaluate/dispatch pass
- * and re-queues exactly one follow-up frame. We snapshot the currently-pending
- * callbacks and run only those — the re-scheduled follow-up stays queued for
- * the NEXT flush, preserving the self-perpetuating RAF loop (clearing it would
- * silently stop the drain loop and mask re-raise bugs).
+ * Run exactly one buffered drain tick. The orchestrator's tick() runs one
+ * evaluate/dispatch pass and then calls ensureDraining(), which re-arms exactly
+ * one follow-up timer IFF there is still unresolved work. We snapshot the
+ * currently-pending callbacks and run only those — a re-armed follow-up stays
+ * queued for the NEXT flush. When the queue drains fully, ensureDraining stops
+ * scheduling, timerQueue goes empty, and flushOneFrame becomes a no-op: that
+ * self-termination is the leak fix (the loop no longer runs forever).
  */
 function flushOneFrame() {
-  const pending = rafQueue;
-  rafQueue = [];
+  const pending = timerQueue;
+  timerQueue = [];
   for (const { cb } of pending) cb();
+}
+
+/** True once the drain loop has stopped re-scheduling itself. */
+function drainIsIdle() {
+  return timerQueue.length === 0;
 }
 
 // ── Load the REAL class via esbuild (no twin, no drift) ────────────────────
@@ -96,12 +123,22 @@ async function loadModule(entryTs) {
   return import(pathToFileURL(outFile).href);
 }
 
+let ALL_STAGES; // [...STAGES, QUIET_WINDOW_STAGE] — matches App.tsx's start() call
+
 before(async () => {
   installPolyfills();
   const orchMod = await loadModule(ORCH_TS);
   const stagesMod = await loadModule(STAGES_TS);
   OnboardingOrchestrator = orchMod.OnboardingOrchestrator;
   STAGES = stagesMod.STAGES;
+  // Production starts the orchestrator with the quiet_window stage appended
+  // (App.tsx: orch.start([...STAGES, QUIET_WINDOW_STAGE])). quiet_window is
+  // inserted into the queue when trial_promo completes, so its config must be
+  // registered or that id would sit unresolved in the queue. Include it here so
+  // the drain-termination guard reflects real startup.
+  ALL_STAGES = stagesMod.QUIET_WINDOW_STAGE
+    ? [...STAGES, stagesMod.QUIET_WINDOW_STAGE]
+    : STAGES;
   assert.ok(OnboardingOrchestrator, 'OnboardingOrchestrator export loaded');
   assert.ok(Array.isArray(STAGES) && STAGES.length > 0, 'STAGES catalog loaded');
 });
@@ -119,7 +156,7 @@ before(async () => {
 // dismissedThisSession guard is still fresh (it is never persisted).
 function raisePermissions({ preservePersistedState = false } = {}) {
   if (!preservePersistedState) localStorage.clear();
-  rafQueue = [];
+  timerQueue = [];
   mockNow = 0;
 
   const orch = new OnboardingOrchestrator();
@@ -230,4 +267,94 @@ test('dismissing permissions does NOT wedge other toaster stages', () => {
     'browser_extension',
     'the next stage must still be reachable — the session guard is per-stage, not global',
   );
+});
+
+// ─── NATIVE-LEAK REGRESSION GUARDS (2026-07-10) ─────────────────────────────
+// These lock in the fix for the perpetual-requestAnimationFrame native memory
+// leak (introduced by cf6a2f9, bisected to the 2026-07-04 window). The drain
+// loop MUST self-terminate when there is no pending work, and MUST NOT run on
+// requestAnimationFrame — otherwise the renderer's compositor never idles and,
+// under software compositing, leaks native raster tiles until OOM.
+
+test('LEAK GUARD: the drain loop uses setTimeout, never requestAnimationFrame', () => {
+  // requestAnimationFrame is intentionally undefined in installPolyfills(). If
+  // the class regressed to a rAF loop, start()/tick() would throw here.
+  assert.equal(
+    typeof globalThis.requestAnimationFrame,
+    'undefined',
+    'test harness must NOT provide requestAnimationFrame (regression guard)',
+  );
+  const orch = raisePermissions(); // exercises start() + several ticks
+  assert.equal(orch.getSnapshot().activeToasterId, 'permissions');
+  // Reaching here without a "requestAnimationFrame is not defined" throw proves
+  // the drain loop is timer-based.
+});
+
+test('LEAK GUARD: the drain loop STOPS scheduling once every stage is resolved', () => {
+  localStorage.clear();
+  timerQueue = [];
+  mockNow = 0;
+
+  const orch = new OnboardingOrchestrator();
+  orch.start(ALL_STAGES);
+  orch.emit({ type: 'launcher:mounted' });
+  orch.emit({ type: 'foreground:change', isForeground: true });
+
+  // Resolve EVERY stage: mark them all completed so nothing can ever fire. This
+  // is the fully-drained terminal state — the loop must stop re-arming itself.
+  for (const stage of ALL_STAGES) {
+    orch.markSkipped(stage.id);
+  }
+
+  // Drain any pending ticks. After the queue is fully resolved, ensureDraining()
+  // must not re-schedule, so the timer queue settles to empty within a couple of
+  // flushes (not spin forever like the old per-frame rAF).
+  let guard = 0;
+  while (!drainIsIdle() && guard < 10) {
+    flushOneFrame();
+    guard += 1;
+  }
+  assert.ok(
+    drainIsIdle(),
+    `drain loop must self-terminate when fully drained (still pending after ${guard} flushes)`,
+  );
+
+  // And it must NOT wake back up on its own — advancing the clock without any
+  // new event leaves it idle (the old loop would have re-fired every frame).
+  mockNow += 60_000;
+  assert.ok(drainIsIdle(), 'drain loop must stay idle with no new events');
+});
+
+test('LEAK GUARD: a state-change event re-arms the drain loop after it went idle', () => {
+  localStorage.clear();
+  timerQueue = [];
+  mockNow = 0;
+
+  const orch = new OnboardingOrchestrator();
+  orch.start(STAGES);
+  // Not foreground yet → shouldEvaluate() is false, but there IS pending work,
+  // so the loop stays armed. Drain the initial ticks.
+  let guard = 0;
+  while (!drainIsIdle() && guard < 5) { flushOneFrame(); guard += 1; }
+
+  // Backgrounded with pending work: the loop keeps a single armed timer (it must
+  // not busy-loop, but it must not permanently give up either). Now deliver a
+  // foreground + mount + duration so permissions becomes eligible.
+  orch.emit({ type: 'launcher:mounted' });
+  orch.emit({ type: 'foreground:change', isForeground: true });
+  orch.emit({
+    type: 'user-state:change',
+    patch: { permsShown: false, macTCCBlocked: true, extensionConnected: true },
+  });
+  mockNow += 3_000;
+
+  // The events called ensureDraining via notify(); flushing must now raise it.
+  guard = 0;
+  let raised = false;
+  while (guard < 5) {
+    flushOneFrame();
+    if (orch.getSnapshot().activeToasterId === 'permissions') { raised = true; break; }
+    guard += 1;
+  }
+  assert.ok(raised, 'a state-change event must re-arm the loop and let a newly-eligible stage fire');
 });
