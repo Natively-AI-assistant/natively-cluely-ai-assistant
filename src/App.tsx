@@ -146,6 +146,18 @@ const App: React.FC = () => {
   // resetting and never fire — the "stuck at the startup animation" symptom.
   // Memoizing to [] makes the splash timers arm exactly once.
   const dismissStartup = useCallback(() => setShowStartup(false), []);
+
+  // Bug 1 + Bug 2: only mount the launcher-side floating card AFTER the
+  // startup animation has finished AND a 3s settle window has elapsed.
+  // Triggers `false → true` 3s after `showStartup` flips false; tracked via
+  // a single boolean so the IPC subscription + motion entrance don't fire
+  // during the startup animation or while the main UI is still settling.
+  const [showHindsightBanner, setShowHindsightBanner] = useState(false);
+  useEffect(() => {
+    if (showStartup) return; // never schedule while startup is up
+    const t = setTimeout(() => setShowHindsightBanner(true), 3000);
+    return () => clearTimeout(t);
+  }, [showStartup]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<string>('general');
   const [isModesOpen, setIsModesOpen] = useState(false);
@@ -819,7 +831,7 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary context="Launcher">
     <div className="h-full min-h-0 w-full relative bg-transparent">
-      <HindsightStatusBanner variant="floating-card" />
+      {showHindsightBanner && <HindsightStatusBanner variant="floating-card" />}
       <AnimatePresence>
         {showStartup ? (
           <motion.div
