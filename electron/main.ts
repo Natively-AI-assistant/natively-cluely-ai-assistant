@@ -1674,14 +1674,37 @@ export class AppState {
         // attributable: if the GPU process is the one ballooning on Windows,
         // the "Browser"/main RSS and the "GPU" RSS diverge here. Guarded so a
         // failure never breaks the heartbeat.
-        let procMem: Array<{ type: string; rssMB: number; pid: number }> = [];
+        let procMem: Array<{ type: string; rssMB: number; pid: number; win?: string }> = [];
         try {
-          const { app: eApp } = require('electron');
+          const { app: eApp, BrowserWindow, webContents } = require('electron');
+          // Build a pid → window-label map so a leaking "Tab" (renderer) is
+          // attributable to a SPECIFIC window (launcher / overlay / cropper /
+          // settings / model-selector). getAppMetrics() only reports the process
+          // TYPE + pid, not which renderer it is — so on the Windows repro we
+          // couldn't tell WHICH renderer ballooned. Match each live webContents'
+          // OS process id to its window URL's ?window= param.
+          const pidToWin: Record<number, string> = {};
+          try {
+            for (const wc of (webContents?.getAllWebContents?.() || [])) {
+              try {
+                if (wc.isDestroyed?.()) continue;
+                const ospid = wc.getOSProcessId?.();
+                if (!ospid) continue;
+                const url = wc.getURL?.() || '';
+                const m = /[?&]window=([a-z-]+)/.exec(url);
+                let label = m ? m[1] : (url.includes('index.html') || url.includes('localhost') ? 'launcher?' : 'renderer');
+                // Devtools / about:blank helpers
+                if (url.startsWith('devtools://')) label = 'devtools';
+                pidToWin[ospid] = pidToWin[ospid] ? `${pidToWin[ospid]}+${label}` : label;
+              } catch { /* per-wc best effort */ }
+            }
+          } catch { /* webContents enumeration best effort */ }
           procMem = (eApp.getAppMetrics?.() || [])
             .map((m: any) => ({
               type: m.type,
               rssMB: m.memory?.workingSetSize ? Math.round(m.memory.workingSetSize / 1024) : 0, // KB→MB
               pid: m.pid,
+              ...(pidToWin[m.pid] ? { win: pidToWin[m.pid] } : {}),
             }))
             .sort((a: any, b: any) => b.rssMB - a.rssMB);
         } catch { /* getAppMetrics unavailable pre-ready — skip */ }
