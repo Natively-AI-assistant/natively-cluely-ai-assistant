@@ -553,9 +553,25 @@ const COMMON_CODING_PROBLEM_PATTERNS = [
 ];
 
 const CODING_PATTERNS = [
-  /\b(write|implement|code|program|function|class|method|solve)\b/i,
+  // Real-custom-mode-repair (2026-07-11): dropped bare `method` and `class`
+  // from this line — both are extremely common non-coding English nouns
+  // ("What fine-tuning METHOD was used?", "teaching method", "what CLASS of
+  // algorithm is this", "business class") and produced a confirmed P0
+  // incident (a document-grounded thesis question about a fine-tuning
+  // method was misrouted to coding_question_answer and answered with an
+  // unrelated Two Sum LeetCode solution — see docs/context-os/
+  // real-custom-mode-repair/06_ROOT_CAUSE_REPORT.md). `class`/`method` alone
+  // are now handled ONLY by the paired-with-coding-object pattern two lines
+  // below (e.g. "write a class for X", "implement a method to Y") — bare
+  // occurrence of either word no longer trips the coding route on its own.
+  /\b(write|implement|code|program|solve)\b/i,
   /\bcode for\b|\bprogram for\b|\bfunction for\b|\balgorithm for\b/i,
   /\balgorithm\b|\bdebug this\b|\bfix (this|the) bug\b/i,
+  // `class`/`method` count as a coding signal ONLY when paired with an
+  // explicit coding verb or a function/algorithm noun in the same clause —
+  // "write a class that…", "implement the method for sorting…" — never bare.
+  /\b(write|implement|code|create|define)\b[\w ,'-]{0,20}\b(class|method|function)\b/i,
+  /\b(class|method|function)\b[\w ,'-]{0,20}\bto\s+(sort|search|traverse|reverse|parse|compute|calculate|return)\b/i,
   // A bare language name is NOT a coding signal on its own — "how would you use
   // SQL", "explain SQL", "have you used Python" are concept/experience asks, not
   // "write code" tasks. Only treat a language as coding when paired with an
