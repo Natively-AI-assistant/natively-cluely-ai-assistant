@@ -33,12 +33,21 @@ export class FollowUpLLM {
         }
     }
 
-    async *generateStream(previousAnswer: string, refinementRequest: string, context?: string): AsyncGenerator<string> {
+    async *generateStream(previousAnswer: string, refinementRequest: string, context?: string, options?: { contractRule?: string }): AsyncGenerator<string> {
         try {
             const message = `PREVIOUS ANSWER:\n${previousAnswer}\n\nREQUEST: ${refinementRequest}`;
             const fittedContext = context ? this.llmHelper.fitContextForCurrentModel(context) : context;
+            let prompt = this.resolvePrompt();
+            // CONTEXT OS (Phase 11): a refinement INHERITS the original turn's
+            // source ownership — "make it shorter" after a doc-grounded answer
+            // must not introduce profile/memory facts. The caller passes the
+            // rule built from the active mode's contract. Additive: absent →
+            // legacy prompt byte-for-byte.
+            if (options?.contractRule) {
+                prompt = `${prompt}\n\n${options.contractRule}`;
+            }
             // See generate() above — ignoreKnowledgeMode=true.
-            yield* this.llmHelper.streamChat(message, undefined, fittedContext, this.resolvePrompt(), true);
+            yield* this.llmHelper.streamChat(message, undefined, fittedContext, prompt, true);
         } catch (e) {
             console.error("[FollowUpLLM] Stream Failed:", e);
         }

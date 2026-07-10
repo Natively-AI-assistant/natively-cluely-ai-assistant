@@ -34,10 +34,17 @@ export class RecapLLM {
     /**
      * Generate a neutral conversation summary (Streamed)
      */
-    async *generateStream(context: string): AsyncGenerator<string> {
+    async *generateStream(context: string, options?: { contractRule?: string }): AsyncGenerator<string> {
         if (!context.trim()) return;
         try {
-            const promptOverride = this.llmHelper.getPromptTier() === 'tiny' ? TINY_RECAP_PROMPT : UNIVERSAL_RECAP_PROMPT;
+            let promptOverride = this.llmHelper.getPromptTier() === 'tiny' ? TINY_RECAP_PROMPT : UNIVERSAL_RECAP_PROMPT;
+            // CONTEXT OS (Phase 11): the caller may pass a source-contract rule
+            // (built from the active mode's TurnContextContract) so the recap is
+            // no longer mode-blind — e.g. "summarize the transcript only; do not
+            // introduce profile or document facts". Additive: absent → legacy.
+            if (options?.contractRule) {
+                promptOverride = `${promptOverride}\n\n${options.contractRule}`;
+            }
             const fittedContext = this.llmHelper.fitContextForCurrentModel(context);
             // See generate() above — ignoreKnowledgeMode=true.
             yield* this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride, true);

@@ -157,7 +157,22 @@ export type IntelligenceFlagKey =
   // Default ON (the full-JIT policy is the intended behavior); flip OFF to
   // restore the legacy AOT-emit fast paths if a latency/behavior regression is
   // found in the field.
-  | 'jitFinalAnswerEnforced';
+  | 'jitFinalAnswerEnforced'
+  // ── Context OS / Source Authority Kernel (2026-07-10) ────────────────────
+  // See docs/context-os/. Umbrella: nothing Context OS runs without this.
+  | 'contextOsEnabled'
+  // Per-surface wiring gates (each also requires contextOsEnabled).
+  | 'contextOsManualChatEnabled'
+  | 'contextOsWtaEnabled'
+  | 'contextOsRecapFollowupEnabled'
+  // Build + trace the typed EvidencePack alongside legacy retrieval.
+  | 'contextOsEvidencePackEnabled'
+  // Memory safety: assistant-claim extraction + validated-claim reuse gates.
+  | 'contextOsMemorySafetyEnabled'
+  // Enforce capability-scoped retrieval (block, not just log, forbidden fetches).
+  | 'contextOsEnforceSourceCapabilities'
+  // Property-aware evidence validation gates generation (refuse on mismatch).
+  | 'contextOsPropertyValidation';
 
 interface FlagSpec {
   /** env var name (NATIVELY_* convention). */
@@ -267,6 +282,20 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   // Full-JIT final-answer law (2026-07-07). Default OFF for stability
   // (2026-07-09); can be re-enabled by env/settings after packaged soak tests.
   jitFinalAnswerEnforced: { env: 'NATIVELY_JIT_FINAL_ANSWER_ENFORCED', setting: 'jitFinalAnswerEnforcedEnabled', default: false },
+  // ── Context OS / Source Authority Kernel (2026-07-10) ────────────────────
+  // Rollout ladder (docs/context-os/): observe → shadow-block → enforce, per
+  // surface. Everything default OFF in production; the umbrella + observe-only
+  // surfaces default ON in dev/test so the contamination suite exercises the
+  // real path (same convention as okfProfilePacks).
+  contextOsEnabled: { env: 'NATIVELY_CONTEXT_OS', setting: 'contextOsEnabled', default: isInternalDevTestContext() },
+  contextOsManualChatEnabled: { env: 'NATIVELY_CONTEXT_OS_MANUAL_CHAT', setting: 'contextOsManualChatEnabled', default: isInternalDevTestContext() },
+  contextOsWtaEnabled: { env: 'NATIVELY_CONTEXT_OS_WTA', setting: 'contextOsWtaEnabled', default: isInternalDevTestContext() },
+  contextOsRecapFollowupEnabled: { env: 'NATIVELY_CONTEXT_OS_RECAP_FOLLOWUP', setting: 'contextOsRecapFollowupEnabled', default: isInternalDevTestContext() },
+  contextOsEvidencePackEnabled: { env: 'NATIVELY_CONTEXT_OS_EVIDENCE_PACK', setting: 'contextOsEvidencePackEnabled', default: isInternalDevTestContext() },
+  contextOsMemorySafetyEnabled: { env: 'NATIVELY_CONTEXT_OS_MEMORY_SAFETY', setting: 'contextOsMemorySafetyEnabled', default: isInternalDevTestContext() },
+  // Blocking behaviors stay default OFF everywhere until telemetry validates.
+  contextOsEnforceSourceCapabilities: { env: 'NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES', setting: 'contextOsEnforceSourceCapabilitiesEnabled', default: false },
+  contextOsPropertyValidation: { env: 'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION', setting: 'contextOsPropertyValidationEnabled', default: false },
 };
 
 const ON_VALUES = new Set(['1', 'true', 'on', 'enabled', 'yes']);

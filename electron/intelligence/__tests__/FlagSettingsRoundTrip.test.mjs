@@ -93,6 +93,19 @@ const EXPECTED_KEYS = [
   // Document-grounded safety isolation gates.
   'docGroundedStrictIsolation',
   'docGroundedFalseRefusalRepair',
+  // Custom-Mode Source Isolation (2026-07-06).
+  'customModeSourceEnforcement',
+  // Full-JIT final-answer law (2026-07-07).
+  'jitFinalAnswerEnforced',
+  // Context OS / Source Authority Kernel (2026-07-10) — docs/context-os/.
+  'contextOsEnabled',
+  'contextOsManualChatEnabled',
+  'contextOsWtaEnabled',
+  'contextOsRecapFollowupEnabled',
+  'contextOsEvidencePackEnabled',
+  'contextOsMemorySafetyEnabled',
+  'contextOsEnforceSourceCapabilities',
+  'contextOsPropertyValidation',
 ];
 
 // All NATIVELY_* env vars these flags read — cleared before/after so a leaked env from the
@@ -153,6 +166,16 @@ const ALL_ENV_VARS = [
   'NATIVELY_OKF_PROFILE_KNOWLEDGE_UI',
   'NATIVELY_DOC_GROUNDED_STRICT_ISOLATION',
   'NATIVELY_DOC_GROUNDED_FALSE_REFUSAL_REPAIR',
+  'NATIVELY_CUSTOM_MODE_SOURCE_ENFORCEMENT',
+  'NATIVELY_JIT_FINAL_ANSWER_ENFORCED',
+  'NATIVELY_CONTEXT_OS',
+  'NATIVELY_CONTEXT_OS_MANUAL_CHAT',
+  'NATIVELY_CONTEXT_OS_WTA',
+  'NATIVELY_CONTEXT_OS_RECAP_FOLLOWUP',
+  'NATIVELY_CONTEXT_OS_EVIDENCE_PACK',
+  'NATIVELY_CONTEXT_OS_MEMORY_SAFETY',
+  'NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES',
+  'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION',
 ];
 
 function clearAllEnv() {

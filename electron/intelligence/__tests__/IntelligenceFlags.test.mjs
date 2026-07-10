@@ -28,6 +28,10 @@ const ENV_KEYS = [
   'NATIVELY_OKF_PROFILE_GRAPH_EXPANSION', 'NATIVELY_OKF_PROFILE_KNOWLEDGE_UI',
   'NATIVELY_DOC_GROUNDED_STRICT_ISOLATION', 'NATIVELY_CUSTOM_MODE_SOURCE_ENFORCEMENT',
   'NATIVELY_DOC_GROUNDED_FALSE_REFUSAL_REPAIR', 'NATIVELY_JIT_FINAL_ANSWER_ENFORCED',
+  'NATIVELY_CONTEXT_OS', 'NATIVELY_CONTEXT_OS_MANUAL_CHAT', 'NATIVELY_CONTEXT_OS_WTA',
+  'NATIVELY_CONTEXT_OS_RECAP_FOLLOWUP', 'NATIVELY_CONTEXT_OS_EVIDENCE_PACK',
+  'NATIVELY_CONTEXT_OS_MEMORY_SAFETY', 'NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES',
+  'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION',
 ];
 
 // The full flag set — Meeting Notes V3 product flags intentionally ship default ON;
@@ -46,6 +50,12 @@ const ALL_FLAG_KEYS = [
   'okfProfileGraphExpansion', 'okfProfileKnowledgeUi',
   'docGroundedStrictIsolation', 'customModeSourceEnforcement', 'docGroundedFalseRefusalRepair',
   'jitFinalAnswerEnforced',
+  // Context OS / Source Authority Kernel (2026-07-10). The first six default to
+  // isInternalDevTestContext() (FALSE under this bare node harness); the two
+  // blocking flags default OFF everywhere.
+  'contextOsEnabled', 'contextOsManualChatEnabled', 'contextOsWtaEnabled',
+  'contextOsRecapFollowupEnabled', 'contextOsEvidencePackEnabled', 'contextOsMemorySafetyEnabled',
+  'contextOsEnforceSourceCapabilities', 'contextOsPropertyValidation',
 ];
 
 const DEFAULT_ON_KEYS = new Set([
