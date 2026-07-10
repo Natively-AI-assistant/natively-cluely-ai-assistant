@@ -1308,6 +1308,26 @@ export class DatabaseManager {
             this.db.pragma('user_version = 24');
         }
 
+        // Version 24 → 25: persisted ModeSourceContract (real-custom-mode-repair,
+        // 2026-07-11). Closes the root cause of the P0 contamination incident:
+        // `documentGrounded`/`sourceAuthority` were previously RE-DERIVED on every
+        // turn by regex-matching the mode's free-text prompt, so a real user's
+        // natural phrasing silently failed to satisfy the detector and modes
+        // defaulted to `general_mixed` (everything allowed) with no user
+        // visibility. `source_contract_json` stores the explicit, typed,
+        // user-editable ModeSourceContract (electron/services/modeSourceContract.ts).
+        // NULL means "not yet migrated" — ModesManager migrates it once on first
+        // read and persists the result (never re-derives per-turn again).
+        if (version < 25) {
+            console.log('[DatabaseManager] Applying migration v24 → v25: Add modes.source_contract_json');
+            const hasColumn = this.db.prepare(`PRAGMA table_info(modes)`).all()
+                .some((col: any) => col.name === 'source_contract_json');
+            if (!hasColumn) {
+                this.db.exec(`ALTER TABLE modes ADD COLUMN source_contract_json TEXT`);
+            }
+            this.db.pragma('user_version = 25');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 
@@ -1500,19 +1520,19 @@ export class DatabaseManager {
         }
     }
 
-    public createMode(mode: { id: string; name: string; templateType: string; customContext: string }): void {
+    public createMode(mode: { id: string; name: string; templateType: string; customContext: string; sourceContractJson?: string }): void {
         if (!this.db) return;
         try {
             this.db.prepare(`
-                INSERT INTO modes (id, name, template_type, custom_context, is_active)
-                VALUES (?, ?, ?, ?, 0)
-            `).run(mode.id, mode.name, mode.templateType, mode.customContext);
+                INSERT INTO modes (id, name, template_type, custom_context, is_active, source_contract_json)
+                VALUES (?, ?, ?, ?, 0, ?)
+            `).run(mode.id, mode.name, mode.templateType, mode.customContext, mode.sourceContractJson ?? null);
         } catch (e) {
             console.error('[DatabaseManager] createMode failed:', e);
         }
     }
 
-    public updateMode(id: string, updates: { name?: string; templateType?: string; customContext?: string }): void {
+    public updateMode(id: string, updates: { name?: string; templateType?: string; customContext?: string; sourceContractJson?: string | null }): void {
         if (!this.db) return;
         try {
             if (updates.name !== undefined) {
@@ -1523,6 +1543,9 @@ export class DatabaseManager {
             }
             if (updates.customContext !== undefined) {
                 this.db.prepare('UPDATE modes SET custom_context = ? WHERE id = ?').run(updates.customContext, id);
+            }
+            if (updates.sourceContractJson !== undefined) {
+                this.db.prepare('UPDATE modes SET source_contract_json = ? WHERE id = ?').run(updates.sourceContractJson, id);
             }
         } catch (e) {
             console.error('[DatabaseManager] updateMode failed:', e);

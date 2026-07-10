@@ -6,6 +6,14 @@ import type { AnswerType } from '../llm/AnswerPlanner';
 import type { ActiveModeInfo } from '../llm/modeProfiles';
 import { classifyCustomContext, selectCustomContextForAnswer } from '../llm/customContextClassifier';
 import { diagLog } from '../llm/documentGroundedPrompt';
+import {
+    type ModeSourceContract,
+    defaultSourceContractForNewMode,
+    migrateSourceContractFromPrompt,
+    parseModeSourceContract,
+    serializeModeSourceContract,
+    documentGroundedFromContract,
+} from './modeSourceContract';
 
 /**
  * Drop sensitive (salary/pricing/strategy) chunks from a raw customContext blob
@@ -55,6 +63,13 @@ export interface Mode {
     customContext: string;
     isActive: boolean;
     createdAt: string;
+    /**
+     * Persisted, explicit, typed source policy (real-custom-mode-repair,
+     * 2026-07-11). `null` for a mode that has never been migrated/set — callers
+     * should treat null as "not yet resolved" and call
+     * ModesManager.getOrMigrateSourceContract(id) rather than assume a default.
+     */
+    sourceContract: ModeSourceContract | null;
 }
 
 export interface ModeReferenceFile {
@@ -232,6 +247,8 @@ export interface ActiveModeDocumentGroundingInfo {
     modeId?: string;
     modeName?: string;
     hasCustomPrompt: boolean;
+    /** The mode's persisted, explicit source policy (real-custom-mode-repair). */
+    sourceContract: ModeSourceContract;
 }
 
 export function isCustomMode(mode: Pick<Mode, 'templateType' | 'name'> | null | undefined): boolean {
@@ -251,6 +268,7 @@ function rowToMode(row: any): Mode {
         customContext: row.custom_context ?? '',
         isActive: row.is_active === 1,
         createdAt: row.created_at,
+        sourceContract: parseModeSourceContract(row.source_contract_json),
     };
 }
 
@@ -391,6 +409,7 @@ export class ModesManager {
                 hasCustomPrompt: grounding.hasCustomPrompt,
                 documentGrounded: grounding.documentGrounded,
                 documentGroundedCustomModeActive: grounding.documentGroundedCustomModeActive,
+                sourceContract: grounding.sourceContract,
             };
         } else {
             this._activeModeInfoCache = null;
@@ -430,11 +449,13 @@ export class ModesManager {
 
     public createMode(params: { name: string; templateType: ModeTemplateType }): Mode {
         const id = `mode_${crypto.randomUUID()}`;
+        const initialContract = defaultSourceContractForNewMode();
         DatabaseManager.getInstance().createMode({
             id,
             name: params.name,
             templateType: params.templateType,
             customContext: '',
+            sourceContractJson: serializeModeSourceContract(initialContract),
         });
         // Seed default note sections for this template type
         const defaultSections = TEMPLATE_NOTE_SECTIONS[params.templateType] ?? [];
@@ -458,12 +479,50 @@ export class ModesManager {
             customContext: '',
             isActive: false,
             createdAt: new Date().toISOString(),
+            sourceContract: initialContract,
         };
     }
 
-    public updateMode(id: string, updates: { name?: string; templateType?: ModeTemplateType; customContext?: string }): void {
-        DatabaseManager.getInstance().updateMode(id, updates);
+    public updateMode(id: string, updates: { name?: string; templateType?: ModeTemplateType; customContext?: string; sourceContract?: ModeSourceContract }): void {
+        const { sourceContract, ...rest } = updates;
+        DatabaseManager.getInstance().updateMode(id, {
+            ...rest,
+            ...(sourceContract !== undefined ? { sourceContractJson: serializeModeSourceContract(sourceContract) } : {}),
+        });
         this.invalidateActiveModeCache();
+    }
+
+    /**
+     * Returns this mode's persisted ModeSourceContract, migrating it ONCE from
+     * legacy prompt-text heuristics (and persisting the result) if the mode has
+     * never had an explicit contract saved. This is the ONLY place the legacy
+     * regex-based heuristic still runs — after the first call for a given mode,
+     * the contract is stable and read verbatim from the database, closing the
+     * root cause of the P0 contamination incident (a mode's grounding behavior
+     * silently re-deriving, and potentially flipping, on every single turn).
+     */
+    public getOrMigrateSourceContract(modeId: string): ModeSourceContract {
+        const mode = this.resolveMode(modeId);
+        if (!mode) return defaultSourceContractForNewMode();
+        if (mode.sourceContract) return mode.sourceContract;
+        const files = this.getReferenceFiles(mode.id);
+        const hasReferenceFiles = files.some(file => file.content.trim());
+        // Profile-facts availability is not known to ModesManager (it lives in
+        // KnowledgeOrchestrator/profile services); migration only needs to
+        // distinguish "has files" from "no files" for its decision tree — see
+        // docs/context-os/real-custom-mode-repair/05_PRODUCT_SOURCE_POLICY.md.
+        // A profile-only migration branch is intentionally conservative
+        // (defaults to `clarify`) when this signal is unavailable at migration
+        // time; a caller with profile-facts knowledge may pass it via
+        // migrateSourceContractFromPrompt directly if a tighter migration is
+        // later needed.
+        const migrated = migrateSourceContractFromPrompt({
+            customContext: mode.customContext,
+            hasReferenceFiles,
+            hasProfileFacts: false,
+        });
+        this.updateMode(mode.id, { sourceContract: migrated });
+        return migrated;
     }
 
     public deleteMode(id: string): void {
@@ -961,42 +1020,40 @@ export class ModesManager {
 
     public getActiveModeDocumentGroundingInfo(pinnedModeId?: string): ActiveModeDocumentGroundingInfo {
         const mode = this.resolveMode(pinnedModeId);
-        if (!mode) return { isCustom: false, hasReferenceFiles: false, documentGrounded: false, documentGroundedCustomModeActive: false, hasCustomPrompt: false };
+        if (!mode) {
+            return {
+                isCustom: false, hasReferenceFiles: false, documentGrounded: false,
+                documentGroundedCustomModeActive: false, hasCustomPrompt: false,
+                sourceContract: defaultSourceContractForNewMode(),
+            };
+        }
         const files = this.getReferenceFiles(mode.id);
         const custom = isCustomMode(mode);
         const hasReferenceFiles = files.some(file => file.content.trim());
         const hasCustomPrompt = mode.customContext.trim().length > 0;
-        // A mode is "document-grounded" if it has reference files AND a custom
-        // prompt that declares source-of-truth on the uploaded material. We
-        // intentionally do NOT gate this on `custom` (= templateType === 'general'
-        // && name !== 'General') because users legitimately create deeply
-        // document-grounded prompts for built-in templates (e.g. a Seminar
-        // mode that explicitly says "answer only from the uploaded seminar file"
-        // — see live repro: a team-meet mode with 2k chars of doc-grounded
-        // customContext + 1 PDF, but documentGrounded=false because custom=false
-        // → retrieval never fires → model says "please upload your document").
-        const documentGrounded = hasReferenceFiles && detectCustomModeDocumentGrounding(mode.customContext);
-        // CRITICAL (code-review audit 2026-07-05, following the fix above):
+        // Real-custom-mode-repair (2026-07-11): `documentGrounded` is now a PURE
+        // function of the mode's PERSISTED ModeSourceContract, never a live regex
+        // re-match against the prompt text. Root cause of the P0 contamination
+        // incident: the prior implementation ran detectCustomModeDocumentGrounding
+        // on every single turn, and a real user's natural phrasing routinely
+        // failed to satisfy both regexes simultaneously, silently defaulting the
+        // mode to `general_mixed` (everything allowed) with zero user visibility.
+        // getOrMigrateSourceContract() migrates + PERSISTS a legacy mode's
+        // contract exactly once (docs/context-os/real-custom-mode-repair/
+        // 05_PRODUCT_SOURCE_POLICY.md); after that this call is a pure DB read.
+        const sourceContract = this.getOrMigrateSourceContract(mode.id);
+        const documentGrounded = documentGroundedFromContract(sourceContract, hasReferenceFiles);
         // `documentGroundedCustomModeActive` — NOT `documentGrounded` — is the
         // flag every production retrieval/prompt-shaping call site actually
         // reads (WhatToAnswerLLM.ts forceDocumentGrounding, both LLMHelper.ts
         // active-mode-injection sites, IntelligenceEngine.ts's context
         // suppression + profile bypass, ipcHandlers.ts's Hindsight/OKF
-        // isolation gates and phone-chat). `documentGrounded` alone is
-        // essentially write-only (only 2 diagnostic console.log fields read
-        // it) — broadening ONLY `documentGrounded` (as an earlier, incomplete
-        // fix did) left every real behavior still gated on the unbroadened
-        // `custom` requirement below, so the original "please upload your
-        // document" bug persisted for built-in-template modes even after
-        // that fix landed. The name retains "CustomMode" for historical/API
-        // -compat reasons (~65 call sites reference this exact field name)
-        // but it no longer requires `isCustomMode` — any mode (built-in
-        // template or user-created) with reference files + a document-
-        // grounded prompt now activates the full doc-grounded behavior.
-        // `hasCustomPrompt` and `hasReferenceFiles` are both already implied
-        // by `documentGrounded` (empty customContext can't match either
-        // regex; documentGrounded requires hasReferenceFiles) — kept as
-        // explicit conjuncts only for readability/defense-in-depth.
+        // isolation gates and phone-chat). The name retains "CustomMode" for
+        // historical/API-compat reasons (~65 call sites reference this exact
+        // field name) but does not require `isCustomMode` — any mode (built-in
+        // template or user-created) whose PERSISTED CONTRACT names reference
+        // files as the (primary or exclusive) source activates full doc-grounded
+        // behavior.
         const documentGroundedCustomModeActive = hasCustomPrompt && documentGrounded && hasReferenceFiles;
         return {
             isCustom: custom,
@@ -1006,6 +1063,7 @@ export class ModesManager {
             modeId: mode.id,
             modeName: mode.name,
             hasCustomPrompt,
+            sourceContract,
         };
     }
 
