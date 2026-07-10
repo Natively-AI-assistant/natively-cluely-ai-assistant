@@ -69,6 +69,21 @@ export interface BuildTurnContractInput {
 const AMBIGUOUS_SOURCE_TERM_RE =
   /\b(project|dataset|method|methodology|phase|stage|experiment|hardware|software|company|role|experience|deadline|model|system|result)\b/i;
 
+// Explicit FIRST-PERSON-POSSESSIVE profile ask. "my best project", "my skills",
+// "do I have X experience", "my résumé", "am I a good fit". The possessive/
+// self-reference DISAMBIGUATES the owner to the candidate profile — so even in a
+// general_mixed/ambiguous authority with a live transcript present, this must NOT
+// clarify: "my project" is unambiguously the candidate's project, not the
+// meeting's. Fixes the false-clarify on profile-mode questions (final
+// verification 2026-07-11). SHAPE only — never an entity/company name.
+const EXPLICIT_SELF_PROFILE_RE =
+  /\b(?:my|mine|our)\b[\s\w-]{0,40}\b(?:resume|cv|profile|projects?|portfolio|experience|background|skills?|education|career|work\s+history|strengths?|weakness(?:es)?)\b|\b(?:do|have|am|are|was|is)\s+i\b[\s\w-]{0,40}\b(?:experience|worked|know|built|good\s+fit|qualified|suitable|fit\s+for)\b|\bwhy\s+(?:am\s+i|i\s+am)\b|\bwhat\s+are\s+my\b|\bwhat\s+is\s+my\b|\b(?:am|why\s+am)\s+i\s+(?:suitable|a\s+good\s+fit|qualified|fit)\b|\bsuitable\s+for\s+(?:this|the)\s+role\b/i;
+
+/** Is this an explicit first-person-possessive ask about the candidate's own profile? */
+export function isExplicitSelfProfileAsk(question: string): boolean {
+  return EXPLICIT_SELF_PROFILE_RE.test(String(question || ''));
+}
+
 function trustLevelFor(sourceKind: SourceKind): TrustLevel {
   switch (sourceKind) {
     case 'system_instruction':
@@ -221,6 +236,14 @@ export class SourceAuthorityKernel {
       case 'general_mixed':
       case 'ask_if_ambiguous':
       default: {
+        // An explicit first-person-possessive profile ask ("my best project",
+        // "what are my skills", "do I have K8s experience") is UNAMBIGUOUS: the
+        // possessive names the candidate's own profile. Resolve to profile (when
+        // facts exist) — never clarify. Fixes false-clarify on profile-mode
+        // questions (final verification 2026-07-11).
+        if (input.hasProfileFacts && isExplicitSelfProfileAsk(input.question)) {
+          return 'profile';
+        }
         // Clarify ONLY when the ambiguity is REAL: the question names a
         // source-owned thing AND at least TWO source universes actually exist
         // for it to be ambiguous BETWEEN (H1 fix, code-review 2026-07-10).

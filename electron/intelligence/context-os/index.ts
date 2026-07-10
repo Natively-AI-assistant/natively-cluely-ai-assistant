@@ -23,6 +23,7 @@ export {
   SourceAuthorityKernel,
   buildAmbiguousSourceClarification,
   buildSourceClarification,
+  isExplicitSelfProfileAsk,
   type BuildTurnContractInput,
 } from './SourceAuthorityKernel';
 export { PROPERTY_RULES, propertyRuleFor, textCanProveProperty } from './requestedProperty';
