@@ -1505,6 +1505,25 @@ export class IntelligenceEngine extends EventEmitter {
             // It carries the t0 mode (so WTA's prompt builders read the SAME mode the
             // plan above used — #6), the correlation ids (#9), and the generationId
             // stamped onto every live token (#3).
+            // CONTEXT OS H1: build a generation context for the WTA typed pack
+            // when the flag is on and this is a doc-grounded WTA turn with a
+            // contract. The pack is built inside WhatToAnswerLLM from the mode
+            // block (no double retrieval) and governs the factual prompt.
+            let wtaContextOsGeneration: import('./intelligence/context-os').ContextOsGenerationContext | undefined;
+            if (wtaTurnContract
+                && documentGroundedCustomModeActive
+                && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
+                wtaContextOsGeneration = {
+                    contract: wtaTurnContract,
+                    evidencePack: null,
+                    modeSnapshot: {
+                        modeId: snapshotModeId ?? null,
+                        modeName: snapshotModeInfo?.name ?? null,
+                        sourceAuthority: wtaTurnContract.reason,
+                    },
+                    govern: true,
+                };
+            }
             const requestSnapshot: WhatToAnswerRequestSnapshot = Object.freeze({
                 activeModeInfo: snapshotModeInfo,
                 modeId: snapshotModeId,
@@ -1514,6 +1533,7 @@ export class IntelligenceEngine extends EventEmitter {
                 meetingId: meetingMarker,
                 surface: 'what_to_answer' as const,
                 generationId,
+                ...(wtaContextOsGeneration ? { contextOsGeneration: wtaContextOsGeneration } : {}),
             });
 
             // RC-03 fix: hold a reference to the generator so we can call .return()

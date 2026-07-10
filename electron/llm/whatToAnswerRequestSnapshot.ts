@@ -74,6 +74,12 @@ export interface WhatToAnswerRequestSnapshot {
   /** The generation id for this request. Stamped onto every emitted live token so
    *  the renderer can reject tokens from a superseded answer (#3). */
   readonly generationId: number;
+  /** Context OS (H1): when present AND `contextOsEvidencePackEnabled`, the typed
+   *  EvidencePack GOVERNS the WTA factual prompt — the raw mode block is replaced
+   *  by the rendered contract + evidence pack and the candidate_profile factual
+   *  block is suppressed. Opaque (`unknown`) to avoid a cross-module type cycle;
+   *  WhatToAnswerLLM narrows it at the use site. Absent → legacy assembly. */
+  readonly contextOsGeneration?: unknown;
 }
 
 /** Minimal interface for the bits of ModesManager the snapshot reads. Keeps this

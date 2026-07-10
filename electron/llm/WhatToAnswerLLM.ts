@@ -448,6 +448,30 @@ ANSWER SHAPE: ${intentResult.answerShape}
                     : basePrompt;
 
             const assembler = new PromptAssembler();
+            // ── CONTEXT OS H1: typed EvidencePack GOVERNS the WTA factual prompt ──
+            // When a ContextOsGenerationContext is present (doc-grounded WTA +
+            // flag on), REPLACE the raw mode block with the typed pack (built from
+            // that same block — no re-retrieval) and suppress the candidate_profile
+            // factual block. One factual pipeline. Flag off / absent → legacy.
+            let typedModeContext = modeContextBlock;
+            let typedCandidateProfile = effectiveCandidateProfile;
+            try {
+                const _cog = requestSnapshot?.contextOsGeneration as import('../intelligence/context-os').ContextOsGenerationContext | undefined;
+                const { isIntelligenceFlagEnabled } = require('../intelligence/intelligenceFlags');
+                if (_cog && _cog.govern && modeContextBlock && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
+                    const { buildDocumentEvidencePackFromBlock, renderGoverningFactualBlock } = require('../intelligence/context-os') as typeof import('../intelligence/context-os');
+                    const pack = buildDocumentEvidencePackFromBlock(_cog.contract, modeContextBlock);
+                    const rendered = renderGoverningFactualBlock({ ..._cog, evidencePack: pack });
+                    if (rendered) {
+                        typedModeContext = rendered;      // typed pack replaces the raw block
+                        typedCandidateProfile = '';       // suppress the raw profile factual block
+                        (_cog as any).evidencePack = pack; // surface for validation/claims (Phase 9)
+                    }
+                }
+            } catch (cogErr: any) {
+                console.warn('[WhatToAnswerLLM] Context OS evidence-pack governance skipped (non-fatal):', cogErr?.message);
+            }
+
             const packet = assembler.assemble({
                 transcript: workingTranscript,
                 modeTemplateType: 'active',
@@ -455,9 +479,9 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 domContext: processedDomContext,
                 priorResponses: !documentGroundedCustomModeActiveForPrompt && temporalContext?.hasRecentResponses ? temporalContext.previousResponses : undefined,
                 intentContext,
-                retrievedModeContext: modeContextBlock || undefined,
+                retrievedModeContext: typedModeContext || undefined,
                 pinnedModeInstructions: pinnedModeInstructions || undefined,
-                candidateProfile: effectiveCandidateProfile || undefined,
+                candidateProfile: typedCandidateProfile || undefined,
                 tokenBudget: Math.max(1000, assemblerBudget),
                 systemPrompt: finalPromptOverride,
             });
