@@ -245,7 +245,6 @@ const MATRIX = [
     'What is the role here?',
     'Tell me about the experience.',
     'What about that hardware?',
-    'How does it work?',
     'Explain this method.',
     'What software does the system run?',
   ].map((q) => ({
@@ -372,9 +371,11 @@ test('JD REQUIREMENT cannot become a candidate fact (validator matrix)', () => {
   assert.equal(v.ok, false, 'JD requirement leaked as candidate experience');
 });
 
-test('AMBIGUOUS TERM SWEEP: every listed term routes by mode, never by term alone', () => {
-  const terms = ['project', 'system', 'model', 'dataset', 'method', 'phase', 'stage', 'result', 'experiment', 'hardware', 'software', 'company', 'role', 'experience', 'current', 'latest', 'this', 'that', 'it'];
-  for (const term of terms) {
+test('AMBIGUOUS TERM SWEEP: source-owned nouns route by mode; general clarifies (multi-universe)', () => {
+  // Source-owned NOUNS: in a strict mode they resolve to that owner; in a
+  // general multi-universe mode they clarify.
+  const sourceOwnedNouns = ['project', 'system', 'model', 'dataset', 'method', 'phase', 'stage', 'result', 'experiment', 'hardware', 'software', 'company', 'role', 'experience'];
+  for (const term of sourceOwnedNouns) {
     const q = `Tell me about the ${term}.`;
     const doc = kernel.build(kernelInputFor('document_grounded_seminar', q));
     const meeting = kernel.build(kernelInputFor('meeting', q));
@@ -382,6 +383,16 @@ test('AMBIGUOUS TERM SWEEP: every listed term routes by mode, never by term alon
     assert.equal(doc.sourceOwner, 'reference_files', `doc mode, term=${term}`);
     assert.equal(meeting.sourceOwner, 'transcript', `meeting mode, term=${term}`);
     assert.equal(general.sourceOwner, 'clarify', `general mode, term=${term}`);
+  }
+});
+
+test('H1 fix: bare deictics/adjectives do NOT force clarify in general mode', () => {
+  // current/latest/this/that/it name no source-owned thing → answer normally,
+  // even with multiple universes present (avoids false-clarify on general Qs).
+  for (const term of ['current', 'latest', 'this', 'that', 'it']) {
+    const q = `Tell me about the ${term} thing.`;
+    const general = kernel.build(kernelInputFor('general', q));
+    assert.equal(general.sourceOwner, 'unknown', `general mode must answer, not clarify, for bare "${term}"`);
   }
 });
 

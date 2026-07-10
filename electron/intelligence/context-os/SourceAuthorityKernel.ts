@@ -57,12 +57,17 @@ export interface BuildTurnContractInput {
   userExplicitSource?: 'reference_files' | 'profile' | 'transcript' | null;
 }
 
-// Terms whose owner depends entirely on the active source authority. In
-// general/ambiguous modes a question containing one of these has no canonical
-// owner → clarify. Mirrors the ambiguous-term table in the current-state
-// report §17.2 (deictic pronouns included).
+// Nouns that can NAME a thing owned by a specific source universe (uploaded
+// document / profile / meeting). In a general/ambiguous mode a question over
+// one of these is clarified ONLY when >=2 universes actually exist (the primary
+// H1 guard in resolveSourceOwner). This list keeps the source-owned NOUNS but
+// drops the bare deictics/adjectives `this|that|it|current|latest` (H1 fix,
+// code-review 2026-07-10) — those fire on ordinary general-knowledge questions
+// ("what is the LATEST React version?", "how does IT work?") which, combined
+// with the >=2-universe gate, would still wrongly clarify. Source-owned nouns
+// like project/dataset/experiment only clarify when the ambiguity is real.
 const AMBIGUOUS_SOURCE_TERM_RE =
-  /\b(project|system|model|dataset|method|phase|stage|result|experiment|hardware|software|company|role|experience|current|latest|this|that|it)\b/i;
+  /\b(project|dataset|method|methodology|phase|stage|experiment|hardware|software|company|role|experience|deadline|model|system|result)\b/i;
 
 function trustLevelFor(sourceKind: SourceKind): TrustLevel {
   switch (sourceKind) {
@@ -215,10 +220,21 @@ export class SourceAuthorityKernel {
 
       case 'general_mixed':
       case 'ask_if_ambiguous':
-      default:
-        // No single canonical universe. A question over an ambiguous term has
-        // no owner → ask instead of guessing (Scenario C).
-        return AMBIGUOUS_SOURCE_TERM_RE.test(input.question) ? 'clarify' : 'unknown';
+      default: {
+        // Clarify ONLY when the ambiguity is REAL: the question names a
+        // source-owned thing AND at least TWO source universes actually exist
+        // for it to be ambiguous BETWEEN (H1 fix, code-review 2026-07-10).
+        // With zero or one universe there is nothing to disambiguate — answer
+        // normally ('unknown' owner → conservative general answer). This stops
+        // false-clarify on ordinary general-knowledge questions.
+        const universeCount = (input.hasReferenceFiles ? 1 : 0)
+          + (input.hasProfileFacts ? 1 : 0)
+          + (input.hasLiveTranscript ? 1 : 0);
+        if (universeCount >= 2 && AMBIGUOUS_SOURCE_TERM_RE.test(input.question)) {
+          return 'clarify';
+        }
+        return 'unknown';
+      }
     }
   }
 

@@ -137,11 +137,29 @@ test('general_mixed + ambiguous term → clarify with ask_clarification policy',
   assert.equal(c.conflictPolicy, 'ask_clarification');
 });
 
-test('ask_if_ambiguous + ambiguous deictic → clarify', () => {
-  for (const q of ['What model is used?', 'What is the current result?', 'Tell me about it', 'What was that system again?']) {
+test('ask_if_ambiguous + source-owned noun (>=2 universes) → clarify', () => {
+  // Source-owned nouns still clarify when >=2 universes exist.
+  for (const q of ['What model is used?', 'What is the current result?', 'What was that system again?']) {
     const c = build({ sourceAuthority: 'ask_if_ambiguous', question: q });
     assert.equal(c.sourceOwner, 'clarify', `expected clarify for "${q}"`);
   }
+});
+
+test('H1 fix: bare deictics ("it") no longer force clarify (avoid false-clarify on general knowledge)', () => {
+  // "Tell me about it" has no source-owned noun → answer normally, not clarify.
+  const c = build({ sourceAuthority: 'ask_if_ambiguous', question: 'Tell me about it' });
+  assert.equal(c.sourceOwner, 'unknown', 'bare deictic must not force clarify');
+});
+
+test('H1 fix: single-universe general question is answered, not clarified', () => {
+  // Only ONE universe (a document) → nothing to disambiguate BETWEEN → answer.
+  const c = build({ sourceAuthority: 'general_mixed', question: 'What model is used?', hasReferenceFiles: true, hasProfileFacts: false, hasLiveTranscript: false });
+  assert.equal(c.sourceOwner, 'unknown', 'single-universe question must not clarify');
+});
+
+test('H1 fix: general-knowledge question with NO universes is answered normally', () => {
+  const c = build({ sourceAuthority: 'general_mixed', question: 'What is the latest React version?', hasReferenceFiles: false, hasProfileFacts: false, hasLiveTranscript: false });
+  assert.equal(c.sourceOwner, 'unknown');
 });
 
 test('general_mixed + unambiguous question → unknown owner with conservative grants', () => {
