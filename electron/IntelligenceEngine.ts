@@ -1225,6 +1225,7 @@ export class IntelligenceEngine extends EventEmitter {
                 const { buildCustomModeExecutionContract } = require('./llm/customModeExecutionContract');
                 const { resolveSourceOwnership } = require('./llm/sourceOwnership');
                 const { getSourceOwnerEnforcementStage } = require('./intelligence/intelligenceFlags');
+                const { buildTurnContractIfEnabled, allowsEvidence: coAllowsEvidence } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
                 const _wtaQ = extractedQuestion.latestQuestion || lastInterviewerTurn || '';
                 const _wtaHasProfile = Boolean((this.llmHelper.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data);
                 const _wtaPlan = planAnswer({
@@ -1260,6 +1261,30 @@ export class IntelligenceEngine extends EventEmitter {
                 wtaProfileAllowed = getSourceOwnerEnforcementStage() === 'off'
                     ? !documentGroundedCustomModeActive
                     : _wtaOwn.profileAllowed;
+
+                // ── CONTEXT OS M1 (never-retrieve) ──────────────────────────
+                // The architecture requires never-retrieve, not retrieve-then-
+                // clear. Compute the Context OS capability HERE — before the
+                // profile grounding fetch below — and AND it into the gate, so
+                // selectManualProfileEvidence is never invoked when the contract
+                // forbids profile. Null contract (flag off) → legacy gate alone.
+                const _wtaEarlyContract = buildTurnContractIfEnabled({
+                    surface: 'what_to_answer',
+                    question: String(_wtaQ),
+                    activeModeId: snapshotModeId ?? null,
+                    activeModeName: snapshotModeInfo?.name ?? null,
+                    sourceAuthority: _wtaContract.sourceAuthority,
+                    answerType: _wtaPlan.answerType,
+                    plannerVoicePerspective: _wtaPlan.voicePerspective,
+                    hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
+                    hasProfileFacts: _wtaHasProfile,
+                    hasLiveTranscript: true,
+                });
+                if (_wtaEarlyContract) {
+                    const contractAllowsProfileEarly = coAllowsEvidence(_wtaEarlyContract, 'profile_resume')
+                        || coAllowsEvidence(_wtaEarlyContract, 'profile_project');
+                    wtaProfileAllowed = wtaProfileAllowed && contractAllowsProfileEarly;
+                }
             } catch { /* keep legacy doc-grounded guard */ }
             if (!candidateProfile && wtaProfileAllowed) {
                 try {
