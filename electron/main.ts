@@ -93,7 +93,23 @@ try {
     // (verified 2026-07-10). Chromium keeps only the LAST --disable-features
     // value, so if a second disabled feature is ever added it MUST be combined
     // into one comma-separated value here rather than a second appendSwitch.
-    app.commandLine.appendSwitch('disable-features', 'Fontations');
+    //
+    // FEATURE NAMES (verified 2026-07-10 via `strings` on the Electron
+    // 33.4.11 framework binary): the base::Feature names are
+    // "FontationsFontBackend" (the full Rust backend) and
+    // "FontationsForSelectedFormats" (routes selected font formats — incl.
+    // variable fonts, the BridgeNormalizedCoords crash path — through Rust
+    // even when the full backend is off). A bare "Fontations" feature does
+    // NOT exist; Chromium silently ignores unknown names, so passing
+    // 'Fontations' here was a no-op. Both must be disabled together.
+    app.commandLine.appendSwitch(
+      'disable-features',
+      'FontationsFontBackend,FontationsForSelectedFormats'
+    );
+    console.log(
+      '[Fontations] disable-features=FontationsFontBackend,FontationsForSelectedFormats applied ' +
+      `(platform=${process.platform} release=${os.release()} override=${fontationsOverride ?? 'auto'})`
+    );
   }
 } catch {
   // Never let the mitigation itself break boot. Worst case: Fontations stays
