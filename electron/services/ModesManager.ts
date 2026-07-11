@@ -504,9 +504,26 @@ export class ModesManager {
     public getOrMigrateSourceContract(modeId: string): ModeSourceContract {
         const mode = this.resolveMode(modeId);
         if (!mode) return defaultSourceContractForNewMode();
-        if (mode.sourceContract) return mode.sourceContract;
         const files = this.getReferenceFiles(mode.id);
         const hasReferenceFiles = files.some(file => file.content.trim());
+        const hasCustomPrompt = mode.customContext.trim().length > 0;
+        // Real-benchmark finding (2026-07-11): createMode() seeds every new
+        // mode with defaultSourceContractForNewMode() (origin='default_new_mode')
+        // AT CREATION TIME, before the user has written a prompt or attached
+        // any reference file. A naive "if mode.sourceContract, return it"
+        // check would short-circuit HERE and never migrate — permanently
+        // freezing every mode at the empty-mode default (defaultOwner=
+        // 'clarify'), regardless of what prompt/files get added afterward.
+        // This is the incident's failure class recurring one layer up: a
+        // stale cached decision silently overriding the mode's real content.
+        // Fix: a 'default_new_mode' contract is NOT yet a real decision — it
+        // is re-migrated (and the migration persisted, replacing the seed)
+        // once the mode actually HAS a prompt or files to migrate from. A
+        // 'user_selected' or previously-completed 'migrated_from_prompt'
+        // contract is never re-derived (stable, as designed).
+        const needsMigration = !mode.sourceContract
+            || (mode.sourceContract.origin === 'default_new_mode' && (hasCustomPrompt || hasReferenceFiles));
+        if (!needsMigration) return mode.sourceContract!;
         // Profile-facts availability is not known to ModesManager (it lives in
         // KnowledgeOrchestrator/profile services); migration only needs to
         // distinguish "has files" from "no files" for its decision tree — see
