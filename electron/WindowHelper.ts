@@ -364,6 +364,11 @@ export class WindowHelper {
 
     try {
       this.launcherWindow = new BrowserWindow(launcherSettings);
+      this.appState.recordNativeOomTrace('launcher-window-created', {
+        window: 'launcher',
+        webContentsId: this.launcherWindow.webContents.id,
+        rendererPid: this.launcherWindow.webContents.getOSProcessId(),
+      });
       console.log('[WindowHelper] BrowserWindow created successfully');
     } catch (err) {
       console.error('[WindowHelper] Failed to create BrowserWindow:', err);
@@ -427,7 +432,24 @@ export class WindowHelper {
     const noOrchSuffix = process.env.NATIVELY_DISABLE_ONBOARDING_ORCH === '1' ? '&noorch=1' : '';
     if (noOrchSuffix) console.warn('[LeakTest] NATIVELY_DISABLE_ONBOARDING_ORCH=1 → launcher with ?noorch=1 (onboarding orchestrator OFF)');
 
-    const launcherUrl = `${startUrl}?window=launcher${nofxSuffix}${noOrchSuffix}`;
+// DEV-ONLY mount isolator for an evidence run. It never changes a normal or
+    // packaged launch: only a development process that explicitly sets the env
+    // variable gets a query parameter. App.tsx uses this to keep the native
+    // splash/shell while excluding one root-level launcher surface group.
+    const requestedIsolation = process.env.NATIVELY_LAUNCHER_ISOLATION;
+    const launcherIsolation = isDev && ['shell', 'global-surfaces'].includes(requestedIsolation || '')
+      ? requestedIsolation
+      : '';
+    const isolationSuffix = launcherIsolation ? `&isolate=${launcherIsolation}` : '';
+    if (launcherIsolation) {
+      this.appState.recordNativeOomTrace('launcher-isolation-selected', {
+        window: 'launcher',
+        isolation: launcherIsolation,
+      });
+      console.warn(`[LeakTest] NATIVELY_LAUNCHER_ISOLATION=${launcherIsolation} → launcher isolation enabled`);
+    }
+
+    const launcherUrl = `${startUrl}?window=launcher${nofxSuffix}${noOrchSuffix}${isolationSuffix}`;
 
     this.launcherWindow
       .loadURL(launcherUrl)
@@ -466,6 +488,15 @@ export class WindowHelper {
     // retry budget instead of being starved by earlier retries.
     this.launcherWindow.webContents.on('did-finish-load', () => {
       launcherLoadRetries = 0;
+      const launcher = this.launcherWindow;
+      if (!launcher || launcher.isDestroyed()) return;
+      const rendererPid = launcher.webContents.getOSProcessId();
+      this.appState.recordNativeOomTrace('launcher-did-finish-load', {
+        window: 'launcher',
+        webContentsId: launcher.webContents.id,
+        rendererPid,
+      });
+      this.appState.startNativeOomContentTrace(rendererPid);
     });
 
     // Pipe renderer-side diagnostics into the main-process log file. Without
@@ -689,6 +720,16 @@ export class WindowHelper {
       });
 
       wc.on('render-process-gone', (_event, details) => {
+        if (tag === 'launcher') {
+          this.appState.recordNativeOomTrace('launcher-render-process-gone', {
+            window: 'launcher',
+            webContentsId: wc.id,
+            rendererPid: wc.getOSProcessId(),
+            reason: typeof details?.reason === 'string' ? details.reason : 'unknown',
+            exitCode: typeof details?.exitCode === 'number' ? details.exitCode : 0,
+          });
+          this.appState.stopNativeOomContentTrace('launcher-render-process-gone');
+        }
         console.error(
           `[Renderer:${tag}] RENDER-PROCESS-GONE reason=${details?.reason} exitCode=${details?.exitCode}`,
         );
@@ -767,14 +808,24 @@ export class WindowHelper {
 
       // Sync maximize state to renderer so WindowControls stays in sync (Windows/Linux only)
       this.launcherWindow.on('maximize', () => {
-        this.launcherWindow?.webContents.send('window-maximized-changed', true);
+        const launcher = this.launcherWindow;
+      if (launcher && !launcher.isDestroyed()) {
+        this.appState.recordNativeOomOutboundIpc(launcher.webContents.id, 'window-maximized-changed', [true]);
+        launcher.webContents.send('window-maximized-changed', true);
+      }
       });
       this.launcherWindow.on('unmaximize', () => {
-        this.launcherWindow?.webContents.send('window-maximized-changed', false);
+        const launcher = this.launcherWindow;
+      if (launcher && !launcher.isDestroyed()) {
+        this.appState.recordNativeOomOutboundIpc(launcher.webContents.id, 'window-maximized-changed', [false]);
+        launcher.webContents.send('window-maximized-changed', false);
+      }
       });
     }
 
     this.launcherWindow.on('closed', () => {
+      this.appState.recordNativeOomTrace('launcher-window-closed', { window: 'launcher' });
+      this.appState.stopNativeOomContentTrace('launcher-window-closed');
       this.launcherWindow = null;
       // If launcher closes, we should probably quit app or close overlay
       if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
@@ -1054,6 +1105,7 @@ export class WindowHelper {
 
       this.overlayWindow.setBounds(targetBounds);
       this.overlayBounds = this.overlayWindow.getBounds();
+      this.appState.recordNativeOomOutboundIpc(this.overlayWindow.webContents.id, 'ensure-expanded', []);
       this.overlayWindow.webContents.send('ensure-expanded');
 
       // Restore opacity before showing (it may have been zeroed by hideMainWindow).

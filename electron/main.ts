@@ -1046,6 +1046,9 @@ import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
 import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
+import { NativeOomTrace } from './utils/NativeOomTrace'
+
+const nativeOomTrace = new NativeOomTrace()
 
 // Valid disguise modes. The persisted setting is untyped on disk and historical
 // builds wrote values that are no longer part of the union (e.g. 'service'),
@@ -1078,6 +1081,22 @@ export class AppState {
   private modeReferenceRetryPromise: Promise<void> | null = null
   private stabilityHeartbeatTimer: NodeJS.Timeout | null = null
   private knowledgeOrchestrator: any = null
+
+  public recordNativeOomTrace(event: string, data: Record<string, unknown> = {}): void {
+    nativeOomTrace.record(event, data)
+  }
+
+  public recordNativeOomOutboundIpc(webContentsId: number, channel: string, args: unknown[]): void {
+    nativeOomTrace.recordOutboundIpc(webContentsId, channel, args)
+  }
+
+  public startNativeOomContentTrace(launcherPid: number): void {
+    void nativeOomTrace.startContentTrace(launcherPid)
+  }
+
+  public stopNativeOomContentTrace(reason: string): void {
+    void nativeOomTrace.stopContentTrace(reason)
+  }
   private tray: Tray | null = null
   private updateAvailable: boolean = false
   private updateDownloadState: 'idle' | 'available' | 'downloading' | 'downloaded' = 'idle'
@@ -1453,14 +1472,10 @@ export class AppState {
           // timing gap. The invoke path used by generalHandlers.takeScreenshot() is
           // already proven to work for UI-button screenshots; reuse it here.
           const mainWindow = this.getMainWindow();
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('global-shortcut', { action: 'takeScreenshot' });
-          }
+          this.sendToWindow(mainWindow, 'global-shortcut', { action: 'takeScreenshot' });
         } else if (actionId === 'general:selective-screenshot') {
           const mainWindow = this.getMainWindow();
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('global-shortcut', { action: 'selectiveScreenshot' });
-          }
+          this.sendToWindow(mainWindow, 'global-shortcut', { action: 'selectiveScreenshot' });
         } else if (actionId === 'general:capture-and-process') {
           // Single-trigger: capture current screen then immediately request AI analysis
           await this.captureScreenAndProcess();
@@ -1516,9 +1531,7 @@ export class AppState {
           // (no rebuild yet, no Accessibility permission, or non-macOS).
           this.showMainWindow(true);
           const overlay = this.windowHelper.getOverlayWindow();
-          if (overlay && !overlay.isDestroyed()) {
-            overlay.webContents.send('ensure-expanded');
-          }
+          this.sendToWindow(overlay, 'ensure-expanded');
 
           if (process.platform === 'darwin') {
             const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
@@ -1531,7 +1544,7 @@ export class AppState {
 
           // Fallback: panel-safe focus on macOS without tap, brief focus on Win.
           if (overlay && !overlay.isDestroyed()) {
-            overlay.webContents.send('global-shortcut', { action: 'focusInput' });
+            this.sendToWindow(overlay, 'global-shortcut', { action: 'focusInput' });
             overlay.focus();
           }
         } else if (
@@ -1725,6 +1738,27 @@ export class AppState {
             .sort((a: any, b: any) => b.rssMB - a.rssMB);
         } catch { /* getAppMetrics unavailable pre-ready — skip */ }
 
+        if (nativeOomTrace.isEnabled()) {
+          nativeOomTrace.sample(
+            mem,
+            (() => {
+              try {
+                return (app.getAppMetrics?.() || []) as unknown as Array<Record<string, unknown>>;
+              } catch {
+                return [];
+              }
+            })(),
+            (() => {
+              const launcher = this.windowHelper?.getLauncherWindow?.();
+              if (!launcher || launcher.isDestroyed()) return undefined;
+              const webContentsId = launcher.webContents.id;
+              const pid = launcher.webContents.getOSProcessId();
+              return pid > 0 ? { webContentsId, pid } : undefined;
+            })(),
+            { freeMemory: os.freemem(), totalMemory: os.totalmem() },
+          );
+        }
+
         console.log('[StabilityHeartbeat]', {
           rssMB: mb(mem.rss),
           heapUsedMB: mb(mem.heapUsed),
@@ -1757,6 +1791,7 @@ export class AppState {
   private sendToWindow(win: BrowserWindow | null | undefined, channel: string, ...args: any[]): boolean {
     if (!win || win.isDestroyed()) return false;
     try {
+      nativeOomTrace.recordOutboundIpc(win.webContents.id, channel, args);
       win.webContents.send(channel, ...args);
       return true;
     } catch {
@@ -1787,8 +1822,8 @@ export class AppState {
   /** Push a transcript payload to the launcher + overlay rolling-transcript bar. */
   private emitTranscriptToSurfaces(payload: { speaker: string; text: string; timestamp: number; final: boolean; confidence: number }): void {
     const helper = this.getWindowHelper();
-    helper.getLauncherWindow()?.webContents.send('native-audio-transcript', payload);
-    helper.getOverlayWindow()?.webContents.send('native-audio-transcript', payload);
+    this.sendToWindow(helper.getLauncherWindow(), 'native-audio-transcript', payload);
+    this.sendToWindow(helper.getOverlayWindow(), 'native-audio-transcript', payload);
   }
 
   /**
@@ -2950,8 +2985,8 @@ export class AppState {
       stt.on('languageDetected', (bcp47: string) => {
         console.log(`[Main] STT language auto-detected (${speaker}): ${bcp47}`);
         const helper = this.getWindowHelper();
-        helper.getMainWindow()?.webContents.send('stt-language-auto-detected', bcp47);
-        helper.getLauncherWindow()?.webContents.send('stt-language-auto-detected', bcp47);
+        this.sendToWindow(helper.getMainWindow(), 'stt-language-auto-detected', bcp47);
+        this.sendToWindow(helper.getLauncherWindow(), 'stt-language-auto-detected', bcp47);
       });
 
       // Persistent-reconnect signal: NativelyProSTT now retries indefinitely
@@ -4783,7 +4818,7 @@ export class AppState {
         if (targets.length === 0) return;
         const level = computeRmsLevel(chunk);
         for (const target of targets) {
-          target.webContents.send('audio-test-level', level);
+          this.sendToWindow(target, 'audio-test-level', level);
         }
       });
 
@@ -4802,13 +4837,13 @@ export class AppState {
         if (targets.length === 0) return;
         const level = computeRmsLevel(chunk);
         for (const target of targets) {
-          target.webContents.send('audio-test-system-level', level);
+          this.sendToWindow(target, 'audio-test-system-level', level);
         }
       });
       capture.on('error', (err: Error) => {
         console.error('[Main] AudioTest System Error:', err);
         for (const target of broadcastTargets()) {
-          target.webContents.send('audio-test-system-error', err.message || String(err));
+          this.sendToWindow(target, 'audio-test-system-error', err.message || String(err));
         }
       });
     };
@@ -4850,7 +4885,8 @@ export class AppState {
       }
       if (screenCapability.effectiveDenied) {
         for (const target of broadcastTargets()) {
-          target.webContents.send(
+          this.sendToWindow(
+            target,
             'audio-test-system-error',
             screenCapability.message ?? formatPermissionMessage('screen-recording-denied'),
           );
@@ -4896,7 +4932,8 @@ export class AppState {
           } catch (probeErr: any) {
             console.warn('[Main] Deferred system-audio probe failed to start:', probeErr);
             for (const target of broadcastTargets()) {
-              target.webContents.send(
+              this.sendToWindow(
+                target,
                 'audio-test-system-error',
                 probeErr?.message || 'System audio probe failed to start.',
               );
@@ -4907,7 +4944,8 @@ export class AppState {
     } catch (sysErr: any) {
       console.warn('[Main] Failed to start system-audio probe:', sysErr);
       for (const target of broadcastTargets()) {
-        target.webContents.send(
+        this.sendToWindow(
+          target,
           'audio-test-system-error',
           sysErr?.message || 'System audio probe failed to start.',
         );
@@ -5081,8 +5119,8 @@ export class AppState {
     } catch { /* non-fatal */ }
 
     // Emit session reset to clear UI state immediately
-    this.getWindowHelper().getOverlayWindow()?.webContents.send('session-reset');
-    this.getWindowHelper().getLauncherWindow()?.webContents.send('session-reset');
+    this.sendToWindow(this.getWindowHelper().getOverlayWindow(), 'session-reset');
+    this.sendToWindow(this.getWindowHelper().getLauncherWindow(), 'session-reset');
 
     // LOCAL-MODEL WARMUP: if the active model is a local Ollama model, warm + pin
     // it now (fire-and-forget) so the cold weight-load (8-12s for a 7-9B model)
@@ -5301,7 +5339,7 @@ export class AppState {
     // The start-side session-reset (in startMeeting) is kept as a safety net
     // for the cold-start / crash-recovery path where endMeeting never ran; on
     // the normal Stop→Start path it is now a no-op (state already clean).
-    this.getWindowHelper().getOverlayWindow()?.webContents.send('session-reset');
+    this.sendToWindow(this.getWindowHelper().getOverlayWindow(), 'session-reset');
 
     // ─── UX STATE FLIP — SYNCHRONOUS ───────────────────────────────────────
     // Now flip the UX-facing meeting flag and broadcast. The launcher's
@@ -5420,7 +5458,7 @@ export class AppState {
           console.log(`[Main] Reverting model to default: ${defaultModel}`);
           this.processingHelper.getLLMHelper().setModel(defaultModel, all);
           BrowserWindow.getAllWindows().forEach(win => {
-            if (!win.isDestroyed()) win.webContents.send('model-changed', defaultModel);
+            this.sendToWindow(win, 'model-changed', defaultModel);
           });
         } catch (e) {
           console.error('[Main] Failed to revert model:', e);
@@ -5543,7 +5581,7 @@ export class AppState {
       if (!win) { tokenBatches.clear(); return; }
       for (const [kind, items] of tokenBatches.entries()) {
         if (items.length > 0) {
-          win.webContents.send('intelligence-token-batch', { kind, items });
+          this.sendToWindow(win, 'intelligence-token-batch', { kind, items });
         }
       }
       tokenBatches.clear();
@@ -5572,16 +5610,16 @@ export class AppState {
     this.intelligenceManager.on('assist_update', (insight: string) => {
       // Send to both if both exist, though mostly overlay needs it
       const helper = this.getWindowHelper();
-      helper.getLauncherWindow()?.webContents.send('intelligence-assist-update', { insight });
-      helper.getOverlayWindow()?.webContents.send('intelligence-assist-update', { insight });
+      this.sendToWindow(helper.getLauncherWindow(), 'intelligence-assist-update', { insight });
+      this.sendToWindow(helper.getOverlayWindow(), 'intelligence-assist-update', { insight });
     })
 
     // Phase 3 — Cluely-style dynamic action card. Forward to all open windows
     // (launcher + overlay) so whichever surface the user has up shows the card.
     this.intelligenceManager.on('dynamic_action_emitted', (action: any) => {
       const helper = this.getWindowHelper();
-      helper.getLauncherWindow()?.webContents.send('intelligence-dynamic-action', { action });
-      helper.getOverlayWindow()?.webContents.send('intelligence-dynamic-action', { action });
+      this.sendToWindow(helper.getLauncherWindow(), 'intelligence-dynamic-action', { action });
+      this.sendToWindow(helper.getOverlayWindow(), 'intelligence-dynamic-action', { action });
       // Phase 6 — telemetry: log detection (sanitized: NO transcript text, NO
       // evidence body — only ids, type, mode, confidence). The TelemetryService
       // sanitizer also strips transcript-shaped fields defensively.
@@ -5605,9 +5643,7 @@ export class AppState {
     this.intelligenceManager.on('suggested_answer', (answer: string, question: string, confidence: number) => {
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-suggested-answer', { answer, question, confidence })
-      }
+      this.sendToWindow(win, 'intelligence-suggested-answer', { answer, question, confidence })
 
     })
 
@@ -5626,9 +5662,7 @@ export class AppState {
     this.intelligenceManager.on('suggested_answer_discard', (reason: string) => {
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-suggested-answer-discard', { reason })
-      }
+      this.sendToWindow(win, 'intelligence-suggested-answer-discard', { reason })
     })
 
     // Verified code execution (background): a ✓ badge when the shown code passed
@@ -5636,12 +5670,12 @@ export class AppState {
     // re-verified fix was produced. Both arrive AFTER the answer was shown.
     this.intelligenceManager.on('code_verified', (info: { question: string; passed: number; total: number; language: string }) => {
       const win = mainWindow()
-      if (win) win.webContents.send('intelligence-code-verified', info)
+      this.sendToWindow(win, 'intelligence-code-verified', info)
     })
     this.intelligenceManager.on('code_correction', (info: { question: string; answer: string; note: string; reVerified: boolean }) => {
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      if (win) win.webContents.send('intelligence-code-correction', info)
+      this.sendToWindow(win, 'intelligence-code-correction', info)
     })
 
     // Sprint 7: dedicated negotiation-coaching channel. Engine emits this
@@ -5653,9 +5687,7 @@ export class AppState {
       // sees them before the coaching card swap.
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-negotiation-coaching', { payload })
-      }
+      this.sendToWindow(win, 'intelligence-negotiation-coaching', { payload })
     })
 
     this.intelligenceManager.on('refined_answer_token', (token: string, intent: string) => {
@@ -5666,18 +5698,14 @@ export class AppState {
     this.intelligenceManager.on('refined_answer', (answer: string, intent: string) => {
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-refined-answer', { answer, intent })
-      }
+      this.sendToWindow(win, 'intelligence-refined-answer', { answer, intent })
 
     })
 
     this.intelligenceManager.on('recap', (summary: string) => {
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-recap', { summary })
-      }
+      this.sendToWindow(win, 'intelligence-recap', { summary })
     })
 
     this.intelligenceManager.on('recap_token', (token: string) => {
@@ -5688,9 +5716,7 @@ export class AppState {
     this.intelligenceManager.on('clarify', (clarification: string) => {
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-clarify', { clarification })
-      }
+      this.sendToWindow(win, 'intelligence-clarify', { clarification })
     })
 
     this.intelligenceManager.on('clarify_token', (token: string) => {
@@ -5701,9 +5727,7 @@ export class AppState {
     this.intelligenceManager.on('follow_up_questions_update', (questions: string) => {
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-follow-up-questions-update', { questions })
-      }
+      this.sendToWindow(win, 'intelligence-follow-up-questions-update', { questions })
     })
 
     this.intelligenceManager.on('follow_up_questions_token', (token: string) => {
@@ -5713,32 +5737,24 @@ export class AppState {
 
     this.intelligenceManager.on('manual_answer_started', () => {
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-manual-started')
-      }
+      this.sendToWindow(win, 'intelligence-manual-started')
     })
 
     this.intelligenceManager.on('manual_answer_result', (answer: string, question: string) => {
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-manual-result', { answer, question })
-      }
+      this.sendToWindow(win, 'intelligence-manual-result', { answer, question })
 
     })
 
     this.intelligenceManager.on('mode_changed', (mode: string) => {
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-mode-changed', { mode })
-      }
+      this.sendToWindow(win, 'intelligence-mode-changed', { mode })
     })
 
     this.intelligenceManager.on('error', (error: Error, mode: string) => {
       console.error(`[IntelligenceManager] Error in ${mode}:`, error)
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-error', { error: error.message, mode })
-      }
+      this.sendToWindow(win, 'intelligence-error', { error: error.message, mode })
     })
   }
 
@@ -5914,9 +5930,7 @@ export class AppState {
     } else {
       // In overlay mode, send toggle-expand IPC to expand/collapse the UI
       const targetWindow = this.windowHelper.getOverlayWindow();
-      if (targetWindow && !targetWindow.isDestroyed()) {
-        targetWindow.webContents.send('toggle-expand');
-      }
+      this.sendToWindow(targetWindow, 'toggle-expand');
     }
   }
 
@@ -6074,12 +6088,10 @@ export class AppState {
       app.dock.hide();
     }
     const mainWindow = this.getMainWindow();
-    if (mainWindow) {
-      mainWindow.webContents.send("capture-and-process", {
-        path: screenshotPath,
-        preview
-      });
-    }
+    this.sendToWindow(mainWindow, 'capture-and-process', {
+      path: screenshotPath,
+      preview,
+    });
   }
 
   public async takeSelectiveScreenshot(restoreFocus: boolean = true): Promise<string> {
@@ -6229,12 +6241,10 @@ export class AppState {
             const screenshotPath = await this.takeScreenshot()
             const preview = await this.getImagePreview(screenshotPath)
             const mainWindow = this.getMainWindow()
-            if (mainWindow) {
-              mainWindow.webContents.send("screenshot-taken", {
-                path: screenshotPath,
-                preview
-              })
-            }
+            this.sendToWindow(mainWindow, 'screenshot-taken', {
+              path: screenshotPath,
+              preview,
+            })
           } catch (error) {
             console.error("Error taking screenshot from tray:", error)
           }
@@ -6713,19 +6723,19 @@ export class AppState {
     const launcher = this.windowHelper.getLauncherWindow();
     if (launcher && !launcher.isDestroyed()) {
       launcher.setTitle(appName.trim());
-      launcher.webContents.send('disguise-changed', mode);
+      this.sendToWindow(launcher, 'disguise-changed', mode);
     }
 
     const overlay = this.windowHelper.getOverlayWindow();
     if (overlay && !overlay.isDestroyed()) {
       overlay.setTitle(appName.trim());
-      overlay.webContents.send('disguise-changed', mode);
+      this.sendToWindow(overlay, 'disguise-changed', mode);
     }
 
     const settingsWin = this.settingsWindowHelper.getSettingsWindow();
     if (settingsWin && !settingsWin.isDestroyed()) {
       settingsWin.setTitle(appName.trim());
-      settingsWin.webContents.send('disguise-changed', mode);
+      this.sendToWindow(settingsWin, 'disguise-changed', mode);
     }
 
     // Cancel any stale forceUpdate timeouts from previous disguise changes
@@ -6764,7 +6774,7 @@ export class AppState {
     for (const win of windows) {
       if (win && !win.isDestroyed() && !sent.has(win.id)) {
         sent.add(win.id);
-        win.webContents.send(channel, ...args);
+        this.sendToWindow(win, channel, ...args);
       }
     }
   }
@@ -6843,6 +6853,8 @@ async function initializeApp() {
   // 2. Wait for app to be ready
   logStartupPhase('before-app-whenReady');
   await app.whenReady()
+  nativeOomTrace.initialize()
+  nativeOomTrace.record('app-ready', { pid: process.pid, platform: process.platform, electron: process.versions.electron })
   logStartupPhase('after-app-whenReady', { userData: app.getPath('userData') });
 
   // 2a. PRE-EMPTIVE dock hide / activation-policy clamp: must happen before ANY
@@ -7458,6 +7470,7 @@ if (process.env.THINKING_MATRIX === '1') {
   }
 
   app.on('will-quit', () => {
+    nativeOomTrace.stop('will-quit');
     stopAppManagedHindsight('will-quit');
     checkpointDatabase('will-quit');
   });
