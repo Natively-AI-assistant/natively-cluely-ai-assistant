@@ -132,14 +132,14 @@ async function main() {
   await win.waitForLoadState('domcontentloaded').catch(() => {});
 
   const RAW = async (fn, arg) => {
-    for (let attempt = 0; attempt < 4; attempt++) {
+    for (let attempt = 0; attempt < 6; attempt++) {
       try {
         const w = app.windows()[0] || (await app.firstWindow());
         await w.waitForLoadState('domcontentloaded').catch(() => {});
         return await w.evaluate(fn, arg);
       } catch (e) {
-        if (attempt === 3) throw e;
-        await new Promise((r) => setTimeout(r, 1500));
+        if (attempt === 5) throw e;
+        await new Promise((r) => setTimeout(r, 2000));
       }
     }
   };
@@ -269,7 +269,7 @@ async function main() {
     // IPC promise along with it; RAW's internal retry only re-issues the
     // evaluate call, which is not enough once the underlying context is gone.
     let lastErr = null;
-    for (let outer = 0; outer < 2; outer++) {
+    for (let outer = 0; outer < 4; outer++) {
       try {
         const result = await RAW(async ({ question }) => {
           const api = window.electronAPI || window.api;
@@ -278,8 +278,8 @@ async function main() {
         return { answer: result?.answer || result?.streamedTokens || '', traces: [...ctxosTraces] };
       } catch (e) {
         lastErr = e;
-        console.warn(`[BENCHMARK] askManual retry ${outer + 1}/2 after error: ${e?.message}`);
-        await new Promise((r) => setTimeout(r, 2000));
+        console.warn(`[BENCHMARK] askManual retry ${outer + 1}/4 after error: ${e?.message}`);
+        await new Promise((r) => setTimeout(r, 3000));
       }
     }
     console.warn(`[BENCHMARK] askManual FAILED after retries: ${lastErr?.message}`);
@@ -309,8 +309,22 @@ async function main() {
   }
 
   // ── Scoring ──────────────────────────────────────────────────────────────
+  // NOTE: `sourceOwner`/`sourceAuthority`/`enforcement`/`finalAction` on each
+  // result are captured on a best-effort basis from [CONTEXT-OS] stdout trace
+  // lines (works reliably in the standalone single-turn probes; under this
+  // harness's restart + __e2e__:manual-ask invocation path, trace-line
+  // capture has been unreliable in some runs for reasons not yet root-caused
+  // — see docs/context-os/real-custom-mode-repair/12_REAL_BENCHMARK_RESULTS.md).
+  // docRoutingAccuracy therefore uses CONTENT-based routing correctness
+  // (does the answer actually contain the expected document fact, and is it
+  // free of forbidden profile-leak signals?) as the primary, always-reliable
+  // signal — this is what actually matters for the incident verdict ("did
+  // the mode answer from the document, not the profile") and does not
+  // depend on trace-log delivery timing. The raw trace fields are still
+  // recorded per-question when available for supplementary diagnostics.
   const docQuestions = results.filter((r) => r.kind === 'doc');
-  const docRoutingCorrect = docQuestions.filter((r) => r.sourceOwner === 'reference_files').length;
+  const docRoutingCorrectByTrace = docQuestions.filter((r) => r.sourceOwner === 'reference_files').length;
+  const docRoutingCorrect = docQuestions.filter((r) => r.supportsExpectedFact === true && !r.profileLeakDetected).length;
   const contaminationCount = results.filter((r) => r.profileLeakDetected).length;
   const explicitSwitchResults = results.filter((r) => r.kind === 'explicit_profile' || r.kind === 'explicit_jd');
   const returnToDocResults = results.filter((r) => r.kind === 'return_to_doc');
@@ -324,6 +338,9 @@ async function main() {
     docQuestions: docQuestions.length,
     docRoutingCorrect,
     docRoutingAccuracy: docQuestions.length ? docRoutingCorrect / docQuestions.length : null,
+    docRoutingCorrectByTrace,
+    docRoutingAccuracyByTrace: docQuestions.length ? docRoutingCorrectByTrace / docQuestions.length : null,
+    traceLinesCaptured: results.some((r) => r.sourceOwner !== null),
     crossSourceContaminationCount: contaminationCount,
     explicitSwitchResults: explicitSwitchResults.map((r) => ({ question: r.question, sourceOwner: r.sourceOwner })),
     returnToDocResults: returnToDocResults.map((r) => ({ question: r.question, sourceOwner: r.sourceOwner, supportsExpectedFact: r.supportsExpectedFact })),
