@@ -4943,12 +4943,23 @@ const isMultimodal = !!(imagePaths?.length);
     // ── CONTEXT OS H1: typed EvidencePack GOVERNS the factual prompt ────────
     // When the caller supplies a ContextOsGenerationContext AND the flag is on,
     // the typed EvidencePack REPLACES the raw retrieved block as the factual
-    // authority: the document evidence is parsed (no re-retrieval) into typed
-    // items and rendered as <turn_context_contract> + <evidence_use_contract> +
+    // authority: rendered as <turn_context_contract> + <evidence_use_contract> +
     // <evidence_pack>. The legacy `context`/`combinedContext` factual blocks are
     // already excluded from doc-grounded facts (buildDocumentGroundedUserContent
     // uses only `retrievedBlock`), so replacing that block makes the typed pack
     // the SOLE factual source. Flag off / no generation context → unchanged.
+    //
+    // EVIDENCE-EXECUTION-REPAIR (2026-07-11): when EvidenceResolver already
+    // populated `_cog.evidencePack` earlier in this same call (the single
+    // canonical retrieval above, ~line 4605), render FROM THAT SAME PACK
+    // OBJECT — never rebuild a second pack via buildDocumentEvidencePackFromBlock.
+    // Rebuilding from the rendered string would re-parse a NEW pack (different
+    // packId, re-derived scores/sourceOwner) and silently overwrite the pack
+    // identity the post-stream validator and claim persistence are meant to
+    // share (Phase 9's "same object" requirement) — a second, divergent pack
+    // for the same turn, exactly the defect class this repair eliminates.
+    // buildDocumentEvidencePackFromBlock remains the fallback ONLY for turns
+    // EvidenceResolver did not govern (legacy hybrid/lexical retrieval path).
     let contextOsGoverningBlock = '';
     let contextOsGovernedPack: import('./intelligence/context-os').EvidencePack | null = null;
     try {
@@ -4956,13 +4967,14 @@ const isMultimodal = !!(imagePaths?.length);
       const { isIntelligenceFlagEnabled } = require('./intelligence/intelligenceFlags');
       if (_cog && _cog.govern && forceDocumentGrounding && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
         const { buildDocumentEvidencePackFromBlock, renderGoverningFactualBlock } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
-        const pack = buildDocumentEvidencePackFromBlock(_cog.contract, evidenceBlockForPrompt || '');
+        const pack = _cog.evidencePack ?? buildDocumentEvidencePackFromBlock(_cog.contract, evidenceBlockForPrompt || '');
         const rendered = renderGoverningFactualBlock({ ..._cog, evidencePack: pack });
         if (rendered) {
           contextOsGoverningBlock = rendered;
           contextOsGovernedPack = pack;
           // Expose the governing pack back to the caller (validation/claims use
-          // the EXACT same pack — Phase 9 identity requirement).
+          // the EXACT same pack — Phase 9 identity requirement). A no-op
+          // reassignment when `pack` already came from `_cog.evidencePack`.
           (_cog as any).evidencePack = pack;
         }
       }
