@@ -1234,6 +1234,11 @@ export class IntelligenceEngine extends EventEmitter {
                     speakerPerspective: 'interviewer',
                     activeMode: snapshotModeInfo,
                 });
+                // Evidence-execution-repair (2026-07-11): resolve the SAME
+                // per-turn explicit switch the manual-chat path resolves — see
+                // electron/intelligence/context-os/explicitSourceSwitch.ts.
+                const { resolveExplicitSourceRequest: _wtaResolveSwitch, toLegacyUserExplicitSource: _wtaToLegacySwitch } = require('./intelligence/context-os/explicitSourceSwitch');
+                const _wtaUserExplicitSource = _wtaToLegacySwitch(_wtaResolveSwitch(String(_wtaQ)));
                 const _wtaContract = buildCustomModeExecutionContract({
                     question: String(_wtaQ),
                     streamRoute: 'wta_live',
@@ -1252,6 +1257,7 @@ export class IntelligenceEngine extends EventEmitter {
                     // contract is authoritative — see
                     // docs/context-os/real-custom-mode-repair/06_ROOT_CAUSE_REPORT.md.
                     persistedSourceAuthority: (snapshotModeInfo as any)?.sourceContract?.sourceAuthority ?? null,
+                    userExplicitSource: _wtaUserExplicitSource,
                 });
                 const _wtaOwn = resolveSourceOwnership({
                     question: String(_wtaQ),
@@ -1283,10 +1289,18 @@ export class IntelligenceEngine extends EventEmitter {
                     hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
                     hasProfileFacts: _wtaHasProfile,
                     hasLiveTranscript: true,
+                    userExplicitSource: _wtaUserExplicitSource,
                 });
                 if (_wtaEarlyContract) {
+                    // Evidence-execution-repair (2026-07-11): this gate previously
+                    // checked only profile_resume/profile_project, never
+                    // profile_jd — the identical gap fixed on the manual-chat
+                    // path (ipcHandlers.ts _contractAllowsProfile). A strictly
+                    // reference_files_only WTA turn could still leak JD content
+                    // through this exact hole.
                     const contractAllowsProfileEarly = coAllowsEvidence(_wtaEarlyContract, 'profile_resume')
-                        || coAllowsEvidence(_wtaEarlyContract, 'profile_project');
+                        || coAllowsEvidence(_wtaEarlyContract, 'profile_project')
+                        || coAllowsEvidence(_wtaEarlyContract, 'profile_jd');
                     wtaProfileAllowed = wtaProfileAllowed && contractAllowsProfileEarly;
                 }
             } catch { /* keep legacy doc-grounded guard */ }
@@ -1372,6 +1386,8 @@ export class IntelligenceEngine extends EventEmitter {
                 const { buildTurnContractIfEnabled } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
                 const _wtaQ2 = question || extractedQuestion.latestQuestion || lastInterviewerTurn || '';
                 const _hasProfile2 = Boolean((this.llmHelper.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data);
+                const { resolveExplicitSourceRequest: _wtaResolveSwitch2, toLegacyUserExplicitSource: _wtaToLegacySwitch2 } = require('./intelligence/context-os/explicitSourceSwitch');
+                const _wtaUserExplicitSource2 = _wtaToLegacySwitch2(_wtaResolveSwitch2(String(_wtaQ2)));
                 const _legacyContract2 = _bldC({
                     question: String(_wtaQ2),
                     streamRoute: 'wta_live',
@@ -1386,6 +1402,8 @@ export class IntelligenceEngine extends EventEmitter {
                     hasProfileFacts: _hasProfile2,
                     hasMeetingRag: false,
                     hasLongTermMemory: false,
+                    persistedSourceAuthority: (snapshotModeInfo as any)?.sourceContract?.sourceAuthority ?? null,
+                    userExplicitSource: _wtaUserExplicitSource2,
                 });
                 wtaTurnContract = buildTurnContractIfEnabled({
                     surface: 'what_to_answer',
@@ -1398,11 +1416,16 @@ export class IntelligenceEngine extends EventEmitter {
                     hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
                     hasProfileFacts: _hasProfile2,
                     hasLiveTranscript: true,
+                    userExplicitSource: _wtaUserExplicitSource2,
                 });
                 if (wtaTurnContract) {
                     const { allowsEvidence } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                    // Evidence-execution-repair (2026-07-11): third occurrence of
+                    // the same profile_jd gap fixed above — see
+                    // docs/context-os/evidence-execution-repair/07_SOURCE_SWITCH_RESULTS.md.
                     const contractAllowsProfileWta = allowsEvidence(wtaTurnContract, 'profile_resume')
-                        || allowsEvidence(wtaTurnContract, 'profile_project');
+                        || allowsEvidence(wtaTurnContract, 'profile_project')
+                        || allowsEvidence(wtaTurnContract, 'profile_jd');
                     if (!contractAllowsProfileWta && candidateProfile) {
                         // Doc-grounded / transcript-owned WTA turn: the candidate
                         // profile grounding must not reach the prompt at all.

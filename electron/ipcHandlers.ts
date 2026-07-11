@@ -1082,6 +1082,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         let manualSourceContract: import('./llm/customModeExecutionContract').CustomModeExecutionContract | null = null;
         let manualOwnership: import('./llm/sourceOwnership').SourceOwnershipDecision | null = null;
         const _hasProfileFactsForTurn = Boolean(llmHelper.getKnowledgeOrchestrator?.()?.activeResume?.structured_data);
+        // Evidence-execution-repair (2026-07-11): hoisted to handler scope so
+        // both the legacy arbiter AND the Context OS kernel build call (below,
+        // in a separate try block) resolve the SAME per-turn explicit switch.
+        let _userExplicitSource: 'reference_files' | 'profile' | 'transcript' | null = null;
         try {
           const { buildCustomModeExecutionContract, logArbitratedContract } = require('./llm/customModeExecutionContract');
           const { resolveSourceOwnership } = require('./llm/sourceOwnership');
@@ -1092,6 +1096,16 @@ export function initializeIpcHandlers(appState: AppState): void {
           const _hasProfileFacts = _hasProfileFactsForTurn;
           const _hasMeetingRag = Boolean(false); // meeting_rag is gated by chat:sendMessage IPC, not in this path
           const _hasLongTermMemory = Boolean(isIntelligenceFlagEnabled('hindsightLiveRecall') && isIntelligenceFlagEnabled('hindsightMemory'));
+          // Evidence-execution-repair (2026-07-11): resolve an explicit source
+          // switch ONCE, before the contract is built, so "according to the
+          // JD" / "based only on my résumé" / "return to the thesis" are
+          // GRANTED by the canonical contract itself — not silently decided by
+          // a parallel Profile Intelligence heuristic while the contract stays
+          // locked at reference_files_only. See
+          // docs/context-os/evidence-execution-repair/07_SOURCE_SWITCH_RESULTS.md.
+          const { resolveExplicitSourceRequest, toLegacyUserExplicitSource } = require('./intelligence/context-os/explicitSourceSwitch');
+          const _explicitSwitch = resolveExplicitSourceRequest(String(message || ''));
+          _userExplicitSource = toLegacyUserExplicitSource(_explicitSwitch);
           manualSourceContract = buildCustomModeExecutionContract({
             question: String(message || ''),
             streamRoute: 'manual_chat_stream',
@@ -1112,6 +1126,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             // Replaces the live regex-heuristic chain above (still used as
             // fallback when no mode is active / arbiter threw).
             persistedSourceAuthority: manualActiveMode?.sourceContract?.sourceAuthority ?? null,
+            userExplicitSource: _userExplicitSource,
           });
           logArbitratedContract(manualSourceContract, String(message || ''));
           manualOwnership = resolveSourceOwnership({
@@ -1175,6 +1190,11 @@ export function initializeIpcHandlers(appState: AppState): void {
               hasReferenceFiles: Boolean((manualActiveMode as any)?.hasReferenceFiles),
               hasProfileFacts: _hasProfileFactsForTurn,
               hasLiveTranscript: Boolean(intelligenceManager.getFormattedContext(100)?.trim()),
+              // Evidence-execution-repair (2026-07-11): same explicit switch
+              // resolved above for the legacy arbiter — the kernel needs it
+              // too so sourceOwner reflects the SAME per-turn switch, not the
+              // mode's persisted default. See explicitSourceSwitch.ts.
+              userExplicitSource: _userExplicitSource,
             });
             // Real-custom-mode-repair (2026-07-11), Phase 4/7: the trace used to
             // be emitted HERE with a hardcoded `finalAction: 'answer'` — before
@@ -1516,7 +1536,18 @@ export function initializeIpcHandlers(appState: AppState): void {
           if (!turnContract) return true; // legacy path decides alone
           try {
             const { allowsEvidence } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
-            return allowsEvidence(turnContract, 'profile_resume') || allowsEvidence(turnContract, 'profile_project');
+            // Evidence-execution-repair (2026-07-11): this gate previously
+            // checked only profile_resume/profile_project, never profile_jd —
+            // so a strictly reference_files_only contract that correctly
+            // forbade profile_jd still let profileEvidenceEligible stay true,
+            // and buildManualProfileEvidenceRoute independently selected JD as
+            // a context layer regardless of the contract. Confirmed live: "Does
+            // the JD prove that I have Tableau experience?" and "According to
+            // the JD, what are the main responsibilities?" both leaked JD
+            // content into a reference_files_only turn through this exact gap.
+            return allowsEvidence(turnContract, 'profile_resume')
+              || allowsEvidence(turnContract, 'profile_project')
+              || allowsEvidence(turnContract, 'profile_jd');
           } catch { return true; }
         })();
         const sourceOwnershipAllowsProfile = ((manualOwnership && !_ownerEnforcementOff)
