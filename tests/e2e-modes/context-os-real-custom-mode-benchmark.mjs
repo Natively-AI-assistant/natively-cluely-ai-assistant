@@ -223,6 +223,20 @@ async function main() {
     return await api.e2eInvoke?.('__e2e__:index-status', undefined).catch(() => null);
   }).catch(() => null);
 
+  // Evidence-execution-repair Phase 12: the isolated userData dir has no
+  // persisted provider credentials, so the real gemini-chat-stream handler
+  // would have nothing to call. Configure the real Gemini key via the SAME
+  // switch-to-gemini IPC the Settings UI's Save button calls — this is
+  // provider setup, not a shortcut around the answer pipeline itself.
+  const geminiApiKey = process.env.GEMINI_API_KEY || '';
+  if (!geminiApiKey) throw new Error('GEMINI_API_KEY not set in the environment — cannot run a real-provider benchmark');
+  const providerSwitch = await RAW(async ({ geminiApiKey }) => {
+    const api = window.electronAPI || window.api;
+    return await api.switchToGemini(geminiApiKey);
+  }, { geminiApiKey });
+  if (!providerSwitch?.success) throw new Error(`switchToGemini failed: ${providerSwitch?.error}`);
+  console.log('[BENCHMARK] configured real Gemini provider via switch-to-gemini IPC');
+
   // Let post-restart boot settle (onboarding checks, provider status polls,
   // etc. can trigger a renderer navigation shortly after activation) before
   // starting the long Phase D question loop.
@@ -251,16 +265,16 @@ async function main() {
 
   // Phase D — ask the benchmark through the REAL manual-chat handler.
   //
-  // Uses __e2e__:manual-ask, which invokes the EXACT SAME captured
-  // `gemini-chat-stream` handler function the real `streamGeminiChat`
-  // preload call dispatches to (globalThis.__nativelyGeminiChatStream) — the
-  // identical production code path (ipcHandlers.ts:_geminiChatStreamHandler
-  // -> planAnswer -> buildCustomModeExecutionContract -> SourceAuthorityKernel
-  // -> LLMHelper.streamChat), with only the transport swapped: a synthetic
-  // in-process sender instead of a real renderer IPC round-trip. This avoids
-  // blocking a page.evaluate() call across a real network request (which is
-  // fragile under Playwright if the renderer ever navigates mid-wait) while
-  // still exercising every routing/contract/retrieval decision for real.
+  // Invokes the REAL `gemini-chat-stream` IPC handler via the SAME
+  // `streamGeminiChat` preload call the renderer's Ask-AI input uses — the
+  // production code path (ipcHandlers.ts:_geminiChatStreamHandler ->
+  // planAnswer -> buildCustomModeExecutionContract -> SourceAuthorityKernel
+  // -> LLMHelper.streamChat -> EvidenceResolver), with a real renderer IPC
+  // round-trip start-to-finish (no synthetic shortcut). The handler streams
+  // tokens over 'gemini-stream-token'/'gemini-stream-done'/'gemini-stream-error'
+  // and returns null itself, so the answer is assembled from the event stream
+  // inside the SAME page.evaluate() call (avoids a fragile multi-call
+  // round-trip if the renderer reloads mid-stream).
   console.log('[BENCHMARK] Phase D: asking benchmark questions through real manual-chat handler...');
   const askManual = async (question) => {
     ctxosTraces.length = 0;
@@ -271,10 +285,36 @@ async function main() {
     let lastErr = null;
     for (let outer = 0; outer < 4; outer++) {
       try {
-        const result = await RAW(async ({ question }) => {
+        const result = await RAW(async ({ question, timeoutMs }) => {
           const api = window.electronAPI || window.api;
-          return await api.e2eInvoke('__e2e__:manual-ask', { question, timeoutMs: 45000 });
-        }, { question });
+          return await new Promise((resolve) => {
+            let settled = false;
+            let tokens = '';
+            const cleanup = () => {
+              offToken?.();
+              offDone?.();
+              offError?.();
+              clearTimeout(timer);
+            };
+            const finish = (result) => {
+              if (settled) return;
+              settled = true;
+              cleanup();
+              resolve(result);
+            };
+            const offToken = api.onGeminiStreamToken((token) => { tokens += token; });
+            const offDone = api.onGeminiStreamDone((data) => {
+              finish({ success: true, answer: data?.finalText || tokens });
+            });
+            const offError = api.onGeminiStreamError((error) => {
+              finish({ success: false, error: String(error), streamedTokens: tokens });
+            });
+            const timer = setTimeout(() => finish({ success: false, timedOut: true, streamedTokens: tokens }), timeoutMs);
+            api.streamGeminiChat(question, undefined, undefined, undefined).catch((e) => {
+              finish({ success: false, error: e?.message || String(e), streamedTokens: tokens });
+            });
+          });
+        }, { question, timeoutMs: 60000 });
         return { answer: result?.answer || result?.streamedTokens || '', traces: [...ctxosTraces] };
       } catch (e) {
         lastErr = e;
