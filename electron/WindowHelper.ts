@@ -372,51 +372,6 @@ export class WindowHelper {
 
     this.launcherWindow.setContentProtection(this.contentProtection);
 
-    // WINDOWS SOFTWARE-COMPOSITING EFFECTS GUARD (2026-07-11).
-    //
-    // Root cause (confirmed by the user's controlled experiment + 5 logs): the
-    // launcher renderer leaks NATIVE memory (RSS → multiple GB, flat JS heap,
-    // then UNRESPONSIVE and killed) when THREE conditions coincide:
-    //   1. the launcher window is VISIBLE/foreground (a backgrounded launcher —
-    //      e.g. during a meeting when the overlay is up — never leaks), AND
-    //   2. Chromium is on SOFTWARE compositing (gpu_compositing:disabled_software
-    //      — a GPU-less / driver-blocklisted Windows box), AND
-    //   3. the PhoneMirror companion browser-extension CONNECTS (which flips
-    //      onboarding state and re-provokes the launcher's animated glass layers).
-    // Under software compositing the launcher's backdrop-filter/blur + infinite
-    // framer-motion animations re-rasterize on the CPU into an unbounded pool of
-    // PartitionAlloc raster tiles that never get reclaimed while the compositor
-    // is kept non-idle. A real-GPU machine composites those tiles on the GPU and
-    // never accumulates them — which is why the dev Mac (Metal) never reproduced.
-    //
-    // Fix: on WINDOWS ONLY, when the GPU is not doing compositing, append ?nofx=1
-    // (the same flag the manual switch sets) so a global CSS rule (src/index.css)
-    // neutralizes every backdrop-filter/blur/filter. GPU-capable Windows machines
-    // keep the full glass; macOS is NEVER affected (guarded by platform). This
-    // trades a flatter look on GPU-less Windows boxes for not leaking to death.
-    //
-    //   NATIVELY_NOFX=1     → force effects OFF regardless of platform (manual)
-    //   NATIVELY_FORCE_FX=1 → force effects ON even under software compositing
-    let nofxReason = '';
-    if (process.env.NATIVELY_NOFX === '1') {
-      nofxReason = 'NATIVELY_NOFX=1 (manual)';
-    } else if (process.env.NATIVELY_FORCE_FX === '1') {
-      nofxReason = '';
-    } else if (process.platform === 'win32') {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const { app } = require('electron');
-        const status = (app.getGPUFeatureStatus?.() ?? {}) as Record<string, unknown>;
-        const gpuComposite = String(status.gpu_compositing ?? '');
-        // "enabled*" = hardware compositing (fine). Anything else = CPU compositing.
-        if (gpuComposite !== '' && !gpuComposite.startsWith('enabled')) {
-          nofxReason = `win32 software compositing (gpu_compositing=${gpuComposite})`;
-        }
-      } catch { /* can't read GPU status → leave effects ON */ }
-    }
-    const nofxSuffix = nofxReason ? '&nofx=1' : '';
-    if (nofxSuffix) console.warn(`[fx-guard] launcher effects OFF (?nofx=1) — ${nofxReason}`);
-
     // A/B KILL-SWITCH (2026-07-10): NATIVELY_DISABLE_ONBOARDING_ORCH=1 appends
     // ?noorch=1, which makes App.tsx skip orch.start() entirely (no drain loop,
     // no onboarding toasters). The onboarding orchestrator's drain loop was
@@ -427,7 +382,7 @@ export class WindowHelper {
     const noOrchSuffix = process.env.NATIVELY_DISABLE_ONBOARDING_ORCH === '1' ? '&noorch=1' : '';
     if (noOrchSuffix) console.warn('[LeakTest] NATIVELY_DISABLE_ONBOARDING_ORCH=1 → launcher with ?noorch=1 (onboarding orchestrator OFF)');
 
-    const launcherUrl = `${startUrl}?window=launcher${nofxSuffix}${noOrchSuffix}`;
+    const launcherUrl = `${startUrl}?window=launcher${noOrchSuffix}`;
 
     this.launcherWindow
       .loadURL(launcherUrl)

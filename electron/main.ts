@@ -7149,14 +7149,10 @@ if (process.env.THINKING_MATRIX === '1') {
   });
 
   // DIAGNOSTIC (2026-07-11): dump Chromium's GPU feature status once at boot.
-  // The "window appears then freezes / renderer not responsive" report is
-  // consistent with a machine that fell back to SOFTWARE compositing (Chromium
-  // blocklisted the GPU / driver state), where the launcher splash's heavy
-  // blur/backdrop-filter becomes catastrophically expensive and can wedge the
-  // renderer's main thread. This logs, in one line, whether gpu_compositing and
-  // rasterization are 'enabled' (hardware) or 'software'/'disabled'. If a user
-  // who freezes shows software/disabled here while a healthy machine shows
-  // enabled, the compositing path is confirmed and `?nofx=1` should unblock it.
+  // This records whether gpu_compositing and rasterization are hardware enabled
+  // or software/disabled, which is useful context when investigating a renderer
+  // hang. The onboarding scheduler must still allow the renderer to become idle
+  // regardless of the reported compositing mode.
   try {
     const status = app.getGPUFeatureStatus();
     console.log('[GPU] featureStatus', JSON.stringify(status));

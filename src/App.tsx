@@ -76,21 +76,6 @@ function shouldMountDevReviewHost(): boolean {
 const queryClient = new QueryClient()
 const CropperWindow = React.lazy(() => import('./components/Cropper'))
 
-// TEMPORARY LEAK-DIAGNOSIS (2026-07-10): the Windows native-RSS climb is a
-// non-JS (flat V8 heap) leak in the launcher renderer + main in lockstep,
-// GPU-process-independent — consistent with CPU-composited backdrop-filter /
-// blur raster tiles under software compositing. Appending `?nofx=1` to any
-// window URL adds `nofx` to <html>, and a global CSS rule (src/index.css)
-// neutralizes every backdrop-filter/filter:blur. If RSS goes FLAT with
-// ?nofx=1, the blur/compositor tile path is the root cause. Remove after fix.
-try {
-  if (new URLSearchParams(window.location.search).get('nofx') === '1') {
-    document.documentElement.classList.add('nofx');
-    // eslint-disable-next-line no-console
-    console.warn('[LeakTest] nofx=1 → backdrop-filter/blur effects disabled this run');
-  }
-} catch { /* non-fatal */ }
-
 const App: React.FC = () => {
   const isSettingsWindow = new URLSearchParams(window.location.search).get('window') === 'settings';
   const isLauncherWindow = new URLSearchParams(window.location.search).get('window') === 'launcher';
