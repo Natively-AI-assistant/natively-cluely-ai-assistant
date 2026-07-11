@@ -2809,32 +2809,52 @@ export function initializeIpcHandlers(appState: AppState): void {
               const isGreeting = GREETING_RE.test(trimmed) || /what would you like help with/i.test(trimmed);
               const isEmpty = trimmed.length < 8;
               const isExactRepeat = priorAnswer.length > 0 && trimmed === priorAnswer;
-              // Re-retrieve the reference block for the regen prompt + the
-              // log-only groundedness check. The block built inside streamChat is
-              // not in handler scope, so we re-run the (cached) lexical retrieval
-              // here. Cheap: the per-file chunk cache means this re-scores, it
-              // does not re-chunk.
+              // EVIDENCE-EXECUTION-REPAIR (2026-07-11): when EvidenceResolver
+              // already governed this turn (manualContextOsGeneration.evidencePack
+              // populated by _streamChatInner during the stream), reuse that SAME
+              // pack for the validator instead of re-retrieving. Re-retrieving here
+              // was an independent second retrieval — a different query
+              // (expandQueryWithHints vs the resolver's), a different budget
+              // (DOC_GROUNDED_TOKEN_BUDGET vs the resolver's), and it ran AFTER the
+              // answer had already streamed, so the validator could see evidence
+              // the answer was never actually grounded in (or vice versa). Only
+              // the governed pack's items become docContextBlock; when the
+              // resolver did not govern this turn (flag off / no contract /
+              // resolver failure), the legacy re-retrieval below remains the only
+              // source, unchanged.
               let docContextBlock = '';
-              try {
-                const { ModesManager } = require('./services/ModesManager');
-                // Use the expanded doc-grounded budget so the validator sees as
-                // many chunks as the main answer path did. The 1800-token default
-                // was calibrated for seminar notes; a 66-page thesis may have the
-                // answer in a chunk that 1800 tokens can't reach.
-                // SOURCE-AWARE HINTS (2026-07-06): expand with generic concept
-                // synonyms so the validator's re-retrieval matches the same
-                // sections the main answer path saw (recall parity), within the
-                // reference files only.
-                let _valRetrievalQuery = message;
+              const _governedPack = manualContextOsGeneration?.evidencePack;
+              if (_governedPack && _governedPack.items.length > 0) {
+                docContextBlock = _governedPack.items
+                  .map((it) => `[Section: ${it.pointer?.section || it.sourceId}]\n${it.text}`)
+                  .join('\n\n');
+              } else if (!_governedPack) {
+                // Re-retrieve the reference block for the regen prompt + the
+                // log-only groundedness check. The block built inside streamChat is
+                // not in handler scope, so we re-run the (cached) lexical retrieval
+                // here. Cheap: the per-file chunk cache means this re-scores, it
+                // does not re-chunk.
                 try {
-                  const { expandQueryWithHints } = require('./llm/documentGroundedPrompt');
-                  _valRetrievalQuery = expandQueryWithHints(String(message || ''));
-                } catch { _valRetrievalQuery = message; }
-                docContextBlock = ModesManager.getInstance().buildRetrievedActiveModeContextBlock(
-                  _valRetrievalQuery, undefined, DOC_GROUNDED_TOKEN_BUDGET, 'lecture_answer', true, undefined, { forceDocumentGrounding: true },
-                ) || '';
-              } catch (reErr: any) {
-                console.warn('[DocGrounded] re-retrieval for validator failed (non-fatal):', reErr?.message);
+                  const { ModesManager } = require('./services/ModesManager');
+                  // Use the expanded doc-grounded budget so the validator sees as
+                  // many chunks as the main answer path did. The 1800-token default
+                  // was calibrated for seminar notes; a 66-page thesis may have the
+                  // answer in a chunk that 1800 tokens can't reach.
+                  // SOURCE-AWARE HINTS (2026-07-06): expand with generic concept
+                  // synonyms so the validator's re-retrieval matches the same
+                  // sections the main answer path saw (recall parity), within the
+                  // reference files only.
+                  let _valRetrievalQuery = message;
+                  try {
+                    const { expandQueryWithHints } = require('./llm/documentGroundedPrompt');
+                    _valRetrievalQuery = expandQueryWithHints(String(message || ''));
+                  } catch { _valRetrievalQuery = message; }
+                  docContextBlock = ModesManager.getInstance().buildRetrievedActiveModeContextBlock(
+                    _valRetrievalQuery, undefined, DOC_GROUNDED_TOKEN_BUDGET, 'lecture_answer', true, undefined, { forceDocumentGrounding: true },
+                  ) || '';
+                } catch (reErr: any) {
+                  console.warn('[DocGrounded] re-retrieval for validator failed (non-fatal):', reErr?.message);
+                }
               }
               // OKF Phase 3: also fold in OKF card text so the strong-evidence
               // check below (term overlap / high-signal entity match) considers
@@ -2850,7 +2870,15 @@ export function initializeIpcHandlers(appState: AppState): void {
               // term-count heuristic, never replacing it, so the already-
               // verified 19/19 benchmark behavior can't regress).
               let isTier1Or2Evidence = false;
-              try {
+              // Evidence-execution-repair: when EvidenceResolver already governed
+              // this turn, its pack IS the authoritative evidence (it already
+              // tried OKF first — see EvidenceResolver's okf_exact/okf_property
+              // strategies) — an independent OKF re-query here would score the
+              // same cards a second time with different params and could augment
+              // docContextBlock with content the answer was never grounded in.
+              // Only run this legacy augmentation when the resolver did NOT
+              // govern this turn.
+              if (!_governedPack) try {
                 if (isIntelligenceFlagEnabled('okfHybridRetrieval')) {
                   const { ModesManager: _MM } = require('./services/ModesManager');
                   const activeMode = _MM.getInstance().getActiveMode?.();
