@@ -4590,7 +4590,78 @@ const isMultimodal = !!(imagePaths?.length);
         // lexical retriever, byte-for-byte unchanged. The hybrid call is guarded
         // so any failure falls back to the sync path the manual flow always used.
         // modeContextBlock / usedRerankPath hoisted to function scope above (round-6 / OKF Phase 3).
+        //
+        // ── EVIDENCE-EXECUTION-REPAIR (2026-07-11): single canonical retrieval ──
+        // When this turn is Context-OS-governed (routeOptions.contextOsGeneration
+        // present + contextOsEvidencePackEnabled), retrieval runs EXACTLY ONCE
+        // through EvidenceResolver — never the legacy hybrid-string-then-
+        // re-derive-a-pack round trip. The resulting EvidencePack is written to
+        // `_cog.evidencePack` IMMEDIATELY (before the provider request), so it
+        // is the SAME object identity the post-stream validator (Phase 10) and
+        // claim persistence consume — no second retrieval, ever, for a
+        // Context-OS-governed turn. See docs/context-os/evidence-execution-repair/
+        // 01_EXECUTION_TIMELINE.md for the defect this replaces and
+        // 04_EVIDENCE_RESOLVER.md for the design.
+        let resolvedViaEvidenceResolver = false;
         try {
+          const _cogEarly = routeOptions?.contextOsGeneration as import('./intelligence/context-os').ContextOsGenerationContext | undefined;
+          const { isIntelligenceFlagEnabled: _isFlagOn } = require('./intelligence/intelligenceFlags');
+          if (_cogEarly && _cogEarly.govern && forceDocumentGrounding && _isFlagOn('contextOsEvidencePackEnabled')) {
+            const { EvidenceResolver } = require('./intelligence/context-os/EvidenceResolver') as typeof import('./intelligence/context-os/EvidenceResolver');
+            const { classifyQuestion } = require('./services/knowledge/QuestionClassifier');
+            const { queryOkfCards } = require('./services/knowledge/OkfRetriever');
+            const { KnowledgeManager } = require('./services/knowledge/KnowledgeManager');
+            const modeContextRetriever = new (require('./services/ModeContextRetriever').ModeContextRetriever)();
+            const activeModeRow = modesMgr.getActiveMode?.();
+            if (activeModeRow) {
+              const resolver = new EvidenceResolver({
+                getModeSnapshot: () => activeModeRow,
+                getReferenceFiles: (modeId: string) => modesMgr.getReferenceFiles(modeId),
+                hybridRetriever: { retrieveHybrid: (m: any, files: any, opts: any) => modeContextRetriever.retrieveHybrid(m, files, opts) },
+                knowledgeManager: { getPackForFile: (fileId: string) => KnowledgeManager.getInstance().getPackForFile(fileId) },
+                classifyQuestion,
+                queryOkfCards,
+              });
+              const resolution = await resolver.resolve({
+                turnId: _cogEarly.contract.turnId,
+                question: message,
+                sourceContract: _cogEarly.contract,
+                activeMode: { modeId: activeModeRow.id, modeUniqueId: activeModeRow.id },
+                requestedProperty: _cogEarly.contract.requestedProperty,
+                transcript: context,
+                followUpReferentHint: routeOptions?.followUpReferentHint,
+              });
+              (_cogEarly as any).evidencePack = resolution.pack;
+              (_cogEarly as any).resolutionStrategy = resolution.strategy;
+              // Render the SAME pack into the legacy string shape so downstream
+              // telemetry/budget-check code (unchanged below) keeps working —
+              // this is the ONLY place the pack is turned into text, and it is
+              // rendered from the resolver's result, never re-retrieved.
+              modeContextBlock = resolution.pack.items
+                .map((it: any) => `[Section: ${it.pointer?.section || it.sourceId}]\n${it.text}`)
+                .join('\n\n');
+              usedRerankPath = true;
+              resolvedViaEvidenceResolver = true;
+              if (_isFlagOn('trace')) {
+                console.log('[EVIDENCE-RESOLVER]', JSON.stringify({
+                  turnId: _cogEarly.contract.turnId,
+                  strategy: resolution.strategy,
+                  packId: resolution.pack.packId,
+                  itemCount: resolution.pack.items.length,
+                  confidence: resolution.confidence,
+                  answerPolicy: resolution.pack.answerPolicy,
+                }));
+              }
+            }
+          }
+        } catch (_evidenceResolverErr: any) {
+          console.warn('[LLMHelper] EvidenceResolver governed retrieval failed, falling back to legacy retrieval:', _evidenceResolverErr?.message);
+        }
+        try {
+          // Evidence-execution-repair: when EvidenceResolver already resolved
+          // this turn's evidence above, skip the entire legacy hybrid/lexical
+          // retrieval block — modeContextBlock + usedRerankPath are already set.
+          if (resolvedViaEvidenceResolver) { /* no-op: fall through to pinned instructions below */ } else {
           // eslint-disable-next-line @typescript-eslint/no-var-requires
           const { isRagLocalRerankEnabled } = require('./intelligence/intelligenceFlags');
           // Document-grounded custom mode (audit 2026-06-27, real-path fix):
@@ -4644,6 +4715,7 @@ const isMultimodal = !!(imagePaths?.length);
               // dropped once it does complete, so we don't act on stale data.
               hybridPromise.finally(() => { /* raced timed out — drop result */ }).catch(() => {});
             }
+          }
           }
         } catch (_rerankErr: any) {
           console.warn('[LLMHelper] manual hybrid+rerank path failed, using sync lexical:', _rerankErr?.message);
