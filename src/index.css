@@ -18,18 +18,27 @@
 @tailwind components;
 @tailwind utilities;
 
-/* TEMPORARY LEAK-DIAGNOSIS (2026-07-10): when <html class="nofx"> is set via
-   the ?nofx=1 URL flag (see src/App.tsx), neutralize every backdrop-filter and
-   blur filter. These CPU-composited raster tiles are the suspected source of
-   the Windows native-RSS leak (launcher renderer + main grow in lockstep with
-   a flat JS heap). If RSS stays flat with ?nofx=1, this is the root cause.
-   Remove this block once the leak is fixed. !important beats Tailwind utils. */
+/* WINDOWS SOFTWARE-COMPOSITING LEAK GUARD (2026-07-11): when <html class="nofx">
+   is set (via ?nofx=1, which WindowHelper appends on Windows boxes running
+   software compositing — see WindowHelper.resolveFxSuffix + src/App.tsx), kill
+   the two things that churn CPU raster tiles unbounded under software compositing
+   and leak native memory (launcher RSS → GB, flat JS heap, UNRESPONSIVE):
+     1. every backdrop-filter / filter / blur (glass layers re-rasterized on CPU), and
+     2. every CSS/framer-motion animation & transition (an always-running
+        `repeat: Infinity` animation — e.g. the BrowserExtensionToaster shimmer
+        that appears when the phone-mirror companion extension connects — keeps
+        the compositor permanently non-idle so the raster-tile pool never drains).
+   Freezing animations to their final frame stops the compositor churn while
+   leaving the UI fully usable (just non-animated). GPU-capable machines and
+   macOS never get this class (the guard is Windows-software-compositing only). */
 html.nofx *,
 html.nofx *::before,
 html.nofx *::after {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   filter: none !important;
+  animation: none !important;
+  transition: none !important;
 }
 
 :root {
