@@ -76,21 +76,6 @@ function shouldMountDevReviewHost(): boolean {
 const queryClient = new QueryClient()
 const CropperWindow = React.lazy(() => import('./components/Cropper'))
 
-// TEMPORARY LEAK-DIAGNOSIS (2026-07-10): the Windows native-RSS climb is a
-// non-JS (flat V8 heap) leak in the launcher renderer + main in lockstep,
-// GPU-process-independent — consistent with CPU-composited backdrop-filter /
-// blur raster tiles under software compositing. Appending `?nofx=1` to any
-// window URL adds `nofx` to <html>, and a global CSS rule (src/index.css)
-// neutralizes every backdrop-filter/filter:blur. If RSS goes FLAT with
-// ?nofx=1, the blur/compositor tile path is the root cause. Remove after fix.
-try {
-  if (new URLSearchParams(window.location.search).get('nofx') === '1') {
-    document.documentElement.classList.add('nofx');
-    // eslint-disable-next-line no-console
-    console.warn('[LeakTest] nofx=1 → backdrop-filter/blur effects disabled this run');
-  }
-} catch { /* non-fatal */ }
-
 const App: React.FC = () => {
   const isSettingsWindow = new URLSearchParams(window.location.search).get('window') === 'settings';
   const isLauncherWindow = new URLSearchParams(window.location.search).get('window') === 'launcher';
@@ -146,6 +131,18 @@ const App: React.FC = () => {
   // resetting and never fire — the "stuck at the startup animation" symptom.
   // Memoizing to [] makes the splash timers arm exactly once.
   const dismissStartup = useCallback(() => setShowStartup(false), []);
+
+  // Bug 1 + Bug 2: only mount the launcher-side floating card AFTER the
+  // startup animation has finished AND a 3s settle window has elapsed.
+  // Triggers `false → true` 3s after `showStartup` flips false; tracked via
+  // a single boolean so the IPC subscription + motion entrance don't fire
+  // during the startup animation or while the main UI is still settling.
+  const [showHindsightBanner, setShowHindsightBanner] = useState(false);
+  useEffect(() => {
+    if (showStartup) return; // never schedule while startup is up
+    const t = setTimeout(() => setShowHindsightBanner(true), 3000);
+    return () => clearTimeout(t);
+  }, [showStartup]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<string>('general');
   const [isModesOpen, setIsModesOpen] = useState(false);
@@ -819,7 +816,7 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary context="Launcher">
     <div className="h-full min-h-0 w-full relative bg-transparent">
-      <HindsightStatusBanner variant="floating-card" />
+      {showHindsightBanner && <HindsightStatusBanner variant="floating-card" />}
       <AnimatePresence>
         {showStartup ? (
           <motion.div

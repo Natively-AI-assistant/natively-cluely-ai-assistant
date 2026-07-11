@@ -109,6 +109,13 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   }
 
   private getWorker(): Worker {
+    // DIAGNOSTIC (2026-07-11): NATIVELY_NO_LOCAL_MODELS=1 forbids the on-device
+    // embedding ONNX worker entirely (local-model leak-isolation test). Belt-and-
+    // suspenders — the resolver already refuses to select this provider under the
+    // flag, but gating the actual worker spawn guarantees no code path can load it.
+    if (process.env.NATIVELY_NO_LOCAL_MODELS === '1') {
+      throw new Error('LocalEmbeddingProvider disabled (NATIVELY_NO_LOCAL_MODELS=1)');
+    }
     if (!this.worker) {
       // Cross-launch disk sentinel: written BEFORE new Worker() so a native
       // ORT abort that kills the process before the JS `ready` arrives
