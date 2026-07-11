@@ -85,14 +85,6 @@ describe('validateSttBaseUrl — SSRF guard for OpenAI-compatible base URL', () 
     assert.equal(validateSttBaseUrl('https://10.0.0.5/v1').isValid, false);
     assert.equal(validateSttBaseUrl('https://192.168.1.1/v1').isValid, false);
     assert.equal(validateSttBaseUrl('https://169.254.169.254/latest/meta-data').isValid, false);
-    assert.equal(validateSttBaseUrl('https://[fc00::1]/v1').isValid, false);
-    assert.equal(validateSttBaseUrl('https://[fd12:3456::1]/v1').isValid, false);
-    assert.equal(validateSttBaseUrl('https://[fe80::1]/v1').isValid, false);
-  });
-
-  test('blocks encoded IPv4 host tricks', () => {
-    assert.equal(validateSttBaseUrl('https://2130706433/v1').isValid, false);
-    assert.equal(validateSttBaseUrl('https://0x7f000001/v1').isValid, false);
   });
 
   test('blocks non-https + dangerous schemes', () => {

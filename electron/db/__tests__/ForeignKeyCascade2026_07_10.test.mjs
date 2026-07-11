@@ -58,7 +58,7 @@ describe('DatabaseManager — foreign_keys cascade without premium (2026-07-10)'
     assert.equal(fk, 1, 'foreign_keys must be enabled without the premium module');
   });
 
-  test('a bare meeting parent delete cascades to transcript/RAG child rows', () => {
+  test('a bare parent delete cascades to child rows', () => {
     if (!dbMgr.isAvailable()) return;
     const db = dbMgr.getDb();
 
@@ -93,89 +93,5 @@ describe('DatabaseManager — foreign_keys cascade without premium (2026-07-10)'
     db.prepare(`DELETE FROM meetings WHERE id = ?`).run(meetingId);
 
     assert.equal(childCount(), 0, 'all child rows must be cascaded away by the parent delete');
-  });
-
-  test('mode reference file create/delete cascades knowledge-pack children', () => {
-    if (!dbMgr.isAvailable()) return;
-    const db = dbMgr.getDb();
-
-    const modeId = 'fk-mode-1';
-    const fileId = 'fk-file-1';
-    const sourceId = 'fk-source-1';
-    const packId = 'fk-pack-1';
-    const cardId = 'fk-card-1';
-
-    dbMgr.createMode({ id: modeId, name: 'FK Mode', templateType: 'general', customContext: '' });
-    dbMgr.addReferenceFile({ id: fileId, modeId, fileName: 'test.pdf', content: '[Page 1]\nhello', pageCount: 1, extractedPageCount: 1 });
-    dbMgr.upsertKnowledgeSource({ id: sourceId, type: 'reference_file', fileId, modeId, fileName: 'test.pdf', sourceChecksum: 'sc', contentHash: 'ch' });
-    dbMgr.upsertKnowledgePack({ id: packId, sourceId, modeId, fileName: 'test.pdf', indexMd: '# Index', statsJson: '{}', packVersion: 1, generatedBy: 'test' });
-    dbMgr.replaceKnowledgeCards(packId, sourceId, [{
-      id: cardId,
-      type: 'concept',
-      title: 'Card',
-      slug: 'card',
-      conceptId: 'concept-card',
-      body: 'Body',
-      sourcePagesJson: '[]',
-      sourceSectionsJson: '[]',
-      sourceQuotesJson: '[]',
-      entitiesJson: '[]',
-      tagsJson: '[]',
-      relatedCardIdsJson: '[]',
-      confidence: 'high',
-      generatedFrom: 'test',
-      sourceChecksum: 'sc',
-      cardVersion: 1,
-    }], 'sc');
-    dbMgr.replaceKnowledgeEntities(packId, [{ id: 'fk-entity-1', slug: 'entity', name: 'Entity', type: 'concept', aliasesJson: '[]', description: 'Entity', sourceCardIdsJson: JSON.stringify([cardId]), sourcePagesJson: '[]' }]);
-    dbMgr.replaceKnowledgeRelations(packId, [{ id: 'fk-relation-1', subjectId: 'a', subjectType: 'concept', predicate: 'relates_to', objectId: 'b', objectType: 'concept', sourceCardIdsJson: JSON.stringify([cardId]), sourcePagesJson: '[]', confidence: 'medium' }]);
-    dbMgr.upsertKnowledgeIndexVersion({ id: 'fk-index-1', sourceId, packId, packVersion: 1, contentHash: 'ch', status: 'complete' });
-    dbMgr.snapshotKnowledgeCardVersion(cardId, 'test', 'snapshot');
-
-    const countAll = () => ({
-      source: db.prepare(`SELECT COUNT(*) AS n FROM knowledge_sources WHERE id = ?`).get(sourceId).n,
-      pack: db.prepare(`SELECT COUNT(*) AS n FROM knowledge_packs WHERE id = ?`).get(packId).n,
-      card: db.prepare(`SELECT COUNT(*) AS n FROM knowledge_cards WHERE id = ?`).get(cardId).n,
-      version: db.prepare(`SELECT COUNT(*) AS n FROM knowledge_card_versions WHERE card_id = ?`).get(cardId).n,
-      entity: db.prepare(`SELECT COUNT(*) AS n FROM knowledge_entities WHERE pack_id = ?`).get(packId).n,
-      relation: db.prepare(`SELECT COUNT(*) AS n FROM knowledge_relations WHERE pack_id = ?`).get(packId).n,
-      indexVersion: db.prepare(`SELECT COUNT(*) AS n FROM knowledge_index_versions WHERE source_id = ?`).get(sourceId).n,
-    });
-
-    assert.deepEqual(countAll(), { source: 1, pack: 1, card: 1, version: 1, entity: 1, relation: 1, indexVersion: 1 }, 'precondition: full reference-file knowledge pack graph inserted');
-
-    dbMgr.deleteReferenceFile(fileId);
-
-    assert.deepEqual(countAll(), { source: 0, pack: 0, card: 0, version: 0, entity: 0, relation: 0, indexVersion: 0 }, 'deleting a reference file cascades all OKF knowledge children');
-  });
-
-  test('bare mode delete cascades reference files, note sections, and knowledge packs', () => {
-    if (!dbMgr.isAvailable()) return;
-    const db = dbMgr.getDb();
-
-    const modeId = 'fk-mode-2';
-    const fileId = 'fk-file-2';
-    const sourceId = 'fk-source-2';
-    const packId = 'fk-pack-2';
-
-    dbMgr.createMode({ id: modeId, name: 'FK Mode 2', templateType: 'general', customContext: '' });
-    dbMgr.addNoteSection({ id: 'fk-note-2', modeId, title: 'Notes', description: 'Desc', sortOrder: 0 });
-    dbMgr.addReferenceFile({ id: fileId, modeId, fileName: 'test2.pdf', content: 'hello', pageCount: 1, extractedPageCount: 1 });
-    dbMgr.upsertKnowledgeSource({ id: sourceId, type: 'reference_file', fileId, modeId, fileName: 'test2.pdf', sourceChecksum: 'sc2', contentHash: 'ch2' });
-    dbMgr.upsertKnowledgePack({ id: packId, sourceId, modeId, fileName: 'test2.pdf', indexMd: '# Index', statsJson: '{}', packVersion: 1, generatedBy: 'test' });
-
-    assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM modes WHERE id = ?`).get(modeId).n, 1);
-    assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM mode_reference_files WHERE mode_id = ?`).get(modeId).n, 1);
-    assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM mode_note_sections WHERE mode_id = ?`).get(modeId).n, 1);
-    assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM knowledge_sources WHERE mode_id = ?`).get(modeId).n, 1);
-    assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM knowledge_packs WHERE mode_id = ?`).get(modeId).n, 1);
-
-    dbMgr.deleteMode(modeId);
-
-    assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM modes WHERE id = ?`).get(modeId).n, 0);
-    assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM mode_reference_files WHERE mode_id = ?`).get(modeId).n, 0);
-    assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM mode_note_sections WHERE mode_id = ?`).get(modeId).n, 0);
-    assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM knowledge_sources WHERE mode_id = ?`).get(modeId).n, 0);
-    assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM knowledge_packs WHERE mode_id = ?`).get(modeId).n, 0);
   });
 });

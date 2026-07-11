@@ -192,28 +192,16 @@ export function validateUrlForSsrf(urlString: string): { isValid: boolean; reaso
     }
 
     const hostname = url.hostname.toLowerCase();
-    const bareHostname = hostname.replace(/^\[/, '').replace(/\]$/, '');
 
     // Block localhost variants (the entire 127.0.0.0/8 range is loopback, not
     // just 127.0.0.1 — e.g. 127.0.0.2 also routes to the local machine).
-    if (hostname === 'localhost' || hostname.startsWith('127.') || bareHostname === '::1' || hostname === '0.0.0.0') {
+    if (hostname === 'localhost' || hostname.startsWith('127.') || hostname === '::1' || hostname === '0.0.0.0') {
         return { isValid: false, reason: 'Loopback addresses are not allowed' };
     }
 
-    // Reject non-dotted numeric hostnames before DNS/canonicalization tricks can
-    // reinterpret them as IPv4 (e.g. https://2130706433/ → 127.0.0.1 in some stacks).
-    if (/^(?:0x[0-9a-f]+|\d+)$/i.test(bareHostname)) {
-        return { isValid: false, reason: 'Encoded IP hostnames are not allowed' };
-    }
-
-    // Block link-local IPv4 (169.254.x.x) and IPv6 (fe80::/10).
-    if (hostname.startsWith('169.254.') || /^fe[89ab][0-9a-f]*:/i.test(bareHostname)) {
+    // Block link-local (169.254.x.x)
+    if (hostname.startsWith('169.254.')) {
         return { isValid: false, reason: 'Link-local addresses are not allowed' };
-    }
-
-    // Block IPv6 unique-local/private (fc00::/7 — fc* and fd*).
-    if (/^f[cd][0-9a-f]*:/i.test(bareHostname)) {
-        return { isValid: false, reason: 'Private IPv6 networks are not allowed' };
     }
 
     // Block private network ranges

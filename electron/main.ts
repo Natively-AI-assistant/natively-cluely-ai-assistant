@@ -140,22 +140,6 @@ try {
   console.warn('[LeakTest] disableHardwareAcceleration failed:', e);
 }
 
-// MASTER LOCAL-MODEL KILL-SWITCH (2026-07-11) — diagnostic.
-// NATIVELY_NO_LOCAL_MODELS=1 blocks EVERY on-device model from loading at
-// startup: the ONNX local-embedding fallback, the zero-shot intent classifier,
-// the BGE reranker, Whisper STT prewarm, the LocalFallbackPreflight probe, AND
-// the Ollama bootstrap. NOTHING local is invoked. If the app boots and stays
-// stable (no native-RSS leak / UNRESPONSIVE) with this set — while it leaks
-// without it — the on-device model path is confirmed as the cause of the
-// Windows freeze (which only engages that path because cloud embedding auth
-// fails there but works on the dev Mac). A no-op unless the flag is set.
-function localModelsDisabled(): boolean {
-  return process.env.NATIVELY_NO_LOCAL_MODELS === '1';
-}
-if (localModelsDisabled()) {
-  console.warn('[LeakTest] NATIVELY_NO_LOCAL_MODELS=1 → ALL local models (ONNX embedding/intent/reranker, Whisper prewarm, preflight, Ollama) are DISABLED this run');
-}
-
 /**
  * Whether THIS build carries a real Developer ID signature.
  *
@@ -1690,37 +1674,14 @@ export class AppState {
         // attributable: if the GPU process is the one ballooning on Windows,
         // the "Browser"/main RSS and the "GPU" RSS diverge here. Guarded so a
         // failure never breaks the heartbeat.
-        let procMem: Array<{ type: string; rssMB: number; pid: number; win?: string }> = [];
+        let procMem: Array<{ type: string; rssMB: number; pid: number }> = [];
         try {
-          const { app: eApp, BrowserWindow, webContents } = require('electron');
-          // Build a pid → window-label map so a leaking "Tab" (renderer) is
-          // attributable to a SPECIFIC window (launcher / overlay / cropper /
-          // settings / model-selector). getAppMetrics() only reports the process
-          // TYPE + pid, not which renderer it is — so on the Windows repro we
-          // couldn't tell WHICH renderer ballooned. Match each live webContents'
-          // OS process id to its window URL's ?window= param.
-          const pidToWin: Record<number, string> = {};
-          try {
-            for (const wc of (webContents?.getAllWebContents?.() || [])) {
-              try {
-                if (wc.isDestroyed?.()) continue;
-                const ospid = wc.getOSProcessId?.();
-                if (!ospid) continue;
-                const url = wc.getURL?.() || '';
-                const m = /[?&]window=([a-z-]+)/.exec(url);
-                let label = m ? m[1] : (url.includes('index.html') || url.includes('localhost') ? 'launcher?' : 'renderer');
-                // Devtools / about:blank helpers
-                if (url.startsWith('devtools://')) label = 'devtools';
-                pidToWin[ospid] = pidToWin[ospid] ? `${pidToWin[ospid]}+${label}` : label;
-              } catch { /* per-wc best effort */ }
-            }
-          } catch { /* webContents enumeration best effort */ }
+          const { app: eApp } = require('electron');
           procMem = (eApp.getAppMetrics?.() || [])
             .map((m: any) => ({
               type: m.type,
               rssMB: m.memory?.workingSetSize ? Math.round(m.memory.workingSetSize / 1024) : 0, // KB→MB
               pid: m.pid,
-              ...(pidToWin[m.pid] ? { win: pidToWin[m.pid] } : {}),
             }))
             .sort((a: any, b: any) => b.rssMB - a.rssMB);
         } catch { /* getAppMetrics unavailable pre-ready — skip */ }
@@ -1899,10 +1860,6 @@ export class AppState {
   private async bootstrapOllamaEmbeddings() {
     this._ollamaBootstrapPromise = (async () => {
       try {
-        if (localModelsDisabled()) {
-          console.warn('[LeakTest] Skipping Ollama embeddings bootstrap (NATIVELY_NO_LOCAL_MODELS=1)');
-          return;
-        }
         // SKIP when a cloud embedding provider is already available. Pulling the
         // 274MB `nomic-embed-text` on first launch is pure waste for users who
         // have an OpenAI/Gemini key (the RAG pipeline resolves to that cloud
@@ -2070,18 +2027,12 @@ export class AppState {
         // We await waitForReady() so uploads during boot wait for the pipeline
         // instead of immediately throwing 'not ready'.
         const self = this;
-        const embedWithProducerMetadata = async (text: string) => {
+        this.knowledgeOrchestrator.setEmbedFn(async (text: string) => {
           const pipeline = self.ragManager?.getEmbeddingPipeline();
           if (!pipeline) throw new Error('RAG pipeline not available');
           await pipeline.waitForReady();
-          return await pipeline.getEmbeddingWithFallback(text);
-        };
-        this.knowledgeOrchestrator.setEmbedFn(async (text: string) => {
-          return (await embedWithProducerMetadata(text)).embedding;
+          return await pipeline.getEmbedding(text);
         });
-        if (typeof this.knowledgeOrchestrator.setEmbedWithMetadataFn === 'function') {
-          this.knowledgeOrchestrator.setEmbedWithMetadataFn(embedWithProducerMetadata);
-        }
         // Report the active document-embedder's composite space so the orchestrator
         // can detect knowledge nodes embedded in an OLD space (e.g. after a
         // gemini-embedding-001 → -2 upgrade) and re-embed them, instead of silently
@@ -7000,16 +6951,11 @@ async function initializeApp() {
     const settingsManager = SettingsManager.getInstance();
     const defaultModel = CredentialsManager.getInstance().getDefaultModel();
     const shouldStartOllama =
-      !localModelsDisabled() && (
-        settingsManager.get('autoStartOllama') === true ||
-        defaultModel.startsWith('ollama-') ||
-        defaultModel.startsWith('ollama:') ||
-        process.env.NATIVELY_AUTO_START_OLLAMA === '1'
-      );
-    if (localModelsDisabled()) {
-      OllamaManager.getInstance().skipStartup('NATIVELY_NO_LOCAL_MODELS=1 — Ollama disabled for diagnostic');
-      console.warn('[LeakTest] Skipping Ollama startup (NATIVELY_NO_LOCAL_MODELS=1)');
-    } else if (shouldStartOllama) {
+      settingsManager.get('autoStartOllama') === true ||
+      defaultModel.startsWith('ollama-') ||
+      defaultModel.startsWith('ollama:') ||
+      process.env.NATIVELY_AUTO_START_OLLAMA === '1';
+    if (shouldStartOllama) {
       OllamaManager.getInstance().ensureRunning({
         reason: settingsManager.get('autoStartOllama') === true ? 'auto-start-setting' : 'startup-selected',
         selectedModel: defaultModel,
@@ -7101,11 +7047,7 @@ if (process.env.THINKING_MATRIX === '1') {
   // credentials are loaded (so the provider can read its API key) and is
   // non-blocking — failures are logged and retried at meeting start.
   try {
-    if (localModelsDisabled()) {
-      console.warn('[LeakTest] Skipping STT pre-warm (NATIVELY_NO_LOCAL_MODELS=1)');
-    } else {
-      appState.prewarmSttProviders();
-    }
+    appState.prewarmSttProviders();
   } catch (err) {
     console.warn('[Init] STT pre-warm threw (non-fatal):', err);
   }
@@ -7148,18 +7090,6 @@ if (process.env.THINKING_MATRIX === '1') {
     windowCount: BrowserWindow.getAllWindows().length,
   });
 
-  // DIAGNOSTIC (2026-07-11): dump Chromium's GPU feature status once at boot.
-  // This records whether gpu_compositing and rasterization are hardware enabled
-  // or software/disabled, which is useful context when investigating a renderer
-  // hang. The onboarding scheduler must still allow the renderer to become idle
-  // regardless of the reported compositing mode.
-  try {
-    const status = app.getGPUFeatureStatus();
-    console.log('[GPU] featureStatus', JSON.stringify(status));
-  } catch (e: any) {
-    console.warn('[GPU] getGPUFeatureStatus failed:', e?.message || e);
-  }
-
   // Run the local-fallback preflight AFTER the launcher paints. We schedule
   // it via setTimeout so the visible launch is not blocked by:
   //   - native module requires (onnxruntime-node, sqlite-vec)
@@ -7175,10 +7105,6 @@ if (process.env.THINKING_MATRIX === '1') {
   const preflightTimer = setTimeout(() => {
     if (appState.isQuitting?.()) {
       console.log('[LocalFallbackPreflight] skipped — app is quitting');
-      return;
-    }
-    if (localModelsDisabled()) {
-      console.warn('[LeakTest] Skipping LocalFallbackPreflight (NATIVELY_NO_LOCAL_MODELS=1)');
       return;
     }
     try {
@@ -7198,10 +7124,6 @@ if (process.env.THINKING_MATRIX === '1') {
   // use, so this only moves startup CPU work out of the visible launch path.
   setTimeout(() => {
     try {
-      if (localModelsDisabled()) {
-        console.warn('[LeakTest] Skipping intent-classifier warmup (NATIVELY_NO_LOCAL_MODELS=1)');
-        return;
-      }
       warmupIntentClassifier();
     } catch (err) {
       console.warn('[Init] Intent classifier warmup scheduling failed (non-fatal):', err);
@@ -7263,17 +7185,7 @@ if (process.env.THINKING_MATRIX === '1') {
 
   // Restore Phone Mirror service if it was enabled in a previous session.
   // Failure here is non-fatal — the user can re-enable from Settings.
-  //
-  // DIAGNOSTIC (2026-07-11): NATIVELY_DISABLE_PHONE_MIRROR=1 stops the PhoneMirror
-  // WebSocket server from ever starting. On the Windows repro, the launcher
-  // renderer's native RSS explodes (497→2008MB in ~4s, flat JS heap) within
-  // seconds of `[PhoneMirror] companion extension connected` — the same trigger
-  // in 3 separate logs. This flag lets the (frozen) user boot WITHOUT the WS
-  // server so the phone/companion extension can't connect. If the leak vanishes,
-  // PhoneMirror connect is confirmed as the trigger.
-  if (process.env.NATIVELY_DISABLE_PHONE_MIRROR === '1') {
-    console.warn('[LeakTest] NATIVELY_DISABLE_PHONE_MIRROR=1 → PhoneMirror WS server NOT started this run');
-  } else if (SettingsManager.getInstance().get('phoneMirrorEnabled')) {
+  if (SettingsManager.getInstance().get('phoneMirrorEnabled')) {
     PhoneMirrorService.getInstance()
       .start({ exposeOnLan: !!SettingsManager.getInstance().get('phoneMirrorExposeOnLan'), persist: false })
       .catch((err) => console.error('[Init] PhoneMirror auto-start failed:', err));
