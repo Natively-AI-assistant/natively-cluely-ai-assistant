@@ -1749,7 +1749,23 @@ export class IntelligenceEngine extends EventEmitter {
                             );
                         };
 
-                        let docContextBlock = await buildDocContext(false);
+                        // Evidence-execution-repair (2026-07-11): when this turn was
+                        // governed by EvidenceResolver/typed-pack generation inside
+                        // WhatToAnswerLLM (wtaContextOsGeneration.evidencePack was
+                        // populated during the stream — see WhatToAnswerLLM.ts H1
+                        // block), reuse that SAME pack for the validator's initial
+                        // check instead of re-retrieving. This was an independent
+                        // second retrieval with different relaxed/topK params, run
+                        // AFTER the answer already streamed — the validator could
+                        // see evidence the answer was never grounded in. The relaxed
+                        // retry below (a genuinely different, WIDER query) still
+                        // runs on validation failure regardless of governance —
+                        // that is a deliberate second attempt at repair, not a
+                        // duplicate of the first-pass retrieval.
+                        const _governedPack = wtaContextOsGeneration?.evidencePack;
+                        let docContextBlock = (_governedPack && _governedPack.items.length > 0)
+                            ? _governedPack.items.map((it) => `[Section: ${it.pointer?.section || it.sourceId}]\n${it.text}`).join('\n\n')
+                            : await buildDocContext(false);
                         const hasOkfEvidence = /STRUCTURED KNOWLEDGE CARDS|Direct quote|knowledge_card/i.test(docContextBlock);
                         const firstCheck = validateDocumentGroundedAnswer({
                             question: docQuestion,
