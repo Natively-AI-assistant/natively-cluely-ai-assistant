@@ -122,6 +122,16 @@ export interface BuildTurnContractForSurfaceInput {
 function normalizeSourceAuthority(value: string | null | undefined): SourceAuthority {
   switch (value) {
     case 'reference_files_only':
+    // Real-benchmark regression (2026-07-11): this switch was missing
+    // 'reference_files_primary', silently downgrading it to the default
+    // 'ask_if_ambiguous' case below — which resolves any question matching
+    // AMBIGUOUS_SOURCE_TERM_RE ("method", "project", ...) to sourceOwner=
+    // 'clarify' instead of the correct 'reference_files'. Confirmed via the
+    // real end-to-end benchmark: "What fine-tuning method was used?" and
+    // "What was the total project budget?" incorrectly clarified while
+    // "What robot platform is used?" (no ambiguous-term match) correctly
+    // answered from the document — the exact signature of this bug.
+    case 'reference_files_primary':
     case 'reference_files_plus_transcript':
     case 'transcript_only':
     case 'profile_only':
