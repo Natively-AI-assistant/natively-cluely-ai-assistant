@@ -9685,9 +9685,30 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   // Push status updates to the renderer whenever the service starts/stops
   // or a phone connects/disconnects. Idempotent — multiple windows can listen.
+  //
+  // WINDOWS LEAK HARDENING (2026-07-11): the launcher renderer only consumes the
+  // boolean flags of PhoneMirrorInfo (extensionConnected → auto-dismiss the
+  // browser-extension onboarding toaster). It does NOT need the heavy fields
+  // (qrDataUrl base64 PNG, phone/ext tokens, url). Sending the full payload to
+  // the launcher on every status change — and re-sending identical payloads when
+  // the companion reconnects/flaps — pushes large serialized IPC messages into a
+  // renderer that, on a software-composited Windows box, may already be behind on
+  // paint. So for the launcher we (a) send ONLY the small flag subset, and
+  // (b) drop no-op repeats (same flags = no send). The Settings window still gets
+  // the full payload (it renders the QR + pairing UI).
+  let lastLauncherPhoneStatusKey = '';
   PhoneMirrorService.getInstance().onStatusChange((info) => {
-    const win = appState.getMainWindow();
-    win?.webContents.send('phone-mirror:status', info);
+    const launcherInfo = {
+      running: (info as any)?.running,
+      enabled: (info as any)?.enabled,
+      clients: (info as any)?.clients,
+      extensionConnected: (info as any)?.extensionConnected,
+    };
+    const key = JSON.stringify(launcherInfo);
+    if (key !== lastLauncherPhoneStatusKey) {
+      lastLauncherPhoneStatusKey = key;
+      appState.getMainWindow()?.webContents.send('phone-mirror:status', launcherInfo);
+    }
     try {
       const settingsWin = (appState as any).settingsWindowHelper?.getWindow?.();
       settingsWin?.webContents?.send('phone-mirror:status', info);
