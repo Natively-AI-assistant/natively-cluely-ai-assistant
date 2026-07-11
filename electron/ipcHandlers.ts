@@ -206,6 +206,14 @@ export function initializeIpcHandlers(appState: AppState): void {
       } catch { /* optional */ }
 
       const has = (value?: string) => !!(value && value.trim().length > 0);
+      const isKnownGroqModel = (modelId: string): boolean => {
+        return modelId.startsWith('llama-')
+          || modelId.startsWith('mixtral-')
+          || modelId.startsWith('gemma-')
+          || modelId.startsWith('meta-llama/')
+          || modelId.startsWith('qwen/')
+          || modelId.startsWith('openai/gpt-oss-'); // Groq-hosted OpenAI OSS models, not OpenAI API models.
+      };
       const modelAvailable = (modelId: string): boolean => {
         if (!modelId) return false;
         if (modelId === 'natively') return has(cm.getNativelyApiKey());
@@ -214,10 +222,15 @@ export function initializeIpcHandlers(appState: AppState): void {
         if (modelId.startsWith('ollama-')) return true; // live Ollama probe happens at execution time
         if (allProviders.some((p: any) => p?.id === modelId)) return true;
         if (modelId.startsWith('gemini-') || modelId.startsWith('models/')) return has(cm.getGeminiApiKey());
+        // Check Groq before the broad OpenAI catch-all so Groq-hosted ids such as
+        // openai/gpt-oss-120b are gated by the Groq key, not the OpenAI key.
+        if (isKnownGroqModel(modelId)) return has(cm.getGroqApiKey());
         if (modelId.startsWith('gpt-') || modelId.startsWith('o1-') || modelId.startsWith('o3-') || modelId.includes('openai')) return has(cm.getOpenaiApiKey());
         if (modelId.startsWith('claude-')) return has(cm.getClaudeApiKey());
-        if (modelId.startsWith('llama-') || modelId.startsWith('mixtral-') || modelId.startsWith('gemma-') || modelId.startsWith('meta-llama/') || modelId.startsWith('qwen/')) return has(cm.getGroqApiKey());
         if (/^deepseek-v/i.test(modelId)) return has(cm.getDeepseekApiKey());
+        // Intentional conservative fallback: unknown model ids may belong to saved
+        // custom providers/extensions this helper cannot classify. Do not reset them
+        // automatically; execution-time routing remains the source of truth.
         return true;
       };
 
@@ -828,15 +841,13 @@ export function initializeIpcHandlers(appState: AppState): void {
   // assistant-meta probes canned but routes candidate-ambiguous probes to the
   // profile fast path whenever a profile is loaded.
 
-  safeHandle(
-    'gemini-chat-stream',
-    async (
-      event,
+  const _geminiChatStreamHandler = async (
+      event: any,
       message: string,
       imagePaths?: string[],
       context?: string,
       options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean },
-    ) => {
+    ): Promise<null> => {
       let myController: AbortController | null = null;
       let _manualFgToken: string | null = null;
       // Intelligence OS observe-only trace (Phase 1). Hoisted so the catch can record
@@ -1071,6 +1082,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         let manualSourceContract: import('./llm/customModeExecutionContract').CustomModeExecutionContract | null = null;
         let manualOwnership: import('./llm/sourceOwnership').SourceOwnershipDecision | null = null;
         const _hasProfileFactsForTurn = Boolean(llmHelper.getKnowledgeOrchestrator?.()?.activeResume?.structured_data);
+        // Evidence-execution-repair (2026-07-11): hoisted to handler scope so
+        // both the legacy arbiter AND the Context OS kernel build call (below,
+        // in a separate try block) resolve the SAME per-turn explicit switch.
+        let _userExplicitSource: 'reference_files' | 'profile' | 'transcript' | null = null;
         try {
           const { buildCustomModeExecutionContract, logArbitratedContract } = require('./llm/customModeExecutionContract');
           const { resolveSourceOwnership } = require('./llm/sourceOwnership');
@@ -1081,6 +1096,16 @@ export function initializeIpcHandlers(appState: AppState): void {
           const _hasProfileFacts = _hasProfileFactsForTurn;
           const _hasMeetingRag = Boolean(false); // meeting_rag is gated by chat:sendMessage IPC, not in this path
           const _hasLongTermMemory = Boolean(isIntelligenceFlagEnabled('hindsightLiveRecall') && isIntelligenceFlagEnabled('hindsightMemory'));
+          // Evidence-execution-repair (2026-07-11): resolve an explicit source
+          // switch ONCE, before the contract is built, so "according to the
+          // JD" / "based only on my résumé" / "return to the thesis" are
+          // GRANTED by the canonical contract itself — not silently decided by
+          // a parallel Profile Intelligence heuristic while the contract stays
+          // locked at reference_files_only. See
+          // docs/context-os/evidence-execution-repair/07_SOURCE_SWITCH_RESULTS.md.
+          const { resolveExplicitSourceRequest, toLegacyUserExplicitSource } = require('./intelligence/context-os/explicitSourceSwitch');
+          const _explicitSwitch = resolveExplicitSourceRequest(String(message || ''));
+          _userExplicitSource = toLegacyUserExplicitSource(_explicitSwitch);
           manualSourceContract = buildCustomModeExecutionContract({
             question: String(message || ''),
             streamRoute: 'manual_chat_stream',
@@ -1095,6 +1120,13 @@ export function initializeIpcHandlers(appState: AppState): void {
             hasProfileFacts: _hasProfileFacts,
             hasMeetingRag: _hasMeetingRag,
             hasLongTermMemory: _hasLongTermMemory,
+            // Real-custom-mode-repair (2026-07-11): the mode's PERSISTED,
+            // explicit ModeSourceContract is authoritative — see
+            // docs/context-os/real-custom-mode-repair/06_ROOT_CAUSE_REPORT.md.
+            // Replaces the live regex-heuristic chain above (still used as
+            // fallback when no mode is active / arbiter threw).
+            persistedSourceAuthority: manualActiveMode?.sourceContract?.sourceAuthority ?? null,
+            userExplicitSource: _userExplicitSource,
           });
           logArbitratedContract(manualSourceContract, String(message || ''));
           manualOwnership = resolveSourceOwnership({
@@ -1133,6 +1165,17 @@ export function initializeIpcHandlers(appState: AppState): void {
         // gates below consult it in ADDITION to (never instead of) the legacy
         // ownership decision, so Context OS can only ever be MORE restrictive.
         let turnContract: import('./intelligence/context-os').TurnContextContract | null = null;
+        // CONTEXT OS (H3): the retrieved factual evidence block for THIS turn,
+        // captured when the doc-grounded validator builds it, so the post-answer
+        // claim-persistence path can verify each claim against the SAME evidence
+        // the answer was grounded in (buildAssistantClaims). Empty when no
+        // document evidence was retrieved (profile/general turns).
+        let capturedEvidenceBlock = '';
+        // CONTEXT OS H1: the generation context passed into streamChat. After
+        // the stream, `.evidencePack` is populated by _streamChatInner with the
+        // EXACT typed pack that governed the prompt — reused for validation +
+        // claim verification so the same pack identity flows end to end.
+        let manualContextOsGeneration: import('./intelligence/context-os').ContextOsGenerationContext | null = null;
         try {
           if (manualSourceContract) {
             const { buildTurnContractIfEnabled } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
@@ -1147,16 +1190,26 @@ export function initializeIpcHandlers(appState: AppState): void {
               hasReferenceFiles: Boolean((manualActiveMode as any)?.hasReferenceFiles),
               hasProfileFacts: _hasProfileFactsForTurn,
               hasLiveTranscript: Boolean(intelligenceManager.getFormattedContext(100)?.trim()),
+              // Evidence-execution-repair (2026-07-11): same explicit switch
+              // resolved above for the legacy arbiter — the kernel needs it
+              // too so sourceOwner reflects the SAME per-turn switch, not the
+              // mode's persisted default. See explicitSourceSwitch.ts.
+              userExplicitSource: _userExplicitSource,
             });
-            if (turnContract && isIntelligenceFlagEnabled('trace')) {
-              const { buildContextOsTrace, logContextOsTrace } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
-              logContextOsTrace(buildContextOsTrace({
-                contract: turnContract,
-                sourceAuthority: manualSourceContract.sourceAuthority,
-                question: String(message || ''),
-                finalAction: 'answer', // provisional; the post-stream trace records the real outcome
-              }));
-            }
+            // Real-custom-mode-repair (2026-07-11), Phase 4/7: the trace used to
+            // be emitted HERE with a hardcoded `finalAction: 'answer'` — before
+            // the clarification short-circuit below had even run. That produced
+            // exactly the misleading contradiction the incident investigation
+            // found (`sourceOwner=clarify` next to `finalAction=answer` on the
+            // SAME turn — see docs/context-os/real-custom-mode-repair/
+            // 04_AUTHORITY_CONFLICT_REPORT.md). The trace is now logged ONLY
+            // after the clarification decision is known (right after the
+            // short-circuit block below): if clarification fires, THAT block
+            // logs `finalAction: 'clarify'` and returns; if it doesn't
+            // (wrong turn shape, flag off, or sourceOwner !== 'clarify'), the
+            // fallthrough log right after it records the real `'answer'`
+            // outcome. No trace line is ever emitted before the outcome it
+            // describes is determined.
           }
         } catch (contextOsErr: any) {
           // Context OS is additive — a kernel failure must never break chat.
@@ -1388,6 +1441,86 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Selected evidence is packed into a compact prompt block and the provider
         // writes the final answer below through the normal streamChat path.
         const isStealthChat = isStealthEvasionQuestion(message);
+
+        // ── CONTEXT OS CLARIFICATION SHORT-CIRCUIT (Phase 4, invariant 14) ──
+        // When the kernel resolves sourceOwner='clarify' (a general/ambiguous
+        // mode where more than one source universe could own an ambiguous noun
+        // like "project"), the correct behavior is to ASK, not guess. This
+        // short-circuits BEFORE any factual retriever or provider call: no
+        // profile, no document, no Hindsight retrieval; no generation. The
+        // clarification is a fixed, source-honest, PII-free string that only
+        // offers the universes that actually exist this turn. It is stored as a
+        // conversational message but is NOT authoritative factual memory.
+        //
+        // Gated on `contextOsPropertyValidation` (the active-enforcement family
+        // flag, default OFF in prod) AND the contract existing AND not a
+        // coding/image/stealth turn. Flag OFF / null contract → legacy behavior
+        // (answer generated as before) — additive and reversible.
+        if (turnContract
+            && turnContract.sourceOwner === 'clarify'
+            && isIntelligenceFlagEnabled('contextOsPropertyValidation')
+            && !isCodingChat
+            && !imagePaths?.length
+            && !isStealthChat) {
+          try {
+            const { buildSourceClarification } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+            const clarify = buildSourceClarification({
+              hasReferenceFiles: Boolean((manualActiveMode as any)?.hasReferenceFiles),
+              hasProfileFacts: _hasProfileFactsForTurn,
+              hasLiveTranscript: Boolean(intelligenceManager.getFormattedContext(100)?.trim()),
+            });
+            if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) return null;
+            event.sender.send('gemini-stream-token', clarify);
+            event.sender.send('gemini-stream-done', { finalText: clarify });
+            try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), clarify); } catch (_) { /* noop */ }
+            try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), clarify); } catch (_) { /* noop */ }
+            const clarifyWrite = decideSessionWritePolicy({ finalGenerationMode: 'source_safe_refusal', validationOk: true, sourceContractHonored: true });
+            intelligenceManager.addAssistantMessage(clarify, clarifyWrite);
+            intelligenceManager.logUsage('chat', message, clarify);
+            chatTrace.markFirstUseful({ via: 'context_os_clarification' });
+            chatTrace.mark('response_completed', { chars: clarify.length, deterministic: true, finalGenerationMode: 'source_safe_refusal' });
+            chatTrace.finish({ chars: clarify.length });
+            iTrace.setRouting({ answerType: answerPlan.answerType, deterministicFastPathUsed: true }).noteFallback('context_os_clarification');
+            if (isIntelligenceFlagEnabled('trace')) {
+              const { buildContextOsTrace, logContextOsTrace } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+              logContextOsTrace(buildContextOsTrace({
+                contract: turnContract,
+                sourceAuthority: manualSourceContract?.sourceAuthority ?? 'ask_if_ambiguous',
+                question: String(message || ''),
+                usedSources: [],
+                finalAction: 'clarify',
+              }));
+            }
+            commitTrace(iTrace);
+            _emitAttr({ answer_type: answerPlan.answerType });
+            return null;
+          } catch (clarErr: any) {
+            if (isIntelligenceFlagEnabled('trace')) {
+              console.warn('[CONTEXT-OS] clarification short-circuit skipped (non-fatal):', clarErr?.message);
+            }
+          }
+        }
+
+        // Real-custom-mode-repair (2026-07-11), Phase 4/7: this is the REAL,
+        // non-provisional `finalAction` trace log for this turn — reached only
+        // when the clarification short-circuit above did NOT fire (it already
+        // logged 'clarify' and returned). Emitted once per turn, so a trace
+        // consumer can never see a `sourceOwner=clarify` line paired with a
+        // hardcoded 'answer' outcome that doesn't reflect what actually
+        // happened, closing the authority-conflict trace gap identified in
+        // docs/context-os/real-custom-mode-repair/04_AUTHORITY_CONFLICT_REPORT.md.
+        if (turnContract && isIntelligenceFlagEnabled('trace')) {
+          try {
+            const { buildContextOsTrace, logContextOsTrace } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+            logContextOsTrace(buildContextOsTrace({
+              contract: turnContract,
+              sourceAuthority: manualSourceContract?.sourceAuthority ?? 'ask_if_ambiguous',
+              question: String(message || ''),
+              finalAction: 'answer',
+            }));
+          } catch { /* tracing must never break an answer */ }
+        }
+
         const legacyDocGuardEligible = answerPlan.answerType !== 'lecture_answer';
         // Staged source-owner enforcement (plan §6): `off` bypasses the resolver
         // decision entirely (legacy doc-guard only); every other stage
@@ -1403,7 +1536,18 @@ export function initializeIpcHandlers(appState: AppState): void {
           if (!turnContract) return true; // legacy path decides alone
           try {
             const { allowsEvidence } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
-            return allowsEvidence(turnContract, 'profile_resume') || allowsEvidence(turnContract, 'profile_project');
+            // Evidence-execution-repair (2026-07-11): this gate previously
+            // checked only profile_resume/profile_project, never profile_jd —
+            // so a strictly reference_files_only contract that correctly
+            // forbade profile_jd still let profileEvidenceEligible stay true,
+            // and buildManualProfileEvidenceRoute independently selected JD as
+            // a context layer regardless of the contract. Confirmed live: "Does
+            // the JD prove that I have Tableau experience?" and "According to
+            // the JD, what are the main responsibilities?" both leaked JD
+            // content into a reference_files_only turn through this exact gap.
+            return allowsEvidence(turnContract, 'profile_resume')
+              || allowsEvidence(turnContract, 'profile_project')
+              || allowsEvidence(turnContract, 'profile_jd');
           } catch { return true; }
         })();
         const sourceOwnershipAllowsProfile = ((manualOwnership && !_ownerEnforcementOff)
@@ -1959,6 +2103,28 @@ export function initializeIpcHandlers(appState: AppState): void {
               forbiddenContextLayers: answerPlan.forbiddenContextLayers,
               ...(manualActiveMode?.documentGroundedCustomModeActive === true
                 ? { followUpReferentHint: (intelligenceManager.getLastAssistantMessage() || '').trim() || undefined }
+                : {}),
+              // CONTEXT OS H1: when the flag is on and this is a doc-grounded
+              // turn with a contract, pass a generation context so the typed
+              // EvidencePack GOVERNS the factual prompt inside _streamChatInner.
+              // The pack is built there from the already-retrieved block (no
+              // double retrieval) and surfaced back on this object for the
+              // post-stream validator/claims to reuse (Phase 9 identity).
+              ...(turnContract
+                  && manualActiveMode?.documentGroundedCustomModeActive === true
+                  && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')
+                ? {
+                    contextOsGeneration: (manualContextOsGeneration = {
+                      contract: turnContract,
+                      evidencePack: null,
+                      modeSnapshot: {
+                        modeId: manualActiveMode?.id ?? null,
+                        modeName: manualActiveMode?.name ?? null,
+                        sourceAuthority: manualSourceContract?.sourceAuthority ?? 'ask_if_ambiguous',
+                      },
+                      govern: true,
+                    }),
+                  }
                 : {}),
             },
           );
@@ -2643,32 +2809,52 @@ export function initializeIpcHandlers(appState: AppState): void {
               const isGreeting = GREETING_RE.test(trimmed) || /what would you like help with/i.test(trimmed);
               const isEmpty = trimmed.length < 8;
               const isExactRepeat = priorAnswer.length > 0 && trimmed === priorAnswer;
-              // Re-retrieve the reference block for the regen prompt + the
-              // log-only groundedness check. The block built inside streamChat is
-              // not in handler scope, so we re-run the (cached) lexical retrieval
-              // here. Cheap: the per-file chunk cache means this re-scores, it
-              // does not re-chunk.
+              // EVIDENCE-EXECUTION-REPAIR (2026-07-11): when EvidenceResolver
+              // already governed this turn (manualContextOsGeneration.evidencePack
+              // populated by _streamChatInner during the stream), reuse that SAME
+              // pack for the validator instead of re-retrieving. Re-retrieving here
+              // was an independent second retrieval — a different query
+              // (expandQueryWithHints vs the resolver's), a different budget
+              // (DOC_GROUNDED_TOKEN_BUDGET vs the resolver's), and it ran AFTER the
+              // answer had already streamed, so the validator could see evidence
+              // the answer was never actually grounded in (or vice versa). Only
+              // the governed pack's items become docContextBlock; when the
+              // resolver did not govern this turn (flag off / no contract /
+              // resolver failure), the legacy re-retrieval below remains the only
+              // source, unchanged.
               let docContextBlock = '';
-              try {
-                const { ModesManager } = require('./services/ModesManager');
-                // Use the expanded doc-grounded budget so the validator sees as
-                // many chunks as the main answer path did. The 1800-token default
-                // was calibrated for seminar notes; a 66-page thesis may have the
-                // answer in a chunk that 1800 tokens can't reach.
-                // SOURCE-AWARE HINTS (2026-07-06): expand with generic concept
-                // synonyms so the validator's re-retrieval matches the same
-                // sections the main answer path saw (recall parity), within the
-                // reference files only.
-                let _valRetrievalQuery = message;
+              const _governedPack = manualContextOsGeneration?.evidencePack;
+              if (_governedPack && _governedPack.items.length > 0) {
+                docContextBlock = _governedPack.items
+                  .map((it) => `[Section: ${it.pointer?.section || it.sourceId}]\n${it.text}`)
+                  .join('\n\n');
+              } else if (!_governedPack) {
+                // Re-retrieve the reference block for the regen prompt + the
+                // log-only groundedness check. The block built inside streamChat is
+                // not in handler scope, so we re-run the (cached) lexical retrieval
+                // here. Cheap: the per-file chunk cache means this re-scores, it
+                // does not re-chunk.
                 try {
-                  const { expandQueryWithHints } = require('./llm/documentGroundedPrompt');
-                  _valRetrievalQuery = expandQueryWithHints(String(message || ''));
-                } catch { _valRetrievalQuery = message; }
-                docContextBlock = ModesManager.getInstance().buildRetrievedActiveModeContextBlock(
-                  _valRetrievalQuery, undefined, DOC_GROUNDED_TOKEN_BUDGET, 'lecture_answer', true, undefined, { forceDocumentGrounding: true },
-                ) || '';
-              } catch (reErr: any) {
-                console.warn('[DocGrounded] re-retrieval for validator failed (non-fatal):', reErr?.message);
+                  const { ModesManager } = require('./services/ModesManager');
+                  // Use the expanded doc-grounded budget so the validator sees as
+                  // many chunks as the main answer path did. The 1800-token default
+                  // was calibrated for seminar notes; a 66-page thesis may have the
+                  // answer in a chunk that 1800 tokens can't reach.
+                  // SOURCE-AWARE HINTS (2026-07-06): expand with generic concept
+                  // synonyms so the validator's re-retrieval matches the same
+                  // sections the main answer path saw (recall parity), within the
+                  // reference files only.
+                  let _valRetrievalQuery = message;
+                  try {
+                    const { expandQueryWithHints } = require('./llm/documentGroundedPrompt');
+                    _valRetrievalQuery = expandQueryWithHints(String(message || ''));
+                  } catch { _valRetrievalQuery = message; }
+                  docContextBlock = ModesManager.getInstance().buildRetrievedActiveModeContextBlock(
+                    _valRetrievalQuery, undefined, DOC_GROUNDED_TOKEN_BUDGET, 'lecture_answer', true, undefined, { forceDocumentGrounding: true },
+                  ) || '';
+                } catch (reErr: any) {
+                  console.warn('[DocGrounded] re-retrieval for validator failed (non-fatal):', reErr?.message);
+                }
               }
               // OKF Phase 3: also fold in OKF card text so the strong-evidence
               // check below (term overlap / high-signal entity match) considers
@@ -2684,7 +2870,15 @@ export function initializeIpcHandlers(appState: AppState): void {
               // term-count heuristic, never replacing it, so the already-
               // verified 19/19 benchmark behavior can't regress).
               let isTier1Or2Evidence = false;
-              try {
+              // Evidence-execution-repair: when EvidenceResolver already governed
+              // this turn, its pack IS the authoritative evidence (it already
+              // tried OKF first — see EvidenceResolver's okf_exact/okf_property
+              // strategies) — an independent OKF re-query here would score the
+              // same cards a second time with different params and could augment
+              // docContextBlock with content the answer was never grounded in.
+              // Only run this legacy augmentation when the resolver did NOT
+              // govern this turn.
+              if (!_governedPack) try {
                 if (isIntelligenceFlagEnabled('okfHybridRetrieval')) {
                   const { ModesManager: _MM } = require('./services/ModesManager');
                   const activeMode = _MM.getInstance().getActiveMode?.();
@@ -2719,6 +2913,10 @@ export function initializeIpcHandlers(appState: AppState): void {
               } catch (okfRetryErr: any) {
                 console.warn('[DocGrounded] OKF card augmentation for validator skipped (non-fatal):', okfRetryErr?.message);
               }
+              // CONTEXT OS (H3): capture the exact retrieved evidence block so the
+              // post-answer claim-verification path can check each claim against
+              // the SAME evidence the answer was grounded in.
+              if (docContextBlock) capturedEvidenceBlock = docContextBlock;
               // False-refusal detector: does the answer claim "not mentioned / not
               // found" while at least two meaningful question terms ARE present in
               // the retrieved excerpts? This is an actionable signal — it means the
@@ -3219,19 +3417,72 @@ export function initializeIpcHandlers(appState: AppState): void {
               // no content) so contamination incidents replay from the trace.
               if (turnContract && isIntelligenceFlagEnabled('contextOsMemorySafetyEnabled')) {
                 try {
-                  const { extractCandidateClaims } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                  const {
+                    buildAssistantClaims,
+                    parseModeSnippets,
+                  } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
                   const { DatabaseManager } = require('./db/DatabaseManager');
                   const dbm = DatabaseManager.getInstance();
-                  const { randomUUID } = require('crypto') as typeof import('crypto');
-                  for (const claimText of extractCandidateClaims(fullResponse).slice(0, 20)) {
+                  // H3: build a real EvidencePack from the exact retrieved block
+                  // this answer was grounded in, then VERIFY each extracted claim
+                  // against it. A claim is 'verified' ONLY when a factual evidence
+                  // item substantially covers it (>=0.6 content-word overlap) —
+                  // otherwise 'unverified'. Aborted/refusal answers never reach
+                  // this point (blockedFromSessionTracker / write-decision gate).
+                  const _tc = turnContract;
+                  // Phase 9 (exact-pack identity): when the typed pack GOVERNED
+                  // this generation (H1), reuse that EXACT pack — same packId end
+                  // to end. Otherwise build a verify-pack from the captured block.
+                  const verifyPack: import('./intelligence/context-os').EvidencePack = manualContextOsGeneration?.evidencePack ?? ((): import('./intelligence/context-os').EvidencePack => {
+                    const evItems = (() => {
+                      if (!capturedEvidenceBlock.trim()) return [];
+                      const snippets = parseModeSnippets(capturedEvidenceBlock);
+                      const texts = snippets.length > 0 ? snippets.map((s) => s.text) : [capturedEvidenceBlock];
+                      return texts.filter((t) => t && t.trim()).map((text, i) => ({
+                        evidenceId: `${_tc.turnId}:ev:${i}`,
+                        sourceKind: 'mode_reference_chunk' as const,
+                        sourceId: _tc.activeModeId ?? 'active-mode',
+                        sourceOwner: 'reference_files' as const,
+                        authority: 'evidence' as const,
+                        trustLevel: 'user_uploaded',
+                        text,
+                        supports: { property: _tc.requestedProperty },
+                        score: { final: 0.6 },
+                        reasonIncluded: 'captured generation evidence',
+                      }));
+                    })();
+                    return {
+                      packId: `${_tc.turnId}:verifypack:1`,
+                      version: 1,
+                      turnId: _tc.turnId,
+                      sourceOwner: _tc.sourceOwner,
+                      requestedProperty: _tc.requestedProperty,
+                      items: evItems,
+                      rejected: [],
+                      coverage: { hasDirectEvidence: evItems.length > 0, propertySatisfied: false, entityMatched: evItems.length > 0, sourceOwnerSatisfied: true, confidence: evItems.length ? 0.6 : 0 },
+                      conflicts: [],
+                      answerPolicy: 'answer' as const,
+                    };
+                  })();
+                  const claims = buildAssistantClaims({
+                    answer: fullResponse,
+                    contract: { turnId: _tc.turnId, sourceOwner: _tc.sourceOwner, requestedProperty: _tc.requestedProperty },
+                    evidencePack: verifyPack,
+                  }).slice(0, 20);
+                  for (const claim of claims) {
+                    // Invariant: a verified claim MUST carry evidence IDs (enforced
+                    // in the DAO too). buildAssistantClaims guarantees this, but we
+                    // defensively downgrade any verified-without-evidence claim.
+                    const status = (claim.validationStatus === 'verified' && claim.evidenceIds.length === 0)
+                      ? 'unverified' : claim.validationStatus;
                     dbm.saveAssistantClaim({
-                      claimId: randomUUID(),
-                      turnId: turnContract.turnId,
-                      claimText,
-                      sourceOwner: turnContract.sourceOwner,
-                      requestedProperty: turnContract.requestedProperty,
-                      validationStatus: 'unverified',
-                      evidenceIds: [],
+                      claimId: claim.claimId,
+                      turnId: claim.turnId,
+                      claimText: claim.claimText,
+                      sourceOwner: claim.sourceOwner,
+                      requestedProperty: claim.requestedProperty,
+                      validationStatus: status,
+                      evidenceIds: claim.evidenceIds,
                     });
                   }
                   dbm.saveTurnContextContract({
@@ -3400,8 +3651,13 @@ export function initializeIpcHandlers(appState: AppState): void {
           }
         }
       }
-    },
-  );
+    };
+  // Register the manual chat handler; also expose it for the E2E manual-ask
+  // harness (test-only; NATIVELY_E2E gates the caller).
+  safeHandle('gemini-chat-stream', _geminiChatStreamHandler);
+  if (process.env.NATIVELY_E2E === '1') {
+    (globalThis as any).__nativelyGeminiChatStream = _geminiChatStreamHandler;
+  }
 
   // Renderer-driven cancellation for the sender's active chat stream.
   safeOn('gemini-chat-stream-stop', (event) => {
@@ -9488,9 +9744,30 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   // Push status updates to the renderer whenever the service starts/stops
   // or a phone connects/disconnects. Idempotent — multiple windows can listen.
+  //
+  // WINDOWS LEAK HARDENING (2026-07-11): the launcher renderer only consumes the
+  // boolean flags of PhoneMirrorInfo (extensionConnected → auto-dismiss the
+  // browser-extension onboarding toaster). It does NOT need the heavy fields
+  // (qrDataUrl base64 PNG, phone/ext tokens, url). Sending the full payload to
+  // the launcher on every status change — and re-sending identical payloads when
+  // the companion reconnects/flaps — pushes large serialized IPC messages into a
+  // renderer that, on a software-composited Windows box, may already be behind on
+  // paint. So for the launcher we (a) send ONLY the small flag subset, and
+  // (b) drop no-op repeats (same flags = no send). The Settings window still gets
+  // the full payload (it renders the QR + pairing UI).
+  let lastLauncherPhoneStatusKey = '';
   PhoneMirrorService.getInstance().onStatusChange((info) => {
-    const win = appState.getMainWindow();
-    win?.webContents.send('phone-mirror:status', info);
+    const launcherInfo = {
+      running: (info as any)?.running,
+      enabled: (info as any)?.enabled,
+      clients: (info as any)?.clients,
+      extensionConnected: (info as any)?.extensionConnected,
+    };
+    const key = JSON.stringify(launcherInfo);
+    if (key !== lastLauncherPhoneStatusKey) {
+      lastLauncherPhoneStatusKey = key;
+      appState.getMainWindow()?.webContents.send('phone-mirror:status', launcherInfo);
+    }
     try {
       const settingsWin = (appState as any).settingsWindowHelper?.getWindow?.();
       settingsWin?.webContents?.send('phone-mirror:status', info);
@@ -9983,6 +10260,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             hasProfileFacts: _pHasProfile,
             hasMeetingRag: false,
             hasLongTermMemory: false,
+            persistedSourceAuthority: (_pMode as any)?.sourceContract?.sourceAuthority ?? null,
           });
           const _pOwn = resolveSourceOwnership({
             question: String(message || ''),
@@ -10492,6 +10770,55 @@ export function initializeIpcHandlers(appState: AppState): void {
           cleanup();
           resolve({ success: false, error: err?.message || 'trigger failed', streamedTokens: tokens });
         });
+      });
+    });
+
+    // CONTEXT OS H1: read the redacted prompt-audit ring (set when
+    // NATIVELY_CONTEXT_OS_PROMPT_AUDIT=1). Returns block-presence + hashes only,
+    // never content. The E2E harness asserts the typed pack governs.
+    safeHandle('__e2e__:context-os-prompt-audit', async () => {
+      const g = globalThis as any;
+      const audit = Array.isArray(g.__contextOsPromptAudit) ? g.__contextOsPromptAudit.slice() : [];
+      return { success: true, audit };
+    });
+    safeHandle('__e2e__:context-os-prompt-audit-clear', async () => {
+      (globalThis as any).__contextOsPromptAudit = [];
+      return { success: true };
+    });
+
+    // CONTEXT OS H1: drive the REAL manual chat path (gemini-chat-stream logic)
+    // for E2E, so the typed-pack-governs-the-prompt behavior can be verified on
+    // the manual surface (not just WTA). Reuses the same handler by emitting the
+    // IPC event through a synthetic sender that collects tokens.
+    safeHandle('__e2e__:manual-ask', async (
+      event,
+      params: { question: string; timeoutMs?: number },
+    ) => {
+      const timeoutMs = params.timeoutMs ?? 45000;
+      return await new Promise((resolve) => {
+        let tokens = '';
+        let done = false;
+        const sender: any = {
+          id: 999999, // synthetic sender id for the E2E manual-ask harness
+          send: (channel: string, payload: any) => {
+            if (channel === 'gemini-stream-token' && typeof payload === 'string') tokens += payload;
+            else if (channel === 'gemini-stream-done') {
+              if (done) return; done = true;
+              const finalText = (payload && typeof payload.finalText === 'string') ? payload.finalText : tokens;
+              resolve({ success: true, answer: finalText, streamedTokens: tokens });
+            } else if (channel === 'gemini-stream-error') {
+              if (done) return; done = true;
+              resolve({ success: false, error: String(payload?.error ?? payload ?? 'error'), streamedTokens: tokens });
+            }
+          },
+        };
+        const synthEvent: any = { sender };
+        const timer = setTimeout(() => { if (!done) { done = true; resolve({ success: false, timedOut: true, streamedTokens: tokens }); } }, timeoutMs);
+        const handler = (globalThis as any).__nativelyGeminiChatStream;
+        Promise.resolve()
+          .then(() => handler ? handler(synthEvent, params.question, undefined, undefined, undefined) : Promise.reject(new Error('gemini-chat-stream handler not captured')))
+          .catch((e: any) => { if (!done) { done = true; resolve({ success: false, error: e?.message, streamedTokens: tokens }); } })
+          .finally(() => clearTimeout(timer));
       });
     });
 

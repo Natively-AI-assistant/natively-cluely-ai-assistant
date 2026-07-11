@@ -26,13 +26,23 @@ function methodBlock(source, signature) {
 }
 
 describe('EmbeddingPipeline single-text fallback promotion', () => {
-  test('getEmbedding() falls back to fallbackProvider and promotes it after primary failure', () => {
+  test('getEmbedding() delegates to the metadata-aware single-embedding path', () => {
     const source = read('electron/rag/EmbeddingPipeline.ts');
     const block = methodBlock(source, 'async getEmbedding(text: string)');
-    assert.match(block, /try\s*\{[\s\S]*embedWithTimeout\(this\.provider, text, 'live-chunk'\)/, 'primary single embed should be attempted first');
+    assert.match(block, /const result = await this\.getEmbeddingWithFallback\(text\)/, 'bare getEmbedding should use the metadata-aware implementation');
+    assert.match(block, /return result\.embedding/, 'legacy callers still receive a bare vector');
+  });
+
+  test('getEmbeddingWithFallback() returns producer metadata and promotes fallback after primary failure', () => {
+    const source = read('electron/rag/EmbeddingPipeline.ts');
+    const block = methodBlock(source, 'async getEmbeddingWithFallback(text: string)');
+    assert.match(block, /const active = this\.provider/, 'must capture active provider before awaiting');
+    assert.match(block, /embedWithTimeout\(active, text, 'live-chunk'\)/, 'primary single embed should be attempted first');
+    assert.match(block, /space: active\.space|const space = active\.space/, 'success metadata should come from captured active provider');
     assert.match(block, /catch\s*\(primaryError\)[\s\S]*const fallback = this\.fallbackProvider/, 'primary failure should enter fallback branch');
     assert.match(block, /embedWithTimeout\(fallback, text, 'fallback-live-chunk'\)/, 'fallback provider should perform the single embed');
     assert.match(block, /this\.promoteFallbackProvider\(fallback\)/, 'successful fallback should become the active provider/space');
+    assert.match(block, /space: fallback\.space, provider: fallback\.name, dimensions: fallback\.dimensions/, 'fallback metadata should come from the fallback that produced the vector');
   });
 
   test('getEmbeddingForQuery() falls back to fallbackProvider and promotes it after primary failure', () => {

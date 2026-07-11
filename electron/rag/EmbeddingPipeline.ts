@@ -98,8 +98,18 @@ export class EmbeddingPipeline {
         // isAvailable() loads the MiniLM ONNX model via transformers.js and can stall
         // the Electron main process during first paint. The provider loads lazily on
         // first real fallback/query use through embed()/embedQuery().
-        this.fallbackProvider = new LocalEmbeddingProvider();
-        console.log(`[EmbeddingPipeline] Local fallback provider registered for lazy load (${this.fallbackProvider.dimensions}d)`);
+        // DIAGNOSTIC (2026-07-11): NATIVELY_NO_LOCAL_MODELS=1 forbids the on-device
+        // embedding model. Do NOT even register the local fallback — leave it null so
+        // no code path can promote/load it. The pipeline then simply has no provider
+        // when cloud is unavailable (queue idles), which is the point of the test.
+        const noLocalModels = process.env.NATIVELY_NO_LOCAL_MODELS === '1';
+        if (noLocalModels) {
+            this.fallbackProvider = null;
+            console.warn('[LeakTest] NATIVELY_NO_LOCAL_MODELS=1 → local embedding fallback NOT registered');
+        } else {
+            this.fallbackProvider = new LocalEmbeddingProvider();
+            console.log(`[EmbeddingPipeline] Local fallback provider registered for lazy load (${this.fallbackProvider.dimensions}d)`);
+        }
 
         // Resolve primary provider before touching the local model. If the primary is
         // local, the resolver's instance becomes both primary and fallback so the model
@@ -136,15 +146,23 @@ export class EmbeddingPipeline {
 
         } catch (err) {
             console.error('[EmbeddingPipeline] Failed to initialize primary provider:', err);
-            console.warn('[EmbeddingPipeline] Falling back to local-only mode for all meetings.');
-            // Promote fallback as the primary so isReady() returns true and queueing works.
-            // The local model still loads lazily on the first embed call.
-            this.provider = this.fallbackProvider;
-            // Persist the fallback provider's space so the next launch does not fire a
-            // false-positive incompatible-space warning (e.g. openai space vs local space).
-            try {
-                this.db.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES ('last_embedding_space', ?)").run(this.provider.space);
-            } catch (_) { /* non-fatal — DB may not have app_state yet in edge cases */ }
+            if (noLocalModels || !this.fallbackProvider) {
+                // Diagnostic mode (or genuinely no fallback): leave the pipeline with
+                // NO provider. embed() calls will no-op / queue will idle. Nothing
+                // local loads. This is the intended state for the leak-isolation test.
+                console.warn('[EmbeddingPipeline] No embedding provider available — pipeline idle (local models disabled or unavailable).');
+                this.provider = null;
+            } else {
+                console.warn('[EmbeddingPipeline] Falling back to local-only mode for all meetings.');
+                // Promote fallback as the primary so isReady() returns true and queueing works.
+                // The local model still loads lazily on the first embed call.
+                this.provider = this.fallbackProvider;
+                // Persist the fallback provider's space so the next launch does not fire a
+                // false-positive incompatible-space warning (e.g. openai space vs local space).
+                try {
+                    this.db.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES ('last_embedding_space', ?)").run(this.provider.space);
+                } catch (_) { /* non-fatal — DB may not have app_state yet in edge cases */ }
+            }
         }
 
         // Flush any queue items submitted during the startup race window (i.e. before the
@@ -491,22 +509,37 @@ export class EmbeddingPipeline {
      * Routes through embedWithTimeout() so a frozen API cannot stall the live indexer.
      */
     async getEmbedding(text: string): Promise<number[]> {
-        if (!this.provider) {
+        const result = await this.getEmbeddingWithFallback(text);
+        return result.embedding;
+    }
+
+    /**
+     * Get a single document embedding with metadata from the provider that actually
+     * produced the vector. Callers that persist vectors MUST prefer this over the
+     * bare getEmbedding() when they also persist an embedding_space label: a
+     * primary→fallback promotion can happen inside this call.
+     */
+    async getEmbeddingWithFallback(text: string): Promise<{ embedding: number[]; space: string; provider?: string; dimensions?: number }> {
+        const active = this.provider;
+        if (!active) {
             throw new Error('Embedding provider not initialized');
         }
         try {
-            return await this.embedWithTimeout(this.provider, text, 'live-chunk');
+            const embedding = await this.embedWithTimeout(active, text, 'live-chunk');
+            const space = active.space;
+            if (!space) throw new Error('Embedding provider has no active space');
+            return { embedding, space, provider: active.name, dimensions: active.dimensions };
         } catch (primaryError) {
             const fallback = this.fallbackProvider;
-            if (!fallback || fallback === this.provider) throw primaryError;
+            if (!fallback || fallback === active) throw primaryError;
             console.warn(
-                `[EmbeddingPipeline] Primary single embedding failed via ${this.provider?.name ?? 'unknown'}; ` +
+                `[EmbeddingPipeline] Primary single embedding failed via ${active.name}; ` +
                 `falling back to ${fallback.name}:`,
                 primaryError instanceof Error ? primaryError.message : primaryError
             );
             const embedding = await this.embedWithTimeout(fallback, text, 'fallback-live-chunk');
             this.promoteFallbackProvider(fallback);
-            return embedding;
+            return { embedding, space: fallback.space, provider: fallback.name, dimensions: fallback.dimensions };
         }
     }
 

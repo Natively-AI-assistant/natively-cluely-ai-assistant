@@ -4590,7 +4590,78 @@ const isMultimodal = !!(imagePaths?.length);
         // lexical retriever, byte-for-byte unchanged. The hybrid call is guarded
         // so any failure falls back to the sync path the manual flow always used.
         // modeContextBlock / usedRerankPath hoisted to function scope above (round-6 / OKF Phase 3).
+        //
+        // ── EVIDENCE-EXECUTION-REPAIR (2026-07-11): single canonical retrieval ──
+        // When this turn is Context-OS-governed (routeOptions.contextOsGeneration
+        // present + contextOsEvidencePackEnabled), retrieval runs EXACTLY ONCE
+        // through EvidenceResolver — never the legacy hybrid-string-then-
+        // re-derive-a-pack round trip. The resulting EvidencePack is written to
+        // `_cog.evidencePack` IMMEDIATELY (before the provider request), so it
+        // is the SAME object identity the post-stream validator (Phase 10) and
+        // claim persistence consume — no second retrieval, ever, for a
+        // Context-OS-governed turn. See docs/context-os/evidence-execution-repair/
+        // 01_EXECUTION_TIMELINE.md for the defect this replaces and
+        // 04_EVIDENCE_RESOLVER.md for the design.
+        let resolvedViaEvidenceResolver = false;
         try {
+          const _cogEarly = routeOptions?.contextOsGeneration as import('./intelligence/context-os').ContextOsGenerationContext | undefined;
+          const { isIntelligenceFlagEnabled: _isFlagOn } = require('./intelligence/intelligenceFlags');
+          if (_cogEarly && _cogEarly.govern && forceDocumentGrounding && _isFlagOn('contextOsEvidencePackEnabled')) {
+            const { EvidenceResolver } = require('./intelligence/context-os/EvidenceResolver') as typeof import('./intelligence/context-os/EvidenceResolver');
+            const { classifyQuestion } = require('./services/knowledge/QuestionClassifier');
+            const { queryOkfCards } = require('./services/knowledge/OkfRetriever');
+            const { KnowledgeManager } = require('./services/knowledge/KnowledgeManager');
+            const modeContextRetriever = new (require('./services/ModeContextRetriever').ModeContextRetriever)();
+            const activeModeRow = modesMgr.getActiveMode?.();
+            if (activeModeRow) {
+              const resolver = new EvidenceResolver({
+                getModeSnapshot: () => activeModeRow,
+                getReferenceFiles: (modeId: string) => modesMgr.getReferenceFiles(modeId),
+                hybridRetriever: { retrieveHybrid: (m: any, files: any, opts: any) => modeContextRetriever.retrieveHybrid(m, files, opts) },
+                knowledgeManager: { getPackForFile: (fileId: string) => KnowledgeManager.getInstance().getPackForFile(fileId) },
+                classifyQuestion,
+                queryOkfCards,
+              });
+              const resolution = await resolver.resolve({
+                turnId: _cogEarly.contract.turnId,
+                question: message,
+                sourceContract: _cogEarly.contract,
+                activeMode: { modeId: activeModeRow.id, modeUniqueId: activeModeRow.id },
+                requestedProperty: _cogEarly.contract.requestedProperty,
+                transcript: context,
+                followUpReferentHint: routeOptions?.followUpReferentHint,
+              });
+              (_cogEarly as any).evidencePack = resolution.pack;
+              (_cogEarly as any).resolutionStrategy = resolution.strategy;
+              // Render the SAME pack into the legacy string shape so downstream
+              // telemetry/budget-check code (unchanged below) keeps working —
+              // this is the ONLY place the pack is turned into text, and it is
+              // rendered from the resolver's result, never re-retrieved.
+              modeContextBlock = resolution.pack.items
+                .map((it: any) => `[Section: ${it.pointer?.section || it.sourceId}]\n${it.text}`)
+                .join('\n\n');
+              usedRerankPath = true;
+              resolvedViaEvidenceResolver = true;
+              if (_isFlagOn('trace')) {
+                console.log('[EVIDENCE-RESOLVER]', JSON.stringify({
+                  turnId: _cogEarly.contract.turnId,
+                  strategy: resolution.strategy,
+                  packId: resolution.pack.packId,
+                  itemCount: resolution.pack.items.length,
+                  confidence: resolution.confidence,
+                  answerPolicy: resolution.pack.answerPolicy,
+                }));
+              }
+            }
+          }
+        } catch (_evidenceResolverErr: any) {
+          console.warn('[LLMHelper] EvidenceResolver governed retrieval failed, falling back to legacy retrieval:', _evidenceResolverErr?.message);
+        }
+        try {
+          // Evidence-execution-repair: when EvidenceResolver already resolved
+          // this turn's evidence above, skip the entire legacy hybrid/lexical
+          // retrieval block — modeContextBlock + usedRerankPath are already set.
+          if (resolvedViaEvidenceResolver) { /* no-op: fall through to pinned instructions below */ } else {
           // eslint-disable-next-line @typescript-eslint/no-var-requires
           const { isRagLocalRerankEnabled } = require('./intelligence/intelligenceFlags');
           // Document-grounded custom mode (audit 2026-06-27, real-path fix):
@@ -4644,6 +4715,7 @@ const isMultimodal = !!(imagePaths?.length);
               // dropped once it does complete, so we don't act on stale data.
               hybridPromise.finally(() => { /* raced timed out — drop result */ }).catch(() => {});
             }
+          }
           }
         } catch (_rerankErr: any) {
           console.warn('[LLMHelper] manual hybrid+rerank path failed, using sync lexical:', _rerankErr?.message);
@@ -4868,8 +4940,59 @@ const isMultimodal = !!(imagePaths?.length);
       }
     }
 
+    // ── CONTEXT OS H1: typed EvidencePack GOVERNS the factual prompt ────────
+    // When the caller supplies a ContextOsGenerationContext AND the flag is on,
+    // the typed EvidencePack REPLACES the raw retrieved block as the factual
+    // authority: rendered as <turn_context_contract> + <evidence_use_contract> +
+    // <evidence_pack>. The legacy `context`/`combinedContext` factual blocks are
+    // already excluded from doc-grounded facts (buildDocumentGroundedUserContent
+    // uses only `retrievedBlock`), so replacing that block makes the typed pack
+    // the SOLE factual source. Flag off / no generation context → unchanged.
+    //
+    // EVIDENCE-EXECUTION-REPAIR (2026-07-11): when EvidenceResolver already
+    // populated `_cog.evidencePack` earlier in this same call (the single
+    // canonical retrieval above, ~line 4605), render FROM THAT SAME PACK
+    // OBJECT — never rebuild a second pack via buildDocumentEvidencePackFromBlock.
+    // Rebuilding from the rendered string would re-parse a NEW pack (different
+    // packId, re-derived scores/sourceOwner) and silently overwrite the pack
+    // identity the post-stream validator and claim persistence are meant to
+    // share (Phase 9's "same object" requirement) — a second, divergent pack
+    // for the same turn, exactly the defect class this repair eliminates.
+    // buildDocumentEvidencePackFromBlock remains the fallback ONLY for turns
+    // EvidenceResolver did not govern (legacy hybrid/lexical retrieval path).
+    let contextOsGoverningBlock = '';
+    let contextOsGovernedPack: import('./intelligence/context-os').EvidencePack | null = null;
+    try {
+      const _cog = routeOptions?.contextOsGeneration as import('./intelligence/context-os').ContextOsGenerationContext | undefined;
+      const { isIntelligenceFlagEnabled } = require('./intelligence/intelligenceFlags');
+      if (_cog && _cog.govern && forceDocumentGrounding && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
+        const { buildDocumentEvidencePackFromBlock, renderGoverningFactualBlock } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+        const pack = _cog.evidencePack ?? buildDocumentEvidencePackFromBlock(_cog.contract, evidenceBlockForPrompt || '');
+        const rendered = renderGoverningFactualBlock({ ..._cog, evidencePack: pack });
+        if (rendered) {
+          contextOsGoverningBlock = rendered;
+          contextOsGovernedPack = pack;
+          // Expose the governing pack back to the caller (validation/claims use
+          // the EXACT same pack — Phase 9 identity requirement). A no-op
+          // reassignment when `pack` already came from `_cog.evidencePack`.
+          (_cog as any).evidencePack = pack;
+        }
+      }
+    } catch (cogErr: any) {
+      console.warn('[LLMHelper] Context OS evidence-pack governance skipped (non-fatal):', cogErr?.message);
+    }
+
     let userContent: string;
-    if (forceDocumentGrounding && evidenceBlockForPrompt) {
+    if (contextOsGoverningBlock) {
+      // Typed pack is the factual authority. Question-first/last framing (same
+      // shape buildDocumentGroundedUserContent uses) around the typed block.
+      // priorContext (referent-only) is preserved for pronoun resolution.
+      const referent = callerSuppliedContextForPriorResolution
+        ? `\n\n## RECENT CONVERSATION (for pronoun resolution only — not a source of facts)\n${callerSuppliedContextForPriorResolution}`
+        : '';
+      userContent = `QUESTION: ${message}\n\n${contextOsGoverningBlock}${referent}\n\nNow answer this question using ONLY the evidence_pack above: ${message}`;
+      void contextOsGovernedPack; // referenced for clarity; pack surfaced via _cog
+    } else if (forceDocumentGrounding && evidenceBlockForPrompt) {
       const { buildDocumentGroundedUserContent } = require('./llm/documentGroundedPrompt');
       const shaped = buildDocumentGroundedUserContent({
         question: message,
@@ -4917,6 +5040,37 @@ const isMultimodal = !!(imagePaths?.length);
       userContent = combinedContext
         ? `CONTEXT:\n${combinedContext}\n\nUSER QUESTION:\n${message}`
         : message;
+    }
+
+    // ── CONTEXT OS PROMPT AUDIT (Phase 10, dev/test only) ──────────────────
+    // NATIVELY_CONTEXT_OS_PROMPT_AUDIT=1 records a REDACTED structural summary of
+    // the final factual prompt (block presence + counts + hashes, NEVER content,
+    // keys, or full prompt) to a process-global ring the E2E harness reads. Used
+    // to assert the typed pack GOVERNS and no raw legacy factual block leaks.
+    // Never enabled in production; content is never logged.
+    if (process.env.NATIVELY_CONTEXT_OS_PROMPT_AUDIT === '1') {
+      try {
+        const crypto = require('crypto') as typeof import('crypto');
+        const hash = (s: string) => crypto.createHash('sha1').update(s || '').digest('hex').slice(0, 12);
+        const uc = userContent;
+        const audit = {
+          model: this.currentModelId,
+          userContentLen: uc.length,
+          hasTypedEvidencePack: uc.includes('<evidence_pack'),
+          hasTurnContract: uc.includes('<turn_context_contract>'),
+          hasEvidenceUseContract: uc.includes('<evidence_use_contract>'),
+          // Raw legacy factual markers that MUST be absent when the typed pack governs.
+          hasRawCandidateProfile: /<candidate_profile>|<candidate_identity_fact>|<profile_jit_evidence_request>/.test(uc),
+          hasRawLongTermMemory: /RELEVANT LONG-TERM MEMORY|<long_term_memory/.test(uc),
+          hasRawUploadedReference: /## UPLOADED REFERENCE MATERIAL|## RETRIEVED EXCERPTS FROM UPLOADED DOCUMENT/.test(uc),
+          factualBlockCount: [uc.includes('<evidence_pack'), /## UPLOADED REFERENCE MATERIAL|## RETRIEVED EXCERPTS/.test(uc), /<candidate_profile>/.test(uc)].filter(Boolean).length,
+          userContentHash: hash(uc),
+          governedByTypedPack: Boolean(contextOsGoverningBlock),
+        };
+        const g = globalThis as any;
+        (g.__contextOsPromptAudit ||= []).push(audit);
+        if (g.__contextOsPromptAudit.length > 50) g.__contextOsPromptAudit.shift();
+      } catch { /* audit never affects the answer */ }
     }
 
     // Pre-work done; about to dispatch to a provider. The gap from here to the
