@@ -1221,6 +1221,11 @@ export class IntelligenceEngine extends EventEmitter {
             // legacy `!documentGroundedCustomModeActive` guard if the resolver
             // throws (never more permissive).
             let wtaProfileAllowed = !documentGroundedCustomModeActive;
+            // Evidence-execution-repair (2026-07-12): hoisted so the Context-OS
+            // clarification short-circuit below (a separate try block, ~line
+            // 1459) can consult the SAME legacy ownership decision this block
+            // computes — see that short-circuit's comment for why.
+            let wtaOwnershipDecision: import('./llm/sourceOwnership').SourceOwnershipDecision | null = null;
             try {
                 const { buildCustomModeExecutionContract } = require('./llm/customModeExecutionContract');
                 const { resolveSourceOwnership } = require('./llm/sourceOwnership');
@@ -1266,6 +1271,7 @@ export class IntelligenceEngine extends EventEmitter {
                     answerType: _wtaPlan.answerType,
                     hasProfileFacts: _wtaHasProfile,
                 });
+                wtaOwnershipDecision = _wtaOwn;
                 // Staged enforcement (plan §6): `off` restores the legacy
                 // doc-grounded guard; every other stage honors the resolver.
                 wtaProfileAllowed = getSourceOwnerEnforcementStage() === 'off'
@@ -1462,11 +1468,23 @@ export class IntelligenceEngine extends EventEmitter {
                 && !isSpeculative) {
                 try {
                     const { buildSourceClarification, buildContextOsTrace, logContextOsTrace } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
-                    const clarify = buildSourceClarification({
-                        hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
-                        hasProfileFacts: Boolean((this.llmHelper.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data),
-                        hasLiveTranscript: true, // WTA is always transcript-driven
-                    });
+                    // Evidence-execution-repair (2026-07-12): prefer the legacy,
+                    // mode-aware sourceOwnership.resolveSourceOwnership() decision
+                    // (computed above as wtaOwnershipDecision) when it has a
+                    // SPECIFIC reason to clarify — an explicit source switch the
+                    // mode's authority denies. Its message names the requested
+                    // source and explains how to switch, which is strictly more
+                    // informative than the kernel's generic multi-universe
+                    // disambiguation below. See the identical fix + comment on
+                    // the manual-chat path (ipcHandlers.ts, same short-circuit
+                    // pattern) for the full rationale.
+                    const clarify = wtaOwnershipDecision?.shouldClarifyInsteadOfProfile
+                        ? require('./llm/sourceOwnership').buildSourceSwitchClarification(wtaOwnershipDecision.owner)
+                        : buildSourceClarification({
+                            hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
+                            hasProfileFacts: Boolean((this.llmHelper.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data),
+                            hasLiveTranscript: true, // WTA is always transcript-driven
+                        });
                     this.session.addAssistantMessage(clarify);
                     this.emit('suggested_answer', clarify, extractedQuestion.latestQuestion || question || 'inferred', 0.9);
                     trace.mark('repair_used', { reason: 'context_os_clarification' });

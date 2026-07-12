@@ -1464,11 +1464,34 @@ export function initializeIpcHandlers(appState: AppState): void {
             && !isStealthChat) {
           try {
             const { buildSourceClarification } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
-            const clarify = buildSourceClarification({
-              hasReferenceFiles: Boolean((manualActiveMode as any)?.hasReferenceFiles),
-              hasProfileFacts: _hasProfileFactsForTurn,
-              hasLiveTranscript: Boolean(intelligenceManager.getFormattedContext(100)?.trim()),
-            });
+            // Evidence-execution-repair (2026-07-12): two independent source-
+            // ownership resolvers can both fire for the same turn — the
+            // legacy, mode-aware `sourceOwnership.resolveSourceOwnership()`
+            // (which computed `manualOwnership` above) and this kernel. They
+            // agree on WHETHER to clarify but can disagree on WHAT to say:
+            // for an explicit "my résumé" ask under a reference-files mode
+            // with no profile loaded, the kernel's generic disambiguation
+            // ("Do you mean the project in your uploaded document, or the
+            // project discussed in the meeting?") fires here BEFORE the
+            // legacy resolver's specific, mode-aware line
+            // ("This mode only answers from your uploaded material...")
+            // ever gets a chance to run below (that block returns null and
+            // exits first). `manualOwnership.shouldClarifyInsteadOfProfile`
+            // is the legacy resolver's SPECIFIC signal for exactly this case
+            // — an explicit source switch the mode's authority denies — so
+            // when it's set, its clarification is strictly more informative
+            // (it names the requested source AND explains how to switch) and
+            // wins. The kernel's generic clarification remains the answer
+            // for genuine multi-universe ambiguity (an ambiguous noun like
+            // "the project" with no explicit switch at all), which the
+            // legacy resolver has no opinion on.
+            const clarify = manualOwnership?.shouldClarifyInsteadOfProfile
+              ? require('./llm/sourceOwnership').buildSourceSwitchClarification(manualOwnership.owner)
+              : buildSourceClarification({
+                hasReferenceFiles: Boolean((manualActiveMode as any)?.hasReferenceFiles),
+                hasProfileFacts: _hasProfileFactsForTurn,
+                hasLiveTranscript: Boolean(intelligenceManager.getFormattedContext(100)?.trim()),
+              });
             if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) return null;
             event.sender.send('gemini-stream-token', clarify);
             event.sender.send('gemini-stream-done', { finalText: clarify });
