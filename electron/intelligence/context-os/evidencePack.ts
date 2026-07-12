@@ -18,6 +18,7 @@ import type {
   SourceOwner,
   TrustLevel,
 } from './types';
+import type { EvidenceSufficiency } from './evidenceSufficiency';
 
 export interface EvidencePointer {
   page?: number;
@@ -93,6 +94,19 @@ export interface EvidenceCoverage {
   confidence: number;
 }
 
+export interface EvidenceSelection {
+  candidateEvidenceIds: string[];
+  selectedEvidenceIds: string[];
+  excludedEvidenceIds: string[];
+  strategy: 'smallest_sufficient_set';
+}
+
+export interface EvidenceResolverMetadata {
+  strategy: string;
+  attemptedSources: SourceKind[];
+  retrievedSources: SourceKind[];
+}
+
 export interface EvidencePack {
   /**
    * Stable identity for THIS pack instance (Phase 6/M4). The exact pack used for
@@ -110,6 +124,9 @@ export interface EvidencePack {
   items: EvidenceItem[];
   rejected: RejectedEvidenceItem[];
   coverage: EvidenceCoverage;
+  sufficiency?: EvidenceSufficiency;
+  selection?: EvidenceSelection;
+  resolver?: EvidenceResolverMetadata;
   conflicts: EvidenceConflict[];
   answerPolicy: AnswerPolicy;
 }
@@ -134,6 +151,8 @@ export function emptyEvidencePack(input: {
   answerPolicy: AnswerPolicy;
 }): EvidencePack {
   return {
+    packId: `${input.turnId}:pack:1:empty`,
+    version: 1,
     turnId: input.turnId,
     sourceOwner: input.sourceOwner,
     requestedProperty: input.requestedProperty,

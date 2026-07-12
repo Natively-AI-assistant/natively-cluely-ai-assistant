@@ -668,12 +668,13 @@ ${this.escapeUserContent(transcript)}
     }
 
     private buildRetrievedModeContextBlock(retrievedModeContext: string): ContextBlock {
+        const sanitized = this.escapePromptInjection(retrievedModeContext);
         return {
             type: 'active_mode_retrieved_context',
             trustLevel: TrustLevel.UNTRUSTED_REFERENCE,
             source: 'mode_retrieval',
             tokenBudget: 1800,
-            content: retrievedModeContext,
+            content: sanitized,
         };
     }
 

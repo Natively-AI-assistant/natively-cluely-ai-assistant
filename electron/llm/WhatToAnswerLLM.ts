@@ -69,6 +69,9 @@ type ModesManagerType = {
         // split one answer across two modes. Optional everywhere → omitting it
         // (older builds / stubs) reads the active mode exactly as before.
         getActiveModeSystemPromptSuffix: (pinnedModeId?: string) => string;
+        getActiveMode?: () => { id: string; templateType: string; customContext: string } | null;
+        getReferenceFiles?: (modeId: string) => Array<{ id: string; fileName: string; content: string }>;
+        retrieveHybridRaw?: (mode: any, files: any, options: any) => Promise<any>;
         buildActiveModeContextBlock: () => string;
         buildRetrievedActiveModeContextBlock: (query: string, transcript?: string, tokenBudget?: number, answerType?: AnswerType, excludeCustomContext?: boolean, pinnedModeId?: string, retrievalOptions?: ModeRetrievalOptions) => string;
         // Phase 4: optional async hybrid retrieval (FTS + vector). Backwards
@@ -210,6 +213,12 @@ ANSWER SHAPE: ${intentResult.answerShape}
             // fitContextForCurrentModel only shrinks for cloud models; tiny-tier
             // returns unchanged so we must estimate conservatively.
             let modeContextBlock = '';
+            const initialContextOsGeneration = requestSnapshot?.contextOsGeneration as import('../intelligence/context-os').ContextOsGenerationContext | undefined;
+            const governedEvidenceResolutionStarted = Boolean(
+                initialContextOsGeneration?.govern
+                && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled'),
+            );
+            let governedEvidencePack: import('../intelligence/context-os').EvidencePack | null = null;
             // Skill mode owns the system prompt — skip the (potentially expensive
             // hybrid retrieval) mode-context block fetch entirely.
             if (!activeSkill) {
@@ -279,6 +288,44 @@ ANSWER SHAPE: ${intentResult.answerShape}
                         referenceFilesAllowed = true;
                     }
                     if (referenceFilesAllowed) {
+                        const _cog = requestSnapshot?.contextOsGeneration as import('../intelligence/context-os').ContextOsGenerationContext | undefined;
+                        const governedWtaTurn = Boolean(_cog?.govern && forceDocumentGrounding && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled'));
+                        if (governedWtaTurn) {
+                            const activeMode = modesManager.getActiveMode?.();
+                            if (!activeMode || !modesManager.getReferenceFiles || !modesManager.retrieveHybridRaw) {
+                                throw new Error('governed WTA turn missing canonical resolver dependencies');
+                            }
+                            const { EvidenceResolver } = require('../intelligence/context-os/EvidenceResolver') as typeof import('../intelligence/context-os/EvidenceResolver');
+                            const { classifyQuestion } = require('../services/knowledge/QuestionClassifier');
+                            const { queryOkfCards } = require('../services/knowledge/OkfRetriever');
+                            const { KnowledgeManager } = require('../services/knowledge/KnowledgeManager');
+                            const resolver = new EvidenceResolver({
+                                getModeSnapshot: () => activeMode,
+                                getReferenceFiles: (modeId: string) => modesManager.getReferenceFiles!(modeId),
+                                hybridRetriever: { retrieveHybrid: (mode: any, files: any, options: any) => modesManager.retrieveHybridRaw!(mode, files, options) },
+                                knowledgeManager: { getPackForFile: (fileId: string) => KnowledgeManager.getInstance().getPackForFile(fileId) },
+                                classifyQuestion,
+                                queryOkfCards,
+                            });
+                            const { allowsEvidence, isReferentOnly } = require('../intelligence/context-os') as typeof import('../intelligence/context-os');
+                            const transcriptIsEvidence = allowsEvidence(_cog!.contract, 'live_transcript');
+                            const transcriptIsReferentOnly = isReferentOnly(_cog!.contract, 'live_transcript');
+                            const resolution = await resolver.resolve({
+                                turnId: _cog!.contract.turnId,
+                                question: answerPlan?.question?.trim() || cleanedTranscript,
+                                sourceContract: _cog!.contract,
+                                activeMode: { modeId: activeMode.id, modeUniqueId: activeMode.id },
+                                requestedProperty: _cog!.contract.requestedProperty,
+                                transcript: transcriptIsEvidence ? cleanedTranscript : undefined,
+                                followUpReferentHint: transcriptIsReferentOnly
+                                    ? temporalContext?.previousResponses?.slice(-1)?.[0]
+                                    : undefined,
+                            });
+                            governedEvidencePack = resolution.pack;
+                            _cog!.evidencePack = resolution.pack;
+                            (_cog as any).resolutionStrategy = resolution.strategy;
+                            modeContextBlock = resolution.pack.items.map((item) => `[Section: ${item.pointer?.section || item.sourceId}]\n${item.text}`).join('\n\n');
+                        } else {
                         // PI v3 (W5): prefer the caller's PREFETCHED retrieval
                         // (kicked in parallel with intent classification +
                         // grounding) — by the time we get here it has usually
@@ -345,6 +392,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
                             const okfQuery = answerPlan?.question?.trim() || cleanedTranscript;
                             modeContextBlock = modesManager.buildOkfAugmentedContextBlock(modeContextBlock, okfQuery, requestSnapshot?.modeUniqueId);
                         }
+                        }
                     } else if (await this.llmHelper.canUseLocalFallback(false)) {
                         console.warn('[ScopeFallback] reference_files denied; local fallback available, routing via streamChat');
                         const retrievalQuery = answerPlan?.question?.trim() || cleanedTranscript;
@@ -357,6 +405,18 @@ ANSWER SHAPE: ${intentResult.answerShape}
                         }
                     }
                 } catch (_err: any) {
+                    if (governedEvidenceResolutionStarted && initialContextOsGeneration) {
+                        const { emptyEvidencePack } = require('../intelligence/context-os/evidencePack') as typeof import('../intelligence/context-os/evidencePack');
+                        governedEvidencePack = emptyEvidencePack({
+                            turnId: initialContextOsGeneration.contract.turnId,
+                            sourceOwner: initialContextOsGeneration.contract.sourceOwner,
+                            requestedProperty: initialContextOsGeneration.contract.requestedProperty,
+                            answerPolicy: initialContextOsGeneration.contract.sourceOwner === 'clarify'
+                                ? 'ask_clarification'
+                                : 'refuse_insufficient_evidence',
+                        });
+                        initialContextOsGeneration.evidencePack = governedEvidencePack;
+                    }
                     console.warn('[WhatToAnswerLLM] ModesManager unavailable:', _err?.message);
                 }
             }
@@ -455,25 +515,38 @@ ANSWER SHAPE: ${intentResult.answerShape}
             // factual block. One factual pipeline. Flag off / absent → legacy.
             let typedModeContext = modeContextBlock;
             let typedCandidateProfile = effectiveCandidateProfile;
+            let transcriptForPrompt = workingTranscript;
             try {
                 const _cog = requestSnapshot?.contextOsGeneration as import('../intelligence/context-os').ContextOsGenerationContext | undefined;
                 const { isIntelligenceFlagEnabled } = require('../intelligence/intelligenceFlags');
-                if (_cog && _cog.govern && modeContextBlock && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
-                    const { buildDocumentEvidencePackFromBlock, renderGoverningFactualBlock } = require('../intelligence/context-os') as typeof import('../intelligence/context-os');
-                    const pack = buildDocumentEvidencePackFromBlock(_cog.contract, modeContextBlock);
-                    const rendered = renderGoverningFactualBlock({ ..._cog, evidencePack: pack });
-                    if (rendered) {
-                        typedModeContext = rendered;      // typed pack replaces the raw block
-                        typedCandidateProfile = '';       // suppress the raw profile factual block
-                        (_cog as any).evidencePack = pack; // surface for validation/claims (Phase 9)
+                if (_cog && _cog.govern && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
+                    const { buildInsufficientPropertyAnswer, renderGoverningFactualBlock } = require('../intelligence/context-os') as typeof import('../intelligence/context-os');
+                    const pack = governedEvidencePack ?? _cog.evidencePack;
+                    if (!pack) throw new Error('governed WTA turn missing canonical EvidencePack');
+                    if (pack.answerPolicy === 'ask_clarification') {
+                        yield _cog.contract.reason || 'Which source should I use for that answer?';
+                        return;
                     }
+                    if (pack.answerPolicy === 'refuse_insufficient_evidence') {
+                        yield buildInsufficientPropertyAnswer({ property: pack.requestedProperty });
+                        return;
+                    }
+                    const rendered = renderGoverningFactualBlock({ ..._cog, evidencePack: pack });
+                    if (!rendered) throw new Error('governed WTA EvidencePack did not render');
+                    typedModeContext = rendered;
+                    typedCandidateProfile = '';
+                    // A reference-file-owned WTA turn may use transcript only for
+                    // retrieval pronouns; it never enters the provider packet as facts.
+                    if (_cog.contract.sourceOwner === 'reference_files') transcriptForPrompt = '';
+                    (_cog as any).evidencePack = pack;
                 }
             } catch (cogErr: any) {
+                if (governedEvidenceResolutionStarted) throw cogErr;
                 console.warn('[WhatToAnswerLLM] Context OS evidence-pack governance skipped (non-fatal):', cogErr?.message);
             }
 
             const packet = assembler.assemble({
-                transcript: workingTranscript,
+                transcript: transcriptForPrompt,
                 modeTemplateType: 'active',
                 screenContext,
                 domContext: processedDomContext,
@@ -546,7 +619,10 @@ ANSWER SHAPE: ${intentResult.answerShape}
             const wtaThinkingBudget = this.llmHelper.thinkingBudgetForAnswerType?.(
                 Boolean(answerPlan && isCodingAnswerType(answerPlan.answerType)),
             );
-            for await (const token of this.llmHelper.streamChat(packet.userMessage, imagePaths, undefined, finalPromptOverride, true, true, packetScopes, undefined, wtaThinkingBudget)) {
+            const wtaRouteOptions = governedEvidencePack && requestSnapshot?.contextOsGeneration
+                ? { answerType: answerPlan?.answerType, contextOsGeneration: requestSnapshot.contextOsGeneration }
+                : { answerType: answerPlan?.answerType };
+            for await (const token of this.llmHelper.streamChat(packet.userMessage, imagePaths, undefined, finalPromptOverride, true, true, packetScopes, undefined, wtaThinkingBudget, wtaRouteOptions)) {
                 if (MEASURE) {
                     const now = performance.now();
                     if (!tFirstToken) tFirstToken = now;

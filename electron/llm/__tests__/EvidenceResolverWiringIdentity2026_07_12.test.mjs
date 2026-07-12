@@ -327,6 +327,7 @@ describe('evidence-execution-repair: EvidenceResolver wiring identity (a524329 r
 
     const cogCtx = {
       contract,
+      turnQuestion: 'What are the four phases of the project?',
       evidencePack: null,
       modeSnapshot: { modeId: contract.activeModeId, modeName: 'Evidence wiring seminar mode', sourceAuthority: 'reference_files_only' },
       govern: true,
@@ -380,6 +381,7 @@ describe('evidence-execution-repair: EvidenceResolver wiring identity (a524329 r
 
     const cogCtx = {
       contract,
+      turnQuestion: 'What compute controller does the system use?',
       evidencePack: null,
       modeSnapshot: { modeId: contract.activeModeId, modeName: mode.name, sourceAuthority: 'reference_files_only' },
       govern: true,
@@ -450,6 +452,7 @@ describe('evidence-execution-repair: EvidenceResolver wiring identity (a524329 r
 
     const cogCtx = {
       contract,
+      turnQuestion: 'What are the four phases of the project?',
       evidencePack: null,
       modeSnapshot: { modeId: contract.activeModeId, modeName: 'x', sourceAuthority: 'reference_files_only' },
       govern: false, // explicitly not governing
@@ -473,7 +476,44 @@ describe('evidence-execution-repair: EvidenceResolver wiring identity (a524329 r
     assert.equal(cogCtx.evidencePack, null, 'evidencePack must remain untouched (null) when govern is false');
   });
 
-  test('resolver throws → falls back to legacy retrieval (fail-open, does not crash the stream)', async () => {
+  test('governed turn missing immutable question fails closed without legacy retrieval or provider dispatch', async () => {
+    resolveCalls = 0;
+    resolveArgsSeen = null;
+    throwOnResolve = false;
+
+    const contract = buildRealContract();
+    nextResolutionPack = buildFakePack(contract);
+    installGovernedDocumentMode();
+    const helper = buildHelper();
+    const calls = attachDispatchSpy(helper);
+    const cogCtx = {
+      contract,
+      turnQuestion: '',
+      evidencePack: null,
+      modeSnapshot: { modeId: contract.activeModeId, modeName: 'x', sourceAuthority: 'reference_files_only' },
+      govern: true,
+    };
+
+    await drainStream(helper.streamChat(
+      'What are the four phases of the project?',
+      undefined,
+      undefined,
+      undefined,
+      true,
+      false,
+      [],
+      undefined,
+      undefined,
+      { answerType: 'list_answer', contextOsGeneration: cogCtx },
+    ));
+
+    assert.equal(resolveCalls, 0, 'a missing immutable question must fail before retrieval');
+    assert.equal(hybridLegacyCalls, 0, 'a governed missing-question failure must never fall back to legacy hybrid retrieval');
+    assert.equal(lexicalLegacyCalls, 0, 'a governed missing-question failure must never fall back to legacy lexical retrieval');
+    assert.equal(calls.find(c => c.via === 'executeCustomProvider'), undefined, 'a governed missing-question failure must not dispatch a provider');
+  });
+
+  test('resolver throws → governed turn refuses without legacy retrieval or provider dispatch', async () => {
     resolveCalls = 0;
     resolveArgsSeen = null;
     throwOnResolve = true;
@@ -486,6 +526,7 @@ describe('evidence-execution-repair: EvidenceResolver wiring identity (a524329 r
 
     const cogCtx = {
       contract,
+      turnQuestion: 'What are the four phases of the project?',
       evidencePack: null,
       modeSnapshot: { modeId: contract.activeModeId, modeName: 'x', sourceAuthority: 'reference_files_only' },
       govern: true,
@@ -505,9 +546,10 @@ describe('evidence-execution-repair: EvidenceResolver wiring identity (a524329 r
     ));
 
     assert.equal(resolveCalls, 1, 'resolver must have been attempted once');
-    assert.ok(hybridLegacyCalls + lexicalLegacyCalls > 0, 'a resolver failure must fall back to legacy retrieval rather than producing no context at all');
+    assert.equal(hybridLegacyCalls, 0, 'a governed resolver failure must never fall back to legacy hybrid retrieval');
+    assert.equal(lexicalLegacyCalls, 0, 'a governed resolver failure must never fall back to legacy lexical retrieval');
     const dispatched = calls.find(c => c.via === 'executeCustomProvider');
-    assert.ok(dispatched, 'executeCustomProvider must still be reached despite the resolver throwing');
+    assert.equal(dispatched, undefined, 'a governed resolver failure must return deterministic refusal before provider dispatch');
   });
 
   // Evidence-execution-repair (2026-07-12) — regression guard for a SECOND,
@@ -561,6 +603,7 @@ describe('evidence-execution-repair: EvidenceResolver wiring identity (a524329 r
 
     const cogCtx = {
       contract,
+      turnQuestion: 'What are the four phases of the project?',
       evidencePack: null,
       modeSnapshot: { modeId: contract.activeModeId, modeName: mode.name, sourceAuthority: 'reference_files_only' },
       govern: true,

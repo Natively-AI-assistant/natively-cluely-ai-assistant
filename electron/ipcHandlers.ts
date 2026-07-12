@@ -2139,6 +2139,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 ? {
                     contextOsGeneration: (manualContextOsGeneration = {
                       contract: turnContract,
+                      turnQuestion: message,
                       evidencePack: null,
                       modeSnapshot: {
                         modeId: manualActiveMode?.id ?? null,
@@ -9190,305 +9191,32 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('modes:upload-reference-file', async (_, modeId: string) => {
     try {
       if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
-      // Server-side allow-list. The dialog filter is a hint to users — never
-      // trust it for validation, since the user can rename a file or the
-      // filter can be bypassed by selecting "All Files" in the dialog UI.
-      // Plain-text formats parse trivially; PDF and DOCX go through their
-      // dedicated parsers below.
-      const ALLOWED_EXTENSIONS = new Set([
-        '.txt',
-        '.md',
-        '.markdown',
-        '.json',
-        '.csv',
-        '.tsv',
-        '.xml',
-        '.html',
-        '.htm',
-        '.log',
-        '.pdf',
-        '.docx',
-        // NOTE: legacy Word `.doc` (binary CFB, NOT the modern .docx ZIP)
-        // is intentionally NOT in the allow-list. mammoth@1.x only handles
-        // .docx and would throw `unzip` errors on real .doc files, which
-        // the user would see as the misleading "corrupt / password-protected"
-        // message. Removing from the allow-list means the dedicated catch
-        // below produces a friendly "convert to .docx" error instead.
-      ]);
-      // 50 MiB per file. PDF/DOCX files are dominated by images, fonts, and
-      // compression metadata — a 50 MB PDF typically yields only 300 KB–2 MB
-      // of extracted text. The extracted text is indexed into mode_reference_chunks
-      // and only the top-6 chunks are retrieved per query (never sent whole),
-      // so there is no prompt-size risk from large files. The old 10 MB limit
-      // was calibrated for the legacy full-text-dump path (MAX_TOTAL_CHARS=40KB)
-      // which is no longer used on the live answer path.
-      const MAX_FILE_BYTES = 50 * 1024 * 1024;
-
       const result: any = await dialog.showOpenDialog({
         properties: ['openFile'],
         filters: [
-          {
-            // MUST stay in sync with ALLOWED_EXTENSIONS above. Users see
-            // the first matching filter as the selected type in the picker;
-            // any extension listed here but missing from ALLOWED_EXTENSIONS
-            // would be silently rejected by the server-side allow-list, and
-            // any extension in ALLOWED_EXTENSIONS but missing from this
-            // filter would force users to switch to "All Files" to pick it.
-            name: 'Text & Documents',
-            extensions: [
-              'txt',
-              'md',
-              'markdown',
-              'json',
-              'csv',
-              'tsv',
-              'xml',
-              'html',
-              'htm',
-              'log',
-              'pdf',
-              'docx',
-            ],
-          },
+          { name: 'Text & Documents', extensions: ['txt', 'md', 'markdown', 'json', 'csv', 'tsv', 'xml', 'html', 'htm', 'log', 'pdf', 'docx'] },
           { name: 'All Files', extensions: ['*'] },
         ],
       });
-      if (result.canceled || !result.filePaths.length) {
-        return { success: false, cancelled: true };
-      }
-      const filePath = result.filePaths[0];
-      const fileName = path.basename(filePath);
-      const ext = path.extname(filePath).toLowerCase();
-
-      if (!ALLOWED_EXTENSIONS.has(ext)) {
-        // Special-case the legacy .doc extension: it's a real, common file
-        // type that users WILL try to upload, so a generic "unsupported"
-        // message is unhelpful. Give them the exact conversion instruction
-        // instead. mammoth can't read CFB; users need to "Save As .docx"
-        // in Word, Pages, or Google Docs.
-        if (ext === '.doc') {
-          return {
-            success: false,
-            error: `"${fileName}" is a legacy Word .doc file. Reference files only support the modern .docx format. Open the file in Word, Pages, or Google Docs and choose "Save As .docx" (or "File → Download → Word .docx"), then upload the new file.`,
-          };
-        }
-        // Friendly, actionable message — UI surfaces this to the user.
-        return {
-          success: false,
-          error: `Unsupported file type "${ext || 'none'}". Supported formats: TXT, MD, MARKDOWN, JSON, CSV, TSV, XML, HTML, HTM, LOG, PDF, DOCX. For resumes and job descriptions, use Profile Intelligence under Settings instead.`,
-        };
-      }
-
-      // Pre-flight stat. Use lstat so we don't auto-follow symlinks — a
-      // symlink to /dev/zero or a network mount that lies about size would
-      // otherwise hang the renderer-IPC reply forever via readFileSync.
-      let stats: ReturnType<typeof fs.lstatSync>;
-      try {
-        stats = fs.lstatSync(filePath);
-      } catch {
-        return {
-          success: false,
-          error: 'Could not read the selected file. It may have moved or been deleted.',
-        };
-      }
-      if (!stats.isFile()) {
-        return {
-          success: false,
-          error:
-            'Selected path is not a regular file (it may be a symlink, device, or directory). Pick a real document file.',
-        };
-      }
-      if (stats.size > MAX_FILE_BYTES) {
-        const mb = (stats.size / (1024 * 1024)).toFixed(1);
-        return {
-          success: false,
-          error: `File is ${mb} MB; the maximum is 50 MB. Trim the file or split it into smaller reference documents.`,
-        };
-      }
-
-      // Wrap the parser branches in a per-call timeout. pdf-parse and mammoth
-      // have both hung historically on malformed input or zip-bomb DOCX.
-      // 30 s covers a 50 MiB image-heavy PDF on a slow machine.
-      const PARSE_TIMEOUT_MS = 30_000;
-      function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
-        return Promise.race([
-          p,
-          new Promise<T>((_, reject) =>
-            setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms),
-          ),
-        ]);
-      }
-
-      let content = '';
-      let pdfReportedPageCount: number | undefined;
-      let pdfExtractedPageCount: number | undefined;
-      try {
-        if (ext === '.pdf') {
-          // pdf-parse@2.x is a thin wrapper over pdfjs-dist's legacy build.
-          // See `pinPdfjsWorkerSrcOnce` above for why this MUST run before
-          // `new PDFParse(...)` and not at module top level. Skipping this
-          // call leaves the broken default workerSrc in place and the parse
-          // fails with "Setting up fake worker failed" on every PDF.
-          await pinPdfjsWorkerSrcOnce();
-          const { PDFParse } = require('pdf-parse');
-          const buffer = await fs.promises.readFile(filePath);
-          const parser = new PDFParse({ data: buffer });
-          const data: any = await withTimeout<any>(parser.getText(), PARSE_TIMEOUT_MS, 'PDF parse');
-          // pdf-parse@2.x's `getText()` returns a TextResult with:
-          //   { text: string, total: number, pages: Array<{ num, text }> }
-          // Previously we stored ONLY `data.text` — concatenated, with no
-          // page boundaries — and the retriever inferred page count from a
-          // 3000-char heuristic, which on a 66-page image-heavy PDF reported
-          // ~47. Preserve the per-page structure so the retriever can boost
-          // exact section / page matches and surface real page metadata.
-          pdfReportedPageCount =
-            typeof data?.total === 'number' && data.total > 0
-              ? data.total
-              : Array.isArray(data?.pages)
-                ? data.pages.length
-                : undefined;
-          if (Array.isArray(data?.pages) && data.pages.length > 0) {
-            pdfExtractedPageCount = data.pages.filter(
-              (p: any) => p && typeof p.text === 'string' && p.text.trim().length > 0,
-            ).length;
-            content = data.pages
-              .map(
-                (p: any) =>
-                  `[Page ${p.num}]\n${typeof p.text === 'string' ? p.text : ''}`,
-              )
-              .join('\n\n');
-          } else {
-            content = data.text;
-          }
-        } else if (ext === '.docx') {
-          // mammoth@1.x only handles .docx (modern Office Open XML, a ZIP
-          // container). Legacy .doc (binary CFB) is rejected upstream in
-          // ALLOWED_EXTENSIONS — it never reaches this branch. The dispatch
-          // intentionally does NOT also match '.doc' (even though the
-          // upstream allow-list gate means it would be dead-code) — keeping
-          // the matcher narrow is a guard against future regressions that
-          // re-add .doc to the parser chain without updating the catch-block
-          // error messages.
-          const mammoth = require('mammoth');
-          const result2: any = await withTimeout<any>(
-            mammoth.extractRawText({ path: filePath }),
-            PARSE_TIMEOUT_MS,
-            'DOCX parse',
-          );
-          content = result2.value;
-        } else {
-          // Plain-text family. Read raw bytes first so we can detect text
-          // encoding from a leading byte-order-mark before deciding whether
-          // a null byte is binary noise or a legitimate UTF-16 zero-pad.
-          const probe = await fs.promises.readFile(filePath, { encoding: null });
-          if (probe.length === 0) {
-            return { success: false, error: `"${fileName}" is empty.` };
-          }
-          // BOM-aware decode. UTF-16 files have many embedded null bytes; we
-          // must NOT treat those as a binary-rename signal.
-          if (probe.length >= 2 && probe[0] === 0xff && probe[1] === 0xfe) {
-            content = probe.subarray(2).toString('utf16le');
-          } else if (probe.length >= 2 && probe[0] === 0xfe && probe[1] === 0xff) {
-            // UTF-16 BE → swap pairs then decode as utf16le.
-            const swapped = Buffer.allocUnsafe(probe.length - 2);
-            for (let i = 2; i + 1 < probe.length; i += 2) {
-              swapped[i - 2] = probe[i + 1];
-              swapped[i - 1] = probe[i];
-            }
-            content = swapped.toString('utf16le');
-          } else if (
-            probe.length >= 3 &&
-            probe[0] === 0xef &&
-            probe[1] === 0xbb &&
-            probe[2] === 0xbf
-          ) {
-            content = probe.subarray(3).toString('utf8');
-          } else {
-            // No BOM. Sniff the first 2 KiB for a null byte — that's the
-            // strongest signal of a renamed binary.
-            const sniffWindow = probe.subarray(0, Math.min(2048, probe.length));
-            if (sniffWindow.includes(0)) {
-              return {
-                success: false,
-                error: `"${fileName}" looks like a binary file even though its extension is ${ext}. Re-save the file as plain text or pick a supported document format.`,
-              };
-            }
-            content = probe.toString('utf8');
-          }
-        }
-      } catch (parseErr: any) {
-        // Parser-specific failures (timeout, malformed PDF, zip-bomb DOCX).
-        // Log detail to main-process; return a generic message.
-        console.error(
-          '[IPC] modes:upload-reference-file parser error:',
-          parseErr?.message ?? parseErr,
-        );
-        return {
-          success: false,
-          error: `Could not parse "${fileName}". The file may be corrupt, password-protected, or in an unsupported variant of ${ext}.`,
-        };
-      }
-
-      if (!content || content.trim().length === 0) {
-        return {
-          success: false,
-          error: `"${fileName}" parsed to empty text. The file may be password-protected, image-only, or corrupt.`,
-        };
-      }
-
-      const { ModesManager } = require('./services/ModesManager');
-      const file = ModesManager.getInstance().addReferenceFile({
+      if (result.canceled || !result.filePaths?.[0]) return { success: false, cancelled: true };
+      const { ingestModeReferenceFile } = require('./services/ModeReferenceFileIngestion') as typeof import('./services/ModeReferenceFileIngestion');
+      const file = await ingestModeReferenceFile({
         modeId,
-        fileName,
-        content,
-        pageCount: pdfReportedPageCount,
-        extractedPageCount: pdfExtractedPageCount,
+        filePath: result.filePaths[0],
+        onIndexStatus: (phase, fileId) => {
+          BrowserWindow.getAllWindows().forEach((win) => {
+            if (!win.isDestroyed()) win.webContents.send('mode-file-index-status', { modeId, fileId, phase });
+          });
+        },
       });
-      // PI v3 (W3) — index at UPLOAD time (fire-and-forget): chunk + embed +
-      // persist vectors now so live retrieval never pays the embedding cost.
-      // Status events let the UI show pending → ready.
-      void (async () => {
-        // Signal "indexing started" BEFORE any work so the renderer can show
-        // the blue shimmer bar immediately (the DB writes status synchronously
-        // before the IPC response returns, so 'pending' is gone by the time the
-        // renderer queries — this push is the only durable signal).
-        BrowserWindow.getAllWindows().forEach((win) => {
-          if (!win.isDestroyed()) win.webContents.send('mode-file-index-status', { modeId, fileId: file.id, phase: 'indexing' });
-        });
-        try {
-          await ModesManager.getInstance().indexReferenceFile(file);
-        } catch (idxErr: any) {
-          console.warn('[IPC] reference-file indexing failed (lexical fallback remains):', idxErr?.message);
-        }
-        // PI v3 (W3) — if the embedding pipeline wasn't ready when this file
-        // was indexed (cold start, no Gemini key yet, Ollama still pulling),
-        // the file lands in 'failed' or 'lexical_only' with no auto-retry.
-        // The boot-time scheduleModeReferenceIndexRetry only sees files that
-        // existed at app start; kick a retry here so uploads during the
-        // waitForReady window aren't silently stuck. Idempotent + deduped
-        // via modeReferenceRetryPromise, so concurrent uploads collapse to
-        // a single retry pass.
-        try {
-          const finalStatus = ModesManager.getInstance().getReferenceFileIndexStatus(file.id);
-          if (finalStatus?.status === 'failed' || finalStatus?.status === 'lexical_only') {
-            appState.scheduleModeReferenceIndexRetry();
-          }
-        } catch { /* status lookup is best-effort */ }
-        // Signal "indexing done" — renderer re-fetches final status.
-        BrowserWindow.getAllWindows().forEach((win) => {
-          if (!win.isDestroyed()) win.webContents.send('mode-file-index-status', { modeId, fileId: file.id, phase: 'done' });
-        });
-      })();
       return { success: true, file };
-    } catch (e: any) {
-      console.error('[IPC] modes:upload-reference-file error:', e);
-      // Do not leak raw error.message to the renderer (may contain absolute
-      // paths or library internals). Return a generic message; the detail is
-      // already in the main-process log above.
-      return {
-        success: false,
-        error: 'Could not read the selected file. Please try a different file or contact support.',
-      };
+    } catch (error: any) {
+      const ext = path.extname(String(error?.path || '')).toLowerCase();
+      if (ext === '.doc') {
+        return { success: false, error: 'Legacy Word .doc files are not supported. Save the file as .docx and upload it again.' };
+      }
+      console.error('[IPC] modes:upload-reference-file error:', error?.message || error);
+      return { success: false, error: 'Could not parse the selected file. It may be corrupt, password-protected, unsupported, or too large.' };
     }
   });
 
@@ -10400,6 +10128,42 @@ export function initializeIpcHandlers(appState: AppState): void {
   if (process.env.NATIVELY_E2E === '1') {
     console.warn('[E2E] NATIVELY_E2E=1 — registering test-only IPC handlers (must never ship enabled).');
 
+    // Parser-faithful benchmark ingress. Unlike the older content-based helper
+    // below, this runs the exact production PDF/DOCX/text parsing use case. The
+    // caller may only select a regular file inside an explicitly configured
+    // fixture root; no arbitrary renderer path reaches the filesystem.
+    safeHandle('__e2e__:upload-reference-file-from-path', async (
+      _,
+      params: { modeId: string; filePath: string },
+    ) => {
+      try {
+        const fixtureRoot = process.env.NATIVELY_E2E_REFERENCE_ROOT;
+        if (!fixtureRoot || !params?.modeId || !params?.filePath) {
+          return { success: false, error: 'benchmark_fixture_root_required' };
+        }
+        const root = path.resolve(fixtureRoot);
+        const candidate = path.resolve(params.filePath);
+        const relative = path.relative(root, candidate);
+        if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+          return { success: false, error: 'fixture_path_not_allowed' };
+        }
+        const { ingestModeReferenceFile } = require('./services/ModeReferenceFileIngestion') as typeof import('./services/ModeReferenceFileIngestion');
+        const file = await ingestModeReferenceFile({
+          modeId: params.modeId,
+          filePath: candidate,
+          onIndexStatus: (phase, fileId) => {
+            BrowserWindow.getAllWindows().forEach((win) => {
+              if (!win.isDestroyed()) win.webContents.send('mode-file-index-status', { modeId: params.modeId, fileId, phase });
+            });
+          },
+        });
+        return { success: true, file };
+      } catch (error: any) {
+        console.warn('[E2E] parser-faithful reference upload failed:', error?.message);
+        return { success: false, error: 'reference_upload_failed' };
+      }
+    });
+
     // Content-based reference-file ingest (bypasses the native open dialog).
     // Mirrors what modes:upload-reference-file does after parsing: hands raw
     // text content to the REAL ModesManager.addReferenceFile (which indexes +
@@ -10794,6 +10558,19 @@ export function initializeIpcHandlers(appState: AppState): void {
           resolve({ success: false, error: err?.message || 'trigger failed', streamedTokens: tokens });
         });
       });
+    });
+
+    // Context OS benchmark provenance is available only in the explicit E2E+
+    // audit configuration. It contains IDs/counts/source metadata, never prompts,
+    // evidence text, answers, credentials, or raw provider headers.
+    safeHandle('__e2e__:context-os-benchmark-audit', async () => {
+      const { getContextOsBenchmarkAudit } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+      return { success: true, records: getContextOsBenchmarkAudit() };
+    });
+    safeHandle('__e2e__:context-os-benchmark-audit-clear', async () => {
+      const { clearContextOsBenchmarkAudit } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+      clearContextOsBenchmarkAudit();
+      return { success: true };
     });
 
     // CONTEXT OS H1: read the redacted prompt-audit ring (set when

@@ -23,6 +23,8 @@ export interface ContextOsModeSnapshot {
 
 export interface ContextOsGenerationContext {
   contract: TurnContextContract;
+  /** Immutable user question. Provider packets must never be reused as this value. */
+  turnQuestion?: string;
   /** The pack governing THIS generation. May be built lazily from the retrieved block. */
   evidencePack: EvidencePack | null;
   modeSnapshot: ContextOsModeSnapshot;

@@ -896,8 +896,11 @@ export class IntelligenceEngine extends EventEmitter {
             ).catch((): { intent: 'general'; confidence: number; answerShape: string } => (
                 { intent: 'general', confidence: 0.4, answerShape: 'Concise, direct answer to the question.' }
             ));
-            const modeContextPromise: Promise<string> = options?.activeSkill
-                ? Promise.resolve('') // skill mode skips mode retrieval entirely
+            // Governed document turns resolve through EvidenceResolver inside
+            // WhatToAnswerLLM. Do not start the legacy prefetch in parallel: even
+            // an ignored retrieval is an unauthorized competing evidence path.
+            const modeContextPromise: Promise<string> = options?.activeSkill || documentGroundedCustomModeActive
+                ? Promise.resolve('') // skill/governed-document mode skips legacy retrieval
                 : (async () => {
                     try {
                         const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
@@ -1387,10 +1390,14 @@ export class IntelligenceEngine extends EventEmitter {
             // repair re-opened profile in doc-grounded turns — baseline §5.5).
             // Narrowing only: the contract can only REMOVE context, never add.
             let wtaTurnContract: import('./intelligence/context-os').TurnContextContract | null = null;
+            // One immutable WTA question must drive contract classification,
+            // resolver retrieval, and provider prompting. Never re-derive it in
+            // downstream request assembly.
+            const wtaTurnQuestion = question || extractedQuestion.latestQuestion || lastInterviewerTurn || '';
             try {
                 const { buildCustomModeExecutionContract: _bldC } = require('./llm/customModeExecutionContract');
                 const { buildTurnContractIfEnabled } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
-                const _wtaQ2 = question || extractedQuestion.latestQuestion || lastInterviewerTurn || '';
+                const _wtaQ2 = wtaTurnQuestion;
                 const _hasProfile2 = Boolean((this.llmHelper.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data);
                 const { resolveExplicitSourceRequest: _wtaResolveSwitch2, toLegacyUserExplicitSource: _wtaToLegacySwitch2 } = require('./intelligence/context-os/explicitSourceSwitch');
                 const _wtaUserExplicitSource2 = _wtaToLegacySwitch2(_wtaResolveSwitch2(String(_wtaQ2)));
@@ -1560,6 +1567,7 @@ export class IntelligenceEngine extends EventEmitter {
                 && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
                 wtaContextOsGeneration = {
                     contract: wtaTurnContract,
+                    turnQuestion: wtaTurnQuestion,
                     evidencePack: null,
                     modeSnapshot: {
                         modeId: snapshotModeId ?? null,

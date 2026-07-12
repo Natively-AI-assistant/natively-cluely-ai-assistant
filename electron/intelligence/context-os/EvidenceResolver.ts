@@ -51,6 +51,12 @@ import { allowsEvidence, allowsRetrieval } from './types';
 import type { EvidenceItem, EvidencePack, RejectedEvidenceItem } from './evidencePack';
 import { textCanProveProperty } from './requestedProperty';
 import {
+  deriveEvidenceSufficiency,
+  MIN_ANSWER_CONFIDENCE,
+  selectSmallestSufficientEvidence,
+  type EvidenceSufficiency,
+} from './evidenceSufficiency';
+import {
   isOkfKnowledgePacksEnabled,
   isOkfHybridRetrievalEnabled,
   isRagConfidenceGateEnabled,
@@ -177,10 +183,8 @@ export interface EvidenceResolverDeps {
 }
 
 // ── Confidence floor for "is this pack good enough to answer from" ─────────
-// Deliberately conservative: prefer an honest insufficient-evidence result
-// over a low-confidence fabrication. Matches the incident brief's "prefer a
-// small, high-confidence evidence set" requirement.
-const MIN_ANSWER_CONFIDENCE = 0.32;
+// `MIN_ANSWER_CONFIDENCE` comes from evidenceSufficiency so hybrid gating and
+// final pre-dispatch policy cannot silently diverge.
 const OKF_CARD_HIGH_CONFIDENCE_SCORE = 0.55;
 
 export class EvidenceResolver {
@@ -467,19 +471,54 @@ export class EvidenceResolver {
     strategy: EvidenceResolutionStrategy,
   ): EvidencePack {
     const { turnId, sourceContract, requestedProperty, parentPackId, packVersion } = request;
-    const factual = items.filter((i) => i.authority === 'evidence');
-    const propertySatisfied = requestedProperty === 'unknown'
-      ? factual.length > 0
-      : factual.some((i) => i.supports.property === requestedProperty);
-    const confidence = factual.length > 0 ? Math.max(...factual.map((i) => i.score.final)) : 0;
-
+    const classification = this.deps.classifyQuestion(request.question);
+    const factual = items.filter((item) => item.authority === 'evidence');
+    const candidatePack = {
+      items: factual,
+      requestedProperty,
+      coverage: { hasDirectEvidence: factual.length > 0, propertySatisfied: false, entityMatched: false, sourceOwnerSatisfied: true, confidence: 0 },
+      conflicts: [] as EvidencePack['conflicts'],
+    };
+    const initialSufficiency = deriveEvidenceSufficiency({
+      pack: candidatePack,
+      targetEntities: classification.targetEntities,
+      isSynthesis: classification.isSynthesis,
+    });
+    const selectedItems = initialSufficiency.answerable
+      ? selectSmallestSufficientEvidence({
+          items: factual,
+          requestedProperty,
+          answerShape: sourceContract.answerShape,
+          targetEntities: classification.targetEntities,
+        })
+      : factual;
+    const selectedIds = new Set(selectedItems.map((item) => item.evidenceId));
+    const excludedItems = factual.filter((item) => !selectedIds.has(item.evidenceId));
+    const selectionRejected: RejectedEvidenceItem[] = excludedItems.map((item) => ({
+      sourceKind: item.sourceKind,
+      sourceId: item.sourceId,
+      textPreview: item.text.slice(0, 80),
+      reason: 'low_confidence',
+    }));
+    const selectedFactual = selectedItems.filter((item) => item.authority === 'evidence');
+    const confidence = selectedFactual.length > 0
+      ? Math.max(...selectedFactual.map((item) => item.score.final || 0))
+      : 0;
+    const sufficiency = deriveEvidenceSufficiency({
+      pack: {
+        items: selectedFactual,
+        requestedProperty,
+        coverage: { hasDirectEvidence: selectedFactual.length > 0, propertySatisfied: false, entityMatched: false, sourceOwnerSatisfied: true, confidence },
+        conflicts: [] as EvidencePack['conflicts'],
+      },
+      targetEntities: classification.targetEntities,
+      isSynthesis: classification.isSynthesis,
+    });
     const answerPolicy = sourceContract.sourceOwner === 'clarify'
       ? 'ask_clarification' as const
-      : factual.length === 0
-        ? 'refuse_insufficient_evidence' as const
-        : (requestedProperty !== 'unknown' && !propertySatisfied)
-          ? 'refuse_insufficient_evidence' as const
-          : 'answer' as const;
+      : sufficiency.answerable
+        ? 'answer' as const
+        : 'refuse_insufficient_evidence' as const;
 
     const version = packVersion ?? 1;
     return {
@@ -489,16 +528,24 @@ export class EvidenceResolver {
       turnId,
       sourceOwner: sourceContract.sourceOwner,
       requestedProperty,
-      items,
-      rejected,
+      items: selectedItems,
+      rejected: [...rejected, ...selectionRejected],
       coverage: {
-        hasDirectEvidence: factual.length > 0,
-        propertySatisfied,
-        entityMatched: factual.length > 0,
-        sourceOwnerSatisfied: factual.every((i) => i.sourceOwner === sourceContract.sourceOwner),
-        confidence,
+        hasDirectEvidence: selectedFactual.length > 0,
+        propertySatisfied: sufficiency.propertySatisfied,
+        entityMatched: sufficiency.entitySatisfied,
+        sourceOwnerSatisfied: selectedFactual.every((item) => item.sourceOwner === sourceContract.sourceOwner),
+        confidence: sufficiency.confidence,
       },
-      conflicts: [],
+      sufficiency,
+      selection: {
+        candidateEvidenceIds: factual.map((item) => item.evidenceId),
+        selectedEvidenceIds: selectedFactual.map((item) => item.evidenceId),
+        excludedEvidenceIds: excludedItems.map((item) => item.evidenceId),
+        strategy: 'smallest_sufficient_set',
+      },
+      resolver: { strategy, attemptedSources: [], retrievedSources: [] },
+      conflicts: [] as EvidencePack['conflicts'],
       answerPolicy,
     };
   }
