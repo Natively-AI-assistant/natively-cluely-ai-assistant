@@ -4611,13 +4611,25 @@ const isMultimodal = !!(imagePaths?.length);
             const { classifyQuestion } = require('./services/knowledge/QuestionClassifier');
             const { queryOkfCards } = require('./services/knowledge/OkfRetriever');
             const { KnowledgeManager } = require('./services/knowledge/KnowledgeManager');
-            const modeContextRetriever = new (require('./services/ModeContextRetriever').ModeContextRetriever)();
             const activeModeRow = modesMgr.getActiveMode?.();
             if (activeModeRow) {
               const resolver = new EvidenceResolver({
                 getModeSnapshot: () => activeModeRow,
                 getReferenceFiles: (modeId: string) => modesMgr.getReferenceFiles(modeId),
-                hybridRetriever: { retrieveHybrid: (m: any, files: any, opts: any) => modeContextRetriever.retrieveHybrid(m, files, opts) },
+                // Evidence-execution-repair (2026-07-12): MUST go through
+                // modesMgr's own retrieveHybridRaw, not a freshly-constructed
+                // ModeContextRetriever — a fresh instance has no shared
+                // embedding pipeline wired (that only happens once, at
+                // RAGManager init, on ModesManager's own singleton instance),
+                // so every retrieveHybrid() call on it silently returns zero
+                // chunks and EvidenceResolver reports 'insufficient' evidence
+                // even when the mode's files are genuinely indexed and ready.
+                // This was a real regression discovered during Phase 12 live
+                // benchmarking: retrieval worked when called through
+                // ModesManager (inspect-retrieval, buildRetrievedActive...Hybrid)
+                // but silently returned empty when EvidenceResolver called its
+                // own orphaned instance.
+                hybridRetriever: { retrieveHybrid: (m: any, files: any, opts: any) => modesMgr.retrieveHybridRaw(m, files, opts) },
                 knowledgeManager: { getPackForFile: (fileId: string) => KnowledgeManager.getInstance().getPackForFile(fileId) },
                 classifyQuestion,
                 queryOkfCards,

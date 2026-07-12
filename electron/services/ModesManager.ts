@@ -1,7 +1,8 @@
 import * as crypto from 'crypto';
 import { DatabaseManager } from '../db/DatabaseManager';
 import type { EmbeddingPipeline } from '../rag/EmbeddingPipeline';
-import { ModeContextRetriever, type ModeRetrievalOptions } from './ModeContextRetriever';
+import { ModeContextRetriever, type ModeRetrievalOptions, type RetrieveOptions } from './ModeContextRetriever';
+import type { ModeRetrievedContext as HybridContext } from './modes/ModeHybridRetriever';
 import type { AnswerType } from '../llm/AnswerPlanner';
 import type { ActiveModeInfo } from '../llm/modeProfiles';
 import { classifyCustomContext, selectCustomContextForAnswer } from '../llm/customContextClassifier';
@@ -1117,6 +1118,24 @@ export class ModesManager {
      *  DIAGNOSTICS only — NOT used by the false-refusal gate (see setter). */
     public getLastRetrievalConfidence(): number {
         return this.lastRetrievalConfidence;
+    }
+
+    /**
+     * Evidence-execution-repair (2026-07-12): raw hybrid-retrieval passthrough
+     * for EvidenceResolver. Returns the STRUCTURED HybridContext (chunks +
+     * per-chunk scores), not the formatted string the other wrappers below
+     * build — EvidenceResolver needs typed items, not prose. CRITICAL: this
+     * delegates to `this.modeContextRetriever`, the SAME shared instance
+     * `main.ts` wires with `setSharedEmbeddingPipeline()` at RAG-manager init.
+     * A caller that constructs its own `new ModeContextRetriever()` gets an
+     * instance whose `_sharedEmbeddingPipeline` is permanently null — every
+     * `retrieveHybrid()` call on it then hits the `!ensureHybridRetriever()`
+     * guard and returns `{ chunks: [], usedFallback: true }` even when the
+     * mode's files are genuinely indexed and ready, which is exactly the bug
+     * this passthrough exists to prevent a future caller from reintroducing.
+     */
+    public async retrieveHybridRaw(mode: Mode, files: ModeReferenceFile[], options: RetrieveOptions): Promise<HybridContext> {
+        return this.modeContextRetriever.retrieveHybrid(mode, files, options);
     }
 
     /**

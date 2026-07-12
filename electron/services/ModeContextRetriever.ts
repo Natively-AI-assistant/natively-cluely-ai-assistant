@@ -81,7 +81,7 @@ export interface ModeRetrievalOptions {
     topK?: number;
 }
 
-interface RetrieveOptions extends ModeRetrievalOptions {
+export interface RetrieveOptions extends ModeRetrievalOptions {
     query: string;
     transcript?: string;
     tokenBudget?: number;

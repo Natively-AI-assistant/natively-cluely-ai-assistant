@@ -141,6 +141,7 @@ let throwOnResolve = false;
 class FakeEvidenceResolver {
   constructor(deps) {
     this.deps = deps;
+    FakeEvidenceResolver.lastConstructedDeps = deps;
   }
   async resolve(request) {
     resolveCalls += 1;
@@ -507,5 +508,90 @@ describe('evidence-execution-repair: EvidenceResolver wiring identity (a524329 r
     assert.ok(hybridLegacyCalls + lexicalLegacyCalls > 0, 'a resolver failure must fall back to legacy retrieval rather than producing no context at all');
     const dispatched = calls.find(c => c.via === 'executeCustomProvider');
     assert.ok(dispatched, 'executeCustomProvider must still be reached despite the resolver throwing');
+  });
+
+  // Evidence-execution-repair (2026-07-12) — regression guard for a SECOND,
+  // distinct defect found during Phase 12 live-provider benchmarking:
+  // LLMHelper.ts constructed EvidenceResolver's `hybridRetriever` dependency
+  // from a FRESH `new ModeContextRetriever()` instead of going through
+  // ModesManager's own singleton retriever. A freshly-constructed instance's
+  // `_sharedEmbeddingPipeline` is always null (that field is only ever wired
+  // once, on ModesManager's own instance, by main.ts at RAG-manager init),
+  // so every retrieveHybrid() call on the orphaned instance silently returned
+  // `{ chunks: [], usedFallback: true }` — EvidenceResolver then reported
+  // 'insufficient' evidence and the model said "I could not find that in the
+  // retrieved sections" even though the mode's files were genuinely indexed
+  // and a DIFFERENT retrieval call path (ModesManager.buildRetrievedActive...
+  // Hybrid / the __e2e__:inspect-retrieval diagnostic) proved real, well-
+  // scored chunks existed for the exact same query. Fixed by routing through
+  // `ModesManager.retrieveHybridRaw()`, a thin passthrough to the SAME shared-
+  // pipeline-wired singleton instance every other retrieval call site uses.
+  //
+  // This test does NOT drive a real hybrid retrieval (that requires a live
+  // embedding pipeline) — it proves the WIRING is correct: the function
+  // object passed as `deps.hybridRetriever.retrieveHybrid` must delegate to
+  // `modesMgr.retrieveHybridRaw`, not construct or call anything else. A
+  // regression back to `new ModeContextRetriever()` makes this spy count stay
+  // at 0 even though the resolver still resolves successfully (fed by the
+  // fake resolver in this test suite) — exactly the silent-fallback shape
+  // that made the real bug invisible to the OTHER tests in this file, which
+  // all use a FakeEvidenceResolver that never actually calls
+  // deps.hybridRetriever.retrieveHybrid at all.
+  test('governed turn: EvidenceResolver is constructed with a hybridRetriever wired to modesMgr.retrieveHybridRaw, not an orphaned ModeContextRetriever instance', async () => {
+    resolveCalls = 0;
+    resolveArgsSeen = null;
+    throwOnResolve = false;
+
+    const contract = buildRealContract();
+    nextResolutionPack = buildFakePack(contract);
+
+    const mode = installGovernedDocumentMode();
+    const manager = ModesManager.getInstance();
+    let retrieveHybridRawCalls = 0;
+    let retrieveHybridRawArgs = null;
+    const sentinelHybridResult = { chunks: [], formattedContext: '', usedFallback: false, usedHybrid: true };
+    manager.retrieveHybridRaw = async (m, files, opts) => {
+      retrieveHybridRawCalls += 1;
+      retrieveHybridRawArgs = { mode: m, files, opts };
+      return sentinelHybridResult;
+    };
+
+    const helper = buildHelper();
+    attachDispatchSpy(helper);
+
+    const cogCtx = {
+      contract,
+      evidencePack: null,
+      modeSnapshot: { modeId: contract.activeModeId, modeName: mode.name, sourceAuthority: 'reference_files_only' },
+      govern: true,
+    };
+
+    await drainStream(helper.streamChat(
+      'What are the four phases of the project?',
+      undefined,
+      undefined,
+      undefined,
+      true,
+      false,
+      [],
+      undefined,
+      undefined,
+      { answerType: 'list_answer', contextOsGeneration: cogCtx },
+    ));
+
+    assert.equal(resolveCalls, 1, 'EvidenceResolver.resolve() must still be called once');
+    assert.ok(resolveArgsSeen, 'resolver must have been constructed and invoked');
+
+    // Drive the ACTUAL hybridRetriever the resolver was constructed with —
+    // this is the direct proof that LLMHelper wired it to modesMgr's own
+    // retrieveHybridRaw rather than a disconnected instance. If this call
+    // does NOT reach our spy, the wiring has regressed back to constructing
+    // its own ModeContextRetriever (or some other orphaned path).
+    const deps = resolveArgsSeen && FakeEvidenceResolver.lastConstructedDeps;
+    assert.ok(deps && typeof deps.hybridRetriever?.retrieveHybrid === 'function', 'resolver deps must include a hybridRetriever.retrieveHybrid function');
+    const result = await deps.hybridRetriever.retrieveHybrid(mode, [{ id: 'doc-1' }], { query: 'probe' });
+    assert.equal(retrieveHybridRawCalls, 1, 'the wired hybridRetriever.retrieveHybrid must delegate to modesMgr.retrieveHybridRaw exactly once');
+    assert.equal(result, sentinelHybridResult, 'the delegated call must return modesMgr.retrieveHybridRaw\'s result verbatim (same object identity)');
+    assert.ok(retrieveHybridRawArgs, 'retrieveHybridRaw must have been called with real arguments');
   });
 });

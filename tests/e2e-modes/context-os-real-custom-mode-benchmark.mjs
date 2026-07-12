@@ -218,10 +218,32 @@ async function main() {
     return await api.modesSetActive(modeId);
   }, { modeId });
 
-  const groundingInfo = await RAW(async () => {
+  // Evidence-execution-repair Phase 12 (flaky-run fix): the restart above
+  // spins up a BRAND-NEW process with a cold embedding pipeline — the
+  // prewarm call before restart (line ~192) only warmed the PRE-restart
+  // process, which is gone. Without re-warming, the hybrid retriever's
+  // vector path can be empty/degraded for the first several questions
+  // (falling back to sync lexical, or scoring below the relevance floor),
+  // producing false "not found" refusals unrelated to the answer pipeline
+  // under test. __e2e__:reindex-embeddings forces the shared embedding
+  // pipeline ready AND retries any files that indexed as lexical_only
+  // before it was ready — call it post-restart and actually wait for it,
+  // rather than a fixed sleep and a discarded index-status probe.
+  const reindexResult = await RAW(async ({ modeId }) => {
     const api = window.electronAPI || window.api;
-    return await api.e2eInvoke?.('__e2e__:index-status', undefined).catch(() => null);
-  }).catch(() => null);
+    return await api.e2eInvoke?.('__e2e__:reindex-embeddings', modeId).catch((e) => ({ success: false, error: e?.message }));
+  }, { modeId }).catch((e) => ({ success: false, error: e?.message }));
+  console.log(`[BENCHMARK] post-restart reindex-embeddings: ${JSON.stringify(reindexResult)}`);
+
+  const groundingInfo = await RAW(async ({ modeId }) => {
+    const api = window.electronAPI || window.api;
+    return await api.e2eInvoke?.('__e2e__:index-status', modeId).catch(() => null);
+  }, { modeId }).catch(() => null);
+  console.log(`[BENCHMARK] post-restart index status: ${JSON.stringify(groundingInfo)}`);
+  const lexicalOnlyCount = (groundingInfo?.statuses || []).filter((s) => s?.status === 'lexical_only').length;
+  if (lexicalOnlyCount > 0) {
+    console.warn(`[BENCHMARK] WARN: ${lexicalOnlyCount} file(s) still lexical_only after reindex — vector retrieval may be degraded for this run`);
+  }
 
   // Evidence-execution-repair Phase 12: the isolated userData dir has no
   // persisted provider credentials, so the real gemini-chat-stream handler
