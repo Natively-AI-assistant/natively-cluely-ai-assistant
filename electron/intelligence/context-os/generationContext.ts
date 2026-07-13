@@ -23,6 +23,8 @@ export interface ContextOsModeSnapshot {
 
 export interface ContextOsGenerationContext {
   contract: TurnContextContract;
+  /** Immutable user question. Provider packets must never be reused as this value. */
+  turnQuestion?: string;
   /** The pack governing THIS generation. May be built lazily from the retrieved block. */
   evidencePack: EvidencePack | null;
   modeSnapshot: ContextOsModeSnapshot;
@@ -102,7 +104,7 @@ export function renderGoverningFactualBlock(ctx: ContextOsGenerationContext): st
   if (!ctx.evidencePack || ctx.evidencePack.items.length === 0) return '';
   return [
     renderContractForPrompt(ctx.contract),
-    renderEvidenceUseRule(ctx.contract),
+    renderEvidenceUseRule(ctx.contract, ctx.evidencePack.answerPolicy),
     renderEvidencePackForPrompt(ctx.evidencePack),
   ].join('\n\n');
 }

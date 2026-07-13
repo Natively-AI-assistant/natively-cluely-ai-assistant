@@ -36,9 +36,16 @@ export interface ContextOsTrace {
   evidenceCoverage: {
     hasDirectEvidence: boolean;
     propertySatisfied: boolean;
+    entityMatched: boolean;
     sourceOwnerSatisfied: boolean;
     confidence: number;
   };
+  packId?: string;
+  packVersion?: number;
+  resolutionStrategy?: string;
+  answerPolicy?: string;
+  selectedEvidenceCount: number;
+  candidateEvidenceCount: number;
   finalAction: FinalAction;
 }
 
@@ -74,9 +81,16 @@ export function buildContextOsTrace(input: {
     evidenceCoverage: {
       hasDirectEvidence: evidencePack?.coverage.hasDirectEvidence ?? false,
       propertySatisfied: evidencePack?.coverage.propertySatisfied ?? false,
+      entityMatched: evidencePack?.coverage.entityMatched ?? false,
       sourceOwnerSatisfied: evidencePack?.coverage.sourceOwnerSatisfied ?? false,
       confidence: evidencePack?.coverage.confidence ?? 0,
     },
+    packId: evidencePack?.packId,
+    packVersion: evidencePack?.version,
+    resolutionStrategy: evidencePack?.resolver?.strategy,
+    answerPolicy: evidencePack?.answerPolicy,
+    selectedEvidenceCount: evidencePack?.selection?.selectedEvidenceIds.length ?? evidencePack?.items.length ?? 0,
+    candidateEvidenceCount: evidencePack?.selection?.candidateEvidenceIds.length ?? evidencePack?.items.length ?? 0,
     finalAction: input.finalAction,
   };
 }

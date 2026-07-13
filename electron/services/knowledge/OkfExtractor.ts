@@ -8,6 +8,11 @@
 
 import { buildDocumentMap, type DocumentMap, type DocumentSection } from '../modes/DocumentMap';
 import { slugify, uniqueSlug, conceptIdFor } from './OkfSlugger';
+import {
+  extractFrontMatter,
+  frontMatterFactToCardBody,
+  type FrontMatterFact,
+} from './FrontMatterExtractor';
 import type { KnowledgeCard, KnowledgeCardType, KnowledgeEntity, KnowledgeEntityType } from './types';
 
 const MAX_BODY_WORDS = 420;
@@ -130,9 +135,11 @@ export interface BuiltCardDraft {
   entities: string[];
 }
 
-/** Step 5: turn section drafts into card drafts with stable slugs/conceptIds. */
-export function extractConceptCards(sections: ExtractedSectionCard[], bundleDir: string): BuiltCardDraft[] {
-  const takenSlugs = new Set<string>();
+/** Step 5: turn section drafts into card drafts with stable slugs/conceptIds.
+ *  `sharedSlugs` lets an earlier extraction pass (front-matter) reserve slugs so
+ *  the two card sets never collide on a slug/conceptId. */
+export function extractConceptCards(sections: ExtractedSectionCard[], bundleDir: string, sharedSlugs?: Set<string>): BuiltCardDraft[] {
+  const takenSlugs = sharedSlugs ?? new Set<string>();
   const out: BuiltCardDraft[] = [];
   for (const s of sections) {
     const slug = uniqueSlug(s.title, takenSlugs);
@@ -213,6 +220,61 @@ export function extractEntityCards(cards: BuiltCardDraft[]): BuiltEntityDraft[] 
   }));
 }
 
+/** Card-title phrasing for each front-matter property. Generic (property-keyed,
+ *  never document-value-keyed) so a property-aware retriever ranks the atomic
+ *  card by the question's own vocabulary ("author", "language", "date"). */
+const FRONT_MATTER_TITLE: Record<FrontMatterFact['property'], string> = {
+  title: 'Document Title',
+  subtitle: 'Document Subtitle',
+  author: 'Author',
+  degree_program: 'Degree Programme',
+  major: 'Major / Specialisation',
+  institution: 'Institution',
+  department: 'Department',
+  supervisor: 'Supervisor',
+  advisor: 'Advisors',
+  collaborator: 'Collaborative Partner',
+  date: 'Date',
+  page_count: 'Number of Pages',
+  language: 'Language',
+  keywords: 'Keywords',
+  abstract: 'Abstract',
+};
+
+/**
+ * Turn atomic front-matter facts into OKF card drafts. Each fact becomes ONE
+ * card whose body is the printed "Label: value" — the smallest sufficient
+ * evidence for a document-identity question. The body always begins with both
+ * the canonical property word and the question-friendly label, so a
+ * property-aware / lexical retriever ranks it for the matching question even
+ * when the value word is rare (e.g. "English" for a language question).
+ */
+export function buildFrontMatterCards(content: string, bundleDir: string, takenSlugs: Set<string>): BuiltCardDraft[] {
+  const facts = extractFrontMatter(content);
+  const out: BuiltCardDraft[] = [];
+  for (const fact of facts) {
+    const title = FRONT_MATTER_TITLE[fact.property] || fact.label;
+    const slug = uniqueSlug(`front-matter-${fact.property}`, takenSlugs);
+    const conceptId = conceptIdFor(bundleDir, slug);
+    // Body leads with the property word + label so retrieval keys on the
+    // question's vocabulary; the value follows.
+    const body = `${title} (${fact.property.replace(/_/g, ' ')}). ${frontMatterFactToCardBody(fact)}`;
+    const page = fact.page ?? 1;
+    out.push({
+      type: 'metadata',
+      title,
+      slug,
+      conceptId,
+      body,
+      sourcePages: [page],
+      sourceSections: ['Front matter'],
+      sourceQuotes: [{ text: frontMatterFactToCardBody(fact).slice(0, 280), page, section: 'front-matter' }],
+      entities: fact.items && fact.items.length > 1 ? fact.items.slice(0, 12) : [fact.value].filter(Boolean).slice(0, 1),
+    });
+  }
+  return out;
+}
+
 /** Full Phase-2 extraction entry point: PDF content → section drafts → card drafts → entity drafts. */
 export function extractFromContent(content: string, bundleDir: string): {
   map: DocumentMap;
@@ -221,7 +283,12 @@ export function extractFromContent(content: string, bundleDir: string): {
 } {
   const map = buildDocumentMap(content);
   const sections = parseToSections(map);
-  const cards = extractConceptCards(sections, bundleDir);
-  const entities = extractEntityCards(cards);
+  const takenSlugs = new Set<string>();
+  // Atomic front-matter cards FIRST so their slugs are stable and they take
+  // retrieval precedence for document-identity questions.
+  const frontMatterCards = buildFrontMatterCards(content, bundleDir, takenSlugs);
+  const sectionCards = extractConceptCards(sections, bundleDir, takenSlugs);
+  const cards = [...frontMatterCards, ...sectionCards];
+  const entities = extractEntityCards(sectionCards);
   return { map, cards, entities };
 }

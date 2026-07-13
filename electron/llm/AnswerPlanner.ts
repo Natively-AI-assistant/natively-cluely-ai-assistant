@@ -40,6 +40,7 @@ export type AnswerType =
   | 'definitional_answer'
   | 'list_answer'
   | 'exact_numeric_answer'
+  | 'document_structure_answer'
   | 'document_absent_fact_refusal'
   | 'document_followup_answer'
   | 'follow_up_answer'
@@ -410,6 +411,7 @@ const DOCUMENT_DEFINITION_TEMPLATE = `Answer from the uploaded document evidence
 const DOCUMENT_LIST_TEMPLATE = `Answer from the uploaded document evidence only. Return the complete list the question asks for. Scan every retrieved excerpt before answering; include all listed items, phases, questions, models, objects, or components that are literally present. Do not stop at the first matching excerpt and do not invent missing list items.`;
 const DOCUMENT_NUMERIC_TEMPLATE = `Answer from the uploaded document evidence only. Report exact values with units and the entity they belong to. If multiple related values are present (training/peak/inference, control/sampling, per-model rates), include all of them. Do not infer numbers that are not written in the evidence.`;
 const DOCUMENT_ABSENT_FACT_TEMPLATE = `Answer from the uploaded document evidence only. If the requested fact is not supported by the selected evidence after retrieval, say exactly and briefly that it is not directly mentioned in the uploaded seminar material. Do not provide a plausible estimate or use general knowledge.`;
+const DOCUMENT_STRUCTURE_TEMPLATE = `Answer from the uploaded document's table-of-contents / heading evidence only. These are navigation questions — a chapter or section title, the page a section begins on, or how many chapters/sections/pages there are. Report the exact title or number as written in the evidence. Do not summarize the section's content and do not infer a title or page that is not literally present.`;
 const DOCUMENT_FOLLOWUP_TEMPLATE = `Answer the follow-up from the uploaded document evidence only. Resolve pronouns like "it", "that", and "they" using the immediately previous topic, but treat the prior answer only as a referent hint — facts must come from the retrieved document excerpts.`;
 
 // Generic technical-concept answers (what is Redis / JWT / CORS / caching / REST) were
@@ -1623,6 +1625,8 @@ const templateFor = (answerType: AnswerType): string => {
       return DOCUMENT_LIST_TEMPLATE;
     case 'exact_numeric_answer':
       return DOCUMENT_NUMERIC_TEMPLATE;
+    case 'document_structure_answer':
+      return DOCUMENT_STRUCTURE_TEMPLATE;
     case 'document_absent_fact_refusal':
       return DOCUMENT_ABSENT_FACT_TEMPLATE;
     case 'document_followup_answer':
@@ -1694,6 +1698,7 @@ const requiredLayersFor = (answerType: AnswerType, documentGroundedCustomModeAct
     case 'definitional_answer':
     case 'list_answer':
     case 'exact_numeric_answer':
+    case 'document_structure_answer':
     case 'document_absent_fact_refusal':
     case 'document_followup_answer':
       return ['live_transcript', 'screen_context', 'reference_files', 'active_mode'];
@@ -1787,6 +1792,7 @@ const forbiddenLayersFor = (answerType: AnswerType): ContextLayer[] => {
     case 'definitional_answer':
     case 'list_answer':
     case 'exact_numeric_answer':
+    case 'document_structure_answer':
     case 'document_absent_fact_refusal':
     case 'document_followup_answer':
       // Document/lecture answers must not pull resume/JD/negotiation.
@@ -1855,6 +1861,7 @@ export const profileContextPolicyFor = (answerType: AnswerType): ProfileContextP
     case 'definitional_answer':
     case 'list_answer':
     case 'exact_numeric_answer':
+    case 'document_structure_answer':
     case 'document_absent_fact_refusal':
     case 'document_followup_answer':
     case 'general_meeting_answer':

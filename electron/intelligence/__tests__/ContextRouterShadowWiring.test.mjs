@@ -82,6 +82,20 @@ describe('ContextRouter shadow wiring — exact shadow input shape', () => {
   });
 
   // (e) JD-fit "why am I a fit for this JD?" → profile + evidence RAG.
+  //
+  // 2026-07-11: AnswerPlanner's JD/Resume JIT pipeline (2026-07-07) added the
+  // more specific 'resume_jd_fit_answer' type ("which of MY projects best
+  // matches this JD?" — resume+jd mix) alongside the older, more generic
+  // 'jd_fit_answer'. This exact phrasing now classifies as the newer type.
+  // ContextRouter/ProfileIntelligenceRouter had NOT been updated to route
+  // resume_jd_fit_answer (nor its siblings resume_jd_gap_answer /
+  // resume_jd_intro_answer / jd_summary_answer / jd_requirements_answer /
+  // jd_fact_answer) — they silently fell through to the general_assistant /
+  // no-profile default despite AnswerPlanner itself (profileContextPolicyFor,
+  // CANDIDATE_VOICE_TYPES) and ProfileOutputValidator (updated 2026-07-07)
+  // both already treating resume_jd_fit_answer as a profile-required,
+  // candidate-voice answer. Fixed in ContextRouter.ts (answerContractFor +
+  // useHybridRag) and ProfileIntelligenceRouter.ts (PROFILE_ANSWER_TYPES).
   test('(e) jd-fit ask → useProfileTree=true + useHybridRag=true', () => {
     const d = routeContext(shadowInput({
       userQuery: 'why am I a fit for this JD?',
@@ -90,8 +104,64 @@ describe('ContextRouter shadow wiring — exact shadow input shape', () => {
     }));
     assert.equal(d.useProfileTree, true, 'jd-fit grounds in the candidate profile');
     assert.equal(d.useHybridRag, true, 'jd-fit pulls evidence via hybrid RAG');
-    assert.equal(d.answerType, 'jd_fit_answer');
+    assert.equal(d.answerType, 'resume_jd_fit_answer');
     assert.equal(d.profileContextPolicy, 'required');
+    assert.equal(d.answerContract, 'interview_detailed', 'resume+JD fit must get the detailed interview contract, not general_assistant');
+  });
+
+  // Sibling coverage: the OLDER, more generic jd_fit_answer type (still reachable
+  // via other phrasings — see AnswerPlanner's classifier) must route identically.
+  test('(e2) legacy jd_fit_answer phrasing still routes to profile + hybrid RAG', () => {
+    const d = routeContext(shadowInput({
+      userQuery: 'am I a good fit for this role',
+      mode: 'looking-for-work',
+      jdAvailable: true,
+    }));
+    assert.equal(d.answerType, 'jd_fit_answer', 'sanity: this phrasing must still hit the legacy type');
+    assert.equal(d.useProfileTree, true);
+    assert.equal(d.useHybridRag, true);
+    assert.equal(d.answerContract, 'interview_detailed');
+  });
+
+  // The three resume+JD MIX types added 2026-07-07 must all ground in the
+  // candidate profile (AnswerPlanner: profileContextPolicy 'required',
+  // CANDIDATE_VOICE_TYPES). The three JD-ONLY types must NOT force the profile
+  // (AnswerPlanner: profileContextPolicy 'allowed', excluded from
+  // CANDIDATE_VOICE_TYPES) — they describe the target role, not the candidate.
+  test('(f) resume_jd_gap_answer grounds in the candidate profile', () => {
+    const d = routeContext(shadowInput({
+      userQuery: 'how would you explain your lack of experience with Kubernetes for this JD',
+      mode: 'looking-for-work',
+      jdAvailable: true,
+    }));
+    assert.equal(d.answerType, 'resume_jd_gap_answer', 'sanity: this phrasing must hit the resume+JD gap type');
+    assert.equal(d.useProfileTree, true, 'resume_jd_gap_answer must ground in the candidate profile');
+    assert.equal(d.answerContract, 'interview_detailed');
+    assert.equal(d.profileContextPolicy, 'required');
+  });
+
+  test('(g) resume_jd_intro_answer grounds in the candidate profile', () => {
+    const d = routeContext(shadowInput({
+      userQuery: 'tell me about yourself for this role',
+      mode: 'looking-for-work',
+      jdAvailable: true,
+    }));
+    assert.equal(d.answerType, 'resume_jd_intro_answer', 'sanity: this phrasing must hit the resume+JD intro type');
+    assert.equal(d.useProfileTree, true, 'resume_jd_intro_answer must ground in the candidate profile');
+    assert.equal(d.answerContract, 'interview_detailed');
+    assert.equal(d.profileContextPolicy, 'required');
+  });
+
+  test('(h) jd_requirements_answer must NOT force candidate profile grounding', () => {
+    const d = routeContext(shadowInput({
+      userQuery: 'what are the top requirements in this JD',
+      mode: 'looking-for-work',
+      jdAvailable: true,
+    }));
+    assert.equal(d.answerType, 'jd_requirements_answer', 'sanity: this phrasing must hit the JD-only type');
+    assert.equal(d.useProfileTree, false, 'JD-only answers must not force the candidate profile in');
+    assert.equal(d.profileContextPolicy, 'allowed', 'JD-only answers describe the role, not the candidate');
+    assert.equal(d.answerContract, 'interview_detailed', 'still a detailed answer, just not profile-forced');
   });
 });
 

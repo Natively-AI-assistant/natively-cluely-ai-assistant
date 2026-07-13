@@ -2488,6 +2488,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const streamingRafRef    = useRef<number | null>(null);
   const streamingRenderModeRef = useRef<'imperative' | 'react-code'>('imperative');
   const streamingCodeRafRef = useRef<number | null>(null);
+  // PERF: onRAGStreamChunk previously called setMessages() (full array clone +
+  // per-token re-render) on every chunk — the same per-token cost the Gemini
+  // token stream above was already fixed for via rAF coalescing. RAG chunks
+  // come from the same SSE-derived async generator (ipcHandlers.ts `for await
+  // (const chunk of stream) event.sender.send(...)`), so a long meeting-recall
+  // answer hit the identical N-renders-per-answer cost. Buffer chunks in a ref
+  // and flush to state at most once per animation frame.
+  const ragChunkBufRef = useRef<string>('');
+  const ragChunkRafRef = useRef<number | null>(null);
   // Active chat stream id (audit finding #3). The main process emits chat tokens
   // on one channel from both the desktop and phone-mirror paths; this lets us drop
   // tokens/done from a superseded stream. null = no id adopted yet (back-compat).
@@ -3917,22 +3926,43 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     );
 
     // JIT RAG Stream listeners (for live meeting RAG responses)
+    //
+    // rAF-coalesced (see ragChunkBufRef/ragChunkRafRef decl above): chunks
+    // accumulate in a ref and flush to React state at most once per frame,
+    // instead of one setMessages() (full array clone) per chunk.
+    const cancelRagChunkRaf = () => {
+      if (ragChunkRafRef.current !== null) {
+        cancelAnimationFrame(ragChunkRafRef.current);
+        ragChunkRafRef.current = null;
+      }
+    };
+    const flushRagChunkBuffer = () => {
+      cancelRagChunkRaf();
+      if (!ragChunkBufRef.current) return;
+      const pending = ragChunkBufRef.current;
+      ragChunkBufRef.current = '';
+      setMessages((prev) => {
+        const lastMsg = prev[prev.length - 1];
+        if (lastMsg && lastMsg.isStreaming && lastMsg.role === 'system') {
+          const updated = [...prev];
+          const text = lastMsg.text + pending;
+          updated[prev.length - 1] = { ...lastMsg, text, isCode: text.includes('```') };
+          return updated;
+        }
+        return prev;
+      });
+    };
+
     if (window.electronAPI.onRAGStreamChunk) {
       cleanups.push(
         window.electronAPI.onRAGStreamChunk((data: { chunk: string }) => {
-          setMessages((prev) => {
-            const lastMsg = prev[prev.length - 1];
-            if (lastMsg && lastMsg.isStreaming && lastMsg.role === 'system') {
-              const updated = [...prev];
-              updated[prev.length - 1] = {
-                ...lastMsg,
-                text: lastMsg.text + data.chunk,
-                isCode: (lastMsg.text + data.chunk).includes('```'),
-              };
-              return updated;
-            }
-            return prev;
-          });
+          ragChunkBufRef.current += data.chunk;
+          if (ragChunkRafRef.current === null) {
+            ragChunkRafRef.current = requestAnimationFrame(() => {
+              ragChunkRafRef.current = null;
+              flushRagChunkBuffer();
+            });
+          }
         }),
       );
     }
@@ -3940,6 +3970,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (window.electronAPI.onRAGStreamComplete) {
       cleanups.push(
         window.electronAPI.onRAGStreamComplete(() => {
+          // Flush any chunk(s) still buffered for the current frame BEFORE
+          // marking the stream as done, so the final commit never drops the
+          // last few characters of the answer.
+          flushRagChunkBuffer();
           setIsProcessing(false);
           requestStartTimeRef.current = null;
           setMessages((prev) => {
@@ -3961,6 +3995,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (window.electronAPI.onRAGStreamError) {
       cleanups.push(
         window.electronAPI.onRAGStreamError((data: { error: string }) => {
+          flushRagChunkBuffer();
           setIsProcessing(false);
           requestStartTimeRef.current = null;
           setMessages((prev) => {
@@ -3979,6 +4014,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         }),
       );
     }
+    // Cleanup: cancel any pending RAF and drop buffered (unflushed) text if
+    // this effect tears down mid-stream (component unmount, deps change).
+    cleanups.push(() => {
+      cancelRagChunkRaf();
+      ragChunkBufRef.current = '';
+    });
 
     return () => cleanups.forEach((fn) => fn());
   }, [currentModel, queueToken, flushToken]); // Ensure tracking captures correct model
