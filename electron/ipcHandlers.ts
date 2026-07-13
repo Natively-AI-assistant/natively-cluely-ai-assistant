@@ -3079,11 +3079,25 @@ export function initializeIpcHandlers(appState: AppState): void {
                   // signal. matchedHighSignalEntity is a whole-entity hit that
                   // is also present in the retrieved context.
                   const hasStrongEvidence = hasRealEvidence || Boolean(matchedHighSignalEntity) || isTier1Or2Evidence;
+                  // GOVERNANCE INTEGRITY (2026-07-13): when EvidenceResolver
+                  // GOVERNED this turn and its typed pack's policy is an explicit
+                  // refusal, that decision is authoritative — it already ran
+                  // OKF-first + hybrid + the canonical sufficiency gate over the
+                  // SAME evidence. Re-synthesizing here would run an UNGOVERNED
+                  // second answer (the observed `governedByTypedPack:false,
+                  // hasRawUploadedReference:true` dispatch), violating "one
+                  // EvidencePack before provider / no unrestricted fallback". The
+                  // legacy false-refusal repair remains fully active for
+                  // ungoverned (legacy-retrieval) turns, where no authoritative
+                  // pack exists. A governed `answer`-policy pack that merely
+                  // produced a weak answer is still repaired below — only an
+                  // explicit governed REFUSAL is trusted here.
+                  const governedRefusal = manualContextOsGeneration?.evidencePack?.answerPolicy === 'refuse_insufficient_evidence';
                   // Both the system's own refusal phrase and a model-phrased
                   // refusal clear the same bar (the question is about a real
                   // document topic). Off-topic questions match neither a whole
                   // name nor >=2 distinct tokens, so their honest refusal stands.
-                  const shouldRepair = hasStrongEvidence;
+                  const shouldRepair = hasStrongEvidence && !governedRefusal;
                   if (shouldRepair) {
                     isFalseRefusal = true;
                     console.warn('[DocGrounded] false-refusal detected — question matches a real document topic, triggering regen', {
