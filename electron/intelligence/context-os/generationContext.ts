@@ -104,7 +104,7 @@ export function renderGoverningFactualBlock(ctx: ContextOsGenerationContext): st
   if (!ctx.evidencePack || ctx.evidencePack.items.length === 0) return '';
   return [
     renderContractForPrompt(ctx.contract),
-    renderEvidenceUseRule(ctx.contract),
+    renderEvidenceUseRule(ctx.contract, ctx.evidencePack.answerPolicy),
     renderEvidencePackForPrompt(ctx.evidencePack),
   ].join('\n\n');
 }
