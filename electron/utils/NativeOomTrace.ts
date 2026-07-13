@@ -133,6 +133,7 @@ export class NativeOomTrace {
   private contentTraceTimer: NodeJS.Timeout | null = null;
   private contentTraceRunning = false;
   private contentTraceStarted = false;
+  private rssGrowthThresholdCrossed = false;
   private baselineRss: number | null = null;
   private armedLauncherPid: number | null = null;
   private stopped = false;
@@ -192,6 +193,7 @@ export class NativeOomTrace {
       this.baselineRss = mainMemory.rss;
       this.write('rss-baseline', { baselineRss: this.baselineRss, rendererPid: launcherPid ?? 0 });
     } else if (
+      !this.rssGrowthThresholdCrossed &&
       this.baselineRss !== null &&
       this.armedLauncherPid &&
       mainMemory.rss >= Math.max(
@@ -199,6 +201,7 @@ export class NativeOomTrace {
         this.baselineRss * CONTENT_TRACE_RSS_MULTIPLIER,
       )
     ) {
+      this.rssGrowthThresholdCrossed = true;
       this.write('rss-growth-threshold-crossed', {
         baselineRss: this.baselineRss,
         triggerRss: mainMemory.rss,

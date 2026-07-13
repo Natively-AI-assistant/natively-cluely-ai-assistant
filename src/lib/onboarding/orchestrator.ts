@@ -414,13 +414,18 @@ export class OnboardingOrchestrator {
 
     for (const id of this.state.queue) {
       const config = this.stageConfigs.find(c => c.id === id);
-      if (!config || this.state.completed[id] != null || this.state.skipped.has(id) || this.dismissedThisSession.has(id)) continue;
+      if (!config || this.state.skipped.has(id) || this.dismissedThisSession.has(id)) continue;
 
       // A hard skip is progress that evaluateAndDispatch can make immediately.
       if (config.skipWhen?.(ctx.userState)) {
         consider(0);
         continue;
       }
+
+      // Match shouldShowToaster(): completion only suppresses once-ever stages.
+      // Cooldown/re-eligibility stages must still contribute their next deadline
+      // or they can become eligible after an otherwise idle session with no timer
+      // left to dispatch them.
       if (config.onceEver && ctx.completed[id] && !config.reEligibility?.(ctx.userState, ctx.completed)) continue;
       if (config.requiresStages?.some(dep => !ctx.completed[dep] && !ctx.skipped.has(dep))) continue;
 

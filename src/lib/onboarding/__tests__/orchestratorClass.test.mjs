@@ -383,3 +383,36 @@ test('LEAK GUARD: event-gated stages do not leave a polling timer armed', () => 
   assert.equal(orch.getSnapshot().activeToasterId, 'permissions');
   assert.ok(drainIsIdle(), 'an active toaster must not keep a scheduler timer alive');
 });
+
+test('deadline scheduler re-evaluates completed cooldown stages in an otherwise idle queue', () => {
+  localStorage.clear();
+  timerQueue = [];
+  mockNow = 0;
+
+  const orch = new OnboardingOrchestrator();
+  const state = orch._getState();
+  state.completed.permissions = Date.now();
+  state.lastShownTimes.permissions = Date.now() - 1_000;
+  state.queue = ['permissions'];
+  orch._setStateForTests(state);
+  orch.start([{
+    id: 'permissions',
+    order: 1,
+    triggers: { requiresHomepageMounted: true, requiresForeground: true },
+    cooldownMs: () => 1_000,
+  }]);
+  orch.emit({ type: 'launcher:mounted' });
+  orch.emit({ type: 'foreground:change', isForeground: true });
+
+  assert.equal(
+    timerQueue.length,
+    1,
+    'a completed non-onceEver stage with an elapsed cooldown must schedule an evaluation',
+  );
+  flushOneFrame();
+  assert.equal(
+    orch.getSnapshot().activeToasterId,
+    'permissions',
+    'the elapsed-cooldown stage must dispatch without waiting for an unrelated event',
+  );
+});

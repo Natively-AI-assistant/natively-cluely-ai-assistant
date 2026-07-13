@@ -11,9 +11,41 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { tmpdir } from 'node:os';
+import { build } from 'esbuild';
 
 const MAX_TRACE_BYTES = 5 * 1024 * 1024;
+let NativeOomTrace;
+
+async function loadNativeOomTrace() {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const entry = path.resolve(here, '..', 'NativeOomTrace.ts');
+  const result = await build({
+    entryPoints: [entry],
+    bundle: true,
+    format: 'esm',
+    platform: 'node',
+    write: false,
+    logLevel: 'silent',
+    plugins: [{
+      name: 'electron-test-stub',
+      setup(esbuild) {
+        esbuild.onResolve({ filter: /^electron$/ }, () => ({ path: 'electron', namespace: 'test-stub' }));
+        esbuild.onLoad({ filter: /.*/, namespace: 'test-stub' }, () => ({
+          contents: 'export const app = {}; export const contentTracing = {};',
+          loader: 'js',
+        }));
+      },
+    }],
+  });
+  const dir = fs.mkdtempSync(path.join(tmpdir(), 'native-oom-trace-'));
+  const outFile = path.join(dir, 'NativeOomTrace.mjs');
+  fs.writeFileSync(outFile, result.outputFiles[0].text);
+  return import(pathToFileURL(outFile).href);
+}
+
+NativeOomTrace = (await loadNativeOomTrace()).NativeOomTrace;
 
 const SAFE_STRING_FIELDS = new Set(['event', 'platform', 'electron', 'window', 'reason', 'type', 'channel']);
 const SAFE_NUMBER_FIELDS = new Set([
@@ -172,6 +204,44 @@ test('content tracing stays off unless both diagnostic flags are enabled', async
   trace = makeTrace({ enabled: true, contentTraceEnabled: false });
   await trace.startContentTrace(4321);
   assert.deepEqual(trace.tracing.starts, []);
+});
+
+test('actual trace records the RSS threshold crossing once across repeated samples', async () => {
+  const writes = [];
+  const traceFs = {
+    appendFileSync: (_path, line) => writes.push(JSON.parse(line)),
+    existsSync: () => false,
+    mkdirSync: () => {},
+    statSync: () => ({ size: 0 }),
+  };
+  const starts = [];
+  const actual = new NativeOomTrace({
+    enabled: true,
+    contentTraceEnabled: true,
+    electronApp: { getPath: () => '/tmp/natively-test' },
+    tracing: {
+      startRecording: async (options) => { starts.push(options); },
+      stopRecording: async () => {},
+    },
+    traceFs,
+    now: () => 1,
+  });
+  const memory = (rss) => ({ rss, heapUsed: 1, heapTotal: 1, external: 1, arrayBuffers: 1 });
+
+  actual.initialize();
+  actual.armContentTrace(4321);
+  actual.sample(memory(100 * 1024 * 1024), [], { webContentsId: 7, pid: 4321 });
+  actual.sample(memory(700 * 1024 * 1024), [], { webContentsId: 7, pid: 4321 });
+  actual.sample(memory(800 * 1024 * 1024), [], { webContentsId: 7, pid: 4321 });
+  await Promise.resolve();
+
+  assert.equal(
+    writes.filter((record) => record.event === 'rss-growth-threshold-crossed').length,
+    1,
+    'the threshold event should be recorded once per trace session',
+  );
+  assert.equal(starts.length, 1, 'the content trace should still start once');
+  actual.stop('test-complete');
 });
 
 const here = path.dirname(fileURLToPath(import.meta.url));
