@@ -6,6 +6,8 @@ const TRACE_ENV = 'NATIVELY_NATIVE_OOM_TRACE';
 const CONTENT_TRACE_ENV = 'NATIVELY_NATIVE_OOM_CONTENT_TRACE';
 const MAX_TRACE_BYTES = 5 * 1024 * 1024;
 const CONTENT_TRACE_DURATION_MS = 25_000;
+const CONTENT_TRACE_RSS_DELTA_BYTES = 512 * 1024 * 1024;
+const CONTENT_TRACE_RSS_MULTIPLIER = 2;
 
 type TraceRecord = Record<string, unknown>;
 type TraceApp = Pick<typeof app, 'getPath'>;
@@ -39,6 +41,8 @@ const SAFE_STRING_FIELDS = new Set([
 const SAFE_NUMBER_FIELDS = new Set([
   'schema',
   'contentTraceRequested',
+  'baselineRss',
+  'triggerRss',
   'pid',
   'webContentsId',
   'rendererPid',
@@ -128,6 +132,8 @@ export class NativeOomTrace {
   private contentTraceTimer: NodeJS.Timeout | null = null;
   private contentTraceRunning = false;
   private contentTraceStarted = false;
+  private baselineRss: number | null = null;
+  private armedLauncherPid: number | null = null;
   private stopped = false;
 
   constructor(options: NativeOomTraceOptions = {}) {
@@ -180,6 +186,25 @@ export class NativeOomTrace {
       pid: typeof metric.pid === 'number' ? metric.pid : 0,
       memory: numericMemory(metric.memory as Record<string, unknown> | undefined),
     }));
+    const launcherPid = launcher?.pid ?? this.armedLauncherPid;
+    if (this.baselineRss === null && mainMemory.rss > 0) {
+      this.baselineRss = mainMemory.rss;
+      this.write('rss-baseline', { baselineRss: this.baselineRss, rendererPid: launcherPid ?? 0 });
+    } else if (
+      this.baselineRss !== null &&
+      this.armedLauncherPid &&
+      mainMemory.rss >= Math.max(
+        this.baselineRss + CONTENT_TRACE_RSS_DELTA_BYTES,
+        this.baselineRss * CONTENT_TRACE_RSS_MULTIPLIER,
+      )
+    ) {
+      this.write('rss-growth-threshold-crossed', {
+        baselineRss: this.baselineRss,
+        triggerRss: mainMemory.rss,
+        rendererPid: this.armedLauncherPid,
+      });
+      void this.startContentTrace(this.armedLauncherPid);
+    }
     this.write('sample', {
       main: {
         rss: mainMemory.rss,
@@ -202,6 +227,17 @@ export class NativeOomTrace {
     entry.messages += 1;
     entry.estimatedBytes += args.reduce<number>((total, arg) => total + estimateValueBytes(arg), 0);
     this.ledger.set(key, entry);
+  }
+
+  /**
+   * Arm a bounded Chromium capture for the first meaningful native RSS jump.
+   * Starting a fixed 25-second trace at first paint missed the historical leak,
+   * which accumulated several minutes later in a healthy Vite session.
+   */
+  armContentTrace(launcherPid: number): void {
+    if (!this.enabled || !this.contentTraceEnabled || this.stopped || launcherPid <= 0) return;
+    this.armedLauncherPid = launcherPid;
+    this.write('content-trace-armed', { rendererPid: launcherPid });
   }
 
   async startContentTrace(launcherPid: number): Promise<void> {

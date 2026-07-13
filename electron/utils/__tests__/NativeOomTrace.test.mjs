@@ -36,3 +36,10 @@ test('native OOM trace clears its interval IPC ledger after each sample', () => 
   assert.match(source, /this\.ledger\.clear\(\)/);
   assert.match(source, /Each sample reports the preceding heartbeat interval/);
 });
+
+test('native OOM trace arms content tracing only after a bounded RSS-growth threshold', () => {
+  assert.match(source, /CONTENT_TRACE_RSS_DELTA_BYTES = 512 \* 1024 \* 1024/);
+  assert.match(source, /CONTENT_TRACE_RSS_MULTIPLIER = 2/);
+  assert.match(source, /armContentTrace\(launcherPid: number\)/);
+  assert.match(source, /rss-growth-threshold-crossed/);
+});

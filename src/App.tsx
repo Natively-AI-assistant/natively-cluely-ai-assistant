@@ -76,6 +76,21 @@ function shouldMountDevReviewHost(): boolean {
 const queryClient = new QueryClient()
 const CropperWindow = React.lazy(() => import('./components/Cropper'))
 
+type LauncherIsolation = 'onboarding' | 'global-surfaces' | null
+
+// The Electron main process only appends `isolate` during an explicit dev-mode
+// native-OOM run. Keeping this query-driven and default-off makes it impossible
+// for packaged launcher sessions to lose product surfaces accidentally.
+function getLauncherIsolation(): LauncherIsolation {
+  try {
+    if (!(import.meta as any)?.env?.DEV) return null
+    const isolate = new URLSearchParams(window.location.search).get('isolate')
+    return isolate === 'onboarding' || isolate === 'global-surfaces' ? isolate : null
+  } catch {
+    return null
+  }
+}
+
 // TEMPORARY LEAK-DIAGNOSIS (2026-07-10): the Windows native-RSS climb is a
 // non-JS (flat V8 heap) leak in the launcher renderer + main in lockstep,
 // GPU-process-independent — consistent with CPU-composited backdrop-filter /
@@ -97,6 +112,9 @@ const App: React.FC = () => {
   const isOverlayWindow = new URLSearchParams(window.location.search).get('window') === 'overlay';
   const isModelSelectorWindow = new URLSearchParams(window.location.search).get('window') === 'model-selector';
   const isCropperWindow = new URLSearchParams(window.location.search).get('window') === 'cropper';
+  const launcherIsolation = getLauncherIsolation();
+  const isolateOnboarding = launcherIsolation === 'onboarding' || launcherIsolation === 'global-surfaces';
+  const isolateGlobalSurfaces = launcherIsolation === 'global-surfaces';
 
   // Default to launcher if not specified (dev mode safety)
   const isDefault = !isSettingsWindow && !isOverlayWindow && !isModelSelectorWindow && !isCropperWindow;
@@ -260,8 +278,8 @@ const App: React.FC = () => {
     // entirely — no drain loop, no toasters. Lets the same build A/B the
     // orchestrator ON vs OFF to confirm/deny the 2026-07-04 native-leak
     // regression in the field. Remove once the leak fix is field-verified.
-    if (new URLSearchParams(window.location.search).get('noorch') === '1') {
-      console.warn('[LeakTest] ?noorch=1 → onboarding orchestrator DISABLED (orch.start skipped)');
+    if (new URLSearchParams(window.location.search).get('noorch') === '1' || isolateOnboarding) {
+      console.warn(`[LeakTest] onboarding orchestrator disabled (${isolateOnboarding ? 'launcher isolation' : '?noorch=1'})`);
       return;
     }
     let cancelled = false;
@@ -295,7 +313,7 @@ const App: React.FC = () => {
       cancelled = true;
       stopFn?.();
     };
-  }, [isLauncherWindow, isDefault]);
+  }, [isLauncherWindow, isDefault, isolateOnboarding]);
 
   // Push user-state patches to the orchestrator as plan/profile state evolves.
   useEffect(() => {
@@ -819,7 +837,7 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary context="Launcher">
     <div className="h-full min-h-0 w-full relative bg-transparent">
-      <HindsightStatusBanner />
+      {!isolateGlobalSurfaces && <HindsightStatusBanner />}
       <AnimatePresence>
         {showStartup ? (
           <motion.div
@@ -1015,23 +1033,25 @@ const App: React.FC = () => {
         )}
       </AnimatePresence>
 
-      <UpdateBanner />
-      <NativelyQuotaBanner />
+      {!isolateGlobalSurfaces && <UpdateBanner />}
+      {!isolateGlobalSurfaces && <NativelyQuotaBanner />}
 
       {/* Orchestrated onboarding toasters (single-slot, controlled by OnboardingOrchestrator) */}
-      <OrchestratorProvider>
-        <OrchestratedToasterHost />
-      </OrchestratorProvider>
+      {!isolateOnboarding && (
+        <OrchestratorProvider>
+          <OrchestratedToasterHost />
+        </OrchestratorProvider>
+      )}
 
       {/* DEV-ONLY: direct ReviewPromptHost mount for iterating on the modal UX.
           Gated on import.meta.env.DEV plus the same opt-in flags the host
           already respects (?review=force, window.__reviewForceShow). When
           active, this bypasses the orchestrator entirely so the persisted
           onboarding ledger is not modified. */}
-      {shouldMountDevReviewHost() && <ReviewPromptHost />}
+      {!isolateGlobalSurfaces && shouldMountDevReviewHost() && <ReviewPromptHost />}
 
       {/* Free trial countdown banner — only in launcher window while trial is active */}
-      {(isLauncherWindow || isDefault) && activeTrial && (
+      {!isolateGlobalSurfaces && (isLauncherWindow || isDefault) && activeTrial && (
         <FreeTrialBanner
           expiresAt={activeTrial.expiresAt}
           usage={activeTrial.usage}
@@ -1040,7 +1060,7 @@ const App: React.FC = () => {
       )}
 
       {/* Post-trial upgrade modal — shown when trial expires */}
-      {(isLauncherWindow || isDefault) && showTrialExpiredModal && (
+      {!isolateGlobalSurfaces && (isLauncherWindow || isDefault) && showTrialExpiredModal && (
         <FreeTrialModal
           usage={activeTrial?.usage ?? { ai: 0, stt_seconds: 0, search: 0 }}
           onByok={async () => {
@@ -1060,14 +1080,14 @@ const App: React.FC = () => {
       )}
 
       {/* Ad toasters */}
-      {isLauncherMainView && !isSettingsOpen && (
+      {!isolateGlobalSurfaces && isLauncherMainView && !isSettingsOpen && (
         <NativelyApiPromoToaster
           isOpen={activeAd === 'natively_api'}
           onDismiss={() => dismissAd('natively_api')}
           onOpenSettings={(tab: string) => openSettingsExclusive(tab)}
         />
       )}
-      {isLauncherMainView && (
+      {!isolateGlobalSurfaces && isLauncherMainView && (
         <>
           <ProfileFeatureToaster
             isOpen={activeAd === 'profile'}

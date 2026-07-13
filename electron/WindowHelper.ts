@@ -394,7 +394,17 @@ export class WindowHelper {
     const noOrchSuffix = process.env.NATIVELY_DISABLE_ONBOARDING_ORCH === '1' ? '&noorch=1' : '';
     if (noOrchSuffix) console.warn('[LeakTest] NATIVELY_DISABLE_ONBOARDING_ORCH=1 → launcher with ?noorch=1 (onboarding orchestrator OFF)');
 
-    const launcherUrl = `${startUrl}?window=launcher${nofxSuffix}${noOrchSuffix}`;
+    // DEV-ONLY launcher mount isolation for native-OOM bisection. This preserves
+    // the launcher shell and normal production behavior while allowing a valid
+    // Vite run to exclude either onboarding alone or all root-level surfaces.
+    const requestedIsolation = process.env.NATIVELY_LAUNCHER_ISOLATION;
+    const launcherIsolation = isDev && (requestedIsolation === 'onboarding' || requestedIsolation === 'global-surfaces')
+      ? requestedIsolation
+      : '';
+    const isolationSuffix = launcherIsolation ? `&isolate=${launcherIsolation}` : '';
+    if (launcherIsolation) console.warn(`[LeakTest] NATIVELY_LAUNCHER_ISOLATION=${launcherIsolation} → launcher root isolation enabled`);
+
+    const launcherUrl = `${startUrl}?window=launcher${nofxSuffix}${noOrchSuffix}${isolationSuffix}`;
 
     this.launcherWindow
       .loadURL(launcherUrl)
@@ -441,7 +451,7 @@ export class WindowHelper {
         webContentsId: launcher.webContents.id,
         rendererPid,
       });
-      this.appState.startNativeOomContentTrace(rendererPid);
+      this.appState.armNativeOomContentTrace(rendererPid);
     });
 
     // Pipe renderer-side diagnostics into the main-process log file. Without

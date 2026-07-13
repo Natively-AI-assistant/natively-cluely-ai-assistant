@@ -1066,6 +1066,9 @@ export class AppState {
   private ragManager: RAGManager | null = null
   private modeReferenceRetryPromise: Promise<void> | null = null
   private stabilityHeartbeatTimer: NodeJS.Timeout | null = null
+  // Diagnostic-only, independently paced native-memory sampler. Normal product
+  // heartbeats remain at 30 seconds; this exists only for a short-lived OOM run.
+  private nativeOomTraceTimer: NodeJS.Timeout | null = null
   private knowledgeOrchestrator: any = null
 
   public recordNativeOomTrace(event: string, data: Record<string, unknown> = {}): void {
@@ -1076,8 +1079,8 @@ export class AppState {
     nativeOomTrace.recordOutboundIpc(webContentsId, channel, args)
   }
 
-  public startNativeOomContentTrace(launcherPid: number): void {
-    void nativeOomTrace.startContentTrace(launcherPid)
+  public armNativeOomContentTrace(launcherPid: number): void {
+    nativeOomTrace.armContentTrace(launcherPid)
   }
 
   public stopNativeOomContentTrace(reason: string): void {
@@ -1673,6 +1676,7 @@ export class AppState {
     this.setupAutoUpdater()
 
     this.startStabilityHeartbeat();
+    this.startNativeOomTraceSampling();
   }
 
   private startStabilityHeartbeat(): void {
@@ -1708,25 +1712,7 @@ export class AppState {
             .sort((a: any, b: any) => b.rssMB - a.rssMB);
         } catch { /* getAppMetrics unavailable pre-ready — skip */ }
 
-        if (nativeOomTrace.isEnabled()) {
-          nativeOomTrace.sample(
-            mem,
-            (() => {
-              try {
-                return (app.getAppMetrics?.() || []) as unknown as Array<Record<string, unknown>>;
-              } catch {
-                return [];
-              }
-            })(),
-            (() => {
-              const launcher = this.windowHelper?.getLauncherWindow?.();
-              if (!launcher || launcher.isDestroyed()) return undefined;
-              const pid = launcher.webContents.getOSProcessId();
-              return pid > 0 ? { webContentsId: launcher.webContents.id, pid } : undefined;
-            })(),
-            { freeMemory: os.freemem(), totalMemory: os.totalmem() },
-          );
-        }
+        this.sampleNativeOomTrace(mem);
 
         console.log('[StabilityHeartbeat]', {
           rssMB: mb(mem.rss),
@@ -1755,6 +1741,41 @@ export class AppState {
     setTimeout(emit, 10_000).unref?.();
     this.stabilityHeartbeatTimer = setInterval(emit, 30_000);
     this.stabilityHeartbeatTimer.unref?.();
+  }
+
+  private sampleNativeOomTrace(memory = process.memoryUsage()): void {
+    if (!nativeOomTrace.isEnabled()) return;
+    nativeOomTrace.sample(
+      memory,
+      (() => {
+        try {
+          return (app.getAppMetrics?.() || []) as unknown as Array<Record<string, unknown>>;
+        } catch {
+          return [];
+        }
+      })(),
+      (() => {
+        const launcher = this.windowHelper?.getLauncherWindow?.();
+        if (!launcher || launcher.isDestroyed()) return undefined;
+        const pid = launcher.webContents.getOSProcessId();
+        return pid > 0 ? { webContentsId: launcher.webContents.id, pid } : undefined;
+      })(),
+      { freeMemory: os.freemem(), totalMemory: os.totalmem() },
+    );
+  }
+
+  private startNativeOomTraceSampling(): void {
+    if (!nativeOomTrace.isEnabled() || this.nativeOomTraceTimer) return;
+    // A prior incident rose from 497 MB to more than 2 GB in roughly four
+    // seconds; the ordinary 30-second heartbeat cannot observe that onset.
+    this.nativeOomTraceTimer = setInterval(() => this.sampleNativeOomTrace(), 1000);
+    this.nativeOomTraceTimer.unref?.();
+  }
+
+  public stopNativeOomTraceSampling(): void {
+    if (!this.nativeOomTraceTimer) return;
+    clearInterval(this.nativeOomTraceTimer);
+    this.nativeOomTraceTimer = null;
   }
 
   private sendToWindow(win: BrowserWindow | null | undefined, channel: string, ...args: any[]): boolean {
@@ -7442,6 +7463,7 @@ if (process.env.THINKING_MATRIX === '1') {
   }
 
   app.on('will-quit', () => {
+    appState.stopNativeOomTraceSampling();
     nativeOomTrace.stop('will-quit');
     stopAppManagedHindsight('will-quit');
     checkpointDatabase('will-quit');
