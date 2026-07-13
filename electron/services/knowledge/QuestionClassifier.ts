@@ -30,6 +30,17 @@ export interface QuestionClassification {
   isSynthesis: boolean;
   /** High-signal entity/term candidates extracted from the question (capitalized phrases, acronyms, quoted terms). */
   targetEntities: string[];
+  /**
+   * Entities that name the QUERIED CATEGORY rather than a constraint the answer
+   * must literally contain — a bare uppercase acronym in interrogative-subject
+   * position ("what LLM performs…", "which GPU was used…", "what VRAM size…").
+   * These are useful for retrieval scoring but must NOT gate answerability: the
+   * answer chunk that names the specific instance ("uses LLaMA 3.2 7B as its
+   * backbone") frequently never repeats the category token itself, so requiring
+   * it verbatim produces a false insufficient-evidence refusal. Generic English
+   * interrogative grammar only; no document terms.
+   */
+  softEntities: string[];
 }
 
 const PATTERNS: Array<{ type: QuestionType; re: RegExp }> = [
@@ -59,24 +70,26 @@ const ENTITY_TOKEN_RE = /\b(?:[A-Z][a-z0-9]+(?:[-\s][A-Z][A-Za-z0-9]+){1,3}|[A-Z
 
 export function classifyQuestion(question: string): QuestionClassification {
   const q = (question || '').trim();
-  if (!q) return { type: 'unknown', isSynthesis: false, targetEntities: [] };
+  if (!q) return { type: 'unknown', isSynthesis: false, targetEntities: [], softEntities: [] };
+
+  const softEntities = extractSoftCategoryEntities(q);
 
   if (FOLLOW_UP_RE.test(q) && q.split(/\s+/).length <= 6) {
-    return { type: 'follow_up', isSynthesis: false, targetEntities: extractTargetEntities(q) };
+    return { type: 'follow_up', isSynthesis: false, targetEntities: extractTargetEntities(q, softEntities), softEntities };
   }
 
   for (const { type, re } of PATTERNS) {
     if (re.test(q)) {
-      return { type, isSynthesis: SYNTHESIS_TYPES.has(type), targetEntities: extractTargetEntities(q) };
+      return { type, isSynthesis: SYNTHESIS_TYPES.has(type), targetEntities: extractTargetEntities(q, softEntities), softEntities };
     }
   }
 
-  const targetEntities = extractTargetEntities(q);
+  const targetEntities = extractTargetEntities(q, softEntities);
   if (targetEntities.length > 0) {
-    return { type: 'entity_lookup', isSynthesis: false, targetEntities };
+    return { type: 'entity_lookup', isSynthesis: false, targetEntities, softEntities };
   }
 
-  return { type: 'unknown', isSynthesis: false, targetEntities: [] };
+  return { type: 'unknown', isSynthesis: false, targetEntities: [], softEntities };
 }
 
 // Sentence-initial interrogatives / imperatives that ENTITY_TOKEN_RE wrongly
@@ -87,10 +100,34 @@ export function classifyQuestion(question: string): QuestionClassification {
 // refusal. Generic English question words only; no document terms.
 const LEADING_QUESTION_WORD_RE = /^(?:What|Which|Who|Whom|Whose|Where|When|Why|How|Name|List|Give|Tell|Does|Did|Do|Is|Are|Was|Were|Can|Could|Would|Should|The|A|An)\s+/;
 
-function extractTargetEntities(question: string): string[] {
+// A bare uppercase acronym (2–5 letters) that is the interrogative SUBJECT —
+// the first token after "What/Which/Whose" — and is followed by a predicate
+// (NOT a copula). That grammar means the acronym is the CATEGORY being asked
+// for ("what LLM performs…", "which GPU was used…", "what VRAM size…"), not a
+// constraint the answer text must literally contain. Copula-followed acronyms
+// ("what is VLA", "what does ROS mean") are genuine entity lookups and are left
+// as hard entities. Generic English grammar only; no document vocabulary.
+const CATEGORY_SUBJECT_ACRONYM_RE = /^(?:What|Which|Whose)\s+([A-Z]{2,5})\s+(\w+)/;
+// Only DEFINITIONAL copulas — asking what the acronym ITSELF is/means — keep the
+// acronym a hard entity ("what is VLA", "what does ROS mean", "what VLA stands
+// for"). Passive auxiliaries ("what MRSE did X have", "what VLM does Y extend")
+// are category questions whose answer is a specific value/instance, so their
+// acronym is soft. Generic grammar; no document terms.
+const CATEGORY_SUBJECT_COPULA_RE = /^(?:is|are|means?|stands?|stood|refers?|denotes?)$/i;
+
+function extractSoftCategoryEntities(question: string): string[] {
+  const m = question.match(CATEGORY_SUBJECT_ACRONYM_RE);
+  if (!m) return [];
+  if (CATEGORY_SUBJECT_COPULA_RE.test(m[2])) return [];
+  return [m[1]];
+}
+
+function extractTargetEntities(question: string, softEntities: string[] = []): string[] {
+  const soft = new Set(softEntities.map((s) => s.toLowerCase()));
   const matches = question.match(ENTITY_TOKEN_RE) || [];
   const cleaned = matches
     .map((m) => m.trim().replace(LEADING_QUESTION_WORD_RE, '').trim())
-    .filter((m) => m.length >= 2 && m.length <= 40);
+    .filter((m) => m.length >= 2 && m.length <= 40)
+    .filter((m) => !soft.has(m.toLowerCase()));
   return [...new Set(cleaned)];
 }
