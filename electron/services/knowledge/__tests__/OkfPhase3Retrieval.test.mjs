@@ -179,14 +179,19 @@ test('OkfRetriever: "What is OpenVLA-OFT?" returns the OpenVLA-OFT card as the t
   assert.equal(scored[0].card.title, 'OpenVLA-OFT');
 });
 
-test('OkfRetriever: a synthesis question (main topic) returns multiple cards in document order', async () => {
+test('OkfRetriever: a whole-document synthesis question returns content cards in document order, never metadata', async () => {
   const pack = await buildPack();
   const { classifyQuestion } = await loadModule('services/knowledge/QuestionClassifier.js');
   const { queryOkfCards } = await loadModule('services/knowledge/OkfRetriever.js');
   const classification = classifyQuestion('What is the main topic of my thesis?');
   const scored = queryOkfCards(pack, 'What is the main topic of my thesis?', classification, { topN: 6 });
   assert.ok(scored.length >= 3);
-  assert.equal(scored[0].card.title, pack.cards[0].title);
+  // A synthesis question is answered from CONTENT sections, never from atomic
+  // title-page metadata cards (Author/Title/Supervisor). The top card is the
+  // first non-metadata card in document order.
+  const firstContent = pack.cards.find((c) => c.type !== 'metadata');
+  assert.equal(scored[0].card.title, firstContent.title);
+  assert.ok(scored.every((s) => s.card.type !== 'metadata'), 'no metadata card in a synthesis result');
 });
 
 test('EvidenceAssembler: computes Tier 1 for a high-confidence entity match', async () => {

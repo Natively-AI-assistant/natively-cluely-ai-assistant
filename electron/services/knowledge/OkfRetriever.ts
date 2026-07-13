@@ -150,8 +150,23 @@ export function queryOkfCards(
   const retrievableCards = pack.cards.filter((c) => c.approvalStatus !== 'rejected');
 
   let result: ScoredCard[];
-  if (classification.isSynthesis) {
-    result = retrievableCards.slice(0, topN).map((card) => ({ card, score: 1 }));
+  // Return-all-in-document-order applies ONLY to a genuine whole-document
+  // synthesis question (main topic, objectives, phases) that names no specific
+  // entity. A synthesis-TYPED question that DOES name a target entity ("what
+  // limitation does the Reasoning Tool address?" classifies as `conclusion` but
+  // is really about one subsection) must be scored so the entity-relevant cards
+  // surface — otherwise slice(0,topN) returns the opening cards (Abstract,
+  // Introduction) and starves the answer. Generic: keyed on presence of target
+  // entities, never on document values.
+  const isWholeDocumentSynthesis = classification.isSynthesis && classification.targetEntities.length === 0;
+  if (isWholeDocumentSynthesis) {
+    // Never answer a synthesis question from atomic title-page metadata cards
+    // (Author, Title, Supervisor, …) — they are emitted FIRST in the pack, so a
+    // naive slice would return only metadata. Metadata is relevant only to an
+    // explicit `metadata` question, which is not a synthesis type.
+    const contentCards = retrievableCards.filter((c) => c.type !== 'metadata');
+    const synthesisCards = contentCards.length > 0 ? contentCards : retrievableCards;
+    result = synthesisCards.slice(0, topN).map((card) => ({ card, score: 1 }));
   } else {
     const queryWords = new Set(contentWords(question));
     if (queryWords.size === 0 && classification.targetEntities.length === 0) {
