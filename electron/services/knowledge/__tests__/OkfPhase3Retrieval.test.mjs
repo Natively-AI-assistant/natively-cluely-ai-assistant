@@ -110,6 +110,23 @@ test('QuestionClassifier: entity-lookup questions extract the target entity', as
   assert.ok(c.targetEntities.some((e) => e.toLowerCase().includes('openvla')));
 });
 
+test('QuestionClassifier: a leading question word is stripped from an extracted acronym entity', async () => {
+  const { classifyQuestion } = await loadModule('services/knowledge/QuestionClassifier.js');
+  // Regression: ENTITY_TOKEN_RE used to fuse the sentence-initial "What" onto a
+  // following acronym ("What VRAM", "What LLM"). The sufficiency gate then
+  // required the evidence to literally contain "What VRAM" — no answer chunk
+  // does — producing a false insufficient-evidence refusal.
+  for (const [q, forbidden, expected] of [
+    ['What VRAM size did the consumer-grade inference GPU have?', /^what /i, 'VRAM'],
+    ['What LLM performs reasoning in the Reasoning Tool?', /^what /i, 'LLM'],
+    ['Which GPU was used for training?', /^which /i, 'GPU'],
+  ]) {
+    const c = classifyQuestion(q);
+    for (const e of c.targetEntities) assert.ok(!forbidden.test(e), `entity "${e}" for "${q}" still carries a leading question word`);
+    assert.ok(c.targetEntities.includes(expected), `expected "${expected}" among entities for "${q}", got ${JSON.stringify(c.targetEntities)}`);
+  }
+});
+
 test('OkfRetriever: returns relevant cards for all 19 benchmark questions', async () => {
   const pack = await buildPack();
   const { classifyQuestion } = await loadModule('services/knowledge/QuestionClassifier.js');

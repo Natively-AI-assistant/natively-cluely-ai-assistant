@@ -79,7 +79,18 @@ export function classifyQuestion(question: string): QuestionClassification {
   return { type: 'unknown', isSynthesis: false, targetEntities: [] };
 }
 
+// Sentence-initial interrogatives / imperatives that ENTITY_TOKEN_RE wrongly
+// fuses onto a following capitalized acronym: "What VRAM", "Which GPU", "Name
+// MoveIt", "List ROS". These are NOT part of the entity — leaving them in makes
+// the downstream sufficiency gate require the evidence to literally contain
+// "What VRAM", which no answer chunk does, causing a false insufficient-evidence
+// refusal. Generic English question words only; no document terms.
+const LEADING_QUESTION_WORD_RE = /^(?:What|Which|Who|Whom|Whose|Where|When|Why|How|Name|List|Give|Tell|Does|Did|Do|Is|Are|Was|Were|Can|Could|Would|Should|The|A|An)\s+/;
+
 function extractTargetEntities(question: string): string[] {
   const matches = question.match(ENTITY_TOKEN_RE) || [];
-  return [...new Set(matches.map((m) => m.trim()).filter((m) => m.length >= 2 && m.length <= 40))];
+  const cleaned = matches
+    .map((m) => m.trim().replace(LEADING_QUESTION_WORD_RE, '').trim())
+    .filter((m) => m.length >= 2 && m.length <= 40);
+  return [...new Set(cleaned)];
 }
