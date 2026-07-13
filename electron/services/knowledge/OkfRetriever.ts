@@ -31,6 +31,9 @@ function contentWords(text: string): string[] {
 
 const CONFIDENCE_BOOST: Record<KnowledgeCard['confidence'], number> = { high: 0.15, medium: 0.05, low: 0 };
 const TYPE_BOOST_FOR_QUESTION_TYPE: Partial<Record<string, Partial<Record<KnowledgeCard['type'], number>>>> = {
+  // A document-identity question is answered by an atomic front-matter card, not
+  // by a topical section that happens to mention the label word once.
+  metadata: { metadata: 0.35 },
   research_questions: { concept: 0.2, section: 0.1 },
   objectives: { concept: 0.2, section: 0.1 },
   result: { result: 0.25 },
@@ -39,7 +42,13 @@ const TYPE_BOOST_FOR_QUESTION_TYPE: Partial<Record<string, Partial<Record<Knowle
   definition: { definition: 0.25, concept: 0.15 },
 };
 
-function scoreCard(card: KnowledgeCard, queryWords: Set<string>, targetEntities: string[], classification: QuestionClassification): number {
+function scoreCard(
+  card: KnowledgeCard,
+  queryWords: Set<string>,
+  targetEntities: string[],
+  classification: QuestionClassification,
+  queryWordIdf?: Map<string, number>,
+): number {
   const titleWords = contentWords(card.title);
   const titleHits = titleWords.filter((w) => queryWords.has(w)).length;
   const titleScore = titleWords.length > 0 ? titleHits / Math.sqrt(titleWords.length) : 0;
@@ -47,7 +56,29 @@ function scoreCard(card: KnowledgeCard, queryWords: Set<string>, targetEntities:
   const bodyWords = contentWords(card.body);
   const bodyWordSet = new Set(bodyWords);
   const bodyHits = [...queryWords].filter((w) => bodyWordSet.has(w)).length;
-  const bodyScore = queryWords.size > 0 ? bodyHits / queryWords.size : 0;
+  // IDF-weighted body match (2026-07-13): a DISTINCTIVE query term that appears
+  // in few cards ("voltage", "battery") is far more indicative of the answer-
+  // bearing card than a term repeated across many cards ("mercury", "system").
+  // Plain hit-counting let a topical parent card ("Mercury X1 Robot") outrank the
+  // sub-section card ("Technical Specifications") that actually holds the value,
+  // because the query's entity word matched everywhere. Weighting each body hit by
+  // its inverse card-frequency surfaces the card that uniquely contains the
+  // distinctive term. Falls back to the plain fraction when IDF isn't provided
+  // (keeps every existing caller/behaviour identical). Generic — no term is
+  // special-cased; distinctiveness is measured from the pack itself.
+  let bodyScore: number;
+  if (queryWordIdf && queryWords.size > 0) {
+    let matchedIdf = 0;
+    let totalIdf = 0;
+    for (const w of queryWords) {
+      const idf = queryWordIdf.get(w) ?? 0;
+      totalIdf += idf;
+      if (bodyWordSet.has(w)) matchedIdf += idf;
+    }
+    bodyScore = totalIdf > 0 ? matchedIdf / totalIdf : (queryWords.size > 0 ? bodyHits / queryWords.size : 0);
+  } else {
+    bodyScore = queryWords.size > 0 ? bodyHits / queryWords.size : 0;
+  }
 
   const entityLower = card.entities.map((e) => e.toLowerCase());
   const entityHits = targetEntities.filter((e) => entityLower.includes(e.toLowerCase())).length;
@@ -126,9 +157,20 @@ export function queryOkfCards(
     if (queryWords.size === 0 && classification.targetEntities.length === 0) {
       result = [];
     } else {
+      // Inverse card-frequency for each query word, measured across THIS pack's
+      // retrievable cards: idf = ln(1 + N / (1 + df)). A term in one card scores
+      // high; a term in every card scores near zero. Used to weight body matches
+      // so the card uniquely containing the distinctive term surfaces.
+      const cardBodyWordSets = retrievableCards.map((c) => new Set(contentWords(c.body)));
+      const N = retrievableCards.length;
+      const queryWordIdf = new Map<string, number>();
+      for (const w of queryWords) {
+        const df = cardBodyWordSets.reduce((acc, set) => acc + (set.has(w) ? 1 : 0), 0);
+        queryWordIdf.set(w, Math.log(1 + N / (1 + df)));
+      }
       const scored: ScoredCard[] = retrievableCards.map((card) => ({
         card,
-        score: scoreCard(card, queryWords, classification.targetEntities, classification),
+        score: scoreCard(card, queryWords, classification.targetEntities, classification, queryWordIdf),
       }));
       result = scored
         .filter((s) => s.score >= minScore)

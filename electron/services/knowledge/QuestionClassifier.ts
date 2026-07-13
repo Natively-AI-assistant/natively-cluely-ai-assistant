@@ -17,6 +17,7 @@ export type QuestionType =
   | 'result'
   | 'conclusion'
   | 'entity_lookup'
+  | 'metadata'
   | 'follow_up'
   | 'unknown';
 
@@ -32,6 +33,14 @@ export interface QuestionClassification {
 }
 
 const PATTERNS: Array<{ type: QuestionType; re: RegExp }> = [
+  // Document-identity / title-page metadata. Generic label vocabulary — a
+  // question ABOUT the document's own metadata (author, title, date, language,
+  // advisor, supervisor, keywords, page count, degree, institution). Placed
+  // first so it wins over the broader main_topic/definition patterns. It must
+  // reference the document's OWN identity, not a same-named body concept, so
+  // "language" requires a document-scoped subject (thesis/paper/document/it) to
+  // avoid catching "what programming language was used" (a software question).
+  { type: 'metadata', re: /\b(who\s+(?:is|wrote|are)\s+the\s+(?:author|writer)|author\s+of\s+the|title\s+of\s+the\s+(?:thesis|paper|document|report|dissertation)|full\s+title|(?:name|list)\s+(?:an?\s+|the\s+|one\s+|two\s+)?(?:advisors?|supervisors?|examiners?)|advisors?\s+listed|supervisors?\s+listed|(?:what|which)\s+(?:date|language|institution|university|degree|department|keywords?)\s+(?:is|are|does|listed|written)|number\s+of\s+pages|how\s+many\s+pages|(?:what|which)\s+language\s+(?:is|was)\s+the\s+(?:thesis|paper|document|report|it)|keywords?\s+(?:listed|for\s+the))/i },
   { type: 'main_topic', re: /\b(main topic|what is .*(thesis|paper|document|project) about|overview)\b/i },
   { type: 'summary', re: /\b(simple words|summari[sz]e|explain .* (simply|briefly)|tl;?dr)\b/i },
   { type: 'problem_statement', re: /\b(problem (is|does|are).*(solv|address)|what problem)\b/i },
