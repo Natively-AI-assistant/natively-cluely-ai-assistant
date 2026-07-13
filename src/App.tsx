@@ -76,7 +76,7 @@ function shouldMountDevReviewHost(): boolean {
 const queryClient = new QueryClient()
 const CropperWindow = React.lazy(() => import('./components/Cropper'))
 
-type LauncherIsolation = 'onboarding' | 'global-surfaces' | null
+type LauncherIsolation = 'onboarding' | 'global-surfaces' | 'permissions-toaster' | 'no-modals' | null
 
 // The Electron main process only appends `isolate` during an explicit dev-mode
 // native-OOM run. Keeping this query-driven and default-off makes it impossible
@@ -85,7 +85,7 @@ function getLauncherIsolation(): LauncherIsolation {
   try {
     if (!(import.meta as any)?.env?.DEV) return null
     const isolate = new URLSearchParams(window.location.search).get('isolate')
-    return isolate === 'onboarding' || isolate === 'global-surfaces' ? isolate : null
+    return isolate === 'onboarding' || isolate === 'global-surfaces' || isolate === 'permissions-toaster' || isolate === 'no-modals' ? isolate : null
   } catch {
     return null
   }
@@ -114,6 +114,8 @@ const App: React.FC = () => {
   const isCropperWindow = new URLSearchParams(window.location.search).get('window') === 'cropper';
   const launcherIsolation = getLauncherIsolation();
   const isolateOnboarding = launcherIsolation === 'onboarding' || launcherIsolation === 'global-surfaces';
+  const isolatePermissionsToaster = launcherIsolation === 'permissions-toaster';
+  const isolateModals = launcherIsolation === 'no-modals' || launcherIsolation === 'global-surfaces';
   const isolateGlobalSurfaces = launcherIsolation === 'global-surfaces';
 
   // Default to launcher if not specified (dev mode safety)
@@ -1060,7 +1062,7 @@ const App: React.FC = () => {
       )}
 
       {/* Post-trial upgrade modal — shown when trial expires */}
-      {!isolateGlobalSurfaces && (isLauncherWindow || isDefault) && showTrialExpiredModal && (
+      {!isolateModals && (isLauncherWindow || isDefault) && showTrialExpiredModal && (
         <FreeTrialModal
           usage={activeTrial?.usage ?? { ai: 0, stt_seconds: 0, search: 0 }}
           onByok={async () => {
@@ -1080,14 +1082,14 @@ const App: React.FC = () => {
       )}
 
       {/* Ad toasters */}
-      {!isolateGlobalSurfaces && isLauncherMainView && !isSettingsOpen && (
+      {!isolateModals && isLauncherMainView && !isSettingsOpen && (
         <NativelyApiPromoToaster
           isOpen={activeAd === 'natively_api'}
           onDismiss={() => dismissAd('natively_api')}
           onOpenSettings={(tab: string) => openSettingsExclusive(tab)}
         />
       )}
-      {!isolateGlobalSurfaces && isLauncherMainView && (
+      {!isolateModals && isLauncherMainView && (
         <>
           <ProfileFeatureToaster
             isOpen={activeAd === 'profile'}
@@ -1124,7 +1126,7 @@ const App: React.FC = () => {
         </>
       )}
 
-      <PremiumUpgradeModal
+      {!isolateModals && <PremiumUpgradeModal
         isOpen={showPremiumModal}
         onClose={() => setShowPremiumModal(false)}
         isPremium={isPremiumActive}
@@ -1144,7 +1146,7 @@ const App: React.FC = () => {
           }, 300);
         }}
         onDeactivated={() => { setIsPremiumActive(false); setPlanDetails({ isPremium: false }); }}
-      />
+      />}
     </div>
     </ErrorBoundary>
   )

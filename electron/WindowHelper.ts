@@ -398,13 +398,22 @@ export class WindowHelper {
     // the launcher shell and normal production behavior while allowing a valid
     // Vite run to exclude either onboarding alone or all root-level surfaces.
     const requestedIsolation = process.env.NATIVELY_LAUNCHER_ISOLATION;
-    const launcherIsolation = isDev && (requestedIsolation === 'onboarding' || requestedIsolation === 'global-surfaces')
-      ? requestedIsolation
-      : '';
+    const launcherIsolation = isDev && (
+      requestedIsolation === 'onboarding' ||
+      requestedIsolation === 'global-surfaces' ||
+      requestedIsolation === 'permissions-toaster' ||
+      requestedIsolation === 'no-modals'
+    ) ? requestedIsolation : '';
     const isolationSuffix = launcherIsolation ? `&isolate=${launcherIsolation}` : '';
     if (launcherIsolation) console.warn(`[LeakTest] NATIVELY_LAUNCHER_ISOLATION=${launcherIsolation} → launcher root isolation enabled`);
 
-    const launcherUrl = `${startUrl}?window=launcher${nofxSuffix}${noOrchSuffix}${isolationSuffix}`;
+    // The review modal deliberately force-opens in development for UI iteration.
+    // This switch keeps every other launcher surface unchanged while excluding
+    // only that dev convenience mount during a native-memory A/B run.
+    const reviewOffSuffix = isDev && process.env.NATIVELY_DISABLE_DEV_REVIEW === '1' ? '&review=off' : '';
+    if (reviewOffSuffix) console.warn('[LeakTest] NATIVELY_DISABLE_DEV_REVIEW=1 → dev review modal disabled');
+
+    const launcherUrl = `${startUrl}?window=launcher${nofxSuffix}${noOrchSuffix}${isolationSuffix}${reviewOffSuffix}`;
 
     this.launcherWindow
       .loadURL(launcherUrl)
