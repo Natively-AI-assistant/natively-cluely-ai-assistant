@@ -160,11 +160,20 @@ export function selectSmallestSufficientEvidence(input: {
   // Instead, an item that BOTH covers a distinctive answer term AND is highly
   // answer-relevant is retained even without the literal entity — entity match
   // still boosts ranking below and still seeds guaranteed coverage.
-  const distinctiveForFilter = new Set(distinctive.map((t) => t.toLowerCase()).filter(Boolean));
+  const distinctiveForFilter = [...new Set(distinctive.map((t) => t.toLowerCase()).filter(Boolean))];
+  // Guard against a multi-subject document pairing a competing-entity chunk with
+  // the target: a chunk is admitted WITHOUT the literal entity only when it is a
+  // STRONG answer match — it must cover MORE THAN HALF of the distinctive query
+  // terms (or all of them when there is only one). A chunk that merely shares a
+  // single generic distinctive word with the question no longer qualifies, so a
+  // coincidental topical overlap on another subject cannot slip in. When target
+  // entities exist, the entity-bearing chunk is still seeded first below, so the
+  // answer's true subject is always represented.
   const isAnswerRelevantWithoutEntity = (item: EvidenceItem): boolean => {
-    if (distinctiveForFilter.size === 0) return false;
+    if (distinctiveForFilter.length === 0) return false;
     const words = new Set(tokenize(item.text));
-    return [...distinctiveForFilter].some((t) => words.has(t));
+    const covered = distinctiveForFilter.filter((t) => words.has(t)).length;
+    return covered * 2 > distinctiveForFilter.length; // strict majority coverage
   };
   const eligible = input.items.filter((item) => item.authority === 'evidence')
     .filter((item) => input.requestedProperty === 'unknown' || itemSupportsProperty(item, input.requestedProperty))
