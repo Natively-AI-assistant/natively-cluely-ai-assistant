@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useT } from '../i18n';
 import { createPortal } from 'react-dom';
 import { Search, Sparkles, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -95,6 +96,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
     onExpansionChange
 }) => {
     const isLight = useResolvedTheme() === 'light';
+    const t = useT();
     const [state, setState] = useState<PillState>('idle');
     const [query, setQuery] = useState('');
     const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -300,7 +302,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                         focus:outline-none
                                         ${state === 'idle' ? 'cursor-default' : 'cursor-text'}
                                     `}
-                                        placeholder="Search or ask anything..."
+                                        placeholder={t("Search or ask anything...")}
                                     />
                                 </div>
 

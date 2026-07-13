@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useT } from '../../i18n';
 import { motion, useReducedMotion, type Variants, useMotionValue, useTransform, useSpring } from 'framer-motion';
 import {
     Lock, Key, CheckCircle, AlertCircle, Check, Copy, X, PlayCircle,
@@ -506,6 +507,7 @@ interface NativelyProSettingsProps {
 }
 
 export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({ initialIsPremium = null }) => {
+    const t = useT();
     const prefersReducedMotion = useReducedMotion();
     const [interfaceTheme, setInterfaceTheme] = useState<MeetingInterfaceTheme>(() => {
         const theme = getMeetingInterfaceTheme();
@@ -783,7 +785,7 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({ initia
                     className="space-y-4"
                 >
                     <header>
-                        <h3 className="text-lg font-bold text-text-primary mb-1">Natively Pro</h3>
+                        <h3 className="text-lg font-bold text-text-primary mb-1">{t('Natively Pro')}</h3>
                         <p className="text-xs text-text-secondary mb-5">
                             Unlock the full Natively Pro toolkit.
                         </p>
@@ -1332,7 +1334,7 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({ initia
                                         value={licenseKey}
                                         onChange={(e) => setLicenseKey(e.target.value)}
                                         onKeyDown={(e) => e.key === 'Enter' && handleActivate()}
-                                        placeholder="Enter your license key"
+                                        placeholder={t("Enter your license key")}
                                         disabled={status === 'loading' || status === 'success'}
                                         className="w-full rounded-[10px] pl-9 pr-3 py-2.5 text-[13px] font-mono focus:outline-none disabled:opacity-50 bg-bg-input border border-border-subtle text-text-primary placeholder-text-tertiary focus:border-white/30 focus:ring-1 focus:ring-white/20 shadow-[inset_0_1px_2px_rgba(0,0,0,0.1)]"
                                         style={{ transition: `border-color 180ms ${EASE_OUT_CSS}, box-shadow 180ms ${EASE_OUT_CSS}` }}
