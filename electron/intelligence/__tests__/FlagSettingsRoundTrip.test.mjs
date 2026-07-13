@@ -122,6 +122,10 @@ const DEFAULT_ON_KEYS = new Set([
   // NOT default-ON here.)
   'docGroundedStrictIsolation',
   'docGroundedFalseRefusalRepair',
+  // Full-JIT final-answer law — unconditionally `true` everywhere (the intended
+  // production policy, not a dev/test-only experiment), restored 2026-07-14
+  // after the 2026-07-09 stability rollback was resolved.
+  'jitFinalAnswerEnforced',
 ]);
 
 const ALL_ENV_VARS = [

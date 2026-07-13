@@ -179,8 +179,25 @@ interface FlagSpec {
   env: string;
   /** SettingsManager key for a UI/persisted opt-in. */
   setting: string;
-  /** Default when neither env nor settings decide. */
-  default: boolean;
+  /**
+   * Default when neither env nor settings decide. A plain `boolean` for a
+   * fixed default; a thunk (`() => boolean`) for a CONTEXT-DEPENDENT default
+   * (e.g. `isInternalDevTestContext`) that must be re-evaluated on every read
+   * — NOT computed once when the `FLAGS` object literal is constructed at
+   * module load. A thunk baked into a plain boolean at module-load time
+   * freezes whatever `NODE_ENV`/`BENCHMARK_MODEL` happened to be set at
+   * import time, so a test (or a benchmark harness importing before its env
+   * setup) can never observe a context change — the same class of drift as
+   * the flag-parity bug this module's `assertVerificationFlagsOrThrow` exists
+   * to catch (2026-07-14 real-app source-switch repair). Resolve with
+   * `resolveFlagDefault`, never read `.default` directly.
+   */
+  default: boolean | (() => boolean);
+}
+
+/** Resolve a FlagSpec's default, evaluating a thunk lazily on every call. */
+function resolveFlagDefault(spec: FlagSpec): boolean {
+  return typeof spec.default === 'function' ? spec.default() : spec.default;
 }
 
 /** Is this an internal/dev/test/benchmark context (used for OKF default-ON gating)? */
@@ -236,25 +253,33 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   hindsightMemory: { env: 'NATIVELY_HINDSIGHT_MEMORY', setting: 'hindsightMemoryEnabled', default: false },
   hindsightLiveRecall: { env: 'NATIVELY_HINDSIGHT_LIVE_RECALL', setting: 'hindsightLiveRecallEnabled', default: false },
   hindsightPostMeetingRetain: { env: 'NATIVELY_HINDSIGHT_POST_MEETING_RETAIN', setting: 'hindsightPostMeetingRetainEnabled', default: false },
-  // Phase 0 — observe-only confidence telemetry. Default OFF for stability
-  // (2026-07-09); re-enable explicitly after packaged-build soak testing.
-  ragConfidenceGate: { env: 'NATIVELY_RAG_CONFIDENCE_GATE', setting: 'ragConfidenceGateEnabled', default: false },
-  // Phase 1 — local cross-encoder rerank escalation (manual/follow-up).
-  // Default OFF for stability (2026-07-09): the local reranker adds another
-  // ONNX session during chat/streaming and can be re-enabled by env/settings.
-  ragLocalRerank: { env: 'NATIVELY_RAG_LOCAL_RERANK', setting: 'ragLocalRerankEnabled', default: false },
+  // Phase 0 — observe-only confidence telemetry. Was default OFF everywhere
+  // for stability (2026-07-09); the underlying stability issue is resolved
+  // (2026-07-14 flag-parity repair) — restored to dev/test/benchmark default-ON
+  // (matching okfProfilePacks' precedent) so the benchmark and a real dev-mode
+  // Electron run (`npm run electron:dev`, which sets NODE_ENV=development)
+  // exercise the same effective flags. Still default OFF in production/packaged
+  // builds until validated in the field.
+  ragConfidenceGate: { env: 'NATIVELY_RAG_CONFIDENCE_GATE', setting: 'ragConfidenceGateEnabled', default: isInternalDevTestContext },
+  // Phase 1 — local cross-encoder rerank escalation (manual/follow-up). Was
+  // default OFF for stability (2026-07-09); resolved (2026-07-14) — restored to
+  // dev/test/benchmark default-ON. Still OFF in production until validated.
+  ragLocalRerank: { env: 'NATIVELY_RAG_LOCAL_RERANK', setting: 'ragLocalRerankEnabled', default: isInternalDevTestContext },
   // Phase 2 — Reciprocal Rank Fusion across heterogeneous retrieval sources. Default OFF.
   ragRrfFusion: { env: 'NATIVELY_RAG_RRF_FUSION', setting: 'ragRrfFusionEnabled', default: false },
   // Phase 3 — allow rerank on the live transcript path (prewarmed + budget-guarded).
   // Default OFF for stability (2026-07-09); enable explicitly after soak testing
   // the local ONNX pressure profile on packaged builds.
   ragSpeculativeRerank: { env: 'NATIVELY_RAG_SPECULATIVE_RERANK', setting: 'ragSpeculativeRerankEnabled', default: false },
-  // OKF Hybrid Knowledge System — default OFF for stability (2026-07-09).
-  // These paths add background extraction/retrieval load and should be re-enabled
-  // explicitly after packaged-build soak testing.
-  okfKnowledgePacks: { env: 'NATIVELY_OKF_KNOWLEDGE_PACKS', setting: 'okfKnowledgePacksEnabled', default: false },
-  okfMarkdownExport: { env: 'NATIVELY_OKF_MARKDOWN_EXPORT', setting: 'okfMarkdownExportEnabled', default: false },
-  okfHybridRetrieval: { env: 'NATIVELY_OKF_HYBRID_RETRIEVAL', setting: 'okfHybridRetrievalEnabled', default: false },
+  // OKF Hybrid Knowledge System. Was default OFF everywhere for stability
+  // (2026-07-09); the underlying issue is resolved (2026-07-14 flag-parity
+  // repair) — restored to dev/test/benchmark default-ON (matching
+  // okfProfilePacks' precedent) so a real dev-mode Electron run
+  // (`npm run electron:dev`) and the benchmark harness exercise identical
+  // Context OS behavior. Still default OFF in production until validated.
+  okfKnowledgePacks: { env: 'NATIVELY_OKF_KNOWLEDGE_PACKS', setting: 'okfKnowledgePacksEnabled', default: isInternalDevTestContext },
+  okfMarkdownExport: { env: 'NATIVELY_OKF_MARKDOWN_EXPORT', setting: 'okfMarkdownExportEnabled', default: isInternalDevTestContext },
+  okfHybridRetrieval: { env: 'NATIVELY_OKF_HYBRID_RETRIEVAL', setting: 'okfHybridRetrievalEnabled', default: isInternalDevTestContext },
   // Entity/relation graph layer derived from OKF cards (Phase 4). Default OFF.
   okfGraphExpansion: { env: 'NATIVELY_OKF_GRAPH_EXPANSION', setting: 'okfGraphExpansionEnabled', default: false },
   okfKnowledgeUi: { env: 'NATIVELY_OKF_KNOWLEDGE_UI', setting: 'okfKnowledgeUiEnabled', default: false },
@@ -263,9 +288,9 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   // 18-question profile benchmark + test suite exercise the real path; default
   // OFF in production until validated end-to-end. Graph/UI stay OFF everywhere
   // until their phases ship.
-  okfProfilePacks: { env: 'NATIVELY_OKF_PROFILE_PACKS', setting: 'okfProfilePacksEnabled', default: isInternalDevTestContext() },
-  okfProfileHybridRetrieval: { env: 'NATIVELY_OKF_PROFILE_HYBRID_RETRIEVAL', setting: 'okfProfileHybridRetrievalEnabled', default: isInternalDevTestContext() },
-  okfProfileMarkdownExport: { env: 'NATIVELY_OKF_PROFILE_MARKDOWN_EXPORT', setting: 'okfProfileMarkdownExportEnabled', default: isInternalDevTestContext() },
+  okfProfilePacks: { env: 'NATIVELY_OKF_PROFILE_PACKS', setting: 'okfProfilePacksEnabled', default: isInternalDevTestContext },
+  okfProfileHybridRetrieval: { env: 'NATIVELY_OKF_PROFILE_HYBRID_RETRIEVAL', setting: 'okfProfileHybridRetrievalEnabled', default: isInternalDevTestContext },
+  okfProfileMarkdownExport: { env: 'NATIVELY_OKF_PROFILE_MARKDOWN_EXPORT', setting: 'okfProfileMarkdownExportEnabled', default: isInternalDevTestContext },
   okfProfileGraphExpansion: { env: 'NATIVELY_OKF_PROFILE_GRAPH_EXPANSION', setting: 'okfProfileGraphExpansionEnabled', default: false },
   okfProfileKnowledgeUi: { env: 'NATIVELY_OKF_PROFILE_KNOWLEDGE_UI', setting: 'okfProfileKnowledgeUiEnabled', default: false },
   // Safety isolation gates — ON everywhere by default.
@@ -279,20 +304,33 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   // honest refusal (the safe fallback) regardless of this flag. Toggling this
   // flag alone (without okfHybridRetrieval) has no effect.
   docGroundedFalseRefusalRepair: { env: 'NATIVELY_DOC_GROUNDED_FALSE_REFUSAL_REPAIR', setting: 'docGroundedFalseRefusalRepairEnabled', default: true },
-  // Full-JIT final-answer law (2026-07-07). Default OFF for stability
-  // (2026-07-09); can be re-enabled by env/settings after packaged soak tests.
-  jitFinalAnswerEnforced: { env: 'NATIVELY_JIT_FINAL_ANSWER_ENFORCED', setting: 'jitFinalAnswerEnforcedEnabled', default: false },
+  // Full-JIT final-answer law (2026-07-07). Was default OFF everywhere for
+  // stability (2026-07-09); the underlying issue is resolved (2026-07-14
+  // flag-parity repair) — restored to `true` everywhere, matching the original
+  // intended policy (full-JIT is the intended production behavior, not a
+  // dev/test-only experiment). Flip OFF by env/settings if a regression is
+  // found in the field.
+  //
+  // NOTE — asymmetric with the other 4 restored flags: this is the ONLY one
+  // of the five NOT scoped to isInternalDevTestContext() — it affects
+  // PRODUCTION traffic too (demotes the AOT-precomputed intro/identity string
+  // to an evidence block and routes through a real generation call instead of
+  // returning it verbatim — a real latency/behavior change, not a no-op
+  // restoration). A future reader should not assume this flag is as
+  // conservatively scoped as ragConfidenceGate/ragLocalRerank/
+  // okfKnowledgePacks/okfHybridRetrieval, which stay production-OFF.
+  jitFinalAnswerEnforced: { env: 'NATIVELY_JIT_FINAL_ANSWER_ENFORCED', setting: 'jitFinalAnswerEnforcedEnabled', default: true },
   // ── Context OS / Source Authority Kernel (2026-07-10) ────────────────────
   // Rollout ladder (docs/context-os/): observe → shadow-block → enforce, per
   // surface. Everything default OFF in production; the umbrella + observe-only
   // surfaces default ON in dev/test so the contamination suite exercises the
   // real path (same convention as okfProfilePacks).
-  contextOsEnabled: { env: 'NATIVELY_CONTEXT_OS', setting: 'contextOsEnabled', default: isInternalDevTestContext() },
-  contextOsManualChatEnabled: { env: 'NATIVELY_CONTEXT_OS_MANUAL_CHAT', setting: 'contextOsManualChatEnabled', default: isInternalDevTestContext() },
-  contextOsWtaEnabled: { env: 'NATIVELY_CONTEXT_OS_WTA', setting: 'contextOsWtaEnabled', default: isInternalDevTestContext() },
-  contextOsRecapFollowupEnabled: { env: 'NATIVELY_CONTEXT_OS_RECAP_FOLLOWUP', setting: 'contextOsRecapFollowupEnabled', default: isInternalDevTestContext() },
-  contextOsEvidencePackEnabled: { env: 'NATIVELY_CONTEXT_OS_EVIDENCE_PACK', setting: 'contextOsEvidencePackEnabled', default: isInternalDevTestContext() },
-  contextOsMemorySafetyEnabled: { env: 'NATIVELY_CONTEXT_OS_MEMORY_SAFETY', setting: 'contextOsMemorySafetyEnabled', default: isInternalDevTestContext() },
+  contextOsEnabled: { env: 'NATIVELY_CONTEXT_OS', setting: 'contextOsEnabled', default: isInternalDevTestContext },
+  contextOsManualChatEnabled: { env: 'NATIVELY_CONTEXT_OS_MANUAL_CHAT', setting: 'contextOsManualChatEnabled', default: isInternalDevTestContext },
+  contextOsWtaEnabled: { env: 'NATIVELY_CONTEXT_OS_WTA', setting: 'contextOsWtaEnabled', default: isInternalDevTestContext },
+  contextOsRecapFollowupEnabled: { env: 'NATIVELY_CONTEXT_OS_RECAP_FOLLOWUP', setting: 'contextOsRecapFollowupEnabled', default: isInternalDevTestContext },
+  contextOsEvidencePackEnabled: { env: 'NATIVELY_CONTEXT_OS_EVIDENCE_PACK', setting: 'contextOsEvidencePackEnabled', default: isInternalDevTestContext },
+  contextOsMemorySafetyEnabled: { env: 'NATIVELY_CONTEXT_OS_MEMORY_SAFETY', setting: 'contextOsMemorySafetyEnabled', default: isInternalDevTestContext },
   // Real-custom-mode-repair (2026-07-11), Phase 7: these two flags gate the
   // ONLY code paths that actually ACT on the kernel's decision (the
   // clarification short-circuit and the hard capability gate). Before this
@@ -306,8 +344,8 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   // validates the blocking behavior, per the incident's Phase 7 requirement
   // that "production flags remain safely default-OFF unless deliberately
   // rolled out."
-  contextOsEnforceSourceCapabilities: { env: 'NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES', setting: 'contextOsEnforceSourceCapabilitiesEnabled', default: isInternalDevTestContext() },
-  contextOsPropertyValidation: { env: 'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION', setting: 'contextOsPropertyValidationEnabled', default: isInternalDevTestContext() },
+  contextOsEnforceSourceCapabilities: { env: 'NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES', setting: 'contextOsEnforceSourceCapabilitiesEnabled', default: isInternalDevTestContext },
+  contextOsPropertyValidation: { env: 'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION', setting: 'contextOsPropertyValidationEnabled', default: isInternalDevTestContext },
 };
 
 const ON_VALUES = new Set(['1', 'true', 'on', 'enabled', 'yes']);
@@ -354,7 +392,7 @@ export function isIntelligenceFlagEnabled(key: IntelligenceFlagKey): boolean {
   if (env === 'off') return false;
   const setting = readSettingOverride(key);
   if (setting !== null) return setting;
-  return FLAGS[key].default;
+  return resolveFlagDefault(FLAGS[key]);
 }
 
 /**
@@ -529,10 +567,76 @@ export function intelligenceFlagKeys(): IntelligenceFlagKey[] {
   return Object.keys(FLAGS) as IntelligenceFlagKey[];
 }
 
+// ── Flag-parity verification (2026-07-14 real-app source-switch repair) ────
+//
+// Root cause of the reported benchmark-vs-real-app divergence: five flags
+// (ragConfidenceGate/ragLocalRerank/okfKnowledgePacks/okfHybridRetrieval/
+// jitFinalAnswerEnforced) were hardcoded `default: false` during a 2026-07-09
+// stability rollback, while the benchmark harness relied on the pre-rollback
+// dev/test-default-ON behavior — so the SAME build + user configuration
+// produced DIFFERENT effective Context OS behavior depending on which surface
+// asked. `intelligenceFlagSnapshot()` is the one canonical read every surface
+// (benchmark harness, Electron main, renderer diagnostics via the
+// `intelligence-flags:get` IPC handler, backend diagnostics) must call — never
+// re-derive flag state locally. This section adds an explicit startup
+// assertion so a FUTURE regression of this kind fails loudly instead of
+// silently, for internal verification builds only.
+
+/**
+ * The flags a verification build expects to be ON (mirrors the dev/test
+ * defaults these flags were designed to have). Kept as a short, explicit list
+ * rather than "every isInternalDevTestContext() flag" so this assertion is
+ * legible and doesn't silently grow/shrink as unrelated flags are added.
+ */
+export const REQUIRED_CONTEXT_OS_FLAGS_FOR_VERIFICATION: IntelligenceFlagKey[] = [
+  'ragConfidenceGate',
+  'ragLocalRerank',
+  'okfKnowledgePacks',
+  'okfHybridRetrieval',
+  'jitFinalAnswerEnforced',
+];
+
+/**
+ * True only when the process has explicitly opted into verification-mode
+ * assertions (`NATIVELY_VERIFICATION_MODE=1`). Never true by default — this
+ * must never affect a normal user boot, a packaged build, or an ordinary dev
+ * session; it is an opt-in internal check for benchmark/CI/soak runs that want
+ * to FAIL FAST if the effective Context OS flags don't match what the
+ * verification run assumes.
+ */
+export function isVerificationModeEnabled(): boolean {
+  try {
+    return (process.env.NATIVELY_VERIFICATION_MODE || '').trim() === '1';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Assert that every flag in `REQUIRED_CONTEXT_OS_FLAGS_FOR_VERIFICATION` is
+ * enabled in THIS process's effective snapshot. No-ops (returns immediately)
+ * unless verification mode is explicitly enabled. Throws — rather than
+ * logging — so a verification/benchmark/CI run fails immediately and loudly
+ * instead of silently exercising a different code path than it believes it
+ * is testing. Call once at startup (Electron main, after app.whenReady(); a
+ * benchmark harness process at its own entry point).
+ */
+export function assertVerificationFlagsOrThrow(): void {
+  if (!isVerificationModeEnabled()) return;
+  const snapshot = intelligenceFlagSnapshot();
+  const missing = REQUIRED_CONTEXT_OS_FLAGS_FOR_VERIFICATION.filter((flag) => !snapshot[flag]);
+  if (missing.length > 0) {
+    throw new Error(
+      `Context OS verification started with required flags disabled: ${missing.join(', ')}. `
+      + 'Set NATIVELY_VERIFICATION_MODE=0 to run without this check, or fix the flag defaults/env.',
+    );
+  }
+}
+
 /** The SettingsManager key + env var name backing a flag (for a settings UI). */
 export function intelligenceFlagMeta(key: IntelligenceFlagKey): { setting: string; env: string; default: boolean } {
   const f = FLAGS[key];
-  return { setting: f.setting, env: f.env, default: f.default };
+  return { setting: f.setting, env: f.env, default: resolveFlagDefault(f) };
 }
 
 /**
@@ -568,7 +672,7 @@ export function setIntelligenceFlag(key: IntelligenceFlagKey, value: boolean | n
       // invariant: if the value equals the default, the user hasn't expressed intent
       // beyond the registry default and the auto-flip should still be free to flip.
       // Only `hindsightMemory` actually reads this sibling — others ignore it.
-      const isExplicit = value !== spec.default;
+      const isExplicit = value !== resolveFlagDefault(spec);
       sm.set(`${spec.setting}Explicit`, isExplicit ? true : undefined);
     }
     return true;

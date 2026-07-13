@@ -6857,6 +6857,34 @@ async function initializeApp() {
   nativeOomTrace.record('app-ready', { pid: process.pid, platform: process.platform, electron: process.versions.electron })
   logStartupPhase('after-app-whenReady', { userData: app.getPath('userData') });
 
+  // 2a-verify. Context OS flag-parity assertion (2026-07-14 real-app
+  // source-switch repair): no-op unless NATIVELY_VERIFICATION_MODE=1 is
+  // explicitly set (internal benchmark/CI/soak runs only). Fails fast and
+  // loudly if this Electron process's effective flags don't match what a
+  // verification run assumes — the exact class of drift that let the
+  // benchmark and the real app silently exercise different Context OS
+  // behavior on the same build.
+  //
+  // HARD EXIT (code-review 2026-07-14 round 2): a throw here would otherwise
+  // propagate into initializeApp()'s generic top-level .catch(), which logs
+  // but never exits — leaving a half-initialized, windowless process alive
+  // indefinitely. That defeats the whole point for a CI/soak harness, which
+  // needs an unambiguous nonzero exit code, not a hang it has to time out on.
+  // Mirrors the existing [nativeArch] gate precedent (main.ts ~line 219):
+  // print the reason, then app.exit(1) (or process.exit(1) if Electron's
+  // app isn't available, e.g. under a bare-Node verification harness).
+  try {
+    const { assertVerificationFlagsOrThrow } = require('./intelligence/intelligenceFlags') as typeof import('./intelligence/intelligenceFlags');
+    assertVerificationFlagsOrThrow();
+  } catch (verifyErr: any) {
+    console.error('[ContextOS] verification flag assertion failed — exiting:', verifyErr?.message || verifyErr);
+    if (typeof app?.exit === 'function') {
+      app.exit(1);
+    } else {
+      process.exit(1);
+    }
+  }
+
   // 2a. PRE-EMPTIVE dock hide / activation-policy clamp: must happen before ANY
   // operation that causes macOS to register a dock entry (app.setName, the
   // LaunchServices live-rename in _applyDisguise, BrowserWindow creation, etc.).
