@@ -901,6 +901,12 @@ export class CredentialsManager {
      * to decide whether to warn.
      */
     private saveCredentials(): boolean {
+        // Try the OS keyring first. When safeStorage is available, this is the
+        // preferred path. On Windows the underlying DPAPI can still throw after
+        // isEncryptionAvailable() returns true (e.g. policy restrictions, roaming
+        // profiles) — we must catch that and fall through to the app-managed
+        // fallback instead of returning false, otherwise keys are silently lost
+        // on restart (the bug reported for Deepgram and other STT keys).
         try {
             if (safeStorage.isEncryptionAvailable()) {
                 const data = JSON.stringify(this.credentials);
@@ -912,14 +918,25 @@ export class CredentialsManager {
                 this.removeFallbackFile();
                 return true;
             }
+        } catch (keyringErr) {
+            // Keyring write failed — don't give up yet. Try the fallback below.
+            console.warn('[CredentialsManager] Keyring save failed, trying app-managed fallback:', keyringErr);
+        }
 
-            // OS keyring unavailable — use the app-managed encrypted fallback so the
-            // key is not silently lost on restart. Weaker than the keyring (see
-            // credentialFallbackCrypto.ts) but never plaintext at rest.
+        // OS keyring unavailable or threw — use the app-managed encrypted fallback so the
+        // key is not silently lost on restart. Weaker than the keyring (see
+        // credentialFallbackCrypto.ts) but never plaintext at rest.
+        try {
             const blob = encryptCredentialBlob(JSON.stringify(this.credentials), this.getFallbackKey());
             const tmpFb = FALLBACK_PATH + '.tmp';
             fs.writeFileSync(tmpFb, blob, { mode: 0o600 });
             fs.renameSync(tmpFb, FALLBACK_PATH);
+            // Stale keyring file is now out of sync (the fallback has the latest
+            // credentials). Remove it so loadCredentials() does not find it on
+            // next startup and treat the old keyring data as authoritative —
+            // otherwise the just-saved key would be silently overwritten by the
+            // stale keyring contents when loadCredentials() deletes the fallback.
+            this.removeKeyringFile();
             console.warn('[CredentialsManager] OS keyring unavailable; saved via app-managed encrypted fallback (machine-bound, will survive restart)');
             return true;
         } catch (error) {
@@ -936,6 +953,24 @@ export class CredentialsManager {
             }
         } catch (err) {
             console.warn('[CredentialsManager] Could not remove stale fallback file:', err);
+        }
+    }
+
+    /**
+     * Remove the stale OS keyring credential file (best-effort).
+     * Called when the keyring write failed and we fell back to the app-managed
+     * fallback — the old keyring file contains stale credentials and would
+     * be treated as authoritative by loadCredentials() on next startup,
+     * silently discarding the just-saved keys.
+     */
+    private removeKeyringFile(): void {
+        try {
+            if (fs.existsSync(CREDENTIALS_PATH)) {
+                fs.unlinkSync(CREDENTIALS_PATH);
+                console.log('[CredentialsManager] Removed stale keyring credential file (fallback is authoritative)');
+            }
+        } catch (err) {
+            console.warn('[CredentialsManager] Could not remove stale keyring file:', err);
         }
     }
 
