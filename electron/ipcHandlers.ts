@@ -9069,7 +9069,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     async (
       _,
       id: string,
-      updates: { name?: string; templateType?: string; customContext?: string },
+      updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any },
     ) => {
       try {
         const { ModesManager } = require('./services/ModesManager');
@@ -9093,6 +9093,23 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
     },
   );
+
+  // Real-app source-switch repair (2026-07-14, Phase 7): expose the mode's
+  // RESOLVED source policy to the Modes Manager UI — the same
+  // getOrMigrateSourceContract() the real answer pipeline consults, so what
+  // the UI shows is guaranteed to be the mode's actual enforced authority
+  // (never a second, independently-computed opinion that could drift from
+  // production behavior).
+  safeHandle('modes:get-source-contract', async (_, modeId: string) => {
+    try {
+      const { ModesManager } = require('./services/ModesManager');
+      const mgr = ModesManager.getInstance();
+      return mgr.getOrMigrateSourceContract(modeId);
+    } catch (e: any) {
+      console.error('[IPC] modes:get-source-contract error:', e);
+      return null;
+    }
+  });
 
   safeHandle('modes:delete', async (_, id: string) => {
     try {

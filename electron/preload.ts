@@ -915,8 +915,9 @@ interface ElectronAPI {
   e2eInvoke: (channel: string, ...args: any[]) => Promise<any>;
   modesUpdate: (
     id: string,
-    updates: { name?: string; templateType?: string; customContext?: string },
+    updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any },
   ) => Promise<{ success: boolean; error?: string }>;
+  modesGetSourceContract: (modeId: string) => Promise<any>;
   modesDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
   modesSetActive: (id: string | null) => Promise<{ success: boolean; error?: string }>;
   modesGetReferenceFiles: (
@@ -2443,8 +2444,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(channel, ...args),
   modesUpdate: (
     id: string,
-    updates: { name?: string; templateType?: string; customContext?: string },
+    updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any },
   ) => ipcRenderer.invoke('modes:update', id, updates),
+  modesGetSourceContract: (modeId: string) =>
+    ipcRenderer.invoke('modes:get-source-contract', modeId),
   modesDelete: (id: string) => ipcRenderer.invoke('modes:delete', id),
   modesSetActive: (id: string | null) => ipcRenderer.invoke('modes:set-active', id),
   modesGetReferenceFiles: (modeId: string) =>
