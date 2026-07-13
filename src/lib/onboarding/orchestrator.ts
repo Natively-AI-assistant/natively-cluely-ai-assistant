@@ -17,9 +17,9 @@
  *   - The user-state patch (premium/profile/etc.) — pushed in via emit()
  *   - The renderer — that lives in OrchestratedToasterHost.tsx
  *
- * Event-driven: no wall-clock timers for stage eligibility. The drain loop
- * runs on requestAnimationFrame and only evaluates when foreground +
- * homepage-mounted + not-in-meeting + no active toaster.
+ * Event-driven: events re-evaluate state changes, while a one-shot deadline
+ * timer handles only the next known time-gated eligibility transition. It never
+ * polls while waiting for a user or IPC event.
  */
 
 // Explicit `.ts` extension — this directory also has a `.mjs` companion
@@ -170,12 +170,9 @@ export class OnboardingOrchestrator {
   private state: OrchestratorState;
   private userState: UserState = DEFAULT_USER_STATE;
   private listeners = new Set<Listener>();
-  // Drain-loop handle. Historically this was a per-FRAME requestAnimationFrame
-  // that rescheduled itself forever (see the NATIVE-LEAK note on scheduleTick).
-  // It is now a low-frequency setTimeout so the renderer can go idle between
-  // ticks — a rAF loop keeps Chromium's compositor permanently non-idle, and
-  // under software compositing (Windows / macOS-GPU-fallback) that turns the
-  // launcher's always-on animations into unbounded native raster-tile churn.
+  // A single one-shot deadline timer. Never use it as a recurring poll: doing
+  // so needlessly wakes the renderer and can retain compositor work under
+  // Windows software compositing.
   private tickTimer: ReturnType<typeof setTimeout> | null = null;
   private running = false;
   private stageConfigs: StageConfig[] = [];
@@ -259,10 +256,14 @@ export class OnboardingOrchestrator {
   private notify(): void {
     this.revision++;
     this.listeners.forEach(l => l(this.state))
-    // A state change may have made a stage newly eligible (foreground regained,
-    // meeting ended, usage tick, user-state patch, slot freed on dismiss). Re-arm
-    // the drain timer if it had stopped. Idempotent — no-op if already ticking or
-    // fully drained. This is what replaces the old always-on per-frame loop.
+    // A state change can remove a prerequisite or move the earliest deadline
+    // sooner. Replace (rather than retain) a stale future deadline so skips and
+    // newly-eligible stages are dispatched promptly; waiting for another event
+    // still leaves no timer.
+    if (this.tickTimer !== null) {
+      clearTimeout(this.tickTimer);
+      this.tickTimer = null;
+    }
     this.ensureDraining();
   }
 
@@ -347,75 +348,104 @@ export class OnboardingOrchestrator {
     this.notify();
   }
 
-  // ─── Drain loop ───────────────────────────────────────────────
+  // ─── Deadline scheduler ───────────────────────────────────────
   //
-  // NATIVE-LEAK FIX (2026-07-10): this used to be a self-perpetuating
-  // requestAnimationFrame loop (scheduleTick → rAF → tick → scheduleTick) that
-  // rescheduled EVERY FRAME (~60fps) for the entire lifetime of the launcher
-  // window, regardless of whether there was any pending onboarding work. A
-  // never-idling rAF keeps Chromium's compositor permanently in the
-  // "BeginFrame pending" state, so it produces a real frame every vsync and
-  // never enters the idle path that reclaims raster tiles. Combined with the
-  // launcher's `repeat: Infinity` toaster animations, under SOFTWARE
-  // compositing (Windows 10, macOS-27 GPU-fallback) that drove unbounded
-  // PartitionAlloc raster-tile churn — a native (non-V8) memory leak that grew
-  // RSS to multiple GB with a flat JS heap and OOM-froze the app / crashed the
-  // renderer in fontations_ffi. Confirmed by per-day git bisect: introduced by
-  // the orchestrator (cf6a2f9, 2026-07-04), absent at 8836b40 (2026-07-03).
+  // NATIVE-LEAK FIX (2026-07-10, refined 2026-07-13): this originally used a
+  // self-perpetuating requestAnimationFrame loop (scheduleTick → rAF → tick →
+  // scheduleTick) that rescheduled EVERY FRAME (~60fps) for the entire
+  // lifetime of the launcher window, regardless of whether there was any
+  // pending onboarding work. A never-idling rAF keeps Chromium's compositor
+  // permanently in the "BeginFrame pending" state, so it produces a real
+  // frame every vsync and never enters the idle path that reclaims raster
+  // tiles. Combined with the launcher's `repeat: Infinity` toaster
+  // animations, under SOFTWARE compositing (Windows 10, macOS-27
+  // GPU-fallback) that drove unbounded PartitionAlloc raster-tile churn — a
+  // native (non-V8) memory leak that grew RSS to multiple GB with a flat JS
+  // heap and OOM-froze the app / crashed the renderer in fontations_ffi.
+  // Confirmed by per-day git bisect: introduced by the orchestrator
+  // (cf6a2f9, 2026-07-04), absent at 8836b40 (2026-07-03).
   //
-  // The loop is now:
-  //   • a low-frequency setTimeout (DRAIN_INTERVAL_MS), NOT a rAF — a timer
-  //     does not request animation frames, so the renderer goes idle between
-  //     ticks and the compositor reclaims tiles normally;
-  //   • self-terminating: it stops scheduling once every stage is resolved
-  //     (drained) or the app leaves the evaluable state, and re-arms lazily via
-  //     ensureDraining() whenever a state-change event lands (see notify()).
-  // Time-based stage triggers (2–10s homepage-duration gates) still fire within
-  // one DRAIN_INTERVAL_MS, so the onboarding funnel is behaviourally unchanged.
+  // Replacing rAF with a one-second recursive setTimeout was still
+  // insufficient: a pending stage kept the launcher waking forever even
+  // while no state could change. A copied real-profile dev run reproduced
+  // the same ~70 MB/s native renderer growth with every modal hidden, while
+  // disabling only orch.start() remained flat.
+  //
+  // Schedule only the next *known time deadline*. All non-time eligibility
+  // inputs (foreground, homepage mount, user-state, turns, usage, dependencies
+  // and custom predicates) arrive through emit()/setUserState(), whose notify()
+  // call re-arms this scheduler. Once a toaster is active there is deliberately
+  // no timer: its dismiss/skip event is the next meaningful state transition.
+  private static readonly MAX_TIMEOUT_MS = 2_147_483_647;
 
-  private static readonly DRAIN_INTERVAL_MS = 1000;
-
-  /** Lazily (re)start the drain timer if there is still work to evaluate. */
+  /** Lazily schedule the next eligibility deadline, if one is knowable. */
   private ensureDraining(): void {
-    if (!this.running) return;
-    if (this.tickTimer !== null) return;          // already scheduled
-    if (this.isFullyDrained()) return;            // nothing left to show, ever
+    if (!this.running || this.tickTimer !== null) return;
+    const delayMs = this.nextEvaluationDelayMs();
+    if (delayMs === null) return;
     this.tickTimer = setTimeout(() => {
       this.tickTimer = null;
       this.tick();
-    }, OnboardingOrchestrator.DRAIN_INTERVAL_MS);
+    }, Math.min(delayMs, OnboardingOrchestrator.MAX_TIMEOUT_MS));
   }
 
   private tick(): void {
-    if (!this.running) return;
-    if (this.shouldEvaluate()) {
-      this.evaluateAndDispatch();
-    }
-    // Re-arm only while there is still an unresolved stage. When the queue is
-    // fully drained the timer stops entirely and the renderer stays idle until
-    // a new event (foreground/usage/meeting/user-state) calls ensureDraining().
+    if (!this.running || !this.shouldEvaluate()) return;
+    this.evaluateAndDispatch();
+    // evaluateAndDispatch may have skipped gate stages or found a later
+    // time-gated stage. Recompute once; never turn this into a polling loop.
     this.ensureDraining();
   }
 
   /**
-   * True when no queued stage can ever be shown again this session — every
-   * stage is completed, skipped, or dismissed-this-session — so the drain
-   * timer has no reason to keep ticking. A time-gated stage that is merely
-   * "not yet eligible" is NOT drained (returns false) so its duration trigger
-   * still gets a chance to fire.
+   * Return milliseconds until the earliest stage whose only unmet condition is
+   * a clock-based trigger, or 0 when a stage can be evaluated immediately.
+   * Return null when a user/event transition is required instead of polling.
    */
-  private isFullyDrained(): boolean {
-    if (this.state.activeToasterId !== null) return false; // a toaster is up
-    return this.state.queue.every(
-      id =>
-        this.state.completed[id] != null ||
-        this.state.skipped.has(id) ||
-        this.dismissedThisSession.has(id) ||
-        // A queued id with no registered config can never be shown (e.g. a
-        // legacy/persisted stage that no longer exists, or one whose config
-        // wasn't passed to start()), so it must not keep the drain loop alive.
-        !this.stageConfigs.some(c => c.id === id),
-    );
+  private nextEvaluationDelayMs(): number | null {
+    if (!this.shouldEvaluate()) return null;
+
+    const ctx = this.buildCtx();
+    let nextDelay: number | null = null;
+    const consider = (delay: number) => {
+      const bounded = Math.max(0, Math.ceil(delay));
+      nextDelay = nextDelay === null ? bounded : Math.min(nextDelay, bounded);
+    };
+
+    for (const id of this.state.queue) {
+      const config = this.stageConfigs.find(c => c.id === id);
+      if (!config || this.state.completed[id] != null || this.state.skipped.has(id) || this.dismissedThisSession.has(id)) continue;
+
+      // A hard skip is progress that evaluateAndDispatch can make immediately.
+      if (config.skipWhen?.(ctx.userState)) {
+        consider(0);
+        continue;
+      }
+      if (config.onceEver && ctx.completed[id] && !config.reEligibility?.(ctx.userState, ctx.completed)) continue;
+      if (config.requiresStages?.some(dep => !ctx.completed[dep] && !ctx.skipped.has(dep))) continue;
+
+      const triggers = config.triggers;
+      // These values cannot become true merely by waiting, so wait for their
+      // event instead of keeping the renderer on a timer.
+      if (
+        (triggers.requiresStartupCount != null && ctx.startupCount < triggers.requiresStartupCount) ||
+        (triggers.requiresTurnCount != null && ctx.turnCount < triggers.requiresTurnCount) ||
+        (triggers.requiresTotalUsageMs != null && ctx.totalUsageMs < triggers.requiresTotalUsageMs) ||
+        (config.customPredicate && !config.customPredicate(ctx))
+      ) continue;
+
+      let delay = 0;
+      if (triggers.requiresHomepageDuration != null) {
+        delay = Math.max(delay, triggers.requiresHomepageDuration - ctx.homepageMountedFor);
+      }
+      const cooldownMs = config.cooldownMs?.(ctx.userState) ?? 0;
+      if (cooldownMs > 0) {
+        delay = Math.max(delay, cooldownMs - (ctx.now - (ctx.lastShownTimes[id] ?? 0)));
+      }
+      consider(delay);
+    }
+
+    return nextDelay;
   }
 
   private shouldEvaluate(): boolean {

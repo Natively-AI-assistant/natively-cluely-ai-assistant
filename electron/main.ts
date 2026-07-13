@@ -1048,6 +1048,8 @@ import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
 import { NativeOomTrace } from './utils/NativeOomTrace'
 
+// Opt-in only: this trace writes allowlisted process metadata and IPC byte estimates
+// for a copied-profile native OOM investigation. It is inert unless explicitly enabled.
 const nativeOomTrace = new NativeOomTrace()
 
 // Valid disguise modes. The persisted setting is untyped on disk and historical
@@ -1080,6 +1082,9 @@ export class AppState {
   private ragManager: RAGManager | null = null
   private modeReferenceRetryPromise: Promise<void> | null = null
   private stabilityHeartbeatTimer: NodeJS.Timeout | null = null
+  // Diagnostic-only, independently paced native-memory sampler. Normal product
+  // heartbeats remain at 30 seconds; this exists only for a short-lived OOM run.
+  private nativeOomTraceTimer: NodeJS.Timeout | null = null
   private knowledgeOrchestrator: any = null
 
   public recordNativeOomTrace(event: string, data: Record<string, unknown> = {}): void {
@@ -1090,13 +1095,14 @@ export class AppState {
     nativeOomTrace.recordOutboundIpc(webContentsId, channel, args)
   }
 
-  public startNativeOomContentTrace(launcherPid: number): void {
-    void nativeOomTrace.startContentTrace(launcherPid)
+  public armNativeOomContentTrace(launcherPid: number): void {
+    nativeOomTrace.armContentTrace(launcherPid)
   }
 
   public stopNativeOomContentTrace(reason: string): void {
     void nativeOomTrace.stopContentTrace(reason)
   }
+
   private tray: Tray | null = null
   private updateAvailable: boolean = false
   private updateDownloadState: 'idle' | 'available' | 'downloading' | 'downloaded' = 'idle'
@@ -1680,6 +1686,7 @@ export class AppState {
     this.setupAutoUpdater()
 
     this.startStabilityHeartbeat();
+    this.startNativeOomTraceSampling();
   }
 
   private startStabilityHeartbeat(): void {
@@ -1738,26 +1745,7 @@ export class AppState {
             .sort((a: any, b: any) => b.rssMB - a.rssMB);
         } catch { /* getAppMetrics unavailable pre-ready — skip */ }
 
-        if (nativeOomTrace.isEnabled()) {
-          nativeOomTrace.sample(
-            mem,
-            (() => {
-              try {
-                return (app.getAppMetrics?.() || []) as unknown as Array<Record<string, unknown>>;
-              } catch {
-                return [];
-              }
-            })(),
-            (() => {
-              const launcher = this.windowHelper?.getLauncherWindow?.();
-              if (!launcher || launcher.isDestroyed()) return undefined;
-              const webContentsId = launcher.webContents.id;
-              const pid = launcher.webContents.getOSProcessId();
-              return pid > 0 ? { webContentsId, pid } : undefined;
-            })(),
-            { freeMemory: os.freemem(), totalMemory: os.totalmem() },
-          );
-        }
+        this.sampleNativeOomTrace(mem);
 
         console.log('[StabilityHeartbeat]', {
           rssMB: mb(mem.rss),
@@ -1786,6 +1774,41 @@ export class AppState {
     setTimeout(emit, 10_000).unref?.();
     this.stabilityHeartbeatTimer = setInterval(emit, 30_000);
     this.stabilityHeartbeatTimer.unref?.();
+  }
+
+  private sampleNativeOomTrace(memory = process.memoryUsage()): void {
+    if (!nativeOomTrace.isEnabled()) return;
+    nativeOomTrace.sample(
+      memory,
+      (() => {
+        try {
+          return (app.getAppMetrics?.() || []) as unknown as Array<Record<string, unknown>>;
+        } catch {
+          return [];
+        }
+      })(),
+      (() => {
+        const launcher = this.windowHelper?.getLauncherWindow?.();
+        if (!launcher || launcher.isDestroyed()) return undefined;
+        const pid = launcher.webContents.getOSProcessId();
+        return pid > 0 ? { webContentsId: launcher.webContents.id, pid } : undefined;
+      })(),
+      { freeMemory: os.freemem(), totalMemory: os.totalmem() },
+    );
+  }
+
+  private startNativeOomTraceSampling(): void {
+    if (!nativeOomTrace.isEnabled() || this.nativeOomTraceTimer) return;
+    // A prior incident rose from 497 MB to more than 2 GB in roughly four
+    // seconds; the ordinary 30-second heartbeat cannot observe that onset.
+    this.nativeOomTraceTimer = setInterval(() => this.sampleNativeOomTrace(), 1000);
+    this.nativeOomTraceTimer.unref?.();
+  }
+
+  public stopNativeOomTraceSampling(): void {
+    if (!this.nativeOomTraceTimer) return;
+    clearInterval(this.nativeOomTraceTimer);
+    this.nativeOomTraceTimer = null;
   }
 
   private sendToWindow(win: BrowserWindow | null | undefined, channel: string, ...args: any[]): boolean {
@@ -6854,7 +6877,11 @@ async function initializeApp() {
   logStartupPhase('before-app-whenReady');
   await app.whenReady()
   nativeOomTrace.initialize()
-  nativeOomTrace.record('app-ready', { pid: process.pid, platform: process.platform, electron: process.versions.electron })
+  nativeOomTrace.record('app-ready', {
+    pid: process.pid,
+    platform: process.platform,
+    electron: process.versions.electron,
+  })
   logStartupPhase('after-app-whenReady', { userData: app.getPath('userData') });
 
   // 2a. PRE-EMPTIVE dock hide / activation-policy clamp: must happen before ANY
@@ -7161,10 +7188,14 @@ if (process.env.THINKING_MATRIX === '1') {
   });
 
   // DIAGNOSTIC (2026-07-11): dump Chromium's GPU feature status once at boot.
-  // This records whether gpu_compositing and rasterization are hardware enabled
-  // or software/disabled, which is useful context when investigating a renderer
-  // hang. The onboarding scheduler must still allow the renderer to become idle
-  // regardless of the reported compositing mode.
+  // The "window appears then freezes / renderer not responsive" report is
+  // consistent with a machine that fell back to SOFTWARE compositing (Chromium
+  // blocklisted the GPU / driver state), where the launcher splash's heavy
+  // blur/backdrop-filter becomes catastrophically expensive and can wedge the
+  // renderer's main thread. This logs, in one line, whether gpu_compositing and
+  // rasterization are 'enabled' (hardware) or 'software'/'disabled'. If a user
+  // who freezes shows software/disabled here while a healthy machine shows
+  // enabled, the compositing path is confirmed and `?nofx=1` should unblock it.
   try {
     const status = app.getGPUFeatureStatus();
     console.log('[GPU] featureStatus', JSON.stringify(status));
@@ -7470,6 +7501,7 @@ if (process.env.THINKING_MATRIX === '1') {
   }
 
   app.on('will-quit', () => {
+    appState.stopNativeOomTraceSampling();
     nativeOomTrace.stop('will-quit');
     stopAppManagedHindsight('will-quit');
     checkpointDatabase('will-quit');

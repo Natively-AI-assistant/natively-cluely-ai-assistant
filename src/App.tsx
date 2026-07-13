@@ -76,17 +76,47 @@ function shouldMountDevReviewHost(): boolean {
 const queryClient = new QueryClient()
 const CropperWindow = React.lazy(() => import('./components/Cropper'))
 
+type LauncherIsolation = 'onboarding' | 'global-surfaces' | 'permissions-toaster' | 'no-modals' | null
+
+// The Electron main process only appends `isolate` during an explicit dev-mode
+// native-OOM run. Keeping this query-driven and default-off makes it impossible
+// for packaged launcher sessions to lose product surfaces accidentally.
+function getLauncherIsolation(): LauncherIsolation {
+  try {
+    if (!(import.meta as any)?.env?.DEV) return null
+    const isolate = new URLSearchParams(window.location.search).get('isolate')
+    return isolate === 'onboarding' || isolate === 'global-surfaces' || isolate === 'permissions-toaster' || isolate === 'no-modals' ? isolate : null
+  } catch {
+    return null
+  }
+}
+
+// TEMPORARY LEAK-DIAGNOSIS (2026-07-10): the Windows native-RSS climb is a
+// non-JS (flat V8 heap) leak in the launcher renderer + main in lockstep,
+// GPU-process-independent — consistent with CPU-composited backdrop-filter /
+// blur raster tiles under software compositing. Appending `?nofx=1` to any
+// window URL adds `nofx` to <html>, and a global CSS rule (src/index.css)
+// neutralizes every backdrop-filter/filter:blur. If RSS goes FLAT with
+// ?nofx=1, the blur/compositor tile path is the root cause. Remove after fix.
+try {
+  if (new URLSearchParams(window.location.search).get('nofx') === '1') {
+    document.documentElement.classList.add('nofx');
+    // eslint-disable-next-line no-console
+    console.warn('[LeakTest] nofx=1 → backdrop-filter/blur effects disabled this run');
+  }
+} catch { /* non-fatal */ }
+
 const App: React.FC = () => {
   const isSettingsWindow = new URLSearchParams(window.location.search).get('window') === 'settings';
   const isLauncherWindow = new URLSearchParams(window.location.search).get('window') === 'launcher';
   const isOverlayWindow = new URLSearchParams(window.location.search).get('window') === 'overlay';
   const isModelSelectorWindow = new URLSearchParams(window.location.search).get('window') === 'model-selector';
   const isCropperWindow = new URLSearchParams(window.location.search).get('window') === 'cropper';
-  // Diagnostic only: WindowHelper only appends this in an explicit development
-  // launch. The `shell` mode is handled in main.tsx before React mounts;
-  // `global-surfaces` mounts Launcher but excludes root-level hosts.
-  const launcherIsolation = new URLSearchParams(window.location.search).get('isolate');
-  const excludesGlobalSurfaces = launcherIsolation === 'global-surfaces';
+  const launcherIsolation = getLauncherIsolation();
+  const isolateOnboarding = launcherIsolation === 'onboarding' || launcherIsolation === 'global-surfaces';
+  const isolatePermissionsToaster = launcherIsolation === 'permissions-toaster';
+  const isolateModals = launcherIsolation === 'no-modals' || launcherIsolation === 'global-surfaces';
+  const isolateGlobalSurfaces = launcherIsolation === 'global-surfaces';
 
   // Default to launcher if not specified (dev mode safety)
   const isDefault = !isSettingsWindow && !isOverlayWindow && !isModelSelectorWindow && !isCropperWindow;
@@ -262,8 +292,8 @@ const App: React.FC = () => {
     // entirely — no drain loop, no toasters. Lets the same build A/B the
     // orchestrator ON vs OFF to confirm/deny the 2026-07-04 native-leak
     // regression in the field. Remove once the leak fix is field-verified.
-    if (new URLSearchParams(window.location.search).get('noorch') === '1') {
-      console.warn('[LeakTest] ?noorch=1 → onboarding orchestrator DISABLED (orch.start skipped)');
+    if (new URLSearchParams(window.location.search).get('noorch') === '1' || isolateOnboarding) {
+      console.warn(`[LeakTest] onboarding orchestrator disabled (${isolateOnboarding ? 'launcher isolation' : '?noorch=1'})`);
       return;
     }
     let cancelled = false;
@@ -297,7 +327,7 @@ const App: React.FC = () => {
       cancelled = true;
       stopFn?.();
     };
-  }, [isLauncherWindow, isDefault]);
+  }, [isLauncherWindow, isDefault, isolateOnboarding]);
 
   // Push user-state patches to the orchestrator as plan/profile state evolves.
   useEffect(() => {
@@ -821,7 +851,7 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary context="Launcher">
     <div className="h-full min-h-0 w-full relative bg-transparent">
-      {!excludesGlobalSurfaces && showHindsightBanner && <HindsightStatusBanner variant="floating-card" />}
+      {!isolateGlobalSurfaces && showHindsightBanner && <HindsightStatusBanner variant="floating-card" />}
       <AnimatePresence>
         {showStartup ? (
           <motion.div
@@ -1017,110 +1047,118 @@ const App: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {!excludesGlobalSurfaces && <>
-        <UpdateBanner />
-        <NativelyQuotaBanner />
+      {!isolateGlobalSurfaces && <UpdateBanner />}
+      {!isolateGlobalSurfaces && <NativelyQuotaBanner />}
 
-        {/* Orchestrated onboarding toasters (single-slot, controlled by OnboardingOrchestrator) */}
+      {/* Orchestrated onboarding toasters (single-slot, controlled by OnboardingOrchestrator) */}
+      {!isolateOnboarding && (
         <OrchestratorProvider>
           <OrchestratedToasterHost />
         </OrchestratorProvider>
+      )}
 
-        {/* DEV-ONLY: direct ReviewPromptHost mount for iterating on the modal UX.
-            Gated on import.meta.env.DEV plus the same opt-in flags the host
-            already respects (?review=force, window.__reviewForceShow). When
-            active, this bypasses the orchestrator entirely so the persisted
-            onboarding ledger is not modified. */}
-        {shouldMountDevReviewHost() && <ReviewPromptHost />}
+      {/* DEV-ONLY: direct ReviewPromptHost mount for iterating on the modal UX.
+          Gated on import.meta.env.DEV plus the same opt-in flags the host
+          already respects (?review=force, window.__reviewForceShow). When
+          active, this bypasses the orchestrator entirely so the persisted
+          onboarding ledger is not modified. */}
+      {!isolateGlobalSurfaces && shouldMountDevReviewHost() && <ReviewPromptHost />}
 
-        {/* Free trial countdown banner — only in launcher window while trial is active */}
-        {(isLauncherWindow || isDefault) && activeTrial && (
-          <FreeTrialBanner
-            expiresAt={activeTrial.expiresAt}
-            usage={activeTrial.usage}
-            onUpgrade={() => openSettingsExclusive('api')}
-          />
-        )}
+      {/* Free trial countdown banner — only in launcher window while trial is active */}
+      {!isolateGlobalSurfaces && (isLauncherWindow || isDefault) && activeTrial && (
+        <FreeTrialBanner
+          expiresAt={activeTrial.expiresAt}
+          usage={activeTrial.usage}
+          onUpgrade={() => openSettingsExclusive('api')}
+        />
+      )}
 
-        {/* Post-trial upgrade modal — shown when trial expires */}
-        {(isLauncherWindow || isDefault) && showTrialExpiredModal && (
-          <FreeTrialModal
-            usage={activeTrial?.usage ?? { ai: 0, stt_seconds: 0, search: 0 }}
-            onByok={async () => {
-              await window.electronAPI?.endTrialByok?.();
-            }}
-            onStandard={async () => {
-              // Wipe resume + JD (orchestrator caches + SQLite) before checkout opens
-              await window.electronAPI?.wipeTrialProfileData?.().catch(() => {});
-              // Revert active mode to none — Standard plan has no modes access
-              await window.electronAPI?.modesSetActive?.(null).catch(() => {});
-            }}
-            onDone={() => {
-              setShowTrialExpiredModal(false);
-              setActiveTrial(null);
-            }}
-          />
-        )}
-
-        {/* Ad toasters */}
-        {isLauncherMainView && !isSettingsOpen && (
-          <NativelyApiPromoToaster
-            isOpen={activeAd === 'natively_api'}
-            onDismiss={() => dismissAd('natively_api')}
-            onOpenSettings={(tab: string) => openSettingsExclusive(tab)}
-          />
-        )}
-        {isLauncherMainView && (
-          <>
-            <ProfileFeatureToaster
-              isOpen={activeAd === 'profile'}
-              onDismiss={dismissAd}
-              onSetupProfile={() => openProfileExclusive()}
-            />
-            <JDAwarenessToaster
-              isOpen={activeAd === 'jd'}
-              onDismiss={dismissAd}
-              onSetupJD={() => openProfileExclusive()}
-            />
-            <PremiumPromoToaster
-              isOpen={activeAd === 'promo'}
-              onDismiss={dismissAd}
-              onUpgrade={() => {
-                setShowPremiumModal(true);
-              }}
-            />
-            <MaxUltraUpgradeToaster
-              isOpen={activeAd === 'max_ultra_upgrade'}
-              onDismiss={dismissAd}
-              onUpgrade={() => {
-                setShowPremiumModal(true);
-              }}
-            />
-          </>
-        )}
-
-        <PremiumUpgradeModal
-          isOpen={showPremiumModal}
-          onClose={() => setShowPremiumModal(false)}
-          isPremium={isPremiumActive}
-          onActivated={() => {
-            setIsPremiumActive(true);
-            // Refresh full plan details after activation so ad targeting reflects the new plan
-            window.electronAPI?.licenseGetDetails?.()
-              .then(d => setPlanDetails(d ?? { isPremium: true }))
-              .catch(() => setPlanDetails({ isPremium: true }));
-            setShowPremiumModal(false);
-            // If user activated during post-trial modal, close it — they have a plan now
+      {/* Post-trial upgrade modal — shown when trial expires */}
+      {!isolateModals && (isLauncherWindow || isDefault) && showTrialExpiredModal && (
+        <FreeTrialModal
+          usage={activeTrial?.usage ?? { ai: 0, stt_seconds: 0, search: 0 }}
+          onByok={async () => {
+            await window.electronAPI?.endTrialByok?.();
+          }}
+          onStandard={async () => {
+            // Wipe resume + JD (orchestrator caches + SQLite) before checkout opens
+            await window.electronAPI?.wipeTrialProfileData?.().catch(() => {});
+            // Revert active mode to none — Standard plan has no modes access
+            await window.electronAPI?.modesSetActive?.(null).catch(() => {});
+          }}
+          onDone={() => {
             setShowTrialExpiredModal(false);
             setActiveTrial(null);
-            // After activation, open settings to Profile Intelligence
-            setTimeout(() => {
-              openProfileExclusive();
-            }, 300);
           }}
-          onDeactivated={() => { setIsPremiumActive(false); setPlanDetails({ isPremium: false }); }}
         />
-      </>}
+      )}
+
+      {/* Ad toasters */}
+      {!isolateModals && isLauncherMainView && !isSettingsOpen && (
+        <NativelyApiPromoToaster
+          isOpen={activeAd === 'natively_api'}
+          onDismiss={() => dismissAd('natively_api')}
+          onOpenSettings={(tab: string) => openSettingsExclusive(tab)}
+        />
+      )}
+      {!isolateModals && isLauncherMainView && (
+        <>
+          <ProfileFeatureToaster
+            isOpen={activeAd === 'profile'}
+            onDismiss={dismissAd}
+            onSetupProfile={() => openProfileExclusive()}
+          />
+          <JDAwarenessToaster
+            isOpen={activeAd === 'jd'}
+            onDismiss={dismissAd}
+            onSetupJD={() => openProfileExclusive()}
+          />
+          <PremiumPromoToaster
+            isOpen={activeAd === 'promo'}
+            onDismiss={dismissAd}
+            onUpgrade={() => {
+              setShowPremiumModal(true);
+            }}
+          />
+          <MaxUltraUpgradeToaster
+            isOpen={activeAd === 'max_ultra_upgrade'}
+            onDismiss={dismissAd}
+            onUpgrade={() => {
+              setShowPremiumModal(true);
+            }}
+          />
+
+          {/* Remote Campaigns Render Logic (Commented out)
+          <RemoteCampaignToaster
+            isOpen={typeof activeAd === 'object' && activeAd !== null}
+            campaign={typeof activeAd === 'object' && activeAd !== null ? activeAd : undefined as any}
+            onDismiss={dismissAd}
+          />
+          */}
+        </>
+      )}
+
+      {!isolateModals && <PremiumUpgradeModal
+        isOpen={showPremiumModal}
+        onClose={() => setShowPremiumModal(false)}
+        isPremium={isPremiumActive}
+        onActivated={() => {
+          setIsPremiumActive(true);
+          // Refresh full plan details after activation so ad targeting reflects the new plan
+          window.electronAPI?.licenseGetDetails?.()
+            .then(d => setPlanDetails(d ?? { isPremium: true }))
+            .catch(() => setPlanDetails({ isPremium: true }));
+          setShowPremiumModal(false);
+          // If user activated during post-trial modal, close it — they have a plan now
+          setShowTrialExpiredModal(false);
+          setActiveTrial(null);
+          // After activation, open settings to Profile Intelligence
+          setTimeout(() => {
+            openProfileExclusive();
+          }, 300);
+        }}
+        onDeactivated={() => { setIsPremiumActive(false); setPlanDetails({ isPremium: false }); }}
+      />}
     </div>
     </ErrorBoundary>
   )

@@ -290,7 +290,7 @@ test('LEAK GUARD: the drain loop uses setTimeout, never requestAnimationFrame', 
   // the drain loop is timer-based.
 });
 
-test('LEAK GUARD: the drain loop STOPS scheduling once every stage is resolved', () => {
+test('LEAK GUARD: the deadline scheduler STOPS scheduling once every stage is resolved', () => {
   localStorage.clear();
   timerQueue = [];
   mockNow = 0;
@@ -325,21 +325,20 @@ test('LEAK GUARD: the drain loop STOPS scheduling once every stage is resolved',
   assert.ok(drainIsIdle(), 'drain loop must stay idle with no new events');
 });
 
-test('LEAK GUARD: a state-change event re-arms the drain loop after it went idle', () => {
+test('LEAK GUARD: an event re-arms the deadline scheduler after it went idle', () => {
   localStorage.clear();
   timerQueue = [];
   mockNow = 0;
 
   const orch = new OnboardingOrchestrator();
   orch.start(STAGES);
-  // Not foreground yet → shouldEvaluate() is false, but there IS pending work,
-  // so the loop stays armed. Drain the initial ticks.
+  // Not foreground yet → there is no time deadline that can be acted on, so
+  // the scheduler must stay idle until an eligibility event arrives.
   let guard = 0;
   while (!drainIsIdle() && guard < 5) { flushOneFrame(); guard += 1; }
 
-  // Backgrounded with pending work: the loop keeps a single armed timer (it must
-  // not busy-loop, but it must not permanently give up either). Now deliver a
-  // foreground + mount + duration so permissions becomes eligible.
+  // Now deliver foreground + mount + duration so permissions becomes eligible.
+  // notify() must schedule one evaluation pass without recreating a poll loop.
   orch.emit({ type: 'launcher:mounted' });
   orch.emit({ type: 'foreground:change', isForeground: true });
   orch.emit({
@@ -357,4 +356,30 @@ test('LEAK GUARD: a state-change event re-arms the drain loop after it went idle
     guard += 1;
   }
   assert.ok(raised, 'a state-change event must re-arm the loop and let a newly-eligible stage fire');
+});
+
+test('LEAK GUARD: event-gated stages do not leave a polling timer armed', () => {
+  localStorage.clear();
+  timerQueue = [];
+  mockNow = 0;
+
+  const orch = new OnboardingOrchestrator();
+  orch.start([{
+    id: 'permissions',
+    order: 1,
+    triggers: { requiresHomepageMounted: true, requiresForeground: true, requiresTurnCount: 1 },
+  }]);
+  orch.emit({ type: 'launcher:mounted' });
+  orch.emit({ type: 'foreground:change', isForeground: true });
+
+  assert.ok(
+    drainIsIdle(),
+    'a stage blocked only on a future event must not wake the renderer on a polling timer',
+  );
+
+  orch.emit({ type: 'turn:done' });
+  assert.equal(timerQueue.length, 1, 'the qualifying event must schedule exactly one evaluation');
+  flushOneFrame();
+  assert.equal(orch.getSnapshot().activeToasterId, 'permissions');
+  assert.ok(drainIsIdle(), 'an active toaster must not keep a scheduler timer alive');
 });

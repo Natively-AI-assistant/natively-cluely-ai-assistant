@@ -9738,11 +9738,18 @@ export function initializeIpcHandlers(appState: AppState): void {
     const key = JSON.stringify(launcherInfo);
     if (key !== lastLauncherPhoneStatusKey) {
       lastLauncherPhoneStatusKey = key;
-      appState.getMainWindow()?.webContents.send('phone-mirror:status', launcherInfo);
+      const win = appState.getMainWindow();
+      if (win && !win.isDestroyed()) {
+        appState.recordNativeOomOutboundIpc(win.webContents.id, 'phone-mirror:status', [launcherInfo]);
+        win.webContents.send('phone-mirror:status', launcherInfo);
+      }
     }
     try {
       const settingsWin = (appState as any).settingsWindowHelper?.getWindow?.();
-      settingsWin?.webContents?.send('phone-mirror:status', info);
+      if (settingsWin && !settingsWin.isDestroyed()) {
+        appState.recordNativeOomOutboundIpc(settingsWin.webContents.id, 'phone-mirror:status', [info]);
+        settingsWin.webContents.send('phone-mirror:status', info);
+      }
     } catch (_) {
       /* settings window may not exist yet */
     }
