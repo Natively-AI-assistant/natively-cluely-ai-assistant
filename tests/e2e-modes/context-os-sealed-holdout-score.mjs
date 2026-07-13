@@ -20,7 +20,9 @@ const arg = (name) => {
 
 const resultsPath = arg('--results');
 const sealedPath = arg('--sealed');
+const expectedTotal = Number(arg('--expected-total') || 30);
 if (!resultsPath || !sealedPath) throw new Error('usage requires --results and --sealed');
+if (!Number.isInteger(expectedTotal) || expectedTotal < 1) throw new Error('--expected-total must be a positive integer');
 
 const readJsonl = (file) => fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
 const gold = JSON.parse(fs.readFileSync(sealedPath, 'utf8'));
@@ -100,9 +102,9 @@ const verdict = {
   duplicateResultIds,
   unknownResultIds,
   missingResultIds,
-  releasePass: scored.length >= 400
-    && rate >= 0.975
-    && lower95 >= 0.95
+  releasePass: scored.length === expectedTotal
+    && results.length === expectedTotal
+    && rate >= 0.95
     && criticalIsolationFailures.length === 0
     && duplicateResultIds.length === 0
     && unknownResultIds.length === 0

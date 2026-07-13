@@ -4567,6 +4567,7 @@ const isMultimodal = !!(imagePaths?.length);
       || routeOptions?.answerType === 'definitional_answer'
       || routeOptions?.answerType === 'list_answer'
       || routeOptions?.answerType === 'exact_numeric_answer'
+      || routeOptions?.answerType === 'document_structure_answer'
       || routeOptions?.answerType === 'document_absent_fact_refusal'
       || routeOptions?.answerType === 'document_followup_answer';
     const shouldSkipModeInjection = skipModeInjection || (isUniversalOverride && !isModeScopedAnswer && !isActiveCustomMode);
