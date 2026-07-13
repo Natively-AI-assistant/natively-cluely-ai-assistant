@@ -1,6 +1,7 @@
 import { AlertTriangle, Check, ChevronDown, Copy, Cpu, Loader2, Wifi, WifiOff } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useT } from '../../i18n';
 
 // Label + one-line description + group + TIER for each Intelligence OS flag. Keyed by flag
 // key; an unknown key falls back to the raw key so a newly-added flag still renders.
@@ -182,6 +183,7 @@ const DisclosureChevron: React.FC<{ open: boolean }> = ({ open }) => (
 // Hindsight setup card so a non-technical user can grab the install / launch / env-export
 // commands with one click instead of typing them by hand.
 const CopyBlock: React.FC<{ text: string; label?: string }> = ({ text, label }) => {
+  const t = useT();
   const [copied, setCopied] = useState(false);
   const handleCopy = useCallback(() => {
     try {
@@ -199,11 +201,11 @@ const CopyBlock: React.FC<{ text: string; label?: string }> = ({ text, label }) 
       <button
         type="button"
         onClick={handleCopy}
-        aria-label={`Copy ${text}`}
+        aria-label={`${t('Copy')} ${text}`}
         className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border-subtle bg-bg-input px-2 py-0.5 text-[10px] font-medium text-text-secondary transition-colors hover:text-text-primary active:scale-[0.97] motion-reduce:active:scale-100"
       >
         {copied ? <Check size={11} className="text-green-400" /> : <Copy size={11} />}
-        {copied ? 'Copied' : 'Copy'}
+        {copied ? t('Copied') : t('Copy')}
       </button>
     </div>
   );
@@ -232,6 +234,7 @@ const StaggerRow: React.FC<{ index: number; children: React.ReactNode }> = ({ in
 // "Not running" for both. The unreachable state offers an inline Retry.
 type ConnStatus = 'not-configured' | 'checking' | 'connected' | 'unreachable' | 'auth-failed';
 const StatusChip: React.FC<{ status: ConnStatus; testing: boolean; onRetry: () => void }> = ({ status, testing, onRetry }) => {
+  const t = useT();
   const reduce = useReducedMotion();
   // Resolve the chip to a single keyed visual state. The 4-state derivation (status + testing)
   // is unchanged — only the presentation is keyed so AnimatePresence can transition between
@@ -242,32 +245,32 @@ const StatusChip: React.FC<{ status: ConnStatus; testing: boolean; onRetry: () =
   if (visual === 'connected') {
     body = (
       <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-green-500/30 bg-green-500/15 px-2.5 py-0.5 text-[11px] font-medium text-green-400">
-        <Wifi size={12} /> Connected
+        <Wifi size={12} /> {t('Connected')}
       </span>
     );
   } else if (visual === 'checking') {
     body = (
       <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border-subtle bg-bg-input px-2.5 py-0.5 text-[11px] font-medium text-text-secondary">
-        <Loader2 size={12} className="animate-spin" /> Checking…
+        <Loader2 size={12} className="animate-spin" /> {t('Checking…')}
       </span>
     );
   } else if (visual === 'unreachable') {
     body = (
       <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/15 px-2.5 py-0.5 text-[11px] font-medium text-amber-400">
-        <WifiOff size={12} /> Can’t connect
-        <button type="button" onClick={onRetry} className="ml-0.5 underline hover:no-underline">Retry</button>
+        <WifiOff size={12} /> {t('Can’t connect')}
+        <button type="button" onClick={onRetry} className="ml-0.5 underline hover:no-underline">{t('Retry')}</button>
       </span>
     );
   } else if (visual === 'auth-failed') {
     body = (
       <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/15 px-2.5 py-0.5 text-[11px] font-medium text-red-400">
-        <WifiOff size={12} /> Cloud key rejected
+        <WifiOff size={12} /> {t('Cloud key rejected')}
       </span>
     );
   } else {
     body = (
       <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border-subtle bg-bg-input px-2.5 py-0.5 text-[11px] font-medium text-text-tertiary">
-        Not set up
+        {t('Not set up')}
       </span>
     );
   }
@@ -296,6 +299,7 @@ const StatusChip: React.FC<{ status: ConnStatus; testing: boolean; onRetry: () =
 };
 
 export const IntelligenceSettings: React.FC = () => {
+  const t = useT();
   const [flags, setFlags] = useState<FlagRow[]>([]);
   const [cfg, setCfg] = useState<HindsightCfg | null>(null);
   const [baseUrl, setBaseUrl] = useState('');
@@ -349,8 +353,8 @@ export const IntelligenceSettings: React.FC = () => {
       if (res && res.enabled === false) {
         // Point the user at the EXACT toggle. These advanced toggles live inside the
         // "Customize individual features" disclosure under Smart features.
-        const t = TRY_IT_TOGGLE[kind];
-        setTryOut({ kind, text: `“${t.label}” is off. Open “Customize individual features” under Smart features, turn it on, then try again.` });
+        const toggle = TRY_IT_TOGGLE[kind];
+        setTryOut({ kind, text: `“${toggle.label}” ${t('is off. Open “Customize individual features” under Smart features, turn it on, then try again.')}` });
         return;
       }
       // Search returns structured rows — render them as readable timestamped quotes
@@ -358,7 +362,7 @@ export const IntelligenceSettings: React.FC = () => {
       if (kind === 'search') {
         const rows: Array<{ snippet?: string; timestampMs?: number; speaker?: string }> = Array.isArray(res?.results) ? res.results : [];
         if (!rows.length) {
-          setTryOut({ kind, text: 'No matches — is a meeting active with a transcript?' });
+          setTryOut({ kind, text: t('No matches — is a meeting active with a transcript?') });
           return;
         }
         const text = rows.slice(0, 20).map((r) => {
@@ -371,9 +375,9 @@ export const IntelligenceSettings: React.FC = () => {
       }
       const payload = res?.notes ?? res?.diagram ?? res;
       const text = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
-      setTryOut({ kind, text: text && text !== 'null' ? text : 'No result — is a meeting active with a transcript?' });
+      setTryOut({ kind, text: text && text !== 'null' ? text : t('No result — is a meeting active with a transcript?') });
     } catch (e: any) {
-      setTryOut({ kind, text: `Failed: ${e?.message || 'error'}` });
+      setTryOut({ kind, text: `${t('Failed:')} ${e?.message || 'error'}` });
     } finally { setTryBusy(null); }
   }, []);
 
@@ -607,9 +611,9 @@ export const IntelligenceSettings: React.FC = () => {
   return (
     <div className="space-y-6 max-w-2xl">
       <header>
-        <h3 className="text-lg font-bold text-text-primary mb-1">Intelligence</h3>
+        <h3 className="text-lg font-bold text-text-primary mb-1">{t('Intelligence')}</h3>
         <p className="text-xs text-text-secondary mb-5">
-          Tune features that surface during real-time conversations, lectures, and meetings.
+          {t('Tune features that surface during real-time conversations, lectures, and meetings.')}
         </p>
       </header>
 
@@ -618,10 +622,10 @@ export const IntelligenceSettings: React.FC = () => {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-text-primary">Long-term memory</h3>
-              <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-amber-400">Beta</span>
+              <h3 className="text-sm font-semibold text-text-primary">{t('Long-term memory')}</h3>
+              <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-amber-400">{t('Beta')}</span>
             </div>
-            <p className="mt-1 text-xs leading-relaxed text-text-secondary">Remember what was discussed in past meetings and surface it automatically. Needs a free companion app — about 5 minutes to set up.</p>
+            <p className="mt-1 text-xs leading-relaxed text-text-secondary">{t('Remember what was discussed in past meetings and surface it automatically. Needs a free companion app — about 5 minutes to set up.')}</p>
           </div>
           <StatusChip status={status} onRetry={onTest} testing={testing} />
         </div>
@@ -631,7 +635,7 @@ export const IntelligenceSettings: React.FC = () => {
           onClick={() => setShowSetup((v) => !v)}
           className="text-xs font-medium text-accent-primary transition-colors hover:text-accent-secondary active:scale-[0.98]"
         >
-          {showSetup ? 'Hide setup' : (status === 'connected' ? 'Edit setup' : 'Set up long-term memory →')}
+          {showSetup ? t('Hide setup') : (status === 'connected' ? t('Edit setup') : t('Set up long-term memory →'))}
         </button>
 
         <Disclosure open={showSetup}>
@@ -644,33 +648,33 @@ export const IntelligenceSettings: React.FC = () => {
                 // CLOUD FLOW — no install, just paste URL + key
                 <>
                   <li>
-                    <span className="font-medium text-text-primary">1. Paste your Hindsight Cloud address below.</span> If you don’t have one, sign up at{' '}
+                    <span className="font-medium text-text-primary">{t('1. Paste your Hindsight Cloud address below.')}</span> {t("If you don’t have one, sign up at")}{' '}
                     <button type="button" onClick={() => openExternal('https://hindsight.vectorize.io')} className="text-accent-primary underline hover:no-underline">hindsight.vectorize.io</button>.
                   </li>
                   <li>
-                    <span className="font-medium text-text-primary">2. Paste your Cloud account key.</span> Found in your Hindsight Cloud dashboard. The app saves it automatically — no Apply needed.
+                    <span className="font-medium text-text-primary">{t('2. Paste your Cloud account key.')}</span> {t('Found in your Hindsight Cloud dashboard. The app saves it automatically — no Apply needed.')}
                   </li>
                 </>
               ) : (
                 // LOCAL FLOW — 3 steps. Step 3 is fully automatic when the companion is installed.
                 <>
               <li>
-                <span className="font-medium text-text-primary">1. Install the companion app.</span> In your Terminal, run:
+                <span className="font-medium text-text-primary">{t('1. Install the companion app.')}</span> {t('In your Terminal, run:')}
                 <CopyBlock text="pip install hindsight-all" />
-                <span className="mt-1 block">Requires Python 3.11 or later.</span>
+                <span className="mt-1 block">{t('Requires Python 3.11 or later.')}</span>
               </li>
               <li>
-                <span className="font-medium text-text-primary">2. Start it.</span>{' '}
-                From the Natively project folder, run the bundled launcher and keep it running while you use the app:
+                <span className="font-medium text-text-primary">{t('2. Start it.')}</span>{' '}
+                {t('From the Natively project folder, run the bundled launcher and keep it running while you use the app:')}
                 <CopyBlock text="bash scripts/hindsight-start.sh" />
                 <span className="mt-1.5 block">
-                  Starts the embedded memory server on port 8888.
+                  {t('Starts the embedded memory server on port 8888.')}
                 </span>
                 <span className="mt-1 block">
-                  <span className="font-medium text-text-primary">If you start it from inside Natively</span> (autoStart toggle ON below), your AI provider key from the AI Providers screen is forwarded to the server automatically — nothing else to do.
+                  <span className="font-medium text-text-primary">{t('If you start it from inside Natively')}</span> {t('(autoStart toggle ON below), your AI provider key from the AI Providers screen is forwarded to the server automatically — nothing else to do.')}
                 </span>
                 <span className="mt-1 block">
-                  <span className="font-medium text-text-primary">If you run the script yourself</span> in a Terminal, also export your AI provider key so the server can use it (the script reads your shell environment, not the app’s stored credentials):
+                  <span className="font-medium text-text-primary">{t('If you run the script yourself')}</span> {t('in a Terminal, also export your AI provider key so the server can use it (the script reads your shell environment, not the app’s stored credentials):')}
                 </span>
                 {detectedProvider && detectedProvider !== 'other' && detectedProvider !== 'litellm' ? (
                   // Auto-detected: show the env-var snippet that matches the user's
@@ -682,7 +686,7 @@ export const IntelligenceSettings: React.FC = () => {
                       label={PROVIDER_ENV_HINTS[detectedProvider].snippetLabel}
                     />
                     <span className="mt-1 block text-text-tertiary">
-                      We detected your AI Providers key for <span className="font-medium">{PROVIDER_ENV_HINTS[detectedProvider].label}</span> — the env var name above is the one the launcher reads.
+                      {t('We detected your AI Providers key for')} <span className="font-medium">{PROVIDER_ENV_HINTS[detectedProvider].label}</span> {t('— the env var name above is the one the launcher reads.')}
                     </span>
                   </>
                 ) : detectedProvider === 'litellm' ? (
@@ -696,7 +700,7 @@ export const IntelligenceSettings: React.FC = () => {
                       label="LiteLLM gateway:"
                     />
                     <span className="mt-1 block text-text-tertiary">
-                      We detected a LiteLLM gateway URL in AI Providers. The launcher forwards it automatically when started from inside Natively; if you run the script yourself, also export the URL above.
+                      {t('We detected a LiteLLM gateway URL in AI Providers. The launcher forwards it automatically when started from inside Natively; if you run the script yourself, also export the URL above.')}
                     </span>
                   </>
                 ) : detectedProvider === 'other' ? (
@@ -705,10 +709,10 @@ export const IntelligenceSettings: React.FC = () => {
                   // one for whatever key they save. Each is a one-click copy.
                   <>
                     <span className="mt-1 block text-text-tertiary">
-                      No AI provider key is configured yet. Save one in the AI Providers screen, then copy the matching line below:
+                      {t('No AI provider key is configured yet. Save one in the AI Providers screen, then copy the matching line below:')}
                     </span>
                     <div className="mt-1.5 space-y-1.5 rounded-lg border border-border-subtle bg-bg-main/40 p-2.5">
-                      <div className="px-1 text-[10px] font-medium uppercase tracking-wide text-text-tertiary">Pick the one that matches your key</div>
+                      <div className="px-1 text-[10px] font-medium uppercase tracking-wide text-text-tertiary">{t('Pick the one that matches your key')}</div>
                       {(Object.keys(PROVIDER_ENV_HINTS) as Array<keyof typeof PROVIDER_ENV_HINTS>).map((k) => (
                         <CopyBlock
                           key={k}
@@ -722,21 +726,21 @@ export const IntelligenceSettings: React.FC = () => {
                   // Still loading (detectedProvider === null). Show a neutral placeholder so
                   // the panel doesn't pop in empty; replaced on the next render once the
                   // credentials IPC resolves.
-                  <CopyBlock text="export GEMINI_API_KEY=your-key-here" label="Loading provider…" />
+                  <CopyBlock text="export GEMINI_API_KEY=your-key-here" label={t("Loading provider…")} />
                 )}
               </li>
               <li>
-                <span className="font-medium text-text-primary">3. Paste the address below</span> (the local default is already filled in). The app connects automatically — no Apply needed.
+                <span className="font-medium text-text-primary">{t('3. Paste the address below')}</span> {t('(the local default is already filled in). The app connects automatically — no Apply needed.')}
               </li>
                 </>
               )}
             </ol>
             <button type="button" onClick={() => openExternal('https://hindsight.vectorize.io/developer/installation')} className="text-[11px] font-medium text-accent-primary transition-colors hover:text-accent-secondary">
-              Full setup guide &amp; troubleshooting →
+              {t('Full setup guide & troubleshooting →')}
             </button>
 
             <label className="block space-y-1">
-              <span className="text-[10px] font-medium uppercase tracking-wide text-text-secondary">Server address</span>
+              <span className="text-[10px] font-medium uppercase tracking-wide text-text-secondary">{t('Server address')}</span>
               <input
                 type="text"
                 value={baseUrl}
@@ -746,7 +750,7 @@ export const IntelligenceSettings: React.FC = () => {
               />
               {cfg?.synthetic && baseUrl === 'http://localhost:8888' && (
                 <span className="mt-1 block text-[11px] text-text-tertiary">
-                  Using local default. Type your Cloud URL (e.g. <span className="font-mono">https://api.hindsight.vectorize.io</span>) to switch to Hindsight Cloud.
+                  {t('Using local default. Type your Cloud URL (e.g.')} <span className="font-mono">https://api.hindsight.vectorize.io</span>{t(') to switch to Hindsight Cloud.')}
                 </span>
               )}
             </label>
@@ -759,27 +763,27 @@ export const IntelligenceSettings: React.FC = () => {
             {(cfg?.mode === 'cloud' || baseUrl && !baseUrl.includes('localhost') && !baseUrl.startsWith('http://127.')) && (
             <label className="block space-y-1">
               <span className="text-[10px] font-medium uppercase tracking-wide text-text-secondary">
-                Hindsight Cloud account key <span className="normal-case text-text-tertiary">(not your AI key)</span>
-                {cfg?.hasApiKey ? ' — saved, leave blank to keep' : ''}
+                {t('Hindsight Cloud account key')} <span className="normal-case text-text-tertiary">{t('(not your AI key)')}</span>
+                {cfg?.hasApiKey ? t(' — saved, leave blank to keep') : ''}
               </span>
               <input
                 type="password"
                 value={apiKey}
                 onChange={(e) => { setApiKey(e.target.value); scheduleAutoSave(); }}
-                placeholder={cfg?.hasApiKey ? '••••••••  saved' : 'Required for Hindsight Cloud'}
+                placeholder={cfg?.hasApiKey ? t('••••••••  saved') : t('Required for Hindsight Cloud')}
                 className="w-full rounded-lg border border-border-subtle bg-bg-input px-3 py-2 text-xs text-text-primary transition-colors focus:outline-none focus:border-accent-primary"
               />
               <span className="block text-[11px] leading-relaxed text-text-secondary">
-                Required for Hindsight Cloud. Your AI provider key stays on this device and is used separately.
+                {t('Required for Hindsight Cloud. Your AI provider key stays on this device and is used separately.')}
               </span>
             </label>
             )}
 
             <label className="flex items-center justify-between gap-3">
               <span className="text-xs text-text-primary">
-                Start memory server automatically at launch
+                {t('Start memory server automatically at launch')}
                 <span className="mt-0.5 block text-[11px] leading-relaxed text-text-secondary">
-                  When ON and the companion is installed, Natively starts it for you at launch and forwards your AI provider key automatically. Turn OFF to manage the server yourself.
+                  {t('When ON and the companion is installed, Natively starts it for you at launch and forwards your AI provider key automatically. Turn OFF to manage the server yourself.')}
                 </span>
               </span>
               <Toggle on={autoStart} onClick={() => { setAutoStart((v) => !v); scheduleAutoSave(); }} />
@@ -797,7 +801,7 @@ export const IntelligenceSettings: React.FC = () => {
               }}
               className="text-[11px] font-medium text-text-tertiary transition-colors hover:text-text-primary text-left"
             >
-              Don't use Hindsight at all
+              {t("Don't use Hindsight at all")}
             </button>
 
             {/* Inline nudge surfaced when the user just saved a new AI provider key while an
@@ -815,7 +819,7 @@ export const IntelligenceSettings: React.FC = () => {
                 >
                   <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-400" />
                   <span>
-                    You just saved a new <span className="font-medium">{restartHint.provider}</span> key, but the running Hindsight server still has the old one. Quit and relaunch Natively, or toggle autoStart off and on to restart the server.
+                    {t('You just saved a new')} <span className="font-medium">{restartHint.provider}</span> {t('key, but the running Hindsight server still has the old one. Quit and relaunch Natively, or toggle autoStart off and on to restart the server.')}
                   </span>
                 </motion.div>
               ) : null}
@@ -824,7 +828,7 @@ export const IntelligenceSettings: React.FC = () => {
             {/* Privacy disclosure ABOVE the Save action so it's seen before any data is sent. */}
             <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-[11px] leading-relaxed text-amber-300/90">
               <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-400" />
-              <span>Local keeps memory on this device. Choosing Cloud sends meeting summaries to Hindsight’s servers — a privacy trade-off for an otherwise local-first app.</span>
+              <span>{t('Local keeps memory on this device. Choosing Cloud sends meeting summaries to Hindsight’s servers — a privacy trade-off for an otherwise local-first app.')}</span>
             </div>
 
             <div className="flex items-center gap-2">
@@ -845,7 +849,7 @@ export const IntelligenceSettings: React.FC = () => {
                     </motion.span>
                   ) : null}
                 </AnimatePresence>
-                {savedAt ? 'Applied' : 'Apply now'}
+                {savedAt ? t('Applied') : t('Apply now')}
               </button>
               <button
                 type="button"
@@ -854,7 +858,7 @@ export const IntelligenceSettings: React.FC = () => {
                 className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 motion-reduce:active:scale-100"
               >
                 {testing ? <Loader2 size={14} className="animate-spin" /> : null}
-                Test connection
+                {t('Test connection')}
               </button>
             </div>
           </div>
@@ -870,11 +874,11 @@ export const IntelligenceSettings: React.FC = () => {
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <Cpu size={15} className="shrink-0 text-accent-primary" />
-                <div className="text-sm font-semibold text-text-primary">Smart features</div>
+                <div className="text-sm font-semibold text-text-primary">{t('Smart features')}</div>
               </div>
               <div className="mt-1 text-xs leading-relaxed text-text-secondary">
-                Better answers, meeting notes, and follow-ups — all running on your device.
-                {masterState === 'mixed' ? <span className="ml-1 font-medium text-accent-primary">Customized.</span> : null}
+                {t('Better answers, meeting notes, and follow-ups — all running on your device.')}
+                {masterState === 'mixed' ? <span className="ml-1 font-medium text-accent-primary">{t('Customized.')}</span> : null}
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
@@ -902,7 +906,7 @@ export const IntelligenceSettings: React.FC = () => {
             className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-accent-primary transition-colors hover:text-accent-secondary active:scale-[0.98]"
           >
             <DisclosureChevron open={showCustomize} />
-            {showCustomize ? 'Hide individual features' : 'Customize individual features'}
+            {showCustomize ? t('Hide individual features') : t('Customize individual features')}
           </button>
 
           <Disclosure open={showCustomize}>
@@ -910,7 +914,7 @@ export const IntelligenceSettings: React.FC = () => {
               {/* Core features individually — same switches the master fans out to. */}
               {byTier.core.length ? (
                 <div className="space-y-1.5">
-                  <div className="px-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">Meeting notes</div>
+                  <div className="px-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">{t('Meeting notes')}</div>
                   {byTier.core.map((row, i) => (
                     <StaggerRow key={row.key} index={i}><FlagRowView row={row} onToggle={onToggleFlag} /></StaggerRow>
                   ))}
@@ -936,7 +940,7 @@ export const IntelligenceSettings: React.FC = () => {
                     className="inline-flex items-center gap-1 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary active:scale-[0.98]"
                   >
                     <DisclosureChevron open={showDev} />
-                    {showDev ? 'Hide developer options' : 'Developer options (for testing only)'}
+                    {showDev ? t('Hide developer options') : t('Developer options (for testing only)')}
                   </button>
                   <Disclosure open={showDev}>
                     <div className="mt-2 space-y-1.5">
@@ -955,8 +959,8 @@ export const IntelligenceSettings: React.FC = () => {
       {/* ── Try it (runs against the current meeting) ────────────── */}
       <section className="rounded-xl border border-border-subtle bg-bg-item-surface p-5 space-y-3">
         <div>
-          <div className="text-sm font-semibold text-text-primary">Try it</div>
-          <div className="mt-1 text-xs leading-relaxed text-text-secondary">These run on the meeting you’re currently in — not a saved recording. Turn the feature on under “Customize individual features” above, then join an active meeting.</div>
+          <div className="text-sm font-semibold text-text-primary">{t('Try it')}</div>
+          <div className="mt-1 text-xs leading-relaxed text-text-secondary">{t('These run on the meeting you’re currently in — not a saved recording. Turn the feature on under “Customize individual features” above, then join an active meeting.')}</div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -965,7 +969,7 @@ export const IntelligenceSettings: React.FC = () => {
             onClick={() => runTry('lecture', () => window.electronAPI.generateLectureNotes?.())}
             className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle px-3 py-1.5 text-xs font-medium text-text-secondary transition-[colors,transform] hover:text-text-primary active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100 motion-reduce:active:scale-100"
           >
-            {tryBusy === 'lecture' ? <Loader2 size={14} className="animate-spin" /> : null} Lecture notes
+            {tryBusy === 'lecture' ? <Loader2 size={14} className="animate-spin" /> : null} {t('Lecture notes')}
           </button>
           <button
             type="button"
@@ -973,7 +977,7 @@ export const IntelligenceSettings: React.FC = () => {
             onClick={() => runTry('diagram', () => window.electronAPI.generateDiagram?.())}
             className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle px-3 py-1.5 text-xs font-medium text-text-secondary transition-[colors,transform] hover:text-text-primary active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100 motion-reduce:active:scale-100"
           >
-            {tryBusy === 'diagram' ? <Loader2 size={14} className="animate-spin" /> : null} Diagram
+            {tryBusy === 'diagram' ? <Loader2 size={14} className="animate-spin" /> : null} {t('Diagram')}
           </button>
         </div>
         <div className="flex items-center gap-2">
@@ -981,7 +985,7 @@ export const IntelligenceSettings: React.FC = () => {
             type="text"
             value={searchQ}
             onChange={(e) => setSearchQ(e.target.value)}
-            placeholder="Search the current meeting…"
+            placeholder={t("Search the current meeting…")}
             disabled={!flagOn('inMeetingSearchV2')}
             className="flex-1 rounded-lg border border-border-subtle bg-bg-input px-3 py-2 text-xs text-text-primary transition-colors focus:outline-none focus:border-accent-primary disabled:opacity-40"
           />
@@ -991,7 +995,7 @@ export const IntelligenceSettings: React.FC = () => {
             onClick={() => runTry('search', () => window.electronAPI.searchInMeeting?.(searchQ.trim()))}
             className="inline-flex items-center gap-1.5 rounded-lg bg-accent-primary px-3 py-1.5 text-xs font-medium text-white transition-[opacity,transform] active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100 motion-reduce:active:scale-100"
           >
-            {tryBusy === 'search' ? <Loader2 size={14} className="animate-spin" /> : null} Search
+            {tryBusy === 'search' ? <Loader2 size={14} className="animate-spin" /> : null} {t('Search')}
           </button>
         </div>
         <TryResult out={tryOut} />

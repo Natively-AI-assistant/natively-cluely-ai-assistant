@@ -21,9 +21,38 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
     },
     claude: {
         hasKeyCheck: (creds) => !!creds?.hasClaudeKey,
-        ids: ['claude-sonnet-4-6'],
-        names: ['Sonnet 4.6'],
-        descs: ['Anthropic'],
+        // Full Anthropic lineup so the top "Active Model" picker lists every model
+        // directly (not just the built-in default + one fetched "preferred"). Ids are
+        // the exact Anthropic /v1/models ids; the per-provider Fetch Models dropdown
+        // still works on top of this for any brand-new model not yet listed here.
+        ids: [
+            'claude-sonnet-5',
+            'claude-sonnet-4-6',
+            'claude-sonnet-4-5-20250929',
+            'claude-opus-4-8',
+            'claude-opus-4-7',
+            'claude-opus-4-6',
+            'claude-opus-4-5-20251101',
+            'claude-opus-4-1-20250805',
+            'claude-haiku-4-5-20251001',
+            'claude-fable-5',
+        ],
+        names: [
+            'Sonnet 5',
+            'Sonnet 4.6',
+            'Sonnet 4.5',
+            'Opus 4.8',
+            'Opus 4.7',
+            'Opus 4.6',
+            'Opus 4.5',
+            'Opus 4.1',
+            'Haiku 4.5',
+            'Fable 5',
+        ],
+        descs: [
+            'Anthropic', 'Anthropic', 'Anthropic', 'Anthropic', 'Anthropic',
+            'Anthropic', 'Anthropic', 'Anthropic', 'Anthropic', 'Anthropic',
+        ],
         pmKey: 'claudePreferredModel'
     },
     groq: {

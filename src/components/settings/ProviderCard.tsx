@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useT } from '../../i18n';
 import { Trash2, AlertCircle, CheckCircle, ExternalLink, Loader2, ChevronDown, Check, RefreshCw } from 'lucide-react';
 
 interface FetchedModel {
@@ -43,6 +44,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     keyUrl,
     onPreferredModelChange,
 }) => {
+    const t = useT();
     const [fetchedModels, setFetchedModels] = useState<FetchedModel[]>([]);
     const [isFetching, setIsFetching] = useState(false);
     const [fetchError, setFetchError] = useState<string | null>(null);
@@ -143,8 +145,8 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle">
             <div className="mb-2 flex items-center justify-between">
                 <label className="flex items-center text-xs font-medium text-text-primary uppercase tracking-wide">
-                    {providerName} API Key
-                    {hasStoredKey && <span className="ml-2 text-green-500 normal-case">✓ Saved</span>}
+                    {providerName} {t('API Key')}
+                    {hasStoredKey && <span className="ml-2 text-green-500 normal-case">✓ {t('Saved')}</span>}
                 </label>
                 <button
                     onClick={() => {
@@ -154,7 +156,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                     className="text-xs text-text-tertiary hover:text-text-primary flex items-center gap-1 transition-colors"
                     title={`Get ${providerName} API Key`}
                 >
-                    <span className="text-[10px] uppercase tracking-wide">Get Key</span>
+                    <span className="text-[10px] uppercase tracking-wide">{t('Get Key')}</span>
                     <ExternalLink size={12} />
                 </button>
             </div>
@@ -174,13 +176,13 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                         : 'bg-bg-input hover:bg-bg-secondary border border-border-subtle text-text-primary disabled:opacity-50'
                         }`}
                 >
-                    {savingStatus ? 'Saving...' : savedStatus ? 'Saved!' : 'Save'}
+                    {savingStatus ? t('Saving...') : savedStatus ? t('Saved!') : t('Save')}
                 </button>
                 {hasStoredKey && (
                     <button
                         onClick={onRemoveKey}
                         className="px-2.5 py-2.5 rounded-lg text-xs font-medium text-text-tertiary hover:text-red-500 hover:bg-red-500/10 transition-all"
-                        title="Remove API Key"
+                        title={t("Remove API Key")}
                     >
                         <Trash2 size={16} strokeWidth={1.5} />
                     </button>
@@ -196,12 +198,12 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                         testStatus === 'error' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
                             'bg-bg-input hover:bg-bg-elevated text-text-primary'
                         }`}
-                    title={testError || "Test Connection"}
+                    title={testError || t("Test Connection")}
                 >
-                    {testStatus === 'testing' ? <><Loader2 size={12} className="animate-spin" /> Testing...</> :
-                        testStatus === 'success' ? <><CheckCircle size={12} /> Connected</> :
-                            testStatus === 'error' ? <><AlertCircle size={12} /> Error</> :
-                                <>{/* No Icon */} Test Connection</>}
+                    {testStatus === 'testing' ? <><Loader2 size={12} className="animate-spin" /> {t('Testing...')}</> :
+                        testStatus === 'success' ? <><CheckCircle size={12} /> {t('Connected')}</> :
+                            testStatus === 'error' ? <><AlertCircle size={12} /> {t('Error')}</> :
+                                <>{/* No Icon */} {t('Test Connection')}</>}
                 </button>
 
                 {/* Inline Model Dropdown */}
@@ -212,7 +214,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                             className={`w-full bg-bg-input border border-border-subtle rounded-md px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary flex items-center justify-between transition-colors ${fetchedModels.length > 0 ? 'hover:bg-bg-elevated' : 'opacity-80 cursor-default'}`}
                             type="button"
                         >
-                            <span className="truncate pr-2">{selectedOption ? selectedOption.label : (preferredModel || 'Select model')}</span>
+                            <span className="truncate pr-2">{selectedOption ? selectedOption.label : (preferredModel || t('Select model'))}</span>
                             <ChevronDown size={14} className={`text-text-secondary transition-transform ${isDropdownOpen ? 'rotate-180' : ''} ${fetchedModels.length === 0 ? 'opacity-50' : ''}`} />
                         </button>
 
@@ -248,9 +250,9 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                             }`}
                     >
                         {isFetching ? (
-                            <><Loader2 size={12} className="animate-spin" /> Fetching...</>
+                            <><Loader2 size={12} className="animate-spin" /> {t('Fetching...')}</>
                         ) : (
-                            <><RefreshCw size={12} /> Fetch Models</>
+                            <><RefreshCw size={12} /> {t('Fetch Models')}</>
                         )}
                     </button>
                 ) : (
@@ -261,7 +263,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
 
             {/* Error from test or fetch */}
             {testError && <p className="text-[10px] text-red-400 mt-1.5 mb-2">{testError}</p>}
-            {fetchError && <p className="text-[10px] text-red-400 mt-1.5 mb-2">Model fetch error: {fetchError}</p>}
+            {fetchError && <p className="text-[10px] text-red-400 mt-1.5 mb-2">{t('Model fetch error:')} {fetchError}</p>}
 
 
         </div>

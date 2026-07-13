@@ -1,5 +1,6 @@
 import { BookOpen, Bot, Braces, Briefcase, Check, Copy, HelpCircle, Lock, Paperclip, RefreshCw, ShieldAlert, ShieldCheck, Sparkles, Wifi, Zap } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useT } from '../../i18n';
 import type { BrowserContextSettings, PhoneMirrorInfo } from '../../types/electron';
 import { isMac } from '../../utils/platformUtils';
 import { BrowserExtensionIcon } from '../onboarding/BrowserExtensionIcon';
@@ -75,6 +76,7 @@ const EMPTY_INFO: PhoneMirrorInfo = {
 };
 
 export const PhoneMirrorSettings: React.FC = () => {
+  const t = useT();
   const [info, setInfo] = useState<PhoneMirrorInfo>(EMPTY_INFO);
   const [busy, setBusy] = useState<null | 'enable' | 'disable' | 'lan' | 'rotate'>(null);
   const [error, setError] = useState<string | null>(null);
@@ -286,7 +288,7 @@ export const PhoneMirrorSettings: React.FC = () => {
   return (
     <div className="space-y-6 animated fadeIn">
       <header>
-        <h3 className="text-lg font-bold text-text-primary mb-1">Sync</h3>
+        <h3 className="text-lg font-bold text-text-primary mb-1">{t('Sync')}</h3>
         <p className="text-xs text-text-secondary mb-5">
           Mirror answers to your phone. Capture browser tabs to your answers.
         </p>
@@ -302,7 +304,7 @@ export const PhoneMirrorSettings: React.FC = () => {
         {/* Row 1 — Enable Phone Mirror */}
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <div className="text-text-primary font-medium text-sm">Enable Phone Mirror</div>
+            <div className="text-text-primary font-medium text-sm">{t('Enable Phone Mirror')}</div>
             <div className="text-text-secondary text-xs mt-1">
               {info.running
                 ? `On — port ${info.port} · bound to ${info.bindAddress} (${info.bindAddress === '0.0.0.0' ? 'LAN' : 'loopback only'}) · ${info.clients} ${info.clients === 1 ? 'phone' : 'phones'} connected`
@@ -490,7 +492,7 @@ export const PhoneMirrorSettings: React.FC = () => {
               <BrowserExtensionIcon color="rgb(129, 140, 248)" size={16} className="text-indigo-400" />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-text-primary font-medium text-sm">Browser Extension</div>
+              <div className="text-text-primary font-medium text-sm">{t('Browser Extension')}</div>
               <div className="text-text-secondary text-xs mt-1 leading-relaxed">
                 Pair the companion extension to send the active tab to the desktop.{' '}
                 <kbd className="px-1 py-0.5 rounded bg-bg-main border border-border-subtle font-mono text-[10px]">
@@ -715,7 +717,7 @@ export const PhoneMirrorSettings: React.FC = () => {
         </div>
         <div className="flex items-start gap-2">
           <Wifi size={12} className="mt-0.5 flex-shrink-0 text-text-secondary" />
-          <span>Phone Mirror runs on your local network. No traffic leaves this machine.</span>
+          <span>{t('Phone Mirror runs on your local network. No traffic leaves this machine.')}</span>
         </div>
       </footer>
 

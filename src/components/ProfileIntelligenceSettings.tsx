@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { PremiumUpgradeModal } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
+import { useT } from '../i18n';
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const PI_CSS = `
@@ -532,20 +533,23 @@ interface FileUploadEmptyProps {
     onBrowse: () => void;
     onNeedUpgrade: () => void;
 }
-const FileUploadEmpty = ({ hint, uploading, hasAccess, onBrowse, onNeedUpgrade }: FileUploadEmptyProps) => (
+const FileUploadEmpty = ({ hint, uploading, hasAccess, onBrowse, onNeedUpgrade }: FileUploadEmptyProps) => {
+    const t = useT();
+    return (
     <div className="pi-file-empty" style={{ gap: 12 }}>
-        <p style={{ fontSize: 12, color: 'var(--pi-tertiary)', margin: 0 }}>{hint}{!hasAccess ? ' Requires Pro.' : ''}</p>
+        <p style={{ fontSize: 12, color: 'var(--pi-tertiary)', margin: 0 }}>{hint}{!hasAccess ? t(' Requires Pro.') : ''}</p>
         <button
             className="pi-upload-btn"
             disabled={uploading}
             onClick={() => { if (!hasAccess) { onNeedUpgrade(); return; } onBrowse(); }}
         >
             {uploading
-                ? <><RefreshCw size={13} className="pi-spinner" /> Processing…</>
-                : <><Paperclip size={13} /> Upload file</>}
+                ? <><RefreshCw size={13} className="pi-spinner" /> {t('Processing…')}</>
+                : <><Paperclip size={13} /> {t('Upload file')}</>}
         </button>
     </div>
-);
+    );
+};
 
 // ─── Nav items ────────────────────────────────────────────────────────────────
 const NAV_ITEMS = [
@@ -559,6 +563,7 @@ const NAV_ITEMS = [
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }) {
+    const t = useT();
     const cachedPremium = readPremiumCache();
     const [isPremium, setIsPremium] = useState(cachedPremium.isPremium);
     const [premiumPlan, setPremiumPlan] = useState<string>(cachedPremium.plan);
@@ -682,7 +687,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
     }, [hasProfileAccess]);
 
     const handleRemoveTavilyKey = async () => {
-        if (!confirm('Remove your Tavily API key?')) return;
+        if (!confirm(t('Remove your Tavily API key?'))) return;
         try {
             const res = await window.electronAPI?.setTavilyApiKey?.('');
             if (res?.success) { setHasStoredTavilyKey(false); setTavilyApiKey(''); }
@@ -714,12 +719,12 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                 if (data) setProfileData(data);
                 setProfileUploadStatus('ready');
             } else {
-                setProfileError(result?.error || 'Upload failed');
+                setProfileError(result?.error || t('Upload failed'));
                 setProfileUploadStatus('failed');
             }
         } catch (e: any) {
             if (token.cancelled) return;
-            setProfileError(e.message || 'Upload failed');
+            setProfileError(e.message || t('Upload failed'));
             setProfileUploadStatus('failed');
         } finally {
             if (!token.cancelled) {
@@ -743,12 +748,12 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                 if (data) setProfileData(data);
                 setJdUploadStatus('ready');
             } else {
-                setJdError(result?.error || 'JD upload failed');
+                setJdError(result?.error || t('JD upload failed'));
                 setJdUploadStatus('failed');
             }
         } catch (e: any) {
             if (token.cancelled) return;
-            setJdError(e.message || 'JD upload failed');
+            setJdError(e.message || t('JD upload failed'));
             setJdUploadStatus('failed');
         } finally {
             if (!token.cancelled) {
@@ -798,11 +803,11 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                 style={{ marginBottom: 20 }}
             >
                 <div>
-                    <h3 className="pi-section-label" style={{ margin: 0 }}>Persona Engine</h3>
+                    <h3 className="pi-section-label" style={{ margin: 0 }}>{t('Persona Engine')}</h3>
                     <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: '4px 0 0' }}>
                         {profileStatus.profileMode
-                            ? 'Answers rewired around your profile, the role, and your voice.'
-                            : 'Dormant. Your profile is loaded but not shaping answers yet.'}
+                            ? t('Answers rewired around your profile, the role, and your voice.')
+                            : t('Dormant. Your profile is loaded but not shaping answers yet.')}
                     </p>
                 </div>
                 <div
@@ -823,10 +828,10 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
             </div>
 
             {/* Resume */}
-            <h3 className="pi-section-label">Resume</h3>
+            <h3 className="pi-section-label">{t('Resume')}</h3>
             {!profileStatus.hasProfile && !profileUploading ? (
                 <FileUploadEmpty
-                    hint="Add your resume as real-time context."
+                    hint={t("Add your resume as real-time context.")}
                     uploading={profileUploading}
                     hasAccess={hasProfileAccess}
                     onBrowse={browseResume}
@@ -855,7 +860,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                     setProfileData(cancelData ?? null);
                                     return;
                                 }
-                                if (!confirm('Delete your resume and its extracted data?')) return;
+                                if (!confirm(t('Delete your resume and its extracted data?'))) return;
                                 try {
                                     await window.electronAPI?.profileDelete?.();
                                     setProfileStatus({ hasProfile: false, profileMode: false });
@@ -889,7 +894,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                     )}
                                     {profileStatus.totalExperienceYears != null && profileStatus.totalExperienceYears > 0 && (
                                         <span style={{ fontSize: 11, color: 'var(--pi-tertiary)' }}>
-                                            {profileStatus.totalExperienceYears}y exp
+                                            {profileStatus.totalExperienceYears}{t('y exp')}
                                         </span>
                                     )}
                                 </div>
@@ -908,7 +913,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                     })()}
                     {!profileUploading && (
                         <button className="pi-add-file-btn" onClick={browseResume}>
-                            <Plus size={12} /> Replace file
+                            <Plus size={12} /> {t('Replace file')}
                         </button>
                     )}
                 </div>
@@ -920,10 +925,10 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
             )}
 
             {/* Job Description */}
-            <h3 className="pi-section-label">Job Description</h3>
+            <h3 className="pi-section-label">{t('Job Description')}</h3>
             {!profileData?.hasActiveJD && !jdUploading ? (
                 <FileUploadEmpty
-                    hint="Add a job description as real-time context."
+                    hint={t("Add a job description as real-time context.")}
                     uploading={jdUploading}
                     hasAccess={hasProfileAccess}
                     onBrowse={browseJD}
@@ -936,7 +941,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                         <span style={{ fontSize: 12, color: 'var(--pi-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {profileData?.activeJD?.title
                                 ? `${profileData.activeJD.title}${profileData.activeJD.company ? ` @ ${profileData.activeJD.company}` : ''}`
-                                : 'Job Description'}
+                                : t('Job Description')}
                         </span>
                         <PIIndexBadge status={jdUploadStatus} />
                         <button
@@ -967,7 +972,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                         const jd = profileData.activeJD;
                         const reqs: string[] = (jd.requirements ?? []).slice(0, 3);
                         const techs: string[] = (jd.technologies ?? []).slice(0, 4);
-                        const levelMap: Record<string, string> = { intern: 'Intern', entry: 'Entry', mid: 'Mid', senior: 'Senior', staff: 'Staff', principal: 'Principal' };
+                        const levelMap: Record<string, string> = { intern: t('Intern'), entry: t('Entry'), mid: t('Mid'), senior: t('Senior'), staff: t('Staff'), principal: t('Principal') };
                         return (
                             <div style={{ padding: '10px 12px', border: '1px solid var(--pi-border)', borderRadius: 'var(--pi-r-md)', background: 'rgba(255,255,255,0.015)', display: 'flex', flexDirection: 'column', gap: 6 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -977,7 +982,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                         </span>
                                     )}
                                     {jd.min_years_experience > 0 && (
-                                        <span style={{ fontSize: 11, color: 'var(--pi-tertiary)' }}>{jd.min_years_experience}+ yrs</span>
+                                        <span style={{ fontSize: 11, color: 'var(--pi-tertiary)' }}>{jd.min_years_experience}{t('+ yrs')}</span>
                                     )}
                                     {jd.location && (
                                         <span style={{ fontSize: 11, color: 'var(--pi-tertiary)', display: 'flex', alignItems: 'center', gap: 3 }}>
@@ -1010,7 +1015,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                     })()}
                     {!jdUploading && (
                         <button className="pi-add-file-btn" onClick={browseJD}>
-                            <Plus size={12} /> Replace file
+                            <Plus size={12} /> {t('Replace file')}
                         </button>
                     )}
                 </div>
@@ -1028,22 +1033,22 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
     const renderContext = () => (
         <>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <h3 className="pi-section-label" style={{ margin: 0 }}>Custom Context</h3>
+                <h3 className="pi-section-label" style={{ margin: 0 }}>{t('Custom Context')}</h3>
                 {customNotesSaved && (
                     <span key={customNotesSavedKey} style={{ fontSize: 10, fontWeight: 700, color: '#22c55e', display: 'flex', alignItems: 'center', gap: 4, animation: 'pi-check-in 320ms var(--pi-ease-spring) both' }}>
-                        <Check size={10} /> Saved
+                        <Check size={10} /> {t('Saved')}
                     </span>
                 )}
             </div>
             <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: '0 0 12px', lineHeight: 1.6 }}>
-                Anything the AI should know about you — facts, constraints, preferences. Saved across all sessions and modes.
+                {t('Anything the AI should know about you — facts, constraints, preferences. Saved across all sessions and modes.')}
             </p>
             <div className="pi-content-box">
                 <textarea
                     value={customNotes}
                     className="pi-textarea"
                     rows={8}
-                    placeholder={`Examples:\n• Q4 ARR was $2.1M, grew 40% YoY\n• Target salary $180k, floor $160k\n• I prefer concise answers without filler phrases`}
+                    placeholder={t("Examples:\n• Q4 ARR was $2.1M, grew 40% YoY\n• Target salary $180k, floor $160k\n• I prefer concise answers without filler phrases")}
                     onChange={e => {
                         const val = e.target.value;
                         if (val.length > 4000) return;
@@ -1066,22 +1071,22 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                     </span>
                 </div>
             </div>
-            <p style={{ fontSize: 11, color: 'var(--pi-tertiary)', margin: '8px 0 0' }}>Auto-saved · Works with all modes and providers</p>
+            <p style={{ fontSize: 11, color: 'var(--pi-tertiary)', margin: '8px 0 0' }}>{t('Auto-saved · Works with all modes and providers')}</p>
         </>
     );
 
     const renderPersona = () => (
         <>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <h3 className="pi-section-label" style={{ margin: 0 }}>AI Persona</h3>
+                <h3 className="pi-section-label" style={{ margin: 0 }}>{t('AI Persona')}</h3>
                 {personaSaved && hasProfileAccess && (
                     <span key={personaSavedKey} style={{ fontSize: 10, fontWeight: 700, color: '#22c55e', display: 'flex', alignItems: 'center', gap: 4, animation: 'pi-check-in 320ms var(--pi-ease-spring) both' }}>
-                        <Check size={10} /> Updated
+                        <Check size={10} /> {t('Updated')}
                     </span>
                 )}
             </div>
             <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: '0 0 12px', lineHeight: 1.6 }}>
-                {hasProfileAccess ? "Set the AI's behavior, tone, and role across providers." : 'Upgrade to Pro to personalise the AI persona.'}
+                {hasProfileAccess ? t("Set the AI's behavior, tone, and role across providers.") : t('Upgrade to Pro to personalise the AI persona.')}
             </p>
             <div className="pi-content-box">
                 <textarea
@@ -1089,7 +1094,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                     className="pi-textarea"
                     rows={6}
                     disabled={!hasProfileAccess}
-                    placeholder="Example: You are a senior hiring manager. Keep answers concise and ask one focused follow-up when needed."
+                    placeholder={t("Example: You are a senior hiring manager. Keep answers concise and ask one focused follow-up when needed.")}
                     onFocus={() => { if (!hasProfileAccess) setIsPremiumModalOpen(true); }}
                     onChange={e => {
                         if (!hasProfileAccess) { setIsPremiumModalOpen(true); return; }
@@ -1124,21 +1129,21 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
     const renderTavily = () => (
         <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <h3 className="pi-section-label" style={{ margin: 0 }}>Tavily Search API</h3>
+                <h3 className="pi-section-label" style={{ margin: 0 }}>{t('Tavily Search API')}</h3>
                 {hasStoredTavilyKey && (
                     <span style={{ fontSize: 10, fontWeight: 700, color: '#22c55e', padding: '2px 7px', borderRadius: 4, background: 'rgba(34,197,94,0.10)', border: '1px solid rgba(34,197,94,0.20)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                        <Check size={9} strokeWidth={2.5} /> Connected
+                        <Check size={9} strokeWidth={2.5} /> {t('Connected')}
                     </span>
                 )}
             </div>
             <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: '0 0 16px', lineHeight: 1.6 }}>
-                Powers live web search for company research. If not provided, LLM general knowledge is used (may be outdated).
+                {t('Powers live web search for company research. If not provided, LLM general knowledge is used (may be outdated).')}
             </p>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--pi-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>API Key</label>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--pi-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('API Key')}</label>
                 {hasStoredTavilyKey && (
                     <button className="pi-pill-btn pi-pill-btn--danger pi-press" style={{ fontSize: 11, padding: '3px 8px' }} onClick={handleRemoveTavilyKey}>
-                        <Trash2 size={10} /> Remove
+                        <Trash2 size={10} /> {t('Remove')}
                     </button>
                 )}
             </div>
@@ -1161,22 +1166,22 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                     setTavilyError(''); setTavilySaving(true);
                     try {
                         const result = await window.electronAPI?.setTavilyApiKey?.(tavilyApiKey.trim());
-                        if (result && !result.success) { setTavilyError(result.error ?? 'Failed to save API key.'); }
+                        if (result && !result.success) { setTavilyError(result.error ?? t('Failed to save API key.')); }
                         else { setHasStoredTavilyKey(true); setTavilyApiKey(''); }
-                    } catch (e: any) { setTavilyError(e?.message ?? 'Unexpected error.'); }
+                    } catch (e: any) { setTavilyError(e?.message ?? t('Unexpected error.')); }
                     finally { setTavilySaving(false); }
                 }}
             >
-                {tavilySaving ? <><RefreshCw size={12} className="pi-spinner" /> Saving…</> : 'Save API Key'}
+                {tavilySaving ? <><RefreshCw size={12} className="pi-spinner" /> {t('Saving…')}</> : t('Save API Key')}
             </button>
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 14, padding: '10px 12px', borderRadius: 8, background: 'var(--pi-btn-bg)', border: '1px solid var(--pi-border)' }}>
                 <Info size={12} style={{ color: 'var(--pi-tertiary)', flexShrink: 0, marginTop: 1 }} />
                 <p style={{ fontSize: 11, color: 'var(--pi-tertiary)', margin: 0, lineHeight: 1.6 }}>
-                    Get your free key at{' '}
+                    {t('Get your free key at')}{' '}
                     <span style={{ color: '#22c55e', cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(34,197,94,0.4)', textUnderlineOffset: 2 }}
                         onClick={() => window.electronAPI?.openExternal?.('https://app.tavily.com/home')}>
                         app.tavily.com
-                    </span>. Keys start with <code style={{ fontSize: 11, color: '#22c55e' }}>tvly-</code>.
+                    </span>. {t('Keys start with')} <code style={{ fontSize: 11, color: '#22c55e' }}>tvly-</code>.
                 </p>
             </div>
         </>
@@ -1184,24 +1189,24 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
 
     const renderCompany = () => {
         if (!profileData?.hasActiveJD || !profileData?.activeJD?.company) {
-            return <p style={{ fontSize: 13, color: 'var(--pi-secondary)' }}>Upload a job description first to enable company research.</p>;
+            return <p style={{ fontSize: 13, color: 'var(--pi-secondary)' }}>{t('Upload a job description first to enable company research.')}</p>;
         }
         return (
             <>
                 {companySearchQuotaExhausted && (
                     <div style={{ display: 'flex', gap: 8, padding: '8px 12px', borderRadius: 8, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', marginBottom: 12, fontSize: 11, color: '#f59e0b', lineHeight: 1.5 }}>
                         <span style={{ flexShrink: 0 }}>⚠</span>
-                        Web search credits exhausted — showing AI-only research.
+                        {t('Web search credits exhausted — showing AI-only research.')}
                     </div>
                 )}
                 {!companyDossier && !companyResearching && (
                     <div style={{ padding: '32px 0', textAlign: 'center' }}>
                         <Building2 size={28} style={{ color: 'var(--pi-tertiary)', marginBottom: 10 }} />
                         <p style={{ fontSize: 13, color: 'var(--pi-secondary)', margin: '0 0 16px' }}>
-                            No research yet for <strong style={{ color: 'var(--pi-primary)' }}>{profileData.activeJD.company}</strong>
+                            {t('No research yet for')} <strong style={{ color: 'var(--pi-primary)' }}>{profileData.activeJD.company}</strong>
                         </p>
                         <button className="pi-upload-btn pi-press" onClick={doCompanyResearch}>
-                            <Search size={13} /> Research Now
+                            <Search size={13} /> {t('Research Now')}
                         </button>
                     </div>
                 )}
@@ -1217,12 +1222,12 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                             <button className="pi-add-file-btn pi-press-soft" disabled={companyResearching} onClick={doCompanyResearch}>
                                 <RefreshCw size={12} className={companyResearching ? 'pi-spinner' : ''} />
-                                {companyResearching ? 'Refreshing…' : 'Refresh'}
+                                {companyResearching ? t('Refreshing…') : t('Refresh')}
                             </button>
                         </div>
                         {companyDossier.hiring_strategy && (
                             <div>
-                                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--pi-hero)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Hiring Strategy</div>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--pi-hero)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>{t('Hiring Strategy')}</div>
                                 <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: 0, lineHeight: 1.6, padding: '10px 12px', borderRadius: 8, background: 'var(--pi-btn-bg)', border: '1px solid var(--pi-border)' }}>
                                     {companyDossier.hiring_strategy}
                                 </p>
@@ -1231,7 +1236,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                         {companyDossier.interview_focus && (
                             <div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--pi-hero)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Interview Focus</div>
+                                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--pi-hero)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('Interview Focus')}</div>
                                     {companyDossier.interview_difficulty && (
                                         <span style={{
                                             fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase',
@@ -1251,7 +1256,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                         )}
                         {companyDossier.salary_estimates?.length > 0 && (
                             <div>
-                                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--pi-hero)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Salary Estimates</div>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--pi-hero)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>{t('Salary Estimates')}</div>
                                 <div style={{ border: '1px solid var(--pi-border)', borderRadius: 8, overflow: 'hidden' }}>
                                     {companyDossier.salary_estimates.map((s: any, i: number) => (
                                         <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: i < companyDossier.salary_estimates.length - 1 ? '1px solid var(--pi-border)' : 'none' }}>
@@ -1272,7 +1277,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                         )}
                         {companyDossier.culture_ratings && (
                             <div>
-                                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--pi-hero)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Work Culture</div>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--pi-hero)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>{t('Work Culture')}</div>
                                 <div style={{ border: '1px solid var(--pi-border)', borderRadius: 8, padding: '12px 14px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid var(--pi-border)' }}>
                                         <div>
@@ -1286,10 +1291,10 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                     </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px' }}>
                                         {[
-                                            { label: 'Work-Life Balance', key: 'work_life_balance' },
-                                            { label: 'Career Growth', key: 'career_growth' },
-                                            { label: 'Compensation', key: 'compensation' },
-                                            { label: 'Management', key: 'management' },
+                                            { label: t('Work-Life Balance'), key: 'work_life_balance' },
+                                            { label: t('Career Growth'), key: 'career_growth' },
+                                            { label: t('Compensation'), key: 'compensation' },
+                                            { label: t('Management'), key: 'management' },
                                         ].map(({ label, key }) => {
                                             const val = typeof (companyDossier.culture_ratings as any)[key] === 'number' ? (companyDossier.culture_ratings as any)[key] : 0;
                                             return val > 0 ? (
@@ -1310,7 +1315,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                             <div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                                     <Gift size={11} style={{ color: '#22c55e' }} />
-                                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--pi-hero)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Benefits</div>
+                                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--pi-hero)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('Benefits')}</div>
                                 </div>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                                     {companyDossier.benefits.map((b: string, i: number) => (
@@ -1321,7 +1326,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                         )}
                         {companyDossier.core_values?.length > 0 && (
                             <div>
-                                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--pi-hero)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Core Values</div>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--pi-hero)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>{t('Core Values')}</div>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                                     {companyDossier.core_values.map((v: string, i: number) => (
                                         <span key={i} style={{ fontSize: 11, color: '#c084fc', padding: '3px 10px', borderRadius: 20, background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.18)' }}>{v}</span>
@@ -1333,7 +1338,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                             <div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                                     <AlertCircle size={11} style={{ color: '#fb923c' }} />
-                                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--pi-hero)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Common Complaints</div>
+                                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--pi-hero)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('Common Complaints')}</div>
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                     {companyDossier.critics.map((c: any, i: number) => (
@@ -1350,7 +1355,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                         )}
                         {companyDossier.recent_news && (
                             <div>
-                                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--pi-hero)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Recent News</div>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--pi-hero)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>{t('Recent News')}</div>
                                 <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: 0, lineHeight: 1.6, padding: '10px 12px', borderRadius: 8, background: 'var(--pi-btn-bg)', border: '1px solid var(--pi-border)' }}>
                                     {companyDossier.recent_news}
                                 </p>
@@ -1358,7 +1363,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                         )}
                         <div style={{ display: 'flex', gap: 8, padding: '10px 12px', borderRadius: 8, background: 'rgba(168,85,247,0.04)', border: '1px solid rgba(168,85,247,0.14)', fontSize: 11, color: 'var(--pi-tertiary)', lineHeight: 1.5 }}>
                             <span style={{ color: '#a855f7', flexShrink: 0 }}>⚠</span>
-                            <span><strong style={{ color: '#c084fc' }}>Beta.</strong> AI-generated — verify salary figures and hiring details independently.</span>
+                            <span><strong style={{ color: '#c084fc' }}>{t('Beta.')}</strong> {t('AI-generated — verify salary figures and hiring details independently.')}</span>
                         </div>
                     </div>
                 )}
@@ -1372,15 +1377,15 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
             try {
                 const result = await window.electronAPI?.profileGenerateNegotiation?.(regen);
                 if (result?.success && result.script) setNegotiationScript(result.script);
-                else setNegotiationError(result?.error || 'Generation failed');
-            } catch { setNegotiationError('Generation failed'); }
+                else setNegotiationError(result?.error || t('Generation failed'));
+            } catch { setNegotiationError(t('Generation failed')); }
             finally { setNegotiationGenerating(false); }
         };
 
         const STEPS = [
-            { step: '01', label: 'Opening',        hint: 'When asked about salary',      field: 'opening_line',          accent: '#10b981', bg: 'rgba(16,185,129,0.06)',  border: 'rgba(16,185,129,0.16)'  },
-            { step: '02', label: 'Justify',         hint: 'Link your record to the ask',  field: 'justification',          accent: '#818cf8', bg: 'rgba(129,140,248,0.06)', border: 'rgba(129,140,248,0.16)' },
-            { step: '03', label: 'Counter & Hold',  hint: 'If they push back',            field: 'counter_offer_fallback', accent: '#fb923c', bg: 'rgba(251,146,60,0.06)',  border: 'rgba(251,146,60,0.16)'  },
+            { step: '01', label: t('Opening'),        hint: t('When asked about salary'),      field: 'opening_line',          accent: '#10b981', bg: 'rgba(16,185,129,0.06)',  border: 'rgba(16,185,129,0.16)'  },
+            { step: '02', label: t('Justify'),         hint: t('Link your record to the ask'),  field: 'justification',          accent: '#818cf8', bg: 'rgba(129,140,248,0.06)', border: 'rgba(129,140,248,0.16)' },
+            { step: '03', label: t('Counter & Hold'),  hint: t('If they push back'),            field: 'counter_offer_fallback', accent: '#fb923c', bg: 'rgba(251,146,60,0.06)',  border: 'rgba(251,146,60,0.16)'  },
         ];
 
         return (
@@ -1388,15 +1393,15 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                 {/* Header */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                     <div>
-                        <h3 className="pi-section-label" style={{ margin: 0 }}>Negotiation Script</h3>
+                        <h3 className="pi-section-label" style={{ margin: 0 }}>{t('Negotiation Script')}</h3>
                         <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: '4px 0 0', lineHeight: 1.5 }}>
-                            AI-crafted salary negotiation based on your resume & JD.
+                            {t('AI-crafted salary negotiation based on your resume & JD.')}
                         </p>
                     </div>
                     {negotiationScript && (
                         <button className="pi-pill-btn pi-press" disabled={negotiationGenerating} onClick={() => doGenerate(true)}>
                             <RefreshCw size={12} className={negotiationGenerating ? 'pi-spinner' : ''} />
-                            Regenerate
+                            {t('Regenerate')}
                         </button>
                     )}
                 </div>
@@ -1427,9 +1432,9 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                             <Gift size={18} style={{ color: '#34d399' }} />
                         </div>
                         <div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>Ready to negotiate</div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>{t('Ready to negotiate')}</div>
                             <div style={{ fontSize: 12, color: 'var(--pi-secondary)', lineHeight: 1.6, maxWidth: 260 }}>
-                                Generate a personalised salary script with opening line, justification, and counter-offer phrasing.
+                                {t('Generate a personalised salary script with opening line, justification, and counter-offer phrasing.')}
                             </div>
                         </div>
                         <button
@@ -1437,7 +1442,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                             style={{ color: '#34d399', borderColor: 'rgba(52,211,153,0.25)', background: 'rgba(52,211,153,0.08)', fontWeight: 600, padding: '8px 20px' }}
                             onClick={() => doGenerate(false)}
                         >
-                            <Sparkles size={13} /> Generate Script
+                            <Sparkles size={13} /> {t('Generate Script')}
                         </button>
                     </div>
                 )}
@@ -1453,7 +1458,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                             const range = `${prefix}${min?.toLocaleString()} – ${max?.toLocaleString()}`;
                             return (
                                 <div style={{ borderRadius: 12, padding: '14px 18px', background: 'var(--pi-btn-bg)', border: '1px solid var(--pi-btn-border)', marginBottom: 2 }}>
-                                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.1em', color: 'var(--pi-tertiary)', marginBottom: 6 }}>Target Compensation</div>
+                                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.1em', color: 'var(--pi-tertiary)', marginBottom: 6 }}>{t('Target Compensation')}</div>
                                     <div style={{ fontSize: 22, fontWeight: 800, color: '#34d399', letterSpacing: '-0.02em', lineHeight: 1, whiteSpace: 'nowrap' }}>
                                         {range}
                                     </div>
@@ -1482,7 +1487,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                             onMouseEnter={e => (e.currentTarget.style.color = 'var(--pi-primary)')}
                                             onMouseLeave={e => (e.currentTarget.style.color = 'var(--pi-tertiary)')}
                                         >
-                                            <Check size={11} /> Copy
+                                            <Check size={11} /> {t('Copy')}
                                         </button>
                                     </div>
                                     {/* Quote body */}
@@ -1535,13 +1540,13 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                 boxShadow: 'inset -1px 0 0 rgba(255,255,255,0.06)',
             }}>
                 {/* Close */}
-                <button onClick={onClose} className="pi-close-btn" style={{ marginLeft: 8, marginBottom: 4 }} title="Close">
+                <button onClick={onClose} className="pi-close-btn" style={{ marginLeft: 8, marginBottom: 4 }} title={t("Close")}>
                     <X size={15} />
                 </button>
 
                 {/* Header */}
                 <div style={{ padding: '8px 20px 12px', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                    <h2 style={{ fontSize: 13, fontWeight: 700, color: 'var(--pi-hero)', margin: 0, letterSpacing: '0.01em', textTransform: 'uppercase' as const }}>Profile Intelligence</h2>
+                    <h2 style={{ fontSize: 13, fontWeight: 700, color: 'var(--pi-hero)', margin: 0, letterSpacing: '0.01em', textTransform: 'uppercase' as const }}>{t('Profile Intelligence')}</h2>
                 </div>
 
                 {/* Nav — position:relative for sliding indicator */}
@@ -1579,10 +1584,10 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                         onClick={() => setIsPremiumModalOpen(true)}
                         className={ctaClass}
                         style={{ width: '100%' }}
-                        aria-label={isPremium ? 'Manage Pro' : 'Unlock Pro'}
+                        aria-label={isPremium ? t('Manage Pro') : t('Unlock Pro')}
                     >
                         <span style={{ flex: 1, textAlign: 'left', position: 'relative', zIndex: 1 }}>
-                            {isPremium ? 'Manage Pro' : isTrialActive ? 'Upgrade' : 'Unlock Pro'}
+                            {isPremium ? t('Manage Pro') : isTrialActive ? t('Upgrade') : t('Unlock Pro')}
                         </span>
                         <div className="pi-cta-ring">
                             {isPremium

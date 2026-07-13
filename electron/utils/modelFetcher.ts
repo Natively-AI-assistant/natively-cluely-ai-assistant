@@ -102,20 +102,30 @@ async function fetchAnthropicModels(apiKey: string): Promise<ProviderModel[]> {
 
     const models: any[] = response.data?.data || [];
 
-    // Only include Claude 3.5+ models (haiku, sonnet, opus)
+    // Only include Claude 3.5+ models (haiku, sonnet, opus).
+    // Anthropic uses TWO id schemes and the family word can precede the version:
+    //   - old: claude-<major>-<minor>-<family>    e.g. claude-3-5-sonnet, claude-4-opus
+    //   - new: claude-<family>-<major>[-<minor>]  e.g. claude-opus-4-8, claude-sonnet-5
+    // Matching only "digits right after claude-" silently drops every new-scheme
+    // id (all the current opus/sonnet 4.x / 5 models), leaving just the built-in
+    // default. Try the family-first form first, then fall back to the version-first.
     const filtered = models.filter((m: any) => {
         const id = (m.id || '').toLowerCase();
         if (!id.includes('claude')) return false;
-        
-        // Match models that are version 3.5, 3.7, 4.0, etc.
-        // e.g. claude-3-5-sonnet, claude-3-7-sonnet, claude-4-opus
-        const versionMatch = id.match(/claude-(\d+)-(\d+)?/);
-        if (versionMatch) {
-            const major = parseInt(versionMatch[1], 10);
-            const minor = versionMatch[2] ? parseInt(versionMatch[2], 10) : 0;
-            if (major > 3 || (major === 3 && minor >= 5)) {
-                return true;
-            }
+
+        let major: number | null = null;
+        let minor = 0;
+        const mNew = id.match(/claude-(?:opus|sonnet|haiku|fable)-(\d+)(?:-(\d+))?/);
+        const mOld = id.match(/claude-(\d+)-(\d+)?/);
+        if (mNew) {
+            major = parseInt(mNew[1], 10);
+            minor = mNew[2] ? parseInt(mNew[2], 10) : 0;
+        } else if (mOld) {
+            major = parseInt(mOld[1], 10);
+            minor = mOld[2] ? parseInt(mOld[2], 10) : 0;
+        }
+        if (major !== null && (major > 3 || (major === 3 && minor >= 5))) {
+            return true;
         }
         return false;
     });

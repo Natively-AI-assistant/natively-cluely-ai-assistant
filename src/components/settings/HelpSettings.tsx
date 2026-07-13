@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useT } from '../../i18n';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Command, Monitor, Mic, Settings, Zap, Key, User, Play, Image, ArrowUp, FileText, Sparkles, Search, ChevronUp, Copy,
@@ -806,44 +807,45 @@ const AccordionSection: React.FC<AccordionSectionProps> = ({ title, icon, childr
 };
 
 const SetupGuide = () => {
+    const t = useT();
     const cmd = getModifierSymbol('cmd');
     const shift = getModifierSymbol('shift');
     const steps = [
         {
-            title: 'Grant Permissions',
+            title: t('Grant Permissions'),
             desc: isMac
-                ? 'Enable Screen Recording and Accessibility for Natively in macOS Privacy & Security.'
-                : 'Approve the microphone prompt the first time you start a meeting (Settings → Privacy → Microphone).',
+                ? t('Enable Screen Recording and Accessibility for Natively in macOS Privacy & Security.')
+                : t('Approve the microphone prompt the first time you start a meeting (Settings → Privacy → Microphone).'),
         },
         {
-            title: 'Set Up Audio',
-            desc: 'Open Settings → Audio and select Natively API, or paste a Deepgram or Google key.',
+            title: t('Set Up Audio'),
+            desc: t('Open Settings → Audio and select Natively API, or paste a Deepgram or Google key.'),
         },
         {
-            title: 'Connect an AI Model',
-            desc: 'Open Settings → AI Providers and choose a built-in model, or add a Groq or OpenRouter key.',
+            title: t('Connect an AI Model'),
+            desc: t('Open Settings → AI Providers and choose a built-in model, or add a Groq or OpenRouter key.'),
         },
         {
-            title: 'Personalize (Optional)',
-            desc: 'Drop your resume + JD in Profile Intelligence, link your Google Calendar, or pick a Mode tailored to your session.',
+            title: t('Personalize (Optional)'),
+            desc: t('Drop your resume + JD in Profile Intelligence, link your Google Calendar, or pick a Mode tailored to your session.'),
         },
         {
-            title: "You're all set.",
+            title: t("You're all set."),
             desc: null,
         },
     ];
 
     const hotkeys = [
-        { label: 'Toggle', kbd: `${cmd}H` },
-        { label: 'Screenshot', kbd: `${cmd}${shift}H` },
-        { label: 'Chat', kbd: `${cmd}K` },
+        { label: t('Toggle'), kbd: `${cmd}H` },
+        { label: t('Screenshot'), kbd: `${cmd}${shift}H` },
+        { label: t('Chat'), kbd: `${cmd}K` },
     ];
 
     return (
         <div className="mb-10">
             <div className="mb-7">
-                <h3 className="text-[20px] font-bold text-text-primary tracking-tight leading-tight">Quick Start</h3>
-                <p className="text-[13px] text-text-tertiary mt-0.5">Get Natively running in four steps.</p>
+                <h3 className="text-[20px] font-bold text-text-primary tracking-tight leading-tight">{t('Quick Start')}</h3>
+                <p className="text-[13px] text-text-tertiary mt-0.5">{t('Get Natively running in four steps.')}</p>
             </div>
 
             <div>
@@ -889,6 +891,7 @@ const SetupGuide = () => {
     );
 };
 export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({ onNavigate }) => {
+    const t = useT();
     const { shortcuts } = useShortcuts();
     const isLight = useResolvedTheme() === 'light';
 
@@ -898,9 +901,9 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
     return (
         <div className="w-full h-full flex flex-col animated fadeIn pb-10">
             <header className="mb-2 shrink-0">
-                <h3 className="text-lg font-bold text-text-primary mb-1">Help & Setup Guide</h3>
+                <h3 className="text-lg font-bold text-text-primary mb-1">{t('Help & Setup Guide')}</h3>
                 <p className="text-xs text-text-secondary mb-2">
-                    Learn how to deeply configure Natively. Everything from providing the right API scopes to executing conversational interviews seamlessly is covered below.
+                    {t('Learn how to deeply configure Natively. Everything from providing the right API scopes to executing conversational interviews seamlessly is covered below.')}
                 </p>
             </header>
 
@@ -916,7 +919,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                 <Zap className="w-5 h-5 text-text-primary group-hover:text-white transition-colors" fill="currentColor" />
                             </div>
                             <div className="flex-1">
-                                <h4 className="text-[14px] font-bold text-text-primary mb-0.5">Want to skip the manual setup?</h4>
+                                <h4 className="text-[14px] font-bold text-text-primary mb-0.5">{t('Want to skip the manual setup?')}</h4>
                                 <p className="text-[13px] text-text-secondary">
                                     Use the <span className="font-semibold text-text-primary">Natively API</span> for an out-of-the-box experience. One-click zero-configuration usage.
                                 </p>
@@ -932,26 +935,26 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                 <div className="h-10" />
                 <div className="mb-4 flex items-center gap-2 border-b border-border-subtle pb-3">
-                    <h3 className="text-[20px] font-bold text-text-primary tracking-tight leading-tight">Help Guide</h3>
+                    <h3 className="text-[20px] font-bold text-text-primary tracking-tight leading-tight">{t('Help Guide')}</h3>
                 </div>
 
-                <AccordionSection title="1. App Permissions Setup" icon={<Monitor className="w-4 h-4" />}>
+                <AccordionSection title={t('1. App Permissions Setup')} icon={<Monitor className="w-4 h-4" />}>
                     <div className="space-y-4">
                         <p>
                             {isMac
-                                ? 'Natively operates entirely on-device, but requires OS permissions to tap into your screen context and global keystrokes. Here is how your system should look:'
-                                : 'Natively operates entirely on-device. Windows will prompt you for microphone access the first time you start a meeting — no other OS permissions are required.'}
+                                ? t('Natively operates entirely on-device, but requires OS permissions to tap into your screen context and global keystrokes. Here is how your system should look:')
+                                : t('Natively operates entirely on-device. Windows will prompt you for microphone access the first time you start a meeting — no other OS permissions are required.')}
                         </p>
                         {isMac && <MockPermissionsAnim />}
                         <div className="space-y-3 mt-4">
-                            <h4 className="font-bold text-base text-text-primary border-b border-border-subtle pb-2">Hardware & Engine Configurations</h4>
+                            <h4 className="font-bold text-base text-text-primary border-b border-border-subtle pb-2">{t('Hardware & Engine Configurations')}</h4>
 
                             <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
                                 <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
-                                    <Mic size={14} className="text-blue-500" /> Microphone & Speaker Loopback Selection
+                                    <Mic size={14} className="text-blue-500" /> {t('Microphone & Speaker Loopback Selection')}
                                 </h5>
                                 <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                    Natively can capture both what you say and what you hear globally. At the top of the Audio Settings, use the Dropdowns to explicitly select your hardware Input (e.g. your physical microphone) and Output capture (what the speakers play). By default, Natively utilizes the <strong>System Default</strong>, so audio routing will automatically follow your OS preferences.
+                                    {t('Natively can capture both what you say and what you hear globally. At the top of the Audio Settings, use the Dropdowns to explicitly select your hardware Input (e.g. your physical microphone) and Output capture (what the speakers play). By default, Natively uses the System Default, so audio routing automatically follows your OS preferences.')}
                                 </p>
                             </div>
 
@@ -962,7 +965,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                             <Monitor size={14} className="text-accent-primary" /> ScreenCaptureKit (SCK)
                                         </h5>
                                         <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                            The recommended backend for macOS 13.0+. Uses Apple's modern, highly optimized internal framework for 0-latency loopback speaker capture securely.
+                                            {t('The recommended backend for macOS 13.0+. Uses Apple\'s modern, highly optimized internal framework for 0-latency loopback speaker capture securely.')}
                                         </p>
                                     </div>
                                     <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
@@ -970,7 +973,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                             <Volume2 size={14} className="text-orange-500" /> CoreAudio (Legacy)
                                         </h5>
                                         <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                            Fallback engine for older hardware. Relies on internal device aggregation to trap output audio. Only use this if SCK repeatedly drops speaker packets.
+                                            {t('Fallback engine for older hardware. Relies on internal device aggregation to trap output audio. Only use this if SCK repeatedly drops speaker packets.')}
                                         </p>
                                     </div>
                                 </div>
@@ -978,10 +981,10 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                             <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
                                 <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
-                                    <Globe size={14} className="text-green-500" /> Language & Regional Accents
+                                    <Globe size={14} className="text-green-500" /> {t('Language & Regional Accents')}
                                 </h5>
                                 <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                    Below the provider list, you must specify the <strong>Language</strong> you will be speaking (e.g., English). Most importantly, ensure you select your specific regional <span className={kbdClass}>Accent / Region</span> mapping (e.g., <em>en-US</em> vs <em>en-GB</em> vs <em>en-IN</em>) as STT backends use this map to vastly increase transcription accuracy logic based on regional inflections.
+                                    {t('Below the provider list, specify the Language you will be speaking (e.g., English). Most importantly, select your specific regional Accent / Region mapping (e.g., en-US vs en-GB vs en-IN) — STT backends use this to greatly improve transcription accuracy based on regional inflections.')}
                                 </p>
                             </div>
                         </div>
@@ -990,144 +993,144 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                             <div className="flex flex-col gap-3 mt-6">
                                 <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
                                     <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
-                                        <Monitor className="w-4 h-4 text-accent-primary" /> Screen Recording
+                                        <Monitor className="w-4 h-4 text-accent-primary" /> {t('Screen Recording')}
                                     </h4>
-                                    <p className="text-xs opacity-90 mb-2">Provides Natively the ability to read your screen temporarily when you capture context.</p>
-                                    <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; Screen Recording</p>
+                                    <p className="text-xs opacity-90 mb-2">{t('Provides Natively the ability to read your screen temporarily when you capture context.')}</p>
+                                    <p className="text-[11px] text-text-tertiary">{t('System Settings > Privacy & Security > Screen Recording')}</p>
                                 </div>
 
                                 <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
                                     <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
-                                        <Command className="w-4 h-4 text-purple-500" /> Accessibility
+                                        <Command className="w-4 h-4 text-purple-500" /> {t('Accessibility')}
                                     </h4>
-                                    <p className="text-xs opacity-90 mb-2">Required for Natively to detect the global keyboard shortcuts below, regardless of what window is focused.</p>
-                                    <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; Accessibility</p>
+                                    <p className="text-xs opacity-90 mb-2">{t('Required for Natively to detect the global keyboard shortcuts below, regardless of what window is focused.')}</p>
+                                    <p className="text-[11px] text-text-tertiary">{t('System Settings > Privacy & Security > Accessibility')}</p>
                                 </div>
                             </div>
                         ) : (
                             <div className="flex flex-col gap-3 mt-6">
                                 <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
                                     <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
-                                        <Mic className="w-4 h-4 text-blue-500" /> Microphone
+                                        <Mic className="w-4 h-4 text-blue-500" /> {t('Microphone')}
                                     </h4>
-                                    <p className="text-xs opacity-90 mb-2">Required to capture what you say during meetings. Windows prompts the first time you start a meeting.</p>
-                                    <p className="text-[11px] text-text-tertiary">Settings &gt; Privacy &gt; Microphone</p>
+                                    <p className="text-xs opacity-90 mb-2">{t('Required to capture what you say during meetings. Windows prompts the first time you start a meeting.')}</p>
+                                    <p className="text-[11px] text-text-tertiary">{t('Settings > Privacy > Microphone')}</p>
                                 </div>
                             </div>
                         )}
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="2. Audio STT Providers Setup (Microphone)" icon={<Mic className="w-4 h-4" />}>
+                <AccordionSection title={t('2. Audio STT Providers Setup (Microphone)')} icon={<Mic className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        <p>Natively supports over 8 different Audio engines to transcribe what you hear and say. From the Audio tab in settings, use the overarching dropdown to switch the active engine.</p>
+                        <p>{t('Natively supports over 8 different Audio engines to transcribe what you hear and say. From the Audio tab in settings, use the overarching dropdown to switch the active engine.')}</p>
 
                         <MockProviderSelectionAnim />
 
                         <div className="space-y-4 pt-2">
-                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">API Keys & Testing</h4>
-                            <p className="text-xs text-text-secondary">We strongly recommend testing connections before jumping into a live meeting. The system shows successful pings or explicit errors if credits/permissions fail.</p>
+                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">{t('API Keys & Testing')}</h4>
+                            <p className="text-xs text-text-secondary">{t('We strongly recommend testing connections before jumping into a live meeting. The system shows successful pings or explicit errors if credits/permissions fail.')}</p>
 
                             <MockApiKeyFlowAnim />
                         </div>
 
                         <div className="space-y-3 pt-4">
-                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">Specific Provider Setup</h4>
+                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">{t('Specific Provider Setup')}</h4>
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
-                                    <span>1. Google Cloud STT</span>
-                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.cloud.google.com/apis/credentials') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Link</button>
+                                    <span>{t('1. Google Cloud STT')}</span>
+                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.cloud.google.com/apis/credentials') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> {t('Link')}</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    Uses a Service Account JSON instead of an API Key. You must build a GCP Project, activate the Cloud Speech API, and create a Service Account under IAM. Download the JSON Key, and drag-and-drop it into the box in the Audio Settings.
+                                    {t('Uses a Service Account JSON instead of an API Key. You must build a GCP Project, activate the Cloud Speech API, and create a Service Account under IAM. Download the JSON Key, and drag-and-drop it into the box in the Audio Settings.')}
                                 </p>
                             </div>
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
-                                    <span>2. ElevenLabs</span>
-                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://elevenlabs.io/app/settings/api-keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Link</button>
+                                    <span>{t('2. ElevenLabs')}</span>
+                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://elevenlabs.io/app/settings/api-keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> {t('Link')}</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    When creating a Custom API key for the "Conversational AI" streaming integration, you must explicitly enable <strong>convai.conversations.create</strong> and <strong>assistants.list</strong>.
-                                    Crucially, you must also allow <strong>Speech to Text: Access</strong> as seen below in the ElevenLabs UI:
+                                    {t('When creating a Custom API key for the "Conversational AI" streaming integration, you must explicitly enable')} <strong>convai.conversations.create</strong> {t('and')} <strong>assistants.list</strong>.
+                                    {t('Crucially, you must also allow Speech to Text: Access as seen below in the ElevenLabs UI:')}
                                 </p>
                                 <ElevenLabsPermissionsMock />
                             </div>
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
-                                    <span>3. Groq</span>
-                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.groq.com/keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Link</button>
+                                    <span>{t('3. Groq')}</span>
+                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.groq.com/keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> {t('Link')}</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    Provides ultra-fast Whisper responses via LPUs. Starts with <span className={kbdClass}>gsk_</span>. No special permissions required.
+                                    {t('Provides ultra-fast Whisper responses via LPUs. Starts with')} <span className={kbdClass}>gsk_</span>. {t('No special permissions required.')}
                                 </p>
                             </div>
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
-                                    <span>4. OpenAI</span>
-                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://platform.openai.com/api-keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Link</button>
+                                    <span>{t('4. OpenAI')}</span>
+                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://platform.openai.com/api-keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> {t('Link')}</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    Uses standard OpenAI keys (<span className={kbdClass}>sk-</span>). Remember: this Audio key is isolated from your AI Generation key under "AI Providers".
+                                    {t('Uses standard OpenAI keys')} (<span className={kbdClass}>sk-</span>). {t('Remember: this Audio key is isolated from your AI Generation key under "AI Providers".')}
                                 </p>
                             </div>
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
-                                    <span>5. Deepgram</span>
-                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.deepgram.com/') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Link</button>
+                                    <span>{t('5. Deepgram')}</span>
+                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.deepgram.com/') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> {t('Link')}</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    Extremely accurate streaming transcription (Nova-2 model). Key is generated on-demand in the Deepgram Console.
+                                    {t('Extremely accurate streaming transcription (Nova-2 model). Key is generated on-demand in the Deepgram Console.')}
                                 </p>
                             </div>
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
-                                    <span>6. Azure</span>
-                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://portal.azure.com/') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Link</button>
+                                    <span>{t('6. Azure')}</span>
+                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://portal.azure.com/') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> {t('Link')}</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    Requires establishing Azure Speech Services. <strong>Important</strong>: You must also specify an Azure Region alongside your key (e.g. <em>eastus</em>, <em>westeurope</em>) or requests will bounce.
+                                    {t('Requires establishing Azure Speech Services. Important: you must also specify an Azure Region alongside your key (e.g.')} <em>eastus</em>, <em>westeurope</em>) {t('or requests will bounce.')}
                                 </p>
                             </div>
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
-                                    <span>7. IBM Watson</span>
-                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://cloud.ibm.com/catalog/services/speech-to-text') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Link</button>
+                                    <span>{t('7. IBM Watson')}</span>
+                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://cloud.ibm.com/catalog/services/speech-to-text') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> {t('Link')}</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    Create a Watson Speech to Text resource in IBM Cloud and generate a set of API credentials.
+                                    {t('Create a Watson Speech to Text resource in IBM Cloud and generate a set of API credentials.')}
                                 </p>
                             </div>
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
-                                    <span>8. Soniox</span>
-                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.soniox.com/') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Link</button>
+                                    <span>{t('8. Soniox')}</span>
+                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.soniox.com/') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> {t('Link')}</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    Provides high-end medical/law tier transcriptions using their standard dashboard API Key.
+                                    {t('Provides high-end medical/law tier transcriptions using their standard dashboard API Key.')}
                                 </p>
                             </div>
                         </div>
 
                         <div className="space-y-4 pt-4">
                             <h4 className="font-semibold text-sm text-text-primary border-b border-border-subtle pb-1.5 flex items-center gap-1.5">
-                                <Globe className="w-4 h-4 text-accent-primary" /> Language Selection & Auto-Detection
+                                <Globe className="w-4 h-4 text-accent-primary" /> {t('Language Selection & Auto-Detection')}
                             </h4>
                             <p className="text-xs text-text-secondary leading-relaxed">
-                                In v2.8, the Speech-to-Text pipeline has expanded support to include <strong>Romanian</strong> and 16 other major regional languages.
+                                {t('In v2.8, the Speech-to-Text pipeline has expanded support to include Romanian and 16 other major regional languages.')}
                             </p>
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                 <ul className="text-[11px] text-text-secondary space-y-1.5 list-disc pl-4">
-                                    <li><strong>Auto-Detection:</strong> Toggle <strong>Auto-Detect Language</strong> in the Audio Settings to let the pipeline classify spoken languages automatically during conversations.</li>
-                                    <li><strong>Fixed Selection:</strong> Use the language dropdown selector to explicitly bind transcription to a specific language, optimizing transcription accuracy and latency.</li>
+                                    <li>{t('Auto-Detection: Toggle Auto-Detect Language in the Audio Settings to let the pipeline classify spoken languages automatically during conversations.')}</li>
+                                    <li>{t('Fixed Selection: Use the language dropdown selector to explicitly bind transcription to a specific language, optimizing transcription accuracy and latency.')}</li>
                                 </ul>
                             </div>
                         </div>
@@ -1135,12 +1138,12 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="3. AI Providers & Prompt Engine" icon={<Key className="w-4 h-4" />}>
+                <AccordionSection title={t('3. AI Providers & Prompt Engine')} icon={<Key className="w-4 h-4" />}>
                     <div className="space-y-4">
-                        <p className="text-sm">Natively uses Large Language Models (LLMs) to reason about your screen and audio context. You can configure cloud providers, local models, or fully custom endpoints.</p>
+                        <p className="text-sm">{t('Natively uses Large Language Models (LLMs) to reason about your screen and audio context. You can configure cloud providers, local models, or fully custom endpoints.')}</p>
 
                         <div className="space-y-3 pt-2">
-                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">1. Standard Cloud Providers</h4>
+                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">{t('1. Standard Cloud Providers')}</h4>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
@@ -1148,9 +1151,9 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                         <span className="flex items-center gap-2">
                                             <img src="https://groq.com/favicon.svg" alt="Groq" className="w-4 h-4 object-contain" /> Groq
                                         </span>
-                                        <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.groq.com/keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Get Key</button>
+                                        <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.groq.com/keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> {t('Get Key')}</button>
                                     </h5>
-                                    <p className="text-[11px] opacity-80 mb-2">Ultra-fast inference using LPU hardware. Default model: <strong>llama-3.3-70b-versatile</strong>.</p>
+                                    <p className="text-[11px] opacity-80 mb-2">{t('Ultra-fast inference using LPU hardware. Default model:')} <strong>llama-3.3-70b-versatile</strong>.</p>
                                     <span className={kbdClass}>gsk_...</span>
                                 </div>
                                 <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
@@ -1158,9 +1161,9 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                         <span className="flex items-center gap-2">
                                             <SiOpenai className={`w-3.5 h-3.5 ${isLight ? 'text-black' : 'text-white'}`} /> OpenAI
                                         </span>
-                                        <button onClick={() => { (window as any).electronAPI?.openExternal('https://platform.openai.com/api-keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Get Key</button>
+                                        <button onClick={() => { (window as any).electronAPI?.openExternal('https://platform.openai.com/api-keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> {t('Get Key')}</button>
                                     </h5>
-                                    <p className="text-[11px] opacity-80 mb-2">Industry standard pipeline. Default models: <strong>gpt-5.4-mini</strong> & <strong>gpt-5.4</strong>.</p>
+                                    <p className="text-[11px] opacity-80 mb-2">{t('Industry standard pipeline. Default models:')} <strong>gpt-5.4-mini</strong> & <strong>gpt-5.4</strong>.</p>
                                     <span className={kbdClass}>sk-proj-...</span>
                                 </div>
                                 <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
@@ -1168,9 +1171,9 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                         <span className="flex items-center gap-2">
                                             <img src="https://cdn.simpleicons.org/anthropic/000000" style={{ filter: isLight ? '' : 'invert(1)' }} alt="Anthropic" className="w-4 h-4 object-contain" /> Anthropic
                                         </span>
-                                        <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.anthropic.com/settings/keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Get Key</button>
+                                        <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.anthropic.com/settings/keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> {t('Get Key')}</button>
                                     </h5>
-                                    <p className="text-[11px] opacity-80 mb-2">Superior coding baseline parameters. Default: <strong>claude-4.6-sonnet</strong>.</p>
+                                    <p className="text-[11px] opacity-80 mb-2">{t('Superior coding baseline parameters. Default:')} <strong>claude-4.6-sonnet</strong>.</p>
                                     <span className={kbdClass}>sk-ant-...</span>
                                 </div>
                                 <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
@@ -1178,9 +1181,9 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                         <span className="flex items-center gap-2">
                                             <SiGoogle className="w-3.5 h-3.5 text-blue-500" /> Google Gemini
                                         </span>
-                                        <button onClick={() => { (window as any).electronAPI?.openExternal('https://aistudio.google.com/app/apikey') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Get Key</button>
+                                        <button onClick={() => { (window as any).electronAPI?.openExternal('https://aistudio.google.com/app/apikey') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> {t('Get Key')}</button>
                                     </h5>
-                                    <p className="text-[11px] opacity-80 mb-2">Immense contextual window. Default model: <strong>gemini-3.1-pro</strong>.</p>
+                                    <p className="text-[11px] opacity-80 mb-2">{t('Immense contextual window. Default model:')} <strong>gemini-3.1-pro</strong>.</p>
                                     <span className={kbdClass}>AIzaSy...</span>
                                 </div>
                             </div>
@@ -1190,43 +1193,43 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     <Zap className="w-4 h-4 text-accent-primary" />
                                 </div>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mt-0.5">
-                                    <strong className="text-text-primary font-bold">Autonomous Registry Sync:</strong> Natively utilizes a 14-day background sync clock (<span className="font-mono bg-bg-elevated border border-border-muted px-1.5 py-0.5 rounded text-[10px] text-text-primary shadow-[inset_0_-1px_0_rgba(0,0,0,0.1)]">v2/api/models</span>) to silently poll upstream APIs. If Anthropic or OpenAI drops a new flagship architecture (e.g. GPT-5), your app dynamically absorbs it into the UI dropdown automatically.
+                                    <strong className="text-text-primary font-bold">{t('Autonomous Registry Sync:')}</strong> {t('Natively utilizes a 14-day background sync clock')} (<span className="font-mono bg-bg-elevated border border-border-muted px-1.5 py-0.5 rounded text-[10px] text-text-primary shadow-[inset_0_-1px_0_rgba(0,0,0,0.1)]">v2/api/models</span>) {t('to silently poll upstream APIs. If Anthropic or OpenAI drops a new flagship architecture (e.g. GPT-5), your app dynamically absorbs it into the UI dropdown automatically.')}
                                 </p>
                             </div>
 
                             <div className="p-4 mt-2 rounded-xl border border-border-subtle bg-bg-item-surface">
-                                <h5 className="font-semibold text-[13px] text-text-primary mb-1">Configuring the Active Model Engine</h5>
+                                <h5 className="font-semibold text-[13px] text-text-primary mb-1">{t('Configuring the Active Model Engine')}</h5>
                                 <p className="text-[11px] text-text-secondary leading-relaxed">
-                                    Inside the Launcher UI (above the start button), you can hot-swap your <strong>Active Model</strong>. This dictation is extremely important—it determines the active core reasoning engine. If set to <strong>claude-3-5-sonnet</strong>, the intelligence agent uses Anthropic infrastructure exclusively for screen analysis. Switch to <strong>llama3:8b</strong> beneath it, and the architecture instantly reverts to generating responses via your offline GPU pipeline.
+                                    {t('Inside the Launcher UI (above the start button), you can hot-swap your Active Model. This choice is extremely important — it determines the active core reasoning engine. If set to')} <strong>claude-3-5-sonnet</strong>, {t('the intelligence agent uses Anthropic infrastructure exclusively for screen analysis. Switch to')} <strong>llama3:8b</strong> {t('beneath it, and the architecture instantly reverts to generating responses via your offline GPU pipeline.')}
                                 </p>
                             </div>
                         </div>
 
                         <div className="space-y-3 pt-4">
-                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">2. Local Models (Ollama)</h4>
+                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">{t('2. Local Models (Ollama)')}</h4>
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-3">
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    You can run Natively completely offline with 100% data privacy using Ollama. Natively automatically scans <span className={kbdClass}>http://localhost:11434</span> for active models.
+                                    {t('You can run Natively completely offline with 100% data privacy using Ollama. Natively automatically scans')} <span className={kbdClass}>http://localhost:11434</span> {t('for active models.')}
                                 </p>
                                 <ol className="list-decimal pl-4 text-xs space-y-2 opacity-90 text-text-secondary">
-                                    <li>Download Ollama locally via <button onClick={() => { (window as any).electronAPI?.openExternal('https://ollama.com/download') }} className="text-accent-primary hover:underline inline-flex items-center gap-1 font-medium">ollama.com <ExternalLink size={10} /></button></li>
+                                    <li>{t('Download Ollama locally via')} <button onClick={() => { (window as any).electronAPI?.openExternal('https://ollama.com/download') }} className="text-accent-primary hover:underline inline-flex items-center gap-1 font-medium">ollama.com <ExternalLink size={10} /></button></li>
                                     <li>
-                                        Open Terminal and run our recommended 8B parameter instruction model:
+                                        {t('Open Terminal and run our recommended 8B parameter instruction model:')}
                                         <div className="mt-1 bg-bg-input p-2 rounded border border-border-subtle font-mono text-[11px]">ollama run llama3:8b</div>
                                     </li>
-                                    <li>Alternatively, for faster generation without GPU, use Microsoft's smaller model:
+                                    <li>{t('Alternatively, for faster generation without GPU, use Microsoft\'s smaller model:')}
                                         <div className="mt-1 bg-bg-input p-2 rounded border border-border-subtle font-mono text-[11px]">ollama run phi3</div>
                                     </li>
-                                    <li>Return to Natively's AI Providers overlay, and you will see your Local models ready for usage.</li>
+                                    <li>{t("Return to Natively's AI Providers overlay, and you will see your Local models ready for usage.")}</li>
                                 </ol>
                             </div>
                         </div>
 
                         <div className="space-y-3 pt-4">
-                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">3. Custom Providers</h4>
+                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">{t('3. Custom Providers')}</h4>
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-3">
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    Use Custom Providers to hook up any standard external LLM router (like OpenRouter, LMStudio, or proprietary company endpoints). Create a new provider using a cURL command template.
+                                    {t('Use Custom Providers to hook up any standard external LLM router (like OpenRouter, LMStudio, or proprietary company endpoints). Create a new provider using a cURL command template.')}
                                 </p>
                                 <div className="bg-bg-input p-3 rounded-lg border border-border-subtle space-y-2">
                                     <div className="text-[11px] font-mono text-text-secondary">
@@ -1238,7 +1241,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                 <div className="flex items-start gap-2 mt-2">
                                     <div className="w-5 h-5 rounded bg-orange-500/20 text-orange-500 flex items-center justify-center shrink-0 mt-0.5"><Zap size={10} /></div>
                                     <div className="text-xs text-text-secondary leading-relaxed">
-                                        <strong>Crucial: The Response Path.</strong> You must inform Natively how to parse the JSON text back. Deeply nested outputs must define the exact path array. For OpenAI/OpenRouter compliant endpoints, this is strictly: <span className={kbdClass}>choices[0].message.content</span>.
+                                        <strong>{t('Crucial: The Response Path.')}</strong> {t('You must inform Natively how to parse the JSON text back. Deeply nested outputs must define the exact path array. For OpenAI/OpenRouter compliant endpoints, this is strictly:')} <span className={kbdClass}>choices[0].message.content</span>.
                                     </div>
                                 </div>
                             </div>
@@ -1247,9 +1250,9 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="4. Natively Interface Operations" icon={<Monitor className="w-4 h-4" />}>
+                <AccordionSection title={t('4. Natively Interface Operations')} icon={<Monitor className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        <p className="text-[13px]">When initialized, Natively hides itself visually while remaining active as a persistent translucent overlay. This is your command center.</p>
+                        <p className="text-[13px]">{t('When initialized, Natively hides itself visually while remaining active as a persistent translucent overlay. This is your command center.')}</p>
 
                         <div className="relative w-full flex flex-col p-2 sm:p-5 bg-bg-main rounded-[26px] border border-border-subtle shadow-inner">
                             <MockAppInterface />
@@ -1259,21 +1262,21 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                         {/* Quick Actions & Hotkeys */}
                         <div className="mt-4 mb-3 flex items-center gap-3">
                             <div className="flex-1 h-px bg-border-subtle" />
-                            <span className="text-[10px] font-semibold text-text-tertiary uppercase tracking-widest">Quick Actions & Hotkeys</span>
+                            <span className="text-[10px] font-semibold text-text-tertiary uppercase tracking-widest">{t('Quick Actions & Hotkeys')}</span>
                             <div className="flex-1 h-px bg-border-subtle" />
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                             {([
-                                { Icon: Pencil, color: 'blue', title: 'What to Answer?', badge: null, bc: '', kbd: ['⌘', '1'], desc: 'Reads the active transcript and screen, then streams a precise response to read aloud.' },
-                                { Icon: Lightbulb, color: 'violet', title: 'Brainstorm', badge: 'Interview ON', bc: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', kbd: ['⌘', '3'], desc: 'Recap becomes Brainstorm when Interview Mode is ON — deep multi-step strategies.' },
-                                { Icon: HelpCircle, color: 'teal', title: 'Follow Up', badge: null, bc: '', kbd: ['⌘', '4'], desc: 'Suggests the next logical question to keep conversation flowing gracefully.' },
-                                { Icon: Zap, color: 'emerald', title: 'Answer Now', badge: null, bc: '', kbd: ['⌘', '5'], desc: 'Records your mic + screen context and fires an immediate AI query.' },
-                                { Icon: MessageSquare, color: 'indigo', title: 'Clarify', badge: null, bc: '', kbd: ['⌘', '2'], desc: 'Generates sharp probing questions from latent audio when a topic is unclear.' },
-                                { Icon: RefreshCw, color: 'amber', title: 'Recap', badge: 'Interview OFF', bc: 'bg-red-500/10 text-red-400 border-red-500/30', kbd: ['⌘', '3'], desc: 'Condenses the last 5 minutes into bullet points when you lose the thread.' },
-                                { Icon: Sparkles, color: 'sky', title: 'Code Hint', badge: null, bc: '', kbd: ['⌘', '6'], desc: 'Reads your screen and nudges you toward the correct code implementation.' },
-                                { Icon: Monitor, color: 'rose', title: 'Screenshot & Ask', badge: null, bc: '', kbd: ['⌘', '⇧', 'H'], desc: 'Forces a full-screen capture and immediately processes it through the LLM.' },
-                                { Icon: EyeOff, color: 'slate', title: 'Stealth Execute', badge: null, bc: '', kbd: ['⌘', '↵'], desc: 'Processes context in the background without ever revealing the interface.' },
+                                { Icon: Pencil, color: 'blue', title: t('What to Answer?'), badge: null, bc: '', kbd: ['⌘', '1'], desc: t('Reads the active transcript and screen, then streams a precise response to read aloud.') },
+                                { Icon: Lightbulb, color: 'violet', title: t('Brainstorm'), badge: t('Interview ON'), bc: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', kbd: ['⌘', '3'], desc: t('Recap becomes Brainstorm when Interview Mode is ON — deep multi-step strategies.') },
+                                { Icon: HelpCircle, color: 'teal', title: t('Follow Up'), badge: null, bc: '', kbd: ['⌘', '4'], desc: t('Suggests the next logical question to keep conversation flowing gracefully.') },
+                                { Icon: Zap, color: 'emerald', title: t('Answer Now'), badge: null, bc: '', kbd: ['⌘', '5'], desc: t('Records your mic + screen context and fires an immediate AI query.') },
+                                { Icon: MessageSquare, color: 'indigo', title: t('Clarify'), badge: null, bc: '', kbd: ['⌘', '2'], desc: t('Generates sharp probing questions from latent audio when a topic is unclear.') },
+                                { Icon: RefreshCw, color: 'amber', title: t('Recap'), badge: t('Interview OFF'), bc: 'bg-red-500/10 text-red-400 border-red-500/30', kbd: ['⌘', '3'], desc: t('Condenses the last 5 minutes into bullet points when you lose the thread.') },
+                                { Icon: Sparkles, color: 'sky', title: t('Code Hint'), badge: null, bc: '', kbd: ['⌘', '6'], desc: t('Reads your screen and nudges you toward the correct code implementation.') },
+                                { Icon: Monitor, color: 'rose', title: t('Screenshot & Ask'), badge: null, bc: '', kbd: ['⌘', '⇧', 'H'], desc: t('Forces a full-screen capture and immediately processes it through the LLM.') },
+                                { Icon: EyeOff, color: 'slate', title: t('Stealth Execute'), badge: null, bc: '', kbd: ['⌘', '↵'], desc: t('Processes context in the background without ever revealing the interface.') },
                             ] as Array<{ Icon: React.ElementType; color: 'blue' | 'violet' | 'teal' | 'emerald' | 'indigo' | 'amber' | 'sky' | 'rose' | 'slate'; title: string; badge: string | null; bc: string; kbd: string[]; desc: string }>).map(({ Icon, color, title, badge, bc, kbd, desc }) => {
                                 const resolvedKbd = kbd.map(k =>
                                     k === '⌘' ? getModifierSymbol('cmd')
@@ -1334,65 +1337,65 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="5. Meeting Intelligence" icon={<Calendar className="w-4 h-4" />}>
+                <AccordionSection title={t('5. Meeting Intelligence')} icon={<Calendar className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        <p className="text-[13px]">When an active session concludes, it gets saved directly to your local file system as a complete intelligence dossier spanning the transcript, AI token usage, and automated structural summaries.</p>
+                        <p className="text-[13px]">{t('When an active session concludes, it gets saved directly to your local file system as a complete intelligence dossier spanning the transcript, AI token usage, and automated structural summaries.')}</p>
 
                         <MockMeetingInterfaceAnim />
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl shadow-sm hover:border-border-muted transition-colors group">
                                 <h4 className="text-[14px] font-bold text-text-primary flex items-center gap-2 mb-2">
-                                    <FileText className="w-4 h-4 text-blue-500 group-hover:scale-110 transition-transform" /> Summary Execution
+                                    <FileText className="w-4 h-4 text-blue-500 group-hover:scale-110 transition-transform" /> {t('Summary Execution')}
                                 </h4>
                                 <p className="text-[12px] text-text-secondary leading-relaxed">
-                                    Natively fires a local background job as soon as the meeting finishes to compress the entire raw audio transcript into clean, formatted markdown representing structural overviews and explicit action items.
+                                    {t('Natively fires a local background job as soon as the meeting finishes to compress the entire raw audio transcript into clean, formatted markdown representing structural overviews and explicit action items.')}
                                 </p>
                             </div>
 
                             <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl shadow-sm hover:border-border-muted transition-colors group">
                                 <h4 className="text-[14px] font-bold text-text-primary flex items-center gap-2 mb-2">
-                                    <Volume2 className="w-4 h-4 text-emerald-500 group-hover:scale-110 transition-transform" /> Raw Transcripts
+                                    <Volume2 className="w-4 h-4 text-emerald-500 group-hover:scale-110 transition-transform" /> {t('Raw Transcripts')}
                                 </h4>
                                 <p className="text-[12px] text-text-secondary leading-relaxed">
-                                    Dive into the exact dialogue timeline. Speaker separation attempts to classify "Me" vs "Them" using volume thresholds, capturing everything physically said alongside timestamps.
+                                    {t('Dive into the exact dialogue timeline. Speaker separation attempts to classify "Me" vs "Them" using volume thresholds, capturing everything physically said alongside timestamps.')}
                                 </p>
                             </div>
 
                             <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl shadow-sm hover:border-border-muted transition-colors group">
                                 <h4 className="text-[14px] font-bold text-text-primary flex items-center gap-2 mb-2">
-                                    <Cpu className="w-4 h-4 text-purple-500 group-hover:scale-110 transition-transform" /> Usage & Storage
+                                    <Cpu className="w-4 h-4 text-purple-500 group-hover:scale-110 transition-transform" /> {t('Usage & Storage')}
                                 </h4>
                                 <p className="text-[12px] text-text-secondary leading-relaxed">
-                                    View exactly how many tokens the AI consumed globally across the meeting, tracking visual and textual inputs separately.
+                                    {t('View exactly how many tokens the AI consumed globally across the meeting, tracking visual and textual inputs separately.')}
                                 </p>
                             </div>
                         </div>
 
                         <div className="border-t border-border-subtle pt-6">
                             <h4 className="font-bold text-sm text-text-primary flex items-center gap-2 mb-4">
-                                <MessageSquare className="w-4 h-4 text-accent-primary" /> In-Meeting Semantic Search
+                                <MessageSquare className="w-4 h-4 text-accent-primary" /> {t('In-Meeting Semantic Search')}
                             </h4>
-                            <p className="text-[13px] mb-6">Instead of re-reading the entire transcript to find what happened, use the attached RAG interface pinned to the bottom of the Meeting details window.</p>
+                            <p className="text-[13px] mb-6">{t('Instead of re-reading the entire transcript to find what happened, use the attached RAG interface pinned to the bottom of the Meeting details window.')}</p>
 
                             <MockMeetingChatAnim />
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-6">
                                 <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl shadow-sm hover:border-border-muted transition-colors group">
                                     <h4 className="text-[14px] font-bold text-text-primary flex items-center gap-2 mb-2">
-                                        <Search className="w-4 h-4 text-orange-500 group-hover:scale-110 transition-transform" /> Contextual Semantic Search
+                                        <Search className="w-4 h-4 text-orange-500 group-hover:scale-110 transition-transform" /> {t('Contextual Semantic Search')}
                                     </h4>
                                     <p className="text-[12px] text-text-secondary leading-relaxed">
-                                        You don't need to craft long AI prompts. Simply ask, "What API dependencies did they list?" and the system injects the localized transcript from that specific timeline to provide highly-accurate responses dynamically.
+                                        {t('You don\'t need to craft long AI prompts. Simply ask, "What API dependencies did they list?" and the system injects the localized transcript from that specific timeline to provide highly-accurate responses dynamically.')}
                                     </p>
                                 </div>
 
                                 <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl shadow-sm hover:border-border-muted transition-colors group">
                                     <h4 className="text-[14px] font-bold text-text-primary flex items-center gap-2 mb-2">
-                                        <Brain className="w-4 h-4 text-teal-500 group-hover:scale-110 transition-transform" /> Memory Isolation
+                                        <Brain className="w-4 h-4 text-teal-500 group-hover:scale-110 transition-transform" /> {t('Memory Isolation')}
                                     </h4>
                                     <p className="text-[12px] text-text-secondary leading-relaxed">
-                                        Conversations here are strictly isolated to the selected meeting boundaries. They do not utilize global memory, ensuring hyper-focused extraction without cross-contamination.
+                                        {t('Conversations here are strictly isolated to the selected meeting boundaries. They do not utilize global memory, ensuring hyper-focused extraction without cross-contamination.')}
                                     </p>
                                 </div>
                             </div>
@@ -1400,35 +1403,35 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="6. Global Search & Shortcuts" icon={<Search className="w-4 h-4" />}>
+                <AccordionSection title={t('6. Global Search & Shortcuts')} icon={<Search className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        <p className="text-[13px]">Hit <span className={kbdClass}>{isMac ? 'Cmd+K' : 'Ctrl+K'}</span> anywhere on your computer to invoke the Natively Global Palette. This acts as your Spotlight overlay for interacting directly with the system backbone.</p>
+                        <p className="text-[13px]">{t('Hit')} <span className={kbdClass}>{isMac ? 'Cmd+K' : 'Ctrl+K'}</span> {t('anywhere on your computer to invoke the Natively Global Palette. This acts as your Spotlight overlay for interacting directly with the system backbone.')}</p>
 
                         <MockSearchPillAnim />
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4 mb-4">
                             <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl shadow-sm hover:border-border-muted transition-colors group">
                                 <h4 className="text-[14px] font-bold text-text-primary flex items-center gap-2 mb-2">
-                                    <Briefcase className="w-4 h-4 text-sky-500 group-hover:scale-110 transition-transform" /> Instant Meeting Traversal
+                                    <Briefcase className="w-4 h-4 text-sky-500 group-hover:scale-110 transition-transform" /> {t('Instant Meeting Traversal')}
                                 </h4>
                                 <p className="text-[12px] text-text-secondary leading-relaxed">
-                                    Typing any text instantly fuzzy matches across all your previous meeting titles, summaries, and internal files. Hitting enter jumps you straight into the intelligence viewer for that topic.
+                                    {t('Typing any text instantly fuzzy matches across all your previous meeting titles, summaries, and internal files. Hitting enter jumps you straight into the intelligence viewer for that topic.')}
                                 </p>
                             </div>
 
                             <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl shadow-sm hover:border-border-muted transition-colors group">
                                 <h4 className="text-[14px] font-bold text-text-primary flex items-center gap-2 mb-2">
-                                    <Sparkles className="w-4 h-4 text-amber-500 group-hover:scale-110 transition-transform" /> Conversational Fallback
+                                    <Sparkles className="w-4 h-4 text-amber-500 group-hover:scale-110 transition-transform" /> {t('Conversational Fallback')}
                                 </h4>
                                 <p className="text-[12px] text-text-secondary leading-relaxed">
-                                    If your query doesn't match an existing document, the palette offers a direct jump to spark off a standard LLM chat conversation passing through your exact typed intent.
+                                    {t('If your query doesn\'t match an existing document, the palette offers a direct jump to spark off a standard LLM chat conversation passing through your exact typed intent.')}
                                 </p>
                             </div>
                         </div>
 
                         <div className="border-t border-border-subtle pt-6">
-                            <h4 className="font-bold text-sm text-text-primary border-b border-border-subtle pb-1">Global System Shortcuts</h4>
-                            <p className="text-[11px] text-text-secondary mt-1 mb-3">These hotkeys work anywhere on your operating system, regardless of whether Natively is focused or completely hidden. Change them via <strong>Settings &gt; Hotkeys</strong>.</p>
+                            <h4 className="font-bold text-sm text-text-primary border-b border-border-subtle pb-1">{t('Global System Shortcuts')}</h4>
+                            <p className="text-[11px] text-text-secondary mt-1 mb-3">{t('These hotkeys work anywhere on your operating system, regardless of whether Natively is focused or completely hidden. Change them via Settings > Hotkeys.')}</p>
 
                             <div className="grid gap-3">
                                 <div className="flex items-center justify-between p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
@@ -1437,8 +1440,8 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                             <Eye className="w-4 h-4 text-text-primary" />
                                         </div>
                                         <div>
-                                            <div className="font-semibold text-sm text-text-primary">Show / Hide Interface</div>
-                                            <div className="text-xs text-text-secondary mt-1">Quickly toggle the window visibility. Used as an immediate panic hide.</div>
+                                            <div className="font-semibold text-sm text-text-primary">{t('Show / Hide Interface')}</div>
+                                            <div className="text-xs text-text-secondary mt-1">{t('Quickly toggle the window visibility. Used as an immediate panic hide.')}</div>
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
@@ -1452,8 +1455,8 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                             <Image className="w-4 h-4 text-text-primary" />
                                         </div>
                                         <div>
-                                            <div className="font-semibold text-sm text-text-primary">Capture Contextual Screenshot</div>
-                                            <div className="text-xs text-text-secondary mt-1">Takes a silent screenshot in the background, feeding the visual data to the LLM context flow.</div>
+                                            <div className="font-semibold text-sm text-text-primary">{t('Capture Contextual Screenshot')}</div>
+                                            <div className="text-xs text-text-secondary mt-1">{t('Takes a silent screenshot in the background, feeding the visual data to the LLM context flow.')}</div>
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
@@ -1467,8 +1470,8 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                             <MessageSquare className="w-4 h-4 text-text-primary" />
                                         </div>
                                         <div>
-                                            <div className="font-semibold text-sm text-text-primary">Process Captured Context (Execute)</div>
-                                            <div className="text-xs text-text-secondary mt-1">Triggers Natively to analyze the captured screenshots and text from the rolling buffer.</div>
+                                            <div className="font-semibold text-sm text-text-primary">{t('Process Captured Context (Execute)')}</div>
+                                            <div className="text-xs text-text-secondary mt-1">{t('Triggers Natively to analyze the captured screenshots and text from the rolling buffer.')}</div>
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
@@ -1482,8 +1485,8 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                             <Zap className="w-4 h-4 text-text-primary" />
                                         </div>
                                         <div>
-                                            <div className="font-semibold text-sm text-text-primary">Capture + Execute Instantly</div>
-                                            <div className="text-xs text-text-secondary mt-1">Captures a screenshot AND processes it in one fluid action.</div>
+                                            <div className="font-semibold text-sm text-text-primary">{t('Capture + Execute Instantly')}</div>
+                                            <div className="text-xs text-text-secondary mt-1">{t('Captures a screenshot AND processes it in one fluid action.')}</div>
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
@@ -1497,41 +1500,41 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
 
 
-                <AccordionSection title="7. Pro Intelligence" icon={<Star className="w-4 h-4" />}>
+                <AccordionSection title={t('7. Pro Intelligence')} icon={<Star className="w-4 h-4" />}>
                     <div className="space-y-6">
                         {/* Profile */}
                         <div>
                             <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl mb-4">
                                 <h4 className="text-[13px] font-semibold text-amber-500 flex items-center gap-2 mb-1">
-                                    <User size={14} /> Profile Intelligence System
+                                    <User size={14} /> {t('Profile Intelligence System')}
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                    Instead of telling the AI who you are during every prompt, Profile Intelligence parses your background and universally injects it into all queries so it responds securely customized to your job role.
+                                    {t('Instead of telling the AI who you are during every prompt, Profile Intelligence parses your background and universally injects it into all queries so it responds securely customized to your job role.')}
                                 </p>
                             </div>
 
                             <div className="grid md:grid-cols-2 gap-3">
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <Globe className="w-4 h-4 text-blue-500" /> Core Benefits
+                                        <Globe className="w-4 h-4 text-blue-500" /> {t('Core Benefits')}
                                     </h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                        <li><strong>Zero Context Prep:</strong> Model inherits your coding stack, experience, etc.</li>
-                                        <li><strong>Resume Parsing:</strong> Upload your PDF Resume for local extraction.</li>
-                                        <li><strong>Global Toggle:</strong> Enable <span className="text-amber-500 font-semibold">Profile Mode</span> via the Star button.</li>
+                                        <li>{t('Zero Context Prep: Model inherits your coding stack, experience, etc.')}</li>
+                                        <li>{t('Resume Parsing: Upload your PDF Resume for local extraction.')}</li>
+                                        <li>{t('Global Toggle: Enable Profile Mode via the Star button.')}</li>
                                     </ul>
                                 </div>
 
                                 <div className="p-4 rounded-xl border bg-accent-primary/5 border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <CreditCard className="w-4 h-4 text-accent-primary" /> Pro Requirement
+                                        <CreditCard className="w-4 h-4 text-accent-primary" /> {t('Pro Requirement')}
                                     </h4>
                                     <p className="text-[11px] text-text-secondary mb-2">
-                                        This is a Natively Pro feature.
+                                        {t('This is a Natively Pro feature.')}
                                     </p>
                                     <ol className="text-[11px] text-text-secondary space-y-1 list-decimal pl-4 mb-0">
-                                        <li>Get a License at <button onClick={() => { (window as any).electronAPI?.openExternal('https://natively.software/') }} className="text-accent-primary hover:underline font-semibold">natively.software</button></li>
-                                        <li>Drop your Resume PDF in the UI to activate injection.</li>
+                                        <li>{t('Get a License at')} <button onClick={() => { (window as any).electronAPI?.openExternal('https://natively.software/') }} className="text-accent-primary hover:underline font-semibold">natively.software</button></li>
+                                        <li>{t('Drop your Resume PDF in the UI to activate injection.')}</li>
                                     </ol>
                                 </div>
                             </div>
@@ -1540,61 +1543,61 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                         <div className="border-t border-border-subtle pt-5 mt-2">
                             <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl mb-4">
                                 <h4 className="text-[13px] font-semibold text-purple-400 flex items-center gap-2 mb-1">
-                                    <Briefcase size={14} /> Job Description Targeting
+                                    <Briefcase size={14} /> {t('Job Description Targeting')}
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                    Drop a target <strong>JD PDF</strong> alongside your resume. Natively extracts the role title, level, company, and required technologies, then biases every prompt to align your responses with that exact spec — perfect for staying on-message during a final loop.
+                                    {t('Drop a target JD PDF alongside your resume. Natively extracts the role title, level, company, and required technologies, then biases every prompt to align your responses with that exact spec — perfect for staying on-message during a final loop.')}
                                 </p>
                             </div>
 
                             <div className="grid md:grid-cols-2 gap-3 mb-5">
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <Building2 className="w-4 h-4 text-purple-400" /> Company Intelligence
+                                        <Building2 className="w-4 h-4 text-purple-400" /> {t('Company Intelligence')}
                                     </h4>
                                     <p className="text-[11px] text-text-secondary leading-relaxed">
-                                        After uploading a JD, hit <strong>Research Now</strong> to compile a live dossier on the company — recent news, product surface area, culture signals — cached and injected into every reply so you sound briefed without prep.
+                                        {t('After uploading a JD, hit Research Now to compile a live dossier on the company — recent news, product surface area, culture signals — cached and injected into every reply so you sound briefed without prep.')}
                                     </p>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <DollarSign className="w-4 h-4 text-emerald-500" /> Negotiation Script
+                                        <DollarSign className="w-4 h-4 text-emerald-500" /> {t('Negotiation Script')}
                                     </h4>
                                     <p className="text-[11px] text-text-secondary leading-relaxed">
-                                        Generate a <strong>tailored salary script</strong> calibrated against the active JD's level and your background. Live coaching shows up inline during compensation conversations.
+                                        {t('Generate a tailored salary script calibrated against the active JD\'s level and your background. Live coaching shows up inline during compensation conversations.')}
                                     </p>
                                 </div>
                             </div>
 
                             <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl mb-4">
                                 <h4 className="text-[13px] font-semibold text-emerald-500 flex items-center gap-2 mb-1">
-                                    <FileText size={14} /> Custom Context Notes
+                                    <FileText size={14} /> {t('Custom Context Notes')}
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                    In addition to your Resume and JD, type any free-form context into the <strong>Custom Context</strong> textarea — sales stats, product details, LeetCode solutions, personal preferences. Injected as a <code className="bg-bg-elevated px-1 rounded text-[10px]">&lt;user_context&gt;</code> block into every AI call, across all modes and providers.
+                                    {t('In addition to your Resume and JD, type any free-form context into the Custom Context textarea — sales stats, product details, LeetCode solutions, personal preferences. Injected as a')} <code className="bg-bg-elevated px-1 rounded text-[10px]">&lt;user_context&gt;</code> {t('block into every AI call, across all modes and providers.')}
                                 </p>
                             </div>
                             <div className="grid md:grid-cols-2 gap-3">
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <Upload className="w-4 h-4 text-emerald-500" /> How to Use
+                                        <Upload className="w-4 h-4 text-emerald-500" /> {t('How to Use')}
                                     </h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                        <li>Open <strong>Settings → Profile Intelligence</strong></li>
-                                        <li>Scroll to the <strong>Custom Context</strong> textarea</li>
-                                        <li>Type anything — auto-saved after 800 ms</li>
-                                        <li>Up to 4,000 characters with a live counter</li>
+                                        <li>{t('Open Settings → Profile Intelligence')}</li>
+                                        <li>{t('Scroll to the Custom Context textarea')}</li>
+                                        <li>{t('Type anything — auto-saved after 800 ms')}</li>
+                                        <li>{t('Up to 4,000 characters with a live counter')}</li>
                                     </ul>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <Sparkles className="w-4 h-4 text-amber-500" /> What to Put Here
+                                        <Sparkles className="w-4 h-4 text-amber-500" /> {t('What to Put Here')}
                                     </h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                        <li>Your company's product details or pricing</li>
-                                        <li>Candidate pipeline notes for recruiting</li>
-                                        <li>LeetCode / DSA patterns you prefer</li>
-                                        <li>Personal formatting or style preferences</li>
+                                        <li>{t("Your company's product details or pricing")}</li>
+                                        <li>{t('Candidate pipeline notes for recruiting')}</li>
+                                        <li>{t('LeetCode / DSA patterns you prefer')}</li>
+                                        <li>{t('Personal formatting or style preferences')}</li>
                                     </ul>
                                 </div>
                             </div>
@@ -1602,18 +1605,18 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="8. Modes Manager" icon={<LayoutGrid className="w-4 h-4" />}>
+                <AccordionSection title={t('8. Modes Manager')} icon={<LayoutGrid className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        <p className="text-[13px]">Modes let you assign a specialized AI persona to your session. Each mode has a tailored system prompt, a personal context area, reference files, and smart note template sections — so Natively behaves differently depending on whether you're in a sales call, a coding interview, or a team standup.</p>
+                        <p className="text-[13px]">{t("Modes let you assign a specialized AI persona to your session. Each mode has a tailored system prompt, a personal context area, reference files, and smart note template sections — so Natively behaves differently depending on whether you're in a sales call, a coding interview, or a team standup.")}</p>
 
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                             {([
-                                { name: 'Interview', desc: 'STAR-format answers, behavioral stories, step-by-step coding hints.' },
-                                { name: 'Sales', desc: 'Objection handling, discovery questions, product pitch frameworks.' },
-                                { name: 'Recruiting', desc: 'Candidate assessment, JD cross-referencing, structured evaluation.' },
-                                { name: 'Team Meet', desc: 'Action items, announcements, blockers, decisions — auto-extracted.' },
-                                { name: 'Lecture', desc: 'Concept breakdowns, intuition-first explanations, formula notes.' },
-                                { name: 'Technical', desc: 'DSA / system design reasoning, edge cases, complexity analysis.' },
+                                { name: t('Interview'), desc: t('STAR-format answers, behavioral stories, step-by-step coding hints.') },
+                                { name: t('Sales'), desc: t('Objection handling, discovery questions, product pitch frameworks.') },
+                                { name: t('Recruiting'), desc: t('Candidate assessment, JD cross-referencing, structured evaluation.') },
+                                { name: t('Team Meet'), desc: t('Action items, announcements, blockers, decisions — auto-extracted.') },
+                                { name: t('Lecture'), desc: t('Concept breakdowns, intuition-first explanations, formula notes.') },
+                                { name: t('Technical'), desc: t('DSA / system design reasoning, edge cases, complexity analysis.') },
                             ] as Array<{ name: string; desc: string }>).map(({ name, desc }) => (
                                 <div key={name} className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h5 className="font-semibold text-sm text-text-primary mb-1">{name}</h5>
@@ -1623,41 +1626,41 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                         </div>
 
                         <div className="space-y-3 pt-2 border-t border-border-subtle">
-                            <h4 className="font-bold text-sm text-text-primary pt-4">How to Use Modes</h4>
+                            <h4 className="font-bold text-sm text-text-primary pt-4">{t('How to Use Modes')}</h4>
                             <div className="grid md:grid-cols-2 gap-3">
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">Opening the Manager</h4>
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">{t('Opening the Manager')}</h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                        <li>Click the <strong>grid icon</strong> in the Launcher header</li>
-                                        <li>Or click the grid icon in the main interface toolbar</li>
-                                        <li>Requires a Natively Pro license</li>
+                                        <li>{t('Click the grid icon in the Launcher header')}</li>
+                                        <li>{t('Or click the grid icon in the main interface toolbar')}</li>
+                                        <li>{t('Requires a Natively Pro license')}</li>
                                     </ul>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">Activating a Mode</h4>
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">{t('Activating a Mode')}</h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                        <li>Select any mode in the left sidebar</li>
-                                        <li>Click <strong>Set active</strong> to apply it</li>
-                                        <li>The toolbar icon shows the active mode name live</li>
-                                        <li>Click <strong>Deactivate</strong> to return to General</li>
+                                        <li>{t('Select any mode in the left sidebar')}</li>
+                                        <li>{t('Click Set active to apply it')}</li>
+                                        <li>{t('The toolbar icon shows the active mode name live')}</li>
+                                        <li>{t('Click Deactivate to return to General')}</li>
                                     </ul>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">Reference Files</h4>
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">{t('Reference Files')}</h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                        <li>Upload PDF, DOCX, or TXT files per mode</li>
-                                        <li>File contents are injected as real-time context</li>
-                                        <li>Great for: resumes, product sheets, job descriptions</li>
-                                        <li>Per-file cap: 12 k chars · total cap: 40 k chars</li>
+                                        <li>{t('Upload PDF, DOCX, or TXT files per mode')}</li>
+                                        <li>{t('File contents are injected as real-time context')}</li>
+                                        <li>{t('Great for: resumes, product sheets, job descriptions')}</li>
+                                        <li>{t('Per-file cap: 12 k chars · total cap: 40 k chars')}</li>
                                     </ul>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">Custom Modes & Templates</h4>
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">{t('Custom Modes & Templates')}</h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                        <li>Click <strong>+ New Mode</strong> for a blank slate</li>
-                                        <li>Browse the <strong>Templates Gallery</strong> for ready-made personas</li>
-                                        <li>Edit the <strong>Real-time Prompt</strong> with the inline Save action</li>
-                                        <li>Define <strong>Note Section Templates</strong> per mode for capture format</li>
+                                        <li>{t('Click + New Mode for a blank slate')}</li>
+                                        <li>{t('Browse the Templates Gallery for ready-made personas')}</li>
+                                        <li>{t('Edit the Real-time Prompt with the inline Save action')}</li>
+                                        <li>{t('Define Note Section Templates per mode for capture format')}</li>
                                     </ul>
                                 </div>
                             </div>
@@ -1665,57 +1668,57 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                         <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
                             <h4 className="text-[13px] font-semibold text-indigo-400 flex items-center gap-2 mb-1">
-                                <Star size={14} /> Pro Feature
+                                <Star size={14} /> {t('Pro Feature')}
                             </h4>
                             <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                Modes are locked behind Natively Pro. Free and trial users see only the General mode. Activate a license via <strong>Settings → Natively API</strong> to unlock all seven modes.
+                                {t('Modes are locked behind Natively Pro. Free and trial users see only the General mode. Activate a license via Settings → Natively API to unlock all seven modes.')}
                             </p>
                         </div>
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="9. Miscellaneous" icon={<Settings className="w-4 h-4" />}>
+                <AccordionSection title={t('9. Miscellaneous')} icon={<Settings className="w-4 h-4" />}>
                     <div className="space-y-6">
                         {/* Calendar */}
                         <div>
                             <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl mb-4">
                                 <h4 className="text-[13px] font-semibold text-blue-500 flex items-center gap-2 mb-1">
-                                    <Calendar size={14} /> What is Calendar Intelligence?
+                                    <Calendar size={14} /> {t('What is Calendar Intelligence?')}
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                    By connecting your Google Calendar directly to Natively, the AI automatically gains context on your upcoming meetings, syncs the event data, and reads attendee lists to hyper-personalize your interactions.
+                                    {t('By connecting your Google Calendar directly to Natively, the AI automatically gains context on your upcoming meetings, syncs the event data, and reads attendee lists to hyper-personalize your interactions.')}
                                 </p>
                             </div>
 
                             <div className="grid md:grid-cols-2 gap-3">
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">How to Set it Up</h4>
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">{t('How to Set it Up')}</h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                        <li>Navigate to the <strong>Calendar</strong> tab in settings.</li>
-                                        <li>Click <strong>Connect Google Calendar</strong> and authenticate securely.</li>
-                                        <li>Natively will quietly background-sync your schedule.</li>
+                                        <li>{t('Navigate to the Calendar tab in settings.')}</li>
+                                        <li>{t('Click Connect Google Calendar and authenticate securely.')}</li>
+                                        <li>{t('Natively will quietly background-sync your schedule.')}</li>
                                     </ul>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">Follow-Up System</h4>
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">{t('Follow-Up System')}</h4>
                                     <p className="text-[11px] text-text-secondary">
-                                        When tracking live meetings, Natively uses the connected calendar context to instantly figure out <strong>who you are talking to</strong>. This powers the Follow-Up Email system, letting you auto-draft post-meeting notes to confirmed attendees.
+                                        {t('When tracking live meetings, Natively uses the connected calendar context to instantly figure out who you are talking to. This powers the Follow-Up Email system, letting you auto-draft post-meeting notes to confirmed attendees.')}
                                     </p>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <LayoutGrid className="w-4 h-4 text-blue-500" /> Launcher Peek Stack
+                                        <LayoutGrid className="w-4 h-4 text-blue-500" /> {t('Launcher Peek Stack')}
                                     </h4>
                                     <p className="text-[11px] text-text-secondary">
-                                        The Launcher's Calendar card now displays your <strong>next real meeting</strong> with a stacked-card visual hinting at what comes after it — no need to switch tabs to see what's queued.
+                                        {t("The Launcher's Calendar card now displays your next real meeting with a stacked-card visual hinting at what comes after it — no need to switch tabs to see what's queued.")}
                                     </p>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <ExternalLink className="w-4 h-4 text-emerald-500" /> One-Click Join
+                                        <ExternalLink className="w-4 h-4 text-emerald-500" /> {t('One-Click Join')}
                                     </h4>
                                     <p className="text-[11px] text-text-secondary">
-                                        Each upcoming event shows a <strong>Join Now</strong> button that opens the meeting link in your <strong>system default browser</strong> (so it lands in the right Chrome/Safari profile), not an in-app webview.
+                                        {t('Each upcoming event shows a Join Now button that opens the meeting link in your system default browser (so it lands in the right Chrome/Safari profile), not an in-app webview.')}
                                     </p>
                                 </div>
                             </div>
@@ -1726,88 +1729,88 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                         {/* Fast Mode */}
                         <div className="space-y-4">
                             <h4 className="font-bold text-sm text-text-primary flex items-center gap-2">
-                                <Zap className="w-4 h-4 text-orange-500" /> Fast Mode (Hardware LPU)
+                                <Zap className="w-4 h-4 text-orange-500" /> {t('Fast Mode (Hardware LPU)')}
                             </h4>
                             <MockFastModeAnim />
                             <div className="p-4 rounded-xl border bg-orange-500/10 border-orange-500/20">
                                 <h4 className="font-semibold text-sm mb-2 text-orange-500 flex items-center gap-2">
-                                    <Zap className="w-4 h-4" /> How Fast Mode Works
+                                    <Zap className="w-4 h-4" /> {t('How Fast Mode Works')}
                                 </h4>
                                 <p className="text-xs text-orange-400/80 m-0">
-                                    Fast Mode activates highly efficient models (like Llama 3 8B) layered over Groq hardware LPUs instead of GPUs. This brings latency down from 2-3 seconds to less than 500ms. To enable Fast Mode, navigate to Settings &gt; General Settings popup overlay, and click the Lightning Icon.
+                                    {t('Fast Mode activates highly efficient models (like Llama 3 8B) layered over Groq hardware LPUs instead of GPUs. This brings latency down from 2-3 seconds to less than 500ms. To enable Fast Mode, navigate to Settings > General Settings popup overlay, and click the Lightning Icon.')}
                                 </p>
                             </div>
                         </div>
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="10. Phone Mirror" icon={<Smartphone className="w-4 h-4" />}>
+                <AccordionSection title={t('10. Phone Mirror')} icon={<Smartphone className="w-4 h-4" />}>
                     <div className="space-y-4">
                         <div className="p-3 bg-sky-500/10 border border-sky-500/20 rounded-xl mb-2">
                             <h4 className="text-[13px] font-semibold text-sky-400 flex items-center gap-2 mb-1">
-                                <Smartphone size={14} /> Stream Natively to Your Phone
+                                <Smartphone size={14} /> {t('Stream Natively to Your Phone')}
                             </h4>
                             <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                Phone Mirror spins up a small local web server so you can watch Natively's live transcript and AI answers from your phone or tablet — handy when your screen is being shared and you don't want the overlay visible.
+                                {t("Phone Mirror spins up a small local web server so you can watch Natively's live transcript and AI answers from your phone or tablet — handy when your screen is being shared and you don't want the overlay visible.")}
                             </p>
                         </div>
 
                         <div className="grid md:grid-cols-2 gap-3">
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                 <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                    <Wifi className="w-4 h-4 text-sky-500" /> Enable & Connect
+                                    <Wifi className="w-4 h-4 text-sky-500" /> {t('Enable & Connect')}
                                 </h4>
                                 <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                    <li>Open <strong>Settings → Sync</strong></li>
-                                    <li>Toggle on, then scan the generated QR code from your phone</li>
-                                    <li>Loopback by default — flip <strong>Expose on LAN</strong> to reach it from another device on the same Wi-Fi</li>
+                                    <li>{t('Open Settings → Sync')}</li>
+                                    <li>{t('Toggle on, then scan the generated QR code from your phone')}</li>
+                                    <li>{t('Loopback by default — flip Expose on LAN to reach it from another device on the same Wi-Fi')}</li>
                                 </ul>
                             </div>
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                 <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                    <Lock className="w-4 h-4 text-amber-500" /> Token-Gated Security
+                                    <Lock className="w-4 h-4 text-amber-500" /> {t('Token-Gated Security')}
                                 </h4>
                                 <p className="text-[11px] text-text-secondary">
-                                    Every session is protected by a single-use bearer token baked into the QR. If a device leaves your trust circle, hit <strong>Rotate Token</strong> to invalidate every existing connection in one tap.
+                                    {t('Every session is protected by a single-use bearer token baked into the QR. If a device leaves your trust circle, hit Rotate Token to invalidate every existing connection in one tap.')}
                                 </p>
                             </div>
                         </div>
 
                         <div className="p-3 border border-orange-500/20 bg-orange-500/5 rounded-lg">
                             <p className="text-[10px] text-orange-400 m-0">
-                                <strong>⚠️ LAN exposure:</strong> Only enable <em>Expose on LAN</em> on networks you trust. The token stops casual snoops, but anyone who captures the QR or copies the URL can read your live transcript until you rotate.
+                                <strong>⚠️ {t('LAN exposure:')}</strong> {t('Only enable Expose on LAN on networks you trust. The token stops casual snoops, but anyone who captures the QR or copies the URL can read your live transcript until you rotate.')}
                             </p>
                         </div>
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="11. Stealth & Window Control" icon={<Ghost className="w-4 h-4" />}>
+                <AccordionSection title={t('11. Stealth & Window Control')} icon={<Ghost className="w-4 h-4" />}>
                     <div className="space-y-4">
                         <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl mb-4">
                             <h4 className="text-[13px] font-semibold text-indigo-400 flex items-center gap-2 mb-1">
-                                <Ghost size={14} /> Process Disguise & Undetectability
+                                <Ghost size={14} /> {t('Process Disguise & Undetectability')}
                             </h4>
                             <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                Natively is heavily geared towards power users seeking minimalistic operation. The process completely disguises itself and remains undetectable/invisible to standard screen-recording applications and desktop sharing utilities.
+                                {t('Natively is heavily geared towards power users seeking minimalistic operation. The process completely disguises itself and remains undetectable/invisible to standard screen-recording applications and desktop sharing utilities.')}
                             </p>
                         </div>
 
                         <div className="grid gap-3">
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                 <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                    <EyeOff className="w-4 h-4 text-text-secondary" /> Dynamic UI Opacity
+                                    <EyeOff className="w-4 h-4 text-text-secondary" /> {t('Dynamic UI Opacity')}
                                 </h4>
                                 <p className="text-xs text-text-secondary">
-                                    Decrease your visual footprint to near-zero. Navigate to the General Settings overlay and dynamically drag the <strong>Opacity Slider</strong> down to make the interface completely translucent against your underlying native applications.
+                                    {t('Decrease your visual footprint to near-zero. Navigate to the General Settings overlay and dynamically drag the Opacity Slider down to make the interface completely translucent against your underlying native applications.')}
                                 </p>
                             </div>
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                 <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                    <Monitor className="w-4 h-4 text-text-secondary" /> Mouse Pass-Through Mode
+                                    <Monitor className="w-4 h-4 text-text-secondary" /> {t('Mouse Pass-Through Mode')}
                                 </h4>
                                 <p className="text-[11px] text-text-secondary mb-2">
-                                    Do you want the AI prompt completely fused into your screen without obstructing your clicks? Activate <strong>Mouse Pass-through</strong> inside the UI toggle menu.
+                                    {t('Do you want the AI prompt completely fused into your screen without obstructing your clicks? Activate Mouse Pass-through inside the UI toggle menu.')}
                                 </p>
                                 <div className="p-2 border border-orange-500/20 bg-orange-500/5 rounded-lg">
                                     <p className="text-[10px] text-orange-400 m-0">
@@ -1819,14 +1822,14 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="12. Hindsight Long-Term Memory (LTM) Setup" icon={<Brain className="w-4 h-4" />}>
+                <AccordionSection title={t('12. Hindsight Long-Term Memory (LTM) Setup')} icon={<Brain className="w-4 h-4" />}>
                     <div className="space-y-4">
                         <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl mb-4">
                             <h4 className="text-[13px] font-semibold text-purple-400 flex items-center gap-2 mb-1">
-                                <Brain size={14} /> Cross-Meeting Memory Infrastructure
+                                <Brain size={14} /> {t('Cross-Meeting Memory Infrastructure')}
                             </h4>
                             <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                Hindsight is a local or cloud-based sidecar service that acts as Natively's vector database. It indexes past meeting transcript segments, custom profiles, and documents to make them queryable via semantic vector search.
+                                {t("Hindsight is a local or cloud-based sidecar service that acts as Natively's vector database. It indexes past meeting transcript segments, custom profiles, and documents to make them queryable via semantic vector search.")}
                             </p>
                         </div>
 
@@ -1834,13 +1837,13 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                             {/* Option 1: Managed Cloud */}
                             <div className="p-4 rounded-xl border bg-accent-primary/5 border-border-subtle group">
                                 <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                    <Globe className="w-4 h-4 text-blue-500" /> Option A: Hindsight Cloud (Recommended)
+                                    <Globe className="w-4 h-4 text-blue-500" /> {t('Option A: Hindsight Cloud (Recommended)')}
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
-                                    A fully managed memory service hosted by Vectorize.io that handles all vector database indexing, LLM fact extraction, and observation consolidation.
+                                    {t('A fully managed memory service hosted by Vectorize.io that handles all vector database indexing, LLM fact extraction, and observation consolidation.')}
                                 </p>
                                 <ol className="text-[11px] text-text-secondary space-y-2 list-decimal pl-4 mb-3">
-                                    <li>Sign up for an account at:
+                                    <li>{t('Sign up for an account at:')}
                                         <button
                                             onClick={() => { (window as any).electronAPI?.openExternal('https://ui.hindsight.vectorize.io/signup') }}
                                             className="ml-1 text-accent-primary hover:underline font-semibold inline-flex items-center gap-0.5"
@@ -1848,24 +1851,24 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                             ui.hindsight.vectorize.io/signup <ExternalLink size={10} />
                                         </button>
                                     </li>
-                                    <li>Create a new <strong>Memory Bank</strong> in the Hindsight Dashboard to obtain your <strong>API Access Key</strong>.</li>
-                                    <li>In Natively desktop: open <strong>Settings → Intelligence</strong>.</li>
-                                    <li>Set the Base URL to: <code className="bg-bg-elevated px-1 font-mono text-[10px]">https://api.hindsight.vectorize.io/v1</code>.</li>
-                                    <li>Enter your Hindsight <strong>API Access Key</strong>, click <strong>Test Connection</strong>, and enable <strong>Long-term memory</strong>.</li>
+                                    <li>{t('Create a new Memory Bank in the Hindsight Dashboard to obtain your API Access Key.')}</li>
+                                    <li>{t('In Natively desktop: open Settings → Intelligence.')}</li>
+                                    <li>{t('Set the Base URL to:')} <code className="bg-bg-elevated px-1 font-mono text-[10px]">https://api.hindsight.vectorize.io/v1</code>.</li>
+                                    <li>{t('Enter your Hindsight API Access Key, click Test Connection, and enable Long-term memory.')}</li>
                                 </ol>
                             </div>
 
                             {/* Option 2: Local Docker / Pip */}
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                 <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                    <Cpu className="w-4 h-4 text-purple-500" /> Option B: Local Self-Hosted Daemon (Docker or Pip)
+                                    <Cpu className="w-4 h-4 text-purple-500" /> {t('Option B: Local Self-Hosted Daemon (Docker or Pip)')}
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
-                                    Run Hindsight as a background daemon on your local computer using Docker or Python pip:
+                                    {t('Run Hindsight as a background daemon on your local computer using Docker or Python pip:')}
                                 </p>
                                 <div className="space-y-3 pl-1 text-[11px] text-text-secondary">
                                     <div>
-                                        <p className="font-semibold text-[10.5px] text-text-primary mb-1">Via Docker (One command with local PostgreSQL):</p>
+                                        <p className="font-semibold text-[10.5px] text-text-primary mb-1">{t('Via Docker (One command with local PostgreSQL):')}</p>
                                         <code className="block bg-bg-elevated p-2 rounded font-mono text-[9.5px] border border-border-subtle overflow-x-auto whitespace-pre">
                                             {`docker run -d --name hindsight -p 8888:8888 -p 9999:9999 \\
   -e HINDSIGHT_API_LLM_API_KEY=$OPENAI_API_KEY \\
@@ -1874,7 +1877,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                         </code>
                                     </div>
                                     <div>
-                                        <p className="font-semibold text-[10.5px] text-text-primary mb-1">Via Pip (Bare metal Python service):</p>
+                                        <p className="font-semibold text-[10.5px] text-text-primary mb-1">{t('Via Pip (Bare metal Python service):')}</p>
                                         <code className="block bg-bg-elevated p-2 rounded font-mono text-[9.5px] border border-border-subtle overflow-x-auto whitespace-pre">
                                             {`pip install hindsight-api
 export HINDSIGHT_API_LLM_PROVIDER=openai
@@ -1883,7 +1886,7 @@ hindsight-api`}
                                         </code>
                                     </div>
                                     <p className="text-[10px] text-text-muted mt-1 leading-relaxed">
-                                        Once running, access the local dashboard UI at <code className="bg-bg-elevated px-1 font-mono text-[9px]">http://localhost:9999</code>. In Natively settings, set the Base URL to <code className="bg-bg-elevated px-1 font-mono text-[9px]">http://localhost:8888</code>.
+                                        {t('Once running, access the local dashboard UI at')} <code className="bg-bg-elevated px-1 font-mono text-[9px]">http://localhost:9999</code>. {t('In Natively settings, set the Base URL to')} <code className="bg-bg-elevated px-1 font-mono text-[9px]">http://localhost:8888</code>.
                                     </p>
                                 </div>
                             </div>
@@ -1891,105 +1894,105 @@ hindsight-api`}
                             {/* Option 3: Local Dev Script */}
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                 <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                    <FileText className="w-4 h-4 text-purple-400" /> Option C: Monorepo Developer Sidecar
+                                    <FileText className="w-4 h-4 text-purple-400" /> {t('Option C: Monorepo Developer Sidecar')}
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
-                                    Quickly start a local developer instance using the scripts packaged with Natively:
+                                    {t('Quickly start a local developer instance using the scripts packaged with Natively:')}
                                 </p>
                                 <ol className="text-[11px] text-text-secondary space-y-1 list-decimal pl-4">
-                                    <li>Install the embedded server package (Python 3.11+): <code className="bg-bg-elevated px-1 font-mono text-[10px]">pip install hindsight-all</code> (Intel Macs: <code className="bg-bg-elevated px-1 font-mono text-[10px]">hindsight-all-slim</code>).</li>
-                                    <li>From the Natively project folder, run the bundled launcher: <code className="bg-bg-elevated px-1 font-mono text-[10px]">bash scripts/hindsight-start.sh</code>. It starts the embedded memory server (bundled Postgres + pgvector, no Docker) on port 8888 and wires your AI provider chain + fallback automatically.</li>
-                                    <li>Set Natively Base URL to <code className="bg-bg-elevated px-1 font-mono text-[10px]">http://localhost:8888</code> and toggle on memory.</li>
+                                    <li>{t('Install the embedded server package (Python 3.11+):')} <code className="bg-bg-elevated px-1 font-mono text-[10px]">pip install hindsight-all</code> ({t('Intel Macs:')} <code className="bg-bg-elevated px-1 font-mono text-[10px]">hindsight-all-slim</code>).</li>
+                                    <li>{t('From the Natively project folder, run the bundled launcher:')} <code className="bg-bg-elevated px-1 font-mono text-[10px]">bash scripts/hindsight-start.sh</code>. {t('It starts the embedded memory server (bundled Postgres + pgvector, no Docker) on port 8888 and wires your AI provider chain + fallback automatically.')}</li>
+                                    <li>{t('Set Natively Base URL to')} <code className="bg-bg-elevated px-1 font-mono text-[10px]">http://localhost:8888</code> {t('and toggle on memory.')}</li>
                                 </ol>
                             </div>
                         </div>
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="13. Sandboxed Code Verification & Corrector" icon={<Cpu className="w-4 h-4" />}>
+                <AccordionSection title={t('13. Sandboxed Code Verification & Corrector')} icon={<Cpu className="w-4 h-4" />}>
                     <div className="space-y-4">
                         <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl mb-4">
                             <h4 className="text-[13px] font-semibold text-emerald-500 flex items-center gap-2 mb-1">
-                                <CheckCircle2 size={14} /> Execution-Based Answer Verification
+                                <CheckCircle2 size={14} /> {t('Execution-Based Answer Verification')}
                             </h4>
                             <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                When a coding question is answered, Natively extracts code blocks and executes them inside isolated local sandboxed processes to verify their logical correctness. Code blocks receive a "Verified ✓" badge once tested.
+                                {t('When a coding question is answered, Natively extracts code blocks and executes them inside isolated local sandboxed processes to verify their logical correctness. Code blocks receive a "Verified ✓" badge once tested.')}
                             </p>
                         </div>
 
                         <div className="grid gap-3">
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                 <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                    <Settings className="w-4 h-4 text-emerald-500" /> Environment Requirements
+                                    <Settings className="w-4 h-4 text-emerald-500" /> {t('Environment Requirements')}
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
-                                    Because code is run locally, you must have the appropriate interpreters installed on your device and exposed in your system PATH:
+                                    {t('Because code is run locally, you must have the appropriate interpreters installed on your device and exposed in your system PATH:')}
                                 </p>
                                 <ul className="text-[11px] text-text-secondary space-y-2 list-disc pl-4">
                                     <li>
-                                        <strong>Python Code Verification:</strong> Requires <code className="bg-bg-elevated px-1 font-mono text-[10px]">python3</code> or <code className="bg-bg-elevated px-1 font-mono text-[10px]">python</code> to be installed on your machine.
+                                        <strong>{t('Python Code Verification:')}</strong> {t('Requires')} <code className="bg-bg-elevated px-1 font-mono text-[10px]">python3</code> {t('or')} <code className="bg-bg-elevated px-1 font-mono text-[10px]">python</code> {t('to be installed on your machine.')}
                                     </li>
                                     <li>
-                                        <strong>JS/TS Code Verification:</strong> Requires Node.js (<code className="bg-bg-elevated px-1 font-mono text-[10px]">node</code>) to be installed on your machine.
+                                        <strong>{t('JS/TS Code Verification:')}</strong> {t('Requires Node.js')} (<code className="bg-bg-elevated px-1 font-mono text-[10px]">node</code>) {t('to be installed on your machine.')}
                                     </li>
                                     <li>
-                                        <strong>SQL Verification:</strong> Uses the system's local SQLite client (<code className="bg-bg-elevated px-1 font-mono text-[10px]">sqlite3</code>) with specialized safe/bail modes to verify queries in memory.
+                                        <strong>{t('SQL Verification:')}</strong> {t("Uses the system's local SQLite client")} (<code className="bg-bg-elevated px-1 font-mono text-[10px]">sqlite3</code>) {t('with specialized safe/bail modes to verify queries in memory.')}
                                     </li>
                                 </ul>
                             </div>
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                 <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                    <Sparkles className="w-4 h-4 text-amber-500" /> One-Shot Code Corrector
+                                    <Sparkles className="w-4 h-4 text-amber-500" /> {t('One-Shot Code Corrector')}
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed">
-                                    If a sandboxed code block fails to compile or yields runtime errors, Natively initiates a background correction request to the reasoning model, supplying the execution error logs. The corrected code is streamed back to your interface automatically.
+                                    {t('If a sandboxed code block fails to compile or yields runtime errors, Natively initiates a background correction request to the reasoning model, supplying the execution error logs. The corrected code is streamed back to your interface automatically.')}
                                 </p>
                             </div>
                         </div>
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="14. Companion Browser Extension Setup" icon={<Smartphone className="w-4 h-4" />}>
+                <AccordionSection title={t('14. Companion Browser Extension Setup')} icon={<Smartphone className="w-4 h-4" />}>
                     <div className="space-y-4">
                         <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl mb-4">
                             <h4 className="text-[13px] font-semibold text-indigo-400 flex items-center gap-2 mb-1">
-                                <Smartphone size={14} /> Active Tab Context Capture
+                                <Smartphone size={14} /> {t('Active Tab Context Capture')}
                             </h4>
                             <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                The Natively browser extension (Manifest V3) allows you to securely send the active browser tab's text content and source code to the Natively desktop app. It only communicates over your local loopback.
+                                {t("The Natively browser extension (Manifest V3) allows you to securely send the active browser tab's text content and source code to the Natively desktop app. It only communicates over your local loopback.")}
                             </p>
                         </div>
 
                         <div className="grid gap-3">
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                 <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                    <Cpu className="w-4 h-4 text-indigo-500" /> 1. Install the Extension
+                                    <Cpu className="w-4 h-4 text-indigo-500" /> {t('1. Install the Extension')}
                                 </h4>
                                 <div className="space-y-3 text-[11px] text-text-secondary">
                                     <div className="p-3 bg-accent-primary/5 border border-border-subtle rounded-lg">
                                         <p className="font-semibold text-text-primary mb-1 flex items-center gap-1.5">
-                                            <ExternalLink className="w-3.5 h-3.5 text-accent-primary" /> Chrome Web Store (Recommended)
+                                            <ExternalLink className="w-3.5 h-3.5 text-accent-primary" /> {t('Chrome Web Store (Recommended)')}
                                         </p>
-                                        <p className="mb-2 leading-relaxed">Install the official companion extension in one click directly from the Web Store:</p>
+                                        <p className="mb-2 leading-relaxed">{t('Install the official companion extension in one click directly from the Web Store:')}</p>
                                         <button
                                             onClick={() => { (window as any).electronAPI?.openExternal('https://chromewebstore.google.com/detail/lmhgnkbjnelmciecjkleaomjpejcgaln?utm_source=item-share-cb') }}
                                             className="px-2.5 py-1 bg-accent-primary hover:bg-accent-hover text-white rounded text-[10px] font-semibold transition-colors flex items-center gap-1"
                                         >
-                                            Install from Chrome Web Store <ExternalLink size={10} />
+                                            {t('Install from Chrome Web Store')} <ExternalLink size={10} />
                                         </button>
                                     </div>
                                     <div className="p-3 border border-border-subtle rounded-lg">
-                                        <p className="font-semibold text-text-primary mb-1">Local Developer Build (Alternative)</p>
-                                        <p className="mb-1 leading-relaxed">To build the extension from source and load it manually:</p>
+                                        <p className="font-semibold text-text-primary mb-1">{t('Local Developer Build (Alternative)')}</p>
+                                        <p className="mb-1 leading-relaxed">{t('To build the extension from source and load it manually:')}</p>
                                         <ol className="space-y-1 list-decimal pl-4">
-                                            <li>Open your terminal and run:
+                                            <li>{t('Open your terminal and run:')}
                                                 <code className="block bg-bg-elevated p-1.5 rounded font-mono text-[9px] my-1 border border-border-subtle overflow-x-auto whitespace-pre">
                                                     cd natively-browser && npm install && npm run build
                                                 </code>
                                             </li>
-                                            <li>Navigate to <code className="bg-bg-elevated px-1 font-mono text-[9.5px]">chrome://extensions</code> and turn on <strong>Developer mode</strong>.</li>
-                                            <li>Click <strong>Load unpacked</strong> and select the <code className="bg-bg-elevated px-1 font-mono text-[9.5px]">natively-browser/dist</code> folder.</li>
+                                            <li>{t('Navigate to')} <code className="bg-bg-elevated px-1 font-mono text-[9.5px]">chrome://extensions</code> {t('and turn on Developer mode.')}</li>
+                                            <li>{t('Click Load unpacked and select the')} <code className="bg-bg-elevated px-1 font-mono text-[9.5px]">natively-browser/dist</code> {t('folder.')}</li>
                                         </ol>
                                     </div>
                                 </div>
@@ -1997,28 +2000,28 @@ hindsight-api`}
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                 <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                    <Zap className="w-4 h-4 text-amber-500" /> 2. Pair with Natively Desktop
+                                    <Zap className="w-4 h-4 text-amber-500" /> {t('2. Pair with Natively Desktop')}
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
-                                    Establish a secure paired loopback connection (done only once):
+                                    {t('Establish a secure paired loopback connection (done only once):')}
                                 </p>
                                 <ol className="text-[11px] text-text-secondary space-y-1 list-decimal pl-4">
-                                    <li>In Natively desktop: go to <strong>Settings → Sync</strong>, ensure Phone Mirror is running, and under the **Browser Extension** card click <strong>Connect browser extension</strong> (arms pairing for 60s).</li>
-                                    <li>In your browser: click the Natively extension toolbar icon, then click <strong>Connect to Natively</strong>.</li>
-                                    <li>Once paired, the connection status shows a green dot ("Connected — capture ready").</li>
+                                    <li>{t('In Natively desktop: go to Settings → Sync, ensure Phone Mirror is running, and under the Browser Extension card click Connect browser extension (arms pairing for 60s).')}</li>
+                                    <li>{t('In your browser: click the Natively extension toolbar icon, then click Connect to Natively.')}</li>
+                                    <li>{t('Once paired, the connection status shows a green dot ("Connected — capture ready").')}</li>
                                 </ol>
                             </div>
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                 <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                    <Monitor className="w-4 h-4 text-emerald-500" /> 3. Triggering Tab Capture
+                                    <Monitor className="w-4 h-4 text-emerald-500" /> {t('3. Triggering Tab Capture')}
                                 </h4>
                                 <ul className="text-[11px] text-text-secondary space-y-2 list-disc pl-4">
                                     <li>
-                                        <strong>Global Hotkey (Recommended):</strong> Press <kbd className="bg-bg-elevated px-1.5 py-0.5 rounded border text-[10.5px] border-border-subtle font-sans">{isMac ? '⌘' : 'Ctrl'}+Shift+Y</kbd> anywhere on your system. Natively pulls DOM context automatically; if the browser isn't active/reachable, it defaults to a screenshot automatically.
+                                        <strong>{t('Global Hotkey (Recommended):')}</strong> {t('Press')} <kbd className="bg-bg-elevated px-1.5 py-0.5 rounded border text-[10.5px] border-border-subtle font-sans">{isMac ? '⌘' : 'Ctrl'}+Shift+Y</kbd> {t("anywhere on your system. Natively pulls DOM context automatically; if the browser isn't active/reachable, it defaults to a screenshot automatically.")}
                                     </li>
                                     <li>
-                                        <strong>Manual Capture:</strong> Open the extension toolbar popup and click <strong>Capture this page</strong>.
+                                        <strong>{t('Manual Capture:')}</strong> {t('Open the extension toolbar popup and click Capture this page.')}
                                     </li>
                                 </ul>
                             </div>
@@ -2026,56 +2029,56 @@ hindsight-api`}
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="15. Session Memory & Spoken Humanizer" icon={<Sparkles className="w-4 h-4" />}>
+                <AccordionSection title={t('15. Session Memory & Spoken Humanizer')} icon={<Sparkles className="w-4 h-4" />}>
                     <div className="space-y-4">
                         <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl mb-4">
                             <h4 className="text-[13px] font-semibold text-amber-500 flex items-center gap-2 mb-1">
-                                <Sparkles size={14} /> Conversational Polish & Context Awareness
+                                <Sparkles size={14} /> {t('Conversational Polish & Context Awareness')}
                             </h4>
                             <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                Natively implements real-time session tracking, entity extraction, and stylistic rewriting. This ensures responses refer correctly to prior chat context and sound completely natural when read aloud, without robotic or repetitive patterns.
+                                {t('Natively implements real-time session tracking, entity extraction, and stylistic rewriting. This ensures responses refer correctly to prior chat context and sound completely natural when read aloud, without robotic or repetitive patterns.')}
                             </p>
                         </div>
 
                         <div className="grid gap-3">
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                 <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                    <Brain className="w-4 h-4 text-purple-500" /> Time-Aware Session Memory & Entity Resolver
+                                    <Brain className="w-4 h-4 text-purple-500" /> {t('Time-Aware Session Memory & Entity Resolver')}
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
-                                    As meetings progress, Natively monitors speaker turns and extracts key entities (such as projects, skills, and compensation):
+                                    {t('As meetings progress, Natively monitors speaker turns and extracts key entities (such as projects, skills, and compensation):')}
                                 </p>
                                 <ul className="text-[11px] text-text-secondary space-y-2 list-disc pl-4">
-                                    <li><strong>Demonstrative Follow-ups:</strong> If you ask "Tell me more about <em>that project</em>", Natively resolves the pronoun to the specific project name discussed previously (e.g. "Natively").</li>
-                                    <li><strong>Time-Decayed Salience:</strong> Entities fade in priority based on a half-life recency calculation (measured in seconds), keeping the AI focused on the most active discussion topic.</li>
-                                    <li><strong>Mode-Aware Routing:</strong> Access is restricted based on mode boundaries (e.g., Coding Mode blocks resume/project history; Negotiation Mode is the only mode permitted to fetch compensation/salary details).</li>
+                                    <li>{t('Demonstrative Follow-ups: If you ask "Tell me more about that project", Natively resolves the pronoun to the specific project name discussed previously (e.g. "Natively").')}</li>
+                                    <li>{t('Time-Decayed Salience: Entities fade in priority based on a half-life recency calculation (measured in seconds), keeping the AI focused on the most active discussion topic.')}</li>
+                                    <li>{t('Mode-Aware Routing: Access is restricted based on mode boundaries (e.g., Coding Mode blocks resume/project history; Negotiation Mode is the only mode permitted to fetch compensation/salary details).')}</li>
                                 </ul>
                             </div>
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                 <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                    <Sparkles className="w-4 h-4 text-amber-500" /> Spoken Answer Humanizer
+                                    <Sparkles className="w-4 h-4 text-amber-500" /> {t('Spoken Answer Humanizer')}
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
-                                    Raw LLM responses are automatically post-processed before they are returned to sound like natural human speech:
+                                    {t('Raw LLM responses are automatically post-processed before they are returned to sound like natural human speech:')}
                                 </p>
                                 <ul className="text-[11px] text-text-secondary space-y-2 list-disc pl-4">
-                                    <li><strong>Corporate Cliché Stripping:</strong> Deterministically removes corporate filler words such as <em>"unique blend"</em>, <em>"leverage"</em>, <em>"streamline"</em>, and <em>"cutting-edge"</em>.</li>
-                                    <li><strong>First-Person Rewriting:</strong> Converts third-person candidate references (e.g. "the candidate worked on...") directly into first-person speech (<em>"I worked on..."</em>).</li>
-                                    <li><strong>Formatting Cleanup:</strong> Removes symbols and structures unfit for audio generation, such as em/en dashes and empty bullet points, while retaining markdown bold elements (`**bold**`).</li>
+                                    <li>{t('Corporate Cliché Stripping: Deterministically removes corporate filler words such as "unique blend", "leverage", "streamline", and "cutting-edge".')}</li>
+                                    <li>{t('First-Person Rewriting: Converts third-person candidate references (e.g. "the candidate worked on...") directly into first-person speech ("I worked on...").')}</li>
+                                    <li>{t('Formatting Cleanup: Removes symbols and structures unfit for audio generation, such as em/en dashes and empty bullet points, while retaining markdown bold elements (`**bold**`).')}</li>
                                 </ul>
                             </div>
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                 <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                    <RefreshCw className="w-4 h-4 text-emerald-500" /> Answer Diversity Guard & Polish
+                                    <RefreshCw className="w-4 h-4 text-emerald-500" /> {t('Answer Diversity Guard & Polish')}
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
-                                    To ensure responses remain fresh and varied across long meeting sessions:
+                                    {t('To ensure responses remain fresh and varied across long meeting sessions:')}
                                 </p>
                                 <ul className="text-[11px] text-text-secondary space-y-2 list-disc pl-4">
-                                    <li><strong>Similarity Prevention:</strong> Computes Jaccard similarity and sentence structure matches to block the AI from repeating recently used phrases or patterns.</li>
-                                    <li><strong>Boilerplate Compressing:</strong> Condenses repetitive prompt headers (e.g. <em>"Based on the code on your screen..."</em>, <em>"Sure, I can help with that..."</em>) directly into speakable, action-oriented answers.</li>
+                                    <li>{t('Similarity Prevention: Computes Jaccard similarity and sentence structure matches to block the AI from repeating recently used phrases or patterns.')}</li>
+                                    <li>{t('Boilerplate Compressing: Condenses repetitive prompt headers (e.g. "Based on the code on your screen...", "Sure, I can help with that...") directly into speakable, action-oriented answers.')}</li>
                                 </ul>
                             </div>
                         </div>
