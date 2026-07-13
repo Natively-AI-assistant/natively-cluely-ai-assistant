@@ -821,7 +821,7 @@ export class IntelligenceEngine extends EventEmitter {
                     return null;
                 }
                 if (answer) {
-                    this.session.addAssistantMessage(answer);
+                    this.session.addAssistantMessage(answer, undefined, 'what_to_answer');
                     this.emit('suggested_answer', answer, question || 'inferred', confidence);
                     this.setMode('idle');
                     return answer;
@@ -1033,7 +1033,7 @@ export class IntelligenceEngine extends EventEmitter {
                     // profile). No prior context exists, so there's nothing to answer.
                     if (fr.isClarification && fr.clarificationText && !isSpeculative) {
                         piTelemetry.emit('wta_context_free_clarification', { surface: 'what_to_answer', via: (fr as any).resolvedVia ?? 'clarification' });
-                        this.session.addAssistantMessage(fr.clarificationText);
+                        this.session.addAssistantMessage(fr.clarificationText, undefined, 'what_to_answer');
                         this.emit('suggested_answer', fr.clarificationText, extractedQuestion.latestQuestion || 'inferred', 0.9);
                         this.setMode('idle');
                         trace.mark('repair_used', { reason: 'context_free_clarification' });
@@ -1492,7 +1492,7 @@ export class IntelligenceEngine extends EventEmitter {
                             hasProfileFacts: Boolean((this.llmHelper.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data),
                             hasLiveTranscript: true, // WTA is always transcript-driven
                         });
-                    this.session.addAssistantMessage(clarify);
+                    this.session.addAssistantMessage(clarify, undefined, 'what_to_answer');
                     this.emit('suggested_answer', clarify, extractedQuestion.latestQuestion || question || 'inferred', 0.9);
                     trace.mark('repair_used', { reason: 'context_os_clarification' });
                     if (isIntelligenceFlagEnabled('trace')) {
@@ -2169,7 +2169,7 @@ export class IntelligenceEngine extends EventEmitter {
                 }
             } catch { /* normalizer never blocks the answer */ }
 
-            this.session.addAssistantMessage(finalWtaAnswer, wtaWriteDecision);
+            this.session.addAssistantMessage(finalWtaAnswer, wtaWriteDecision, 'what_to_answer');
 
             // Full-JIT write-gating law (§6): a provider-error/no-answer WTA
             // fallback (deadline timeout, leaked-schema-stub) carries a
@@ -2391,7 +2391,7 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             if (!streamAborted && fullRefined) {
-                this.session.addAssistantMessage(fullRefined);
+                this.session.addAssistantMessage(fullRefined, undefined, 'what_to_answer');
                 this.emit('refined_answer', fullRefined, intent);
 
                 const intentMap: Record<string, string> = {
@@ -2530,7 +2530,7 @@ export class IntelligenceEngine extends EventEmitter {
                 // Track recap as an assistant message so "make it shorter" / other
                 // refinements can target it via FollowUpLLM (which reads the last
                 // assistant message).
-                this.session.addAssistantMessage(fullSummary);
+                this.session.addAssistantMessage(fullSummary, undefined, 'what_to_answer');
 
                 this.session.pushUsage({
                     type: 'chat',
@@ -2596,7 +2596,7 @@ export class IntelligenceEngine extends EventEmitter {
             // Only update history and emit final if not aborted
             if (fullClarification && this.currentGenerationId === generationId) {
                 this.emit('clarify', fullClarification);
-                this.session.addAssistantMessage(fullClarification);
+                this.session.addAssistantMessage(fullClarification, undefined, 'what_to_answer');
 
                 this.session.pushUsage({
                     type: 'chat',
@@ -2720,7 +2720,12 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             if (answer) {
-                this.session.addAssistantMessage(answer);
+                // MODE 5: Manual Answer (Fallback) — a manual-chat submission
+                // (submit-manual-question IPC), NOT a WTA suggestion. Was
+                // mistagged 'what_to_answer' (code-review round 2, 2026-07-14);
+                // fixed to match this function's own source: 'manual_input'
+                // plan and the pushUsage({source: 'manual_chat'}) call below.
+                this.session.addAssistantMessage(answer, undefined, 'manual_chat');
                 this.emit('manual_answer_result', answer, question);
 
                 this.session.pushUsage({
@@ -2809,7 +2814,7 @@ export class IntelligenceEngine extends EventEmitter {
                 fullHint = "I couldn't detect any code in the screenshot. Try screenshotting your code editor directly.";
             }
 
-            this.session.addAssistantMessage(fullHint);
+            this.session.addAssistantMessage(fullHint, undefined, 'screenshot');
             this.session.pushUsage({
                 type: 'assist',
                 timestamp: Date.now(),
@@ -2854,7 +2859,7 @@ export class IntelligenceEngine extends EventEmitter {
             if (!context.trim() && !resolvedProblem && (!imagePaths || imagePaths.length === 0)) {
                 this.setMode('idle');
                 const msg = "There's nothing to brainstorm right now. Make sure your question is visible or spoken aloud, then try again.";
-                this.session.addAssistantMessage(msg);
+                this.session.addAssistantMessage(msg, undefined, 'screenshot');
                 this.emit('suggested_answer', msg, 'Brainstorming Approaches', 1.0);
                 return msg;
             }
@@ -2887,7 +2892,7 @@ export class IntelligenceEngine extends EventEmitter {
                 fullResult = "I couldn't generate brainstorm approaches. Make sure your question is visible and try again.";
             }
 
-            this.session.addAssistantMessage(fullResult);
+            this.session.addAssistantMessage(fullResult, undefined, 'screenshot');
             this.session.pushUsage({
                 type: 'assist',
                 timestamp: Date.now(),

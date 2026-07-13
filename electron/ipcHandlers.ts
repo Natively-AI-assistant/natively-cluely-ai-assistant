@@ -778,7 +778,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
         // 2. Add assistant response and set as last message
         console.log(`[IPC] Updating IntelligenceManager with assistant message...`);
-        intelligenceManager.addAssistantMessage(result);
+        intelligenceManager.addAssistantMessage(result, undefined, 'manual_chat');
         console.log(`[IPC] Updated IntelligenceManager.Last message`, {
           length: intelligenceManager.getLastAssistantMessage()?.length ?? 0,
         });
@@ -934,7 +934,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             } catch (_) {
               /* noop */
             }
-            intelligenceManager.addAssistantMessage(identityHit);
+            intelligenceManager.addAssistantMessage(identityHit, undefined, 'manual_chat');
             intelligenceManager.logUsage('chat', message, identityHit);
             // Observe-only trace for the app-identity canned reply (common path). The
             // hoisted iTrace is still the NOOP here (real trace is created post-planAnswer),
@@ -1425,7 +1425,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           event.sender.send('gemini-stream-done', { finalText: clarification });
           try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), clarification); } catch (_) { /* noop */ }
           try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), clarification); } catch (_) { /* noop */ }
-          intelligenceManager.addAssistantMessage(clarification);
+          intelligenceManager.addAssistantMessage(clarification, undefined, 'manual_chat');
           intelligenceManager.logUsage('chat', message, clarification);
           chatTrace.markFirstUseful({ via: 'context_free_clarification' });
           chatTrace.mark('response_completed', { chars: clarification.length, deterministic: true });
@@ -1498,7 +1498,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), clarify); } catch (_) { /* noop */ }
             try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), clarify); } catch (_) { /* noop */ }
             const clarifyWrite = decideSessionWritePolicy({ finalGenerationMode: 'source_safe_refusal', validationOk: true, sourceContractHonored: true });
-            intelligenceManager.addAssistantMessage(clarify, clarifyWrite);
+            intelligenceManager.addAssistantMessage(clarify, clarifyWrite, 'manual_chat');
             intelligenceManager.logUsage('chat', message, clarify);
             chatTrace.markFirstUseful({ via: 'context_os_clarification' });
             chatTrace.mark('response_completed', { chars: clarify.length, deterministic: true, finalGenerationMode: 'source_safe_refusal' });
@@ -1608,7 +1608,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), clarify); } catch (_) { /* noop */ }
             try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), clarify); } catch (_) { /* noop */ }
             const clarifyWrite = decideSessionWritePolicy({ finalGenerationMode: 'source_safe_refusal', validationOk: true, sourceContractHonored: true });
-            intelligenceManager.addAssistantMessage(clarify, clarifyWrite);
+            intelligenceManager.addAssistantMessage(clarify, clarifyWrite, 'manual_chat');
             intelligenceManager.logUsage('chat', message, clarify);
             chatTrace.markFirstUseful({ via: 'source_switch_clarification' });
             chatTrace.mark('response_completed', { chars: clarify.length, deterministic: false, finalGenerationMode: 'source_safe_refusal' });
@@ -2124,8 +2124,13 @@ export function initializeIpcHandlers(appState: AppState): void {
             {
               answerType: answerPlan.answerType,
               forbiddenContextLayers: answerPlan.forbiddenContextLayers,
+              // Surface-scoped (Phase 9, 2026-07-14): the referent hint must come
+              // from THIS manual-chat conversation's own last answer, never a
+              // WTA/phone-mirror turn that happened to write the shared
+              // lastAssistantMessage more recently — that would resolve an
+              // anaphoric query against an unrelated surface's subject.
               ...(manualActiveMode?.documentGroundedCustomModeActive === true
-                ? { followUpReferentHint: (intelligenceManager.getLastAssistantMessage() || '').trim() || undefined }
+                ? { followUpReferentHint: (intelligenceManager.getLastAssistantMessage('manual_chat') || '').trim() || undefined }
                 : {}),
               // CONTEXT OS H1: when the flag is on and this is a doc-grounded
               // turn with a contract, pass a generation context so the typed
@@ -2829,7 +2834,10 @@ export function initializeIpcHandlers(appState: AppState): void {
             try {
               const GREETING_RE = /^\s*(?:hey|hi|hello)[!,.]?\s*(?:there)?[!,.]?\s*(?:what would you like help with|how can i help|what can i (?:help|do)(?: you with| for you)?|how may i (?:help|assist))\b/i;
               const trimmed = fullResponse.trim();
-              const priorAnswer = (intelligenceManager.getLastAssistantMessage() || '').trim();
+              // Surface-scoped (Phase 9, 2026-07-14): comparing THIS manual-chat
+              // turn's greeting/duplicate-detection against a WTA/phone-mirror
+              // answer would be an apples-to-oranges comparison across surfaces.
+              const priorAnswer = (intelligenceManager.getLastAssistantMessage('manual_chat') || '').trim();
               const isGreeting = GREETING_RE.test(trimmed) || /what would you like help with/i.test(trimmed);
               const isEmpty = trimmed.length < 8;
               const isExactRepeat = priorAnswer.length > 0 && trimmed === priorAnswer;
@@ -3443,7 +3451,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             if (fullResponse.trim().length > 0
                 && !blockedFromSessionTracker
                 && !sessionWriteDecision.blockedFromSessionTracker) {
-              intelligenceManager.addAssistantMessage(fullResponse, sessionWriteDecision);
+              intelligenceManager.addAssistantMessage(fullResponse, sessionWriteDecision, 'manual_chat');
               // Log Usage for streaming chat
               intelligenceManager.logUsage('chat', message, fullResponse);
               // CONTEXT OS memory safety (Phase 9, 2026-07-10): persist the
@@ -3654,7 +3662,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               event.sender.send('gemini-stream-token', safe);
               event.sender.send('gemini-stream-done', { finalText: safe });
               try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), safe); PhoneMirrorService.getInstance().publishDone(String(myStreamId), safe); } catch (_) { /* noop */ }
-              intelligenceManager.addAssistantMessage(safe, sessionWriteDecision);
+              intelligenceManager.addAssistantMessage(safe, sessionWriteDecision, 'manual_chat');
               _emitAttr({ answer_type: answerPlan.answerType, profile_tree_used: false, profile_tree_fast_path_used: false, structured_resume_used: false });
               return null;
             }
@@ -10047,7 +10055,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             try { phoneMirror.publishDone(String(myStreamId), clarify); } catch (_) {}
             win?.webContents.send('gemini-stream-token', clarify, { streamId: myStreamId });
             win?.webContents.send('gemini-stream-done', { streamId: myStreamId });
-            intelligenceManager.addAssistantMessage(clarify);
+            intelligenceManager.addAssistantMessage(clarify, undefined, 'phone_mirror');
             intelligenceManager.logUsage('chat', message, clarify);
             if (isIntelligenceFlagEnabled('trace')) {
               console.log('[SOURCE-GUARD] phone: blocked source=profile reason=explicit_profile_ask_in_reference_mode', { owner: _pOwn.owner });
@@ -10105,7 +10113,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             console.warn('[PhoneMirror] document-grounded invalid answer blocked from SessionTracker', { chars: phoneTrim.length });
           }
           if (phoneTrim.length > 0 && !phoneInvalid) {
-            intelligenceManager.addAssistantMessage(full);
+            intelligenceManager.addAssistantMessage(full, undefined, 'phone_mirror');
             intelligenceManager.logUsage('chat', message, full);
           }
         }
