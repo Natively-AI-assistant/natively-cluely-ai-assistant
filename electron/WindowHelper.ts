@@ -364,6 +364,11 @@ export class WindowHelper {
 
     try {
       this.launcherWindow = new BrowserWindow(launcherSettings);
+      this.appState.recordNativeOomTrace('launcher-window-created', {
+        window: 'launcher',
+        webContentsId: this.launcherWindow.webContents.id,
+        rendererPid: this.launcherWindow.webContents.getOSProcessId(),
+      });
       console.log('[WindowHelper] BrowserWindow created successfully');
     } catch (err) {
       console.error('[WindowHelper] Failed to create BrowserWindow:', err);
@@ -428,6 +433,15 @@ export class WindowHelper {
     // retry budget instead of being starved by earlier retries.
     this.launcherWindow.webContents.on('did-finish-load', () => {
       launcherLoadRetries = 0;
+      const launcher = this.launcherWindow;
+      if (!launcher || launcher.isDestroyed()) return;
+      const rendererPid = launcher.webContents.getOSProcessId();
+      this.appState.recordNativeOomTrace('launcher-did-finish-load', {
+        window: 'launcher',
+        webContentsId: launcher.webContents.id,
+        rendererPid,
+      });
+      this.appState.startNativeOomContentTrace(rendererPid);
     });
 
     // Pipe renderer-side diagnostics into the main-process log file. Without
@@ -627,6 +641,16 @@ export class WindowHelper {
       });
 
       wc.on('render-process-gone', (_event, details) => {
+        if (tag === 'launcher') {
+          this.appState.recordNativeOomTrace('launcher-render-process-gone', {
+            window: 'launcher',
+            webContentsId: wc.id,
+            rendererPid: wc.getOSProcessId(),
+            reason: typeof details?.reason === 'string' ? details.reason : 'unknown',
+            exitCode: typeof details?.exitCode === 'number' ? details.exitCode : 0,
+          });
+          this.appState.stopNativeOomContentTrace('launcher-render-process-gone');
+        }
         console.error(
           `[Renderer:${tag}] RENDER-PROCESS-GONE reason=${details?.reason} exitCode=${details?.exitCode}`,
         );
@@ -713,6 +737,8 @@ export class WindowHelper {
     }
 
     this.launcherWindow.on('closed', () => {
+      this.appState.recordNativeOomTrace('launcher-window-closed', { window: 'launcher' });
+      this.appState.stopNativeOomContentTrace('launcher-window-closed');
       this.launcherWindow = null;
       // If launcher closes, we should probably quit app or close overlay
       if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {

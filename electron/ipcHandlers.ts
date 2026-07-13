@@ -9192,10 +9192,16 @@ export function initializeIpcHandlers(appState: AppState): void {
   // or a phone connects/disconnects. Idempotent — multiple windows can listen.
   PhoneMirrorService.getInstance().onStatusChange((info) => {
     const win = appState.getMainWindow();
-    win?.webContents.send('phone-mirror:status', info);
+    if (win && !win.isDestroyed()) {
+      appState.recordNativeOomOutboundIpc(win.webContents.id, 'phone-mirror:status', [info]);
+      win.webContents.send('phone-mirror:status', info);
+    }
     try {
       const settingsWin = (appState as any).settingsWindowHelper?.getWindow?.();
-      settingsWin?.webContents?.send('phone-mirror:status', info);
+      if (settingsWin && !settingsWin.isDestroyed()) {
+        appState.recordNativeOomOutboundIpc(settingsWin.webContents.id, 'phone-mirror:status', [info]);
+        settingsWin.webContents.send('phone-mirror:status', info);
+      }
     } catch (_) {
       /* settings window may not exist yet */
     }

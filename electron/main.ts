@@ -1030,6 +1030,11 @@ import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
 import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
+import { NativeOomTrace } from './utils/NativeOomTrace'
+
+// Opt-in only: this trace writes allowlisted process metadata and IPC byte estimates
+// for a copied-profile native OOM investigation. It is inert unless explicitly enabled.
+const nativeOomTrace = new NativeOomTrace()
 
 // Valid disguise modes. The persisted setting is untyped on disk and historical
 // builds wrote values that are no longer part of the union (e.g. 'service'),
@@ -1062,6 +1067,23 @@ export class AppState {
   private modeReferenceRetryPromise: Promise<void> | null = null
   private stabilityHeartbeatTimer: NodeJS.Timeout | null = null
   private knowledgeOrchestrator: any = null
+
+  public recordNativeOomTrace(event: string, data: Record<string, unknown> = {}): void {
+    nativeOomTrace.record(event, data)
+  }
+
+  public recordNativeOomOutboundIpc(webContentsId: number, channel: string, args: unknown[]): void {
+    nativeOomTrace.recordOutboundIpc(webContentsId, channel, args)
+  }
+
+  public startNativeOomContentTrace(launcherPid: number): void {
+    void nativeOomTrace.startContentTrace(launcherPid)
+  }
+
+  public stopNativeOomContentTrace(reason: string): void {
+    void nativeOomTrace.stopContentTrace(reason)
+  }
+
   private tray: Tray | null = null
   private updateAvailable: boolean = false
   private updateDownloadState: 'idle' | 'available' | 'downloading' | 'downloaded' = 'idle'
@@ -1686,6 +1708,26 @@ export class AppState {
             .sort((a: any, b: any) => b.rssMB - a.rssMB);
         } catch { /* getAppMetrics unavailable pre-ready — skip */ }
 
+        if (nativeOomTrace.isEnabled()) {
+          nativeOomTrace.sample(
+            mem,
+            (() => {
+              try {
+                return (app.getAppMetrics?.() || []) as unknown as Array<Record<string, unknown>>;
+              } catch {
+                return [];
+              }
+            })(),
+            (() => {
+              const launcher = this.windowHelper?.getLauncherWindow?.();
+              if (!launcher || launcher.isDestroyed()) return undefined;
+              const pid = launcher.webContents.getOSProcessId();
+              return pid > 0 ? { webContentsId: launcher.webContents.id, pid } : undefined;
+            })(),
+            { freeMemory: os.freemem(), totalMemory: os.totalmem() },
+          );
+        }
+
         console.log('[StabilityHeartbeat]', {
           rssMB: mb(mem.rss),
           heapUsedMB: mb(mem.heapUsed),
@@ -1718,6 +1760,7 @@ export class AppState {
   private sendToWindow(win: BrowserWindow | null | undefined, channel: string, ...args: any[]): boolean {
     if (!win || win.isDestroyed()) return false;
     try {
+      nativeOomTrace.recordOutboundIpc(win.webContents.id, channel, args);
       win.webContents.send(channel, ...args);
       return true;
     } catch {
@@ -6794,6 +6837,12 @@ async function initializeApp() {
   // 2. Wait for app to be ready
   logStartupPhase('before-app-whenReady');
   await app.whenReady()
+  nativeOomTrace.initialize()
+  nativeOomTrace.record('app-ready', {
+    pid: process.pid,
+    platform: process.platform,
+    electron: process.versions.electron,
+  })
   logStartupPhase('after-app-whenReady', { userData: app.getPath('userData') });
 
   // 2a. PRE-EMPTIVE dock hide / activation-policy clamp: must happen before ANY
@@ -7201,7 +7250,14 @@ if (process.env.THINKING_MATRIX === '1') {
 
   // Restore Phone Mirror service if it was enabled in a previous session.
   // Failure here is non-fatal — the user can re-enable from Settings.
-  if (SettingsManager.getInstance().get('phoneMirrorEnabled')) {
+  //
+  // DIAGNOSTIC: this is an explicit A/B lever for copied-profile OOM runs only.
+  // It does not alter PhoneMirror's port selection, persisted setting, or normal
+  // startup behavior when unset; it simply prevents the WS server from starting
+  // so the companion extension cannot connect during the isolated comparison.
+  if (process.env.NATIVELY_DISABLE_PHONE_MIRROR === '1') {
+    console.warn('[LeakTest] NATIVELY_DISABLE_PHONE_MIRROR=1 → PhoneMirror WS server NOT started this run');
+  } else if (SettingsManager.getInstance().get('phoneMirrorEnabled')) {
     PhoneMirrorService.getInstance()
       .start({ exposeOnLan: !!SettingsManager.getInstance().get('phoneMirrorExposeOnLan'), persist: false })
       .catch((err) => console.error('[Init] PhoneMirror auto-start failed:', err));
@@ -7386,6 +7442,7 @@ if (process.env.THINKING_MATRIX === '1') {
   }
 
   app.on('will-quit', () => {
+    nativeOomTrace.stop('will-quit');
     stopAppManagedHindsight('will-quit');
     checkpointDatabase('will-quit');
   });
