@@ -110,6 +110,51 @@ test('QuestionClassifier: entity-lookup questions extract the target entity', as
   assert.ok(c.targetEntities.some((e) => e.toLowerCase().includes('openvla')));
 });
 
+test('QuestionClassifier: a leading question word is never fused into an extracted entity', async () => {
+  const { classifyQuestion } = await loadModule('services/knowledge/QuestionClassifier.js');
+  // Regression: ENTITY_TOKEN_RE used to fuse the sentence-initial "What" onto a
+  // following acronym ("What VRAM", "What LLM"). No extracted entity — hard or
+  // soft — may ever carry the leading interrogative word.
+  for (const q of [
+    'What VRAM size did the consumer-grade inference GPU have?',
+    'What LLM performs reasoning in the Reasoning Tool?',
+    'Which GPU was used for training?',
+  ]) {
+    const c = classifyQuestion(q);
+    for (const e of [...c.targetEntities, ...c.softEntities]) {
+      assert.ok(!/^(?:what|which|who|how|name|list) /i.test(e), `entity "${e}" for "${q}" still carries a leading question word`);
+    }
+  }
+});
+
+test('QuestionClassifier: an interrogative-subject category acronym is SOFT, not a blocking entity', async () => {
+  const { classifyQuestion } = await loadModule('services/knowledge/QuestionClassifier.js');
+  // Generic root cause (2026-07-13 continuation): "what LLM performs…", "what
+  // VLA limitation…", "what VRAM size…" name the CATEGORY being asked for. The
+  // answer chunk names the specific instance ("uses LLaMA 3.2 7B as its
+  // backbone") and never repeats the category token, so requiring it verbatim
+  // in the sufficiency gate produced a false insufficient-evidence refusal.
+  // Such acronyms must land in softEntities (retrieval-only), leaving the real
+  // constraint entity ("Reasoning Tool") as the sole hard entity.
+  const c127 = classifyQuestion('What LLM performs reasoning and rephrasing in the Reasoning Tool?');
+  assert.deepEqual(c127.softEntities, ['LLM']);
+  assert.ok(!c127.targetEntities.includes('LLM'), 'LLM must not be a hard entity');
+  assert.ok(c127.targetEntities.includes('Reasoning Tool'), 'the real constraint entity stays hard');
+
+  const c126 = classifyQuestion('What VLA limitation does the Reasoning Tool address?');
+  assert.deepEqual(c126.softEntities, ['VLA']);
+  assert.ok(!c126.targetEntities.includes('VLA'));
+
+  // A copula-followed acronym is a genuine entity lookup — must stay HARD.
+  const cDef = classifyQuestion('What is OpenVLA-OFT?');
+  assert.deepEqual(cDef.softEntities, []);
+  assert.ok(cDef.targetEntities.some((e) => e.toLowerCase().includes('openvla')));
+
+  // "what does ROS mean" — copula/means → stays a hard entity lookup.
+  const cRos = classifyQuestion('What does ROS mean in this thesis?');
+  assert.deepEqual(cRos.softEntities, []);
+});
+
 test('OkfRetriever: returns relevant cards for all 19 benchmark questions', async () => {
   const pack = await buildPack();
   const { classifyQuestion } = await loadModule('services/knowledge/QuestionClassifier.js');
@@ -134,14 +179,19 @@ test('OkfRetriever: "What is OpenVLA-OFT?" returns the OpenVLA-OFT card as the t
   assert.equal(scored[0].card.title, 'OpenVLA-OFT');
 });
 
-test('OkfRetriever: a synthesis question (main topic) returns multiple cards in document order', async () => {
+test('OkfRetriever: a whole-document synthesis question returns content cards in document order, never metadata', async () => {
   const pack = await buildPack();
   const { classifyQuestion } = await loadModule('services/knowledge/QuestionClassifier.js');
   const { queryOkfCards } = await loadModule('services/knowledge/OkfRetriever.js');
   const classification = classifyQuestion('What is the main topic of my thesis?');
   const scored = queryOkfCards(pack, 'What is the main topic of my thesis?', classification, { topN: 6 });
   assert.ok(scored.length >= 3);
-  assert.equal(scored[0].card.title, pack.cards[0].title);
+  // A synthesis question is answered from CONTENT sections, never from atomic
+  // title-page metadata cards (Author/Title/Supervisor). The top card is the
+  // first non-metadata card in document order.
+  const firstContent = pack.cards.find((c) => c.type !== 'metadata');
+  assert.equal(scored[0].card.title, firstContent.title);
+  assert.ok(scored.every((s) => s.card.type !== 'metadata'), 'no metadata card in a synthesis result');
 });
 
 test('EvidenceAssembler: computes Tier 1 for a high-confidence entity match', async () => {

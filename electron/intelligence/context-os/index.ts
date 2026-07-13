@@ -17,7 +17,19 @@ export {
   legacyKindsFor,
 } from './sourceKinds';
 export * from './evidencePack';
+export {
+  deriveEvidenceSufficiency,
+  selectSmallestSufficientEvidence,
+  type EvidenceSufficiency,
+  type EvidenceSufficiencyReason,
+} from './evidenceSufficiency';
 export * from './trace';
+export {
+  clearContextOsBenchmarkAudit,
+  getContextOsBenchmarkAudit,
+  recordContextOsBenchmarkAudit,
+  type ContextOsBenchmarkAuditRecord,
+} from './benchmarkAudit';
 export { detectRequestedProperty } from './requestedPropertyDetector';
 export {
   SourceAuthorityKernel,

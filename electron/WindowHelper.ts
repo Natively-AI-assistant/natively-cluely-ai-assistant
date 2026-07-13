@@ -432,14 +432,18 @@ export class WindowHelper {
     const noOrchSuffix = process.env.NATIVELY_DISABLE_ONBOARDING_ORCH === '1' ? '&noorch=1' : '';
     if (noOrchSuffix) console.warn('[LeakTest] NATIVELY_DISABLE_ONBOARDING_ORCH=1 → launcher with ?noorch=1 (onboarding orchestrator OFF)');
 
-// DEV-ONLY mount isolator for an evidence run. It never changes a normal or
-    // packaged launch: only a development process that explicitly sets the env
-    // variable gets a query parameter. App.tsx uses this to keep the native
-    // splash/shell while excluding one root-level launcher surface group.
+    // DEV-ONLY launcher mount isolation for native-OOM bisection. This preserves
+    // the launcher shell and normal production behavior while allowing a valid
+    // Vite run to exclude either onboarding alone, all root-level surfaces, or
+    // (via 'shell') skip the React root entirely (src/main.tsx).
     const requestedIsolation = process.env.NATIVELY_LAUNCHER_ISOLATION;
-    const launcherIsolation = isDev && ['shell', 'global-surfaces'].includes(requestedIsolation || '')
-      ? requestedIsolation
-      : '';
+    const launcherIsolation = isDev && (
+      requestedIsolation === 'shell' ||
+      requestedIsolation === 'onboarding' ||
+      requestedIsolation === 'global-surfaces' ||
+      requestedIsolation === 'permissions-toaster' ||
+      requestedIsolation === 'no-modals'
+    ) ? requestedIsolation : '';
     const isolationSuffix = launcherIsolation ? `&isolate=${launcherIsolation}` : '';
     if (launcherIsolation) {
       this.appState.recordNativeOomTrace('launcher-isolation-selected', {
@@ -449,7 +453,13 @@ export class WindowHelper {
       console.warn(`[LeakTest] NATIVELY_LAUNCHER_ISOLATION=${launcherIsolation} → launcher isolation enabled`);
     }
 
-    const launcherUrl = `${startUrl}?window=launcher${nofxSuffix}${noOrchSuffix}${isolationSuffix}`;
+    // The review modal deliberately force-opens in development for UI iteration.
+    // This switch keeps every other launcher surface unchanged while excluding
+    // only that dev convenience mount during a native-memory A/B run.
+    const reviewOffSuffix = isDev && process.env.NATIVELY_DISABLE_DEV_REVIEW === '1' ? '&review=off' : '';
+    if (reviewOffSuffix) console.warn('[LeakTest] NATIVELY_DISABLE_DEV_REVIEW=1 → dev review modal disabled');
+
+    const launcherUrl = `${startUrl}?window=launcher${nofxSuffix}${noOrchSuffix}${isolationSuffix}${reviewOffSuffix}`;
 
     this.launcherWindow
       .loadURL(launcherUrl)
@@ -496,7 +506,7 @@ export class WindowHelper {
         webContentsId: launcher.webContents.id,
         rendererPid,
       });
-      this.appState.startNativeOomContentTrace(rendererPid);
+      this.appState.armNativeOomContentTrace(rendererPid);
     });
 
     // Pipe renderer-side diagnostics into the main-process log file. Without

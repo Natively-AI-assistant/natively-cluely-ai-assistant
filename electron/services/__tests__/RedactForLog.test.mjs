@@ -66,6 +66,40 @@ test('redactForLog removes raw transcript / prompt / reference / screenshot fiel
   assert.ok(out.includes('"durationMs":304'));
 });
 
+test('redactForLog redacts answer/content/text/output-shaped fields (2026-07-10 hardening)', async () => {
+  const { redactForLog } = await loadRedactor();
+
+  // These key names are not currently used by any real log call site (verified
+  // during the Phase 4 privacy audit), but are exactly the kind of field an
+  // LLM-heavy codebase adds later when logging a generation result. Cover them
+  // proactively so a future `console.log({ answer, content })` cannot leak.
+  const payload = {
+    answer: 'FULL_ANSWER_CANARY',
+    content: 'CONTENT_CANARY',
+    text: 'TEXT_CANARY',
+    output: 'OUTPUT_CANARY',
+    aiResponse: 'AI_RESPONSE_CANARY',
+    fullAnswer: 'FULL_ANSWER_FIELD_CANARY',
+    // Unrelated keys with "content"/"text" as a SUBSTRING must NOT be swept —
+    // only exact `content`/`text`/`output` and the listed suffix patterns.
+    contentType: 'application/json',
+    textColor: '#000000',
+    modelId: 'gemini-3.1-flash',
+  };
+
+  const out = redactForLog([payload]);
+  for (const canary of [
+    'FULL_ANSWER_CANARY', 'CONTENT_CANARY', 'TEXT_CANARY', 'OUTPUT_CANARY',
+    'AI_RESPONSE_CANARY', 'FULL_ANSWER_FIELD_CANARY',
+  ]) {
+    assert.ok(!out.includes(canary), `canary ${canary} should not leak — got: ${out}`);
+  }
+  // Non-content keys survive untouched.
+  assert.ok(out.includes('application/json'), 'contentType value must not be swept (not an exact "content" key)');
+  assert.ok(out.includes('#000000'), 'textColor value must not be swept (not an exact "text" key)');
+  assert.ok(out.includes('gemini-3.1-flash'), 'modelId is a safe marker field');
+});
+
 test('redactForLog handles Error objects, arrays, and cyclic references', async () => {
   const { redactForLog } = await loadRedactor();
 

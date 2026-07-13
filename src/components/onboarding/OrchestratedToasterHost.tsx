@@ -77,8 +77,21 @@ export const OrchestratedToasterHost: React.FC = () => {
 
   if (!activeId) return null;
 
+  // Development-only native-OOM bisection. Keep orchestration/state updates
+  // alive but exclude every visible onboarding modal, which distinguishes the
+  // host's scheduling work from the currently-active modal implementation.
+  if (new URLSearchParams(window.location.search).get('isolate') === 'no-modals') {
+    return null;
+  }
+
   switch (activeId) {
     case 'permissions':
+      // Dev-only native-OOM bisection: keep the orchestrator and every later
+      // stage active while excluding only the permissions card's animated,
+      // backdrop-filter-heavy visual guide.
+      if (new URLSearchParams(window.location.search).get('isolate') === 'permissions-toaster') {
+        return null;
+      }
       return (
         <PermissionsToaster
           isOpen={true}
