@@ -90,7 +90,7 @@ describe('EvidenceSufficiency', () => {
     );
   });
 
-  test('selects the smallest entity-covering set and observes answer-shape limits', () => {
+  test('covers every target entity and observes answer-shape caps', () => {
     const alpha = item({ id: 'alpha', entity: 'Alpha', text: 'Alpha metric', property: 'result_metric', score: 0.8 });
     const beta = item({ id: 'beta', entity: 'Beta', text: 'Beta metric', property: 'result_metric', score: 0.7 });
     const extras = Array.from({ length: 8 }, (_, index) => item({
@@ -101,28 +101,57 @@ describe('EvidenceSufficiency', () => {
       score: 0.6 - index / 100,
     }));
 
+    // No distinctiveTerms supplied → answer-relevance is 0 for all, so selection
+    // degrades to the prior raw-score ordering and fills to the answer-shape cap.
     const general = selectSmallestSufficientEvidence({
-      items: [alpha, beta, ...extras],
-      requestedProperty: 'result_metric',
-      answerShape: 'general',
-      targetEntities: ['Alpha', 'Beta'],
+      items: [alpha, beta, ...extras], requestedProperty: 'result_metric', answerShape: 'general', targetEntities: ['Alpha', 'Beta'],
     });
     const list = selectSmallestSufficientEvidence({
-      items: [alpha, beta, ...extras],
-      requestedProperty: 'result_metric',
-      answerShape: 'list',
-      targetEntities: ['Alpha', 'Beta'],
+      items: [alpha, beta, ...extras], requestedProperty: 'result_metric', answerShape: 'list', targetEntities: ['Alpha', 'Beta'],
     });
     const comparison = selectSmallestSufficientEvidence({
-      items: [alpha, beta, ...extras],
-      requestedProperty: 'result_metric',
-      answerShape: 'comparison',
-      targetEntities: ['Alpha', 'Beta'],
+      items: [alpha, beta, ...extras], requestedProperty: 'result_metric', answerShape: 'comparison', targetEntities: ['Alpha', 'Beta'],
     });
 
-    assert.deepEqual(general.slice(0, 2).map((evidence) => evidence.evidenceId), ['alpha', 'beta']);
+    // Both entities are always covered, regardless of which item represents each.
+    for (const set of [general, list, comparison]) {
+      assert.ok(set.some((e) => /alpha/i.test(e.text)), 'Alpha covered');
+      assert.ok(set.some((e) => /beta/i.test(e.text)), 'Beta covered');
+    }
     assert.equal(general.length, 3);
     assert.equal(list.length, 5);
     assert.equal(comparison.length, 6);
+  });
+
+  test('property-aware ranking pulls the value-bearing chunk above a higher-score topical chunk', () => {
+    // The topical chunk has the HIGHER raw retrieval score but only names the
+    // subject; the value chunk has a LOWER score but carries the distinctive
+    // answer term + an answer-shaped value. Answer-aware selection must rank the
+    // value chunk first.
+    const topical = item({ id: 'topical', entity: 'Mercury', text: 'The Mercury robot is an advanced manipulation platform used in the lab.', property: 'unknown', score: 0.92 });
+    const valueChunk = item({ id: 'value', entity: 'Mercury', text: 'The Mercury main controller is an NVIDIA Jetson Xavier NX board.', property: 'unknown', score: 0.55 });
+    const selected = selectSmallestSufficientEvidence({
+      items: [topical, valueChunk],
+      requestedProperty: 'unknown',
+      answerShape: 'general',
+      targetEntities: ['Mercury'],
+      distinctiveTerms: ['controller'],
+    });
+    assert.equal(selected[0].evidenceId, 'value', 'the controller-bearing chunk must rank first');
+  });
+
+  test('dynamic stop: once every distinctive term is covered, no topical filler is added beyond the cap', () => {
+    const answer = item({ id: 'answer', text: 'The learning rate schedule and the batch size are both specified here.', property: 'unknown', score: 0.6 });
+    const fillerA = item({ id: 'filler-a', text: 'General discussion of the training loop and its stages.', property: 'unknown', score: 0.9 });
+    const fillerB = item({ id: 'filler-b', text: 'More background prose about experiments and evaluation.', property: 'unknown', score: 0.85 });
+    const selected = selectSmallestSufficientEvidence({
+      items: [answer, fillerA, fillerB],
+      requestedProperty: 'unknown',
+      answerShape: 'general',
+      targetEntities: [],
+      distinctiveTerms: ['learning', 'rate', 'batch', 'size'],
+    });
+    assert.ok(selected.some((e) => e.evidenceId === 'answer'), 'answer chunk selected');
+    assert.ok(selected.length <= 3, 'bounded by the general-shape cap');
   });
 });

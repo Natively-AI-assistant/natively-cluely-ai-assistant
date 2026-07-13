@@ -595,6 +595,11 @@ export class EvidenceResolver {
           requestedProperty,
           answerShape: sourceContract.answerShape,
           targetEntities: classification.targetEntities,
+          // Property-aware ranking (Priority 2): the distinctive (non-entity,
+          // non-stopword) query terms let selection prefer the chunk that
+          // actually carries the answer value over a merely topical chunk with a
+          // higher raw retrieval score.
+          distinctiveTerms: distinctiveQueryTerms(request.question, classification.targetEntities),
         })
       : factual;
     const selectedIds = new Set(selectedItems.map((item) => item.evidenceId));
