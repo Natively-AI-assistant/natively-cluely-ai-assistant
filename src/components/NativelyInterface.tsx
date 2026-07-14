@@ -1136,7 +1136,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const codeHeaderClass = 'overlay-code-header-surface';
   const codeHeaderTextClass = 'overlay-text-muted';
   const quickActionClass = 'overlay-chip-surface overlay-text-interactive';
-  const inputClass = `${isLightTheme ? 'focus:ring-black/10' : 'focus:ring-white/10'} overlay-input-surface overlay-input-text`;
+  const inputClass = `aurora-focus overlay-input-surface overlay-input-text`;
   const controlSurfaceClass = 'overlay-control-surface overlay-text-interactive';
 
   // PERF: hoist ReactMarkdown `components` maps for every streaming intent
@@ -6387,7 +6387,7 @@ Provide only the answer, nothing else.`;
                     // the CGEventTap, so typing routes through that path.
                     onMouseDown={blockInputFocus}
                     readOnly={stealthTapActive}
-                    className={`w-full border focus:ring-1 rounded-xl pl-3 pr-10 py-2.5 focus:outline-none transition-all duration-200 ease-sculpted text-[13px] leading-relaxed ${inputClass} ${stealthTapActive ? 'ring-2 ring-emerald-400/30 border-emerald-400/40 shadow-[0_0_12px_rgba(52,211,153,0.15)]' : ''}`}
+                    className={`w-full border rounded-xl pl-3 pr-10 py-2.5 text-[13px] leading-relaxed ${inputClass} ${stealthTapActive ? 'ring-2 ring-emerald-400/30 border-emerald-400/40 shadow-[0_0_12px_rgba(52,211,153,0.15)]' : ''}`}
                     style={appearance.inputStyle}
                   />
 
