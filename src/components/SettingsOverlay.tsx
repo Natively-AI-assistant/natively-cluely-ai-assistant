@@ -1437,7 +1437,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             </button>
                             <div className="px-5 pt-2 pb-3 overflow-y-auto flex-1 min-h-0">
                                 <h2 className="mb-0 text-[13px] font-bold uppercase tracking-[0.01em] text-text-primary">Settings</h2>
-                                <nav className="space-y-1">
+                                <nav className="mt-2 space-y-1">
                                     <button
                                         onClick={() => setActiveTab('general')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'general' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
