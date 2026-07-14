@@ -132,20 +132,27 @@ const EVIDENCE_REQUIRED_FOR_AUTHORITY: Record<ModeSourceAuthority, boolean> = {
 export function defaultSourceContractForNewMode(
   templateType?: string,
 ): ModeSourceContract {
-  let allowedExplicitSwitches: string[];
-  if (templateType === 'looking-for-work' || templateType === 'technical-interview') {
-    allowedExplicitSwitches = ['profile', 'job_description'];
-  } else {
-    allowedExplicitSwitches = ['reference_files'];
-  }
+  const isInterviewPrep = templateType === 'looking-for-work'
+    || templateType === 'technical-interview';
+  const allowedExplicitSwitches: string[] = isInterviewPrep
+    ? ['profile', 'job_description']
+    : ['reference_files'];
+  const defaultOwner: ModeSourceOwner = isInterviewPrep ? 'profile' : 'reference_files';
+  const sourceAuthority: ModeSourceAuthority = isInterviewPrep
+    ? 'profile_only'
+    : 'reference_files_primary';
   return {
     version: 1,
-    defaultOwner: 'clarify',
+    defaultOwner,
     allowedExplicitSwitches,
-    sourceAuthority: 'ask_if_ambiguous',
-    evidenceRequired: false,
-    conflictPolicy: 'ask_clarification',
-    memoryPolicy: { allowPriorAssistantFacts: false, allowPriorAssistantReferents: true, allowHindsight: false },
+    sourceAuthority,
+    evidenceRequired: EVIDENCE_REQUIRED_FOR_AUTHORITY[sourceAuthority],
+    conflictPolicy: CONFLICT_POLICY_FOR_AUTHORITY[sourceAuthority],
+    memoryPolicy: sourceAuthority === 'reference_files_only'
+      || sourceAuthority === 'reference_files_primary'
+      || sourceAuthority === 'reference_files_plus_transcript'
+      ? { allowPriorAssistantFacts: false, allowPriorAssistantReferents: true, allowHindsight: false }
+      : { allowPriorAssistantFacts: true, allowPriorAssistantReferents: true, allowHindsight: true },
     origin: 'default_new_mode',
   };
 }
@@ -506,10 +513,14 @@ export function migrateSourceContractFromPrompt(input: {
     // — "default owner: reference files"), not only questions that happen to
     // match an ambiguous-term regex, while explicit "answer from my résumé"
     // asks still work via sourceOwnership.ts's reference_files_primary case.
+    // Note: 'transcript' is intentionally NOT in allowedExplicitSwitches here.
+    // Live STT is always-on implicit context (ProviderDataScope) during a
+    // session, never a user-settable switch. Including it would persist a
+    // user-settable signal that the runtime then ignores — inconsistent state.
     return {
       version: 1,
       defaultOwner: 'reference_files',
-      allowedExplicitSwitches: ['profile', 'job_description', 'transcript'],
+      allowedExplicitSwitches: ['profile', 'job_description'],
       sourceAuthority: 'reference_files_primary',
       evidenceRequired: true,
       conflictPolicy: 'reference_files_win',
@@ -523,7 +534,7 @@ export function migrateSourceContractFromPrompt(input: {
     return {
       version: 1,
       defaultOwner: 'profile',
-      allowedExplicitSwitches: ['job_description', 'transcript'],
+      allowedExplicitSwitches: ['job_description'],
       sourceAuthority: 'profile_only',
       evidenceRequired: false,
       conflictPolicy: 'profile_wins',
@@ -536,7 +547,7 @@ export function migrateSourceContractFromPrompt(input: {
   return {
     version: 1,
     defaultOwner: 'clarify',
-    allowedExplicitSwitches: ['reference_files', 'profile', 'job_description', 'transcript'],
+    allowedExplicitSwitches: ['reference_files', 'profile', 'job_description'],
     sourceAuthority: 'ask_if_ambiguous',
     evidenceRequired: false,
     conflictPolicy: 'ask_clarification',

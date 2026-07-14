@@ -15,6 +15,7 @@ import {
     parseModeSourceContract,
     serializeModeSourceContract,
     documentGroundedFromContract,
+    buildUserSelectedSourceContract,
 } from './modeSourceContract';
 
 /**
@@ -495,6 +496,44 @@ export class ModesManager {
     }
 
     /**
+     * Build the canonical user-selected contract for a mode. The ONLY place the
+     * ModeSourceContract object should be assembled for `origin: 'user_selected'`
+     * saves — the renderer must call this via IPC instead of constructing the
+     * contract itself. This guarantees every saved contract has the correct
+     * `defaultOwner` (derived from `templateType`, not hard-coded to
+     * 'reference_files' which would force `evidenceRequired: true` on modes that
+     * have no documents, e.g. looking-for-work where the user keeps the seed).
+     *
+     * The switches parameter is the user's `allowedExplicitSwitches` Set from
+     * the panel, with deprecated 'transcript' values filtered out (live STT
+     * is always-on implicit context, never a user-settable switch).
+     *
+     * If `switches` is the empty array, the user has explicitly cleared all
+     * sources — return a `reference_files_only` or `profile_only` contract
+     * with empty `allowedExplicitSwitches`, NOT an `ask_if_ambiguous` fallback.
+     * The previously-implicit handling of "all dots unchecked" produced
+     * `ask_if_ambiguous` which silently allowed profile context through
+     * experience/project/skills answer types — exactly the leak this method
+     * prevents.
+     */
+    public buildUserSourceContract(input: {
+        modeId: string;
+        templateType: ModeTemplateType;
+        switches: string[];
+        hasLiveTranscriptCapable?: boolean;
+    }): ModeSourceContract {
+        const isInterviewPrep = input.templateType === 'looking-for-work'
+            || input.templateType === 'technical-interview';
+        const switches = input.switches.filter((s) => s !== 'transcript');
+        const defaultOwner: ModeSourceOwner = isInterviewPrep ? 'profile' : 'reference_files';
+        return buildUserSelectedSourceContract({
+            defaultOwner,
+            allowedExplicitSwitches: switches as any,
+            hasLiveTranscriptCapable: !!input.hasLiveTranscriptCapable,
+        });
+    }
+
+    /**
      * Returns this mode's persisted ModeSourceContract, migrating it ONCE from
      * legacy prompt-text heuristics (and persisting the result) if the mode has
      * never had an explicit contract saved. This is the ONLY place the legacy
@@ -518,10 +557,19 @@ export class ModesManager {
         // 'clarify'), regardless of what prompt/files get added afterward.
         // This is the incident's failure class recurring one layer up: a
         // stale cached decision silently overriding the mode's real content.
-        // Fix: a 'default_new_mode' contract is NOT yet a real decision — it
-        // is re-migrated (and the migration persisted, replacing the seed)
-        // once the mode actually HAS a prompt or files to migrate from. A
-        // 'user_selected' contract is never re-derived (stable, by design).
+        //
+        // EXCEPTION (fix, 2026-07-15): if the seed was already template-aware
+        // (i.e. defaultSourceContractForNewMode received the mode's actual
+        // templateType, not undefined), the seed's `sourceAuthority` and
+        // `allowedExplicitSwitches` are the correct runtime contract for this
+        // mode — even when the user later writes a prompt. The prompt-text
+        // heuristic would silently OVERRIDE the template intent (e.g. a
+        // Team-meet mode with seeded `sourceAuthority='reference_files_primary'`
+        // re-migrating to `ask_if_ambiguous` after the user types anything).
+        // Template-aware seeds are stable; only `general` mode's default_new_mode
+        // contract is eligible for re-migration on prompt change (the user's
+        // intent is genuinely blank there — `general` is the "I'll figure out
+        // what I want later" template).
         //
         // Self-heal (rev-2): a contract migrated by an OLDER revision of the
         // prompt→contract heuristic is re-migrated ONCE so its persisted
@@ -531,10 +579,12 @@ export class ModesManager {
         // `reference_files_primary`. This NEVER touches a `user_selected`
         // contract (the user's explicit choice); only `migrated_from_prompt`
         // contracts carry a migrationRevision and are eligible.
+        const isTemplateAwareSeed = mode.sourceContract?.origin === 'default_new_mode'
+            && mode.templateType !== 'general';
         const staleMigration = mode.sourceContract?.origin === 'migrated_from_prompt'
             && (mode.sourceContract.migrationRevision ?? 1) < CURRENT_MIGRATION_REVISION;
         const needsMigration = !mode.sourceContract
-            || (mode.sourceContract.origin === 'default_new_mode' && (hasCustomPrompt || hasReferenceFiles))
+            || (mode.sourceContract.origin === 'default_new_mode' && !isTemplateAwareSeed && (hasCustomPrompt || hasReferenceFiles))
             || staleMigration;
         if (!needsMigration) return mode.sourceContract!;
         // Profile-facts availability is not known to ModesManager (it lives in
@@ -1084,7 +1134,22 @@ export class ModesManager {
         // template or user-created) whose PERSISTED CONTRACT names reference
         // files as the (primary or exclusive) source activates full doc-grounded
         // behavior.
-        const documentGroundedCustomModeActive = hasCustomPrompt && documentGrounded && hasReferenceFiles;
+        //
+        // FIX (2026-07-15): the previous gate `hasCustomPrompt && documentGrounded
+        // && hasReferenceFiles` neutralized doc-grounded isolation on freshly-
+        // created Team-meet / Lecture / Sales / Recruiting modes before the user
+        // had written any prompt AND before any reference files were uploaded —
+        // leaving Hindsight, OKF Profile Cards, and JIT profile evidence all
+        // reachable via the answer-type-driven sourceOwnership resolver. The
+        // new gate keys purely on the PERSISTED CONTRACT AUTHORITY (the runtime
+        // signal that already encodes the user's template-level intent via the
+        // seed). Reference-file presence is no longer required: the user's
+        // template-level intent to use reference files is honored the moment
+        // the mode is created, before any upload happens.
+        const documentGroundedCustomModeActive =
+            sourceContract.sourceAuthority === 'reference_files_only'
+            || sourceContract.sourceAuthority === 'reference_files_primary'
+            || sourceContract.sourceAuthority === 'reference_files_plus_transcript';
         return {
             isCustom: custom,
             hasReferenceFiles,

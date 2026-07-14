@@ -1375,7 +1375,17 @@ export function initializeIpcHandlers(appState: AppState): void {
         // against the real prior Q/A) instead of a dead-end clarification. Flag OFF →
         // skipped entirely (original clarification behavior preserved byte-for-byte).
         if (!context && !autoContextSnapshot && isBareFollowUp(message)
-            && isIntelligenceFlagEnabled('conversationMemoryV2')) {
+            && isIntelligenceFlagEnabled('conversationMemoryV2')
+            // FIX (2026-07-15): gate prior-exchange injection on the contract's
+            // memoryReadPolicy.allowPriorAssistantFacts. A doc-grounded mode
+            // (sourceAuthority reference_files_*) sets this to false to seal the
+            // session against profile-laced re-injection from a prior answer.
+            // Without this gate, a follow-up in a Team-meet / Lecture /
+            // General mode whose prior answer pulled in profile facts (via
+            // answer-type-driven sourceOwnership resolver) re-injects those
+            // facts on every "why?" / "expand on that" follow-up, defeating
+            // the doc-grounded isolation contract.
+            && (!turnContract || turnContract.memoryReadPolicy.allowPriorAssistantFacts)) {
           try {
             const prior = _manualConversationMemory.resolveSameSession(String(senderId), message);
             if (prior && prior.userMessage && prior.assistantAnswer) {
@@ -1395,7 +1405,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         // (the prior answer is what the edit targets). Coding follow-ups are handled by the
         // coding-followup block above, so skip when already a coding chat. Flag-gated.
         if (!isCodingChat && !context && isRefinementFollowUp(message)
-            && isIntelligenceFlagEnabled('conversationMemoryV2')) {
+            && isIntelligenceFlagEnabled('conversationMemoryV2')
+            // FIX (2026-07-15): same allowPriorAssistantFacts gate as the
+            // bare-follow-up block above. A doc-grounded mode's contract
+            // forbids prior-exchange injection — including refinement edits
+            // ("make that shorter") on a prior answer that may already contain
+            // profile facts.
+            && (!turnContract || turnContract.memoryReadPolicy.allowPriorAssistantFacts)) {
           try {
             const prior = _manualConversationMemory.resolveSameSession(String(senderId), message)
               || (() => { const a = _manualConversationMemory.getLastAssistantAnswer(String(senderId)); return a ? { userMessage: '', assistantAnswer: a } as any : null; })();
@@ -9045,6 +9061,36 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (e: any) {
       console.error('[IPC] modes:get-source-contract error:', e);
       return null;
+    }
+  });
+
+  // Build a user-selected ModeSourceContract server-side. The renderer must
+  // call this BEFORE persisting via modes:update so the `defaultOwner`,
+  // `sourceAuthority`, and `memoryPolicy` fields are derived from
+  // templateType + switches, never hard-coded in JSX. Without this, a
+  // looking-for-work mode (where the panel keeps the per-mode default of
+  // ['profile', 'job_description']) would persist with
+  // defaultOwner='reference_files', sourceAuthority='reference_files_primary',
+  // evidenceRequired=true — forcing the document-grounded gate for a mode
+  // that has no documents.
+  safeHandle('modes:build-user-source-contract', async (_, input: {
+    modeId: string;
+    templateType: string;
+    switches: string[];
+    hasLiveTranscriptCapable?: boolean;
+  }) => {
+    try {
+      const { ModesManager } = require('./services/ModesManager');
+      const mgr = ModesManager.getInstance();
+      return mgr.buildUserSourceContract({
+        modeId: input.modeId,
+        templateType: input.templateType as any,
+        switches: input.switches,
+        hasLiveTranscriptCapable: input.hasLiveTranscriptCapable,
+      });
+    } catch (e: any) {
+      console.error('[IPC] modes:build-user-source-contract error:', e);
+      throw e;
     }
   });
 

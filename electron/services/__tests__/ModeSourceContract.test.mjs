@@ -102,11 +102,72 @@ test('migrateSourceContractFromPrompt: no files, no prompt, no profile → ask_i
   assert.equal(contract.sourceAuthority, 'ask_if_ambiguous');
 });
 
-test('defaultSourceContractForNewMode: brand-new mode defaults to clarify, never a permissive mix', () => {
+test('defaultSourceContractForNewMode: brand-new mode defaults to isolation-aware authority (NOT ask_if_ambiguous)', () => {
+  // REGRESSION for the senior-review CRITICAL finding: previously this
+  // asserted defaultOwner='clarify' and sourceAuthority='ask_if_ambiguous',
+  // which left ownership answer-type-driven and silently leaked profile
+  // facts through experience/project/skills answer types in
+  // sourceOwnership.ts. The new defaultOwner and sourceAuthority are
+  // derived from templateType and isolation-fence the runtime from turn 1.
+  // For the no-template fallback (called by getOrMigrateSourceContract
+  // when the mode is missing), defaultOwner='reference_files' and
+  // sourceAuthority='reference_files_primary' — the safe, doc-grounded
+  // default. 'ask_if_ambiguous' never reappears as a seed.
   const contract = defaultSourceContractForNewMode();
-  assert.equal(contract.defaultOwner, 'clarify');
-  assert.equal(contract.sourceAuthority, 'ask_if_ambiguous');
+  assert.equal(contract.defaultOwner, 'reference_files');
+  assert.equal(contract.sourceAuthority, 'reference_files_primary');
   assert.equal(contract.origin, 'default_new_mode');
+  assert.equal(contract.evidenceRequired, true);
+  assert.equal(contract.conflictPolicy, 'reference_files_win');
+  assert.equal(contract.memoryPolicy.allowHindsight, false,
+    'doc-grounded modes must seal Hindsight OFF at seed time');
+  assert.equal(contract.memoryPolicy.allowPriorAssistantFacts, false,
+    'doc-grounded modes must seal prior-assistant-facts OFF at seed time');
+});
+
+test('defaultSourceContractForNewMode: per-template sourceAuthority + defaultOwner (isolation gate)', () => {
+  // The isolation contract — "Knowledge source is the only source used while
+  // meeting" — is enforced by the runtime gates (SourceAuthorityKernel,
+  // sourceOwnership, documentGroundedFromContract) which all key on the
+  // persisted sourceAuthority and defaultOwner. If the seed hands the runtime
+  // an `ask_if_ambiguous` contract, those gates fire only conditionally on
+  // answer-type — silently leaking profile facts through experience/project
+  // answer types. To prevent that, every template's seed must land at an
+  // authority that PROPERLY gates isolation from turn 1.
+  const referenceTemplates = ['general', 'sales', 'recruiting', 'team-meet', 'lecture', undefined];
+  for (const template of referenceTemplates) {
+    const contract = defaultSourceContractForNewMode(template);
+    assert.equal(
+      contract.sourceAuthority, 'reference_files_primary',
+      `templateType=${template ?? '(undefined)'} must seed reference_files_primary (NOT ask_if_ambiguous)`,
+    );
+    assert.equal(
+      contract.defaultOwner, 'reference_files',
+      `templateType=${template ?? '(undefined)'} defaultOwner must be reference_files`,
+    );
+    assert.equal(contract.evidenceRequired, true,
+      `templateType=${template ?? '(undefined)'} evidenceRequired must be true for reference_files_primary`);
+    assert.equal(contract.conflictPolicy, 'reference_files_win',
+      `templateType=${template ?? '(undefined)'} conflictPolicy must be reference_files_win`);
+    assert.equal(contract.memoryPolicy.allowHindsight, false,
+      `templateType=${template ?? '(undefined)'} Hindsight must be sealed OFF for doc-grounded modes`);
+    assert.equal(contract.memoryPolicy.allowPriorAssistantFacts, false,
+      `templateType=${template ?? '(undefined)'} prior-assistant-facts must be sealed OFF for doc-grounded modes`);
+  }
+  const interviewPrep = ['looking-for-work', 'technical-interview'];
+  for (const template of interviewPrep) {
+    const contract = defaultSourceContractForNewMode(template);
+    assert.equal(
+      contract.sourceAuthority, 'profile_only',
+      `templateType=${template} must seed profile_only`,
+    );
+    assert.equal(
+      contract.defaultOwner, 'profile',
+      `templateType=${template} defaultOwner must be profile (interview-prep modes use profile + JD)`,
+    );
+    assert.equal(contract.evidenceRequired, false,
+      `templateType=${template} evidenceRequired must be false (interview-prep has no docs by default)`);
+  }
 });
 
 test('defaultSourceContractForNewMode: per-template allowedExplicitSwitches (renderer parity)', () => {
@@ -137,6 +198,55 @@ test('defaultSourceContractForNewMode: per-template allowedExplicitSwitches (ren
     assert.ok(
       !contract.allowedExplicitSwitches.includes('transcript'),
       `templateType=${template ?? '(undefined)'} must not seed 'transcript'`,
+    );
+  }
+});
+
+test('buildUserSelectedSourceContract: looking-for-work with profile-only switches produces profile_only (NOT reference_files_primary)', () => {
+  // Regression for the HIGH finding in the senior review: the renderer's
+  // onSave previously hard-coded defaultOwner='reference_files' and
+  // sourceAuthority='reference_files_primary' regardless of template, which
+  // forced evidenceRequired=true for interview-prep modes that have no docs.
+  // The new flow calls buildUserSelectedSourceContract with
+  // defaultOwner='profile' for these modes (derived from templateType in
+  // ModesManager.buildUserSourceContract). Verify the server builder honors
+  // that input correctly.
+  const contract = buildUserSelectedSourceContract({
+    defaultOwner: 'profile',
+    allowedExplicitSwitches: ['profile', 'job_description'],
+  });
+  assert.equal(contract.sourceAuthority, 'profile_only');
+  assert.equal(contract.defaultOwner, 'profile');
+  assert.equal(contract.evidenceRequired, false);
+  assert.equal(contract.conflictPolicy, 'profile_wins');
+  assert.equal(contract.origin, 'user_selected');
+});
+
+test('migrateSourceContractFromPrompt: legacy fallback no longer includes "transcript"', () => {
+  // Regression for the MEDIUM finding: prior migration fallback at line ~540
+  // included 'transcript' in allowedExplicitSwitches for three branches. The
+  // transcript is always-on implicit context via ProviderDataScope, never a
+  // user-settable switch — persisting it in the contract is inconsistent
+  // with the per-template seed.
+  // Walk every fallback branch via migrateSourceContractFromPrompt and assert
+  // none of them emit 'transcript'.
+  const fallbacks = [
+    { customContext: 'just a prompt',         hasReferenceFiles: false, hasProfileFacts: false,
+      label: 'empty prompt + no files + no profile' },
+    { customContext: 'just a prompt',         hasReferenceFiles: true,  hasProfileFacts: false,
+      label: 'ambiguous prompt + files' },
+    { customContext: 'just a prompt',         hasReferenceFiles: false, hasProfileFacts: true,
+      label: 'profile facts + no files' },
+    { customContext: '',                      hasReferenceFiles: true,  hasProfileFacts: false,
+      label: 'files only' },
+    { customContext: '',                      hasReferenceFiles: false, hasProfileFacts: true,
+      label: 'profile facts only' },
+  ];
+  for (const { customContext, hasReferenceFiles, hasProfileFacts, label } of fallbacks) {
+    const migrated = migrateSourceContractFromPrompt({ customContext, hasReferenceFiles, hasProfileFacts });
+    assert.ok(
+      !migrated.allowedExplicitSwitches.includes('transcript'),
+      `migrated contract for "${label}" must not include 'transcript'`,
     );
   }
 });

@@ -62,12 +62,21 @@ describe('ModesManager.getOrMigrateSourceContract — create-then-update migrati
     if (!dbMgr.isAvailable()) return;
 
     // Step 1: create the mode (exactly what modesCreate does — no prompt, no files yet).
+    // NOTE (2026-07-15): the seed for `templateType='general'` is now
+    // `defaultOwner='reference_files'`, `sourceAuthority='reference_files_primary'`
+    // (per Fix 1's per-template seed). The `general` template's `default_new_mode`
+    // contract remains re-migration-eligible (the re-migration guard at
+    // ModesManager.ts:581 exempts only non-general template-aware seeds),
+    // so the create-then-migrate flow still works. The test below now asserts
+    // the seed lands at the doc-grounded authority for `general`, then
+    // re-migrates to `migrated_from_prompt` when the user writes a prompt.
     const created = mgr.createMode({ name: 'Seminar mode', templateType: 'general' });
 
-    // Precondition: the seed contract is the empty-mode default.
+    // Precondition: the seed contract is the template-aware empty-mode default.
     const seedContract = mgr.getOrMigrateSourceContract(created.id);
     assert.equal(seedContract.origin, 'default_new_mode');
-    assert.equal(seedContract.defaultOwner, 'clarify');
+    assert.equal(seedContract.defaultOwner, 'reference_files');
+    assert.equal(seedContract.sourceAuthority, 'reference_files_primary');
 
     // Step 2: the user writes a realistic (non-regex-engineered) prompt —
     // exactly what modesUpdate does.
@@ -115,12 +124,21 @@ describe('ModesManager.getOrMigrateSourceContract — create-then-update migrati
     assert.deepEqual(readBack, explicit);
   });
 
-  test('a mode created and activated with NO prompt and NO files stays at the safe clarify default (not silently promoted)', () => {
+  test('a mode created and activated with NO prompt and NO files stays at the safe doc-grounded default (not silently promoted)', () => {
     if (!dbMgr.isAvailable()) return;
 
+    // NOTE (2026-07-15): the seed for `templateType='general'` is now
+    // `defaultOwner='reference_files'`, `sourceAuthority='reference_files_primary'`
+    // (per Fix 1). The "safe default" assertion below flipped from
+    // `'clarify'` to `'reference_files_primary'` — both are equally safe
+    // (neither is `general_mixed`), and the new default is more aligned
+    // with the doc-grounded isolation contract. A user with no prompt and
+    // no files gets the doc-grounded defaults instead of the ambiguous
+    // `ask_if_ambiguous` fallback.
     const created = mgr.createMode({ name: 'Empty mode', templateType: 'general' });
     const contract = mgr.getOrMigrateSourceContract(created.id);
-    assert.equal(contract.defaultOwner, 'clarify');
+    assert.equal(contract.defaultOwner, 'reference_files');
+    assert.equal(contract.sourceAuthority, 'reference_files_primary');
     assert.notEqual(contract.sourceAuthority, 'general_mixed');
   });
 });
