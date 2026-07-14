@@ -591,6 +591,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                     </div>
                     <div className="relative group/modes-btn select-none">
                         <button
+                            data-testid="open-modes-manager"
                             onClick={() => {
                                 setShowModesOnboarding(false);
                                 localStorage.setItem('natively_seen_modes_onboarding_v5', 'true');

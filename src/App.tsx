@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useSyncExternalStore } from "react" // forcing refresh
+import React, { useState, useEffect, useCallback, useRef, useSyncExternalStore } from "react" // forcing refresh
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { ToastProvider, ToastViewport } from "./components/ui/toast"
 import NativelyInterface from "./components/NativelyInterface"
@@ -8,7 +8,7 @@ import Launcher from "./components/Launcher"
 import ModelSelectorWindow from "./components/ModelSelectorWindow"
 import SettingsOverlay from "./components/SettingsOverlay"
 import StartupSequence from "./components/StartupSequence"
-import { AnimatePresence, motion } from "framer-motion"
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import UpdateBanner from "./components/UpdateBanner"
 import { NativelyQuotaBanner } from "./components/NativelyQuotaBanner"
 import { FreeTrialBanner }      from "./components/trial/FreeTrialBanner"
@@ -77,6 +77,20 @@ const queryClient = new QueryClient()
 const CropperWindow = React.lazy(() => import('./components/Cropper'))
 
 type LauncherIsolation = 'onboarding' | 'global-surfaces' | 'permissions-toaster' | 'no-modals' | null
+type ManagerPanel = 'modes' | 'profile' | null
+
+type ManagerPanelDirection = 'forward' | 'backward'
+
+const MANAGER_EASE = [0.22, 0.61, 0.36, 1] as const
+const MANAGER_SHELL_EASE = [0.16, 1, 0.3, 1] as const
+const MANAGER_OPEN_EASE = [0.16, 1, 0.3, 1] as const
+const MANAGER_CLOSE_EASE = [0.3, 0.9, 0.2, 1] as const
+
+function getFocusableElements(container: HTMLElement): HTMLElement[] {
+  return Array.from(container.querySelectorAll<HTMLElement>(
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  )).filter((element) => !element.hasAttribute('inert') && element.offsetParent !== null)
+}
 
 // The Electron main process only appends `isolate` during an explicit dev-mode
 // native-OOM run. Keeping this query-driven and default-off makes it impossible
@@ -180,24 +194,82 @@ const App: React.FC = () => {
   }, [showStartup]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<string>('general');
-  const [isModesOpen, setIsModesOpen] = useState(false);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [activeManagerPanel, setActiveManagerPanel] = useState<ManagerPanel>(null);
+  const [managerPanelDirection, setManagerPanelDirection] = useState<ManagerPanelDirection>('forward');
+  const managerDialogRef = useRef<HTMLDivElement>(null);
+  const managerOpenerRef = useRef<HTMLElement | null>(null);
+  const [managerBackdropPressed, setManagerBackdropPressed] = useState(false);
+  const reduceManagerMotion = useReducedMotion() ?? false;
+
+  const rememberManagerOpener = useCallback(() => {
+    const activeElement = document.activeElement;
+    managerOpenerRef.current = activeElement instanceof HTMLElement ? activeElement : null;
+  }, []);
+
+  const closeManagerPanel = useCallback(() => {
+    setActiveManagerPanel(null);
+  }, []);
+
   const openSettingsExclusive = useCallback((tab: string = 'general') => {
-    setIsModesOpen(false);
-    setIsProfileOpen(false);
+    // Settings replaces the manager rather than closing back to its launcher trigger.
+    managerOpenerRef.current = null;
+    setActiveManagerPanel(null);
     setSettingsInitialTab(tab);
     setIsSettingsOpen(true);
   }, []);
+
   const openProfileExclusive = useCallback(() => {
-    setIsModesOpen(false);
+    if (!activeManagerPanel) rememberManagerOpener();
+    if (activeManagerPanel === 'modes') setManagerPanelDirection('forward');
     setIsSettingsOpen(false);
-    setIsProfileOpen(true);
-  }, []);
+    setActiveManagerPanel('profile');
+  }, [activeManagerPanel, rememberManagerOpener]);
+
   const openModesExclusive = useCallback(() => {
-    setIsProfileOpen(false);
+    if (!activeManagerPanel) rememberManagerOpener();
+    if (activeManagerPanel === 'profile') setManagerPanelDirection('backward');
     setIsSettingsOpen(false);
-    setIsModesOpen(true);
-  }, []);
+    setActiveManagerPanel('modes');
+  }, [activeManagerPanel, rememberManagerOpener]);
+
+  useEffect(() => {
+    if (!activeManagerPanel) {
+      const opener = managerOpenerRef.current;
+      if (opener?.isConnected) opener.focus();
+      return;
+    }
+    const frame = requestAnimationFrame(() => managerDialogRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [activeManagerPanel]);
+
+  useEffect(() => {
+    if (!activeManagerPanel) return;
+    const dialog = managerDialogRef.current;
+    if (!dialog) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      const focusable = getFocusableElements(dialog);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (document.activeElement === dialog) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    dialog.addEventListener('keydown', onKeyDown);
+    return () => dialog.removeEventListener('keydown', onKeyDown);
+  }, [activeManagerPanel]);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [isPremiumActive, setIsPremiumActive] = useState(false);
   const [hasLoadedLicense, setHasLoadedLicense] = useState(false);
@@ -247,7 +319,64 @@ const App: React.FC = () => {
   } | null>(null);
   const [showTrialExpiredModal, setShowTrialExpiredModal] = useState(false);
 
-  const isAppReady = !isSettingsWindow && !isOverlayWindow && !isModelSelectorWindow && !showStartup && !isSettingsOpen && isLauncherMainView && !isProfileOpen;
+  const isManagerOpen = activeManagerPanel !== null;
+  const managerBackdropVariants = {
+    initial: { opacity: 0 },
+    animate: reduceManagerMotion
+      ? { opacity: 1, transition: { duration: 0 } }
+      : { opacity: 1, transition: { duration: 0.28, ease: MANAGER_EASE } },
+    exit: reduceManagerMotion
+      ? { opacity: 0, transition: { duration: 0 } }
+      : { opacity: 0, transition: { duration: 0.2, ease: MANAGER_CLOSE_EASE } },
+  };
+  const managerCardSpring = reduceManagerMotion
+    ? { duration: 0 }
+    : { type: 'spring' as const, stiffness: 260, damping: 30, mass: 1.1 };
+  const managerCardVariants = {
+    initial: reduceManagerMotion ? { opacity: 0 } : { opacity: 0, scale: 0.94, y: 20 },
+    animate: reduceManagerMotion
+      ? { opacity: 1, transition: { duration: 0 } }
+      : {
+          opacity: 1,
+          scale: 1,
+          y: 0,
+          transition: {
+            opacity: { duration: 0.24, ease: MANAGER_EASE },
+            scale: managerCardSpring,
+            y: managerCardSpring,
+          },
+        },
+    exit: reduceManagerMotion
+      ? { opacity: 0, transition: { duration: 0 } }
+      : {
+          opacity: 0,
+          scale: 0.965,
+          y: 12,
+          transition: {
+            opacity: { duration: 0.16, ease: MANAGER_CLOSE_EASE },
+            scale: { duration: 0.22, ease: MANAGER_CLOSE_EASE },
+            y: { duration: 0.22, ease: MANAGER_CLOSE_EASE },
+          },
+        },
+    backdropPress: reduceManagerMotion
+      ? { opacity: 1, transition: { duration: 0 } }
+      : {
+          opacity: 1,
+          scale: 0.998,
+          y: 1,
+          transition: { duration: 0.06, ease: MANAGER_OPEN_EASE },
+        },
+  };
+  const managerContentVariants = {
+    initial: reduceManagerMotion ? { opacity: 0 } : { opacity: 0, x: 8 },
+    animate: reduceManagerMotion
+      ? { opacity: 1, transition: { duration: 0 } }
+      : { opacity: 1, x: 0, transition: { duration: 0.28, ease: MANAGER_EASE } },
+    exit: reduceManagerMotion
+      ? { opacity: 0, transition: { duration: 0 } }
+      : { opacity: 0, x: -8, transition: { duration: 0.22, ease: MANAGER_CLOSE_EASE } },
+  };
+  const isAppReady = !isSettingsWindow && !isOverlayWindow && !isModelSelectorWindow && !showStartup && !isSettingsOpen && !isManagerOpen && isLauncherMainView;
 
   // Gate useAdCampaigns behind orchestrator eligibility. Ads only self-schedule
   // when (a) the orchestrator is ready (no other toaster active) and (b) the
@@ -339,33 +468,30 @@ const App: React.FC = () => {
     });
   }, [isPremiumActive, hasProfile, hasNativelyApi, activeTrial]);
 
-  // Pause the orchestrator while Settings/Modes/Profile panels are open so
-  // toasters don't fire over the user's settings interaction.
+  // Pause the orchestrator while a foreground settings surface is open so
+  // toasters never appear over the user's settings interaction.
   useEffect(() => {
     if (!isLauncherWindow && !isDefault) return;
-    const anyPanelOpen = isSettingsOpen || isModesOpen || isProfileOpen;
-    if (anyPanelOpen) {
+    if (isSettingsOpen || isManagerOpen) {
       emitOrchestratorEvent({ type: 'launcher:unmounted' });
     } else {
       emitOrchestratorEvent({ type: 'launcher:mounted' });
     }
-  }, [isSettingsOpen, isModesOpen, isProfileOpen, isLauncherWindow, isDefault]);
+  }, [isSettingsOpen, isManagerOpen, isLauncherWindow, isDefault]);
 
-  // Escape closes the top-most open overlay (Settings > Modes > Profile).
-  // SettingsOverlay also listens for Escape internally; the duplicate keydown is
-  // a no-op there because the panel already closed by the time the handler fires.
+  // Settings keeps priority; the shared manager owns a single Escape path for
+  // both Modes and Profile Intelligence.
   useEffect(() => {
-    if (!isSettingsOpen && !isModesOpen && !isProfileOpen) return;
+    if (!isSettingsOpen && !isManagerOpen) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
       e.preventDefault();
       if (isSettingsOpen) { setIsSettingsOpen(false); return; }
-      if (isModesOpen)    { setIsModesOpen(false);    return; }
-      if (isProfileOpen)  { setIsProfileOpen(false);  return; }
+      closeManagerPanel();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [isSettingsOpen, isModesOpen, isProfileOpen]);
+  }, [isSettingsOpen, isManagerOpen, closeManagerPanel]);
 
 
 
@@ -898,69 +1024,60 @@ const App: React.FC = () => {
                   initialHasNativelyKey={hasNativelyApi}
                 />
                 <AnimatePresence>
-                  {isModesOpen && (
+                  {activeManagerPanel && (
                     <motion.div
-                      key="modes-panel"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.15 }}
+                      key="manager-panel"
+                      variants={managerBackdropVariants}
+                      initial="initial"
+                      animate="animate"
+                      exit="exit"
                       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-                      onClick={(e) => { if (e.target === e.currentTarget) setIsModesOpen(false); }}
+                      onClick={(event) => {
+                        if (event.target !== event.currentTarget) return;
+                        setManagerBackdropPressed(false);
+                        closeManagerPanel();
+                      }}
                     >
                       <motion.div
-                        initial={{ opacity: 0, scale: 0.92, y: 18, filter: 'blur(12px)' }}
-                        animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
-                        exit={{ opacity: 0, scale: 0.96, y: 8, filter: 'blur(8px)' }}
-                        transition={{
-                          opacity: { duration: 0.32, ease: [0.23, 1, 0.32, 1] },
-                          filter: { duration: 0.34, ease: [0.23, 1, 0.32, 1] },
-                          scale: { type: 'spring', stiffness: 320, damping: 34, mass: 0.9 },
-                          y: { type: 'spring', stiffness: 320, damping: 34, mass: 0.9 },
-                        }}
+                        ref={managerDialogRef}
+                        data-testid="manager-panel-host"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={activeManagerPanel === 'modes' ? 'Modes Manager' : 'Profile Intelligence'}
+                        tabIndex={-1}
+                        variants={managerCardVariants}
+                        animate={managerBackdropPressed ? 'backdropPress' : 'animate'}
+                        onClick={(event) => event.stopPropagation()}
                         style={{
-                          willChange: 'transform, opacity, filter',
+                          willChange: 'transform, opacity',
                           transformOrigin: 'center',
-                          boxShadow: '0 30px 80px -20px rgba(0,0,0,0.65), 0 16px 40px -12px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.06)',
+                          boxShadow: '0 24px 64px -24px rgba(0,0,0,0.72), 0 8px 24px -16px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05)',
                         }}
                         className="w-[820px] h-[600px] max-w-[95vw] max-h-[90vh] rounded-2xl overflow-hidden border border-white/10 bg-[#141414]"
                       >
-                        <ModesSettings onClose={() => setIsModesOpen(false)} isPremium={isPremiumActive} isLoaded={hasLoadedLicense} isTrialActive={!!activeTrial} onOpenNativelyAPI={() => openSettingsExclusive('natively-api')} />
-                      </motion.div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-                <AnimatePresence>
-                  {isProfileOpen && (
-                    <motion.div
-                      key="profile-panel"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.15 }}
-                      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-                      onClick={(e) => { if (e.target === e.currentTarget) setIsProfileOpen(false); }}
-                    >
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.92, y: 18, filter: 'blur(12px)' }}
-                        animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
-                        exit={{ opacity: 0, scale: 0.96, y: 8, filter: 'blur(8px)' }}
-                        transition={{
-                          opacity: { duration: 0.32, ease: [0.23, 1, 0.32, 1] },
-                          filter: { duration: 0.34, ease: [0.23, 1, 0.32, 1] },
-                          scale: { type: 'spring', stiffness: 320, damping: 34, mass: 0.9 },
-                          y: { type: 'spring', stiffness: 320, damping: 34, mass: 0.9 },
-                        }}
-                        style={{
-                          willChange: 'transform, opacity, filter',
-                          transformOrigin: 'center',
-                          boxShadow: '0 30px 80px -20px rgba(0,0,0,0.65), 0 16px 40px -12px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.06)',
-                        }}
-                        className="w-[820px] h-[600px] max-w-[95vw] max-h-[90vh] rounded-2xl overflow-hidden border border-white/10 bg-[#141414]"
-                      >
-                        <ProfileIntelligenceSettings
-                          onClose={() => setIsProfileOpen(false)}
-                        />
+                        <motion.div
+                          key={activeManagerPanel}
+                          data-testid={`manager-panel-${activeManagerPanel}`}
+                          variants={managerContentVariants}
+                          initial="initial"
+                          animate="animate"
+                          exit="exit"
+                          className="h-full w-full"
+                        >
+                          {activeManagerPanel === 'modes' ? (
+                            <ModesSettings
+                              onClose={closeManagerPanel}
+                              isPremium={isPremiumActive}
+                              isLoaded={hasLoadedLicense}
+                              isTrialActive={!!activeTrial}
+                              onOpenNativelyAPI={() => openSettingsExclusive('natively-api')}
+                            />
+                          ) : (
+                            <ProfileIntelligenceSettings
+                              onClose={closeManagerPanel}
+                            />
+                          )}
+                        </motion.div>
                       </motion.div>
                     </motion.div>
                   )}

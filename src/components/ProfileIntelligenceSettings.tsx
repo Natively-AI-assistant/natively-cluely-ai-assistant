@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import {
     X, RefreshCw, Upload, Briefcase, Trash2, Check, Globe,
     Building2, Search, AlertCircle, Gift, Info, Star, Sparkles,
-    User, CheckCircle, ArrowUpRight, Pencil, Paperclip, Plus, FileText,
+    User, CheckCircle, ArrowUpRight, Paperclip, Plus, FileText,
 } from 'lucide-react';
 import { PremiumUpgradeModal } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
@@ -72,8 +72,8 @@ const PI_CSS = `
         to   { opacity: 1; transform: translateY(0); }
     }
     @keyframes pi-panel-fade {
-        from { opacity: 0; transform: translateY(6px); filter: blur(2px); }
-        to   { opacity: 1; transform: translateY(0);   filter: blur(0); }
+        from { opacity: 0; transform: translateY(4px); }
+        to   { opacity: 1; transform: translateY(0); }
     }
     @keyframes pi-check-in {
         from { opacity: 0; transform: scale(0.5); }
@@ -102,7 +102,7 @@ const PI_CSS = `
         50%       { opacity: 0.65; }
     }
 
-    .pi-panel-fade { animation: pi-panel-fade 380ms var(--pi-ease-out) both; }
+    .pi-panel-fade { animation: pi-panel-fade 180ms var(--pi-ease-out) both; }
     .pi-list-item  { animation: pi-list-in 280ms var(--pi-ease-out) both; }
     .pi-spinner    { animation: pi-spin 0.8s linear infinite; }
     .pi-save-pulse { animation: pi-save-pulse 360ms var(--pi-ease-spring); }
@@ -384,7 +384,7 @@ const PI_CSS = `
 
     /* ── Reduced motion ── */
     @media (prefers-reduced-motion: reduce) {
-        .pi-panel-fade { animation-duration: 150ms; filter: none !important; }
+        .pi-panel-fade { animation: none; }
         .pi-list-item  { animation-duration: 100ms; }
         .pi-press:active, .pi-press-soft:active { transform: none; }
         .pi-metric-fill { animation: none; }
@@ -550,15 +550,17 @@ const FileUploadEmpty = ({ hint, uploading, hasAccess, onBrowse, onNeedUpgrade }
 // ─── Nav items ────────────────────────────────────────────────────────────────
 const NAV_ITEMS = [
     { id: 'identity',    label: 'Identity',           Icon: User },
-    { id: 'context',     label: 'Custom Context',     Icon: Pencil },
-    { id: 'persona',     label: 'AI Persona',         Icon: Sparkles },
     { id: 'tavily',      label: 'Tavily Search',      Icon: Globe },
     { id: 'company',     label: 'Company Intel',      Icon: Building2 },
     { id: 'negotiation', label: 'Negotiation Script', Icon: Gift },
 ];
 
 // ─── Main export ──────────────────────────────────────────────────────────────
-export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }) {
+export function ProfileIntelligenceSettings({
+    onClose,
+}: {
+    onClose: () => void;
+}) {
     const cachedPremium = readPremiumCache();
     const [isPremium, setIsPremium] = useState(cachedPremium.isPremium);
     const [premiumPlan, setPremiumPlan] = useState<string>(cachedPremium.plan);
@@ -566,18 +568,6 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
     const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
     const hasProfileAccess = isPremium || isTrialActive;
     const theme = useResolvedTheme();
-
-    // Escape closes the panel — matches SettingsOverlay behavior. App.tsx also
-    // listens; the duplicate keydown is a no-op once the panel is gone.
-    useEffect(() => {
-        const handler = (e: KeyboardEvent) => {
-            if (e.key !== 'Escape') return;
-            e.preventDefault();
-            onClose();
-        };
-        window.addEventListener('keydown', handler);
-        return () => window.removeEventListener('keydown', handler);
-    }, [onClose]);
 
     const [activeSection, setActiveSection] = useState('identity');
 
@@ -604,18 +594,6 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
     const [jdUploadStatus, setJdUploadStatus] = useState<string | undefined>(undefined);
     const [jdError, setJdError] = useState('');
     const jdAbortRef = useRef<{ cancelled: boolean }>({ cancelled: false });
-
-    // Custom context
-    const [customNotes, setCustomNotes] = useState('');
-    const [customNotesSaved, setCustomNotesSaved] = useState(false);
-    const [customNotesSavedKey, setCustomNotesSavedKey] = useState(0);
-    const customNotesDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-    // Persona
-    const [persona, setPersona] = useState('');
-    const [personaSaved, setPersonaSaved] = useState(false);
-    const [personaSavedKey, setPersonaSavedKey] = useState(0);
-    const personaDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Tavily
     const [tavilyApiKey, setTavilyApiKey] = useState('');
@@ -666,20 +644,10 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
             setProfileData(data);
             if (data?.negotiationScript) setNegotiationScript(data.negotiationScript);
         }).catch(() => {});
-        window.electronAPI?.profileGetNotes?.().then((res: any) => {
-            if (res?.success) setCustomNotes(res.content ?? '');
-        }).catch(() => {});
         window.electronAPI?.getStoredCredentials?.().then((creds: any) => {
             if (creds?.hasTavilyKey) setHasStoredTavilyKey(true);
         }).catch(() => {});
     }, []);
-
-    useEffect(() => {
-        if (!hasProfileAccess) { setPersona(''); return; }
-        window.electronAPI?.profileGetPersona?.().then((res: any) => {
-            if (res?.success) setPersona(res.content ?? '');
-        }).catch(() => {});
-    }, [hasProfileAccess]);
 
     const handleRemoveTavilyKey = async () => {
         if (!confirm('Remove your Tavily API key?')) return;
@@ -1024,102 +992,6 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
         </>
         );
     };
-
-    const renderContext = () => (
-        <>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <h3 className="pi-section-label" style={{ margin: 0 }}>Custom Context</h3>
-                {customNotesSaved && (
-                    <span key={customNotesSavedKey} style={{ fontSize: 10, fontWeight: 700, color: '#22c55e', display: 'flex', alignItems: 'center', gap: 4, animation: 'pi-check-in 320ms var(--pi-ease-spring) both' }}>
-                        <Check size={10} /> Saved
-                    </span>
-                )}
-            </div>
-            <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: '0 0 12px', lineHeight: 1.6 }}>
-                Anything the AI should know about you — facts, constraints, preferences. Saved across all sessions and modes.
-            </p>
-            <div className="pi-content-box">
-                <textarea
-                    value={customNotes}
-                    className="pi-textarea"
-                    rows={8}
-                    placeholder={`Examples:\n• Q4 ARR was $2.1M, grew 40% YoY\n• Target salary $180k, floor $160k\n• I prefer concise answers without filler phrases`}
-                    onChange={e => {
-                        const val = e.target.value;
-                        if (val.length > 4000) return;
-                        setCustomNotes(val);
-                        setCustomNotesSaved(false);
-                        if (customNotesDebounceRef.current) clearTimeout(customNotesDebounceRef.current);
-                        customNotesDebounceRef.current = setTimeout(async () => {
-                            try {
-                                await window.electronAPI?.profileSaveNotes?.(val);
-                                setCustomNotesSavedKey(k => k + 1);
-                                setCustomNotesSaved(true);
-                                setTimeout(() => setCustomNotesSaved(false), 2000);
-                            } catch { /**/ }
-                        }, 800);
-                    }}
-                />
-                <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '8px 12px', borderTop: '1px solid var(--pi-input-border)' }}>
-                    <span style={{ fontSize: 10, color: customNotes.length > 3600 ? '#f59e0b' : 'var(--pi-tertiary)' }}>
-                        {customNotes.length}/4000
-                    </span>
-                </div>
-            </div>
-            <p style={{ fontSize: 11, color: 'var(--pi-tertiary)', margin: '8px 0 0' }}>Auto-saved · Works with all modes and providers</p>
-        </>
-    );
-
-    const renderPersona = () => (
-        <>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <h3 className="pi-section-label" style={{ margin: 0 }}>AI Persona</h3>
-                {personaSaved && hasProfileAccess && (
-                    <span key={personaSavedKey} style={{ fontSize: 10, fontWeight: 700, color: '#22c55e', display: 'flex', alignItems: 'center', gap: 4, animation: 'pi-check-in 320ms var(--pi-ease-spring) both' }}>
-                        <Check size={10} /> Updated
-                    </span>
-                )}
-            </div>
-            <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: '0 0 12px', lineHeight: 1.6 }}>
-                {hasProfileAccess ? "Set the AI's behavior, tone, and role across providers." : 'Upgrade to Pro to personalise the AI persona.'}
-            </p>
-            <div className="pi-content-box">
-                <textarea
-                    value={persona}
-                    className="pi-textarea"
-                    rows={6}
-                    disabled={!hasProfileAccess}
-                    placeholder="Example: You are a senior hiring manager. Keep answers concise and ask one focused follow-up when needed."
-                    onFocus={() => { if (!hasProfileAccess) setIsPremiumModalOpen(true); }}
-                    onChange={e => {
-                        if (!hasProfileAccess) { setIsPremiumModalOpen(true); return; }
-                        const val = e.target.value;
-                        if (val.length > 4000) return;
-                        setPersona(val);
-                        setPersonaSaved(false);
-                        if (personaDebounceRef.current) clearTimeout(personaDebounceRef.current);
-                        personaDebounceRef.current = setTimeout(async () => {
-                            try {
-                                const res = await window.electronAPI?.profileSavePersona?.(val);
-                                if (res?.success) {
-                                    setPersonaSavedKey(k => k + 1);
-                                    setPersonaSaved(true);
-                                    setTimeout(() => setPersonaSaved(false), 2000);
-                                } else if (res?.error === 'pro_required') {
-                                    setPersona(''); setIsPremiumModalOpen(true);
-                                }
-                            } catch { /**/ }
-                        }, 800);
-                    }}
-                />
-                <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '8px 12px', borderTop: '1px solid var(--pi-input-border)' }}>
-                    <span style={{ fontSize: 10, color: persona.length > 3600 ? '#f59e0b' : 'var(--pi-tertiary)' }}>
-                        {persona.length}/4000
-                    </span>
-                </div>
-            </div>
-        </>
-    );
 
     const renderTavily = () => (
         <>
@@ -1500,8 +1372,6 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
 
     const SECTION_RENDERERS: Record<string, () => React.ReactNode> = {
         identity: renderIdentity,
-        context: renderContext,
-        persona: renderPersona,
         tavily: renderTavily,
         company: renderCompany,
         negotiation: renderNegotiation,
