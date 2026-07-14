@@ -28,13 +28,22 @@ const COMPILED = path.resolve(
 // hostname is irrelevant to the key now — that's the point of one of the tests).
 function makeEnv() {
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'cred-persist-'));
-  const state = { keyringAvailable: false, userData };
+  const state = { keyringAvailable: false, userData, encryptShouldThrow: false };
   const fakeElectron = {
     app: { getPath: () => state.userData, isPackaged: false, getVersion: () => '0.0.0-test' },
     safeStorage: {
       isEncryptionAvailable: () => state.keyringAvailable,
       // Trivial reversible transform so the keyring path is exercisable in tests.
-      encryptString: (s) => Buffer.concat([Buffer.from('KR'), Buffer.from(s, 'utf8')]),
+      // When `encryptShouldThrow` is set, encryptString throws to model the
+      // Windows DPAPI failure shape (`isEncryptionAvailable()` returns true but
+      // `encryptString()` throws on the actual call due to policy/roaming
+      // profile/sandboxing).
+      encryptString: (s) => {
+        if (state.encryptShouldThrow) {
+          throw new Error('DPAPI: policy blocked encryption');
+        }
+        return Buffer.concat([Buffer.from('KR'), Buffer.from(s, 'utf8')]);
+      },
       decryptString: (b) => Buffer.from(b).subarray(2).toString('utf8'),
       getSelectedStorageBackend: () => 'basic_text',
     },
@@ -411,4 +420,105 @@ test('SettingsOverlay sends USE_STORED sentinel when input empty but key on disk
   assert.match(fnBody, /hasStoredStt[A-Za-z]+Key/, 'handleTestSttConnection must consult hasStored*Key flags');
   assert.match(fnBody, /apiKeyToSend/, 'handleTestSttConnection must use the apiKeyToSend variable');
   assert.doesNotMatch(fnBody, /'Please enter an API key first'/, 'misleading "Please enter an API key first" message must be removed');
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// PR #370 regression: STT key persistence on Windows when safeStorage.encryptString
+// throws after isEncryptionAvailable() returns true (DPAPI policy/roaming
+// profile/sandboxing failures). The save must fall through to the app-managed
+// fallback instead of returning false (which would surface a misleading "Save
+// Failed" badge to the user). Closes the bug reported for Deepgram + other
+// STT keys.
+// ───────────────────────────────────────────────────────────────────────────
+
+test('PR #370: keyring AVAILABLE but encryptString throws → save falls through to fallback (returns true, NOT false)', () => {
+  const env = makeEnv();
+  env.state.keyringAvailable = true;
+  env.state.encryptShouldThrow = true;
+
+  const cm = freshManager(env);
+  const SECRET = 'dg-LIVE-PR370-FALLTHROUGH-abc123';
+  const persisted = cm.setDeepgramApiKey(SECRET);
+
+  // CRITICAL: the save MUST succeed (true), NOT fail (false). The user entered a
+  // key, sees "Saved" badge, and the key is actually persisted via the fallback.
+  assert.equal(persisted, true,
+    'a keyring write that throws must fall through to the fallback, not return false');
+
+  // Verify the fallback file exists and contains the secret.
+  const fbPath = path.join(env.userData, 'credentials.fallback.enc');
+  assert.ok(fs.existsSync(fbPath), 'fallback file must exist after a keyring-throws save');
+
+  // Verify a fresh cold-start loads the secret from the fallback.
+  const cm2 = freshManager(env);
+  assert.equal(cm2.getDeepgramApiKey(), SECRET,
+    'a saved-via-fallback key must survive a restart');
+});
+
+test('PR #370: keyring-throws save leaves NO stale credentials.enc on disk', () => {
+  const env = makeEnv();
+  env.state.keyringAvailable = true;
+  env.state.encryptShouldThrow = true;
+
+  const cm = freshManager(env);
+  cm.setDeepgramApiKey('dg-LIVE-PR370-CLEANUP-xyz');
+
+  // The stale keyring file (if any pre-existed) must have been removed before
+  // the fallback write returned. Otherwise loadCredentials() would read it on
+  // next startup and discard the fresh fallback.
+  const keyringPath = path.join(env.userData, 'credentials.enc');
+  assert.ok(!fs.existsSync(keyringPath),
+    'a successful fallback save must unlink any pre-existing stale credentials.enc');
+});
+
+test('PR #370: loadCredentials detects stale-keyring state via mtime and unlinks before read', () => {
+  const env = makeEnv();
+
+  // Pre-populate BOTH stores with mtimes that make the fallback strictly newer
+  // than the keyring — modeling a saveCredentials() that hit the fallback path
+  // (fallback just-written) but failed to clean up the stale keyring.
+  const keyringPath = path.join(env.userData, 'credentials.enc');
+  const fallbackPath = path.join(env.userData, 'credentials.fallback.enc');
+  const OLD_TIME = new Date('2026-01-01T00:00:00Z');
+  const NEW_TIME = new Date('2026-07-01T00:00:00Z');
+  fs.writeFileSync(keyringPath, Buffer.from('KR{"deepgramApiKey":"OLD-STALE-VALUE"}'));
+  fs.writeFileSync(fallbackPath, Buffer.from('garbage-encrypted-blob'));
+  fs.utimesSync(keyringPath, OLD_TIME, OLD_TIME);
+  fs.utimesSync(fallbackPath, NEW_TIME, NEW_TIME);
+
+  // Keyring reports available (the normal macOS/healthy-Windows state).
+  env.state.keyringAvailable = true;
+
+  // Cold-start: loadCredentials must detect the mtime inversion and unlink the
+  // stale keyring BEFORE attempting to decrypt it (otherwise it would either
+  // corrupt the credential set or shadow the fallback).
+  freshManager(env);
+
+  assert.ok(!fs.existsSync(keyringPath),
+    'a keyring older than the fallback must be unlinked before load attempts to decrypt it');
+});
+
+test('PR #370: loadCredentials does NOT discard a fresh keyring when fallback is older (legitimate round-trip)', () => {
+  const env = makeEnv();
+
+  // Inverse: keyring is newer than fallback. Models the normal
+  // keyring-saves-everything case where removeFallbackFile() ran cleanly and
+  // the fallback is just a stale leftover from a previous machine.
+  const keyringPath = path.join(env.userData, 'credentials.enc');
+  const fallbackPath = path.join(env.userData, 'credentials.fallback.enc');
+  const NEW_TIME = new Date('2026-07-01T00:00:00Z');
+  const OLD_TIME = new Date('2026-01-01T00:00:00Z');
+  fs.writeFileSync(keyringPath, Buffer.from('KR{"deepgramApiKey":"CURRENT-VALID-VIA-KEYRING"}'));
+  fs.writeFileSync(fallbackPath, Buffer.from('garbage-from-old-machine'));
+  fs.utimesSync(keyringPath, NEW_TIME, NEW_TIME);
+  fs.utimesSync(fallbackPath, OLD_TIME, OLD_TIME);
+
+  env.state.keyringAvailable = true;
+
+  const cm = freshManager(env);
+
+  assert.ok(fs.existsSync(keyringPath),
+    'a fresher keyring must NOT be discarded just because a stale fallback exists alongside it');
+  assert.equal(cm.getDeepgramApiKey(), 'CURRENT-VALID-VIA-KEYRING',
+    'the keyring path must load the current value (not fall through to the fallback)');
 });
