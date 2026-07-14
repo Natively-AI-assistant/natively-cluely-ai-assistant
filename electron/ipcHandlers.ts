@@ -1083,8 +1083,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         // both the legacy arbiter AND the Context OS kernel build call (below,
         // in a separate try block) resolve the SAME per-turn explicit switch.
         let _userExplicitSource: 'reference_files' | 'profile' | 'transcript' | null = null;
+        let manualTurnSourceDecision: import('./llm/turnSourceDecision').TurnSourceDecision | null = null;
         try {
           const { buildCustomModeExecutionContract, logArbitratedContract } = require('./llm/customModeExecutionContract');
+          const { resolveTurnSourceDecision } = require('./llm/turnSourceDecision') as typeof import('./llm/turnSourceDecision');
           const { resolveSourceOwnership } = require('./llm/sourceOwnership');
           const _docGrounded = manualActiveMode?.documentGroundedCustomModeActive === true;
           const _hasRefFiles = Boolean((manualActiveMode && (manualActiveMode as any).hasReferenceFiles) ?? false);
@@ -1103,6 +1105,20 @@ export function initializeIpcHandlers(appState: AppState): void {
           const { resolveExplicitSourceRequest, toLegacyUserExplicitSource } = require('./intelligence/context-os/explicitSourceSwitch');
           const _explicitSwitch = resolveExplicitSourceRequest(String(message || ''));
           _userExplicitSource = toLegacyUserExplicitSource(_explicitSwitch);
+          const _activeSourceContract = manualActiveMode?.sourceContract ?? null;
+          const _orchForAvailability = llmHelper.getKnowledgeOrchestrator?.();
+          manualTurnSourceDecision = resolveTurnSourceDecision({
+            sourceContract: _activeSourceContract,
+            persistedSourceAuthority: _activeSourceContract?.sourceAuthority ?? null,
+            explicitRequest: _explicitSwitch,
+            availability: {
+              hasReferenceFiles: _hasRefFiles,
+              hasProfileFacts: _hasProfileFacts,
+              hasJobDescription: Boolean(_orchForAvailability?.activeJD?.structured_data),
+              hasLiveTranscript: _hasLiveTranscript,
+              hasMeetingRag: _hasMeetingRag,
+            },
+          });
           manualSourceContract = buildCustomModeExecutionContract({
             question: String(message || ''),
             streamRoute: 'manual_chat_stream',
@@ -1124,6 +1140,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             // fallback when no mode is active / arbiter threw).
             persistedSourceAuthority: manualActiveMode?.sourceContract?.sourceAuthority ?? null,
             userExplicitSource: _userExplicitSource,
+            turnSourceDecision: manualTurnSourceDecision,
           });
           logArbitratedContract(manualSourceContract, String(message || ''));
           manualOwnership = resolveSourceOwnership({
@@ -1132,6 +1149,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             profileContextPolicy: answerPlan.profileContextPolicy,
             answerType: answerPlan.answerType,
             hasProfileFacts: _hasProfileFacts,
+            turnSourceDecision: manualTurnSourceDecision,
           });
           if (isIntelligenceFlagEnabled('trace')) {
             console.log('[SOURCE-OWNERSHIP]', JSON.stringify({
@@ -1192,6 +1210,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               // too so sourceOwner reflects the SAME per-turn switch, not the
               // mode's persisted default. See explicitSourceSwitch.ts.
               userExplicitSource: _userExplicitSource,
+              turnSourceDecision: manualTurnSourceDecision,
             });
             // Real-custom-mode-repair (2026-07-11), Phase 4/7: the trace used to
             // be emitted HERE with a hardcoded `finalAction: 'answer'` — before
@@ -9080,6 +9099,14 @@ export function initializeIpcHandlers(appState: AppState): void {
     hasLiveTranscriptCapable?: boolean;
   }) => {
     try {
+      // Source Contract Builder is a Phase-7 pro feature: the panel renders
+      // for any non-general mode and gates on pro via the surrounding UI,
+      // but the IPC must enforce the same gate so a hand-crafted payload
+      // can't bypass. Mirror modes:set-active: general modes are free, all
+      // others require pro/trial.
+      if (input.templateType !== 'general' && !isProOrTrialActive()) {
+        return null;
+      }
       const { ModesManager } = require('./services/ModesManager');
       const mgr = ModesManager.getInstance();
       return mgr.buildUserSourceContract({
@@ -9090,6 +9117,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       });
     } catch (e: any) {
       console.error('[IPC] modes:build-user-source-contract error:', e);
+      // Asymmetric with modes:get-source-contract (which swallows and returns
+      // null) on purpose: the renderer has an explicit `if (!built)` guard
+      // that converts a rejection into a clean `{ success: false, error }`
+      // save-failure path. A swallowed null here would silently persist the
+      // wrong contract shape — the bug this IPC was introduced to prevent.
       throw e;
     }
   });

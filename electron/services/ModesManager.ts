@@ -9,6 +9,7 @@ import { classifyCustomContext, selectCustomContextForAnswer } from '../llm/cust
 import { diagLog } from '../llm/documentGroundedPrompt';
 import {
     type ModeSourceContract,
+    type ModeSourceOwner,
     CURRENT_MIGRATION_REVISION,
     defaultSourceContractForNewMode,
     migrateSourceContractFromPrompt,
@@ -517,6 +518,11 @@ export class ModesManager {
      * prevents.
      */
     public buildUserSourceContract(input: {
+        // `modeId` is accepted-but-unused: the contract is derived purely from
+        // templateType + switches (two modes with the same inputs get the same
+        // contract shape). Kept in the signature so the IPC payload doesn't
+        // need to drop a field, and to leave room for future per-mode overrides
+        // without an IPC break.
         modeId: string;
         templateType: ModeTemplateType;
         switches: string[];
