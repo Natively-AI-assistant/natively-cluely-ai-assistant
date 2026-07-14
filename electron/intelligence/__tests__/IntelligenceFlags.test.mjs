@@ -68,6 +68,10 @@ const DEFAULT_ON_KEYS = new Set([
   // resolve to isInternalDevTestContext() = FALSE under this bare node harness.
   'docGroundedStrictIsolation',
   'docGroundedFalseRefusalRepair',
+  // Full-JIT final-answer law — unconditionally `true` everywhere (the intended
+  // production policy, not a dev/test-only experiment), restored 2026-07-14
+  // after the 2026-07-09 stability rollback was resolved.
+  'jitFinalAnswerEnforced',
 ]);
 
 const expectedDefault = (key) => DEFAULT_ON_KEYS.has(key) ? true : false;

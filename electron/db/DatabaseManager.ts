@@ -856,6 +856,8 @@ export class DatabaseManager {
             this.db.pragma('user_version = 13');
         }
 
+        // NOTE: profile_custom_notes and profile_persona (v13→14, v14→15 below) are orphaned —
+        // the Custom Context / AI Persona feature they backed was removed. Kept non-destructively.
         // Version 13 → 14: Add profile_custom_notes table
         if (version < 14) {
             console.log('[DatabaseManager] Applying migration v13 → v14: Add profile_custom_notes table');
@@ -1439,62 +1441,6 @@ export class DatabaseManager {
         }
     }
 
-    // ============================================
-    // Profile Custom Notes
-    // ============================================
-
-    public getCustomNotes(): string {
-        if (!this.db) return '';
-        try {
-            const row = this.db.prepare('SELECT content FROM profile_custom_notes WHERE id = 1').get() as { content: string } | undefined;
-            return row?.content ?? '';
-        } catch (e) {
-            console.error('[DatabaseManager] getCustomNotes failed:', e);
-            return '';
-        }
-    }
-
-    public saveCustomNotes(content: string): void {
-        if (!this.db) return;
-        try {
-            this.db.prepare(
-                'INSERT INTO profile_custom_notes (id, content, updated_at) VALUES (1, ?, datetime(\'now\')) ON CONFLICT(id) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at'
-            ).run(content);
-        } catch (e) {
-            console.error('[DatabaseManager] saveCustomNotes failed:', e);
-        }
-    }
-
-    public getPersona(): string {
-        if (!this.db) return '';
-        try {
-            const row = this.db.prepare('SELECT content FROM profile_persona WHERE id = 1').get() as { content: string } | undefined;
-            return row?.content ?? '';
-        } catch (e) {
-            console.error('[DatabaseManager] getPersona failed:', e);
-            return '';
-        }
-    }
-
-    public savePersona(content: string): void {
-        if (!this.db) return;
-        try {
-            this.db.prepare(
-                'INSERT INTO profile_persona (id, content, updated_at) VALUES (1, ?, datetime(\'now\')) ON CONFLICT(id) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at'
-            ).run(content);
-        } catch (e) {
-            console.error('[DatabaseManager] savePersona failed:', e);
-        }
-    }
-
-    public clearProfilePersona(): void {
-        if (!this.db) return;
-        try {
-            this.db.prepare('UPDATE profile_persona SET content = \'\', updated_at = datetime(\'now\') WHERE id = 1').run();
-        } catch (e) {
-            console.error('[DatabaseManager] clearProfilePersona failed:', e);
-        }
-    }
 
     // ============================================
     // Modes CRUD

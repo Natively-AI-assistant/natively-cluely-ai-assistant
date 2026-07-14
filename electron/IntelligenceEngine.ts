@@ -821,7 +821,7 @@ export class IntelligenceEngine extends EventEmitter {
                     return null;
                 }
                 if (answer) {
-                    this.session.addAssistantMessage(answer);
+                    this.session.addAssistantMessage(answer, undefined, 'what_to_answer');
                     this.emit('suggested_answer', answer, question || 'inferred', confidence);
                     this.setMode('idle');
                     return answer;
@@ -896,8 +896,11 @@ export class IntelligenceEngine extends EventEmitter {
             ).catch((): { intent: 'general'; confidence: number; answerShape: string } => (
                 { intent: 'general', confidence: 0.4, answerShape: 'Concise, direct answer to the question.' }
             ));
-            const modeContextPromise: Promise<string> = options?.activeSkill
-                ? Promise.resolve('') // skill mode skips mode retrieval entirely
+            // Governed document turns resolve through EvidenceResolver inside
+            // WhatToAnswerLLM. Do not start the legacy prefetch in parallel: even
+            // an ignored retrieval is an unauthorized competing evidence path.
+            const modeContextPromise: Promise<string> = options?.activeSkill || documentGroundedCustomModeActive
+                ? Promise.resolve('') // skill/governed-document mode skips legacy retrieval
                 : (async () => {
                     try {
                         const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
@@ -1030,7 +1033,7 @@ export class IntelligenceEngine extends EventEmitter {
                     // profile). No prior context exists, so there's nothing to answer.
                     if (fr.isClarification && fr.clarificationText && !isSpeculative) {
                         piTelemetry.emit('wta_context_free_clarification', { surface: 'what_to_answer', via: (fr as any).resolvedVia ?? 'clarification' });
-                        this.session.addAssistantMessage(fr.clarificationText);
+                        this.session.addAssistantMessage(fr.clarificationText, undefined, 'what_to_answer');
                         this.emit('suggested_answer', fr.clarificationText, extractedQuestion.latestQuestion || 'inferred', 0.9);
                         this.setMode('idle');
                         trace.mark('repair_used', { reason: 'context_free_clarification' });
@@ -1221,6 +1224,11 @@ export class IntelligenceEngine extends EventEmitter {
             // legacy `!documentGroundedCustomModeActive` guard if the resolver
             // throws (never more permissive).
             let wtaProfileAllowed = !documentGroundedCustomModeActive;
+            // Evidence-execution-repair (2026-07-12): hoisted so the Context-OS
+            // clarification short-circuit below (a separate try block, ~line
+            // 1459) can consult the SAME legacy ownership decision this block
+            // computes — see that short-circuit's comment for why.
+            let wtaOwnershipDecision: import('./llm/sourceOwnership').SourceOwnershipDecision | null = null;
             try {
                 const { buildCustomModeExecutionContract } = require('./llm/customModeExecutionContract');
                 const { resolveSourceOwnership } = require('./llm/sourceOwnership');
@@ -1266,6 +1274,7 @@ export class IntelligenceEngine extends EventEmitter {
                     answerType: _wtaPlan.answerType,
                     hasProfileFacts: _wtaHasProfile,
                 });
+                wtaOwnershipDecision = _wtaOwn;
                 // Staged enforcement (plan §6): `off` restores the legacy
                 // doc-grounded guard; every other stage honors the resolver.
                 wtaProfileAllowed = getSourceOwnerEnforcementStage() === 'off'
@@ -1381,10 +1390,14 @@ export class IntelligenceEngine extends EventEmitter {
             // repair re-opened profile in doc-grounded turns — baseline §5.5).
             // Narrowing only: the contract can only REMOVE context, never add.
             let wtaTurnContract: import('./intelligence/context-os').TurnContextContract | null = null;
+            // One immutable WTA question must drive contract classification,
+            // resolver retrieval, and provider prompting. Never re-derive it in
+            // downstream request assembly.
+            const wtaTurnQuestion = question || extractedQuestion.latestQuestion || lastInterviewerTurn || '';
             try {
                 const { buildCustomModeExecutionContract: _bldC } = require('./llm/customModeExecutionContract');
                 const { buildTurnContractIfEnabled } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
-                const _wtaQ2 = question || extractedQuestion.latestQuestion || lastInterviewerTurn || '';
+                const _wtaQ2 = wtaTurnQuestion;
                 const _hasProfile2 = Boolean((this.llmHelper.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data);
                 const { resolveExplicitSourceRequest: _wtaResolveSwitch2, toLegacyUserExplicitSource: _wtaToLegacySwitch2 } = require('./intelligence/context-os/explicitSourceSwitch');
                 const _wtaUserExplicitSource2 = _wtaToLegacySwitch2(_wtaResolveSwitch2(String(_wtaQ2)));
@@ -1462,12 +1475,24 @@ export class IntelligenceEngine extends EventEmitter {
                 && !isSpeculative) {
                 try {
                     const { buildSourceClarification, buildContextOsTrace, logContextOsTrace } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
-                    const clarify = buildSourceClarification({
-                        hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
-                        hasProfileFacts: Boolean((this.llmHelper.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data),
-                        hasLiveTranscript: true, // WTA is always transcript-driven
-                    });
-                    this.session.addAssistantMessage(clarify);
+                    // Evidence-execution-repair (2026-07-12): prefer the legacy,
+                    // mode-aware sourceOwnership.resolveSourceOwnership() decision
+                    // (computed above as wtaOwnershipDecision) when it has a
+                    // SPECIFIC reason to clarify — an explicit source switch the
+                    // mode's authority denies. Its message names the requested
+                    // source and explains how to switch, which is strictly more
+                    // informative than the kernel's generic multi-universe
+                    // disambiguation below. See the identical fix + comment on
+                    // the manual-chat path (ipcHandlers.ts, same short-circuit
+                    // pattern) for the full rationale.
+                    const clarify = wtaOwnershipDecision?.shouldClarifyInsteadOfProfile
+                        ? require('./llm/sourceOwnership').buildSourceSwitchClarification(wtaOwnershipDecision.owner)
+                        : buildSourceClarification({
+                            hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
+                            hasProfileFacts: Boolean((this.llmHelper.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data),
+                            hasLiveTranscript: true, // WTA is always transcript-driven
+                        });
+                    this.session.addAssistantMessage(clarify, undefined, 'what_to_answer');
                     this.emit('suggested_answer', clarify, extractedQuestion.latestQuestion || question || 'inferred', 0.9);
                     trace.mark('repair_used', { reason: 'context_os_clarification' });
                     if (isIntelligenceFlagEnabled('trace')) {
@@ -1542,6 +1567,7 @@ export class IntelligenceEngine extends EventEmitter {
                 && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
                 wtaContextOsGeneration = {
                     contract: wtaTurnContract,
+                    turnQuestion: wtaTurnQuestion,
                     evidencePack: null,
                     modeSnapshot: {
                         modeId: snapshotModeId ?? null,
@@ -1749,7 +1775,23 @@ export class IntelligenceEngine extends EventEmitter {
                             );
                         };
 
-                        let docContextBlock = await buildDocContext(false);
+                        // Evidence-execution-repair (2026-07-11): when this turn was
+                        // governed by EvidenceResolver/typed-pack generation inside
+                        // WhatToAnswerLLM (wtaContextOsGeneration.evidencePack was
+                        // populated during the stream — see WhatToAnswerLLM.ts H1
+                        // block), reuse that SAME pack for the validator's initial
+                        // check instead of re-retrieving. This was an independent
+                        // second retrieval with different relaxed/topK params, run
+                        // AFTER the answer already streamed — the validator could
+                        // see evidence the answer was never grounded in. The relaxed
+                        // retry below (a genuinely different, WIDER query) still
+                        // runs on validation failure regardless of governance —
+                        // that is a deliberate second attempt at repair, not a
+                        // duplicate of the first-pass retrieval.
+                        const _governedPack = wtaContextOsGeneration?.evidencePack;
+                        let docContextBlock = (_governedPack && _governedPack.items.length > 0)
+                            ? _governedPack.items.map((it) => `[Section: ${it.pointer?.section || it.sourceId}]\n${it.text}`).join('\n\n')
+                            : await buildDocContext(false);
                         const hasOkfEvidence = /STRUCTURED KNOWLEDGE CARDS|Direct quote|knowledge_card/i.test(docContextBlock);
                         const firstCheck = validateDocumentGroundedAnswer({
                             question: docQuestion,
@@ -2127,7 +2169,7 @@ export class IntelligenceEngine extends EventEmitter {
                 }
             } catch { /* normalizer never blocks the answer */ }
 
-            this.session.addAssistantMessage(finalWtaAnswer, wtaWriteDecision);
+            this.session.addAssistantMessage(finalWtaAnswer, wtaWriteDecision, 'what_to_answer');
 
             // Full-JIT write-gating law (§6): a provider-error/no-answer WTA
             // fallback (deadline timeout, leaked-schema-stub) carries a
@@ -2349,7 +2391,7 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             if (!streamAborted && fullRefined) {
-                this.session.addAssistantMessage(fullRefined);
+                this.session.addAssistantMessage(fullRefined, undefined, 'what_to_answer');
                 this.emit('refined_answer', fullRefined, intent);
 
                 const intentMap: Record<string, string> = {
@@ -2488,7 +2530,7 @@ export class IntelligenceEngine extends EventEmitter {
                 // Track recap as an assistant message so "make it shorter" / other
                 // refinements can target it via FollowUpLLM (which reads the last
                 // assistant message).
-                this.session.addAssistantMessage(fullSummary);
+                this.session.addAssistantMessage(fullSummary, undefined, 'what_to_answer');
 
                 this.session.pushUsage({
                     type: 'chat',
@@ -2554,7 +2596,7 @@ export class IntelligenceEngine extends EventEmitter {
             // Only update history and emit final if not aborted
             if (fullClarification && this.currentGenerationId === generationId) {
                 this.emit('clarify', fullClarification);
-                this.session.addAssistantMessage(fullClarification);
+                this.session.addAssistantMessage(fullClarification, undefined, 'what_to_answer');
 
                 this.session.pushUsage({
                     type: 'chat',
@@ -2678,7 +2720,12 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             if (answer) {
-                this.session.addAssistantMessage(answer);
+                // MODE 5: Manual Answer (Fallback) — a manual-chat submission
+                // (submit-manual-question IPC), NOT a WTA suggestion. Was
+                // mistagged 'what_to_answer' (code-review round 2, 2026-07-14);
+                // fixed to match this function's own source: 'manual_input'
+                // plan and the pushUsage({source: 'manual_chat'}) call below.
+                this.session.addAssistantMessage(answer, undefined, 'manual_chat');
                 this.emit('manual_answer_result', answer, question);
 
                 this.session.pushUsage({
@@ -2767,7 +2814,7 @@ export class IntelligenceEngine extends EventEmitter {
                 fullHint = "I couldn't detect any code in the screenshot. Try screenshotting your code editor directly.";
             }
 
-            this.session.addAssistantMessage(fullHint);
+            this.session.addAssistantMessage(fullHint, undefined, 'screenshot');
             this.session.pushUsage({
                 type: 'assist',
                 timestamp: Date.now(),
@@ -2812,7 +2859,7 @@ export class IntelligenceEngine extends EventEmitter {
             if (!context.trim() && !resolvedProblem && (!imagePaths || imagePaths.length === 0)) {
                 this.setMode('idle');
                 const msg = "There's nothing to brainstorm right now. Make sure your question is visible or spoken aloud, then try again.";
-                this.session.addAssistantMessage(msg);
+                this.session.addAssistantMessage(msg, undefined, 'screenshot');
                 this.emit('suggested_answer', msg, 'Brainstorming Approaches', 1.0);
                 return msg;
             }
@@ -2845,7 +2892,7 @@ export class IntelligenceEngine extends EventEmitter {
                 fullResult = "I couldn't generate brainstorm approaches. Make sure your question is visible and try again.";
             }
 
-            this.session.addAssistantMessage(fullResult);
+            this.session.addAssistantMessage(fullResult, undefined, 'screenshot');
             this.session.pushUsage({
                 type: 'assist',
                 timestamp: Date.now(),

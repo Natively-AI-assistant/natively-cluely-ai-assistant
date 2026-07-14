@@ -16,6 +16,10 @@ function shortId(prefix: string, seed: string): string {
 
 /** Confidence heuristic v1: a card with a real section number + non-trivial body is high; short/no-number bodies are medium. */
 function inferCardConfidence(draft: BuiltCardDraft): KnowledgeCardConfidence {
+  // Atomic front-matter facts are a printed Label: value taken verbatim from the
+  // title page — the single most reliable evidence unit for a document-identity
+  // question. They are intrinsically high-confidence despite a short body.
+  if (draft.type === 'metadata') return 'high';
   const hasSection = draft.sourceSections.some((s) => /^\d/.test(s));
   const bodyWords = draft.body.split(/\s+/).filter(Boolean).length;
   if (hasSection && bodyWords >= 30) return 'high';

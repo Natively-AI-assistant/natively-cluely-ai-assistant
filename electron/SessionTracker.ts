@@ -50,10 +50,24 @@ export interface ContextItem {
     timestamp: number;
 }
 
+/**
+ * Which conversational surface produced/consumes a turn (real-app
+ * source-switch repair, 2026-07-14, Phase 9 — surface isolation). Manual chat,
+ * What-to-Answer (live suggestions), and meeting auto-answer are DISTINCT
+ * conversations that happen to share this session's transcript/meeting
+ * context; a turn from one must not silently look like a prior turn of
+ * another when resolving a follow-up referent ("what about that?"). Optional
+ * (absent = legacy/unknown caller) so this is purely additive — no existing
+ * write site is required to change.
+ */
+export type ConversationSurface = 'manual_chat' | 'what_to_answer' | 'screenshot' | 'meeting_auto_answer' | 'phone_mirror';
+
 export interface AssistantResponse {
     text: string;
     timestamp: number;
     questionContext: string;
+    /** Which surface produced this turn. Absent for legacy callers. */
+    surface?: ConversationSurface;
 }
 
 export class SessionTracker {
@@ -64,6 +78,12 @@ export class SessionTracker {
 
     // Last assistant message for follow-up mode
     private lastAssistantMessage: string | null = null;
+    // Per-surface last assistant message (Phase 9 surface isolation,
+    // 2026-07-14) — populated ADDITIVELY alongside the shared
+    // `lastAssistantMessage` above, never replacing it (existing meeting/WTA
+    // continuity that intentionally reads the shared field is unaffected).
+    // Keyed by ConversationSurface; a surface with no turns yet is simply absent.
+    private lastAssistantMessageBySurface: Partial<Record<ConversationSurface, string>> = {};
 
     // Temporal RAG: Track all assistant responses in session for anti-repetition
     private assistantResponseHistory: AssistantResponse[] = [];
@@ -280,8 +300,18 @@ export class SessionTracker {
     /**
      * Add assistant-generated message to context
      */
-    addAssistantMessage(text: string, writeDecision?: { policy?: 'store_conversational_only' | 'store_non_authoritative' | 'do_not_store'; reason?: string; blockedFromSessionTracker?: boolean }): void {
-        console.log(`[SessionTracker] addAssistantMessage called`, { length: text.length, policy: writeDecision?.policy || 'store_conversational_only' });
+    addAssistantMessage(
+        text: string,
+        writeDecision?: { policy?: 'store_conversational_only' | 'store_non_authoritative' | 'do_not_store'; reason?: string; blockedFromSessionTracker?: boolean },
+        // Phase 9 surface isolation (2026-07-14): OPTIONAL — absent means the
+        // caller hasn't been updated yet, and this write behaves exactly as
+        // before (shared lastAssistantMessage / assistantResponseHistory
+        // only). Passing a surface additionally populates the per-surface map
+        // a same-surface-only reader (getLastAssistantMessage(surface)) can
+        // consult, without changing what the shared, cross-surface state sees.
+        surface?: ConversationSurface,
+    ): void {
+        console.log(`[SessionTracker] addAssistantMessage called`, { length: text.length, policy: writeDecision?.policy || 'store_conversational_only', surface: surface ?? 'unspecified' });
 
         if (writeDecision?.policy === 'do_not_store' || writeDecision?.blockedFromSessionTracker) {
             console.warn(`[SessionTracker] Blocked assistant message by write policy`, { reason: writeDecision?.reason || 'unspecified' });
@@ -324,12 +354,16 @@ export class SessionTracker {
         );
 
         this.lastAssistantMessage = cleanText;
+        if (surface) {
+            this.lastAssistantMessageBySurface[surface] = cleanText;
+        }
 
         // Temporal RAG: Track response history for anti-repetition
         this.assistantResponseHistory.push({
             text: cleanText,
             timestamp: Date.now(),
-            questionContext: this.getLastInterviewerTurn() || 'unknown'
+            questionContext: this.getLastInterviewerTurn() || 'unknown',
+            surface,
         });
 
         // Keep history bounded (last 10 responses)
@@ -433,11 +467,30 @@ export class SessionTracker {
         return out;
     }
 
-    getLastAssistantMessage(): string | null {
+    /**
+     * The last assistant message. With NO argument, returns the shared,
+     * cross-surface value (unchanged legacy behavior — meeting/WTA continuity
+     * that intentionally wants "the last thing said on ANY surface" keeps
+     * working exactly as before).
+     *
+     * With a `surface` argument (Phase 9 surface isolation, 2026-07-14),
+     * returns ONLY that surface's own last message — `null` if that surface
+     * has never written one, even if a DIFFERENT surface has. Use this for a
+     * follow-up-referent resolution that must not treat a WTA/meeting answer
+     * as the user's own prior manual-chat turn (the reported "concatenated/
+     * unrelated WTA responses leaking into manual chat" defect).
+     */
+    getLastAssistantMessage(surface?: ConversationSurface): string | null {
+        if (surface) {
+            return this.lastAssistantMessageBySurface[surface] ?? null;
+        }
         return this.lastAssistantMessage;
     }
 
-    getAssistantResponseHistory(): AssistantResponse[] {
+    getAssistantResponseHistory(surface?: ConversationSurface): AssistantResponse[] {
+        if (surface) {
+            return this.assistantResponseHistory.filter((r) => r.surface === surface);
+        }
         return this.assistantResponseHistory;
     }
 

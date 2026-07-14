@@ -6,7 +6,7 @@ import { DatabaseManager } from '../db/DatabaseManager';
 // Imported from the leaf module (not the ../llm barrel) to avoid a require cycle.
 import { classifyCustomContext, selectCustomContextForAnswer } from '../llm/customContextClassifier';
 import type { AnswerType } from '../llm/AnswerPlanner';
-import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, sentenceAwareWindows, tabularChunks, type DocumentMap } from './modes/DocumentMap';
+import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, selectTableOfContentsEntries, sentenceAwareWindows, tabularChunks, type DocumentMap } from './modes/DocumentMap';
 import { EVIDENCE_USE_RULE, retrievalDiagnosticsEnabled, diagLog, isBroadDocumentQuery, computeEvidenceCoverage, classifyDocumentQuestionShape } from '../llm/documentGroundedPrompt';
 
 /**
@@ -81,7 +81,7 @@ export interface ModeRetrievalOptions {
     topK?: number;
 }
 
-interface RetrieveOptions extends ModeRetrievalOptions {
+export interface RetrieveOptions extends ModeRetrievalOptions {
     query: string;
     transcript?: string;
     tokenBudget?: number;
@@ -1030,6 +1030,19 @@ export class ModeContextRetriever {
             const m = text.match(/^\[Section\s+([\d.]+)\s*\|/);
             return m ? m[1] : null;
         };
+        const navigationEntriesBySource = new Map<string, Set<string>>();
+        if (forceDocumentGrounding && queryShape === 'document_structure_answer') {
+            for (const source of sources) {
+                if (source.type !== 'reference_file') continue;
+                const entries = selectTableOfContentsEntries(options.query, getCachedDocumentMap(source.id, source.content));
+                if (entries.length > 0) navigationEntriesBySource.set(source.id, new Set(entries));
+            }
+        }
+        const isMatchingNavigationChunk = (sourceId: string, text: string): boolean => {
+            if (!text.startsWith('[Table of Contents |')) return false;
+            const entries = navigationEntriesBySource.get(sourceId);
+            return Boolean(entries && [...entries].some((entry) => text.includes(entry)));
+        };
         // Boost a chunk for being IN a target section or a DESCENDANT of one
         // (a target "2.3" pulls "2.3.2 Technical Specifications"). We do NOT
         // boost ANCESTORS — boosting the broad "2" chapter for a "2.4.2" target
@@ -1103,30 +1116,14 @@ export class ModeContextRetriever {
             // but only the RLDS chunk contains "forma" (from "format").
             return Math.min(0.15, 0.05 * hit);
         };
-        const mercuryControllerQuery = /\bmercury\s*x1\b/i.test(options.query || '')
-            && /\b(?:processor|controller|control\s+system|controls?|main\s+controller|auxiliary\s+controller)\b/i.test(options.query || '');
-        const mercuryControllerScoreAdjust = (chunk: string): number => {
-            if (!forceDocumentGrounding || !mercuryControllerQuery) return 0;
-            const hasMain = /\bJetson\s+Xavier\b/i.test(chunk) && !/\bJetson\s+Xavier\s+NX\b/i.test(chunk);
-            const hasAux = /\bJetson\s+Nano\b/i.test(chunk);
-            const controllerCue = /\b(?:Control\s+System|main\s+controller|auxiliary\s+controller|controlled\s+by|technical\s+specifications?|specifications?)\b/i.test(chunk);
-            const lowLevelEsp32 = /\bESP32\b/i.test(chunk) && /\b(?:motor\s+control|low-level\s+motor|communication\s+board|motor\s+control\s+board)\b/i.test(chunk);
-            let delta = 0;
-            if (controllerCue) delta += 0.12;
-            if (hasMain) delta += 0.18;
-            if (hasAux) delta += 0.18;
-            if (hasMain && hasAux) delta += 0.22;
-            if (lowLevelEsp32 && !(hasMain || hasAux)) delta -= 0.30;
-            return delta;
-        };
-
         const candidates: ModeRetrievedSnippet[] = [];
         for (const source of sources) {
             for (const chunk of chunksForSource(source)) {
+                const navigationMatch = isMatchingNavigationChunk(source.id, chunk);
                 let score = scoreChunk(queryWords, chunk, options.query, forceDocumentGrounding, queryEntityTerms);
                 const boost = sectionBoost(chunkSectionNum(chunk));
                 if (boost > 0) score = Math.min(1, score + boost + contentWordBonus(chunk));
-                score = Math.max(0, Math.min(1, score + mercuryControllerScoreAdjust(chunk)));
+                if (navigationMatch) score = Math.max(score, 0.9);
                 if (score < adaptiveThreshold) continue;
                 candidates.push({
                     sourceId: source.id,
@@ -1381,7 +1378,7 @@ export class ModeContextRetriever {
                     const retryCandidates: ModeRetrievedSnippet[] = [];
                     for (const source of sources) {
                         for (const chunk of chunksForSource(source)) {
-                            const score = Math.max(0, Math.min(1, scoreChunk(retryQueryWords, chunk, retryTerms.join(" "), forceDocumentGrounding, retryEntityTerms) + mercuryControllerScoreAdjust(chunk)));
+                            const score = Math.max(0, Math.min(1, scoreChunk(retryQueryWords, chunk, retryTerms.join(" "), forceDocumentGrounding, retryEntityTerms)));
                             if (score < MIN_RELEVANCE_SCORE) continue;
                             retryCandidates.push({
                                 sourceId: source.id,

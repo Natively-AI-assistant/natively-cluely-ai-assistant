@@ -1,13 +1,15 @@
 import * as crypto from 'crypto';
 import { DatabaseManager } from '../db/DatabaseManager';
 import type { EmbeddingPipeline } from '../rag/EmbeddingPipeline';
-import { ModeContextRetriever, type ModeRetrievalOptions } from './ModeContextRetriever';
+import { ModeContextRetriever, type ModeRetrievalOptions, type RetrieveOptions } from './ModeContextRetriever';
+import type { ModeRetrievedContext as HybridContext } from './modes/ModeHybridRetriever';
 import type { AnswerType } from '../llm/AnswerPlanner';
 import type { ActiveModeInfo } from '../llm/modeProfiles';
 import { classifyCustomContext, selectCustomContextForAnswer } from '../llm/customContextClassifier';
 import { diagLog } from '../llm/documentGroundedPrompt';
 import {
     type ModeSourceContract,
+    CURRENT_MIGRATION_REVISION,
     defaultSourceContractForNewMode,
     migrateSourceContractFromPrompt,
     parseModeSourceContract,
@@ -519,10 +521,21 @@ export class ModesManager {
         // Fix: a 'default_new_mode' contract is NOT yet a real decision — it
         // is re-migrated (and the migration persisted, replacing the seed)
         // once the mode actually HAS a prompt or files to migrate from. A
-        // 'user_selected' or previously-completed 'migrated_from_prompt'
-        // contract is never re-derived (stable, as designed).
+        // 'user_selected' contract is never re-derived (stable, by design).
+        //
+        // Self-heal (rev-2): a contract migrated by an OLDER revision of the
+        // prompt→contract heuristic is re-migrated ONCE so its persisted
+        // authority reflects the corrected logic — e.g. a seminar prompt that
+        // says "default to the thesis, but use my résumé/JD if I ask" was
+        // over-locked to `reference_files_only` by rev 1 and must self-heal to
+        // `reference_files_primary`. This NEVER touches a `user_selected`
+        // contract (the user's explicit choice); only `migrated_from_prompt`
+        // contracts carry a migrationRevision and are eligible.
+        const staleMigration = mode.sourceContract?.origin === 'migrated_from_prompt'
+            && (mode.sourceContract.migrationRevision ?? 1) < CURRENT_MIGRATION_REVISION;
         const needsMigration = !mode.sourceContract
-            || (mode.sourceContract.origin === 'default_new_mode' && (hasCustomPrompt || hasReferenceFiles));
+            || (mode.sourceContract.origin === 'default_new_mode' && (hasCustomPrompt || hasReferenceFiles))
+            || staleMigration;
         if (!needsMigration) return mode.sourceContract!;
         // Profile-facts availability is not known to ModesManager (it lives in
         // KnowledgeOrchestrator/profile services); migration only needs to
@@ -1117,6 +1130,24 @@ export class ModesManager {
      *  DIAGNOSTICS only — NOT used by the false-refusal gate (see setter). */
     public getLastRetrievalConfidence(): number {
         return this.lastRetrievalConfidence;
+    }
+
+    /**
+     * Evidence-execution-repair (2026-07-12): raw hybrid-retrieval passthrough
+     * for EvidenceResolver. Returns the STRUCTURED HybridContext (chunks +
+     * per-chunk scores), not the formatted string the other wrappers below
+     * build — EvidenceResolver needs typed items, not prose. CRITICAL: this
+     * delegates to `this.modeContextRetriever`, the SAME shared instance
+     * `main.ts` wires with `setSharedEmbeddingPipeline()` at RAG-manager init.
+     * A caller that constructs its own `new ModeContextRetriever()` gets an
+     * instance whose `_sharedEmbeddingPipeline` is permanently null — every
+     * `retrieveHybrid()` call on it then hits the `!ensureHybridRetriever()`
+     * guard and returns `{ chunks: [], usedFallback: true }` even when the
+     * mode's files are genuinely indexed and ready, which is exactly the bug
+     * this passthrough exists to prevent a future caller from reintroducing.
+     */
+    public async retrieveHybridRaw(mode: Mode, files: ModeReferenceFile[], options: RetrieveOptions): Promise<HybridContext> {
+        return this.modeContextRetriever.retrieveHybrid(mode, files, options);
     }
 
     /**

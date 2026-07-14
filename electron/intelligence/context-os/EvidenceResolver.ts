@@ -51,6 +51,12 @@ import { allowsEvidence, allowsRetrieval } from './types';
 import type { EvidenceItem, EvidencePack, RejectedEvidenceItem } from './evidencePack';
 import { textCanProveProperty } from './requestedProperty';
 import {
+  deriveEvidenceSufficiency,
+  MIN_ANSWER_CONFIDENCE,
+  selectSmallestSufficientEvidence,
+  type EvidenceSufficiency,
+} from './evidenceSufficiency';
+import {
   isOkfKnowledgePacksEnabled,
   isOkfHybridRetrievalEnabled,
   isRagConfidenceGateEnabled,
@@ -177,11 +183,76 @@ export interface EvidenceResolverDeps {
 }
 
 // ── Confidence floor for "is this pack good enough to answer from" ─────────
-// Deliberately conservative: prefer an honest insufficient-evidence result
-// over a low-confidence fabrication. Matches the incident brief's "prefer a
-// small, high-confidence evidence set" requirement.
-const MIN_ANSWER_CONFIDENCE = 0.32;
+// `MIN_ANSWER_CONFIDENCE` comes from evidenceSufficiency so hybrid gating and
+// final pre-dispatch policy cannot silently diverge.
 const OKF_CARD_HIGH_CONFIDENCE_SCORE = 0.55;
+
+// Generic English function words that carry no topical signal in a question.
+// Deliberately small — only words that appear in nearly every question phrasing.
+const QUESTION_STOPWORDS = new Set([
+  'the', 'a', 'an', 'of', 'in', 'on', 'at', 'to', 'for', 'with', 'and', 'or',
+  'is', 'are', 'was', 'were', 'be', 'been', 'this', 'that', 'these', 'those',
+  'it', 'its', 'as', 'by', 'from', 'has', 'have', 'had', 'not', 'but', 'which',
+  'what', 'when', 'where', 'who', 'whom', 'how', 'why', 'does', 'did', 'do',
+  'my', 'about', 'listed', 'given', 'used', 'named', 'many', 'much', 'two',
+  'three', 'name', 'list', 'there', 'their',
+]);
+
+/**
+ * Tokenize text into lowercased content words. Unicode-aware (`\p{L}\p{N}`) so
+ * accented Latin / CJK terms survive rather than being split into noise. Hyphens
+ * inside a token are kept ("open-source", "6g-networking"). Pure + deterministic.
+ */
+function contentTokens(text: string): string[] {
+  return String(text || '').toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}-]*/gu) || [];
+}
+
+/**
+ * Distinctive content words in a question: lowercased words ≥3 chars that are
+ * neither a generic stopword nor part of one of the question's target entities.
+ * These are the terms whose PRESENCE in an evidence card indicates the card can
+ * actually answer the question — as opposed to the entity words, which a merely
+ * topical parent card also contains. Pure + deterministic.
+ */
+function distinctiveQueryTerms(question: string, targetEntities: string[]): string[] {
+  const entityWords = new Set<string>(targetEntities.flatMap((e) => contentTokens(e)));
+  const words = contentTokens(question)
+    .filter((w) => w.length >= 3 && !QUESTION_STOPWORDS.has(w) && !entityWords.has(w));
+  return [...new Set(words)];
+}
+
+/**
+ * Of the distinctive query terms, the SALIENT ones are those rarest across the
+ * pack's card bodies — the terms that actually pin down the answer-bearing card.
+ * A specific-value question ("what working VOLTAGE is listed…") carries both a
+ * high-frequency filler distinctive word ("working", in many prose cards) and a
+ * low-frequency answer word ("voltage", in ~1 card). Requiring coverage of ANY
+ * distinctive term let "working" spuriously satisfy the gate, so OKF answered
+ * from a topical card that never contained "voltage". Ranking by card
+ * document-frequency and keeping only the rarest tier fixes this generically —
+ * rarity is measured from the pack itself; no term is special-cased.
+ *
+ * Returns the subset of `distinctive` whose card-frequency is at or below the
+ * median (rounded down, min 1), i.e. the more distinctive half. When every term
+ * is equally common the whole set is returned (no term is more salient).
+ */
+function salientDistinctiveTerms(distinctive: string[], cardBodies: string[]): string[] {
+  if (distinctive.length <= 1) return distinctive;
+  const cardWordSets = cardBodies.map((b) => new Set(contentTokens(b)));
+  const df = new Map<string, number>();
+  for (const term of distinctive) {
+    df.set(term, cardWordSets.reduce((acc, set) => acc + (set.has(term) ? 1 : 0), 0));
+  }
+  const sorted = [...distinctive].sort((a, b) => (df.get(a)! - df.get(b)!));
+  const minDf = df.get(sorted[0])!;
+  const maxDf = df.get(sorted[sorted.length - 1])!;
+  // All terms equally frequent → none is more salient; keep all.
+  if (minDf === maxDf) return distinctive;
+  // Keep the rarer half (ties at the cutoff included).
+  const cutoffIdx = Math.max(0, Math.floor(sorted.length / 2) - 1);
+  const cutoffDf = df.get(sorted[cutoffIdx])!;
+  return sorted.filter((t) => df.get(t)! <= cutoffDf);
+}
 
 export class EvidenceResolver {
   constructor(private readonly deps: EvidenceResolverDeps) {}
@@ -282,9 +353,13 @@ export class EvidenceResolver {
     const classification = this.deps.classifyQuestion(question);
 
     const scoredAcrossFiles: Array<{ card: any; score: number; fileId: string }> = [];
+    // All card bodies across the active files — used to measure query-term rarity
+    // for the salient-distinctive-term gate below. Collected once here.
+    const corpusBodies: string[] = [];
     for (const file of files) {
       const pack = this.deps.knowledgeManager.getPackForFile(file.id);
       if (!pack || pack.cards.length === 0) continue;
+      for (const c of pack.cards) corpusBodies.push(`${c.title}\n${c.body}`);
       const scored = this.deps.queryOkfCards(pack, question, classification, { topN: 6, fileId: file.id });
       for (const s of scored) scoredAcrossFiles.push({ ...s, fileId: file.id });
     }
@@ -336,6 +411,40 @@ export class EvidenceResolver {
     // answering from a merely topically-similar card.
     if (requestedProperty !== 'unknown' && !propertySatisfied) return null;
     if (!isHighConfidenceExact && classification.isSynthesis === false) return null;
+
+    // Distinctive-term gate (2026-07-13): OKF scoring is title/entity-centric, so a
+    // specific-fact question that NAMES an entity ("What working voltage is listed
+    // for Mercury X1?") lets the topical PARENT card ("Mercury X1 Robot") win on the
+    // entity match even though the value lives in a generically-titled sub-section
+    // ("Technical Specifications") the parent card never contains. For a
+    // non-synthesis question, require the selected cards to collectively contain at
+    // least one DISTINCTIVE query term — a content word that is NOT one of the
+    // question's target entities and not a generic stopword. When they don't, OKF is
+    // only a topical match; fall through to hybrid RAG, which routes to the exact
+    // sub-section. Generic: distinctiveness is derived from the question itself, no
+    // document/field is special-cased.
+    if (!classification.isSynthesis) {
+      const distinctive = distinctiveQueryTerms(question, classification.targetEntities);
+      if (distinctive.length > 0) {
+        // Fall through to hybrid RAG when the selected OKF cards do not carry a
+        // SALIENT distinctive term — one of the rarest (lowest card-frequency)
+        // non-entity query words, which is what actually pins the answer-bearing
+        // card. Requiring merely ANY distinctive term let a high-frequency filler
+        // word ("working" in "what working voltage…") spuriously retain a topical
+        // parent card that never contained the real answer word ("voltage"). The
+        // answer then lives only in hybrid's section-routed chunk. Checking the
+        // whole selected set (not just the top card) keeps a case where the
+        // answer-bearing card ranked 2nd behind a topical parent.
+        //
+        // Match on WHOLE-WORD membership, not substring: a substring `includes`
+        // would count "storage" as covering the distinctive term "age", spuriously
+        // retaining a topical card. Tokenize the card text into a word set instead.
+        const salient = salientDistinctiveTerms(distinctive, corpusBodies);
+        const cardWords = new Set(items.flatMap((it) => contentTokens(it.text)));
+        const covered = salient.some((term) => cardWords.has(term));
+        if (!covered) return null;
+      }
+    }
 
     const strategy: EvidenceResolutionStrategy = requestedProperty === 'unknown' ? 'okf_exact' : 'okf_property';
     const pack = this.finalizePack(request, items, [], strategy);
@@ -467,19 +576,59 @@ export class EvidenceResolver {
     strategy: EvidenceResolutionStrategy,
   ): EvidencePack {
     const { turnId, sourceContract, requestedProperty, parentPackId, packVersion } = request;
-    const factual = items.filter((i) => i.authority === 'evidence');
-    const propertySatisfied = requestedProperty === 'unknown'
-      ? factual.length > 0
-      : factual.some((i) => i.supports.property === requestedProperty);
-    const confidence = factual.length > 0 ? Math.max(...factual.map((i) => i.score.final)) : 0;
-
+    const classification = this.deps.classifyQuestion(request.question);
+    const factual = items.filter((item) => item.authority === 'evidence');
+    const candidatePack = {
+      items: factual,
+      requestedProperty,
+      coverage: { hasDirectEvidence: factual.length > 0, propertySatisfied: false, entityMatched: false, sourceOwnerSatisfied: true, confidence: 0 },
+      conflicts: [] as EvidencePack['conflicts'],
+    };
+    const initialSufficiency = deriveEvidenceSufficiency({
+      pack: candidatePack,
+      targetEntities: classification.targetEntities,
+      isSynthesis: classification.isSynthesis,
+    });
+    const selectedItems = initialSufficiency.answerable
+      ? selectSmallestSufficientEvidence({
+          items: factual,
+          requestedProperty,
+          answerShape: sourceContract.answerShape,
+          targetEntities: classification.targetEntities,
+          // Property-aware ranking (Priority 2): the distinctive (non-entity,
+          // non-stopword) query terms let selection prefer the chunk that
+          // actually carries the answer value over a merely topical chunk with a
+          // higher raw retrieval score.
+          distinctiveTerms: distinctiveQueryTerms(request.question, classification.targetEntities),
+        })
+      : factual;
+    const selectedIds = new Set(selectedItems.map((item) => item.evidenceId));
+    const excludedItems = factual.filter((item) => !selectedIds.has(item.evidenceId));
+    const selectionRejected: RejectedEvidenceItem[] = excludedItems.map((item) => ({
+      sourceKind: item.sourceKind,
+      sourceId: item.sourceId,
+      textPreview: item.text.slice(0, 80),
+      reason: 'low_confidence',
+    }));
+    const selectedFactual = selectedItems.filter((item) => item.authority === 'evidence');
+    const confidence = selectedFactual.length > 0
+      ? Math.max(...selectedFactual.map((item) => item.score.final || 0))
+      : 0;
+    const sufficiency = deriveEvidenceSufficiency({
+      pack: {
+        items: selectedFactual,
+        requestedProperty,
+        coverage: { hasDirectEvidence: selectedFactual.length > 0, propertySatisfied: false, entityMatched: false, sourceOwnerSatisfied: true, confidence },
+        conflicts: [] as EvidencePack['conflicts'],
+      },
+      targetEntities: classification.targetEntities,
+      isSynthesis: classification.isSynthesis,
+    });
     const answerPolicy = sourceContract.sourceOwner === 'clarify'
       ? 'ask_clarification' as const
-      : factual.length === 0
-        ? 'refuse_insufficient_evidence' as const
-        : (requestedProperty !== 'unknown' && !propertySatisfied)
-          ? 'refuse_insufficient_evidence' as const
-          : 'answer' as const;
+      : sufficiency.answerable
+        ? 'answer' as const
+        : 'refuse_insufficient_evidence' as const;
 
     const version = packVersion ?? 1;
     return {
@@ -489,16 +638,24 @@ export class EvidenceResolver {
       turnId,
       sourceOwner: sourceContract.sourceOwner,
       requestedProperty,
-      items,
-      rejected,
+      items: selectedItems,
+      rejected: [...rejected, ...selectionRejected],
       coverage: {
-        hasDirectEvidence: factual.length > 0,
-        propertySatisfied,
-        entityMatched: factual.length > 0,
-        sourceOwnerSatisfied: factual.every((i) => i.sourceOwner === sourceContract.sourceOwner),
-        confidence,
+        hasDirectEvidence: selectedFactual.length > 0,
+        propertySatisfied: sufficiency.propertySatisfied,
+        entityMatched: sufficiency.entitySatisfied,
+        sourceOwnerSatisfied: selectedFactual.every((item) => item.sourceOwner === sourceContract.sourceOwner),
+        confidence: sufficiency.confidence,
       },
-      conflicts: [],
+      sufficiency,
+      selection: {
+        candidateEvidenceIds: factual.map((item) => item.evidenceId),
+        selectedEvidenceIds: selectedFactual.map((item) => item.evidenceId),
+        excludedEvidenceIds: excludedItems.map((item) => item.evidenceId),
+        strategy: 'smallest_sufficient_set',
+      },
+      resolver: { strategy, attemptedSources: [], retrievedSources: [] },
+      conflicts: [] as EvidencePack['conflicts'],
       answerPolicy,
     };
   }

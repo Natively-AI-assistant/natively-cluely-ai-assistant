@@ -20,6 +20,10 @@ const DEFAULT_ON_KEYS = new Set([
   // resolve to isInternalDevTestContext() = FALSE under this bare node harness.
   'docGroundedStrictIsolation',
   'docGroundedFalseRefusalRepair',
+  // Full-JIT final-answer law — unconditionally `true` everywhere (the intended
+  // production policy, not a dev/test-only experiment), restored 2026-07-14
+  // after the 2026-07-09 stability rollback was resolved.
+  'jitFinalAnswerEnforced',
 ]);
 
 const expectedDefault = (key) => DEFAULT_ON_KEYS.has(key) ? true : false;
@@ -57,6 +61,7 @@ const EXTRA_FLAG_ENV = [
   'NATIVELY_OKF_PROFILE_PACKS', 'NATIVELY_OKF_PROFILE_HYBRID_RETRIEVAL', 'NATIVELY_OKF_PROFILE_MARKDOWN_EXPORT',
   'NATIVELY_OKF_PROFILE_GRAPH_EXPANSION', 'NATIVELY_OKF_PROFILE_KNOWLEDGE_UI',
   'NATIVELY_DOC_GROUNDED_STRICT_ISOLATION', 'NATIVELY_DOC_GROUNDED_FALSE_REFUSAL_REPAIR',
+  'NATIVELY_JIT_FINAL_ANSWER_ENFORCED',
 ];
 
 function clearAll() {

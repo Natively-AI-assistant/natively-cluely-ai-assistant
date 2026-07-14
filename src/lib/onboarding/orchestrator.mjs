@@ -2,9 +2,26 @@
  * OnboardingOrchestrator — .mjs companion exposing the pure decision-engine
  * function for unit tests under `node --test`.
  *
- * The full class (with RAF, pub/sub, event bus) lives in orchestrator.ts. This
- * file re-implements `shouldShowToaster` as a pure function with the same
- * logic so tests can exercise it without DOM polyfills.
+ * The full class (with the drain loop, pub/sub, event bus) lives in
+ * orchestrator.ts. This file re-implements ONLY the pure `shouldShowToaster`
+ * predicate so tests can exercise it without DOM polyfills.
+ *
+ * ⚠️ DO NOT re-add a `getOrchestrator()` / stateful-orchestrator export here.
+ * History (bisected 2026-07-10): this file used to export a NO-OP
+ * `getOrchestrator()` "for test/static contexts". Because the app imported the
+ * orchestrator with an UNQUALIFIED specifier (`'./onboarding/orchestrator'`)
+ * and Vite's default `resolve.extensions` puts `.mjs` BEFORE `.ts`, the
+ * PACKAGED bundle silently resolved THIS no-op stub instead of the real
+ * orchestrator.ts class. Result: `orch.start()` did nothing, no toaster ever
+ * showed, and the stub's `getSnapshot()` returned a fresh object literal every
+ * call → `useSyncExternalStore` infinite-render → "Maximum update depth" →
+ * blank/black launcher (the "stuck at startup" field bug). It was only masked
+ * later by adding explicit `.ts` extensions + a `vite.config.mts`
+ * `resolve.extensions` override (commit 6f32a64). Keeping a stateful export
+ * here re-arms that footgun: if either guardrail regresses, the shadow returns
+ * SILENTLY. By exporting only the pure function, a shadowing regression instead
+ * fails LOUD — `getOrchestrator is not a function` at import — which is what we
+ * want. The real singleton lives exclusively in orchestrator.ts.
  */
 
 /**
@@ -53,8 +70,8 @@ export function shouldShowToaster(config, ctx) {
 }
 
 /**
- * Default UserState — exported here so the orchestrator.ts source-of-truth
- * is mirrored in the .mjs companion that the Vite bundle resolves to.
+ * Default UserState — mirrors orchestrator.ts's DEFAULT_USER_STATE for tests
+ * that build a Ctx without the full class. Pure data, safe to export.
  */
 export const DEFAULT_USER_STATE = {
   isPremium: false,
@@ -72,59 +89,7 @@ export const DEFAULT_USER_STATE = {
   isV2_8_OrNewer: true,
 };
 
-/**
- * No-op orchestrator handle for use in test/static contexts where the real
- * singleton isn't available. Returns the same shape as getOrchestrator() so
- * callers can call .emit() / .subscribe() without crashing — but they're
- * all no-ops.
- */
-export function getOrchestrator() {
-  if (!getOrchestrator.__instance) {
-    getOrchestrator.__instance = createNoopOrchestrator();
-  }
-  return getOrchestrator.__instance;
-}
-
-function createNoopOrchestrator() {
-  const noop = () => {};
-  // Referentially STABLE snapshot object — React's useSyncExternalStore
-  // (used by OrchestratedToasterHost.tsx) compares consecutive getSnapshot()
-  // return values with Object.is(). A fresh object literal on every call
-  // always compares unequal, which React interprets as "the store changed
-  // mid-render" and immediately re-renders to re-check — forever. That
-  // infinite render loop trips React's "Maximum update depth exceeded"
-  // safety valve, which unmounts the entire tree (blank #root / black
-  // screen) since nothing here ever wraps in an error boundary that can
-  // recover from a render-phase throw. Returning the SAME object every call
-  // (this noop orchestrator's state truly never changes) is what
-  // useSyncExternalStore requires. See orchestrator.ts's real getSnapshot(),
-  // which already returns `this.state` (a stable reference) for the same
-  // reason.
-  const snapshot = {
-    version: '1.0',
-    startupCount: 0,
-    totalUsageMs: 0,
-    turnCount: 0,
-    homepageMountedAt: null,
-    homepageFrozenAt: null,
-    homepageCurrentlyMounted: false,
-    appInForeground: true,
-    meetingActive: false,
-    queue: [],
-    completed: {},
-    skipped: new Set(),
-    activeToasterId: null,
-    lastShownTimes: {},
-  };
-  return {
-    start: noop,
-    stop: noop,
-    emit: noop,
-    subscribe: () => noop,
-    getSnapshot: () => snapshot,
-    markDismissed: noop,
-    markSkipped: noop,
-    setUserState: noop,
-    getUserState: () => DEFAULT_USER_STATE,
-  };
-}
+// NOTE: a stateful `getOrchestrator()` export was DELIBERATELY REMOVED here
+// (2026-07-10) — see the file header. The real, only orchestrator singleton
+// is `getOrchestrator()` in orchestrator.ts. Re-adding one here silently
+// shadows it in the Vite bundle and reintroduces the blank-launcher bug.

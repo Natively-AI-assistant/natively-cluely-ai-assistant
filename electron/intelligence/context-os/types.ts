@@ -81,6 +81,8 @@ export type RequestedProperty =
   | 'candidate_experience'
   | 'candidate_identity'
   | 'role_requirement'
+  | 'document_structure'
+  | 'document_metadata'
   | 'unknown';
 
 // ── Voice perspective ────────────────────────────────────────────────────────

@@ -1048,6 +1048,8 @@ import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
 import { NativeOomTrace } from './utils/NativeOomTrace'
 
+// Opt-in only: this trace writes allowlisted process metadata and IPC byte estimates
+// for a copied-profile native OOM investigation. It is inert unless explicitly enabled.
 const nativeOomTrace = new NativeOomTrace()
 
 // Valid disguise modes. The persisted setting is untyped on disk and historical
@@ -1080,6 +1082,9 @@ export class AppState {
   private ragManager: RAGManager | null = null
   private modeReferenceRetryPromise: Promise<void> | null = null
   private stabilityHeartbeatTimer: NodeJS.Timeout | null = null
+  // Diagnostic-only, independently paced native-memory sampler. Normal product
+  // heartbeats remain at 30 seconds; this exists only for a short-lived OOM run.
+  private nativeOomTraceTimer: NodeJS.Timeout | null = null
   private knowledgeOrchestrator: any = null
 
   public recordNativeOomTrace(event: string, data: Record<string, unknown> = {}): void {
@@ -1090,13 +1095,14 @@ export class AppState {
     nativeOomTrace.recordOutboundIpc(webContentsId, channel, args)
   }
 
-  public startNativeOomContentTrace(launcherPid: number): void {
-    void nativeOomTrace.startContentTrace(launcherPid)
+  public armNativeOomContentTrace(launcherPid: number): void {
+    nativeOomTrace.armContentTrace(launcherPid)
   }
 
   public stopNativeOomContentTrace(reason: string): void {
     void nativeOomTrace.stopContentTrace(reason)
   }
+
   private tray: Tray | null = null
   private updateAvailable: boolean = false
   private updateDownloadState: 'idle' | 'available' | 'downloading' | 'downloaded' = 'idle'
@@ -1634,17 +1640,6 @@ export class AppState {
         serviceTier: settingsManager.get('codexCliServiceTier') || 'default',
         modelReasoningEffort: settingsManager.get('codexCliModelReasoningEffort'),
       });
-      // Restore custom notes and persona for non-premium path
-      try {
-        const savedNotes = DatabaseManager.getInstance().getCustomNotes();
-        if (savedNotes) {
-          llmHelper.setCustomNotes(savedNotes);
-        }
-        const savedPersona = DatabaseManager.getInstance().getPersona();
-        if (savedPersona) {
-          llmHelper.setPersonaPrompt(savedPersona);
-        }
-      } catch (_) {}
     }
 
     // Initialize RAGManager (requires database to be ready)
@@ -1680,6 +1675,7 @@ export class AppState {
     this.setupAutoUpdater()
 
     this.startStabilityHeartbeat();
+    this.startNativeOomTraceSampling();
   }
 
   private startStabilityHeartbeat(): void {
@@ -1738,26 +1734,7 @@ export class AppState {
             .sort((a: any, b: any) => b.rssMB - a.rssMB);
         } catch { /* getAppMetrics unavailable pre-ready — skip */ }
 
-        if (nativeOomTrace.isEnabled()) {
-          nativeOomTrace.sample(
-            mem,
-            (() => {
-              try {
-                return (app.getAppMetrics?.() || []) as unknown as Array<Record<string, unknown>>;
-              } catch {
-                return [];
-              }
-            })(),
-            (() => {
-              const launcher = this.windowHelper?.getLauncherWindow?.();
-              if (!launcher || launcher.isDestroyed()) return undefined;
-              const webContentsId = launcher.webContents.id;
-              const pid = launcher.webContents.getOSProcessId();
-              return pid > 0 ? { webContentsId, pid } : undefined;
-            })(),
-            { freeMemory: os.freemem(), totalMemory: os.totalmem() },
-          );
-        }
+        this.sampleNativeOomTrace(mem);
 
         console.log('[StabilityHeartbeat]', {
           rssMB: mb(mem.rss),
@@ -1786,6 +1763,41 @@ export class AppState {
     setTimeout(emit, 10_000).unref?.();
     this.stabilityHeartbeatTimer = setInterval(emit, 30_000);
     this.stabilityHeartbeatTimer.unref?.();
+  }
+
+  private sampleNativeOomTrace(memory = process.memoryUsage()): void {
+    if (!nativeOomTrace.isEnabled()) return;
+    nativeOomTrace.sample(
+      memory,
+      (() => {
+        try {
+          return (app.getAppMetrics?.() || []) as unknown as Array<Record<string, unknown>>;
+        } catch {
+          return [];
+        }
+      })(),
+      (() => {
+        const launcher = this.windowHelper?.getLauncherWindow?.();
+        if (!launcher || launcher.isDestroyed()) return undefined;
+        const pid = launcher.webContents.getOSProcessId();
+        return pid > 0 ? { webContentsId: launcher.webContents.id, pid } : undefined;
+      })(),
+      { freeMemory: os.freemem(), totalMemory: os.totalmem() },
+    );
+  }
+
+  private startNativeOomTraceSampling(): void {
+    if (!nativeOomTrace.isEnabled() || this.nativeOomTraceTimer) return;
+    // A prior incident rose from 497 MB to more than 2 GB in roughly four
+    // seconds; the ordinary 30-second heartbeat cannot observe that onset.
+    this.nativeOomTraceTimer = setInterval(() => this.sampleNativeOomTrace(), 1000);
+    this.nativeOomTraceTimer.unref?.();
+  }
+
+  public stopNativeOomTraceSampling(): void {
+    if (!this.nativeOomTraceTimer) return;
+    clearInterval(this.nativeOomTraceTimer);
+    this.nativeOomTraceTimer = null;
   }
 
   private sendToWindow(win: BrowserWindow | null | undefined, channel: string, ...args: any[]): boolean {
@@ -2220,25 +2232,6 @@ export class AppState {
           if (this.knowledgeOrchestrator.isKnowledgeMode()) {
             llmHelper.prewarmPromptCache().catch((_e: any): void => {});
           }
-        }
-
-        // Restore custom notes so orchestrator has them from first request
-        const savedNotes = DatabaseManager.getInstance().getCustomNotes();
-        if (savedNotes) {
-          this.knowledgeOrchestrator.setCustomNotes(savedNotes);
-          llmHelper.setCustomNotes(savedNotes);
-          console.log('[AppState] Custom notes restored');
-        }
-
-        // Restore persona prompt so it is active from first request (not just after the UI mounts)
-        try {
-          const savedPersona = DatabaseManager.getInstance().getPersona();
-          if (savedPersona) {
-            llmHelper.setPersonaPrompt(savedPersona);
-            console.log('[AppState] Persona prompt restored');
-          }
-        } catch (personaErr: any) {
-          console.warn('[AppState] Persona restore failed, continuing without it:', personaErr?.message);
         }
 
         console.log('[AppState] KnowledgeOrchestrator initialized');
@@ -6854,8 +6847,40 @@ async function initializeApp() {
   logStartupPhase('before-app-whenReady');
   await app.whenReady()
   nativeOomTrace.initialize()
-  nativeOomTrace.record('app-ready', { pid: process.pid, platform: process.platform, electron: process.versions.electron })
+  nativeOomTrace.record('app-ready', {
+    pid: process.pid,
+    platform: process.platform,
+    electron: process.versions.electron,
+  })
   logStartupPhase('after-app-whenReady', { userData: app.getPath('userData') });
+
+  // 2a-verify. Context OS flag-parity assertion (2026-07-14 real-app
+  // source-switch repair): no-op unless NATIVELY_VERIFICATION_MODE=1 is
+  // explicitly set (internal benchmark/CI/soak runs only). Fails fast and
+  // loudly if this Electron process's effective flags don't match what a
+  // verification run assumes — the exact class of drift that let the
+  // benchmark and the real app silently exercise different Context OS
+  // behavior on the same build.
+  //
+  // HARD EXIT (code-review 2026-07-14 round 2): a throw here would otherwise
+  // propagate into initializeApp()'s generic top-level .catch(), which logs
+  // but never exits — leaving a half-initialized, windowless process alive
+  // indefinitely. That defeats the whole point for a CI/soak harness, which
+  // needs an unambiguous nonzero exit code, not a hang it has to time out on.
+  // Mirrors the existing [nativeArch] gate precedent (main.ts ~line 219):
+  // print the reason, then app.exit(1) (or process.exit(1) if Electron's
+  // app isn't available, e.g. under a bare-Node verification harness).
+  try {
+    const { assertVerificationFlagsOrThrow } = require('./intelligence/intelligenceFlags') as typeof import('./intelligence/intelligenceFlags');
+    assertVerificationFlagsOrThrow();
+  } catch (verifyErr: any) {
+    console.error('[ContextOS] verification flag assertion failed — exiting:', verifyErr?.message || verifyErr);
+    if (typeof app?.exit === 'function') {
+      app.exit(1);
+    } else {
+      process.exit(1);
+    }
+  }
 
   // 2a. PRE-EMPTIVE dock hide / activation-policy clamp: must happen before ANY
   // operation that causes macOS to register a dock entry (app.setName, the
@@ -7161,10 +7186,14 @@ if (process.env.THINKING_MATRIX === '1') {
   });
 
   // DIAGNOSTIC (2026-07-11): dump Chromium's GPU feature status once at boot.
-  // This records whether gpu_compositing and rasterization are hardware enabled
-  // or software/disabled, which is useful context when investigating a renderer
-  // hang. The onboarding scheduler must still allow the renderer to become idle
-  // regardless of the reported compositing mode.
+  // The "window appears then freezes / renderer not responsive" report is
+  // consistent with a machine that fell back to SOFTWARE compositing (Chromium
+  // blocklisted the GPU / driver state), where the launcher splash's heavy
+  // blur/backdrop-filter becomes catastrophically expensive and can wedge the
+  // renderer's main thread. This logs, in one line, whether gpu_compositing and
+  // rasterization are 'enabled' (hardware) or 'software'/'disabled'. If a user
+  // who freezes shows software/disabled here while a healthy machine shows
+  // enabled, the compositing path is confirmed and `?nofx=1` should unblock it.
   try {
     const status = app.getGPUFeatureStatus();
     console.log('[GPU] featureStatus', JSON.stringify(status));
@@ -7470,6 +7499,7 @@ if (process.env.THINKING_MATRIX === '1') {
   }
 
   app.on('will-quit', () => {
+    appState.stopNativeOomTraceSampling();
     nativeOomTrace.stop('will-quit');
     stopAppManagedHindsight('will-quit');
     checkpointDatabase('will-quit');

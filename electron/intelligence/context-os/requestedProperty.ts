@@ -71,6 +71,48 @@ export const PROPERTY_RULES: readonly PropertyRule[] = [
     evidencePatterns: [/\brequire(?:s|d|ment)?\b/i, /\bjob\s+description\b/i, /\bmust\s+have\b/i, /\bqualifications?\b/i],
   },
   {
+    // Document-identity / title-page metadata (author, title, date, language,
+    // advisors, supervisor, keywords, degree, institution). Ordered BEFORE
+    // document_structure and software_stack so "what LANGUAGE is the thesis
+    // written in?" reads as document metadata, not a programming-language
+    // (software_stack) question. Generic label vocabulary — no document values.
+    property: 'document_metadata',
+    questionPatterns: [
+      /\bwho\s+(?:is|wrote|are)\s+the\s+(?:author|writer|authors)\b/i,
+      /\bauthor\s+of\s+the\b/i,
+      /\b(?:full\s+)?title\s+of\s+the\s+(?:thesis|paper|document|report|dissertation)\b/i,
+      /\b(?:name|list)\s+(?:an?\s+|the\s+|one\s+|two\s+)?(?:advisors?|supervisors?|examiners?)\b/i,
+      /\b(?:advisors?|supervisors?|examiners?)\s+listed\b/i,
+      /\b(?:what|which)\s+date\s+(?:is|does|listed)\b/i,
+      /\bdate\s+(?:is\s+)?listed\s+for\s+the\b/i,
+      /\b(?:what|which)\s+language\s+(?:is|was)\s+the\s+(?:thesis|paper|document|report|it)\b/i,
+      /\b(?:what|which)\s+(?:institution|university|degree|department)\s+(?:is|are|does|listed)\b/i,
+      /\b(?:keywords?)\s+(?:listed|for\s+the)\b/i,
+      /\b(?:name|list)\s+(?:one|two|three|the|some)?\s*keywords?\b/i,
+    ],
+    // Evidence: a "Label: value" front-matter card OR a plain title-page label
+    // line. Requires a metadata LABEL token, so topical prose that merely uses
+    // the word "language" or "date" cannot prove it.
+    evidencePatterns: [
+      /\b(?:author|title|advisors?|supervisors?|examiners?|date|language|keywords?|degree\s+programme?|department|institution|number\s+of\s+pages)\s*[:\-]/i,
+      /\b(?:Author|Title|Advisors?|Supervisors?|Date|Language|Keywords?)\b.{0,60}$/im,
+    ],
+  },
+  {
+    property: 'document_structure',
+    questionPatterns: [
+      /\btable\s+of\s+contents\b/i,
+      /\b(?:title|name)\s+of\s+(?:chapter|section)\s+\d{1,2}\b/i,
+      /\b(?:what|which)\s+page\s+(?:does|do|is|are|begins?|starts?)\b/i,
+      /\b(?:how\s+many|number\s+of)\s+(?:chapters?|sections?)\b/i,
+      /\bchapter\s+\d{1,2}\b/i,
+    ],
+    // Navigation entries must carry a numbered heading plus a printed page.
+    // This prevents topical prose that merely mentions a chapter from proving a
+    // title/page question.
+    evidencePatterns: [/^\s*\[Table of Contents\s*\|[^\n]*\][\s\S]*^\s*\d+(?:\.\d+){0,3}\s+.+?\s+\d{1,3}\s*$/im],
+  },
+  {
     property: 'funding_source',
     questionPatterns: [
       /\bwho\s+funded\b/i,

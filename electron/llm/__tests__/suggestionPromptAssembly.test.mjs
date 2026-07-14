@@ -43,14 +43,14 @@ test('generateSuggestion prepends mode context before transcript context', () =>
 
 test('generateSuggestion keeps active mode suffix in system prompt without user context', () => {
   assert.match(generateSuggestionSource, /const basePrompt = activeModePrompt[\s\S]*\? `\$\{HARD_SYSTEM_PROMPT\}\\n\\n## ACTIVE MODE\\n\$\{activeModePrompt\}`/);
-  assert.doesNotMatch(generateSuggestionSource, /\$\{activeModePrompt\}\$\{customNotesBlock\}/);
 });
 
-test('generateSuggestion sends custom notes and mode context as user message content', () => {
-  // INVARIANT (not exact source shape): custom notes + retrieved mode context are
-  // combined into `suggestionContext` and passed as the USER-content arg, while
-  // `basePrompt` (the trusted system prompt) carries only the mode persona suffix.
-  assert.match(generateSuggestionSource, /const suggestionContext = \[customNotesBlock, enrichedContext\]\.filter\(Boolean\)\.join\('\\n\\n'\);/);
+test('generateSuggestion sends mode context as user message content', () => {
+  // INVARIANT (not exact source shape): the retrieved mode context is passed
+  // through as `suggestionContext` (the USER-content arg), while `basePrompt`
+  // (the trusted system prompt) carries only the mode persona suffix. The
+  // global "Custom Context" textarea that used to be folded in here was removed.
+  assert.match(generateSuggestionSource, /const suggestionContext = enrichedContext;/);
   // The streaming providers receive suggestionContext as the 3rd (context) arg
   // and basePrompt as the 4th (systemPrompt) arg — context is NOT folded into the
   // system prompt. Two streaming branches (custom/curl provider + default client).
@@ -63,11 +63,6 @@ test('generateSuggestion sends custom notes and mode context as user message con
   // the raw promptMessage concatenated into it.
   assert.doesNotMatch(generateSuggestionSource, /generateWithFlash\(\[\{ text: `\$\{systemPrompt\}/);
   assert.doesNotMatch(generateSuggestionSource, /\$\{systemPrompt\}\\n\\n\$\{promptMessage\}/);
-});
-
-test('generateSuggestion does not append custom notes to any system prompt branch', () => {
-  assert.doesNotMatch(generateSuggestionSource, /basePrompt[\s\S]*customNotesBlock/);
-  assert.doesNotMatch(generateSuggestionSource, /Never hedge\. Never say "it depends"\.\$\{customNotesBlock\}/);
 });
 
 test('WhatToAnswerLLM does not append active mode context to system prompt override', () => {

@@ -166,6 +166,19 @@ function answerContractFor(answerType: AnswerType, templateType?: string): Answe
     case 'behavioral_interview_answer':
     case 'gap_analysis_answer':
     case 'negotiation_answer':
+    // JD-source + resume+JD mix shapes (2026-07-07, AnswerPlanner). Added here
+    // 2026-07-11 — these were routed to the 'general_assistant' default, which
+    // drops the detailed-interview answer contract for a genuinely detailed
+    // profile/JD answer. Missing from this switch is exactly the class of bug
+    // the Context OS ownership audit looks for: ProfileOutputValidator already
+    // treats all six as profile answer types (2026-07-07), but ContextRouter's
+    // contract mapping had drifted out of sync with AnswerPlanner.
+    case 'jd_summary_answer':
+    case 'jd_requirements_answer':
+    case 'jd_fact_answer':
+    case 'resume_jd_fit_answer':
+    case 'resume_jd_gap_answer':
+    case 'resume_jd_intro_answer':
       return 'interview_detailed';
     default:
       return 'general_assistant';
@@ -290,10 +303,15 @@ export function routeContext(
 
   // HYBRID RAG: in-meeting search, JD-fit evidence, or backward recall. Not for a
   // pure identity/name ask (ProfileTree answers those deterministically).
+  // resume_jd_fit_answer / resume_jd_gap_answer (2026-07-07) are the same
+  // evidence-comparison shape as jd_fit_answer (candidate facts vs JD
+  // requirements) and were missing here — added 2026-07-11.
   const useHybridRag =
     isInMeetingSearch ||
     isRecallQuery ||
     answerType === 'jd_fit_answer' ||
+    answerType === 'resume_jd_fit_answer' ||
+    answerType === 'resume_jd_gap_answer' ||
     answerType === 'source_code_evidence_answer';
 
   // LECTURE / DIAGRAM (Phase 6 V2): only meaningful in lecture mode.

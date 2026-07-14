@@ -3,11 +3,49 @@
 // Contract tests for the opt-in native OOM trace. The production module imports
 // Electron, so the inlined harness mirrors only the filesystem, privacy, IPC,
 // and tracing lifecycle contract and remains runnable in bare node --test.
+// A second block of tests below asserts directly against the .ts source for
+// behavior that isn't practical to mirror in the inlined harness (RSS-threshold
+// arming, ledger-clear-on-sample).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { tmpdir } from 'node:os';
+import { build } from 'esbuild';
 
 const MAX_TRACE_BYTES = 5 * 1024 * 1024;
+let NativeOomTrace;
+
+async function loadNativeOomTrace() {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const entry = path.resolve(here, '..', 'NativeOomTrace.ts');
+  const result = await build({
+    entryPoints: [entry],
+    bundle: true,
+    format: 'esm',
+    platform: 'node',
+    write: false,
+    logLevel: 'silent',
+    plugins: [{
+      name: 'electron-test-stub',
+      setup(esbuild) {
+        esbuild.onResolve({ filter: /^electron$/ }, () => ({ path: 'electron', namespace: 'test-stub' }));
+        esbuild.onLoad({ filter: /.*/, namespace: 'test-stub' }, () => ({
+          contents: 'export const app = {}; export const contentTracing = {};',
+          loader: 'js',
+        }));
+      },
+    }],
+  });
+  const dir = fs.mkdtempSync(path.join(tmpdir(), 'native-oom-trace-'));
+  const outFile = path.join(dir, 'NativeOomTrace.mjs');
+  fs.writeFileSync(outFile, result.outputFiles[0].text);
+  return import(pathToFileURL(outFile).href);
+}
+
+NativeOomTrace = (await loadNativeOomTrace()).NativeOomTrace;
 
 const SAFE_STRING_FIELDS = new Set(['event', 'platform', 'electron', 'window', 'reason', 'type', 'channel']);
 const SAFE_NUMBER_FIELDS = new Set([
@@ -166,4 +204,82 @@ test('content tracing stays off unless both diagnostic flags are enabled', async
   trace = makeTrace({ enabled: true, contentTraceEnabled: false });
   await trace.startContentTrace(4321);
   assert.deepEqual(trace.tracing.starts, []);
+});
+
+test('actual trace records the RSS threshold crossing once across repeated samples', async () => {
+  const writes = [];
+  const traceFs = {
+    appendFileSync: (_path, line) => writes.push(JSON.parse(line)),
+    existsSync: () => false,
+    mkdirSync: () => {},
+    statSync: () => ({ size: 0 }),
+  };
+  const starts = [];
+  const actual = new NativeOomTrace({
+    enabled: true,
+    contentTraceEnabled: true,
+    electronApp: { getPath: () => '/tmp/natively-test' },
+    tracing: {
+      startRecording: async (options) => { starts.push(options); },
+      stopRecording: async () => {},
+    },
+    traceFs,
+    now: () => 1,
+  });
+  const memory = (rss) => ({ rss, heapUsed: 1, heapTotal: 1, external: 1, arrayBuffers: 1 });
+
+  actual.initialize();
+  actual.armContentTrace(4321);
+  actual.sample(memory(100 * 1024 * 1024), [], { webContentsId: 7, pid: 4321 });
+  actual.sample(memory(700 * 1024 * 1024), [], { webContentsId: 7, pid: 4321 });
+  actual.sample(memory(800 * 1024 * 1024), [], { webContentsId: 7, pid: 4321 });
+  await Promise.resolve();
+
+  assert.equal(
+    writes.filter((record) => record.event === 'rss-growth-threshold-crossed').length,
+    1,
+    'the threshold event should be recorded once per trace session',
+  );
+  assert.equal(starts.length, 1, 'the content trace should still start once');
+  actual.stop('test-complete');
+});
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const source = fs.readFileSync(path.resolve(here, '..', 'NativeOomTrace.ts'), 'utf8');
+
+test('native OOM trace is explicitly opt-in and bounded', () => {
+  assert.match(source, /NATIVELY_NATIVE_OOM_TRACE/);
+  assert.match(source, /NATIVELY_NATIVE_OOM_CONTENT_TRACE/);
+  assert.match(source, /MAX_TRACE_BYTES = 5 \* 1024 \* 1024/);
+  assert.match(source, /CONTENT_TRACE_DURATION_MS = 25_000/);
+  assert.match(source, /trace_buffer_size_in_kb: 16 \* 1024/);
+});
+
+test('native OOM trace allowlist excludes payload text and credentials', () => {
+  assert.match(source, /const SAFE_STRING_FIELDS/);
+  assert.match(source, /const SAFE_NUMBER_FIELDS/);
+  assert.match(source, /const SAFE_OBJECT_FIELDS/);
+  assert.doesNotMatch(source, /'text'/);
+  assert.doesNotMatch(source, /'prompt'/);
+  assert.doesNotMatch(source, /'apiKey'/);
+  assert.match(source, /Payload values are never written to disk/);
+});
+
+test('native OOM trace records only estimated IPC payload sizes', () => {
+  assert.match(source, /recordOutboundIpc\(webContentsId: number, channel: string, args: unknown\[\]\)/);
+  assert.match(source, /estimatedBytes/);
+  assert.match(source, /estimateValueBytes/);
+  assert.match(source, /ipc: this\.ledgerSnapshot\(\)/);
+});
+
+test('native OOM trace clears its interval IPC ledger after each sample', () => {
+  assert.match(source, /this\.ledger\.clear\(\)/);
+  assert.match(source, /Each sample reports the preceding heartbeat interval/);
+});
+
+test('native OOM trace arms content tracing only after a bounded RSS-growth threshold', () => {
+  assert.match(source, /CONTENT_TRACE_RSS_DELTA_BYTES = 512 \* 1024 \* 1024/);
+  assert.match(source, /CONTENT_TRACE_RSS_MULTIPLIER = 2/);
+  assert.match(source, /armContentTrace\(launcherPid: number\)/);
+  assert.match(source, /rss-growth-threshold-crossed/);
 });

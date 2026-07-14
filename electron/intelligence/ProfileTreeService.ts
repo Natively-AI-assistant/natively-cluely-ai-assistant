@@ -187,8 +187,15 @@ export class ProfileTreeService {
   }
 
   /**
-   * JD fit — combines profile + the active JD (skill/experience matching). Returns
-   * null when no JD is loaded or no anchors match (caller can then defer to the LLM).
+   * JD fit — combines profile + the active JD (skill/experience matching).
+   * Returns null only when there is no usable profile evidence at all (no
+   * anchors match). When a JD-fit question is asked WITHOUT a JD loaded, this
+   * still returns a JIT prompt grounded in the candidate's own skills/
+   * experience/projects (never fabricated JD facts — the prompt simply omits
+   * any <target_job_evidence> section and hints the model to answer from
+   * profile evidence only). (docstring corrected 2026-07-11: the previous
+   * "returns null when no JD is loaded" claim no longer matched
+   * selectManualProfileEvidence's JD_FIT_PATTERNS fallback branch.)
    */
   getRoleFit(): string | null {
     return this.answer(Q.roleFit);

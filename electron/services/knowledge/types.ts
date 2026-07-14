@@ -48,6 +48,11 @@ export type KnowledgeCardType =
   | 'methodology'
   | 'result'
   | 'conclusion'
+  // Atomic front-matter / title-page metadata fact (author, title, date,
+  // language, advisors, keywords, …). One property per card — the smallest
+  // sufficient evidence unit for a document-identity question. See
+  // FrontMatterExtractor.ts.
+  | 'metadata'
   // OKF Profile Intelligence card types (2026-07-02). Deterministic transform
   // of the premium engine's structured_data + AOT artifacts. Each maps to a
   // human-readable OKF `type` in OkfMarkdownExporter.
