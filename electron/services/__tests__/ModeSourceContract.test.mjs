@@ -109,6 +109,38 @@ test('defaultSourceContractForNewMode: brand-new mode defaults to clarify, never
   assert.equal(contract.origin, 'default_new_mode');
 });
 
+test('defaultSourceContractForNewMode: per-template allowedExplicitSwitches (renderer parity)', () => {
+  // The seed must mirror the renderer's per-mode default table so a freshly
+  // created mode lands on the correct dots without the renderer needing an
+  // 'origin !== user_selected' guard. Pre-Fix-B the seed had every switch
+  // listed, which forced the renderer to ignore it on every new mode.
+  // Regression: keep this in sync with DEFAULT_BY_TEMPLATE in the renderer.
+  const cases = [
+    { template: undefined,           expect: ['reference_files'] },
+    { template: 'general',           expect: ['reference_files'] },
+    { template: 'sales',             expect: ['reference_files'] },
+    { template: 'recruiting',        expect: ['reference_files'] },
+    { template: 'team-meet',         expect: ['reference_files'] },
+    { template: 'lecture',           expect: ['reference_files'] },
+    { template: 'looking-for-work',  expect: ['profile', 'job_description'] },
+    { template: 'technical-interview', expect: ['profile', 'job_description'] },
+  ];
+  for (const { template, expect: expected } of cases) {
+    const contract = defaultSourceContractForNewMode(template);
+    assert.deepEqual(
+      contract.allowedExplicitSwitches,
+      expected,
+      `templateType=${template ?? '(undefined)'} should seed ${JSON.stringify(expected)}`,
+    );
+    // Per Fix A and the always-on transcript design: deprecated 'transcript'
+    // is NEVER seeded, regardless of template type.
+    assert.ok(
+      !contract.allowedExplicitSwitches.includes('transcript'),
+      `templateType=${template ?? '(undefined)'} must not seed 'transcript'`,
+    );
+  }
+});
+
 test('buildUserSelectedSourceContract: reference_files + no switches → reference_files_only', () => {
   const contract = buildUserSelectedSourceContract({ defaultOwner: 'reference_files' });
   assert.equal(contract.sourceAuthority, 'reference_files_only');

@@ -451,7 +451,7 @@ export class ModesManager {
 
     public createMode(params: { name: string; templateType: ModeTemplateType }): Mode {
         const id = `mode_${crypto.randomUUID()}`;
-        const initialContract = defaultSourceContractForNewMode();
+        const initialContract = defaultSourceContractForNewMode(params.templateType);
         DatabaseManager.getInstance().createMode({
             id,
             name: params.name,

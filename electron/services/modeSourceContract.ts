@@ -117,12 +117,31 @@ const EVIDENCE_REQUIRED_FOR_AUTHORITY: Record<ModeSourceAuthority, boolean> = {
   ask_if_ambiguous: false,
 };
 
-/** A brand-new mode with no reference files / prompt yet: safe, ambiguous-aware default. */
-export function defaultSourceContractForNewMode(): ModeSourceContract {
+/**
+ * A brand-new mode with no reference files / prompt yet: safe, ambiguous-aware default.
+ *
+ * `templateType` is honored so the seed matches the renderer's per-mode default
+ * table (general / sales / recruiting / team-meet / lecture → reference_files,
+ * looking-for-work / technical-interview → profile + job_description). Without
+ * template awareness the seed listed every switch and the renderer would have
+ * to ignore it on every freshly-created mode.
+ *
+ * The deprecated 'transcript' switch is never seeded; it's always available
+ * via ProviderDataScope during STT sessions, never as a user-settable switch.
+ */
+export function defaultSourceContractForNewMode(
+  templateType?: string,
+): ModeSourceContract {
+  let allowedExplicitSwitches: string[];
+  if (templateType === 'looking-for-work' || templateType === 'technical-interview') {
+    allowedExplicitSwitches = ['profile', 'job_description'];
+  } else {
+    allowedExplicitSwitches = ['reference_files'];
+  }
   return {
     version: 1,
     defaultOwner: 'clarify',
-    allowedExplicitSwitches: ['reference_files', 'profile', 'job_description', 'transcript'],
+    allowedExplicitSwitches,
     sourceAuthority: 'ask_if_ambiguous',
     evidenceRequired: false,
     conflictPolicy: 'ask_clarification',
