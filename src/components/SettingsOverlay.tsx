@@ -1420,16 +1420,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                         }}
                         className="bg-bg-elevated w-full max-w-4xl h-[80vh] rounded-2xl border border-border-subtle shadow-2xl overflow-hidden relative"
                     >
-                        {/* Top-right close button — always visible, never clipped.
-                            Hidden during opacity preview to match #settings-panel visibility. */}
-                        <button
-                            onClick={onClose}
-                            style={{ visibility: isPreviewingOpacity ? 'hidden' : 'visible' }}
-                            className="absolute top-4 right-4 z-50 p-2 rounded-xl bg-bg-elevated/80 backdrop-blur-sm border border-border-subtle text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50 transition-all"
-                            title="Close settings"
-                        >
-                            <X size={20} strokeWidth={2} />
-                        </button>
                         <div
                             id="settings-panel"
                             className="flex w-full h-full"
@@ -1437,6 +1427,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                         >
                         {/* Sidebar */}
                         <div className="w-64 bg-bg-sidebar flex flex-col border-r border-border-subtle">
+                            <button
+                                onClick={onClose}
+                                className="self-start ml-2 mt-2 mb-1 p-1.5 rounded-md text-text-tertiary hover:text-text-primary transition-colors"
+                                title="Close"
+                                aria-label="Close"
+                            >
+                                <X size={15} />
+                            </button>
                             <div className="p-6 pb-2 overflow-y-auto flex-1 min-h-0">
                                 <h2 className="font-semibold text-gray-400 text-xs uppercase tracking-wider mb-2">Settings</h2>
                                 <nav className="space-y-1">
@@ -1527,9 +1525,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                     className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-3"
                                 >
                                     <LogOut size={16} /> Quit Natively
-                                </button>
-                                <button onClick={onClose} className="group mt-2 w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50 transition-colors flex items-center gap-3">
-                                    <X size={18} className="group-hover:text-red-500 transition-colors" /> Close
                                 </button>
                             </div>
                         </div>
