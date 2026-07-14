@@ -1420,6 +1420,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                         }}
                         className="bg-bg-elevated w-full max-w-4xl h-[80vh] rounded-2xl border border-border-subtle shadow-2xl overflow-hidden relative"
                     >
+                        {/* Top-right close button — always visible, never clipped.
+                            Hidden during opacity preview to match #settings-panel visibility. */}
+                        <button
+                            onClick={onClose}
+                            style={{ visibility: isPreviewingOpacity ? 'hidden' : 'visible' }}
+                            className="absolute top-4 right-4 z-50 p-2 rounded-xl bg-bg-elevated/80 backdrop-blur-sm border border-border-subtle text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50 transition-all"
+                            title="Close settings"
+                        >
+                            <X size={20} strokeWidth={2} />
+                        </button>
                         <div
                             id="settings-panel"
                             className="flex w-full h-full"
