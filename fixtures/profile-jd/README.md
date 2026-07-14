@@ -3,34 +3,37 @@
 Real artifacts the `scripts/e2e-profile-jd-real-path.js` harness defaults
 to (overridable via `E2E_RESUME` / `E2E_JD` env vars).
 
-- **Resume PDF** — `evinresume.pdf` (repo root): the user's own 2025 résumé.
+- **Resume PDF** — `evinresume.pdf` (repo root): the user's own résumé.
+  Evin John — AI & Full Stack Engineer Intern, B.Tech CS at CUSAT,
+  projects include Natively (privacy-first AI meeting copilot), TalentScope,
+  RedisMart. **Not a nursing/healthcare résumé.** The earlier harness draft
+  assumed a nursing fixture (mistakenly used `test-fixtures/profiles/p04/
+  _resume.txt` which IS the nursing one — that was the bug that produced
+  17/40 with the wrong must-regex patterns; the harness was running on the
+  correct PDF, the assertions were wrong). The current `Q` array is
+  authored against the real `evinresume.pdf` content.
+
 - **JD PDF** — `profileresume/Job-Description---Data-Analyst-Sample.pdf`
-  (repo root): the *Data Analyst* sample JD. Picked because it is NOT a
-  nursing role — the harness therefore exercises genuine résumé/JD
-  cross-source reasoning (not "both say nursing") and the comparison /
-  missing-skill / false-premise categories all produce meaningful signals.
-- **Optional backup fixtures** — `test-fixtures/profiles/p04/{resume.pdf,jd.txt}`
-  exist for an alternate role-play persona (healthcare); override
-  `E2E_RESUME=/…/p04/resume.pdf E2E_JD=/…/p04/jd.txt` if a nursing-role
-  benchmark is wanted instead.
+  (repo root): a Data Analyst sample JD. Intentionally NON-matching with
+  Evin's software-engineer résumé. The mismatch is the point:
+  - "JD direct requirements" answers come from the JD (data analyst skills).
+  - "Resume direct facts" answers come from the résumé (software / AI skills).
+  - "Compare / missing / false-premise" categories specifically require the
+    model to reason about the gap between the two — that's not testable
+    against a matching pair.
 
-## Why these specific files
+- **Optional backup fixtures** — `test-fixtures/profiles/p04/{resume.pdf,
+  jd.txt}` exist for an alternate role-play persona (nursing clinical-care
+  coordinator). Override `E2E_RESUME=/…/p04/resume.pdf E2E_JD=…/p04/jd.txt`
+  if a nursing benchmark is wanted instead. (Note: the JD there is text,
+  not a PDF — set `E2E_JD` accordingly.)
 
-The user-provided nursing résumé + non-nursing data-analyst JD combination is
-intentional: it lets the harness prove three Phase 10/11 gates the original
-task named:
+## Why a non-matching pair matters
 
-1. **Cross-source question correctness** — "Based on my résumé and the JD,
-   what requirements do I clearly meet?" — BD/MSN are JD requirements; RN
-   cert/7y are résumé strengths; the answer must surface BOTH, not invent
-   either.
-2. **Missing-skill detection** — "Does my résumé mention Tableau experience?"
-   — answer must say NO without inventing it, even though the JD asks for
-   it (a false-premise-flavoured question, since the prompt is inverting
-   the "candidate has it" assumption).
-3. **False-premise handling** — "Does the JD ask for an on-site role?" —
-   must answer from JD, not résumé; must not affirmatively answer about
-   nursing tools that aren't in either source.
-
-A nursing/nursing benchmark would not exercise category (1) cross-source
-mismatch as cleanly.
+The original Phase 10/11 task asked the harness to prove "explicit switch
+accuracy ≥ 98%", "return-to-default accuracy ≥ 98%", "comparison accuracy
+≥ 95%", and "candidate/JD contamination = 0". None of these can be
+meaningfully verified against a same-domain pair (e.g. a data-analyst
+résumé against a data-analyst JD would pass even a broken model on most
+categories). The cross-domain mismatch is what makes each gate
+discriminating.
