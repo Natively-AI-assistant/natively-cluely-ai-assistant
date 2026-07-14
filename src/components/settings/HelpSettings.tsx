@@ -1571,7 +1571,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     <FileText size={14} /> Custom Context Notes
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                    In addition to your Resume and JD, type any free-form context into the <strong>Custom Context</strong> textarea — sales stats, product details, LeetCode solutions, personal preferences. Injected as a <code className="bg-bg-elevated px-1 rounded text-[10px]">&lt;user_context&gt;</code> block into every AI call, across all modes and providers.
+                                    Free-form context — sales stats, product details, LeetCode solutions, personal preferences — now lives per-mode in <strong>Modes Manager</strong> instead of a single global field. Each mode's <strong>Real-time prompt</strong> is injected into every AI call while that mode is active, so different contexts stay scoped to the situations where they're relevant. See <strong>Modes Manager</strong> below.
                                 </p>
                             </div>
                             <div className="grid md:grid-cols-2 gap-3">
@@ -1580,10 +1580,10 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                         <Upload className="w-4 h-4 text-emerald-500" /> How to Use
                                     </h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                        <li>Open <strong>Settings → Profile Intelligence</strong></li>
-                                        <li>Scroll to the <strong>Custom Context</strong> textarea</li>
-                                        <li>Type anything — auto-saved after 800 ms</li>
-                                        <li>Up to 4,000 characters with a live counter</li>
+                                        <li>Open <strong>Modes Manager</strong></li>
+                                        <li>Select or create a mode, then scroll to <strong>Real-time prompt</strong></li>
+                                        <li>Type anything — auto-saved as you go</li>
+                                        <li>Only active while that mode is selected</li>
                                     </ul>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
