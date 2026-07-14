@@ -1,22 +1,7 @@
 import React from "react"
 import ReactDOM from "react-dom/client"
-import { MotionConfig } from "framer-motion"
 import App from "./App"
 import "./index.css"
-
-// WINDOWS SOFTWARE-COMPOSITING LEAK GUARD (2026-07-11): ?nofx=1 (appended by
-// WindowHelper on Windows boxes under software compositing) forces framer-motion
-// into reduced-motion mode for the whole tree. CSS `animation:none` (index.css
-// html.nofx) cannot stop framer-motion's `repeat: Infinity` loops because they
-// are driven by JS requestAnimationFrame writing inline transforms — the exact
-// mechanism that keeps the compositor non-idle and leaks CPU raster tiles under
-// software compositing. reducedMotion="always" makes every motion component
-// (incl. the BrowserExtensionToaster shimmer, which already gates on
-// useReducedMotion) skip transform/layout animation, so the compositor idles.
-const NOFX = (() => {
-  try { return new URLSearchParams(window.location.search).get('nofx') === '1'; }
-  catch { return false; }
-})();
 
 // ── Renderer crash/hang diagnostics ─────────────────────────────────────────
 // Surface uncaught errors and unhandled promise rejections through console.error
@@ -82,13 +67,7 @@ try {
   } else {
     ReactDOM.createRoot(rootEl).render(
       <React.StrictMode>
-        {NOFX ? (
-          <MotionConfig reducedMotion="always">
-            <App />
-          </MotionConfig>
-        ) : (
-          <App />
-        )}
+        <App />
       </React.StrictMode>
     );
     // eslint-disable-next-line no-console

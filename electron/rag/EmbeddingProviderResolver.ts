@@ -90,16 +90,6 @@ export class EmbeddingProviderResolver {
    * Local model is the unconditional fallback — always last.
    */
   static async resolve(config: AppAPIConfig): Promise<IEmbeddingProvider> {
-    // DIAGNOSTIC (2026-07-11): NATIVELY_NO_LOCAL_MODELS=1 forbids the bundled
-    // local embedding model entirely. When cloud providers are unavailable
-    // (e.g. the Windows box where Gemini auth 403s), the resolver would normally
-    // fall back to LocalEmbeddingProvider, which loads the MiniLM ONNX model.
-    // Under this flag we instead throw, so the pipeline ends up with NO provider
-    // (queue stays empty, nothing local loads). If the app then boots stable,
-    // the local-model path is confirmed as the leak source. Cloud providers
-    // still resolve normally when their keys work.
-    const noLocal = process.env.NATIVELY_NO_LOCAL_MODELS === '1';
-
     const candidates: IEmbeddingProvider[] = [];
 
     let embeddingsDenied = false;
@@ -159,10 +149,6 @@ export class EmbeddingProviderResolver {
     // users. Construction exposes dimensions/space cheaply; the actual model load
     // happens on first embed()/embedQuery(), where failures can still surface and
     // retry normally.
-    if (noLocal) {
-      console.warn('[LeakTest] NATIVELY_NO_LOCAL_MODELS=1 → refusing local embedding fallback; no embedding provider this run (queue will idle).');
-      throw new Error('No embedding provider available (NATIVELY_NO_LOCAL_MODELS=1 blocks the local fallback)');
-    }
     if (embeddingsDenied) {
       console.warn('[ScopeFallback] embeddings denied; Ollama unavailable, using bundled local embedding model lazily');
     } else {

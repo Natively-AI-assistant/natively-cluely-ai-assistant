@@ -117,45 +117,6 @@ try {
   // auto-reload handler recovers it.
 }
 
-// ============================================================================
-// TEMPORARY LEAK-DIAGNOSIS TEST HOOKS (2026-07-10) — remove after the Windows
-// native-RSS-leak (OOM-freeze on boot) is root-caused. Each is env-gated and a
-// no-op unless the flag is set, so they never affect normal runs. See the
-// per-process procMem field added to StabilityHeartbeat for attribution.
-//
-//   NATIVELY_DISABLE_GPU=1        → app.disableHardwareAcceleration() — tests
-//                                   whether the leak is Chromium GPU/compositor
-//                                   shared memory (top hypothesis). If RSS stays
-//                                   flat with this set, the GPU process is it.
-//   NATIVELY_DISABLE_STT_PREWARM=1 → skip prewarmSttProviders() (gated at the
-//                                   call site in AppState).
-//   NATIVELY_ONNX_MIN_FREE_GB=999 → (existing) disables ALL local ONNX workers.
-// ============================================================================
-try {
-  if (process.env.NATIVELY_DISABLE_GPU === '1') {
-    app.disableHardwareAcceleration();
-    console.warn('[LeakTest] NATIVELY_DISABLE_GPU=1 → hardware acceleration DISABLED for this run');
-  }
-} catch (e) {
-  console.warn('[LeakTest] disableHardwareAcceleration failed:', e);
-}
-
-// MASTER LOCAL-MODEL KILL-SWITCH (2026-07-11) — diagnostic.
-// NATIVELY_NO_LOCAL_MODELS=1 blocks EVERY on-device model from loading at
-// startup: the ONNX local-embedding fallback, the zero-shot intent classifier,
-// the BGE reranker, Whisper STT prewarm, the LocalFallbackPreflight probe, AND
-// the Ollama bootstrap. NOTHING local is invoked. If the app boots and stays
-// stable (no native-RSS leak / UNRESPONSIVE) with this set — while it leaks
-// without it — the on-device model path is confirmed as the cause of the
-// Windows freeze (which only engages that path because cloud embedding auth
-// fails there but works on the dev Mac). A no-op unless the flag is set.
-function localModelsDisabled(): boolean {
-  return process.env.NATIVELY_NO_LOCAL_MODELS === '1';
-}
-if (localModelsDisabled()) {
-  console.warn('[LeakTest] NATIVELY_NO_LOCAL_MODELS=1 → ALL local models (ONNX embedding/intent/reranker, Whisper prewarm, preflight, Ollama) are DISABLED this run');
-}
-
 /**
  * Whether THIS build carries a real Developer ID signature.
  *
@@ -1040,7 +1001,7 @@ try {
 
 import { CredentialsManager } from "./services/CredentialsManager"
 import { SettingsManager } from "./services/SettingsManager"
-import { PhoneMirrorService } from "./services/PhoneMirrorService"
+import { PhoneMirrorService, shouldStartPhoneMirrorOnBoot } from "./services/PhoneMirrorService"
 import { setVerboseLoggingFlag } from "./verboseLog"
 import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
@@ -1748,13 +1709,8 @@ export class AppState {
           isMeetingActive: this.isMeetingActive,
           flags,
           wal: collectWalSnapshot(),
-          // Per-process working-set RSS (MB) — the leak-attribution field.
+          // Per-process working-set RSS (MB) — leak-attribution / stability signal.
           procMem,
-          testHooks: {
-            gpuDisabled: process.env.NATIVELY_DISABLE_GPU === '1',
-            sttPrewarmDisabled: process.env.NATIVELY_DISABLE_STT_PREWARM === '1',
-            onnxFloorGB: process.env.NATIVELY_ONNX_MIN_FREE_GB || null,
-          },
         });
       } catch (e: any) {
         console.warn('[StabilityHeartbeat] skipped:', e?.message || e);
@@ -1946,10 +1902,6 @@ export class AppState {
   private async bootstrapOllamaEmbeddings() {
     this._ollamaBootstrapPromise = (async () => {
       try {
-        if (localModelsDisabled()) {
-          console.warn('[LeakTest] Skipping Ollama embeddings bootstrap (NATIVELY_NO_LOCAL_MODELS=1)');
-          return;
-        }
         // SKIP when a cloud embedding provider is already available. Pulling the
         // 274MB `nomic-embed-text` on first launch is pure waste for users who
         // have an OpenAI/Gemini key (the RAG pipeline resolves to that cloud
@@ -3508,11 +3460,6 @@ export class AppState {
    * prevent duplicate construction.
    */
   public prewarmSttProviders(): void {
-    // TEMPORARY LEAK-DIAGNOSIS gate (2026-07-10) — remove after root cause.
-    if (process.env.NATIVELY_DISABLE_STT_PREWARM === '1') {
-      console.warn('[LeakTest] NATIVELY_DISABLE_STT_PREWARM=1 → skipping STT pre-warm this run');
-      return;
-    }
     if (this.googleSTT && this.googleSTT_User) return;
     try {
       if (!this.googleSTT) {
@@ -7037,16 +6984,11 @@ async function initializeApp() {
     const settingsManager = SettingsManager.getInstance();
     const defaultModel = CredentialsManager.getInstance().getDefaultModel();
     const shouldStartOllama =
-      !localModelsDisabled() && (
-        settingsManager.get('autoStartOllama') === true ||
-        defaultModel.startsWith('ollama-') ||
-        defaultModel.startsWith('ollama:') ||
-        process.env.NATIVELY_AUTO_START_OLLAMA === '1'
-      );
-    if (localModelsDisabled()) {
-      OllamaManager.getInstance().skipStartup('NATIVELY_NO_LOCAL_MODELS=1 — Ollama disabled for diagnostic');
-      console.warn('[LeakTest] Skipping Ollama startup (NATIVELY_NO_LOCAL_MODELS=1)');
-    } else if (shouldStartOllama) {
+      settingsManager.get('autoStartOllama') === true ||
+      defaultModel.startsWith('ollama-') ||
+      defaultModel.startsWith('ollama:') ||
+      process.env.NATIVELY_AUTO_START_OLLAMA === '1';
+    if (shouldStartOllama) {
       OllamaManager.getInstance().ensureRunning({
         reason: settingsManager.get('autoStartOllama') === true ? 'auto-start-setting' : 'startup-selected',
         selectedModel: defaultModel,
@@ -7138,11 +7080,7 @@ if (process.env.THINKING_MATRIX === '1') {
   // credentials are loaded (so the provider can read its API key) and is
   // non-blocking — failures are logged and retried at meeting start.
   try {
-    if (localModelsDisabled()) {
-      console.warn('[LeakTest] Skipping STT pre-warm (NATIVELY_NO_LOCAL_MODELS=1)');
-    } else {
-      appState.prewarmSttProviders();
-    }
+    appState.prewarmSttProviders();
   } catch (err) {
     console.warn('[Init] STT pre-warm threw (non-fatal):', err);
   }
@@ -7185,20 +7123,17 @@ if (process.env.THINKING_MATRIX === '1') {
     windowCount: BrowserWindow.getAllWindows().length,
   });
 
-  // DIAGNOSTIC (2026-07-11): dump Chromium's GPU feature status once at boot.
-  // The "window appears then freezes / renderer not responsive" report is
-  // consistent with a machine that fell back to SOFTWARE compositing (Chromium
-  // blocklisted the GPU / driver state), where the launcher splash's heavy
-  // blur/backdrop-filter becomes catastrophically expensive and can wedge the
-  // renderer's main thread. This logs, in one line, whether gpu_compositing and
-  // rasterization are 'enabled' (hardware) or 'software'/'disabled'. If a user
-  // who freezes shows software/disabled here while a healthy machine shows
-  // enabled, the compositing path is confirmed and `?nofx=1` should unblock it.
-  try {
-    const status = app.getGPUFeatureStatus();
-    console.log('[GPU] featureStatus', JSON.stringify(status));
-  } catch (e: any) {
-    console.warn('[GPU] getGPUFeatureStatus failed:', e?.message || e);
+  // Opt-in: NATIVELY_LOG_GPU_STATUS=1 logs Chromium's GPU feature status once
+  // at boot (whether gpu_compositing/rasterization are 'enabled' vs.
+  // 'software'/'disabled') — useful when diagnosing a renderer that freezes
+  // or fails to composite. Off by default to avoid unconditional boot noise.
+  if (process.env.NATIVELY_LOG_GPU_STATUS === '1') {
+    try {
+      const status = app.getGPUFeatureStatus();
+      console.log('[GPU] featureStatus', JSON.stringify(status));
+    } catch (e: any) {
+      console.warn('[GPU] getGPUFeatureStatus failed:', e?.message || e);
+    }
   }
 
   // Run the local-fallback preflight AFTER the launcher paints. We schedule
@@ -7218,10 +7153,6 @@ if (process.env.THINKING_MATRIX === '1') {
       console.log('[LocalFallbackPreflight] skipped — app is quitting');
       return;
     }
-    if (localModelsDisabled()) {
-      console.warn('[LeakTest] Skipping LocalFallbackPreflight (NATIVELY_NO_LOCAL_MODELS=1)');
-      return;
-    }
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
       const { runLocalFallbackPreflight } = require('./services/LocalFallbackPreflight');
@@ -7239,10 +7170,6 @@ if (process.env.THINKING_MATRIX === '1') {
   // use, so this only moves startup CPU work out of the visible launch path.
   setTimeout(() => {
     try {
-      if (localModelsDisabled()) {
-        console.warn('[LeakTest] Skipping intent-classifier warmup (NATIVELY_NO_LOCAL_MODELS=1)');
-        return;
-      }
       warmupIntentClassifier();
     } catch (err) {
       console.warn('[Init] Intent classifier warmup scheduling failed (non-fatal):', err);
@@ -7312,12 +7239,18 @@ if (process.env.THINKING_MATRIX === '1') {
   // in 3 separate logs. This flag lets the (frozen) user boot WITHOUT the WS
   // server so the phone/companion extension can't connect. If the leak vanishes,
   // PhoneMirror connect is confirmed as the trigger.
-  if (process.env.NATIVELY_DISABLE_PHONE_MIRROR === '1') {
-    console.warn('[LeakTest] NATIVELY_DISABLE_PHONE_MIRROR=1 → PhoneMirror WS server NOT started this run');
-  } else if (SettingsManager.getInstance().get('phoneMirrorEnabled')) {
+  const disablePhoneMirrorOnBoot = process.env.NATIVELY_DISABLE_PHONE_MIRROR === '1';
+  if (
+    shouldStartPhoneMirrorOnBoot({
+      disablePhoneMirror: disablePhoneMirrorOnBoot,
+      phoneMirrorEnabled: !!SettingsManager.getInstance().get('phoneMirrorEnabled'),
+    })
+  ) {
     PhoneMirrorService.getInstance()
       .start({ exposeOnLan: !!SettingsManager.getInstance().get('phoneMirrorExposeOnLan'), persist: false })
       .catch((err) => console.error('[Init] PhoneMirror auto-start failed:', err));
+  } else if (disablePhoneMirrorOnBoot) {
+    console.warn('[LeakTest] NATIVELY_DISABLE_PHONE_MIRROR=1 → PhoneMirror WS server NOT started this run');
   }
 
   // One-time macOS screen recording permission prompt.

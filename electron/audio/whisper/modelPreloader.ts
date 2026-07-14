@@ -116,12 +116,6 @@ class ModelPreloader {
      * Cancels an in-progress load if a different model is requested.
      */
     preload(modelId: string): void {
-        // DIAGNOSTIC (2026-07-11): NATIVELY_NO_LOCAL_MODELS=1 forbids warming the
-        // on-device Whisper ONNX worker (local-model leak-isolation test).
-        if (process.env.NATIVELY_NO_LOCAL_MODELS === '1') {
-            console.warn('[ModelPreloader] Skipping preload (NATIVELY_NO_LOCAL_MODELS=1)');
-            return;
-        }
         if (this.warmModelId === modelId && this.warmWorker) return;
         if (this.pendingModelId === modelId && this.loading) return;
 

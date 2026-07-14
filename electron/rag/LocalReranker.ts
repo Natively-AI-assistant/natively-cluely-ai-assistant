@@ -165,11 +165,6 @@ class LocalRerankerImpl {
     }
 
     private getWorker(): Worker {
-        // DIAGNOSTIC (2026-07-11): NATIVELY_NO_LOCAL_MODELS=1 forbids the on-device
-        // reranker ONNX worker entirely (part of the local-model leak-isolation test).
-        if (process.env.NATIVELY_NO_LOCAL_MODELS === '1') {
-            throw new Error('LocalReranker disabled (NATIVELY_NO_LOCAL_MODELS=1)');
-        }
         if (!this.worker) {
             // Cross-launch disk sentinel: written BEFORE new Worker() so a
             // native ORT abort that kills the process before the JS `ready`

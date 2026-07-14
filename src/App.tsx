@@ -105,21 +105,6 @@ function getLauncherIsolation(): LauncherIsolation {
   }
 }
 
-// TEMPORARY LEAK-DIAGNOSIS (2026-07-10): the Windows native-RSS climb is a
-// non-JS (flat V8 heap) leak in the launcher renderer + main in lockstep,
-// GPU-process-independent — consistent with CPU-composited backdrop-filter /
-// blur raster tiles under software compositing. Appending `?nofx=1` to any
-// window URL adds `nofx` to <html>, and a global CSS rule (src/index.css)
-// neutralizes every backdrop-filter/filter:blur. If RSS goes FLAT with
-// ?nofx=1, the blur/compositor tile path is the root cause. Remove after fix.
-try {
-  if (new URLSearchParams(window.location.search).get('nofx') === '1') {
-    document.documentElement.classList.add('nofx');
-    // eslint-disable-next-line no-console
-    console.warn('[LeakTest] nofx=1 → backdrop-filter/blur effects disabled this run');
-  }
-} catch { /* non-fatal */ }
-
 const App: React.FC = () => {
   const isSettingsWindow = new URLSearchParams(window.location.search).get('window') === 'settings';
   const isLauncherWindow = new URLSearchParams(window.location.search).get('window') === 'launcher';
@@ -198,7 +183,6 @@ const App: React.FC = () => {
   const [managerPanelDirection, setManagerPanelDirection] = useState<ManagerPanelDirection>('forward');
   const managerDialogRef = useRef<HTMLDivElement>(null);
   const managerOpenerRef = useRef<HTMLElement | null>(null);
-  const [managerBackdropPressed, setManagerBackdropPressed] = useState(false);
   const reduceManagerMotion = useReducedMotion() ?? false;
 
   const rememberManagerOpener = useCallback(() => {
@@ -324,57 +308,33 @@ const App: React.FC = () => {
     initial: { opacity: 0 },
     animate: reduceManagerMotion
       ? { opacity: 1, transition: { duration: 0 } }
-      : { opacity: 1, transition: { duration: 0.28, ease: MANAGER_EASE } },
+      : { opacity: 1, transition: { duration: 0.34, ease: MANAGER_EASE } },
     exit: reduceManagerMotion
       ? { opacity: 0, transition: { duration: 0 } }
-      : { opacity: 0, transition: { duration: 0.2, ease: MANAGER_CLOSE_EASE } },
+      : { opacity: 0, transition: { duration: 0.18, ease: MANAGER_EASE } },
   };
-  const managerCardSpring = reduceManagerMotion
+  const managerCardTransition = reduceManagerMotion
     ? { duration: 0 }
-    : { type: 'spring' as const, stiffness: 260, damping: 30, mass: 1.1 };
+    : { type: 'spring' as const, stiffness: 260, damping: 28, mass: 1 };
   const managerCardVariants = {
-    initial: reduceManagerMotion ? { opacity: 0 } : { opacity: 0, scale: 0.94, y: 20 },
+    initial: reduceManagerMotion
+      ? { opacity: 0 }
+      : { opacity: 0, scale: 0.92, y: 28 },
     animate: reduceManagerMotion
       ? { opacity: 1, transition: { duration: 0 } }
-      : {
-          opacity: 1,
-          scale: 1,
-          y: 0,
-          transition: {
-            opacity: { duration: 0.24, ease: MANAGER_EASE },
-            scale: managerCardSpring,
-            y: managerCardSpring,
-          },
-        },
+      : { opacity: 1, scale: 1, y: 0, transition: managerCardTransition },
     exit: reduceManagerMotion
       ? { opacity: 0, transition: { duration: 0 } }
-      : {
-          opacity: 0,
-          scale: 0.965,
-          y: 12,
-          transition: {
-            opacity: { duration: 0.16, ease: MANAGER_CLOSE_EASE },
-            scale: { duration: 0.22, ease: MANAGER_CLOSE_EASE },
-            y: { duration: 0.22, ease: MANAGER_CLOSE_EASE },
-          },
-        },
-    backdropPress: reduceManagerMotion
-      ? { opacity: 1, transition: { duration: 0 } }
-      : {
-          opacity: 1,
-          scale: 0.998,
-          y: 1,
-          transition: { duration: 0.06, ease: MANAGER_OPEN_EASE },
-        },
+      : { opacity: 0, scale: 0.96, y: 12, transition: { duration: 0.16, ease: MANAGER_EASE } },
   };
   const managerContentVariants = {
-    initial: reduceManagerMotion ? { opacity: 0 } : { opacity: 0, x: 8 },
+    initial: reduceManagerMotion ? { opacity: 0 } : { opacity: 0, x: 10 },
     animate: reduceManagerMotion
       ? { opacity: 1, transition: { duration: 0 } }
-      : { opacity: 1, x: 0, transition: { duration: 0.28, ease: MANAGER_EASE } },
+      : { opacity: 1, x: 0, transition: { duration: 0.32, ease: MANAGER_EASE } },
     exit: reduceManagerMotion
       ? { opacity: 0, transition: { duration: 0 } }
-      : { opacity: 0, x: -8, transition: { duration: 0.22, ease: MANAGER_CLOSE_EASE } },
+      : { opacity: 0, x: -6, transition: { duration: 0.14, ease: MANAGER_EASE } },
   };
   const isAppReady = !isSettingsWindow && !isOverlayWindow && !isModelSelectorWindow && !showStartup && !isSettingsOpen && !isManagerOpen && isLauncherMainView;
 
@@ -1034,7 +994,6 @@ const App: React.FC = () => {
                       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
                       onClick={(event) => {
                         if (event.target !== event.currentTarget) return;
-                        setManagerBackdropPressed(false);
                         closeManagerPanel();
                       }}
                     >
@@ -1046,7 +1005,6 @@ const App: React.FC = () => {
                         aria-label={activeManagerPanel === 'modes' ? 'Modes Manager' : 'Profile Intelligence'}
                         tabIndex={-1}
                         variants={managerCardVariants}
-                        animate={managerBackdropPressed ? 'backdropPress' : 'animate'}
                         onClick={(event) => event.stopPropagation()}
                         style={{
                           willChange: 'transform, opacity',
@@ -1055,6 +1013,7 @@ const App: React.FC = () => {
                         }}
                         className="w-[820px] h-[600px] max-w-[95vw] max-h-[90vh] rounded-2xl overflow-hidden border border-white/10 bg-[#141414]"
                       >
+                        <AnimatePresence mode="wait" initial={false}>
                         <motion.div
                           key={activeManagerPanel}
                           data-testid={`manager-panel-${activeManagerPanel}`}
@@ -1078,6 +1037,7 @@ const App: React.FC = () => {
                             />
                           )}
                         </motion.div>
+                        </AnimatePresence>
                       </motion.div>
                     </motion.div>
                   )}

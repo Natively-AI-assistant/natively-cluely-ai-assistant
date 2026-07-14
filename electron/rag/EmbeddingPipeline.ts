@@ -98,18 +98,8 @@ export class EmbeddingPipeline {
         // isAvailable() loads the MiniLM ONNX model via transformers.js and can stall
         // the Electron main process during first paint. The provider loads lazily on
         // first real fallback/query use through embed()/embedQuery().
-        // DIAGNOSTIC (2026-07-11): NATIVELY_NO_LOCAL_MODELS=1 forbids the on-device
-        // embedding model. Do NOT even register the local fallback — leave it null so
-        // no code path can promote/load it. The pipeline then simply has no provider
-        // when cloud is unavailable (queue idles), which is the point of the test.
-        const noLocalModels = process.env.NATIVELY_NO_LOCAL_MODELS === '1';
-        if (noLocalModels) {
-            this.fallbackProvider = null;
-            console.warn('[LeakTest] NATIVELY_NO_LOCAL_MODELS=1 → local embedding fallback NOT registered');
-        } else {
-            this.fallbackProvider = new LocalEmbeddingProvider();
-            console.log(`[EmbeddingPipeline] Local fallback provider registered for lazy load (${this.fallbackProvider.dimensions}d)`);
-        }
+        this.fallbackProvider = new LocalEmbeddingProvider();
+        console.log(`[EmbeddingPipeline] Local fallback provider registered for lazy load (${this.fallbackProvider.dimensions}d)`);
 
         // Resolve primary provider before touching the local model. If the primary is
         // local, the resolver's instance becomes both primary and fallback so the model
@@ -146,11 +136,8 @@ export class EmbeddingPipeline {
 
         } catch (err) {
             console.error('[EmbeddingPipeline] Failed to initialize primary provider:', err);
-            if (noLocalModels || !this.fallbackProvider) {
-                // Diagnostic mode (or genuinely no fallback): leave the pipeline with
-                // NO provider. embed() calls will no-op / queue will idle. Nothing
-                // local loads. This is the intended state for the leak-isolation test.
-                console.warn('[EmbeddingPipeline] No embedding provider available — pipeline idle (local models disabled or unavailable).');
+            if (!this.fallbackProvider) {
+                console.warn('[EmbeddingPipeline] No embedding provider available — pipeline idle.');
                 this.provider = null;
             } else {
                 console.warn('[EmbeddingPipeline] Falling back to local-only mode for all meetings.');
