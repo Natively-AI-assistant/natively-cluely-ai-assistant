@@ -1640,17 +1640,6 @@ export class AppState {
         serviceTier: settingsManager.get('codexCliServiceTier') || 'default',
         modelReasoningEffort: settingsManager.get('codexCliModelReasoningEffort'),
       });
-      // Restore custom notes and persona for non-premium path
-      try {
-        const savedNotes = DatabaseManager.getInstance().getCustomNotes();
-        if (savedNotes) {
-          llmHelper.setCustomNotes(savedNotes);
-        }
-        const savedPersona = DatabaseManager.getInstance().getPersona();
-        if (savedPersona) {
-          llmHelper.setPersonaPrompt(savedPersona);
-        }
-      } catch (_) {}
     }
 
     // Initialize RAGManager (requires database to be ready)
@@ -2243,25 +2232,6 @@ export class AppState {
           if (this.knowledgeOrchestrator.isKnowledgeMode()) {
             llmHelper.prewarmPromptCache().catch((_e: any): void => {});
           }
-        }
-
-        // Restore custom notes so orchestrator has them from first request
-        const savedNotes = DatabaseManager.getInstance().getCustomNotes();
-        if (savedNotes) {
-          this.knowledgeOrchestrator.setCustomNotes(savedNotes);
-          llmHelper.setCustomNotes(savedNotes);
-          console.log('[AppState] Custom notes restored');
-        }
-
-        // Restore persona prompt so it is active from first request (not just after the UI mounts)
-        try {
-          const savedPersona = DatabaseManager.getInstance().getPersona();
-          if (savedPersona) {
-            llmHelper.setPersonaPrompt(savedPersona);
-            console.log('[AppState] Persona prompt restored');
-          }
-        } catch (personaErr: any) {
-          console.warn('[AppState] Persona restore failed, continuing without it:', personaErr?.message);
         }
 
         console.log('[AppState] KnowledgeOrchestrator initialized');

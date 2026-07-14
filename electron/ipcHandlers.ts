@@ -328,9 +328,6 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { DatabaseManager } = require('./db/DatabaseManager');
       const db = DatabaseManager.getInstance();
       db.setActiveMode(null);
-      db.clearProfilePersona?.();
-      const llmHelper = appState.processingHelper?.getLLMHelper?.();
-      llmHelper?.setPersonaPrompt?.('');
       BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) win.webContents.send('modes-active-cleared');
       });
@@ -8796,66 +8793,6 @@ export function initializeIpcHandlers(appState: AppState): void {
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) return { success: false };
       orchestrator.resetNegotiationSession();
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  // ==========================================
-  // Profile Custom Notes
-  // ==========================================
-
-  safeHandle('profile:get-notes', async () => {
-    try {
-      const content = DatabaseManager.getInstance().getCustomNotes();
-      return { success: true, content };
-    } catch (error: any) {
-      return { success: false, content: '', error: error.message };
-    }
-  });
-
-  safeHandle('profile:save-notes', async (_, content: string) => {
-    try {
-      // Enforce a max length of 4000 chars to prevent prompt bloat
-      const trimmed = typeof content === 'string' ? content.slice(0, 4000) : '';
-      DatabaseManager.getInstance().saveCustomNotes(trimmed);
-
-      // Propagate to orchestrator (premium path) and LLMHelper (all-provider path)
-      const orchestrator = appState.getKnowledgeOrchestrator();
-      if (orchestrator?.setCustomNotes) orchestrator.setCustomNotes(trimmed);
-
-      const llmHelper = appState.processingHelper?.getLLMHelper?.();
-      if (llmHelper?.setCustomNotes) llmHelper.setCustomNotes(trimmed);
-
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  safeHandle('profile:get-persona', async () => {
-    try {
-      if (!isProOrTrialActive()) return { success: false, content: '', error: 'pro_required' };
-      const content = DatabaseManager.getInstance().getPersona();
-      const llmHelper = appState.processingHelper?.getLLMHelper?.();
-      if (llmHelper?.setPersonaPrompt) llmHelper.setPersonaPrompt(content);
-      return { success: true, content };
-    } catch (error: any) {
-      return { success: false, content: '', error: error.message };
-    }
-  });
-
-  safeHandle('profile:save-persona', async (_, content: string) => {
-    try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
-      if (typeof content !== 'string') return { success: false, error: 'invalid_persona' };
-      const trimmed = content.trim().slice(0, 4000);
-      DatabaseManager.getInstance().savePersona(trimmed);
-
-      const llmHelper = appState.processingHelper?.getLLMHelper?.();
-      if (llmHelper?.setPersonaPrompt) llmHelper.setPersonaPrompt(trimmed);
-
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };

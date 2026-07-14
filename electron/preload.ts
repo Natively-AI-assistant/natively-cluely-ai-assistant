@@ -2286,10 +2286,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('profile:generate-negotiation', force),
   profileGetNegotiationState: () => ipcRenderer.invoke('profile:get-negotiation-state'),
   profileResetNegotiation: () => ipcRenderer.invoke('profile:reset-negotiation'),
-  profileGetNotes: () => ipcRenderer.invoke('profile:get-notes'),
-  profileSaveNotes: (content: string) => ipcRenderer.invoke('profile:save-notes', content),
-  profileGetPersona: () => ipcRenderer.invoke('profile:get-persona'),
-  profileSavePersona: (content: string) => ipcRenderer.invoke('profile:save-persona', content),
 
   // Tavily Search API
   setTavilyApiKey: (apiKey: string) => ipcRenderer.invoke('set-tavily-api-key', apiKey),

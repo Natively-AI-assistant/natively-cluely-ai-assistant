@@ -543,10 +543,6 @@ export interface ElectronAPI {
   profileGenerateNegotiation: (force?: boolean) => Promise<{ success: boolean; script?: any; error?: string }>
   profileGetNegotiationState: () => Promise<{ success: boolean; state?: any; isActive?: boolean; error?: string }>
   profileResetNegotiation: () => Promise<{ success: boolean; error?: string }>
-  profileGetNotes: () => Promise<{ success: boolean; content: string; error?: string }>
-  profileSaveNotes: (content: string) => Promise<{ success: boolean; error?: string }>
-  profileGetPersona: () => Promise<{ success: boolean; content: string; error?: string }>
-  profileSavePersona: (content: string) => Promise<{ success: boolean; error?: string }>
 
   // Tavily Search API
   setTavilyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
