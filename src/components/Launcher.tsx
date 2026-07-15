@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useT } from '../i18n';
 import { ToggleLeft, ToggleRight, Search, Calendar, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, LayoutGrid, RefreshCw, Eye, EyeOff, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle, User, UserSearch, Sparkles, ArrowUpRight } from 'lucide-react';
 import { generateMeetingPDF } from '../utils/pdfGenerator';
 import icon from "./icon.png";
@@ -80,6 +81,7 @@ const formatTime = (dateStr: string) => {
 };
 
 const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onOpenProfile, onOpenModes, onPageChange, ollamaPullStatus = 'idle', ollamaPullPercent = 0, ollamaPullMessage = '' }) => {
+    const t = useT();
     const [meetings, setMeetings] = useState<Meeting[]>([]);
     const [isDetectable, setIsDetectable] = useState(false);
     const [isMeetingActive, setIsMeetingActive] = useState(false);
@@ -499,7 +501,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                 window.electronAPI?.onboardingSetFlag?.('seenProfileOnboarding', true).catch(() => {});
                                 onOpenProfile?.();
                             }}
-                            title="Profile Intelligence"
+                            title={t("Profile Intelligence")}
                             className={`p-2 text-text-secondary hover:text-text-primary transition-all duration-300 ${isLight ? 'hover:drop-shadow-[0_0_6px_rgba(0,0,0,0.25)]' : 'hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]'}`}
                         >
                             <UserSearch size={18} />
@@ -536,19 +538,19 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                         </div>
                                         <div className="flex-1 pt-[2px]">
                                             <h3 className="text-[14px] font-semibold tracking-[-0.015em] mb-1 flex items-center gap-2">
-                                                <span className={isLight ? 'text-slate-900' : 'text-slate-100'}>Profile Intel</span>
+                                                <span className={isLight ? 'text-slate-900' : 'text-slate-100'}>{t('Profile Intel')}</span>
                                                 <span className={`text-[10px] font-medium px-1.5 py-[1px] rounded-[5px] ${
                                                     isLight
                                                     ? 'bg-blue-50 text-blue-600 border border-blue-100/50'
                                                     : 'bg-blue-500/10 text-blue-400'
                                                 }`}>
-                                                    Beta
+                                                    {t('Beta')}
                                                 </span>
                                             </h3>
                                             <p className={`text-[12px] leading-[1.35] mb-3.5 tracking-[-0.01em] ${
                                                 isLight ? 'text-slate-500' : 'text-slate-400'
                                             }`}>
-                                                Manage your persona, career history, and active job description.
+                                                {t('Manage your persona, career history, and active job description.')}
                                             </p>
                                             <div className="flex justify-end gap-1.5 isolate">
                                                 <button 
@@ -564,14 +566,14 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                         : 'text-slate-400 hover:text-slate-100 hover:bg-white/10'
                                                     }`}
                                                 >
-                                                    Dismiss
+                                                    {t('Dismiss')}
                                                 </button>
-                                                <button 
-                                                    onClick={(e) => { 
-                                                        e.stopPropagation(); 
-                                                        onOpenProfile?.(); 
-                                                        setShowProfileOnboarding(false); 
-                                                        localStorage.setItem('natively_seen_profile_onboarding_v1', 'true'); 
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onOpenProfile?.();
+                                                        setShowProfileOnboarding(false);
+                                                        localStorage.setItem('natively_seen_profile_onboarding_v1', 'true');
                                                         window.electronAPI?.onboardingSetFlag?.('seenProfileOnboarding', true).catch(() => {});
                                                     }}
                                                     className={`text-[12px] font-medium px-4 py-[6px] rounded-full transition-all active:scale-95 shadow-sm ${
@@ -580,7 +582,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                         : 'bg-slate-100 text-slate-900 hover:bg-white'
                                                     }`}
                                                 >
-                                                    Try it out
+                                                    {t('Try it out')}
                                                 </button>
                                             </div>
                                         </div>
@@ -598,7 +600,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                 window.electronAPI?.onboardingSetFlag?.('seenModesOnboarding', true).catch(() => {});
                                 onOpenModes?.();
                             }}
-                            title="Modes"
+                            title={t("Modes")}
                             className={`p-2 text-text-secondary hover:text-text-primary transition-all duration-300 ${isLight ? 'hover:drop-shadow-[0_0_6px_rgba(0,0,0,0.25)]' : 'hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]'}`}
                         >
                             <svg width={18} height={18} viewBox="0 0 14 14" fill="none">
@@ -645,19 +647,19 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                         </div>
                                         <div className="flex-1 pt-[2px]">
                                             <h3 className="text-[14px] font-semibold tracking-[-0.015em] mb-1 flex items-center gap-2">
-                                                <span className={isLight ? 'text-slate-900' : 'text-slate-100'}>Modes</span>
+                                                <span className={isLight ? 'text-slate-900' : 'text-slate-100'}>{t('Modes')}</span>
                                                 <span className={`text-[10px] font-medium px-1.5 py-[1px] rounded-[5px] ${
                                                     isLight
                                                     ? 'bg-orange-50 text-orange-600 border border-orange-100/50'
                                                     : 'bg-orange-500/10 text-orange-400'
                                                 }`}>
-                                                    Beta
+                                                    {t('Beta')}
                                                 </span>
                                             </h3>
                                             <p className={`text-[12px] leading-[1.35] mb-3.5 tracking-[-0.01em] ${
                                                 isLight ? 'text-slate-500' : 'text-slate-400'
                                             }`}>
-                                                Custom instructions and formulas designed for different meeting contexts.
+                                                {t('Custom instructions and formulas designed for different meeting contexts.')}
                                             </p>
                                             <div className="flex justify-end gap-1.5 isolate">
                                                 <button 
@@ -673,12 +675,12 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                         : 'text-slate-400 hover:text-slate-100 hover:bg-white/10'
                                                     }`}
                                                 >
-                                                    Dismiss
+                                                    {t('Dismiss')}
                                                 </button>
-                                                <button 
-                                                    onClick={(e) => { 
-                                                        e.stopPropagation(); 
-                                                        onOpenModes?.(); 
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onOpenModes?.();
                                                         setShowModesOnboarding(false); 
                                                         localStorage.setItem('natively_seen_modes_onboarding_v5', 'true'); 
                                                         window.electronAPI?.onboardingSetFlag?.('seenModesOnboarding', true).catch(() => {});
@@ -689,7 +691,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                         : 'bg-slate-100 text-slate-900 hover:bg-white'
                                                     }`}
                                                 >
-                                                    Try it out
+                                                    {t('Try it out')}
                                                 </button>
                                             </div>
                                         </div>
@@ -702,7 +704,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                         onClick={() => {
                             onOpenSettings();
                         }}
-                        title="Settings"
+                        title={t("Settings")}
                         className={`p-2 text-text-secondary hover:text-text-primary transition-all duration-300 ${isLight ? 'hover:drop-shadow-[0_0_6px_rgba(0,0,0,0.25)]' : 'hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]'}`}
                     >
                         <Settings size={18} />
@@ -750,14 +752,14 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                     {/* 1.5. Hero Header (Title + Controls + CTA) */}
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-4">
-                                            <h1 className="text-3xl font-celeb-light font-medium text-text-primary tracking-wide drop-shadow-sm">My Natively</h1>
+                                            <h1 className="text-3xl font-celeb-light font-medium text-text-primary tracking-wide drop-shadow-sm">{t('My Natively')}</h1>
 
                                             {/* Refresh Button */}
                                             <button
                                                 onClick={handleRefresh}
                                                 disabled={isRefreshing}
                                                 className={`p-2 text-text-secondary hover:text-text-primary rounded-full transition-colors ${isRefreshing ? 'animate-spin text-blue-400' : ''} ${isLight ? 'hover:bg-black/8' : 'hover:bg-white/10'}`}
-                                                title="Refresh State"
+                                                title={t("Refresh State")}
                                             >
                                                 <RefreshCw size={18} />
                                             </button>
@@ -788,7 +790,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                     </svg>
                                                 )}
                                                 <span className="text-xs font-medium flex-1 transition-colors text-text-secondary">
-                                                    {isDetectable ? "Detectable" : "Undetectable"}
+                                                    {isDetectable ? t("Detectable") : t("Undetectable")}
                                                  </span>
                                                  <div
                                                      className={`w-8 h-4 rounded-full relative transition-colors cursor-pointer ${!isDetectable ? 'bg-accent-primary' : 'bg-bg-toggle-switch'}`}
@@ -808,7 +810,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                              : 'bg-emerald-400/10 hover:bg-emerald-400/20 border-emerald-500/20 text-emerald-400'
                                                      }`}
                                                  >
-                                                     <span>What's New in 2.8</span>
+                                                     <span>{t("What's New in 2.8")}</span>
                                                      <ArrowUpRight size={12} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
                                                  </button>
                                              )}
@@ -834,7 +836,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                         )}
                                                         <div className="flex flex-col">
                                                             <span className="text-[11px] font-medium text-text-secondary whitespace-nowrap">
-                                                                {ollamaPullStatus === 'downloading' ? `Setting up AI memory... ${ollamaPullPercent}%` : ollamaPullMessage}
+                                                                {ollamaPullStatus === 'downloading' ? `${t('Setting up AI memory...')} ${ollamaPullPercent}%` : ollamaPullMessage}
                                                             </span>
                                                             {ollamaPullStatus === 'downloading' && (
                                                                 <div className="w-full h-[3px] bg-white/10 rounded-full mt-1 overflow-hidden">
@@ -911,7 +913,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-60" />
                                                                 <span className="relative inline-flex rounded-full h-[9px] w-[9px] bg-white" />
                                                             </span>
-                                                            <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)] text-[20px] leading-none">Meeting ongoing</span>
+                                                            <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)] text-[20px] leading-none">{t('Meeting ongoing')}</span>
                                                         </motion.div>
                                                     ) : (
                                                         <motion.div
@@ -923,7 +925,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                             className="flex items-center gap-3"
                                                         >
                                                             <img src={icon} alt="Logo" className="w-[18px] h-[18px] object-contain brightness-0 invert drop-shadow-[0_1px_2px_rgba(0,0,0,0.1)] opacity-90" />
-                                                            <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)] text-[20px] leading-none">Start Natively</span>
+                                                            <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)] text-[20px] leading-none">{t('Start Natively')}</span>
                                                         </motion.div>
                                                     )}
                                                 </AnimatePresence>
@@ -970,8 +972,8 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                             {isCalendarConnected ? (() => {
                                                 const eventCount = upcomingMeetings.length;
                                                 const summaryLabel = eventCount === 0
-                                                    ? 'No upcoming events'
-                                                    : `${eventCount} upcoming event${eventCount === 1 ? '' : 's'}`;
+                                                    ? t('No upcoming events')
+                                                    : `${eventCount} ${eventCount === 1 ? t('upcoming event') : t('upcoming events')}`;
 
                                                 const formatTimeLabel = (startTime: string) => {
                                                     const start = new Date(startTime);
@@ -1015,7 +1017,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                     <div className="relative z-10 w-full flex flex-col h-full">
                                                         {/* Heading block — top-centered */}
                                                         <div className="px-4 pt-5 text-center">
-                                                            <h3 className="text-[20px] font-semibold text-white leading-[1.15] tracking-[-0.01em]">Calendar linked</h3>
+                                                            <h3 className="text-[20px] font-semibold text-white leading-[1.15] tracking-[-0.01em]">{t('Calendar linked')}</h3>
                                                             <p className="text-[13px] text-white/55 font-medium mt-0.5 tabular-nums">{summaryLabel}</p>
                                                         </div>
 
@@ -1025,7 +1027,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                                 <span className="w-5 h-5 rounded-full bg-violet-500 ring-1 ring-violet-300/40 flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
                                                                     <Check size={11} strokeWidth={3} className="text-white" />
                                                                 </span>
-                                                                <span className="text-[12px] font-semibold text-white/95 pr-1.5 tracking-[-0.005em]">Calendar Connected</span>
+                                                                <span className="text-[12px] font-semibold text-white/95 pr-1.5 tracking-[-0.005em]">{t('Calendar Connected')}</span>
                                                             </div>
                                                         </div>
 
@@ -1065,7 +1067,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                                             </h4>
                                                                             {moreMeetingsCount > 0 && (
                                                                                 <span className="shrink-0 inline-flex items-center rounded-full bg-white/10 ring-1 ring-white/15 px-1.5 py-0.5 text-[10px] font-semibold text-white/80 tabular-nums">
-                                                                                    +{moreMeetingsCount} more
+                                                                                    +{moreMeetingsCount} {t('more')}
                                                                                 </span>
                                                                             )}
                                                                         </div>
@@ -1105,8 +1107,8 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                             })() : (
                                                 <div className="relative z-10 w-full flex flex-col items-center h-full pt-6 text-center">
                                                     <h3 className="text-[19px] leading-tight mb-4 tracking-[-0.01em]">
-                                                        <span className="block font-semibold text-white">Link your calendar to</span>
-                                                        <span className="block font-medium text-white/60 text-[0.95em]">see upcoming events</span>
+                                                        <span className="block font-semibold text-white">{t('Link your calendar to')}</span>
+                                                        <span className="block font-medium text-white/60 text-[0.95em]">{t('see upcoming events')}</span>
                                                     </h3>
 
                                                     <ConnectCalendarButton
@@ -1146,7 +1148,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                                 {m.title === 'Processing...' ? (
                                                                     <div className="flex items-center gap-2 transition-all duration-200 ease-out group-hover:opacity-0 group-hover:translate-x-2 delayed-hover-exit">
                                                                         <RefreshCw size={12} className="animate-spin text-blue-500" />
-                                                                        <span className="text-xs text-blue-500 font-medium">Finalizing...</span>
+                                                                        <span className="text-xs text-blue-500 font-medium">{t('Finalizing...')}</span>
                                                                     </div>
                                                                 ) : (
                                                                     <>
@@ -1216,7 +1218,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                                                 }}
                                                                             >
                                                                                 <Download size={13} />
-                                                                                Export
+                                                                                {t('Export')}
                                                                             </button>
                                                                             <button
                                                                                 className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-red-400 hover:bg-red-500/10 hover:text-red-300 rounded-lg transition-colors text-left"
@@ -1232,7 +1234,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                                                 }}
                                                                             >
                                                                                 <Trash2 size={13} />
-                                                                                Delete
+                                                                                {t('Delete')}
                                                                             </button>
                                                                         </div>
                                                                     </motion.div>
@@ -1245,7 +1247,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                         ))}
 
                                         {meetings.length === 0 && (
-                                            <div className="p-4 text-text-tertiary text-sm">No recent meetings.</div>
+                                            <div className="p-4 text-text-tertiary text-sm">{t('No recent meetings.')}</div>
                                         )}
 
                                     </div>
@@ -1277,8 +1279,8 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
 
                         {/* Text Content */}
                         <div className="flex flex-col gap-0.5">
-                            <span className="text-[14px] font-semibold text-text-primary leading-none tracking-tight">Refreshed</span>
-                            <span className="text-[11px] text-text-tertiary font-medium leading-none tracking-wide">Synced with calendar</span>
+                            <span className="text-[14px] font-semibold text-text-primary leading-none tracking-tight">{t('Refreshed')}</span>
+                            <span className="text-[11px] text-text-tertiary font-medium leading-none tracking-wide">{t('Synced with calendar')}</span>
                         </div>
 
                         {/* Specular Highlight Overlay */}

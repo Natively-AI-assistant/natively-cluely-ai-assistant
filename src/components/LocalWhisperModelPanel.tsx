@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useT } from '../i18n';
 import { Download, Trash2, HardDrive, Check, Loader2, Zap, AlertCircle, ChevronDown, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { isMac } from '../utils/platformUtils';
@@ -54,6 +55,7 @@ interface OnnxRecoveryNotice {
 const electronAPI = (window as any).electronAPI;
 
 function PremiumSelect({ label, value, options, onChange, placeholder }: any) {
+    const t = useT();
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -104,7 +106,7 @@ function PremiumSelect({ label, value, options, onChange, placeholder }: any) {
                                 );
                             })}
                             {options.length === 0 && (
-                                <div className="px-3 py-2.5 text-sm text-text-tertiary italic text-center">No models available</div>
+                                <div className="px-3 py-2.5 text-sm text-text-tertiary italic text-center">{t('No models available')}</div>
                             )}
                         </div>
                     </motion.div>
@@ -115,6 +117,7 @@ function PremiumSelect({ label, value, options, onChange, placeholder }: any) {
 }
 
 export function LocalWhisperModelPanel() {
+    const t = useT();
     const [models, setModels] = useState<ModelInfo[]>([]);
     const [hardware, setHardware] = useState<HardwareInfo | null>(null);
     const [config, setConfig] = useState<ChannelConfig>({
@@ -334,15 +337,15 @@ export function LocalWhisperModelPanel() {
                 <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex items-start gap-3 text-amber-700 dark:text-amber-300">
                     <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold text-text-primary">Recovered local transcription</div>
+                        <div className="text-sm font-semibold text-text-primary">{t('Recovered local transcription')}</div>
                         <p className="text-xs text-text-secondary mt-1 leading-relaxed">
-                            Natively recovered from a local transcription model crash. We reset <span className="font-mono text-text-primary">{recoveryNotice.badModelId}</span> to <span className="font-mono text-text-primary">{recoveryNotice.fallbackModelId}</span> so the app can start safely.
+                            {t('Natively recovered from a local transcription model crash. We reset')} <span className="font-mono text-text-primary">{recoveryNotice.badModelId}</span> {t('to')} <span className="font-mono text-text-primary">{recoveryNotice.fallbackModelId}</span> {t('so the app can start safely.')}
                         </p>
                     </div>
                     <button
                         onClick={() => setRecoveryNotice(null)}
                         className="p-1 rounded-md text-text-tertiary hover:text-text-primary hover:bg-bg-elevated transition-colors"
-                        aria-label="Dismiss recovery notice"
+                        aria-label={t("Dismiss recovery notice")}
                     >
                         <X size={14} />
                     </button>
@@ -350,7 +353,7 @@ export function LocalWhisperModelPanel() {
             )}
             {onnxNotices.intent && (
                 <OnnxRecoveryChip
-                    title="Recovered intent classifier"
+                    title={t("Recovered intent classifier")}
                     family="intent"
                     notice={onnxNotices.intent}
                     onDismiss={() => setOnnxNotices((s) => ({ ...s, intent: undefined }))}
@@ -358,7 +361,7 @@ export function LocalWhisperModelPanel() {
             )}
             {onnxNotices.embeddings && (
                 <OnnxRecoveryChip
-                    title="Recovered local embeddings"
+                    title={t("Recovered local embeddings")}
                     family="embeddings"
                     notice={onnxNotices.embeddings}
                     onDismiss={() => setOnnxNotices((s) => ({ ...s, embeddings: undefined }))}
@@ -366,7 +369,7 @@ export function LocalWhisperModelPanel() {
             )}
             {onnxNotices.reranker && (
                 <OnnxRecoveryChip
-                    title="Recovered local reranker"
+                    title={t("Recovered local reranker")}
                     family="reranker"
                     notice={onnxNotices.reranker}
                     onDismiss={() => setOnnxNotices((s) => ({ ...s, reranker: undefined }))}
@@ -374,8 +377,8 @@ export function LocalWhisperModelPanel() {
             )}
             <div className="bg-bg-card rounded-xl border border-border-subtle p-5 shadow-sm">
                 <div className="mb-5">
-                    <h3 className="text-sm font-semibold text-text-primary">Local Engine Configuration</h3>
-                    <p className="text-xs text-text-secondary mt-1 leading-relaxed">Select the AI models you want to use for Speech-to-Text inference.</p>
+                    <h3 className="text-sm font-semibold text-text-primary">{t('Local Engine Configuration')}</h3>
+                    <p className="text-xs text-text-secondary mt-1 leading-relaxed">{t('Select the AI models you want to use for Speech-to-Text inference.')}</p>
                 </div>
 
                 <label className="flex items-center justify-between p-3.5 rounded-xl border border-border-subtle bg-bg-elevated/30 hover:bg-bg-elevated transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] cursor-pointer group mb-5 active:scale-[0.99]">
@@ -386,8 +389,8 @@ export function LocalWhisperModelPanel() {
                         onChange={(e) => toggleDualChannel(e.target.checked)} 
                     />
                     <div>
-                        <span className="text-sm font-medium text-text-primary block transition-colors group-hover:text-accent-primary">Split Audio Channels</span>
-                        <span className="text-xs text-text-tertiary mt-0.5 block">Use different models for microphone and system audio</span>
+                        <span className="text-sm font-medium text-text-primary block transition-colors group-hover:text-accent-primary">{t('Split Audio Channels')}</span>
+                        <span className="text-xs text-text-tertiary mt-0.5 block">{t('Use different models for microphone and system audio')}</span>
                     </div>
                     <div className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary focus-visible:ring-opacity-75 ${config.enabled ? 'bg-accent-primary' : 'bg-border-muted'}`}>
                         <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${config.enabled ? 'translate-x-4' : 'translate-x-0'}`} />
@@ -406,18 +409,18 @@ export function LocalWhisperModelPanel() {
                                 className="grid grid-cols-2 gap-4"
                             >
                                 <PremiumSelect
-                                    label="Mic Audio Model"
+                                    label={t("Mic Audio Model")}
                                     value={config.micModelId}
                                     onChange={setMicModel}
                                     options={availableModels}
-                                    placeholder="Select mic model"
+                                    placeholder={t("Select mic model")}
                                 />
                                 <PremiumSelect
-                                    label="System Audio Model"
+                                    label={t("System Audio Model")}
                                     value={config.systemModelId}
                                     onChange={setSystemModel}
                                     options={availableModels}
-                                    placeholder="Select system model"
+                                    placeholder={t("Select system model")}
                                 />
                             </motion.div>
                         ) : (
@@ -429,11 +432,11 @@ export function LocalWhisperModelPanel() {
                                 transition={{ duration: 0.2, ease: "easeOut" }}
                             >
                                 <PremiumSelect
-                                    label="Global Model"
+                                    label={t("Global Model")}
                                     value={config.globalModelId}
                                     onChange={setGlobalModel}
                                     options={availableModels}
-                                    placeholder="Select global model"
+                                    placeholder={t("Select global model")}
                                 />
                             </motion.div>
                         )}
@@ -443,10 +446,10 @@ export function LocalWhisperModelPanel() {
 
             <div className="bg-bg-card rounded-xl border border-border-subtle overflow-hidden shadow-sm relative z-0">
                 <div className="px-5 py-4 bg-bg-elevated/50 border-b border-border-subtle flex justify-between items-center">
-                    <h3 className="text-sm font-semibold text-text-primary">Model Manager</h3>
+                    <h3 className="text-sm font-semibold text-text-primary">{t('Model Manager')}</h3>
                     {hardware?.recommendedModel && (
                         <span className="text-[11px] text-text-tertiary font-medium bg-bg-input px-2 py-1 rounded-md border border-border-subtle">
-                            Recommended for your {isMac ? 'Mac' : 'PC'}: <span className="text-text-primary">{models.find(m => m.id === hardware.recommendedModel)?.name}</span>
+                            {t('Recommended for your')} {isMac ? 'Mac' : 'PC'}: <span className="text-text-primary">{models.find(m => m.id === hardware.recommendedModel)?.name}</span>
                         </span>
                     )}
                 </div>
@@ -465,7 +468,7 @@ export function LocalWhisperModelPanel() {
                                     <div className="flex items-center gap-2 mb-1.5">
                                         <span className="text-sm font-medium text-text-primary truncate tracking-tight">{model.name}</span>
                                         {isRecommended && (
-                                            <span className="px-1.5 py-0.5 rounded-[4px] bg-accent-primary/10 text-accent-primary text-[9px] font-bold uppercase tracking-wider">Recommended</span>
+                                            <span className="px-1.5 py-0.5 rounded-[4px] bg-accent-primary/10 text-accent-primary text-[9px] font-bold uppercase tracking-wider">{t('Recommended')}</span>
                                         )}
                                         {model.requiresAppleSilicon && (
                                             <span className="px-1.5 py-0.5 rounded-[4px] bg-purple-500/10 text-purple-500 text-[9px] font-bold uppercase tracking-wider">Apple Silicon</span>
@@ -474,21 +477,21 @@ export function LocalWhisperModelPanel() {
                                     <div className="flex items-center gap-3.5 text-xs text-text-tertiary">
                                         <span className="flex items-center gap-1.5"><HardDrive size={13} className="opacity-70" /> {model.sizeMb} MB</span>
                                         <span className="flex items-center gap-1.5"><Zap size={13} className="opacity-70" /> {model.speed}</span>
-                                        <span className="flex items-center gap-1.5"><Check size={13} className="opacity-70" /> {model.accuracy} acc</span>
+                                        <span className="flex items-center gap-1.5"><Check size={13} className="opacity-70" /> {model.accuracy} {t('acc')}</span>
                                     </div>
                                     
                                     {isDownloading && (
                                         <div className="mt-3.5 pr-8">
                                             <div className="flex justify-between items-center text-[10px] text-text-secondary mb-1.5 uppercase tracking-wider font-semibold">
-                                                <span>Downloading...</span>
+                                                <span>{t('Downloading...')}</span>
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-accent-primary tabular-nums">{Math.round(progress)}%</span>
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); handleCancel(model.id); }}
                                                         className="text-text-tertiary hover:text-red-500 transition-colors duration-200 px-1.5 py-0.5 rounded-md hover:bg-red-500/10 normal-case tracking-normal font-medium"
-                                                        title="Cancel download"
+                                                        title={t("Cancel download")}
                                                     >
-                                                        Cancel
+                                                        {t('Cancel')}
                                                     </button>
                                                 </div>
                                             </div>
@@ -507,10 +510,10 @@ export function LocalWhisperModelPanel() {
                                         <div className="mt-2.5 text-xs text-red-500 flex items-center gap-1.5 font-medium bg-red-500/10 px-2.5 py-1.5 rounded-md inline-flex">
                                             <AlertCircle size={14} />
                                             {model.status === 'interrupted'
-                                                ? 'Download was interrupted. Click Install to retry.'
+                                                ? t('Download was interrupted. Click Install to retry.')
                                                 : model.status === 'cancelled'
-                                                  ? 'Download cancelled. Click Install to retry.'
-                                                  : (model.errorMessage || 'Failed to download model')}
+                                                  ? t('Download cancelled. Click Install to retry.')
+                                                  : (model.errorMessage || t('Failed to download model'))}
                                         </div>
                                     )}
                                 </div>
@@ -522,7 +525,7 @@ export function LocalWhisperModelPanel() {
                                             className="group/btn relative h-[34px] px-4 flex items-center gap-1.5 rounded-[10px] bg-accent-primary/10 hover:bg-accent-primary/20 text-accent-primary text-[13px] font-semibold transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.96] shadow-sm"
                                         >
                                             <Download size={14} className="transition-transform duration-300 group-hover/btn:-translate-y-[2px]" />
-                                            <span>{model.status === 'error' || model.status === 'interrupted' || model.status === 'cancelled' ? 'Retry' : 'Install'}</span>
+                                            <span>{model.status === 'error' || model.status === 'interrupted' || model.status === 'cancelled' ? t('Retry') : t('Install')}</span>
                                         </button>
                                     )}
                                     
@@ -530,7 +533,7 @@ export function LocalWhisperModelPanel() {
                                         <button
                                             onClick={() => handleDelete(model.id)}
                                             className="p-2 rounded-[10px] text-text-tertiary hover:bg-red-500/10 hover:text-red-500 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.96]"
-                                            title="Delete model"
+                                            title={t("Delete model")}
                                         >
                                             <Trash2 size={16} />
                                         </button>
@@ -546,7 +549,7 @@ export function LocalWhisperModelPanel() {
             {hardware?.tier === 'limited' && (
                 <div className="pt-1 text-center">
                     <p className="text-[10px] font-medium text-amber-500 dark:text-amber-400/80 uppercase tracking-widest">
-                        ⓘ Limited hardware — cloud STT recommended for long sessions
+                        ⓘ {t('Limited hardware — cloud STT recommended for long sessions')}
                     </p>
                 </div>
             )}
@@ -576,6 +579,7 @@ function OnnxRecoveryChip({
     notice: OnnxRecoveryNotice;
     onDismiss: () => void;
 }) {
+    const t = useT();
     const [retrying, setRetrying] = useState(false);
     const handleRetry = useCallback(async () => {
         setRetrying(true);
@@ -600,17 +604,17 @@ function OnnxRecoveryChip({
                         disabled={retrying}
                         className="text-[11px] font-semibold text-accent-primary hover:underline disabled:opacity-50"
                     >
-                        {retrying ? 'Retrying…' : 'Retry now'}
+                        {retrying ? t('Retrying…') : t('Retry now')}
                     </button>
                     <span className="text-[10px] text-text-tertiary">
-                        Skipped model: <span className="font-mono">{notice.badModelId}</span>
+                        {t('Skipped model:')} <span className="font-mono">{notice.badModelId}</span>
                     </span>
                 </div>
             </div>
             <button
                 onClick={onDismiss}
                 className="p-1 rounded-md text-text-tertiary hover:text-text-primary hover:bg-bg-elevated transition-colors"
-                aria-label="Dismiss recovery notice"
+                aria-label={t("Dismiss recovery notice")}
             >
                 <X size={12} />
             </button>

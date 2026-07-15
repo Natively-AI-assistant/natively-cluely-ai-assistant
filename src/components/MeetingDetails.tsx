@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useId } from 'react';
+import { useT } from '../i18n';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { ArrowLeft, Search, Mail, Link, ChevronDown, Play, ArrowUp, Copy, Check, MoreHorizontal, Settings, ArrowRight, RefreshCw, Info, Eye, EyeOff, History, Pencil, X, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
@@ -211,6 +212,7 @@ function techniqueLabel(body: string): string {
 // Copy-to-clipboard control for the code hero. Ghosted until hover on desktop,
 // icon crossfades copy → check on success and reverts after 2s.
 const CopyButton: React.FC<{ text: string }> = ({ text }) => {
+    const t = useT();
     const [copied, setCopied] = useState(false);
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
     useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
@@ -230,7 +232,7 @@ const CopyButton: React.FC<{ text: string }> = ({ text }) => {
         <button
             type="button"
             onClick={handle}
-            aria-label={copied ? 'Copied' : 'Copy code'}
+            aria-label={copied ? t('Copied') : t('Copy code')}
             className="relative w-6 h-6 inline-flex items-center justify-center rounded-md text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-[color,background-color,transform] duration-100 ease-out active:scale-[0.92] opacity-100 md:opacity-0 md:group-hover:opacity-100 focus:outline-none focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-white/20"
         >
             <AnimatePresence mode="wait" initial={false}>
@@ -268,6 +270,7 @@ function markdownToPlainText(md: string): string {
 // Text button used in the answer-level hover action bar (copy whole answer).
 // Same copy→check feedback as CopyButton but with a visible label.
 const AnswerCopyButton: React.FC<{ text: string }> = ({ text }) => {
+    const t = useT();
     const [copied, setCopied] = useState(false);
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
     useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
@@ -284,11 +287,11 @@ const AnswerCopyButton: React.FC<{ text: string }> = ({ text }) => {
         <button
             type="button"
             onClick={handle}
-            aria-label={copied ? 'Copied answer' : 'Copy answer'}
+            aria-label={copied ? t('Copied answer') : t('Copy answer')}
             className="inline-flex items-center gap-1 h-6 px-1.5 rounded-md cursor-default select-none text-[11px] font-medium text-text-tertiary hover:text-text-secondary hover:bg-white/[0.05] transition-[color,background-color,transform] duration-[120ms] ease-out active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/25"
         >
             {copied ? <Check className="w-3 h-3 text-emerald-400" strokeWidth={2.5} /> : <Copy className="w-3 h-3" strokeWidth={2} />}
-            <span>{copied ? 'Copied' : 'Copy'}</span>
+            <span>{copied ? t('Copied') : t('Copy')}</span>
         </button>
     );
 };
@@ -424,6 +427,7 @@ const CodeHero: React.FC<{ lang: string; code: string; technique?: string }> = (
  *   crossfade when switching, iOS drawer curve for open/close).
  */
 const CodingAnswerBlock: React.FC<{ sections: CodingSection[]; firstView?: boolean }> = ({ sections, firstView = false }) => {
+    const t = useT();
     const reduce = useReducedMotion();
     const [activeDetail, setActiveDetail] = useState<DetailKind | null>(null);
     const panelRef = useRef<HTMLDivElement>(null);
@@ -530,7 +534,7 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[]; firstView?: boole
             {/* Complexity — always-visible chip, never behind a click */}
             {complexityChip && (
                 <motion.div variants={childVariant} className="flex items-center gap-1.5 -mt-1">
-                    <span className="text-[10px] uppercase tracking-[0.1em] font-semibold text-white/25 select-none cursor-default">cost</span>
+                    <span className="text-[10px] uppercase tracking-[0.1em] font-semibold text-white/25 select-none cursor-default">{t('cost')}</span>
                     <span className="text-[12px] tabular-nums text-text-secondary font-medium select-text font-mono">{renderComplexity(complexityChip)}</span>
                 </motion.div>
             )}
@@ -554,7 +558,7 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[]; firstView?: boole
                         <div
                             ref={pillsRef}
                             role="tablist"
-                            aria-label="Answer detail"
+                            aria-label={t("Answer detail")}
                             className="flex items-center gap-0.5"
                             onKeyDown={onPillKeyDown}
                         >
@@ -711,11 +715,12 @@ const ToneDropdown: React.FC<{
     isRegeneratingFollowUp: boolean;
     onSelect: (tone: 'professional' | 'warm' | 'concise' | 'friendly') => void;
 }> = ({ followUpTone, isRegeneratingFollowUp, onSelect }) => {
+    const t = useT();
     const toneOptions: { value: 'professional' | 'warm' | 'concise' | 'friendly'; label: string }[] = [
-        { value: 'professional', label: 'Professional' },
-        { value: 'warm',         label: 'Warm'         },
-        { value: 'concise',      label: 'Concise'      },
-        { value: 'friendly',     label: 'Friendly'     },
+        { value: 'professional', label: t('Professional') },
+        { value: 'warm',         label: t('Warm')         },
+        { value: 'concise',      label: t('Concise')      },
+        { value: 'friendly',     label: t('Friendly')     },
     ];
     const [toneOpen, setToneOpen] = useState(false);
     const toneRef = useRef<HTMLDivElement>(null);
@@ -735,7 +740,7 @@ const ToneDropdown: React.FC<{
                 onClick={() => setToneOpen(v => !v)}
                 className="h-7 inline-flex items-center gap-1.5 text-[11px] font-medium pl-2.5 pr-2 rounded-md text-text-secondary hover:text-text-primary hover:bg-white/[0.06] disabled:opacity-50 transition-colors"
             >
-                <span>{toneOptions.find(o => o.value === followUpTone)?.label ?? 'Tone'}</span>
+                <span>{toneOptions.find(o => o.value === followUpTone)?.label ?? t('Tone')}</span>
                 <ChevronDown className={`w-3 h-3 text-text-tertiary transition-transform duration-150 ${toneOpen ? 'rotate-180' : ''}`} strokeWidth={2.5} />
             </button>
             <AnimatePresence>
@@ -852,6 +857,7 @@ interface MeetingDetailsProps {
 }
 
 const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting }) => {
+    const t = useT();
     const isLight = useResolvedTheme() === 'light';
     // We need local state for the meeting object to reflect optimistic updates
     const [meeting, setMeeting] = useState<Meeting>(initialMeeting);
@@ -1190,7 +1196,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                             transition={{ type: "spring", stiffness: 400, damping: 30 }}
                                         />
                                     )}
-                                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                                    {tab === 'summary' ? t('Summary') : tab === 'transcript' ? t('Transcript') : t('Usage')}
                                 </button>
                             ))}
                         </div>
@@ -1201,7 +1207,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                             className="flex items-center gap-2 text-xs font-medium text-text-secondary hover:text-text-primary transition-colors"
                         >
                             {isCopied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                            {isCopied ? 'Copied' : activeTab === 'summary' ? 'Copy full summary' : activeTab === 'transcript' ? 'Copy full transcript' : 'Copy usage'}
+                            {isCopied ? t('Copied') : activeTab === 'summary' ? t('Copy full summary') : activeTab === 'transcript' ? t('Copy full transcript') : t('Copy usage')}
                         </button>
                     </div>
 
@@ -1289,7 +1295,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                         strokeWidth={2}
                                                     />
                                                 </motion.span>
-                                                <span>{isRegenerating ? 'Regenerating…' : 'Regenerate notes'}</span>
+                                                <span>{isRegenerating ? t('Regenerating…') : t('Regenerate notes')}</span>
                                             </motion.button>
 
                                             <div className="w-px h-4 bg-border-subtle shrink-0" aria-hidden="true" />
@@ -1318,7 +1324,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                         </motion.span>
                                                     </AnimatePresence>
                                                 </span>
-                                                <span>{showEvidence ? 'Hide evidence' : 'Show evidence'}</span>
+                                                <span>{showEvidence ? t('Hide evidence') : t('Show evidence')}</span>
                                             </motion.button>
                                         </div>
                                         {v3SummaryStatus && v3SummaryStatus !== 'completed' && (
@@ -1345,12 +1351,12 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     >
                                         <div className="min-w-0">
                                             <p className="text-[11px] font-medium uppercase tracking-[0.06em] text-text-tertiary mb-1">
-                                                {v3Mode.selectedModeName ? `This looks like a ${v3Mode.detectedModeName}` : 'Better template available'}
+                                                {v3Mode.selectedModeName ? `${t('This looks like a')} ${v3Mode.detectedModeName}` : t('Better template available')}
                                             </p>
                                             <p className="text-[14px] font-semibold text-text-primary tracking-[-0.01em] truncate leading-tight">
                                                 {isRegenerating
-                                                    ? 'Regenerating…'
-                                                    : <>Regenerate notes as <span className="text-accent-primary">{v3Mode.detectedModeName}</span></>}
+                                                    ? t('Regenerating…')
+                                                    : <>{t('Regenerate notes as')} <span className="text-accent-primary">{v3Mode.detectedModeName}</span></>}
                                             </p>
                                         </div>
                                         <ChevronRight className="shrink-0 w-4 h-4 text-text-tertiary group-hover:text-accent-primary group-hover:translate-x-0.5 transition-all duration-150" strokeWidth={2} />
@@ -1367,7 +1373,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     >
                                         <div className="flex items-center gap-2 mb-2.5">
                                             <History className="w-3.5 h-3.5 text-text-tertiary shrink-0" strokeWidth={2} />
-                                            <p className="text-[11px] font-medium uppercase tracking-[0.06em] text-text-tertiary">From earlier meetings</p>
+                                            <p className="text-[11px] font-medium uppercase tracking-[0.06em] text-text-tertiary">{t('From earlier meetings')}</p>
                                         </div>
                                         <ul className="space-y-2">
                                             {meeting.detailedSummary.crossMeeting.stillOpen.map((line, i) => (
@@ -1383,7 +1389,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                 {/* Summary on top — outcome-first, grounded. Then the mode's template sections below. */}
                                 {isV3Summary && v3Tldr.length > 0 && (
                                     <section className="mb-8">
-                                        <h2 className="text-lg font-semibold text-text-primary mb-4">Summary</h2>
+                                        <h2 className="text-lg font-semibold text-text-primary mb-4">{t('Summary')}</h2>
                                         <ul className="space-y-3">
                                             {v3Tldr.map((item, i) => (
                                                 <li key={i} className="flex items-start gap-3 group">
@@ -1427,7 +1433,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     recall). Flip to true to surface them again. */}
                                 {SHOW_STRUCTURED_BLOCKS && isV3Summary && v3WhatChanged.length > 0 && (
                                     <section className="mb-8">
-                                        <h2 className="text-lg font-semibold text-text-primary mb-4">What changed</h2>
+                                        <h2 className="text-lg font-semibold text-text-primary mb-4">{t('What changed')}</h2>
                                         <ul className="space-y-3">
                                             {v3WhatChanged.map((item, i) => (
                                                 <li key={i} className="flex items-start gap-3 group">
@@ -1441,7 +1447,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
 
                                 {SHOW_STRUCTURED_BLOCKS && isV3Summary && v3Decisions.length > 0 && (
                                     <section className="mb-8">
-                                        <h2 className="text-lg font-semibold text-text-primary mb-4">Decisions</h2>
+                                        <h2 className="text-lg font-semibold text-text-primary mb-4">{t('Decisions')}</h2>
                                         <ul className="space-y-3">
                                             {v3Decisions.map((item, i) => (
                                                 <li key={item.id || i} className="p-3 rounded-[10px] border border-white/10 bg-white/[0.02]">
@@ -1451,7 +1457,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                             <p className="text-sm text-text-secondary leading-relaxed">{item.text}</p>
                                                             <p className="text-[11px] text-text-tertiary mt-1">
                                                                 {item.owner && <span>{item.owner} · </span>}
-                                                                <span>{item.confidence} confidence</span>
+                                                                <span>{item.confidence} {t('confidence')}</span>
                                                             </p>
                                                             {showEvidence && evidenceLabel(item.evidence) && (
                                                                 <button type="button" onClick={() => jumpToEvidence(item.evidence)} className="text-[11px] text-blue-400/80 hover:text-blue-300 mt-1 text-left">↳ {evidenceLabel(item.evidence)}</button>
@@ -1466,7 +1472,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
 
                                 {SHOW_STRUCTURED_BLOCKS && isV3Summary && v3Actions.length > 0 && (
                                     <section className="mb-8">
-                                        <h2 className="text-lg font-semibold text-text-primary mb-4">Action Items</h2>
+                                        <h2 className="text-lg font-semibold text-text-primary mb-4">{t('Action Items')}</h2>
                                         <ul className="space-y-3">
                                             {v3Actions.map((item, i) => (
                                                 <li key={item.id || i} className="p-3 rounded-[10px] border border-emerald-400/20 bg-emerald-500/[0.03]">
@@ -1476,9 +1482,9 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                             <p className="text-sm text-text-secondary leading-relaxed">{item.text}</p>
                                                             <p className="text-[11px] text-text-tertiary mt-1 flex flex-wrap gap-x-1">
                                                                 {item.owner && <span className="font-medium">{item.owner}</span>}
-                                                                {item.deadline && <span>by {item.deadline}</span>}
+                                                                {item.deadline && <span>{t('by')} {item.deadline}</span>}
                                                                 <span className={`px-1.5 py-0.5 rounded border ${item.explicitness === 'explicit' ? 'border-emerald-400/30 text-emerald-400' : 'border-amber-400/30 text-amber-400'}`}>{item.explicitness}</span>
-                                                                <span>{item.confidence} confidence</span>
+                                                                <span>{item.confidence} {t('confidence')}</span>
                                                             </p>
                                                             {showEvidence && evidenceLabel(item.evidence) && (
                                                                 <button type="button" onClick={() => jumpToEvidence(item.evidence)} className="text-[11px] text-blue-400/80 hover:text-blue-300 mt-1 text-left">↳ {evidenceLabel(item.evidence)}</button>
@@ -1493,7 +1499,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
 
                                 {SHOW_STRUCTURED_BLOCKS && isV3Summary && v3Questions.length > 0 && (
                                     <section className="mb-8">
-                                        <h2 className="text-lg font-semibold text-text-primary mb-4">Open Questions</h2>
+                                        <h2 className="text-lg font-semibold text-text-primary mb-4">{t('Open Questions')}</h2>
                                         <ul className="space-y-3">
                                             {v3Questions.map((item, i) => (
                                                 <li key={item.id || i} className="flex items-start gap-3 group">
@@ -1510,12 +1516,12 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
 
                                 {SHOW_STRUCTURED_BLOCKS && isV3Summary && v3Risks.length > 0 && (
                                     <section className="mb-8">
-                                        <h2 className="text-lg font-semibold text-text-primary mb-4">Risks / Blockers</h2>
+                                        <h2 className="text-lg font-semibold text-text-primary mb-4">{t('Risks / Blockers')}</h2>
                                         <ul className="space-y-3">
                                             {v3Risks.map((item, i) => (
                                                 <li key={item.id || i} className="p-3 rounded-[10px] border border-red-400/20 bg-red-500/[0.03]">
                                                     <p className="text-sm text-text-secondary leading-relaxed">{item.text}</p>
-                                                    <p className="text-[11px] text-text-tertiary mt-1">{item.severity} severity{evidenceLabel(item.evidence) ? ` · ${evidenceLabel(item.evidence)}` : ''}</p>
+                                                    <p className="text-[11px] text-text-tertiary mt-1">{item.severity} {t('severity')}{evidenceLabel(item.evidence) ? ` · ${evidenceLabel(item.evidence)}` : ''}</p>
                                                 </li>
                                             ))}
                                         </ul>
@@ -1526,7 +1532,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                 {isV3Summary && followUpBody.trim() && (
                                     <section className="mb-8">
                                         <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-                                            <h2 className="text-lg font-semibold text-text-primary">Follow-up draft</h2>
+                                            <h2 className="text-lg font-semibold text-text-primary">{t('Follow-up draft')}</h2>
                                             <div className="flex items-center gap-1 p-1 rounded-lg bg-white/[0.03] border border-border-subtle">
                                                 {/* Copy — with a real copied-confirmation state. */}
                                                 <motion.button
@@ -1538,7 +1544,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                     }}
                                                     whileTap={prefersReducedMotion ? undefined : { scale: 0.96 }}
                                                     transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                                                    aria-label={followUpCopied ? 'Copied' : 'Copy follow-up draft'}
+                                                    aria-label={followUpCopied ? t('Copied') : t('Copy follow-up draft')}
                                                     className="h-7 inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-white/[0.06] transition-colors"
                                                 >
                                                     <span className="relative w-3.5 h-3.5 shrink-0">
@@ -1568,7 +1574,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                             )}
                                                         </AnimatePresence>
                                                     </span>
-                                                    <span className="min-w-[30px] text-left">{followUpCopied ? 'Copied' : 'Copy'}</span>
+                                                    <span className="min-w-[30px] text-left">{followUpCopied ? t('Copied') : t('Copy')}</span>
                                                 </motion.button>
 
                                                 <div className="w-px h-4 bg-border-subtle shrink-0" aria-hidden="true" />
@@ -1586,7 +1592,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                         className={`w-3.5 h-3.5 shrink-0 ${isRegeneratingFollowUp && !prefersReducedMotion ? 'animate-spin' : ''}`}
                                                         strokeWidth={2}
                                                     />
-                                                    <span>{isRegeneratingFollowUp ? 'Regenerating…' : 'Regenerate'}</span>
+                                                    <span>{isRegeneratingFollowUp ? t('Regenerating…') : t('Regenerate')}</span>
                                                 </motion.button>
 
                                                 <div className="w-px h-4 bg-border-subtle shrink-0" aria-hidden="true" />
@@ -1599,7 +1605,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                 />
                                             </div>
                                         </div>
-                                        {followUpSubject && <p className="text-[12.5px] text-text-tertiary mb-1">Subject: {followUpSubject}</p>}
+                                        {followUpSubject && <p className="text-[12.5px] text-text-tertiary mb-1">{t('Subject:')} {followUpSubject}</p>}
                                         <pre className="text-[12.5px] text-text-secondary leading-relaxed whitespace-pre-wrap font-sans select-text cursor-text p-3 rounded-[10px] border border-white/10 bg-white/[0.02]">{followUpBody}</pre>
                                     </section>
                                 )}
@@ -1609,7 +1615,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     <section className="mb-8">
                                         <div className="flex items-center justify-between mb-4">
                                             <EditableTextBlock
-                                                initialValue={meeting.detailedSummary?.actionItemsTitle || 'Action Items'}
+                                                initialValue={meeting.detailedSummary?.actionItemsTitle || t('Action Items')}
                                                 onSave={(val) => {
                                                     setMeeting(prev => ({
                                                         ...prev,
@@ -1632,7 +1638,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                             onSave={(val) => handleActionItemSave(i, val)}
                                                             tagName="p"
                                                             className="text-sm text-text-secondary leading-relaxed -ml-2 px-2 rounded-sm transition-colors"
-                                                            placeholder="Type an action item..."
+                                                            placeholder={t("Type an action item...")}
                                                             onEnter={() => {
                                                                 const newItems = [...(meeting.detailedSummary?.actionItems || [])];
                                                                 newItems.splice(i + 1, 0, "");
@@ -1659,7 +1665,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     <section>
                                         <div className="flex items-center justify-between mb-4">
                                             <EditableTextBlock
-                                                initialValue={meeting.detailedSummary?.keyPointsTitle || 'Key Points'}
+                                                initialValue={meeting.detailedSummary?.keyPointsTitle || t('Key Points')}
                                                 onSave={(val) => {
                                                     setMeeting(prev => ({
                                                         ...prev,
@@ -1682,7 +1688,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                             onSave={(val) => handleKeyPointSave(i, val)}
                                                             tagName="p"
                                                             className="text-sm text-text-secondary leading-relaxed -ml-2 px-2 rounded-sm transition-colors"
-                                                            placeholder="Type a key point..."
+                                                            placeholder={t("Type a key point...")}
                                                             onEnter={() => {
                                                                 const newItems = [...(meeting.detailedSummary?.keyPoints || [])];
                                                                 newItems.splice(i + 1, 0, "");
@@ -1710,7 +1716,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     pre-Phase-7 meetings still look the same. */}
                                 {!isV3Summary && meeting.detailedSummary?.actionItemsStructured && meeting.detailedSummary.actionItemsStructured.length > 0 && (
                                     <section className="mb-8">
-                                        <h2 className="text-lg font-semibold text-text-primary mb-4">Next Steps</h2>
+                                        <h2 className="text-lg font-semibold text-text-primary mb-4">{t('Next Steps')}</h2>
                                         <ul className="space-y-2">
                                             {meeting.detailedSummary.actionItemsStructured.map(item => (
                                                 <li key={item.id} className="flex items-start gap-3 group">
@@ -1721,7 +1727,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                             <p className="text-[11px] text-text-tertiary mt-0.5">
                                                                 {item.owner && <span className="font-medium">{item.owner}</span>}
                                                                 {item.owner && item.deadline && <span> · </span>}
-                                                                {item.deadline && <span>by {item.deadline}</span>}
+                                                                {item.deadline && <span>{t('by')} {item.deadline}</span>}
                                                             </p>
                                                         )}
                                                     </div>
@@ -1734,7 +1740,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                 {/* Phase 7 — Coaching insights (mode-specific opportunities). */}
                                 {meeting.detailedSummary?.coachingInsights && meeting.detailedSummary.coachingInsights.length > 0 && (
                                     <section className="mb-8">
-                                        <h2 className="text-lg font-semibold text-text-primary mb-4">Coaching</h2>
+                                        <h2 className="text-lg font-semibold text-text-primary mb-4">{t('Coaching')}</h2>
                                         <ul className="space-y-3">
                                             {meeting.detailedSummary.coachingInsights.map(insight => {
                                                 const tone = insight.severity === 'warning'
@@ -1760,7 +1766,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                 {!isV3Summary && typeof meeting.detailedSummary?.followUpDraft === 'string' && meeting.detailedSummary.followUpDraft.trim() && (
                                     <section className="mb-8">
                                         <div className="flex items-center justify-between mb-3">
-                                            <h2 className="text-lg font-semibold text-text-primary">Follow-up Draft</h2>
+                                            <h2 className="text-lg font-semibold text-text-primary">{t('Follow-up Draft')}</h2>
                                             <button
                                                 type="button"
                                                 onClick={() => {
@@ -1769,7 +1775,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                 }}
                                                 className="text-[11px] px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-text-secondary border border-white/10 transition-colors"
                                             >
-                                                Copy
+                                                {t('Copy')}
                                             </button>
                                         </div>
                                         <pre className="text-[12.5px] text-text-secondary leading-relaxed whitespace-pre-wrap font-sans select-text cursor-text p-3 rounded-[10px] border border-white/10 bg-white/[0.02]">{meeting.detailedSummary.followUpDraft}</pre>
@@ -1811,7 +1817,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     if (speakers.length === 0) return null;
                                     return (
                                         <div className="mb-5 flex flex-wrap items-center gap-2">
-                                            <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-wide mr-0.5">Speakers</span>
+                                            <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-wide mr-0.5">{t('Speakers')}</span>
                                             <AnimatePresence initial={false} mode="popLayout">
                                             {speakers.map((sp) => {
                                                 const display = resolveSpeakerName(sp);
@@ -1840,7 +1846,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                                 onClick={() => handleSaveSpeakerLabel(id, speakerDraft)}
                                                                 whileTap={prefersReducedMotion ? undefined : { scale: 0.9 }}
                                                                 className="inline-flex items-center justify-center w-5 h-5 rounded-full text-accent-primary hover:bg-accent-primary/15 transition-colors"
-                                                                title="Save"
+                                                                title={t("Save")}
                                                             >
                                                                 <Check className="w-3 h-3" strokeWidth={2.5} />
                                                             </motion.button>
@@ -1850,7 +1856,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                                 onClick={() => setEditingSpeaker(null)}
                                                                 whileTap={prefersReducedMotion ? undefined : { scale: 0.9 }}
                                                                 className="inline-flex items-center justify-center w-5 h-5 rounded-full text-text-tertiary hover:text-text-primary hover:bg-white/[0.08] transition-colors"
-                                                                title="Cancel"
+                                                                title={t("Cancel")}
                                                             >
                                                                 <X className="w-3 h-3" strokeWidth={2.5} />
                                                             </motion.button>
@@ -1866,7 +1872,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                         whileTap={prefersReducedMotion ? undefined : { scale: 0.96 }}
                                                         transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
                                                         className="group inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] text-text-secondary hover:text-text-primary border border-border-subtle transition-colors"
-                                                        title="Rename speaker"
+                                                        title={t("Rename speaker")}
                                                     >
                                                         <span className="text-[11px] font-medium">{display}</span>
                                                         <Pencil className="w-2.5 h-2.5 text-text-tertiary opacity-0 group-hover:opacity-100 transition-opacity shrink-0" strokeWidth={2} />
@@ -1885,7 +1891,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                         }) || [];
 
                                         if (filteredTranscript.length === 0) {
-                                            return <p className="text-text-tertiary">No transcript available.</p>;
+                                            return <p className="text-text-tertiary">{t('No transcript available.')}</p>;
                                         }
 
                                         // Find the segment index closest to a pending evidence timestamp.
@@ -1935,7 +1941,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                         );
                                     });
                                 })()}
-                                {!meeting.usage?.length && <p className="text-text-tertiary">No usage history.</p>}
+                                {!meeting.usage?.length && <p className="text-text-tertiary">{t('No usage history.')}</p>}
                             </section>
                         )}
                     </div>
@@ -1951,7 +1957,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={handleInputKeyDown}
-                        placeholder="Ask about this meeting..."
+                        placeholder={t("Ask about this meeting...")}
                         className="w-full pl-5 pr-12 py-3 bg-transparent backdrop-blur-[24px] backdrop-saturate-[140%] shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-white/20 rounded-full text-sm text-text-primary placeholder-text-tertiary/70 focus:outline-none transition-shadow duration-200"
                     />
                     <button

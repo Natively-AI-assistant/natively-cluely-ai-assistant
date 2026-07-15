@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useT } from '../../i18n';
 import { ArrowRight, Loader, Check } from 'lucide-react';
 import { motion } from 'framer-motion';
 // Static import keeps Vite from warning about a "mixed" dynamic+static import
@@ -15,6 +16,7 @@ interface ConnectCalendarButtonProps extends React.ButtonHTMLAttributes<HTMLButt
 }
 
 const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className = '', variant = 'default', onConnect, ...props }) => {
+    const t = useT();
     const [loading, setLoading] = useState(false);
     const [connected, setConnected] = useState(false);
 
@@ -202,7 +204,7 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
                     </svg>
                 )}
 
-                {loading ? 'Connecting...' : 'Connect calendar'}
+                {loading ? t('Connecting...') : t('Connect calendar')}
 
                 {!loading && (
                     <ArrowRight
