@@ -316,8 +316,13 @@ const HighlightedCode = React.memo(
         </div>
         {/* No-wrap horizontal scroll: code line layout stays stable as the
                 canvas grows/shrinks. Without this, wrapped lines re-flow at every
-                spring tick, the block height jitters, and content below shifts. */}
-        <div className="bg-transparent overflow-x-auto">
+                spring tick, the block height jitters, and content below shifts.
+                w-full + min-w-0 keep the inner scroller contained — a flex/grid
+                child defaults to min-width:auto, which lets the <pre>'s intrinsic
+                min-content width stretch the surrounding card and ultimately the
+                chat viewport sideways. See MeetingDetails.tsx CodeHero for the
+                same pattern. */}
+        <div className="w-full min-w-0 bg-transparent overflow-x-auto">
           <SyntaxHighlighter
             language={resolved}
             style={codeTheme}
@@ -503,13 +508,13 @@ const MessageRow = React.memo(
         ? 'max-w-[85%] p-0'
         : 'max-w-[85%] px-4 py-3';
     return (
-      <div className="w-full" {...(isCodeMsg ? { 'data-code-msg': 'true' } : {})}>
+      <div className="w-full min-w-0" {...(isCodeMsg ? { 'data-code-msg': 'true' } : {})}>
         <div
-          className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+          className={`flex min-w-0 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
         >
           <div
             className={`
-              ${bubbleMaxClass} text-[15px] leading-relaxed relative group whitespace-pre-wrap
+              min-w-0 ${bubbleMaxClass} text-[15px] leading-relaxed relative group whitespace-pre-wrap
               ${
                 msg.role === 'user'
                   ? isLightTheme
@@ -6060,7 +6065,7 @@ Provide only the answer, nothing else.`;
               {showAnswerPanel && (
                 <motion.div
                   ref={scrollContainerRef}
-                  className="relative z-10 flex-1 overflow-y-auto p-4 space-y-3 no-drag isolate"
+                  className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-3 no-drag isolate"
                   layout={false}
                   style={{ scrollbarWidth: 'none', maxHeight: scrollMaxH }}
                 >
