@@ -47,7 +47,12 @@ import {
 import { assertProviderDataScopes, getDeniedDataScopes, routeWithScopeFallback, ProviderRouter, DOCUMENT_GROUNDING_SCOPE_DENIED_MESSAGE, type ProviderDataScope, type ProviderDataScopePolicy } from "./llm/ProviderRouter"
 // D1 (PROFILE_INTELLIGENCE_RESEARCH_AND_REDESIGN.md §15 R1): make the routing
 // decision authoritative at this central execution choke-point.
-import { profileInterceptAllowedByRoute, modeAnswerType, type StreamRouteOptions } from "./llm/streamContextPolicy"
+import {
+  localInterviewContextKindsForRoute,
+  profileInterceptAllowedByRoute,
+  modeAnswerType,
+  type StreamRouteOptions,
+} from "./llm/streamContextPolicy"
 import type { ActiveModeDocumentGroundingInfo } from "./services/ModesManager"
 import type { TranscriptTurn } from "./llm/transcriptCleaner"
 import { deepVariableReplacer, getByPath, injectImageIntoMessages } from './utils/curlUtils';
@@ -59,6 +64,10 @@ import { promisify } from 'util';
 import axios from 'axios';
 import { createProviderRateLimiters, RateLimiter } from './services/RateLimiter';
 import { CodexCliConfig, CodexCliService, DEFAULT_CODEX_CLI_CONFIG } from './services/CodexCliService';
+import {
+  buildAiResponseLanguageInstructionSuffix,
+  getProviderLanguageHint,
+} from '../shared/aiResponseLanguage';
 const execAsync = promisify(exec);
 const NATIVELY_API_URL = (process.env.NATIVELY_API_URL || 'https://api.natively.software').replace(/\/+$/, '');
 
@@ -379,6 +388,117 @@ export class LLMHelper {
     if (/<meeting_history|USER-PROVIDED PERSONA CONTEXT|<user_context|<candidate_|<active_mode_custom_instructions/i.test(context)) scopes.push('profile_history');
     if (/<post_call_summary|meeting summary|silent meeting summarizer|silent meeting note-taker/i.test(context)) scopes.push('post_call_summary');
     return scopes;
+  }
+
+  /**
+   * Attach the user-managed local interview profile to a user-facing answer.
+   * The service performs query-aware excerpt selection so the prompt stays
+   * bounded even when the stored documents are large. Repair/internal calls
+   * opt out through shouldInject; no premium module or license state is read.
+   */
+  private applyLocalInterviewContext(
+    message: string,
+    context: string | undefined,
+    systemPromptOverride: string | undefined,
+    shouldInject: boolean,
+    hasAttachedImages: boolean = false,
+    liveRoute?: {
+      live: boolean;
+      question?: string;
+      retrievalQuestion?: string;
+      answerType?: StreamRouteOptions['answerType'];
+      profileFactIntent?: StreamRouteOptions['profileFactIntent'];
+      route?: StreamRouteOptions;
+    },
+  ): { context: string | undefined; systemPromptOverride: string | undefined } {
+    if (!shouldInject || context?.includes('<local_interview_context>')) {
+      return { context, systemPromptOverride };
+    }
+    try {
+      // The text the CURRENT question actually lives in. For a routed live
+      // answer `message` is the assembled WTA packet (transcript included), so
+      // cue checks and relevance scoring must run against the extracted
+      // question instead — transcript chatter like "nesta conversa" must not
+      // skip injection for an unrelated live answer.
+      const questionText = liveRoute?.question?.trim() || message;
+      // Retrieval can deliberately use a resolved antecedent while the model's
+      // task remains `questionText`. Never use this value for cue detection or
+      // USER QUESTION/currentQuestion prompt assembly.
+      const retrievalQuestionText = liveRoute?.retrievalQuestion?.trim() || questionText;
+      // IMMEDIATE-CONTEXT PRIORITY: a question about an attached
+      // screenshot or about something just said in this conversation is never
+      // answered from the interview documents — injecting them here was
+      // observed pulling the model into a generic candidate presentation that
+      // ignored the image and the chat history. Profile questions without an
+      // attachment/recall cue keep the full injection.
+      const { referencesImmediateConversation, referencesAttachedMedia } =
+        require('./llm/AnswerPlanner') as typeof import('./llm/AnswerPlanner');
+      if (hasAttachedImages || referencesImmediateConversation(questionText) || referencesAttachedMedia(questionText)) {
+        console.log('[LLMHelper] Local interview context skipped (immediate-context priority)', {
+          hasAttachedImages,
+        });
+        return { context, systemPromptOverride };
+      }
+      const { InterviewContextService } = require('./services/InterviewContextService') as typeof import('./services/InterviewContextService');
+      const CONTEXT_CAP = 60_000;
+      const isLiveRoutedAnswer = liveRoute?.live === true;
+      const allowedKinds = localInterviewContextKindsForRoute(liveRoute?.route);
+      // A routed answer with no selected local-document category must not
+      // receive a generic profile bundle merely because none of its layers was
+      // explicitly forbidden. Missing route metadata keeps legacy behavior.
+      if (allowedKinds && allowedKinds.length === 0) {
+        return { context, systemPromptOverride };
+      }
+      const existingLength = context?.length ?? 0;
+      // LIVE-ANSWER RELEVANCE: a routed live answer must never carry the whole
+      // document set. Attaching it to every "what to answer" turn can drown
+      // the specific question into a generic candidate presentation. Live
+      // answers get a tight overall cap and relevance-first excerpt selection
+      // scored against the extracted question; manual chat keeps the legacy
+      // budget (its immediate-context failure modes are handled by the cue
+      // skips above).
+      const available = Math.min(isLiveRoutedAnswer ? 12_000 : 36_000, CONTEXT_CAP - existingLength - 2);
+      if (available < 1_500) return { context, systemPromptOverride };
+      const bundle = isLiveRoutedAnswer
+        ? InterviewContextService.getInstance().buildPromptBundle(retrievalQuestionText, available, {
+            relevanceFirst: true,
+            perCategoryExcerptCap: 3_500,
+            // Project follow-ups need project evidence only. The normal live
+            // profile path intentionally keeps a short identity anchor, but
+            // that anchor caused the production model to repeat the candidate
+            // introduction for an exact implementation drill-in.
+            strictRelevance: liveRoute?.answerType === 'project_followup_answer'
+              || liveRoute?.answerType === 'profile_fact_answer',
+            factRelevance: liveRoute?.answerType === 'profile_fact_answer'
+              && liveRoute?.profileFactIntent === 'fact_lookup',
+            documentInventoryScope: liveRoute?.profileFactIntent === 'profile_document_inventory'
+              ? 'profile'
+              : liveRoute?.profileFactIntent === 'company_document_selection'
+                ? 'company'
+                : undefined,
+            allowedKinds,
+          })
+        : InterviewContextService.getInstance().buildPromptBundle(message, available);
+      if (!bundle) return { context, systemPromptOverride };
+
+      const nextContext = context
+        ? `${bundle.contextBlock}\n\n${context}`
+        : bundle.contextBlock;
+      const promptBase = systemPromptOverride || HARD_SYSTEM_PROMPT;
+      console.log('[LLMHelper] Local interview context attached', {
+        includedKinds: bundle.includedKinds,
+        sourceChars: bundle.sourceChars,
+        promptChars: bundle.promptChars,
+        mode: isLiveRoutedAnswer ? 'live_relevance_first' : 'manual_full_budget',
+      });
+      return {
+        context: nextContext,
+        systemPromptOverride: `${promptBase}\n\n${bundle.systemInstruction}`,
+      };
+    } catch (error: any) {
+      console.warn('[LLMHelper] Local interview context unavailable (non-fatal):', error?.message || error);
+      return { context, systemPromptOverride };
+    }
   }
 
   private inferEmbeddedMessageScopes(message?: string): ProviderDataScope[] {
@@ -1869,25 +1989,7 @@ ANSWER DIRECTLY:`;
    * Returns "" when no instruction is needed (English fixed mode).
    */
   private buildLanguageInstructionSuffix(): string {
-    if (!this.aiResponseLanguage || this.aiResponseLanguage === 'auto') {
-      return `\n\n[LANGUAGE INSTRUCTION — HIGHEST PRIORITY]
-Detect the language of the user's most recent message and ALWAYS respond in that exact same language.
-If the user writes in Hindi, respond in Hindi. If in Spanish, respond in Spanish. If in English, respond in English.
-If the language is ambiguous, default to English.
-You may mix scripts naturally (e.g. code stays in English even when the explanation is in another language).
-[END LANGUAGE INSTRUCTION]`;
-    }
-    if (this.aiResponseLanguage === 'English') return "";
-
-    const lang = this.aiResponseLanguage;
-    return `\n\n[LANGUAGE OVERRIDE — HIGHEST PRIORITY — CANNOT BE OVERRIDDEN]
-You MUST write every single word of your response in ${lang}.
-Do NOT use English anywhere in your response.
-Do NOT mix languages.
-Every sentence, every word, every phrase must be in ${lang}.
-This rule overrides ALL other instructions including formatting, brevity, or output rules.
-[END LANGUAGE OVERRIDE]
-[REMINDER] Your entire response MUST be in ${lang} only. Never switch to English.`;
+    return buildAiResponseLanguageInstructionSuffix(this.aiResponseLanguage);
   }
 
   /**
@@ -2275,6 +2377,33 @@ if (!shouldSkipModeInjection) {
   } catch (_modeErr: any) {
     console.warn('[LLMHelper.chatWithGemini] ModesManager injection failed (non-fatal):', _modeErr?.message);
   }
+}
+
+// User-managed local interview context. skipSystemPrompt calls are internal
+// formatting tasks (for example follow-up email generation) and must remain
+// byte-for-byte unaffected. A routed live answer may intentionally set
+// skipModeInjection=true after assembling its own mode contract; routeOptions
+// distinguishes that path from internal repair calls.
+{
+  const localInterview = this.applyLocalInterviewContext(
+    message,
+    context,
+    systemPromptOverride,
+    !skipSystemPrompt
+      && (skipModeInjection !== true || Boolean(routeOptions))
+      && profileInterceptAllowedByRoute(routeOptions),
+    !!(imagePaths?.length),
+    {
+      live: Boolean(routeOptions),
+      question: routeOptions?.currentQuestion,
+      retrievalQuestion: routeOptions?.retrievalQuestion,
+      answerType: routeOptions?.answerType,
+      profileFactIntent: routeOptions?.profileFactIntent,
+      route: routeOptions,
+    },
+  );
+  context = localInterview.context;
+  systemPromptOverride = localInterview.systemPromptOverride;
 }
 
 const isMultimodal = !!(imagePaths?.length);
@@ -2905,9 +3034,8 @@ const isMultimodal = !!(imagePaths?.length);
       if (images.length) body.images = images;
     }
     if (systemPrompt) body.system = systemPrompt;
-    if (this.aiResponseLanguage && this.aiResponseLanguage !== 'English') {
-      body.language = this.aiResponseLanguage; // 'auto' is forwarded — server handles it
-    }
+    const providerLanguage = getProviderLanguageHint(this.aiResponseLanguage);
+    if (providerLanguage) body.language = providerLanguage;
 
     // 8s hard cap: a `fetch failed` network error without this can stall the provider
     // waterfall for 25-30s before the OS-level TCP reset fires.
@@ -3849,7 +3977,12 @@ const isMultimodal = !!(imagePaths?.length);
       }
       if (ollamaAvailable) {
         const localCombined = context ? `CONTEXT:\n${context}\n\nUSER QUESTION:\n${message}` : message;
-        const ollamaScopePrompt = skipSystemPrompt ? undefined : this.resolveLocalSystemPrompt(this.injectLanguageInstruction(HARD_SYSTEM_PROMPT));
+        // RAG deliberately skips the generic assistant persona, but the selected
+        // response-language contract must still be honored on every turn.
+        const languageOnlyPrompt = this.buildLanguageInstructionSuffix().trim() || undefined;
+        const ollamaScopePrompt = skipSystemPrompt
+          ? languageOnlyPrompt
+          : this.resolveLocalSystemPrompt(this.injectLanguageInstruction(HARD_SYSTEM_PROMPT));
         yield await this.callOllama(localCombined, imagePaths, ollamaScopePrompt);
         return;
       }
@@ -3860,16 +3993,15 @@ const isMultimodal = !!(imagePaths?.length);
     }
 
     // Build single-string messages for Groq/Gemini (which use combined prompts)
+    const languageOnlyPrompt = this.buildLanguageInstructionSuffix().trim() || undefined;
     const buildCombinedMessage = (systemPrompt: string) => {
-      const finalPrompt = skipSystemPrompt ? systemPrompt : this.injectLanguageInstruction(systemPrompt);
-      if (skipSystemPrompt) {
-        return context
-          ? `CONTEXT:\n${context}\n\nUSER QUESTION:\n${message}`
-          : message;
-      }
-      return context
-        ? `${finalPrompt}\n\nCONTEXT:\n${context}\n\nUSER QUESTION:\n${message}`
-        : `${finalPrompt}\n\n${message}`;
+      const finalPrompt = skipSystemPrompt
+        ? languageOnlyPrompt
+        : this.injectLanguageInstruction(systemPrompt);
+      const userBlock = context
+        ? `CONTEXT:\n${context}\n\nUSER QUESTION:\n${message}`
+        : message;
+      return finalPrompt ? `${finalPrompt}\n\n${userBlock}` : userBlock;
     };
 
     // For OpenAI/Claude: separate system prompt + user message (proper API pattern)
@@ -3883,9 +4015,9 @@ const isMultimodal = !!(imagePaths?.length);
     };
 
     // CACHE: separate system for Groq's prefix cache (used by streamWithGroq below).
-    const groqSystemForCache = skipSystemPrompt ? undefined : this.injectLanguageInstruction(GROQ_SYSTEM_PROMPT);
+    const groqSystemForCache = skipSystemPrompt ? languageOnlyPrompt : this.injectLanguageInstruction(GROQ_SYSTEM_PROMPT);
     // CACHE: separate system for Gemini's systemInstruction channel.
-    const geminiSystemForCache = skipSystemPrompt ? undefined : this.injectLanguageInstruction(HARD_SYSTEM_PROMPT);
+    const geminiSystemForCache = skipSystemPrompt ? languageOnlyPrompt : this.injectLanguageInstruction(HARD_SYSTEM_PROMPT);
 
     if (this.useOllama) {
       const response = await this.callOllama(combinedMessages.gemini, imagePaths?.[0]);
@@ -3904,8 +4036,8 @@ const isMultimodal = !!(imagePaths?.length);
     const providers: ProviderAttempt[] = [];
 
     // System prompts for OpenAI/Claude (skipped if skipSystemPrompt)
-    const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(OPENAI_SYSTEM_PROMPT);
-    const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(CLAUDE_SYSTEM_PROMPT);
+    const openaiSystemPrompt = skipSystemPrompt ? languageOnlyPrompt : this.injectLanguageInstruction(OPENAI_SYSTEM_PROMPT);
+    const claudeSystemPrompt = skipSystemPrompt ? languageOnlyPrompt : this.injectLanguageInstruction(CLAUDE_SYSTEM_PROMPT);
 
     // Get auto-discovered text model IDs from ModelVersionManager
     const textOpenAI = this.modelVersionManager.getTextTieredModels(TextModelFamily.OPENAI).tier1;
@@ -4798,6 +4930,32 @@ const isMultimodal = !!(imagePaths?.length);
       }
     }
 
+    // Attach local interview evidence after active-mode retrieval so both
+    // sources share one bounded context budget. Routed WTA calls pass
+    // skipModeInjection=true because they already built the mode contract;
+    // routeOptions keeps those user-facing answers eligible while excluding
+    // internal repair/regeneration streams that also skip mode injection.
+    {
+      const localInterview = this.applyLocalInterviewContext(
+        message,
+        context,
+        systemPromptOverride,
+        (skipModeInjection !== true || Boolean(routeOptions))
+          && profileInterceptAllowedByRoute(routeOptions),
+        !!(imagePaths?.length),
+        {
+          live: Boolean(routeOptions),
+          question: routeOptions?.currentQuestion,
+          retrievalQuestion: routeOptions?.retrievalQuestion,
+          answerType: routeOptions?.answerType,
+          profileFactIntent: routeOptions?.profileFactIntent,
+          route: routeOptions,
+        },
+      );
+      context = localInterview.context;
+      systemPromptOverride = localInterview.systemPromptOverride;
+    }
+
     // Preparation
     let isMultimodal = !!(imagePaths?.length);
     const contextScopes = [...extraDataScopes, ...this.inferContextScopes(context), ...this.inferEmbeddedMessageScopes(message)];
@@ -5566,9 +5724,8 @@ const isMultimodal = !!(imagePaths?.length);
     };
     if (this.groqFastTextMode) body.fast_mode = true;
     if (systemPrompt) body.system = systemPrompt;
-    if (this.aiResponseLanguage && this.aiResponseLanguage !== 'English') {
-      body.language = this.aiResponseLanguage; // 'auto' is forwarded — server handles it
-    }
+    const providerLanguage = getProviderLanguageHint(this.aiResponseLanguage);
+    if (providerLanguage) body.language = providerLanguage;
 
     // Attach images — compress before sending (same as non-streaming generateWithNatively).
     // Retina screenshots are 2-5 MB PNG; the Natively API body limit is 4 MB.

@@ -81,9 +81,22 @@ function cleanText(text: string): string {
  * Check if a turn is meaningful enough to keep
  */
 function isMeaningfulTurn(turn: TranscriptTurn, cleanedText: string): boolean {
-    // Always keep interviewer speech (priority)
-    if (turn.role === 'interviewer' && cleanedText.length >= 5) {
-        return true;
+    // Always keep meaningful interviewer speech (priority). Short, valid
+    // questions such as "Why?" / "How?" used to be dropped by the five-character
+    // floor. That made the downstream extractor walk backwards and answer an
+    // older question (commonly "Tell me about yourself") again. Preserve a
+    // compact question when it either carries explicit question punctuation or
+    // is a high-confidence bare interrogative that STT may emit without "?".
+    // Filler-only turns remain excluded because cleanText() removes acknowledgements
+    // such as "ok?", "uh?" and "hmm?" before this check.
+    if (turn.role === 'interviewer') {
+        const compactQuestion = cleanedText.trim();
+        const alphaNumericLength = (compactQuestion.match(/[a-z0-9À-ɏ]/gi) || []).length;
+        const hasQuestionMark = compactQuestion.endsWith('?') && alphaNumericLength >= 2;
+        const isBareInterrogative = /^(?:why|how|what|who|where|when|which|por\s+qu[eê]|como|o\s+qu[eê]|qu[eê]|qual|quem|onde|quando)$/i.test(compactQuestion);
+        if (cleanedText.length >= 5 || hasQuestionMark || isBareInterrogative) {
+            return true;
+        }
     }
 
     // Minimum 3 words for other roles
@@ -175,7 +188,11 @@ export function prepareTranscriptForWhatToAnswer(
     turns: TranscriptTurn[],
     maxTurns: number = 12
 ): string {
-    const cleaned = cleanTranscript(turns);
+    // Prepared transcript is a human-evidence channel only. Assistant output is
+    // available separately through the AnswerPlan-gated prior-response channel;
+    // embedding it here would bypass that policy and let old answers self-ground.
+    const humanTurns = turns.filter(turn => turn.role !== 'assistant');
+    const cleaned = cleanTranscript(humanTurns);
     const sparsified = sparsifyTranscript(cleaned, maxTurns);
     return formatTranscriptForLLM(sparsified);
 }

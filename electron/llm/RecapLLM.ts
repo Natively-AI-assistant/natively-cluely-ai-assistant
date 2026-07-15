@@ -1,4 +1,5 @@
 import { LLMHelper } from "../LLMHelper";
+import { englishForContext } from "../../shared/aiResponseLanguage";
 import { UNIVERSAL_RECAP_PROMPT } from "./prompts";
 import { TINY_RECAP_PROMPT } from "./tinyPrompts";
 
@@ -21,10 +22,13 @@ export class RecapLLM {
             // rationale: `context` is a conversation-context blob, not a real
             // question, and letting it through the knowledge-mode intent classifier
             // risks misclassifying the whole recap call as an intro request.
-            const stream = this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride, true);
+            const stream = this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride, true, true);
             let fullResponse = "";
             for await (const chunk of stream) fullResponse += chunk;
-            return this.clampRecapResponse(fullResponse);
+            // Epoch summaries are durable model-facing memory. If the global
+            // bilingual response contract wraps this internal recap call, keep
+            // only its English section before clamping/persisting the summary.
+            return this.clampRecapResponse(englishForContext(fullResponse));
         } catch (error) {
             console.error("[RecapLLM] Generation failed:", error);
             return "";
@@ -47,7 +51,7 @@ export class RecapLLM {
             }
             const fittedContext = this.llmHelper.fitContextForCurrentModel(context);
             // See generate() above — ignoreKnowledgeMode=true.
-            yield* this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride, true);
+            yield* this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride, true, true);
         } catch (error) {
             console.error("[RecapLLM] Streaming generation failed:", error);
         }

@@ -1,4 +1,6 @@
 
+import { AI_RESPONSE_LANGUAGE_BILINGUAL_EN_PT } from '../../shared/aiResponseLanguage';
+
 export type LanguageOption = {
     label: string;
     code: string; // Internal key (e.g. 'russian')
@@ -135,6 +137,7 @@ export const RECOGNITION_LANGUAGES: Record<string, LanguageOption> = {
 export const AI_RESPONSE_LANGUAGES = [
     { label: 'Auto (Detect)', code: 'auto' },
     { label: 'English', code: 'English' },
+    { label: 'English + Portuguese (Interview)', code: AI_RESPONSE_LANGUAGE_BILINGUAL_EN_PT },
     { label: 'Indonesian', code: 'Indonesian' },
     { label: 'Russian', code: 'Russian' },
     { label: 'Spanish', code: 'Spanish' },

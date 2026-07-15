@@ -33,7 +33,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
 
-describe('Bug 1: internal action LLMs must not go through the knowledge-mode intent gate', () => {
+describe('Bug 1: internal action LLMs must not receive knowledge-mode or profile/mode injection', () => {
   const sites = [
     { file: 'electron/llm/ClarifyLLM.ts', label: 'ClarifyLLM' },
     { file: 'electron/llm/RecapLLM.ts', label: 'RecapLLM' },
@@ -42,15 +42,15 @@ describe('Bug 1: internal action LLMs must not go through the knowledge-mode int
     { file: 'electron/llm/BrainstormLLM.ts', label: 'BrainstormLLM' },
   ];
   for (const { file, label } of sites) {
-    test(`${label}: every streamChat() call passes ignoreKnowledgeMode=true`, () => {
+    test(`${label}: every streamChat() call passes both isolation flags`, () => {
       const src = fs.readFileSync(path.join(repoRoot, file), 'utf8');
       const calls = [...src.matchAll(/\.streamChat\(([\s\S]*?)\);/g)];
       assert.ok(calls.length > 0, `${label} must call streamChat at least once`);
       for (const m of calls) {
-        // The 5th positional arg (ignoreKnowledgeMode) must be `true`. We check
-        // the raw call text ends with ", true)" before the closing paren (the
-        // regex above already stripped the trailing ");").
-        assert.match(m[1].trim(), /,\s*true\s*$/, `${label} streamChat call missing ignoreKnowledgeMode=true: ${m[0].slice(0, 120)}`);
+        // The 5th and 6th positional args must be true: ignoreKnowledgeMode and
+        // skipModeInjection. The latter keeps profile/mode prompts out of these
+        // internal transformation calls.
+        assert.match(m[1].trim(), /,\s*true\s*,\s*true\s*$/, `${label} streamChat call missing isolation flags: ${m[0].slice(0, 120)}`);
       }
     });
   }
