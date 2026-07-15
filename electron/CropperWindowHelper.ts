@@ -112,15 +112,38 @@ export class CropperWindowHelper {
                 return;
             }
 
-            // Validate input data for security
-            if (!this.validateBounds(bounds)) {
-                console.error('[CropperWindowHelper] Invalid bounds received:', bounds);
+            // The renderer fires 'cropper-confirmed' with WINDOW-LOCAL coordinates
+            // (e.clientX/clientY inside the cropper BrowserWindow, which itself spans
+            // the combined multi-monitor virtual screen at combinedBounds.{x,y}). The
+            // downstream screenshot pipeline + validateBounds both expect GLOBAL
+            // screen coordinates, so we add the cropper window's absolute position.
+            //
+            // If the cropper window is gone (e.g. closed mid-IPC), there's no safe
+            // global mapping; reject the selection rather than forwarding local
+            // coords to a global-coordinate consumer.
+            const cropperBounds = this.cropperWindow?.getBounds();
+            if (!cropperBounds) {
+                console.error('[CropperWindowHelper] cropper window missing on confirmed — refusing selection');
                 this.rejectCurrentSelection(null);
                 this.hideOrClose();
                 return;
             }
 
-            this.resolveCurrentSelection(bounds);
+            const globalBounds: Electron.Rectangle = {
+                ...bounds,
+                x: bounds.x + cropperBounds.x,
+                y: bounds.y + cropperBounds.y,
+            };
+
+            // Validate input data for security using global coordinates to support multi-monitor setups
+            if (!this.validateBounds(globalBounds)) {
+                console.error('[CropperWindowHelper] Invalid bounds received:', globalBounds);
+                this.rejectCurrentSelection(null);
+                this.hideOrClose();
+                return;
+            }
+
+            this.resolveCurrentSelection(globalBounds);
             this.hideOrClose();
         };
 
