@@ -1,4 +1,5 @@
 import { LLMHelper } from "../LLMHelper";
+import { formatLanguageAwareFallback } from "../../shared/aiResponseLanguage";
 import { UNIVERSAL_FOLLOWUP_PROMPT } from "./prompts";
 import { TINY_FOLLOWUP_PROMPT } from "./tinyPrompts";
 
@@ -23,13 +24,17 @@ export class FollowUpLLM {
             // intent classifier risks misclassifying this refinement call as an
             // intro/identity request whenever the previous answer happened to
             // discuss the candidate's name/background (see ClarifyLLM.generate()).
-            const stream = this.llmHelper.streamChat(message, undefined, fittedContext, this.resolvePrompt(), true);
+            const stream = this.llmHelper.streamChat(message, undefined, fittedContext, this.resolvePrompt(), true, true);
             let full = "";
             for await (const chunk of stream) full += chunk;
             return full;
         } catch (e) {
             console.error("[FollowUpLLM] Failed:", e);
-            return "";
+            return formatLanguageAwareFallback(
+                this.llmHelper.getAiResponseLanguage?.(),
+                "I couldn't refine that answer. Please try again.",
+                "Não consegui refinar essa resposta. Tente novamente.",
+            );
         }
     }
 
@@ -47,9 +52,14 @@ export class FollowUpLLM {
                 prompt = `${prompt}\n\n${options.contractRule}`;
             }
             // See generate() above — ignoreKnowledgeMode=true.
-            yield* this.llmHelper.streamChat(message, undefined, fittedContext, prompt, true);
+            yield* this.llmHelper.streamChat(message, undefined, fittedContext, prompt, true, true);
         } catch (e) {
             console.error("[FollowUpLLM] Stream Failed:", e);
+            yield formatLanguageAwareFallback(
+                this.llmHelper.getAiResponseLanguage?.(),
+                "I couldn't refine that answer. Please try again.",
+                "Não consegui refinar essa resposta. Tente novamente.",
+            );
         }
     }
 }

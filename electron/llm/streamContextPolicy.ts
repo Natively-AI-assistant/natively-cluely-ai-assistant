@@ -28,7 +28,37 @@ import type { AnswerType, ContextLayer } from './AnswerPlanner';
 export interface StreamRouteOptions {
   /** The plan's answer type — drives custom-context sensitivity scoping. */
   answerType?: AnswerType;
-  /** The plan's forbidden context layers — the authoritative exclusion list. */
+  /**
+   * Layers selected by the AnswerPlan. This is distinct from the forbidden
+   * list: a layer can be safe in isolation yet irrelevant to this turn. Prompt
+   * assembly uses the selected list to avoid attaching unrelated profile
+   * categories (for example identity + JD on a project drill-in).
+   */
+  requiredContextLayers?: ContextLayer[];
+  /**
+   * The extracted CURRENT question (AnswerPlan.question) for a routed live
+   * answer. The local interview-context injector scores document chunks
+   * against this instead of the full assembled packet (whose transcript noise
+   * would defeat relevance selection). Absent → the injector falls back to the
+   * message text (legacy behavior).
+   */
+  currentQuestion?: string;
+  /**
+   * Query used only to select evidence. This is intentionally separate from
+   * `currentQuestion`: a short resolved anaphora such as "but I attached it"
+   * still has to be answered as the current turn, while retrieval uses the
+   * immediately preceding factual question as its semantic antecedent.
+   */
+  retrievalQuestion?: string;
+  /** Profile-fact subtype selected by AnswerPlanner. Inventory/status asks use
+   * active-document metadata and never fall back to arbitrary profile text. */
+  profileFactIntent?: 'fact_lookup' | 'profile_document_inventory' | 'company_document_selection';
+  /**
+   * The plan's forbidden context layers — the authoritative exclusion list.
+   * Routed answer callers must forward this together with `answerType`; omitting
+   * it would turn a planner-level `resume` exclusion into legacy allow behavior
+   * at the final local-context injection choke point.
+   */
   forbiddenContextLayers?: ContextLayer[];
   /**
    * Round-7 Failure-2: the previous assistant answer, supplied by the caller
@@ -68,6 +98,28 @@ export function profileInterceptAllowedByRoute(route?: StreamRouteOptions): bool
   const forbidden = route?.forbiddenContextLayers;
   if (!forbidden || forbidden.length === 0) return true;
   return !forbidden.includes('resume');
+}
+
+export type LocalInterviewContextKind = 'personal' | 'professional' | 'company';
+
+/**
+ * Project the AnswerPlan's typed layers onto the three user-managed interview
+ * documents. Missing route metadata preserves legacy all-category behavior.
+ * With a routed answer, only SELECTED categories are eligible:
+ *   stable_identity -> personal, resume -> professional, jd -> company.
+ */
+export function localInterviewContextKindsForRoute(
+  route?: StreamRouteOptions,
+): LocalInterviewContextKind[] | undefined {
+  const required = route?.requiredContextLayers;
+  if (!required) return undefined;
+  const forbidden = new Set(route?.forbiddenContextLayers ?? []);
+  const selected = new Set(required.filter((layer) => !forbidden.has(layer)));
+  const kinds: LocalInterviewContextKind[] = [];
+  if (selected.has('stable_identity')) kinds.push('personal');
+  if (selected.has('resume')) kinds.push('professional');
+  if (selected.has('jd')) kinds.push('company');
+  return kinds;
 }
 
 /**

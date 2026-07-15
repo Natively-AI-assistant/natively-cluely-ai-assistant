@@ -1,4 +1,5 @@
 import { LLMHelper } from "../LLMHelper";
+import { formatLanguageAwareFallback } from "../../shared/aiResponseLanguage";
 import { CLARIFY_MODE_PROMPT } from "./prompts";
 import { TINY_CLARIFY_PROMPT } from "./tinyPrompts";
 
@@ -28,13 +29,17 @@ export class ClarifyLLM {
             // and the actual clarifying-question task entirely (live bug report
             // 2026-07-04). Same fix applied to RecapLLM/FollowUpLLM/
             // FollowUpQuestionsLLM/BrainstormLLM, which have the identical shape.
-            const stream = this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride, true);
+            const stream = this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride, true, true);
             let fullResponse = "";
             for await (const chunk of stream) fullResponse += chunk;
             return fullResponse.trim();
         } catch (error) {
             console.error("[ClarifyLLM] Generation failed:", error);
-            return "";
+            return formatLanguageAwareFallback(
+                this.llmHelper.getAiResponseLanguage?.(),
+                "I couldn't generate a clarifying question. Please try again.",
+                "Não consegui gerar uma pergunta de esclarecimento. Tente novamente.",
+            );
         }
     }
 
@@ -48,9 +53,14 @@ export class ClarifyLLM {
             const fittedContext = this.llmHelper.fitContextForCurrentModel(context);
             // See generate() above — ignoreKnowledgeMode=true prevents the context
             // blob from being misclassified by the knowledge-mode intent gate.
-            yield* this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride, true);
+            yield* this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride, true, true);
         } catch (error) {
             console.error("[ClarifyLLM] Streaming generation failed:", error);
+            yield formatLanguageAwareFallback(
+                this.llmHelper.getAiResponseLanguage?.(),
+                "I couldn't generate a clarifying question. Please try again.",
+                "Não consegui gerar uma pergunta de esclarecimento. Tente novamente.",
+            );
         }
     }
 }

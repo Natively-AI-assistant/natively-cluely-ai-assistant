@@ -30,6 +30,14 @@ if (fs.existsSync(electronDir)) {
   entryPoints.push(...findTs(electronDir).map(f => path.relative(rootDir, f)));
 }
 
+// Shared pure modules are consumed by both Electron and the renderer. Emit
+// them as standalone files too so Node unit tests can exercise the exact
+// language/response contracts that ship in the packaged app.
+const sharedDir = path.resolve(rootDir, 'shared');
+if (fs.existsSync(sharedDir)) {
+  entryPoints.push(...findTs(sharedDir).map(f => path.relative(rootDir, f)));
+}
+
 // Also include premium electron files if they exist
 const premiumDir = path.resolve(rootDir, 'premium/electron');
 if (fs.existsSync(premiumDir)) {

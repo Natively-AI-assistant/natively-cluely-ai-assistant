@@ -135,6 +135,18 @@ export interface AnswerPlan {
    * so the user never sees code-first / malformed markdown mid-stream.
    */
   shouldShowImmediateScaffold: boolean;
+  /**
+   * Evidence-selection query for this turn. Normally identical to `question`.
+   * A narrowly resolved manual anaphora may point this at the immediately
+   * preceding user question while `question` remains the CURRENT turn the
+   * model must answer. This value is retrieval-only and must never replace
+   * `currentQuestion` in the answer contract.
+   */
+  retrievalQuestion?: string;
+  /** Profile-fact subtype used by the final context assembler. Document
+   * inventory asks are answered from active-document metadata, not arbitrary
+   * content chunks or a generic profile head. */
+  profileFactIntent?: 'fact_lookup' | 'profile_document_inventory' | 'company_document_selection';
   question: string;
   confidence: number;
   /**
@@ -152,6 +164,11 @@ export interface AnswerPlan {
 
 export interface PlanAnswerInput {
   question?: string | null;
+  /**
+   * Previous completed manual-chat question, when available. Used only by
+   * narrow deterministic anaphora guards; it never acts as general evidence.
+   */
+  previousQuestion?: string | null;
   source: AnswerSource;
   speakerPerspective?: SpeakerPerspective;
   extractedQuestion?: ExtractedQuestion | null;
@@ -554,6 +571,13 @@ const COMMON_CODING_PROBLEM_PATTERNS = [
   /\bbubble sort\b|\bquick\s?sort\b|\bmerge sort\b|\binsertion sort\b/i,
 ];
 
+// A Portuguese implementation imperative is a coding task even when its UI
+// copy happens to quote a candidate/profile question (for example, a React
+// form whose label is "Qual e a minha formacao?"). Keep this deliberately
+// paired with a software artifact so a generic "monte uma resposta" does not
+// become coding.
+const PORTUGUESE_CODING_IMPERATIVE_RE = /\b(?:monte|crie|desenvolva|implemente|codifique|programe)\b[^.?!]{0,100}\b(?:formul[aá]rio|componente|aplicativo|aplica[cç][aã]o|app|p[aá]gina|fun[cç][aã]o|classe|m[eé]todo|script|endpoint|api|hook|c[oó]digo|detector)\b/i;
+
 const CODING_PATTERNS = [
   // Real-custom-mode-repair (2026-07-11): dropped bare `method` and `class`
   // from this line — both are extremely common non-coding English nouns
@@ -581,6 +605,7 @@ const CODING_PATTERNS = [
   // skill_experience / jd_fit routing (benchmark 2026-06-05).
   /\b(write|implement|code|coding|program|snippet|function|script|reverse|sort|parse)\b[\w ,'-]*\b(javascript|typescript|python|java|c\+\+|sql|go|golang|rust)\b/i,
   /\bin (javascript|typescript|python|java|c\+\+|sql|golang|rust)\b[\w ,'-]*\b(write|code|implement|function|program)\b/i,
+  PORTUGUESE_CODING_IMPERATIVE_RE,
   ...COMMON_CODING_PROBLEM_PATTERNS,
 ];
 
@@ -1231,6 +1256,11 @@ const PROJECT_FOLLOWUP_PATTERNS = [
   /\bwhat (tech stack|technologies|tools|languages|frameworks|stack|tech) (did|do|does|was|were) (you|i|it|used)\b/i,
   /\bwhat was the hardest (part|challenge|thing)\b/i,
   /\bwhy did (you|i) (build|make|create|choose|pick|use)\b/i,
+  // Natural design-decision phrasing: "could you explain why you used/chose X
+  // in the project?". This is the same project drill-in as "why did you use X",
+  // but the embedded "explain why you" form previously missed this branch and
+  // fell into the generic project/JD-fit templates.
+  /\b(?:explain|tell me)\s+why\s+(you|i)\s+(used?|chose|built|implemented|designed|selected|adopted)\b/i,
   /\bhow did (you|i) (optimi[sz]e|scale|test|build|implement|design|handle|architect|secure|deploy)\b/i,
   /\bwhat did (you|i) learn\b/i,
   /\b(explain|tell me (more |about )|describe|walk me through)\s+(that|this|the|your|it)\b.*\b(project|more|further|again|in detail)\b/i,
@@ -1248,6 +1278,20 @@ const PROJECT_FOLLOWUP_PATTERNS = [
   /\bwhat did you (personally )?(contribute|do|build|own|lead)\b/i,
   /\bwhat (was|were) (the )?(measurable )?(result|impact|outcome|metric)s?\b/i,
 ];
+
+// Past design decisions inside an explicitly named project are project
+// drill-ins, even when the user asks in Portuguese. Keep this separate from
+// the broad coding verb detector: "implemente um gate" is an implementation
+// request, while "no projeto X, por que eu implementei o gate?" asks about the
+// candidate's real work and must be grounded in the professional profile.
+const isExplicitProjectDecisionDrillIn = (text: string): boolean => {
+  const hasProjectAnchor = /\b(project|projeto|produto|aplicativo|sistema)\b/i.test(text);
+  if (!hasProjectAnchor) return false;
+
+  const englishPastDecision = /\b(?:why|explain why|reason(?:s)? (?:for|behind))\b.{0,35}\b(?:i|you)\s+(?:used?|chose|selected|adopted|built|created|designed|implemented)\b/i.test(text);
+  const portuguesePastDecision = /\b(?:por que|porque|qual (?:foi|era) (?:a )?(?:raz[aã]o|decis[aã]o)|explique por que)\b.{0,45}\b(?:eu|voc[eê]|voce)\s+(?:usei|usou|escolhi|escolheu|selecionei|selecionou|adotei|adotou|constru[ií]|construiu|criei|criou|desenhei|desenhou|implementei|implementou)\b/i.test(text);
+  return englishPastDecision || portuguesePastDecision;
+};
 const EXPERIENCE_PATTERNS = [
   /\bexperience|background|previous role|last role|work history|internship|interned|worked at|time at\b/i,
   // "what do you currently do?", "what are you working on (now)?", "what's your
@@ -1348,9 +1392,44 @@ const MEETING_PATTERNS = [
   /\b(write|draft|send) (a |the )?(follow[- ]?up|recap|summary|meeting) (email|note|message|mail)\b/i,
   /\brecap\b|\bcatch me up\b/i,
 ];
+
+// The text inside a translation request is quoted material, not the user's
+// intent. Without this wrapper guard, "Traduza 'Where did you study?'" matched
+// PROFILE_FACT_PATTERNS below and injected the candidate profile instead of
+// translating the sentence. Anchor the request at the start so a genuine
+// profile answer that merely asks for a PT-BR translation afterwards is not
+// affected.
+const DIRECT_TRANSLATION_REQUEST_RE = /^\s*(?:(?:por favor|please)[,:]?\s*)?(?:(?:tradu(?:z(?:a|o)?|zir)|translate)\b|como\s+(?:(?:se|eu)\s+)?(?:tradu(?:z(?:a|o)?|zir)|fala|diz)\b|how\s+do\s+(?:i|you)\s+(?:say|translate)\b)/i;
+
 // Profile FACT lookups (education, target role) — short factual answers
 // (benchmark 2026-06-05): "where did you study?", "what role are you applying
 // for?", "what's your degree?".
+const PROFILE_DOCUMENT_INVENTORY_PATTERNS = [
+  // Inventory access is granted only when the whole user turn is itself the
+  // status question. Anchoring prevents quoted examples inside "explique",
+  // "corrija", translation, or code-generation wrappers from opening profile
+  // metadata merely because their payload contains one of these phrases.
+  /^\s*(?:voc[eê]|voce|vc) (?:tem|carregou|consegue acessar|consegue ver).{0,35}\b(?:documentos?|docs?|perfil)\b.{0,40}\s*[?!.,;:]*\s*$/i,
+  /^\s*(?:voc[eê]|voce|vc) (?:tem|carregou|consegue acessar|consegue ver).{0,35}\b(?:curr[ií]culo|cv)\b.{0,25}\s*[?!.,;:]*\s*$/i,
+  /^\s*(?:meus?|seus?) (?:documentos?|docs?) (?:est[aã]o|foram|ficaram).{0,25}\b(?:carregad|anexad|dispon[ií]v)\w*\s*[?!.,;:]*\s*$/i,
+  /^\s*quais? documentos? (?:do )?(?:meu|seu) perfil\s*[?!.,;:]*\s*$/i,
+  /^\s*quais? arquivos? (?:do )?(?:meu|seu) perfil(?: (?:est[aã]o|foram|ficaram))?.{0,25}\b(?:carregad|anexad|dispon[ií]v)\w*\s*[?!.,;:]*\s*$/i,
+  /^\s*(?:meus?|seus?) arquivos? (?:do|de) perfil (?:est[aã]o|foram|ficaram).{0,25}\b(?:carregad|anexad|dispon[ií]v)\w*\s*[?!.,;:]*\s*$/i,
+  /^\s*(?:eu )?(?:j[aá] )?(?:anexei|carreguei|enviei).{0,20}\b(?:(?:meu|o) )?(?:curr[ií]culo|cv)\s*[?!.,;:]*\s*$/i,
+  // Direct status checks are deliberately whole-question patterns. This covers
+  // natural PT-BR shorthand without treating quoted UI copy such as
+  // `mostre "currículo carregado"` as permission to open the profile.
+  /^\s*(?:(?:o )?(?:meu|seu) )?(?:curr[ií]culo|cv)(?: j[aá])?(?: est[aá]| esta| foi)? (?:carregad[oa]|anexad[oa]|dispon[ií]vel)\s*[?!.,;:]*\s*$/i,
+  /^\s*tem (?:algum|um) (?:curr[ií]culo|cv) (?:carregad[oa]|anexad[oa]|dispon[ií]vel)\s*[?!.,;:]*\s*$/i,
+];
+
+const COMPANY_DOCUMENT_SELECTION_PATTERNS = [
+  /\bqual (?:documento|arquivo|contexto)(?: de| da)? empresa (?:est[aá]|foi)?\s*selecionad\w*/i,
+  /\b(?:documento|arquivo|contexto)(?: de| da)? empresa.{0,35}\b(?:selecionad|ativo)\w*/i,
+  /\b(?:empresa|company).{0,30}\b(?:documento|arquivo|context).{0,30}\b(?:selecionad|selected|ativo|active)\w*/i,
+  /\bwhich company (?:document|file|context).{0,30}\b(?:selected|active)\b/i,
+];
+
 const PROFILE_FACT_PATTERNS = [
   /\bwhere did (you|i) (study|go to (school|college|university)|graduate)\b/i,
   /\bwhat (role|job|position) (are|am) (you|i) (applying|interviewing) for\b/i,
@@ -1365,7 +1444,50 @@ const PROFILE_FACT_PATTERNS = [
   /\bhow many years (of )?(experience|exp)\b|\bwhat(?:'s| is) (your|my) (years of )?experience\b/i,
   /\bwhat (was|is) (your|my) (last|current|previous) (company|employer|job|role|title)\b/i,
   /\bwhere (are|r) (you|u) (based|located)\b|\bwhat(?:'s| is) (your|my) availability\b/i,
+  // PT-BR factual profile questions used by the localized desktop build. These
+  // are whole-question shapes on purpose: matching the same words inside a
+  // translation, coding prompt, or quoted form label must not unlock profile
+  // evidence. Punctuation is consumed instead of relying on `\b`, which does
+  // not form a JavaScript word boundary after accented `ê` in "quê?".
+  /^\s*(?:sou|é|eh) formad[oa] (?:em|no|na) (?:qu[eê]|qual|o qu[eê])\s*[?!.,;:]*\s*$/i,
+  /^\s*qual (?:é|eh|e) (?:a )?(?:minha|sua) forma[cç][aã]o\s*[?!.,;:]*\s*$/i,
+  /^\s*onde (?:(?:eu )?(?:me formei|estudei)|(?:voc[eê]|voce|vc) (?:se formou|estudou))\s*[?!.,;:]*\s*$/i,
+  /^\s*qual (?:(?:curso|faculdade) (?:eu )?(?:fiz|cursei|conclu[ií])|(?:é|eh|e) (?:(?:a )?(?:minha|sua) (?:gradua[cç][aã]o|faculdade)|(?:o )?(?:meu|seu) curso))\s*[?!.,;:]*\s*$/i,
+  /^\s*qual (?:é|eh|e) (?:a )?(?:minha|sua) localiza[cç][aã]o(?: atual)?\s*[?!.,;:]*\s*$/i,
+  /^\s*onde (?:(?:eu )?(?:moro|resido)|(?:voc[eê]|voce|vc) (?:mora|reside|est[aá] localizad[oa]))\s*[?!.,;:]*\s*$/i,
+  /^\s*em que cidade (?:(?:eu )?(?:moro|resido)|(?:voc[eê]|voce|vc) (?:mora|reside))\s*[?!.,;:]*\s*$/i,
+  /^\s*qual (?:é|eh|e)?\s*(?:(?:o )?(?:meu|seu) cargo|(?:a )?(?:minha|sua) fun[cç][aã]o) atual\s*[?!.,;:]*\s*$/i,
+  /^\s*que cargo (?:(?:eu )?ocupo|(?:voc[eê]|voce|vc) ocupa)(?: hoje| atualmente)?\s*[?!.,;:]*\s*$/i,
+  /^\s*(?:em qual empresa (?:eu )?trabalho(?: atualmente| hoje)?|qual (?:é|eh|e) (?:a )?(?:minha|sua) empresa atual)\s*[?!.,;:]*\s*$/i,
+  /^\s*quantos anos de experi[eê]ncia(?: profissional)? (?:(?:eu )?tenho|(?:voc[eê]|voce|vc) tem)\s*[?!.,;:]*\s*$/i,
+  /^\s*h[aá] quantos anos (?:(?:eu )?trabalho|(?:voc[eê]|voce|vc) trabalha) (?:na|nesta|nessa) [aá]rea\s*[?!.,;:]*\s*$/i,
+  /^\s*quanto tempo de experi[eê]ncia(?: profissional)? (?:(?:eu )?tenho|(?:voc[eê]|voce|vc) tem)\s*[?!.,;:]*\s*$/i,
+  // Inventory/status questions about the user-managed profile documents. These
+  // need the same personal+professional grounding as other profile facts; they
+  // must never be answered from the rolling meeting transcript.
+  ...PROFILE_DOCUMENT_INVENTORY_PATTERNS,
+  // Active-company-document status is also local interview-context metadata.
+  // It must not fall to meeting recall merely because no company document is
+  // currently selected (absence is itself the requested fact).
+  ...COMPANY_DOCUMENT_SELECTION_PATTERNS,
 ];
+
+// A short correction such as "Ué, mas eu anexei" is profile-grounded only when
+// the immediately previous completed manual turn was itself an explicit profile-
+// fact lookup (for example, education or profile-document inventory). This lets
+// the user correct a false "please attach your résumé" response without making
+// the ambiguous phrase a general profile unlock. On its own it remains unknown.
+const isProfileDocumentAttachmentCorrection = (
+  text: string,
+  previousQuestion?: string | null,
+): boolean => {
+  if (!previousQuestion || text.length > 120) return false;
+  const wordCount = text.replace(/[.!?,]/g, ' ').split(/\s+/).filter(Boolean).length;
+  if (wordCount > 8) return false;
+  const isNarrowCorrection = /^\s*(?:(?:u[eé][,!]?\s*)(?:mas\s+)?|mas\s+)(?:eu\s+)?(?:j[aá]\s+)?(?:anexei|carreguei|enviei)(?:\s+(?:(?:o|os|um|meu|meus)\s+)?(?:docs?|documentos?|arquivos?))?\s*[.!?]*\s*$/i.test(text);
+  return isNarrowCorrection
+    && includesAny(previousQuestion.toLowerCase(), PROFILE_FACT_PATTERNS);
+};
 // Sales: pricing/product/competitor/objection questions (spec Case G). Uses sales
 // context, NOT resume/JD/negotiation. The active mode also signals sales, but the
 // answerType lets the selector exclude resume/salary regardless of mode.
@@ -1649,6 +1771,11 @@ const requiredLayersFor = (answerType: AnswerType, documentGroundedCustomModeAct
     case 'identity_answer':
       return ['stable_identity', 'resume'];
     case 'profile_fact_answer':
+      // Local interview context stores biographical facts (education, location,
+      // personal background) in the personal document and project/career facts
+      // in the professional document. Profile facts may legitimately live in
+      // either, so select both typed layers.
+      return ['stable_identity', 'resume', 'custom_context', 'ai_persona'];
     case 'project_answer':
     case 'skills_answer':
     case 'skill_experience_answer':
@@ -1814,6 +1941,14 @@ const forbiddenLayersFor = (answerType: AnswerType): ContextLayer[] => {
       // so a genuine "And SQL?" becomes skill_experience (resume allowed) and
       // never lands here — this floor only bites truly context-free fragments.
       return ['resume', 'jd', 'negotiation'];
+    case 'unknown_answer':
+      // Fail closed for unmatched/manual-neutral questions. An unknown route has
+      // no evidence that the user asked about their candidacy, so resume/JD/
+      // negotiation — including the local interview-profile injector, which is
+      // gated by the resume layer at the execution choke point — must stay out.
+      // Explicit profile questions route to identity/project/skills/etc. above
+      // and therefore continue to receive the profile they require.
+      return ['resume', 'jd', 'negotiation'];
     case 'ethical_usage_answer':
       // A safety/policy answer must pull NO candidate context at all.
       return ['resume', 'jd', 'negotiation', 'custom_context', 'reference_files'];
@@ -1908,8 +2043,12 @@ export const profileContextPolicyFor = (answerType: AnswerType): ProfileContextP
       // live FollowUpResolver upgrades genuine follow-ups to a concrete type
       // (which sets its own policy) before this floor is ever reached.
       return 'forbidden';
-    case 'negotiation_answer':
     case 'unknown_answer':
+      // No matched candidate intent means no profile. This mirrors the explicit
+      // forbidden-layer contract above and prevents prompt policy from implying
+      // that profile enrichment is acceptable on an unmatched manual turn.
+      return 'forbidden';
+    case 'negotiation_answer':
     // NOTE: general_meeting_answer is handled in the 'forbidden' group above
     // (meeting recaps must never pull the profile) — do not re-add it here.
     default:
@@ -2146,6 +2285,44 @@ const resolveJdSourceType = (
   return 'jd_summary_answer';
 };
 
+// ── IMMEDIATE-CONTEXT cues (bilingual EN + PT-BR) ───────────────────────────
+// A question that explicitly references THIS conversation ("o codinome que
+// acabei de informar", "what did I just tell you") or an ATTACHED image ("na
+// captura anexada", "in the attached screenshot") is about the immediate
+// material, never about the candidate's profile. Without an explicit route,
+// these fell through to unknown_answer and the assembled prompt (interview
+// documents + candidate-evidence policy) pulled the model into a generic
+// candidate presentation that ignored the chat history and the screenshot.
+// Strong, high-confidence shapes only — a bare "tela"/"screen" never matches.
+const CONVERSATION_RECALL_PATTERNS = [
+  /\bacab(?:ei|ou|amos) de (?:te |lhe |me )?(?:informar|dizer|falar|mencionar|passar|enviar|mandar|digitar|escrever|perguntar)\b/i,
+  /\b(?:nesta|nessa) conversa\b/i,
+  /\b(?:mensagem|pergunta|resposta) anterior\b/i,
+  /\bque (?:eu |te |lhe )?(?:disse|falei|informei|mencionei|escrevi|digitei|enviei|mandei|passei)\s+(?:antes|acima|agora|h[áa] pouco|anteriormente)\b/i,
+  /\bi just (?:told|said|mentioned|typed|wrote|gave|shared|sent|asked)\b/i,
+  /\bjust (?:told|gave|sent) you\b/i,
+  /\bearlier in (?:this|the|our) (?:chat|conversation|thread|session)\b/i,
+  /\bin this (?:chat|conversation|thread)\b/i,
+  /\bwhat did i (?:just )?(?:say|tell|type|write|send)\b/i,
+];
+const ATTACHED_MEDIA_PATTERNS = [
+  /\b(?:captura|imagem|foto|print|screenshot|tela) (?:anexad[ao]|enviad[ao]|em anexo|acima|abaixo)\b/i,
+  /\bn[ao] (?:captura|imagem|foto|print|screenshot|anexo)\b/i,
+  /\bdest[ae] (?:imagem|captura|foto|print|screenshot)\b/i,
+  /\bdess[ae] (?:imagem|captura|foto|print|screenshot)\b/i,
+  /\b(?:attached|this|that|the) (?:screenshot|image|picture|photo|screen\s?shot)\b/i,
+  /\bin the (?:screenshot|image|picture|attachment|photo)\b/i,
+  /\bon (?:my|the) screen\b/i,
+];
+/** True when the question explicitly refers to something said earlier in THIS
+ * conversation. Consulted by the classify chain and by the LLM prompt
+ * assemblers (interview-context injection skip). */
+export const referencesImmediateConversation = (question: string): boolean =>
+  includesAny(question.toLowerCase(), CONVERSATION_RECALL_PATTERNS);
+/** True when the question explicitly refers to an attached/on-screen image. */
+export const referencesAttachedMedia = (question: string): boolean =>
+  includesAny(question.toLowerCase(), ATTACHED_MEDIA_PATTERNS);
+
 export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
   const rawQuestion = input.question || input.extractedQuestion?.latestQuestion || '';
   const question = rawQuestion.trim();
@@ -2161,8 +2338,13 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     .replace(/\bfull[- ]?stack\b/g, 'fullstack');
   const extractedType = input.extractedQuestion?.questionType;
   const documentGroundedCustomModeActive = input.activeMode?.documentGroundedCustomModeActive === true;
-  const explicitDocumentModeCodingAsk = /\b(write|implement|code|coding interview|dsa|dry run|time complexity|space complexity|big[-\s]?o|algorithm(?:ic)?|solution code|source code)\b/i.test(text);
+  const explicitDocumentModeCodingAsk = /\b(write|implement|code|coding interview|dsa|dry run|time complexity|space complexity|big[-\s]?o|algorithm(?:ic)?|solution code|source code)\b/i.test(text)
+    || PORTUGUESE_CODING_IMPERATIVE_RE.test(text);
   const explicitDocumentModeProfileAsk = /\b(resume|cv|profile|job description|\bjd\b|career|work experience|candidate profile|my background|your background|my projects?|your projects?|my skills?|your skills?)\b/i.test(text);
+  const profileAttachmentCorrection = isProfileDocumentAttachmentCorrection(
+    question,
+    input.previousQuestion,
+  );
 
   let answerType: AnswerType = 'general_meeting_answer';
 
@@ -2263,11 +2445,13 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
   // Genuine SQL/coding "salary" cases are caught by the write/COMMON_CODING/DSA
   // signals instead.
   const hasExplicitCodingVerb = /\b(write|implement|code|program|function|solve)\b/i.test(textWithoutProductSolveClause)
+    || PORTUGUESE_CODING_IMPERATIVE_RE.test(textWithoutProductSolveClause)
     || includesAny(text, COMMON_CODING_PROBLEM_PATTERNS) || includesAny(textNoTechStack, DSA_PATTERNS);
   // Strict "write code" verbs only (no DSA-term inference). Used to gate the
   // HYPOTHETICAL branch: "how would you use BFS?" is a concept (BFS is a DSA term
   // but there's no write-verb), so it must NOT be blocked from technical_concept.
   const hasWriteCodeVerb = /\b(write|implement|code|program|solve)\b/i.test(textWithoutProductSolveClause)
+    || PORTUGUESE_CODING_IMPERATIVE_RE.test(textWithoutProductSolveClause)
     || includesAny(text, COMMON_CODING_PROBLEM_PATTERNS);
   // A CLEAR past/present EXPERIENCE probe ("have you implemented X before", "where
   // have you used X", "did you actually use X") is about the CANDIDATE — it must
@@ -2356,10 +2540,24 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     answerType = 'unknown_answer';
   } else if (isStealthEvasion) {
     answerType = 'ethical_usage_answer';
+  } else if (DIRECT_TRANSLATION_REQUEST_RE.test(question)) {
+    // The quoted sentence is payload, not intent. A neutral/manual route keeps
+    // the full current question available to the model while hard-forbidding
+    // resume/JD/profile injection.
+    answerType = 'unknown_answer';
   } else if (wantsSourceEvidence) {
     answerType = 'source_code_evidence_answer';
   } else if (wantsProjectLink) {
     answerType = 'project_link_answer';
+  } else if (!hasWriteCodeVerb
+             && (referencesImmediateConversation(text) || referencesAttachedMedia(text))) {
+    // IMMEDIATE-CONTEXT PRIORITY: the question is explicitly about
+    // this conversation or an attached image. Route to the neutral
+    // conversation-scoped shape EXPLICITLY (not via fallthrough, so the mode
+    // prior can never rewrite it) — the rolling chat snapshot / attached image
+    // is the primary source and no candidate contract may be prepended. A
+    // write-code verb keeps coding routing (screenshot of a LeetCode problem).
+    answerType = 'general_meeting_answer';
   } else if (metaDirective) {
     answerType = metaDirective;
   } else if (jdSourceType && !wantsNegotiationAdvice) {
@@ -2391,7 +2589,8 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     // "Have you used WebRTC / a hashmap / AWS?" → profile skill-experience answer
     // in first person. Wins over coding/DSA/technical-concept routing below.
     answerType = 'skill_experience_answer';
-  } else if (includesAny(text, PROJECT_FOLLOWUP_PATTERNS)
+  } else if (isExplicitProjectDecisionDrillIn(text)
+             || (includesAny(text, PROJECT_FOLLOWUP_PATTERNS)
              // An EXPLICIT project entity ("...in SQL-Copilot?", "...role in
              // Natively?") OR a resolved prior-turn target makes this an
              // unambiguous project follow-up — even if the project NAME contains a
@@ -2411,7 +2610,7 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
              && (followUpHasProjectContext(input, question)
                  || (!includesAny(textNoTechStack, DSA_PATTERNS)
                      && !includesAny(text, CODING_PATTERNS)
-                     && !isLikelyTechnicalConcept(textNoTechStack)))) {
+                     && !isLikelyTechnicalConcept(textNoTechStack))))) {
     // Phase 5: a drill-in on a project already on the table ("how is it built?",
     // "what was your role?", "what tech stack did you use?", "hardest part?",
     // "why did you build it?", "what did you learn?"). These are PROFILE questions
@@ -2561,11 +2760,25 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     // Honest gap + mitigation for the role (checked BEFORE jd_fit so a gap ask isn't
     // swallowed by the fit patterns). Resume+JD grounded, first-person candidate.
     answerType = 'gap_analysis_answer';
-  } else if (includesAny(text, JD_FIT_PATTERNS) || extractedType === 'jd_alignment') {
+  } else if (
+    includesAny(text, JD_FIT_PATTERNS)
+    // Defense in depth: the extractor is intentionally coarse. A stale/noisy
+    // `jd_alignment` hint must not override an explicit project signal in the
+    // current question. Real fit questions still win through JD_FIT_PATTERNS.
+    || (extractedType === 'jd_alignment'
+      && !includesAny(text, PROJECT_PATTERNS)
+      && !includesAny(text, PROJECT_FOLLOWUP_PATTERNS))
+  ) {
     answerType = 'jd_fit_answer';
   } else if (includesAny(text, BEHAVIORAL_PATTERNS) || extractedType === 'behavioral') {
     answerType = 'behavioral_interview_answer';
-  } else if (includesAny(text, PROFILE_FACT_PATTERNS)) {
+  } else if (
+    includesAny(text, PROFILE_FACT_PATTERNS)
+    // Use the original question here: SMS normalization intentionally rewrites
+    // bare "u" to "you", but JS word boundaries can see the `u` in Portuguese
+    // "ué" as bare before the accented character (`youé`).
+    || profileAttachmentCorrection
+  ) {
     // Short factual profile lookups (education, target role, degree) — benchmark
     // 2026-06-05. Profile required, concise direct answer.
     answerType = 'profile_fact_answer';
@@ -2692,6 +2905,17 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
       ? 800
       : 1500;
 
+  const retrievalQuestion = answerType === 'profile_fact_answer' && profileAttachmentCorrection
+    ? input.previousQuestion?.trim() || question
+    : question;
+  const profileFactIntent = answerType === 'profile_fact_answer'
+    ? (includesAny(retrievalQuestion.toLowerCase(), COMPANY_DOCUMENT_SELECTION_PATTERNS)
+      ? 'company_document_selection' as const
+      : includesAny(retrievalQuestion.toLowerCase(), PROFILE_DOCUMENT_INVENTORY_PATTERNS)
+        ? 'profile_document_inventory' as const
+        : 'fact_lookup' as const)
+    : undefined;
+
   return {
     answerType,
     source: input.source,
@@ -2708,6 +2932,8 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     requiresLLM: !fastPathTypes.includes(answerType),
     canUseFastPath: fastPathTypes.includes(answerType),
     shouldShowImmediateScaffold: shouldScaffold(answerType) && !styleSuppressesScaffoldSafe(answerType, question),
+    retrievalQuestion,
+    profileFactIntent,
     question,
     confidence: Math.max(input.intentResult?.confidence || input.extractedQuestion?.confidence || 0.7, 0),
     answerStyle: detectAnswerStyle(question).style,
@@ -2787,6 +3013,18 @@ const SPEAKABLE_RENDERING_DIRECTIVE =
   `Cover the same substance — lead with the direct answer, ground every claim, close naturally. ` +
   `Never print "Speakable Final Answer", "Direct Answer", "The Honest Gap", "Short Fit Summary", or any other label.`;
 
+const answerContractQuestion = (value: string | null | undefined): string =>
+  String(value || 'the latest interviewer question')
+    .replace(/[\u0000-\u001F\u007F]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 2_000)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+
 export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationSpec = false): string => {
   const verificationBlock = (includeVerificationSpec && isCodingAnswerType(plan.answerType))
     ? `\n\n${CODING_VERIFICATION_INSTRUCTION}`
@@ -2840,6 +3078,7 @@ export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationS
   const renderingDirective = isSpeakableOnlyPlan(plan) ? SPEAKABLE_RENDERING_DIRECTIVE : '';
   return `<answer_contract>
 answerType: ${plan.answerType}
+currentQuestion: ${answerContractQuestion(plan.question)}
 source: ${plan.source}
 speakerPerspective: ${plan.speakerPerspective}
 outputPerspective: ${plan.outputPerspective}
@@ -2852,6 +3091,8 @@ answerStyle: ${plan.answerStyle}
 
 VOICE: ${voiceLine}
 GROUNDING: ${policyLine}
+
+TURN PRIORITY: Answer currentQuestion directly. Earlier transcript questions and earlier assistant answers are context only, never the task for this turn. Do not repeat a self-introduction or profile summary unless currentQuestion explicitly asks for one.
 
 STRICT RESPONSE TEMPLATE:
 ${plan.responseTemplate}${renderingDirective}${styleDirective}${lengthDirective}${verificationBlock}

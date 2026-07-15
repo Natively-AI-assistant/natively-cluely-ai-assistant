@@ -4,6 +4,7 @@
 
 import { RecapLLM } from './llm';
 import { isVerboseLogging } from './verboseLog';
+import { englishForContext } from '../shared/aiResponseLanguage';
 
 // Canned-fallback phrases that mean the model gave up entirely, not phrases
 // that might legitimately appear inside a real answer. Matched only when the
@@ -48,6 +49,13 @@ export interface ContextItem {
     role: 'interviewer' | 'user' | 'assistant';
     text: string;
     timestamp: number;
+    /**
+     * Assistant turns are tagged with the surface that produced them so a
+     * surface-scoped prompt cannot accidentally inherit an answer from WTA,
+     * screenshot analysis, or the phone mirror. Transcript/user turns remain
+     * shared meeting context and therefore leave this unset.
+     */
+    surface?: ConversationSurface;
 }
 
 /**
@@ -321,7 +329,13 @@ export class SessionTracker {
         // Natively-style filtering
         if (!text) return;
 
-        const cleanText = text.trim();
+        // The renderer receives the original model response directly, including
+        // both bilingual sections. SessionTracker is the storage/model-context
+        // boundary, though: keeping the translation and protocol markers here
+        // would feed them back into later prompts and encourage repeated or
+        // malformed bilingual envelopes. Persist only the actionable English
+        // section while leaving the caller-owned raw response untouched.
+        const cleanText = englishForContext(text).trim();
         if (cleanText.length < 10) {
             console.warn(`[SessionTracker] Ignored short message (<10 chars)`);
             return;
@@ -335,7 +349,8 @@ export class SessionTracker {
         this.contextItems.push({
             role: 'assistant',
             text: cleanText,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            surface,
         });
 
         // Also add to fullTranscript so it persists in the session history (and summaries)
@@ -423,9 +438,20 @@ export class SessionTracker {
     /**
      * Get context items within the last N seconds
      */
-    getContext(lastSeconds: number = 120): ContextItem[] {
+    getContext(lastSeconds: number = 120, surface?: ConversationSurface): ContextItem[] {
         const cutoff = Date.now() - (lastSeconds * 1000);
-        return this.contextItems.filter(item => item.timestamp >= cutoff);
+        return this.contextItems.filter(item => {
+            if (item.timestamp < cutoff) return false;
+            // A surface-scoped reader keeps the shared human transcript but
+            // accepts assistant generations ONLY from its own surface. Legacy
+            // untagged assistant writes are excluded on a scoped read because
+            // their provenance is unknowable; the unscoped API below preserves
+            // the exact legacy behavior and still returns every item.
+            if (surface && item.role === 'assistant') {
+                return item.surface === surface;
+            }
+            return true;
+        });
     }
 
     /**
@@ -528,8 +554,8 @@ export class SessionTracker {
     /**
      * Get formatted context string for LLM prompts
      */
-    getFormattedContext(lastSeconds: number = 120): string {
-        return this.formatContextItems(this.getContext(lastSeconds));
+    getFormattedContext(lastSeconds: number = 120, surface?: ConversationSurface): string {
+        return this.formatContextItems(this.getContext(lastSeconds, surface));
     }
 
     /**

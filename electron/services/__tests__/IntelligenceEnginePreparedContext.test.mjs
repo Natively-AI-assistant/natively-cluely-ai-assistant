@@ -56,4 +56,23 @@ describe('buildPreparedTranscriptContext', () => {
     const session = new SessionTracker();
     assert.equal(buildPreparedTranscriptContext(session, 180), '');
   });
+
+  test('keeps prepared transcript human-only and never appends assistant history', () => {
+    const now = Date.now();
+    const session = {
+      getContextWithInterim: () => [
+        { role: 'interviewer', text: 'What problem did the gate prevent?', timestamp: now - 3000 },
+        { role: 'user', text: 'Please answer from the attached document.', timestamp: now - 2000 },
+        { role: 'assistant', text: 'STALE ASSISTANT CLAIM FROM AN EARLIER TURN', timestamp: now - 1000 },
+      ],
+      getAssistantResponseHistory: () => ['OLDER GATED ASSISTANT RESPONSE'],
+    };
+
+    const context = buildPreparedTranscriptContext(session, 180);
+    assert.match(context, /what problem did the gate prevent/i);
+    assert.match(context, /please answer from the attached document/i);
+    assert.doesNotMatch(context, /STALE ASSISTANT CLAIM/);
+    assert.doesNotMatch(context, /OLDER GATED ASSISTANT RESPONSE/);
+    assert.doesNotMatch(context, /RECENT ASSISTANT RESPONSES/);
+  });
 });

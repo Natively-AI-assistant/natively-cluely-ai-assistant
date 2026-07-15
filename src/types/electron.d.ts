@@ -1,3 +1,5 @@
+import type { InterviewContextKind, InterviewContextRendererState } from '../../shared/interviewContext'
+
 // Phase 3 — DynamicActionPayload mirrors electron/services/dynamic-actions/DynamicAction.ts.
 // Kept as a structural interface (not a class import) to preserve the strict main↔renderer
 // type boundary — the renderer never imports from electron/* directly.
@@ -574,6 +576,13 @@ export interface ElectronAPI {
   getProviderDataScopes: () => Promise<{ transcript?: boolean; screenshots?: boolean; reference_files?: boolean; profile_history?: boolean; embeddings?: boolean; post_call_summary?: boolean }>;
   setProviderDataScopes: (scopes: { transcript?: boolean; screenshots?: boolean; reference_files?: boolean; profile_history?: boolean; embeddings?: boolean; post_call_summary?: boolean }) => Promise<{ success: boolean; error?: string }>;
   onProviderDataScopesChanged: (callback: (scopes: { transcript?: boolean; screenshots?: boolean; reference_files?: boolean; profile_history?: boolean; embeddings?: boolean; post_call_summary?: boolean }) => void) => () => void;
+  interviewContextGet: () => Promise<{ success: boolean; state?: InterviewContextRendererState; error?: string }>;
+  interviewContextSetEnabled: (enabled: boolean) => Promise<{ success: boolean; state?: InterviewContextRendererState; error?: string }>;
+  interviewContextUpdateText: (kind: InterviewContextKind, text: string) => Promise<{ success: boolean; state?: InterviewContextRendererState; error?: string }>;
+  interviewContextImportFile: (kind: InterviewContextKind) => Promise<{ success: boolean; cancelled?: boolean; state?: InterviewContextRendererState; error?: string }>;
+  interviewContextClear: (kind: InterviewContextKind) => Promise<{ success: boolean; state?: InterviewContextRendererState; error?: string }>;
+  interviewContextSelectCompanyDocument: (id: string | null) => Promise<{ success: boolean; state?: InterviewContextRendererState; error?: string }>;
+  interviewContextRenameCompanyDocument: (id: string, label: string) => Promise<{ success: boolean; state?: InterviewContextRendererState; error?: string }>;
   getScreenUnderstandingMode: () => Promise<'vision_first' | 'vision_only' | 'private_vision'>;
   setScreenUnderstandingMode: (mode: 'vision_first' | 'vision_only' | 'private_vision') => Promise<{ success: boolean; error?: string }>;
   onScreenUnderstandingModeChanged: (callback: (mode: 'vision_first' | 'vision_only' | 'private_vision') => void) => () => void;

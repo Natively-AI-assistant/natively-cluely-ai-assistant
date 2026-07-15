@@ -17,10 +17,22 @@ const PARSE_TIMEOUT_MS = 30_000;
 
 let pdfjsWorkerSrcPinned = false;
 
-const withTimeout = <T>(promise: Promise<T>, label: string): Promise<T> => Promise.race([
-  promise,
-  new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${PARSE_TIMEOUT_MS}ms`)), PARSE_TIMEOUT_MS)),
-]);
+const withTimeout = async <T>(promise: Promise<T>, label: string): Promise<T> => {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`${label} timed out after ${PARSE_TIMEOUT_MS}ms`)),
+          PARSE_TIMEOUT_MS,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+};
 
 const pinPdfjsWorkerSrcOnce = async (): Promise<void> => {
   if (pdfjsWorkerSrcPinned) return;
@@ -69,6 +81,17 @@ export interface ModeReferenceFileIngestResult {
   contentSha256: string;
 }
 
+export interface ExtractedReferenceDocument {
+  filePath: string;
+  fileName: string;
+  extension: string;
+  content: string;
+  pageCount?: number;
+  extractedPageCount?: number;
+  binarySha256: string;
+  contentSha256: string;
+}
+
 export interface ModeReferenceFileIngestOptions {
   modeId: string;
   filePath: string;
@@ -76,14 +99,15 @@ export interface ModeReferenceFileIngestOptions {
 }
 
 /**
- * Parse, persist, and begin indexing a user-selected regular file. Callers must
- * perform UI/authorization policy; this use case enforces file safety and uses
- * the exact PDF/DOCX/text parser path for every trusted filesystem ingress.
+ * Safely extract text and metadata from a user-selected document without
+ * persisting it. Keeping this as the single parser entry point prevents the
+ * local Interview Context feature and Modes Manager from drifting apart.
+ * The caller owns the native file-picker authorization boundary.
  */
-export const ingestModeReferenceFile = async (
-  options: ModeReferenceFileIngestOptions,
-): Promise<ModeReferenceFileIngestResult> => {
-  const filePath = path.resolve(options.filePath);
+export const extractReferenceDocument = async (
+  selectedPath: string,
+): Promise<ExtractedReferenceDocument> => {
+  const filePath = path.resolve(selectedPath);
   const fileName = path.basename(filePath);
   const ext = path.extname(fileName).toLowerCase();
   if (!MODE_REFERENCE_FILE_EXTENSIONS.has(ext)) throw new Error(`unsupported file type ${ext || 'none'}`);
@@ -102,15 +126,19 @@ export const ingestModeReferenceFile = async (
     await pinPdfjsWorkerSrcOnce();
     const { PDFParse } = require('pdf-parse');
     const parser = new PDFParse({ data: binary });
-    const data: any = await withTimeout<any>(parser.getText(), 'PDF parse');
-    pageCount = typeof data?.total === 'number' && data.total > 0
-      ? data.total
-      : Array.isArray(data?.pages) ? data.pages.length : undefined;
-    if (Array.isArray(data?.pages) && data.pages.length > 0) {
-      extractedPageCount = data.pages.filter((page: any) => typeof page?.text === 'string' && page.text.trim()).length;
-      content = data.pages.map((page: any) => `[Page ${page.num}]\n${typeof page.text === 'string' ? page.text : ''}`).join('\n\n');
-    } else {
-      content = String(data?.text || '');
+    try {
+      const data: any = await withTimeout<any>(parser.getText(), 'PDF parse');
+      pageCount = typeof data?.total === 'number' && data.total > 0
+        ? data.total
+        : Array.isArray(data?.pages) ? data.pages.length : undefined;
+      if (Array.isArray(data?.pages) && data.pages.length > 0) {
+        extractedPageCount = data.pages.filter((page: any) => typeof page?.text === 'string' && page.text.trim()).length;
+        content = data.pages.map((page: any) => `[Page ${page.num}]\n${typeof page.text === 'string' ? page.text : ''}`).join('\n\n');
+      } else {
+        content = String(data?.text || '');
+      }
+    } finally {
+      try { await parser.destroy?.(); } catch { /* best-effort parser cleanup */ }
     }
   } else if (ext === '.docx') {
     const mammoth = require('mammoth');
@@ -120,8 +148,39 @@ export const ingestModeReferenceFile = async (
     content = parseTextFile(binary, fileName, ext);
   }
 
-  if (!content.trim()) throw new Error('file parsed to empty text');
+  content = content.replace(/\r\n?/g, '\n').trim();
+  if (!content) throw new Error('file parsed to empty text');
   const contentSha256 = crypto.createHash('sha256').update(content).digest('hex');
+
+  return {
+    filePath,
+    fileName,
+    extension: ext,
+    content,
+    pageCount,
+    extractedPageCount,
+    binarySha256,
+    contentSha256,
+  };
+};
+
+/**
+ * Parse, persist, and begin indexing a user-selected regular file. Callers must
+ * perform UI/authorization policy; this use case enforces file safety and uses
+ * the exact PDF/DOCX/text parser path for every trusted filesystem ingress.
+ */
+export const ingestModeReferenceFile = async (
+  options: ModeReferenceFileIngestOptions,
+): Promise<ModeReferenceFileIngestResult> => {
+  const extracted = await extractReferenceDocument(options.filePath);
+  const {
+    fileName,
+    content,
+    pageCount,
+    extractedPageCount,
+    binarySha256,
+    contentSha256,
+  } = extracted;
   const manager = ModesManager.getInstance();
   const file = manager.addReferenceFile({
     modeId: options.modeId,

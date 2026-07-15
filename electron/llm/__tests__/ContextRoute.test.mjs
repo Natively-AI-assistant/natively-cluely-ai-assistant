@@ -12,6 +12,7 @@ import {
   planAnswer,
   buildContextRoute,
   isLayerAllowed,
+  isLayerSelected,
   summarizeContextRoute,
 } from '../../../dist-electron/electron/llm/index.js';
 
@@ -147,5 +148,14 @@ describe('route invariants', () => {
       assert.equal(isLayerAllowed(plan, layer), false);
     }
     assert.equal(isLayerAllowed(plan, 'live_transcript'), true, 'non-forbidden layer allowed');
+  });
+  test('isLayerSelected mirrors the complete route, including not-required layers', () => {
+    const plan = planFor('Could you explain why you used a deterministic evidence gate in the Atlas Verify project?');
+    assert.equal(plan.answerType, 'project_followup_answer');
+    assert.equal(isLayerSelected(plan, 'resume'), true);
+    assert.equal(isLayerSelected(plan, 'prior_assistant_responses'), true);
+    assert.equal(isLayerSelected(plan, 'live_transcript'), false, 'old transcript is not selected for an explicit project drill-in');
+    assert.equal(isLayerSelected(plan, 'stable_identity'), false, 'not forbidden does not mean selected');
+    assert.equal(isLayerSelected(plan, 'jd'), false);
   });
 });

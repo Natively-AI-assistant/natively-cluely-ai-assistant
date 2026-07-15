@@ -14,12 +14,16 @@ import { DOM_CONTEXT_MAX_CHARS } from "../config/constants";
 import { checkAnswerForCodeBugs } from "./CodeSanityCheck";
 import { formatAnswerPlanForPrompt, isCodingAnswerType } from "./AnswerPlanner";
 import type { AnswerPlan, AnswerType } from "./AnswerPlanner";
-import { isLayerAllowed } from "./contextRoute";
+import { isLayerSelected } from "./contextRoute";
 import { DOCUMENT_GROUNDING_SCOPE_DENIED_MESSAGE, type ProviderDataScope } from "./ProviderRouter";
 import type { ActiveModeDocumentGroundingInfo } from "../services/ModesManager";
 import type { ModeRetrievalOptions } from "../services/ModeContextRetriever";
 import { isCodeVerificationEnabled } from "./codeVerification/verificationEnabled";
 import type { WhatToAnswerRequestSnapshot } from "./whatToAnswerRequestSnapshot";
+import {
+    AI_RESPONSE_LANGUAGE_BILINGUAL_EN_PT,
+    formatLanguageAwareFallback,
+} from "../../shared/aiResponseLanguage";
 
 // Wall-clock budget for the pre-stream mode-context HYBRID retrieval await.
 // The hybrid retriever embeds the live query, and the embedder's own hard
@@ -275,7 +279,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
                         console.warn('[ScopeFallback] reference_files policy unreadable; using default-allow (explicit denial still omits-at-source below)');
                     }
                     // Unified context-route enforcement: forbidden always wins.
-                    if (answerPlan && !isLayerAllowed(answerPlan, 'reference_files')) {
+                    if (answerPlan && !isLayerSelected(answerPlan, 'reference_files')) {
                         referenceFilesAllowed = false;
                     }
                     if (documentGroundedCustomModeActive) {
@@ -429,7 +433,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
             // getActiveModePinnedInstructions (salary/pricing notes can't leak
             // into non-negotiation answers). Skill mode owns its prompt — skip.
             let pinnedModeInstructions = '';
-            if (!activeSkill && (!answerPlan || isLayerAllowed(answerPlan, 'custom_context'))) {
+            if (!activeSkill && (!answerPlan || isLayerSelected(answerPlan, 'custom_context'))) {
                 try {
                     const modesManager = this.getModesManager();
                     pinnedModeInstructions = modesManager.getActiveModePinnedInstructions?.(answerPlan?.answerType, requestSnapshot?.modeUniqueId) || '';
@@ -441,7 +445,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
             // Resume facts (candidateProfile) are dropped when the route forbids
             // the resume layer — e.g. coding/DSA must not see resume context.
             const documentGroundedCustomModeActiveForPrompt = answerPlan?.documentGroundedCustomModeActive === true;
-            const effectiveCandidateProfile = (documentGroundedCustomModeActiveForPrompt || (answerPlan && !isLayerAllowed(answerPlan, 'resume')))
+            const effectiveCandidateProfile = (documentGroundedCustomModeActiveForPrompt || (answerPlan && !isLayerSelected(answerPlan, 'resume')))
                 ? undefined
                 : candidateProfile;
 
@@ -515,7 +519,15 @@ ANSWER SHAPE: ${intentResult.answerShape}
             // factual block. One factual pipeline. Flag off / absent → legacy.
             let typedModeContext = modeContextBlock;
             let typedCandidateProfile = effectiveCandidateProfile;
-            let transcriptForPrompt = workingTranscript;
+            // The current question is pinned explicitly inside answer_contract.
+            // Only attach the broader transcript when the deterministic route
+            // actually selected it. A project drill-in, for example, selects
+            // resume evidence + prior assistant response but deliberately excludes
+            // the old transcript; leaking an earlier "introduce yourself" turn
+            // here was the direct cause of the repeated-presentation regression.
+            let transcriptForPrompt = answerPlan && !isLayerSelected(answerPlan, 'live_transcript')
+                ? ''
+                : workingTranscript;
             try {
                 const _cog = requestSnapshot?.contextOsGeneration as import('../intelligence/context-os').ContextOsGenerationContext | undefined;
                 const { isIntelligenceFlagEnabled } = require('../intelligence/intelligenceFlags');
@@ -550,7 +562,11 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 modeTemplateType: 'active',
                 screenContext,
                 domContext: processedDomContext,
-                priorResponses: !documentGroundedCustomModeActiveForPrompt && temporalContext?.hasRecentResponses ? temporalContext.previousResponses : undefined,
+                priorResponses: !documentGroundedCustomModeActiveForPrompt
+                    && (!answerPlan || isLayerSelected(answerPlan, 'prior_assistant_responses'))
+                    && temporalContext?.hasRecentResponses
+                    ? temporalContext.previousResponses
+                    : undefined,
                 intentContext,
                 retrievedModeContext: typedModeContext || undefined,
                 pinnedModeInstructions: pinnedModeInstructions || undefined,
@@ -610,7 +626,10 @@ ANSWER SHAPE: ${intentResult.answerShape}
             // Candidate resume facts AND prior assistant responses both fall under
             // the 'profile_history' data scope; push once if either is present.
             const hasProfileHistory = Boolean(effectiveCandidateProfile)
-                || Boolean(!documentGroundedCustomModeActiveForPrompt && temporalContext?.hasRecentResponses && temporalContext.previousResponses.length > 0);
+                || Boolean(!documentGroundedCustomModeActiveForPrompt
+                    && (!answerPlan || isLayerSelected(answerPlan, 'prior_assistant_responses'))
+                    && temporalContext?.hasRecentResponses
+                    && temporalContext.previousResponses.length > 0);
             if (hasProfileHistory) packetScopes.push('profile_history');
             // Coding/DSA answers get a small reasoning budget for correctness;
             // everything else streams with thinking off (fastest TTFT). abortSignal
@@ -619,9 +638,17 @@ ANSWER SHAPE: ${intentResult.answerShape}
             const wtaThinkingBudget = this.llmHelper.thinkingBudgetForAnswerType?.(
                 Boolean(answerPlan && isCodingAnswerType(answerPlan.answerType)),
             );
-            const wtaRouteOptions = governedEvidencePack && requestSnapshot?.contextOsGeneration
-                ? { answerType: answerPlan?.answerType, contextOsGeneration: requestSnapshot.contextOsGeneration }
-                : { answerType: answerPlan?.answerType };
+            const wtaRouteOptions = {
+                answerType: answerPlan?.answerType,
+                requiredContextLayers: answerPlan?.requiredContextLayers,
+                forbiddenContextLayers: answerPlan?.forbiddenContextLayers,
+                currentQuestion: answerPlan?.question?.trim() || undefined,
+                retrievalQuestion: answerPlan?.retrievalQuestion?.trim() || undefined,
+                profileFactIntent: answerPlan?.profileFactIntent,
+                ...(governedEvidencePack && requestSnapshot?.contextOsGeneration
+                    ? { contextOsGeneration: requestSnapshot.contextOsGeneration }
+                    : {}),
+            };
             for await (const token of this.llmHelper.streamChat(packet.userMessage, imagePaths, undefined, finalPromptOverride, true, true, packetScopes, undefined, wtaThinkingBudget, wtaRouteOptions)) {
                 if (MEASURE) {
                     const now = performance.now();
@@ -696,12 +723,29 @@ ANSWER SHAPE: ${intentResult.answerShape}
             // support. Surface an actionable message for provider failures.
             const msg = String(error?.message ?? error ?? '').toLowerCase();
             const isProviderFailure = /\b(401|403|429)\b|api key|unauthor|forbidden|quota|rate.?limit|billing|exhausted|permission/.test(msg);
+            const responseLanguage = this.llmHelper.getAiResponseLanguage?.();
             if (isProviderFailure) {
-                yield "I couldn't reach the AI provider — this looks like an API key or rate-limit issue. Check your API keys / plan in Settings and try again.";
+                yield formatLanguageAwareFallback(
+                    responseLanguage,
+                    "I couldn't reach the AI provider — this looks like an API key or rate-limit issue. Check your API keys / plan in Settings and try again.",
+                    "Não consegui acessar o provedor de IA — parece ser um problema com a chave da API ou o limite de uso. Verifique suas chaves de API ou seu plano nas Configurações e tente novamente.",
+                );
             } else {
                 // W6b: topic-aware graceful retry instead of the fixed canned line.
                 const { buildGracefulRetry } = require('./manualProfileIntelligence') as typeof import('./manualProfileIntelligence');
-                yield buildGracefulRetry(cleanedTranscript.split('\n').pop() || '');
+                // The topic-aware English templates interpolate live transcript
+                // words. In bilingual mode use the fixed reviewed pair rather
+                // than pretending that an untranslated topic is Portuguese.
+                const retryEnglish = buildGracefulRetry(
+                    responseLanguage === AI_RESPONSE_LANGUAGE_BILINGUAL_EN_PT
+                        ? ''
+                        : cleanedTranscript.split('\n').pop() || '',
+                );
+                yield formatLanguageAwareFallback(
+                    responseLanguage,
+                    retryEnglish,
+                    "Você poderia repetir? Quero ter certeza de responder corretamente à sua pergunta.",
+                );
             }
         }
     }

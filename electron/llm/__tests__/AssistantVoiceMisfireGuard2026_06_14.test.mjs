@@ -30,6 +30,16 @@ describe('detectAssistantVoiceMisfire — identity misfire', () => {
   test('flags "as an AI, I ..." assistant framing', () => {
     assert.equal(detectAssistantVoiceMisfire('As an AI, I cannot attend meetings.').isMisfire, true);
   });
+  test('flags an identity sentence after a preamble longer than 240 characters', () => {
+    const answer = `${'Context-free filler. '.repeat(18)} I am Natively, an AI assistant developed by Evin John.`;
+    assert.ok(answer.length > 240);
+    assert.equal(detectAssistantVoiceMisfire(answer).reason, 'identity');
+  });
+  test('flags the same identity misfire inside a bilingual response envelope', () => {
+    const answer = `<!--NATIVELY_EN-->\n${'Filler. '.repeat(30)} I am Natively, an AI assistant developed by Evin John.\n<!--NATIVELY_PT_BR-->\nEu sou o Natively, um assistente de IA.`;
+    assert.ok(answer.length > 240);
+    assert.equal(detectAssistantVoiceMisfire(answer).reason, 'identity');
+  });
 });
 
 describe('detectAssistantVoiceMisfire — stock refusal', () => {

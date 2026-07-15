@@ -93,7 +93,7 @@ export { verifyCodingAnswer } from "./codeVerification/verifyCodingAnswer";
 export type { VerifyCodingOptions, CorrectionFn } from "./codeVerification/verifyCodingAnswer";
 export type { Verdict, VerificationOutcome, VerifyLanguage, TestCase, RunResult, VerificationSpec } from "./codeVerification/types";
 export { extractVerificationSpec, parseProblemExamples, extractCodeBlock } from "./codeVerification/extractTests";
-export { buildContextRoute, isLayerAllowed, summarizeContextRoute } from "./contextRoute";
+export { buildContextRoute, isLayerAllowed, isLayerSelected, summarizeContextRoute } from "./contextRoute";
 export type { ContextRoute, ContextRouteLayer } from "./contextRoute";
 export {
     classifyCustomContext,

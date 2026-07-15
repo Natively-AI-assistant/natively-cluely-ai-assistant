@@ -1,4 +1,5 @@
 import { LLMHelper } from "../LLMHelper";
+import { formatLanguageAwareFallback } from "../../shared/aiResponseLanguage";
 import { UNIVERSAL_FOLLOW_UP_QUESTIONS_PROMPT } from "./prompts";
 import { TINY_FOLLOW_UP_QUESTIONS_PROMPT } from "./tinyPrompts";
 
@@ -21,13 +22,17 @@ export class FollowUpQuestionsLLM {
             // Q&A / transcript), not a real question, and the knowledge-mode
             // intent classifier can misfire on it (e.g. an identity-flavored prior
             // turn short-circuits this ENTIRE call to the canned intro response).
-            const stream = this.llmHelper.streamChat(fittedContext, undefined, undefined, this.resolvePrompt(), true);
+            const stream = this.llmHelper.streamChat(fittedContext, undefined, undefined, this.resolvePrompt(), true, true);
             let full = "";
             for await (const chunk of stream) full += chunk;
             return full;
         } catch (e) {
             console.error("[FollowUpQuestionsLLM] Failed:", e);
-            return "";
+            return formatLanguageAwareFallback(
+                this.llmHelper.getAiResponseLanguage?.(),
+                "I couldn't generate questions to ask. Please try again.",
+                "Não consegui gerar perguntas para fazer. Tente novamente.",
+            );
         }
     }
 
@@ -35,9 +40,14 @@ export class FollowUpQuestionsLLM {
         try {
             const fittedContext = this.llmHelper.fitContextForCurrentModel(context);
             // See generate() above — ignoreKnowledgeMode=true.
-            yield* this.llmHelper.streamChat(fittedContext, undefined, undefined, this.resolvePrompt(), true);
+            yield* this.llmHelper.streamChat(fittedContext, undefined, undefined, this.resolvePrompt(), true, true);
         } catch (e) {
             console.error("[FollowUpQuestionsLLM] Stream Failed:", e);
+            yield formatLanguageAwareFallback(
+                this.llmHelper.getAiResponseLanguage?.(),
+                "I couldn't generate questions to ask. Please try again.",
+                "Não consegui gerar perguntas para fazer. Tente novamente.",
+            );
         }
     }
 }

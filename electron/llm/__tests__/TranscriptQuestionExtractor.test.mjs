@@ -63,6 +63,37 @@ describe('transcript question extractor', () => {
     assert.equal(r.questionType, 'jd_alignment');
   });
 
+  test('project design-decision "why you used" is profile_detail, not jd_alignment', () => {
+    const r = extractLatestQuestion([
+      turn('interviewer', 'Could you explain why you used a deterministic evidence gate in the Atlas Verify project?'),
+    ]);
+    assert.equal(r.questionType, 'profile_detail');
+    assert.notEqual(r.questionType, 'jd_alignment');
+    assert.match(r.latestQuestion, /deterministic evidence gate/i);
+  });
+
+  test('real hiring and role-fit phrasings remain jd_alignment', () => {
+    const fitQuestions = [
+      'Why should we hire you?',
+      'Why should we bring you on?',
+      'Why are you a good fit for this role?',
+      'Why do you want this position?',
+      'What makes you the right candidate for this job?',
+      'Why are you interested in working here?',
+    ];
+    for (const text of fitQuestions) {
+      const r = extractLatestQuestion([turn('interviewer', text)]);
+      assert.equal(r.questionType, 'jd_alignment', `expected jd_alignment for: ${text}`);
+    }
+  });
+
+  test('non-hiring "why should we" technical decision is not jd_alignment', () => {
+    const r = extractLatestQuestion([
+      turn('interviewer', 'Why should we use a deterministic evidence gate here?'),
+    ]);
+    assert.notEqual(r.questionType, 'jd_alignment');
+  });
+
   test('salary question → negotiation', () => {
     const r = extractLatestQuestion([
       turn('interviewer', 'What salary are you expecting?'),
@@ -258,4 +289,3 @@ describe('toCandidateFraming (interviewer 2nd-person → candidate 1st-person)',
     }
   });
 });
-

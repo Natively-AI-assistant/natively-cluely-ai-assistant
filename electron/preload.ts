@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { SkillUploadPayload } from './services/skills/SkillValidator';
+import type { InterviewContextKind, InterviewContextRendererState } from '../shared/interviewContext';
 
 /**
  * Metadata the companion extension sends with a captured page (drives the
@@ -824,6 +825,13 @@ interface ElectronAPI {
       post_call_summary?: boolean;
     }) => void,
   ) => () => void;
+  interviewContextGet: () => Promise<{ success: boolean; state?: InterviewContextRendererState; error?: string }>;
+  interviewContextSetEnabled: (enabled: boolean) => Promise<{ success: boolean; state?: InterviewContextRendererState; error?: string }>;
+  interviewContextUpdateText: (kind: InterviewContextKind, text: string) => Promise<{ success: boolean; state?: InterviewContextRendererState; error?: string }>;
+  interviewContextImportFile: (kind: InterviewContextKind) => Promise<{ success: boolean; cancelled?: boolean; state?: InterviewContextRendererState; error?: string }>;
+  interviewContextClear: (kind: InterviewContextKind) => Promise<{ success: boolean; state?: InterviewContextRendererState; error?: string }>;
+  interviewContextSelectCompanyDocument: (id: string | null) => Promise<{ success: boolean; state?: InterviewContextRendererState; error?: string }>;
+  interviewContextRenameCompanyDocument: (id: string, label: string) => Promise<{ success: boolean; state?: InterviewContextRendererState; error?: string }>;
   getScreenUnderstandingMode: () => Promise<'vision_first' | 'vision_only' | 'private_vision'>;
   setScreenUnderstandingMode: (
     mode: 'vision_first' | 'vision_only' | 'private_vision',
@@ -2360,6 +2368,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('provider-data-scopes-changed', subscription);
     };
   },
+  interviewContextGet: () => ipcRenderer.invoke('interview-context:get'),
+  interviewContextSetEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke('interview-context:set-enabled', enabled),
+  interviewContextUpdateText: (kind: InterviewContextKind, text: string) =>
+    ipcRenderer.invoke('interview-context:update-text', kind, text),
+  interviewContextImportFile: (kind: InterviewContextKind) =>
+    ipcRenderer.invoke('interview-context:import-file', kind),
+  interviewContextClear: (kind: InterviewContextKind) =>
+    ipcRenderer.invoke('interview-context:clear', kind),
+  interviewContextSelectCompanyDocument: (id: string | null) =>
+    ipcRenderer.invoke('interview-context:select-company-document', id),
+  interviewContextRenameCompanyDocument: (id: string, label: string) =>
+    ipcRenderer.invoke('interview-context:rename-company-document', id, label),
   getScreenUnderstandingMode: () => ipcRenderer.invoke('get-screen-understanding-mode'),
   setScreenUnderstandingMode: (mode: 'vision_first' | 'vision_only' | 'private_vision') =>
     ipcRenderer.invoke('set-screen-understanding-mode', mode),

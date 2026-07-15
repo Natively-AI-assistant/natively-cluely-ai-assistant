@@ -116,6 +116,23 @@ export const isLayerAllowed = (plan: AnswerPlan, layer: ContextLayer): boolean =
 };
 
 /**
+ * Whether a layer was actually SELECTED for this answer, rather than merely
+ * not forbidden. `isLayerAllowed` intentionally preserves its older,
+ * permissive semantics for compatibility; prompt assembly must use this
+ * stricter predicate whenever it is deciding which factual blocks to attach.
+ *
+ * This distinction matters for profile answers: a project drill-in requires
+ * `resume`, while `stable_identity`, `jd`, and `live_transcript` are all
+ * unselected. Treating every non-forbidden layer as selected let an earlier
+ * self-introduction and the company/JD document drown the current project
+ * question even though the telemetry route correctly showed them excluded.
+ */
+export const isLayerSelected = (plan: AnswerPlan, layer: ContextLayer): boolean => {
+  const route = buildContextRoute(plan);
+  return route.selectedLayers.includes(layer);
+};
+
+/**
  * Compact, PII-free summary of the route for safe debug metadata / telemetry.
  * Layer NAMES and counts only — never content.
  */

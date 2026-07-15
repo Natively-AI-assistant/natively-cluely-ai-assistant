@@ -23,6 +23,10 @@ import {
   mergeRollingTranscriptFinal,
   mergeRollingTranscriptPartial,
 } from '../../electron/utils/rollingTranscriptState.ts';
+import {
+  englishForContext,
+  parseBilingualResponse,
+} from '../../shared/aiResponseLanguage.ts';
 import { categorizeSttError } from '../lib/sttErrorMapper';
 
 import type { SkillSummary } from '../types/electron';
@@ -248,7 +252,9 @@ const buildConversationContextFromMessages = (items: Message[]): string =>
     .filter((m) => m.role !== 'user' || !m.hasScreenshot)
     .map(
       (m) =>
-        `${m.role === 'interviewer' ? 'Interviewer' : m.role === 'user' ? 'User' : 'Assistant'}: ${m.text}`,
+        `${m.role === 'interviewer' ? 'Interviewer' : m.role === 'user' ? 'User' : 'Assistant'}: ${
+          m.role === 'system' ? englishForContext(m.text) : m.text
+        }`,
     )
     .slice(-20)
     .join('\n');
@@ -2523,12 +2529,46 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       streamingRafRef.current = null;
       const node = streamingNodeRef.current;
       if (!node || !streamingTextRef.current) return;
+      const parsed = parseBilingualResponse(streamingTextRef.current);
+
+      if (parsed.bilingual) {
+        const englishHtml = marked.parse(parsed.english, { async: false }) as string;
+        const portugueseHtml = parsed.portuguese
+          ? (marked.parse(parsed.portuguese, { async: false }) as string)
+          : '';
+        const portugueseSection = parsed.portugueseStarted
+          ? `
+            <section data-bilingual-section="pt-br" class="mt-4 rounded-xl border border-violet-400/10 bg-violet-400/[0.035] px-3 pb-1 pt-3.5">
+              <div class="mb-2 flex items-center gap-2 whitespace-normal text-[10px] font-semibold uppercase tracking-[0.19em] text-violet-400">
+                <span aria-hidden="true" class="h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400"></span>
+                ${t('Translation · PT-BR')}
+              </div>
+              <div class="markdown-content whitespace-pre-wrap text-[13.5px] leading-relaxed opacity-80">${portugueseHtml}</div>
+            </section>`
+          : '';
+
+        const bilingualHtml = `
+          <div data-bilingual-response="true" class="whitespace-normal">
+            <section data-bilingual-section="en">
+              <div class="mb-2 flex items-center gap-2 whitespace-normal text-[10px] font-semibold uppercase tracking-[0.19em] text-sky-400">
+                <span aria-hidden="true" class="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400"></span>
+                ${t('Say in English')}
+              </div>
+              <div class="markdown-content whitespace-pre-wrap text-[14.5px] leading-relaxed">${englishHtml}</div>
+            </section>
+            ${portugueseSection}
+          </div>`;
+
+        node.innerHTML = DOMPurify.sanitize(bilingualHtml);
+        return;
+      }
+
       // marked.parse is sync and fast (<1ms for typical LLM chunks).
       // DOMPurify strips any script/event-handler injection.
       const rawHtml = marked.parse(streamingTextRef.current, { async: false }) as string;
       node.innerHTML = DOMPurify.sanitize(rawHtml);
     });
-  }, []);
+  }, [t]);
 
   const scheduleStreamingCodeRender = useCallback(() => {
     if (streamingCodeRafRef.current !== null) return;
@@ -2635,7 +2675,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // new character without waiting for the RAF, then let the RAF
         // upgrade it to rendered HTML. This gives sub-frame latency for
         // plain text and up-to-60fps latency for markdown.
-        streamingNodeRef.current.textContent = streamingTextRef.current;
+        // The bilingual protocol uses invisible HTML-comment delimiters. Do
+        // not paint the raw buffer in that mode: the next animation frame
+        // renders the parsed sections, so even a marker split across chunks
+        // can never flash on screen.
+        if (!parseBilingualResponse(streamingTextRef.current).bilingual) {
+          streamingNodeRef.current.textContent = streamingTextRef.current;
+        }
       }
       scheduleMarkdownRender();
       return;
@@ -2709,7 +2755,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     streamingNodeRef.current = el;
     if (el && streamingTextRef.current) {
       // Push any text that arrived before the DOM node was ready.
-      el.textContent = streamingTextRef.current;
+      if (!parseBilingualResponse(streamingTextRef.current).bilingual) {
+        el.textContent = streamingTextRef.current;
+      }
       scheduleMarkdownRender();
     }
   }, [scheduleMarkdownRender]);
@@ -3373,7 +3421,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // (memoized below) receives this as a prop; without a stable identity its
   // memo comparator would never match and the bailout would not fire.
   const handleCopy = useCallback((text: string) => {
-    navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(englishForContext(text));
     analytics.trackCopyAnswer();
     // Optional: Trigger a small toast or state change for visual feedback
   }, []);
@@ -4443,7 +4491,7 @@ Provide only the answer, nothing else.`;
         }
         // Handoff gap after flushToken(): imperative ref cleared but React has
         // not yet reconciled — keep showing accumulated text instead of blank.
-        if (msg.text) {
+        if (msg.text && !parseBilingualResponse(msg.text).bilingual) {
           return (
             <div key="streaming" className={`w-full rounded-[20px] rounded-tl-[4px] p-[14px_18px] ai-response-card ${cardBgBorderClass} my-2.5 transition-all duration-300 markdown-content whitespace-pre-wrap text-[14.5px] leading-relaxed`}>{msg.text}</div>
           );
@@ -4474,6 +4522,129 @@ Provide only the answer, nothing else.`;
               );
             }}
           />
+        );
+      }
+
+      const bilingualResponse = parseBilingualResponse(msg.text);
+      if (msg.role === 'system' && bilingualResponse.bilingual) {
+        const bilingualMarkdownComponents =
+          msg.intent === 'what_to_answer'
+            ? mdComponents.whatToAnswerText
+            : mdComponents.standard;
+        const bilingualEnglishHasCode =
+          msg.isCode || bilingualResponse.english.includes('```');
+        const bilingualEnglishParts = bilingualEnglishHasCode
+          ? bilingualResponse.english.split(/(```[\s\S]*?(?:```|$))/g)
+          : null;
+        const englishLabelClass = isLightTheme ? 'text-sky-700' : 'text-sky-300';
+        const portugueseLabelClass = isLightTheme ? 'text-violet-700' : 'text-violet-300';
+        const translationSurfaceClass = isLightTheme
+          ? 'border-violet-500/15 bg-violet-500/[0.035]'
+          : 'border-violet-300/10 bg-violet-300/[0.035]';
+
+        return (
+          <div
+            data-bilingual-response="true"
+            className={`w-full rounded-[20px] rounded-tl-[4px] p-[14px_18px] ai-response-card ${cardBgBorderClass} my-2.5 transition-all duration-300 relative group`}
+          >
+            <div className="absolute top-[-16px] right-[-16px] z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
+              <CardCopyButton
+                text={bilingualResponse.english}
+                onCopy={handleCopy}
+                isLightTheme={isLightTheme}
+                isModernTheme={isModernTheme}
+                isGlassTheme={isGlassTheme}
+              />
+            </div>
+
+            <section data-bilingual-section="en">
+              <div className={`mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.19em] ${englishLabelClass}`}>
+                <span
+                  aria-hidden="true"
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${isLightTheme ? 'bg-sky-600' : 'bg-sky-300'}`}
+                />
+                {t('Say in English')}
+              </div>
+              <div className="markdown-content text-[14.5px] leading-relaxed">
+                {bilingualEnglishParts ? (
+                  <div className="space-y-2">
+                    {bilingualEnglishParts.map((part, index) => {
+                      if (part.startsWith('```')) {
+                        // Keep bilingual code answers on the same Prism-backed
+                        // surface as ordinary WTA/code answers. The protocol
+                        // markers are stripped before this point, so only the
+                        // actionable English section is copied and highlighted.
+                        const match = part.match(/```([\w+#-]*)\s+([\s\S]*?)(?:```|$)/);
+                        const lang = match?.[1]
+                          || (msg.intent === 'what_to_answer' ? 'python' : '');
+                        const code = (match?.[2]
+                          || part.replace(/^```[\w+#-]*\s*/, '').replace(/```$/, ''))
+                          .trim();
+
+                        return (
+                          <HighlightedCode
+                            key={index}
+                            code={code}
+                            lang={lang}
+                            isLightTheme={isLightTheme}
+                            codeTheme={codeTheme}
+                            codeBlockClass={codeBlockClass}
+                            codeHeaderClass={codeHeaderClass}
+                            codeHeaderTextClass={codeHeaderTextClass}
+                            codeLineNumberColor={codeLineNumberColor}
+                            appearance={appearance}
+                            isModernTheme={isModernTheme}
+                            isGlassTheme={isGlassTheme}
+                          />
+                        );
+                      }
+
+                      return (
+                        <ReactMarkdown
+                          key={index}
+                          remarkPlugins={REMARK_PLUGINS}
+                          rehypePlugins={REHYPE_PLUGINS}
+                          components={bilingualMarkdownComponents}
+                        >
+                          {part}
+                        </ReactMarkdown>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <ReactMarkdown
+                    remarkPlugins={REMARK_PLUGINS}
+                    rehypePlugins={REHYPE_PLUGINS}
+                    components={bilingualMarkdownComponents}
+                  >
+                    {bilingualResponse.english}
+                  </ReactMarkdown>
+                )}
+              </div>
+            </section>
+
+            <section
+              data-bilingual-section="pt-br"
+              className={`mt-4 rounded-xl border px-3 pb-1 pt-3.5 ${translationSurfaceClass}`}
+            >
+              <div className={`mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.19em] ${portugueseLabelClass}`}>
+                <span
+                  aria-hidden="true"
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${isLightTheme ? 'bg-violet-600' : 'bg-violet-300'}`}
+                />
+                {t('Translation · PT-BR')}
+              </div>
+              <div className="markdown-content text-[13.5px] leading-relaxed opacity-80">
+                <ReactMarkdown
+                  remarkPlugins={REMARK_PLUGINS}
+                  rehypePlugins={REHYPE_PLUGINS}
+                  components={bilingualMarkdownComponents}
+                >
+                  {bilingualResponse.portuguese || t('Translation not received.')}
+                </ReactMarkdown>
+              </div>
+            </section>
+          </div>
         );
       }
 
@@ -4727,7 +4898,7 @@ Provide only the answer, nothing else.`;
         </div>
       );
     },
-    [isLightTheme, mdComponents, appearance],
+    [isLightTheme, mdComponents, appearance, t],
   );
 
   // We use a ref to hold the latest handlers to avoid re-binding the event listener on every render

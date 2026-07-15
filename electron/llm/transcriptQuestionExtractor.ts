@@ -183,8 +183,23 @@ function classifyType(q: string): ExtractedQuestionType {
         return 'negotiation';
     }
 
-    // JD / role alignment
-    if (/\b(good fit|right fit|why (should we|do you want|are you interested)|fit for (this|the) (role|position|job)|why this (role|company|position)|what makes you|why you)\b/.test(t)) {
+    // JD / role alignment. Keep this deliberately conservative: bare fragments
+    // such as "why you" / "what makes you" also occur in project and technical
+    // drill-ins ("explain why you used an evidence gate"). Treating those as
+    // JD alignment makes the planner choose a resume+JD fit pitch instead of
+    // answering the actual design decision. The full AnswerPlanner still owns
+    // the richer JD-fit vocabulary; this coarse extractor only needs high-
+    // confidence role/hiring shapes.
+    if (
+        /\b(good fit|right fit|fit for (this|the) (role|position|job)|why this (role|company|position|job))\b/.test(t)
+        || /\bwhy should we (?:(?:hire|pick|choose|select|consider|take|go with) you|bring you (?:on|in))\b/.test(t)
+        || /\bwhy do you want (this|the) (role|job|position)|\bwhy do you want to (work|join)\b/.test(t)
+        || /\bwhy are you interested in (?:(this|the) (role|job|position|company)|working|joining)\b/.test(t)
+        || /\b(?:why|how) (?:do |would |are )?you (?:a good )?fit\b/.test(t)
+        || /\bwhat makes you (?:a |the )?(?:good|great|right|ideal|strong|best|qualified|suitable) (?:fit|candidate|choice|hire|person|applicant)\b/.test(t)
+        || /\bwhy (?:are )?you (?:the |a )?(?:right|best|good|ideal|strong|qualified|suitable) (?:candidate|fit|person|choice|applicant)\b/.test(t)
+        || /\bwhy you (?:for|over)\b.{0,30}\b(role|job|position|candidate|applicant)\b/.test(t)
+    ) {
         return 'jd_alignment';
     }
 

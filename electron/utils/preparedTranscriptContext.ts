@@ -1,7 +1,4 @@
-import {
-  buildTemporalContext,
-  prepareTranscriptForWhatToAnswer,
-} from '../llm';
+import { prepareTranscriptForWhatToAnswer } from '../llm';
 
 export interface PreparedContextItem {
   role: string;
@@ -11,12 +8,11 @@ export interface PreparedContextItem {
 
 export interface PreparedContextSession {
   getContextWithInterim(lastSeconds: number): PreparedContextItem[];
-  getAssistantResponseHistory(): string[];
 }
 
 /**
- * Build transcript context aligned with What-to-Answer: cleaned turns,
- * interim interviewer speech, and recent assistant responses.
+ * Build human-only transcript context aligned with What-to-Answer. Previous
+ * assistant replies are supplied separately by the AnswerPlan-gated channel.
  */
 export function buildPreparedTranscriptContext(
   session: PreparedContextSession,
@@ -31,24 +27,7 @@ export function buildPreparedTranscriptContext(
     timestamp: item.timestamp,
   }));
 
-  // `as any` here bridges the structural-but-nominally-distinct turn/context
-  // shapes: the llm helpers (prepareTranscriptForWhatToAnswer / buildTemporalContext)
-  // declare their own RollingTranscript-derived turn types, and the items above
-  // (role/text/timestamp + PreparedContextItem) are field-compatible at runtime
-  // but not assignable nominally. The casts are safe given that field alignment.
-  const preparedTranscript = prepareTranscriptForWhatToAnswer(transcriptTurns as any, 12);
-  const temporalContext = buildTemporalContext(
-    contextItems as any,
-    session.getAssistantResponseHistory() as any,
-    lastSeconds,
-  );
-
-  const parts: string[] = [preparedTranscript];
-  if (temporalContext.hasRecentResponses && temporalContext.previousResponses.length > 0) {
-    parts.push(
-      '[RECENT ASSISTANT RESPONSES]\n' +
-        temporalContext.previousResponses.map((r) => `- ${r}`).join('\n'),
-    );
-  }
-  return parts.filter(Boolean).join('\n\n');
+  // `as any` bridges structurally-compatible transcript turn types declared by
+  // the LLM helpers and SessionTracker.
+  return prepareTranscriptForWhatToAnswer(transcriptTurns as any, 12);
 }

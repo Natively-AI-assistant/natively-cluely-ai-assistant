@@ -7,7 +7,7 @@ import {
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
     ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Settings, Activity, ExternalLink, Trash2,
     Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff, Folder,
-    Star, AlertCircle, Gift, Smartphone, Cpu, Shield
+    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, FileText
 } from 'lucide-react';
 import { analytics } from '../lib/analytics/analytics.service';
 import { AboutSection } from './AboutSection';
@@ -17,6 +17,7 @@ import { NativelyApiSettings } from './settings/NativelyApiSettings';
 import { NativelyProSettings } from './settings/NativelyProSettings';
 import { PhoneMirrorSettings } from './settings/PhoneMirrorSettings';
 import { IntelligenceSettings } from './settings/IntelligenceSettings';
+import { InterviewContextSettings } from './settings/InterviewContextSettings';
 import { SkillsSettings } from './settings/SkillsSettings';
 import { LocalWhisperModelPanel } from './LocalWhisperModelPanel';
 import { NativelyLogoMark } from './NativelyLogoMark';
@@ -35,6 +36,8 @@ import { getMeetingInterfaceTheme, setMeetingInterfaceTheme, type MeetingInterfa
 import { KeyRecorder } from './ui/KeyRecorder';
 import { ProfileVisualizer, PremiumUpgradeModal } from '../premium';
 import icon from './icon.png';
+
+const BILINGUAL_INTERVIEW_LANGUAGE_CODE = 'bilingual-en-pt';
 
 // ---------------------------------------------------------------------------
 // StarRating — renders filled/empty stars for culture ratings
@@ -707,12 +710,15 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
             if (window.electronAPI?.getAiResponseLanguages) {
                 const aiLangs = await window.electronAPI.getAiResponseLanguages();
-                // Sort: Auto first, English second, then alphabetical
+                // Sort: Auto first, English second, bilingual interview mode third,
+                // then the remaining languages alphabetically.
                 const sortedAiLangs = [...aiLangs].sort((a, b) => {
                     if (a.code === 'auto') return -1;
                     if (b.code === 'auto') return 1;
                     if (a.label === 'English') return -1;
                     if (b.label === 'English') return 1;
+                    if (a.code === BILINGUAL_INTERVIEW_LANGUAGE_CODE) return -1;
+                    if (b.code === BILINGUAL_INTERVIEW_LANGUAGE_CODE) return 1;
                     return a.label.localeCompare(b.label);
                 });
                 setAvailableAiLanguages(sortedAiLangs);
@@ -1481,6 +1487,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         <Folder size={16} className={activeTab === 'skills' ? 'text-accent-primary' : 'text-text-secondary'} /> {t('Skills')}
                                     </button>
                                     <button
+                                        onClick={() => setActiveTab('interview-context')}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'interview-context' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                    >
+                                        <FileText size={16} className={activeTab === 'interview-context' ? 'text-accent-primary' : 'text-text-secondary'} /> {t('Interview Context')}
+                                    </button>
+                                    <button
                                         onClick={() => setActiveTab('calendar')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'calendar' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
@@ -2010,7 +2022,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[110px] justify-between"
                                                         >
                                                             <span className="capitalize text-ellipsis overflow-hidden whitespace-nowrap flex items-center gap-1">
-                                                                {aiResponseLanguage === 'auto' ? t('Auto') : aiResponseLanguage}
+                                                                {aiResponseLanguage === 'auto'
+                                                                    ? t('Auto')
+                                                                    : aiResponseLanguage === BILINGUAL_INTERVIEW_LANGUAGE_CODE
+                                                                        ? t('English + Portuguese (Interview)')
+                                                                        : t(availableAiLanguages.find((option) => option.code === aiResponseLanguage)?.label || aiResponseLanguage)}
                                                             </span>
                                                             <ChevronDown size={12} className={`shrink-0 transition-transform ${isAiLangDropdownOpen ? 'rotate-180' : ''}`} />
                                                         </button>
@@ -2030,7 +2046,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                         {option.code === 'auto' ? (
                                                                             <span className="font-medium">{t('Auto')}</span>
                                                                         ) : (
-                                                                            <span className="font-medium">{option.label}</span>
+                                                                            <span className="font-medium">
+                                                                                {option.code === BILINGUAL_INTERVIEW_LANGUAGE_CODE
+                                                                                    ? t('English + Portuguese (Interview)')
+                                                                                    : t(option.label)}
+                                                                            </span>
                                                                         )}
                                                                     </button>
                                                                 ))}
@@ -2236,6 +2256,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             )}
                             {activeTab === 'skills' && (
                                 <SkillsSettings />
+                            )}
+                            {activeTab === 'interview-context' && (
+                                <InterviewContextSettings />
                             )}
                             {activeTab === 'natively-api' && (
                                 <NativelyApiSettings initialIsSaved={hasNativelyKey} />

@@ -1,4 +1,5 @@
 import { LLMHelper } from "../LLMHelper";
+import { formatLanguageAwareFallback } from "../../shared/aiResponseLanguage";
 import { BRAINSTORM_MODE_PROMPT } from "./prompts";
 import { TINY_BRAINSTORM_PROMPT } from "./tinyPrompts";
 
@@ -22,10 +23,14 @@ export class BrainstormLLM {
             // rationale: `context` here is the problem/transcript blob passed
             // directly as the user message, not a real question being asked of the
             // candidate, so it must not go through the knowledge-mode intent gate.
-            yield* this.llmHelper.streamChat(fittedContext, imagePaths, undefined, promptOverride, true);
+            yield* this.llmHelper.streamChat(fittedContext, imagePaths, undefined, promptOverride, true, true);
         } catch (error) {
             console.error("[BrainstormLLM] Stream failed:", error);
-            yield "I couldn't generate brainstorm approaches. Make sure your question is visible and try again.";
+            yield formatLanguageAwareFallback(
+                this.llmHelper.getAiResponseLanguage?.(),
+                "I couldn't generate brainstorm approaches. Make sure your question is visible and try again.",
+                "Não consegui gerar abordagens para o brainstorming. Verifique se a pergunta está visível e tente novamente.",
+            );
         }
     }
 }

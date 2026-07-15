@@ -559,16 +559,17 @@ export interface AssistantVoiceSanitizeResult {
  * rather than a real answer. Deterministic, content-free. The caller substitutes a
  * deterministic honest answer (e.g. the no-context line) when `isMisfire` is true.
  *
- * Conservative by design: only flags when the canned line is the WHOLE answer (short
- * + matches), so a long, real meeting answer that merely quotes "I can't share the
- * revenue figure" is never falsely flagged.
+ * Identity self-introductions are checked regardless of envelope length because a
+ * bilingual wrapper or preamble can make the same canned misfire exceed 240 chars.
+ * Stock refusals remain length-capped so a real answer that merely quotes one is not
+ * falsely flagged.
  */
 export function detectAssistantVoiceMisfire(answer: string): AssistantVoiceSanitizeResult {
   const t = String(answer || '').trim();
   if (!t) return { isMisfire: false, reason: null };
-  // Only a SHORT answer can be a pure canned non-answer; a real answer is longer.
-  if (t.length > 240) return { isMisfire: false, reason: null };
   if (ASSISTANT_IDENTITY_MISFIRE_RE.test(t)) return { isMisfire: true, reason: 'identity' };
+  // Only a SHORT answer can be a pure stock refusal; a real answer is longer.
+  if (t.length > 240) return { isMisfire: false, reason: null };
   if (ASSISTANT_STOCK_REFUSAL_RE.test(t)) return { isMisfire: true, reason: 'refusal' };
   return { isMisfire: false, reason: null };
 }

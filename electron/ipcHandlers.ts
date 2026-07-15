@@ -40,6 +40,8 @@ import { isAssistantIdentityQuestion, profileFactsReady } from './llm/manualProf
 import { buildManualProfileEvidenceRoute } from './llm/profileAnswerBackend';
 import { DOC_GROUNDED_TOKEN_BUDGET } from './services/ModeContextRetriever';
 import { detectIncompleteNumericAnswer, completenessRegenFabricates, isDocGroundedAnswerType } from './llm/documentGroundedPrompt';
+import { isInterviewContextKind } from '../shared/interviewContext';
+import { formatLanguageAwareFallback } from '../shared/aiResponseLanguage';
 
 // Generic tokens excluded when splitting OKF entity names / card titles into
 // distinctive words for the document-grounded false-refusal gate (2026-07-02).
@@ -754,7 +756,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Don't process empty responses
         if (!result || result.trim().length === 0) {
           console.warn('[IPC] Empty response from LLM, not updating IntelligenceManager');
-          return "I apologize, but I couldn't generate a response. Please try again.";
+          return formatLanguageAwareFallback(
+            appState.processingHelper.getLLMHelper().getAiResponseLanguage?.(),
+            "I apologize, but I couldn't generate a response. Please try again.",
+            'Desculpe, mas não consegui gerar uma resposta. Tente novamente.',
+          );
         }
 
         // Sync with IntelligenceManager so Follow-Up/Recap work
@@ -952,7 +958,18 @@ export function initializeIpcHandlers(appState: AppState): void {
         let autoContextSnapshot: string | undefined;
         if (!context) {
           try {
-            const snap = intelligenceManager.getFormattedContext(100);
+            // MANUAL CHAT MEMORY: the manual chat thread must
+            // survive longer than the live 100s window — a fact typed a few
+            // minutes earlier ("o codinome é X") was silently evaporating and
+            // the model answered from the interview documents instead. 900s
+            // covers a realistic chat session; live WTA paths keep their own
+            // short windows (60/180s) untouched.
+            // Manual chat is a distinct conversational surface. Keep the shared
+            // human meeting transcript, but never feed assistant output produced
+            // by WTA/screenshot/phone back into a fresh manual question. That
+            // cross-surface leak was the direct cause of a short translation ask
+            // replaying the candidate presentation generated moments earlier.
+            const snap = intelligenceManager.getFormattedContext(900, 'manual_chat');
             if (snap && snap.trim().length > 0) autoContextSnapshot = snap;
           } catch (ctxErr) {
             console.warn('[IPC] Failed to capture pre-turn context:', ctxErr);
@@ -1055,12 +1072,29 @@ export function initializeIpcHandlers(appState: AppState): void {
           manualActiveMode = ModesManager.getInstance().getActiveModeInfo();
         } catch { /* mode prior unavailable — planAnswer stays mode-blind */ }
 
+        // Resolve only a narrow manual anaphora shape (for example,
+        // "Ué, mas eu anexei") against the last completed manual turn. The
+        // SessionTracker accessor is recent/manual-only and excludes synthetic
+        // actions, so unrelated meeting or internal-action text cannot unlock
+        // profile evidence.
+        let previousManualQuestion: string | null = null;
+        try {
+          previousManualQuestion = intelligenceManager.getRecentManualTurn()?.question ?? null;
+        } catch { /* no prior manual turn — planner stays fail-closed */ }
+
         const answerPlan = planAnswer({
           question: message,
+          previousQuestion: previousManualQuestion,
           source: 'manual_input',
           speakerPerspective: 'user',
           activeMode: manualActiveMode,
         });
+        // Keep the current user turn authoritative for generation while letting
+        // a narrowly-resolved anaphora select evidence with its antecedent.
+        // AnswerPlanner only diverges these values for the guarded manual
+        // attachment-correction shape; normal sequential questions stay local.
+        const manualRetrievalQuestion = answerPlan.retrievalQuestion?.trim()
+          || answerPlan.question;
 
         // Custom-Mode Source Disambiguation (2026-07-06): build the
         // CustomModeExecutionContract ONCE and resolve the turn's SOURCE
@@ -1611,10 +1645,20 @@ export function initializeIpcHandlers(appState: AppState): void {
         const profileEvidenceEligible = !imagePaths?.length && !isCodingChat
           && !isAssistantIdentityQuestion(message)
           && !isStealthChat
+          // The AnswerPlan is the authoritative profile boundary. In
+          // particular, unmatched/manual-neutral (`unknown_answer`) turns fail
+          // closed; do not let the secondary JIT selector independently reopen
+          // profile evidence after the planner forbids it.
+          && answerPlan.profileContextPolicy !== 'forbidden'
           && answerPlan.answerType !== 'ethical_usage_answer'
           && answerPlan.answerType !== 'project_link_answer'
           && answerPlan.answerType !== 'source_code_evidence_answer'
           && answerPlan.answerType !== 'project_about_answer'
+          // Inventory/status is answered from InterviewContextService's active
+          // file metadata. Structured resume cards cannot prove which local
+          // document slots are currently loaded and would add generic filler.
+          && answerPlan.profileFactIntent !== 'profile_document_inventory'
+          && answerPlan.profileFactIntent !== 'company_document_selection'
           && sourceOwnershipAllowsProfile;
 
         let finalGenerationMode: FinalGenerationMode = 'jit_llm';
@@ -1663,7 +1707,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           try {
             const orchestrator = llmHelper.getKnowledgeOrchestrator?.();
             const { route: evidenceRoute, routeLog } = buildManualProfileEvidenceRoute({
-              question: message,
+              question: manualRetrievalQuestion,
               orchestrator,
               source: 'manual_input',
               // Stage 4/5: pass the routed answer type so the selector emits the
@@ -2068,11 +2112,15 @@ export function initializeIpcHandlers(appState: AppState): void {
         // the JIT "answer only from allowed_evidence" instruction and the OKF generic
         // CONTEXT header contradict, wasting tokens/latency. Not a leak (both are
         // owner-gated), but the double-injection is redundant.
-        if (!isCodingChat && !selectedProfileEvidence && answerPlan.profileContextPolicy !== 'forbidden' && !docGroundedOrUnknown && ownershipAllowsProfileEvidence) {
+        if (!isCodingChat && !selectedProfileEvidence
+            && answerPlan.profileContextPolicy !== 'forbidden'
+            && answerPlan.profileFactIntent !== 'profile_document_inventory'
+            && answerPlan.profileFactIntent !== 'company_document_selection'
+            && !docGroundedOrUnknown && ownershipAllowsProfileEvidence) {
           try {
             const { retrieveProfileEvidence } = require('./services/knowledge/OkfProfileRetriever') as typeof import('./services/knowledge/OkfProfileRetriever');
             const profileEvidence = retrieveProfileEvidence({
-              question: message,
+              question: manualRetrievalQuestion,
               profileContextPolicy: answerPlan.profileContextPolicy,
               // Pass the REAL doc-grounded state so the retriever's own gate 4 is
               // live defense-in-depth (not dead code). It is false here only
@@ -2155,8 +2203,12 @@ export function initializeIpcHandlers(appState: AppState): void {
             // still strips prior assistant turns), so anti-contamination holds.
             {
               answerType: answerPlan.answerType,
+              requiredContextLayers: answerPlan.requiredContextLayers,
+              currentQuestion: answerPlan.question,
+              retrievalQuestion: manualRetrievalQuestion,
+              profileFactIntent: answerPlan.profileFactIntent,
               forbiddenContextLayers: answerPlan.forbiddenContextLayers,
-              // Surface-scoped (Phase 9, 2026-07-14): the referent hint must come
+              // Surface-scoped: the referent hint must come
               // from THIS manual-chat conversation's own last answer, never a
               // WTA/phone-mirror turn that happened to write the shared
               // lastAssistantMessage more recently — that would resolve an
@@ -2325,9 +2377,17 @@ export function initializeIpcHandlers(appState: AppState): void {
           // insufficient-context line, so a live answer is NEVER blank when a safe
           // fallback exists (Issue 1 / spec). Only when !manualFirstUseful.
           if (!manualFirstUseful && !fullResponse.trim()) {
-            const fb = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
+            const fallbackEnglish = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
               ? "I don't have enough context from the allowed source to answer that yet."
               : "The model did not produce an answer in time, so I won't guess from your profile.";
+            const fallbackPortuguese = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
+              ? 'Ainda não tenho contexto suficiente na fonte permitida para responder isso.'
+              : 'O modelo não produziu uma resposta a tempo, então não vou inventar usando o seu perfil.';
+            const fb = formatLanguageAwareFallback(
+              llmHelper.getAiResponseLanguage?.(),
+              fallbackEnglish,
+              fallbackPortuguese,
+            );
             finalGenerationMode = 'provider_error_no_answer';
             sessionWriteDecision = decideSessionWritePolicy({ finalGenerationMode, validationOk: false, criticalViolations: ['provider_timeout_no_answer'] });
             fullResponse = fb;
@@ -2622,7 +2682,11 @@ export function initializeIpcHandlers(appState: AppState): void {
                   // assistant-meta, do NOT repair with deterministic profile prose.
                   // Emit a transparent source-safe failure and keep it out of
                   // SessionTracker as authoritative conversation memory.
-                  const safe = "The model produced an invalid assistant-identity answer, so I won't guess from your profile. Please try again.";
+                  const safe = formatLanguageAwareFallback(
+                    llmHelper.getAiResponseLanguage?.(),
+                    "The model produced an invalid assistant-identity answer, so I won't guess from your profile. Please try again.",
+                    'O modelo produziu uma resposta inválida na identidade do assistente, então não vou inventar usando o seu perfil. Tente novamente.',
+                  );
                   fullResponse = safe;
                   finalText = safe;
                   finalGenerationMode = 'provider_error_no_answer';
@@ -2645,7 +2709,11 @@ export function initializeIpcHandlers(appState: AppState): void {
               // refusal AND the type is a product-about/project type.
               if ((answerPlan.answerType === 'project_about_answer' || answerPlan.answerType === 'project_answer')
                   && /^\s*(?:I(?:'m| am) Natively[.,]?\s*(?:an? AI assistant[.,]?\s*)?)?I\s+(?:cannot|can\s?not|can'?t)\s+share\s+that(?:\s+information)?\s*\.?\s*$/i.test(fullResponse.trim())) {
-                const honest = "I don't have that product detail in my loaded context. I can only speak to what's in the loaded project description.";
+                const honest = formatLanguageAwareFallback(
+                  llmHelper.getAiResponseLanguage?.(),
+                  "I don't have that product detail in my loaded context. I can only speak to what's in the loaded project description.",
+                  'Não tenho esse detalhe do produto no contexto carregado. Só posso falar sobre o que está na descrição do projeto carregada.',
+                );
                 fullResponse = honest;
                 finalText = honest;
                 _attr.assistant_voice_guard_triggered = true;
@@ -2678,10 +2746,22 @@ export function initializeIpcHandlers(appState: AppState): void {
                 // question instead. Clarification-seeking is only the last resort
                 // when no grounded fallback exists.
                 const honest = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
-                  ? "I don't have enough context from the conversation to answer that yet."
+                  ? formatLanguageAwareFallback(
+                    llmHelper.getAiResponseLanguage?.(),
+                    "I don't have enough context from the conversation to answer that yet.",
+                    'Ainda não tenho contexto suficiente da conversa para responder isso.',
+                  )
                   : answerPlan.answerType === 'sales_answer'
-                    ? "I don't have enough context on that yet — could you share a bit more?"
-                    : "Could you give me a bit more to go on?";
+                    ? formatLanguageAwareFallback(
+                      llmHelper.getAiResponseLanguage?.(),
+                      "I don't have enough context on that yet — could you share a bit more?",
+                      'Ainda não tenho contexto suficiente sobre isso. Você poderia compartilhar mais detalhes?',
+                    )
+                    : formatLanguageAwareFallback(
+                      llmHelper.getAiResponseLanguage?.(),
+                      "Could you give me a bit more to go on?",
+                      'Você poderia fornecer um pouco mais de contexto?',
+                    );
                 piTelemetry.emit('pi_assistant_voice_misfire_repaired', { answerType: answerPlan.answerType, reason: misfire.reason });
                 console.warn('[ProfileIntelligence] assistant-voice identity/refusal misfire replaced with honest line', { answerType: answerPlan.answerType, reason: misfire.reason });
                 fullResponse = honest;
@@ -3427,7 +3507,11 @@ export function initializeIpcHandlers(appState: AppState): void {
                   // Retry didn't help → ship a SAFE failure line (NOT a greeting),
                   // referencing the uploaded material (not "the conversation"), and
                   // BLOCK it from SessionTracker so it cannot poison the next turn.
-                  const safe = "I couldn't find that in the uploaded material. Try rephrasing, or ask about a specific section of the document.";
+                  const safe = formatLanguageAwareFallback(
+                    llmHelper.getAiResponseLanguage?.(),
+                    "I couldn't find that in the uploaded material. Try rephrasing, or ask about a specific section of the document.",
+                    'Não encontrei essa informação no material enviado. Tente reformular ou pergunte sobre uma seção específica do documento.',
+                  );
                   fullResponse = safe;
                   finalText = safe;
                   blockedFromSessionTracker = true;
@@ -3684,7 +3768,11 @@ export function initializeIpcHandlers(appState: AppState): void {
             piTelemetry.emit('pi_provider_error_classified', { kind: klass.kind, outage: klass.isOutage, retryable: klass.retryable, surface: 'manual' });
             if (answerPlan.profileContextPolicy === 'required' && !fullResponse.trim()
                 && _chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
-              const safe = "The model failed before generating an answer, so I won't guess from your profile. Please try again.";
+              const safe = formatLanguageAwareFallback(
+                llmHelper.getAiResponseLanguage?.(),
+                "The model failed before generating an answer, so I won't guess from your profile. Please try again.",
+                'O modelo falhou antes de gerar uma resposta, então não vou inventar usando o seu perfil. Tente novamente.',
+              );
               finalGenerationMode = 'provider_error_no_answer';
               sessionWriteDecision = decideSessionWritePolicy({
                 finalGenerationMode,
@@ -3973,6 +4061,114 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
     });
     return { success: true };
+  });
+
+  // ==========================================
+  // Local Interview Context (source build)
+  // ==========================================
+
+  safeHandle('interview-context:get', async () => {
+    try {
+      const { InterviewContextService } = require('./services/InterviewContextService') as typeof import('./services/InterviewContextService');
+      return { success: true, state: InterviewContextService.getInstance().getRendererState() };
+    } catch (error: any) {
+      console.error('[IPC] interview-context:get error:', error?.message || error);
+      return { success: false, error: 'Could not load the interview context.' };
+    }
+  });
+
+  safeHandle('interview-context:set-enabled', async (_, enabled: boolean) => {
+    try {
+      const { InterviewContextService } = require('./services/InterviewContextService') as typeof import('./services/InterviewContextService');
+      const state = InterviewContextService.getInstance().setEnabled(enabled);
+      return { success: true, state };
+    } catch (error: any) {
+      console.error('[IPC] interview-context:set-enabled error:', error?.message || error);
+      return { success: false, error: 'Could not update the interview context.' };
+    }
+  });
+
+  safeHandle('interview-context:update-text', async (_, kind: string, text: string) => {
+    try {
+      const { InterviewContextService } = require('./services/InterviewContextService') as typeof import('./services/InterviewContextService');
+      const state = InterviewContextService.getInstance().updateText(kind, text);
+      return { success: true, state };
+    } catch (error: any) {
+      console.error('[IPC] interview-context:update-text error:', error?.message || error);
+      const tooLarge = typeof error?.message === 'string' && error.message.includes('character limit');
+      const atCompanyLimit = typeof error?.message === 'string' && error.message.includes('company document limit');
+      return {
+        success: false,
+        error: atCompanyLimit
+          ? 'You can save up to 40 company contexts. Remove one before adding another.'
+          : tooLarge
+          ? 'This text is too large. Use a smaller document or remove unnecessary content.'
+          : 'Could not save this context.',
+      };
+    }
+  });
+
+  safeHandle('interview-context:import-file', async (_, kind: string) => {
+    try {
+      if (!isInterviewContextKind(kind)) {
+        return { success: false, error: 'Invalid context category.' };
+      }
+      const result: any = await dialog.showOpenDialog({
+        properties: ['openFile'],
+        filters: [
+          { name: 'Documents', extensions: ['pdf', 'docx', 'txt', 'md', 'markdown', 'json', 'csv', 'tsv'] },
+          { name: 'All files', extensions: ['*'] },
+        ],
+      });
+      if (result.canceled || !result.filePaths?.[0]) {
+        return { success: false, cancelled: true };
+      }
+      const { InterviewContextService } = require('./services/InterviewContextService') as typeof import('./services/InterviewContextService');
+      const state = await InterviewContextService.getInstance().importFile(kind, result.filePaths[0]);
+      return { success: true, state };
+    } catch (error: any) {
+      console.error('[IPC] interview-context:import-file error:', error?.message || error);
+      const message = String(error?.message || '');
+      let userMessage = 'Could not read this document. Check that it is not protected or corrupted.';
+      if (message.includes('unsupported file type')) userMessage = 'Unsupported format. Use PDF, DOCX, TXT, Markdown, JSON, or CSV.';
+      if (message.includes('50 MB')) userMessage = 'The document exceeds the 50 MB limit.';
+      if (message.includes('parsed to empty')) userMessage = 'The document does not contain readable text. Image-only scanned PDFs are not supported yet.';
+      if (message.includes('company document limit')) userMessage = 'You can save up to 40 company contexts. Remove one before adding another.';
+      return { success: false, error: userMessage };
+    }
+  });
+
+  safeHandle('interview-context:clear', async (_, kind: string) => {
+    try {
+      const { InterviewContextService } = require('./services/InterviewContextService') as typeof import('./services/InterviewContextService');
+      const state = InterviewContextService.getInstance().clear(kind);
+      return { success: true, state };
+    } catch (error: any) {
+      console.error('[IPC] interview-context:clear error:', error?.message || error);
+      return { success: false, error: 'Could not remove this context.' };
+    }
+  });
+
+  safeHandle('interview-context:select-company-document', async (_, id: string | null) => {
+    try {
+      const { InterviewContextService } = require('./services/InterviewContextService') as typeof import('./services/InterviewContextService');
+      const state = InterviewContextService.getInstance().selectCompanyDocument(id);
+      return { success: true, state };
+    } catch (error: any) {
+      console.error('[IPC] interview-context:select-company-document error:', error?.message || error);
+      return { success: false, error: 'Could not select this company context.' };
+    }
+  });
+
+  safeHandle('interview-context:rename-company-document', async (_, id: string, label: string) => {
+    try {
+      const { InterviewContextService } = require('./services/InterviewContextService') as typeof import('./services/InterviewContextService');
+      const state = InterviewContextService.getInstance().renameCompanyDocument(id, label);
+      return { success: true, state };
+    } catch (error: any) {
+      console.error('[IPC] interview-context:rename-company-document error:', error?.message || error);
+      return { success: false, error: 'Use a name between 1 and 120 characters.' };
+    }
   });
 
   safeHandle('get-screen-understanding-mode', async () => {

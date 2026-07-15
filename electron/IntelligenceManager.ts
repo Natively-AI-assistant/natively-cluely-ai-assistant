@@ -120,20 +120,24 @@ export class IntelligenceManager extends EventEmitter {
         this.session.addAssistantMessage(text, writeDecision, surface);
     }
 
-    getContext(lastSeconds: number = 120) {
-        return this.session.getContext(lastSeconds);
+    getContext(lastSeconds: number = 120, surface?: ConversationSurface) {
+        return this.session.getContext(lastSeconds, surface);
     }
 
     getLastAssistantMessage(surface?: ConversationSurface): string | null {
         return this.session.getLastAssistantMessage(surface);
     }
 
-    getFormattedContext(lastSeconds: number = 120): string {
-        return this.session.getFormattedContext(lastSeconds);
+    getFormattedContext(lastSeconds: number = 120, surface?: ConversationSurface): string {
+        return this.session.getFormattedContext(lastSeconds, surface);
     }
 
     getLastInterviewerTurn(): string | null {
         return this.session.getLastInterviewerTurn();
+    }
+
+    getRecentManualTurn(maxAgeMs?: number): { question: string; answer: string; timestamp: number } | null {
+        return this.session.getRecentManualTurn(maxAgeMs);
     }
 
     /** Current meeting's full finalized transcript (for in-meeting search, Phase 10). */

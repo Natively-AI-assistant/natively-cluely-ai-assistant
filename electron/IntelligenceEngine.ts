@@ -42,6 +42,10 @@ import { isDurableMemoryWindowEnabled, isIntelligenceFlagEnabled } from './intel
 import { normalizeOutputShape } from './intelligence/OutputShapeNormalizer';
 import { LiveTranscriptBrain } from './intelligence/LiveTranscriptBrain';
 import { recordAttribution } from './intelligence/IntelligenceAttribution';
+import {
+    AI_RESPONSE_LANGUAGE_BILINGUAL_EN_PT,
+    formatLanguageAwareFallback,
+} from '../shared/aiResponseLanguage';
 
 // Mode types
 export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'follow_up' | 'recap' | 'clarify' | 'manual' | 'follow_up_questions' | 'code_hint' | 'brainstorm';
@@ -68,6 +72,41 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<{
             () => { if (!settled) { settled = true; clearTimeout(timer); resolve({ value: fallback, timedOut: false }); } },
         );
     });
+}
+
+function formatLiveFallback(
+    llmHelper: LLMHelper,
+    english: string,
+    portuguese: string,
+): string {
+    const language = typeof (llmHelper as any).getAiResponseLanguage === 'function'
+        ? llmHelper.getAiResponseLanguage()
+        : 'English';
+    return formatLanguageAwareFallback(
+        language,
+        english,
+        portuguese,
+    );
+}
+
+function formatGracefulRetry(
+    llmHelper: LLMHelper,
+    questionHint?: string | null,
+): string {
+    const language = typeof (llmHelper as any).getAiResponseLanguage === 'function'
+        ? llmHelper.getAiResponseLanguage()
+        : 'English';
+    // Topic-aware retries interpolate live transcript words. Keep that useful
+    // English behavior in existing modes, but use a reviewed fixed pair in the
+    // bilingual mode so the Portuguese section is always a real translation.
+    const english = buildGracefulRetry(
+        language === AI_RESPONSE_LANGUAGE_BILINGUAL_EN_PT ? '' : questionHint,
+    );
+    return formatLanguageAwareFallback(
+        language,
+        english,
+        'Você poderia repetir? Quero ter certeza de responder corretamente à sua pergunta.',
+    );
 }
 
 // Refinement intent detection (refined to avoid false positives)
@@ -797,7 +836,11 @@ export class IntelligenceEngine extends EventEmitter {
                 if (!this.answerLLM) {
                     if (isSpeculative) { this.speculativeText = null; this.speculativeTextExpiry = Infinity; }
                     this.setMode('idle');
-                    const noKeyMsg = "Please configure your API Keys in Settings to use this feature.";
+                    const noKeyMsg = formatLiveFallback(
+                        this.llmHelper,
+                        "Please configure your API Keys in Settings to use this feature.",
+                        "Configure suas chaves de API nas Configurações para usar este recurso.",
+                    );
                     // The renderer renders the answer via the 'suggested_answer'
                     // EVENT (the IPC return value's non-null answer is only used to
                     // detect the null/empty-feedback case). Returning a non-null
@@ -814,7 +857,7 @@ export class IntelligenceEngine extends EventEmitter {
                     this.speculativeTextExpiry = Infinity;
                     this.lastTriggerTime = Date.now();
                     this.setMode('idle');
-                    return answer || buildGracefulRetry(question);
+                    return answer || formatGracefulRetry(this.llmHelper, question);
                 }
                 if (answer && IntelligenceEngine.isNonAnswerSentinel(answer)) {
                     this.setMode('idle');
@@ -1352,7 +1395,9 @@ export class IntelligenceEngine extends EventEmitter {
 
             const answerPlan = planAnswer({
                 question: question || extractedQuestion.latestQuestion || lastInterviewerTurn,
-                source: question ? 'manual_input' : 'what_to_answer',
+                // This method is always the live/WTA surface, including when a
+                // button passes the current question explicitly.
+                source: 'what_to_answer',
                 speakerPerspective: extractedQuestion.detectedSpeaker === 'interviewer' ? 'interviewer' : 'user',
                 extractedQuestion,
                 intentResult,
@@ -1680,8 +1725,16 @@ export class IntelligenceEngine extends EventEmitter {
                 streamingTokenBuffer = '';
                 if (!fullAnswer.trim()) {
                     const safe = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
-                        ? "I don't have enough context from the conversation to answer that yet."
-                        : "The model did not produce an answer in time, so I won't guess from your profile.";
+                        ? formatLiveFallback(
+                            this.llmHelper,
+                            "I don't have enough context from the conversation to answer that yet.",
+                            'Ainda não tenho contexto suficiente da conversa para responder isso.',
+                        )
+                        : formatLiveFallback(
+                            this.llmHelper,
+                            "The model did not produce an answer in time, so I won't guess from your profile.",
+                            'O modelo não produziu uma resposta a tempo, então não vou inventar usando o seu perfil.',
+                        );
                     fullAnswer = safe;
                     emitChunk(safe);
                     wtaWriteDecision = decideSessionWritePolicy({
@@ -1711,7 +1764,10 @@ export class IntelligenceEngine extends EventEmitter {
 
             if (!fullAnswer || fullAnswer.trim().length < 5) {
                 // W6b: topic-aware graceful retry instead of the fixed canned line.
-                fullAnswer = buildGracefulRetry(question || extractedQuestion.latestQuestion || lastInterviewerTurn);
+                fullAnswer = formatGracefulRetry(
+                    this.llmHelper,
+                    question || extractedQuestion.latestQuestion || lastInterviewerTurn,
+                );
             }
 
             trace.mark('validation_started', { answerType: answerPlan.answerType });
@@ -1804,7 +1860,11 @@ export class IntelligenceEngine extends EventEmitter {
                         if (!firstCheck.ok) {
                             trace.mark('validation_failed', { reason: firstCheck.reason, action: firstCheck.action });
                             if (firstCheck.action === 'refuse') {
-                                fullAnswer = 'I could not find that in the retrieved sections of the document.';
+                                fullAnswer = formatLiveFallback(
+                                    this.llmHelper,
+                                    'I could not find that in the retrieved sections of the document.',
+                                    'Não encontrei essa informação nas seções recuperadas do documento.',
+                                );
                                 trace.mark('repair_used', { reason: 'doc_grounded_refusal', coverage: firstCheck.coverage.reason });
                             } else {
                                 const relaxedBlock = await buildDocContext(true);
@@ -1854,7 +1914,11 @@ export class IntelligenceEngine extends EventEmitter {
                                     // fail closed instead.
                                     trace.mark('validation_completed', { reason: 'doc_grounded_repair_rejected_keep_original', originalReason: firstCheck.reason });
                                 } else {
-                                    fullAnswer = 'I could not find that in the retrieved sections of the document.';
+                                    fullAnswer = formatLiveFallback(
+                                        this.llmHelper,
+                                        'I could not find that in the retrieved sections of the document.',
+                                        'Não encontrei essa informação nas seções recuperadas do documento.',
+                                    );
                                     trace.mark('repair_used', { reason: 'doc_grounded_safe_refusal_after_repair_reject', originalReason: firstCheck.reason });
                                 }
                             }
@@ -2023,7 +2087,11 @@ export class IntelligenceEngine extends EventEmitter {
             // M3 over-applies the system-prompt refusal). Mirror of the manual-path backstop.
             if (answerPlan.answerType === 'project_about_answer' || answerPlan.answerType === 'project_answer') {
                 if (/^\s*(?:I(?:'m| am) Natively[.,]?\s*(?:an? AI assistant[.,]?\s*)?)?I\s+(?:cannot|can\s?not|can'?t)\s+share\s+that(?:\s+information)?\s*\.?\s*$/i.test(fullAnswer.trim())) {
-                    fullAnswer = "I don't have that product detail in my loaded context. I can only speak to what's in the loaded project description.";
+                    fullAnswer = formatLiveFallback(
+                        this.llmHelper,
+                        "I don't have that product detail in my loaded context. I can only speak to what's in the loaded project description.",
+                        'Não tenho esse detalhe do produto no contexto carregado. Só posso falar sobre o que está na descrição do projeto carregada.',
+                    );
                     trace.mark('repair_used', { reason: 'product_about_refusal_repaired' });
                 }
             }
@@ -2041,10 +2109,22 @@ export class IntelligenceEngine extends EventEmitter {
                     const mis = detectAssistantVoiceMisfire(fullAnswer);
                     if (mis.isMisfire) {
                         fullAnswer = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
-                            ? "I don't have enough context from the conversation to answer that yet."
+                            ? formatLiveFallback(
+                                this.llmHelper,
+                                "I don't have enough context from the conversation to answer that yet.",
+                                'Ainda não tenho contexto suficiente da conversa para responder isso.',
+                            )
                             : answerPlan.answerType === 'sales_answer'
-                                ? "I don't have enough context on that yet — could you share a bit more?"
-                                : 'Could you give me a bit more to go on?';
+                                ? formatLiveFallback(
+                                    this.llmHelper,
+                                    "I don't have enough context on that yet — could you share a bit more?",
+                                    'Ainda não tenho contexto suficiente sobre isso. Você poderia compartilhar mais detalhes?',
+                                )
+                                : formatLiveFallback(
+                                    this.llmHelper,
+                                    'Could you give me a bit more to go on?',
+                                    'Você poderia fornecer um pouco mais de contexto?',
+                                );
                         trace.mark('repair_used', { reason: 'assistant_voice_misfire', misfireReason: mis.reason });
                     }
                 } catch (avErr: any) {
@@ -2116,8 +2196,16 @@ export class IntelligenceEngine extends EventEmitter {
             if (fullAnswer && isLeakedSchemaStub(fullAnswer)) {
                 trace.mark('fallback_answer_used', { answerType: answerPlan.answerType, reason: 'leaked_schema_stub', finalGenerationMode: 'provider_error_no_answer' });
                 fullAnswer = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
-                    ? "I don't have enough context from the conversation to answer that yet."
-                    : "The model produced an invalid answer artifact, so I won't guess from your profile. Please try again.";
+                    ? formatLiveFallback(
+                        this.llmHelper,
+                        "I don't have enough context from the conversation to answer that yet.",
+                        'Ainda não tenho contexto suficiente da conversa para responder isso.',
+                    )
+                    : formatLiveFallback(
+                        this.llmHelper,
+                        "The model produced an invalid answer artifact, so I won't guess from your profile. Please try again.",
+                        'O modelo produziu um artefato de resposta inválido, então não vou inventar usando o seu perfil. Tente novamente.',
+                    );
                 wtaWriteDecision = decideSessionWritePolicy({
                     finalGenerationMode: 'provider_error_no_answer',
                     validationOk: false,
@@ -2236,7 +2324,7 @@ export class IntelligenceEngine extends EventEmitter {
             if (openedStreamRow) this.emit('suggested_answer_discard', 'error');
             this.emit('error', error as Error, 'what_to_say');
             this.setMode('idle');
-            return buildGracefulRetry(question);
+            return formatGracefulRetry(this.llmHelper, question);
         } finally {
             // Resume background drains on EVERY exit path (answer, abort, error).
             releaseFg();
@@ -2359,8 +2447,13 @@ export class IntelligenceEngine extends EventEmitter {
                 if (fuContract) {
                     const switchTo = contextOs.detectFollowUpSourceSwitch(String(refinementRequest || ''));
                     if (switchTo && switchTo !== (fuContract.sourceOwner === 'reference_files' ? 'reference_files' : fuContract.sourceOwner)) {
-                        const line = 'Switching sources needs a fresh question — ask it directly and I\'ll answer from ' +
-                            (switchTo === 'profile' ? 'your profile.' : switchTo === 'reference_files' ? 'the uploaded material.' : 'the conversation.');
+                        const line = formatLiveFallback(
+                            this.llmHelper,
+                            'Switching sources needs a fresh question — ask it directly and I\'ll answer from ' +
+                                (switchTo === 'profile' ? 'your profile.' : switchTo === 'reference_files' ? 'the uploaded material.' : 'the conversation.'),
+                            'Para trocar de fonte, é preciso fazer uma nova pergunta. Pergunte diretamente e eu responderei usando ' +
+                                (switchTo === 'profile' ? 'o seu perfil.' : switchTo === 'reference_files' ? 'o material enviado.' : 'a conversa.'),
+                        );
                         this.emit('refined_answer', line, intent);
                         this.setMode('idle');
                         return line;
@@ -2848,7 +2941,11 @@ export class IntelligenceEngine extends EventEmitter {
         try {
             if (!this.brainstormLLM) {
                 this.setMode('idle');
-                return "Please configure your API Keys in Settings to use this feature.";
+                return formatLiveFallback(
+                    this.llmHelper,
+                    "Please configure your API Keys in Settings to use this feature.",
+                    "Configure suas chaves de API nas Configurações para usar este recurso.",
+                );
             }
 
             let context = this.session.getFormattedContext(180);
@@ -2858,7 +2955,11 @@ export class IntelligenceEngine extends EventEmitter {
 
             if (!context.trim() && !resolvedProblem && (!imagePaths || imagePaths.length === 0)) {
                 this.setMode('idle');
-                const msg = "There's nothing to brainstorm right now. Make sure your question is visible or spoken aloud, then try again.";
+                const msg = formatLiveFallback(
+                    this.llmHelper,
+                    "There's nothing to brainstorm right now. Make sure your question is visible or spoken aloud, then try again.",
+                    'Não há nada para explorar no brainstorming agora. Verifique se a pergunta está visível ou foi dita em voz alta e tente novamente.',
+                );
                 this.session.addAssistantMessage(msg, undefined, 'screenshot');
                 this.emit('suggested_answer', msg, 'Brainstorming Approaches', 1.0);
                 return msg;
@@ -2889,7 +2990,11 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             if (!fullResult || fullResult.trim().length < 5) {
-                fullResult = "I couldn't generate brainstorm approaches. Make sure your question is visible and try again.";
+                fullResult = formatLiveFallback(
+                    this.llmHelper,
+                    "I couldn't generate brainstorm approaches. Make sure your question is visible and try again.",
+                    "Não consegui gerar abordagens para o brainstorming. Verifique se a pergunta está visível e tente novamente.",
+                );
             }
 
             this.session.addAssistantMessage(fullResult, undefined, 'screenshot');
