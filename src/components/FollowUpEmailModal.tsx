@@ -114,7 +114,11 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
             }
         } catch (error) {
             console.error('Failed to generate email:', error);
-            setEmailBody(t('Hi there,\n\nI enjoyed our conversation. Let me know if you have any questions.\n\nBest,'));
+            // NOTE: Do NOT use t() here. This is the recipient-facing email body
+            // content, not the UI. The recipient's language isn't determined by
+            // the user's UI locale. Keep this English (or surface a per-recipient
+            // language signal if/when one exists).
+            setEmailBody('Hi there,\n\nI enjoyed our conversation. Let me know if you have any questions.\n\nBest,');
         } finally {
             setIsGenerating(false);
         }
