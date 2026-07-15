@@ -6346,7 +6346,7 @@ Provide only the answer, nothing else.`;
                                     overlay no longer accidentally engage the
                                     tap and break inputs in Settings/Model
                                     Selector windows. */}
-                <div className="relative group" data-stealth-engage="true">
+                <div className="relative group aurora-focus-container" data-stealth-engage="true">
                   <input
                     ref={textInputRef}
                     data-testid="overlay-chat-input"
