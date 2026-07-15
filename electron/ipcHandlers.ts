@@ -18,6 +18,7 @@ import type { BrowserContextCategory, SafeWebsiteMetadata } from './services/bro
 import { SettingsManager } from './services/SettingsManager';
 import { ProviderStatusRegistry } from './services/ProviderStatusRegistry';
 import { SkillsManager } from './services/SkillsManager';
+import { SAFE_DOCUMENT_EXTENSIONS } from './services/SafeDocumentTextExtractor';
 import { DEFAULT_BUILTIN_SKILL_IDS, type SkillUploadPayload } from './services/skills/SkillValidator';
 
 import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
@@ -8406,6 +8407,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
       const { DocType } = require('../premium/electron/knowledge/types');
       const result = await orchestrator.ingestDocument(resolvedPath, DocType.RESUME);
+      if (!result?.success && path.extname(resolvedPath).toLowerCase() === '.doc') {
+        return { success: false, error: 'Legacy Word .doc files are not supported. Save the file as .docx and upload it again.' };
+      }
       if (result?.success) {
         // RC-8 fix: uploading a resume must make it immediately usable. Previously
         // knowledge mode was a SEPARATE manual toggle, so a freshly-uploaded resume
@@ -8431,6 +8435,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             : (activeResume?.skills && typeof activeResume.skills === 'object'
                 ? Object.values(activeResume.skills).reduce((n: number, v: any) => n + (Array.isArray(v) ? v.length : 0), 0)
                 : 0),
+          extractionMode: activeResume?._extraction_mode ?? 'unknown',
         });
       }
       return result;
@@ -8527,9 +8532,13 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('profile:select-file', async () => {
     try {
+      const extensions = [...SAFE_DOCUMENT_EXTENSIONS].map(extension => extension.slice(1));
       const result: any = await dialog.showOpenDialog({
         properties: ['openFile'],
-        filters: [{ name: 'Resume Files', extensions: ['pdf', 'docx', 'txt'] }],
+        filters: [
+          { name: 'Resume & JD Documents', extensions },
+          { name: 'All Files', extensions: ['*'] },
+        ],
       });
 
       if (result.canceled || result.filePaths.length === 0) {
@@ -8573,6 +8582,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
       const { DocType } = require('../premium/electron/knowledge/types');
       const result = await orchestrator.ingestDocument(resolvedPath, DocType.JD);
+      if (!result?.success && path.extname(resolvedPath).toLowerCase() === '.doc') {
+        return { success: false, error: 'Legacy Word .doc files are not supported. Save the file as .docx and upload it again.' };
+      }
       if (result?.success) {
         // RC-8 fix: a JD is only useful with knowledge mode on. If a resume is already
         // loaded, setKnowledgeMode(true) takes effect immediately; if not, it no-ops

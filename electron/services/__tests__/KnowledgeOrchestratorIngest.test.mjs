@@ -174,6 +174,25 @@ describe('FINDING-004: KnowledgeOrchestrator ingest pipeline', () => {
         assert.ok(resumeCategories.join(';') !== jdCategories.join(';'));
     });
 
+    test('sparse-but-valid LLM resume entries retain persistence and atomic nodes', async () => {
+        orchestrator.setGenerateContentFn(async () => JSON.stringify({
+            identity: { name: 'Sparse Candidate', email: '', phone: '', location: '', linkedin: '', github: '', website: '', summary: '' },
+            skills: { languages: ['TypeScript'], frameworks: [], cloud: [], databases: [], ml: [], devops: [], tools: [] },
+            experience: [{ company: 'Acme', role: 'Engineer', start_date: '2024-01', end_date: null }],
+            projects: [{ name: 'Metrics App', description: 'Shows product metrics', highlights: ['Improved activation by 42%.'] }],
+            education: [], achievements: [], certifications: [], leadership: [],
+        }));
+
+        const result = await orchestrator.ingestDocument(tmpResumeFile, DocType.RESUME);
+        assert.equal(result.success, true, `Sparse resume ingest failed: ${result.error}`);
+
+        const profile = orchestrator.getProfileData();
+        assert.deepEqual(profile.experience[0].bullets, []);
+        assert.deepEqual(profile.projects[0].technologies, []);
+        assert.ok(profile.projects[0].highlights.includes('Improved activation by 42%.'));
+        assert.ok(db.getAllNodes().some(n => n.category === 'skills_languages'));
+    });
+
     test('deleteDocumentsByType removes resume and resets knowledge mode', async () => {
         await orchestrator.ingestDocument(tmpResumeFile, DocType.RESUME);
         orchestrator.setKnowledgeMode(true);
