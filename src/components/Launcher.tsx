@@ -9,7 +9,7 @@ import ConnectCalendarButton from './ui/ConnectCalendarButton';
 import MeetingDetails from './MeetingDetails';
 import TopSearchPill from './TopSearchPill';
 import GlobalChatOverlay from './GlobalChatOverlay';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useAnimationControls } from 'framer-motion';
 import { FeatureSpotlight } from './FeatureSpotlight';
 import { analytics } from '../lib/analytics/analytics.service'; // Added analytics import
 import { useShortcuts } from '../hooks/useShortcuts';
@@ -85,6 +85,19 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     const [meetings, setMeetings] = useState<Meeting[]>([]);
     const [isDetectable, setIsDetectable] = useState(false);
     const [isMeetingActive, setIsMeetingActive] = useState(false);
+    // Whole-pill weight cue on state flips — a barely-there squash-settle
+    // (not the hover/tap scale) that reads as the shape "deciding" to
+    // resize rather than just snapping, without adding any spring wobble.
+    const ctaPillControls = useAnimationControls();
+    const prevMeetingActiveRef = useRef(isMeetingActive);
+    useEffect(() => {
+        if (prevMeetingActiveRef.current === isMeetingActive) return;
+        prevMeetingActiveRef.current = isMeetingActive;
+        ctaPillControls.start({
+            scale: [1, 0.985, 1],
+            transition: { duration: 0.36, times: [0, 0.45, 1], ease: [0.25, 1, 0.5, 1] },
+        });
+    }, [isMeetingActive, ctaPillControls]);
     const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
     const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
     const [isCalendarConnected, setIsCalendarConnected] = useState(false);
@@ -852,8 +865,23 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                             </AnimatePresence>
                                         </div>
 
-                                        {/* Unified CTA pill — same jelly shape, morphs between idle and active-meeting state */}
+                                        {/* Unified CTA pill — same jelly shape, morphs between idle and active-meeting state.
+                                            `layout` + AnimatePresence mode="popLayout" makes the pill's width/height
+                                            interpolate via Framer's FLIP projection instead of snapping to the new
+                                            content's intrinsic size on the frame it swaps — this is what makes the
+                                            ongoing→start shrink (and the reverse grow) read as one continuous squeeze
+                                            rather than a jump-cut. Shape resize and color crossfade share the same
+                                            0.36s "apple-ease" curve. Content enter/exit is intentionally ASYMMETRIC
+                                            (0.22s in, 0.14s out) — the old symmetric 0.2s/0.2s crossfade left both
+                                            labels visibly overlapping ("ghosting") for ~80ms mid-swap; a snappier
+                                            exit plus a `blur` pass on both sides (blur bridges the two states into
+                                            one perceived transform instead of two texts crossing) removes that
+                                            without touching the resize timing it's nested in. A barely-there
+                                            0.985 squash-settle (ctaPillControls, independent of hover/tap scale)
+                                            gives the shape a "deciding to resize" weight instead of a flat snap. */}
                                         <motion.button
+                                            layout
+                                            animate={ctaPillControls}
                                             onClick={() => {
                                                 if (isMeetingActive) {
                                                     // inactive=true: overlay appears on top but doesn't activate
@@ -871,23 +899,26 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                             }}
                                             whileHover={{ scale: 1.01, filter: 'brightness(1.1)' }}
                                             whileTap={{ scale: 0.99 }}
-                                            transition={{ duration: 0.18, ease: 'easeOut' }}
+                                            transition={{
+                                                default: { duration: 0.18, ease: 'easeOut' },
+                                                layout: { duration: 0.36, ease: [0.25, 1, 0.5, 1] },
+                                            }}
                                             className="group relative overflow-hidden text-white px-6 py-3 rounded-full font-celeb font-medium tracking-normal flex items-center justify-center gap-3 backdrop-blur-xl shrink-0"
                                             style={{
                                                 boxShadow: isMeetingActive
                                                     ? 'inset 0 1px 1px rgba(255,255,255,0.7), inset 0 -1px 2px rgba(0,0,0,0.1), 0 2px 10px rgba(16,185,129,0.45), 0 0 0 1px rgba(255,255,255,0.15)'
                                                     : 'inset 0 1px 1px rgba(255,255,255,0.7), inset 0 -1px 2px rgba(0,0,0,0.1), 0 2px 10px rgba(14,165,233,0.4), 0 0 0 1px rgba(255,255,255,0.15)',
-                                                transition: 'box-shadow 0.5s ease-out',
+                                                transition: 'box-shadow 0.36s cubic-bezier(0.25, 1, 0.5, 1)',
                                             }}
                                         >
                                             {/* Blue gradient layer (idle) */}
                                             <div
-                                                className="absolute inset-0 bg-gradient-to-b from-sky-400 via-sky-500 to-blue-600 transition-opacity duration-500 ease-out"
+                                                className="absolute inset-0 bg-gradient-to-b from-sky-400 via-sky-500 to-blue-600 transition-opacity duration-[360ms] ease-apple-ease"
                                                 style={{ opacity: isMeetingActive ? 0 : 1 }}
                                             />
                                             {/* Green gradient layer (meeting active) */}
                                             <div
-                                                className="absolute inset-0 bg-gradient-to-b from-emerald-400 via-emerald-500 to-green-600 transition-opacity duration-500 ease-out"
+                                                className="absolute inset-0 bg-gradient-to-b from-emerald-400 via-emerald-500 to-green-600 transition-opacity duration-[360ms] ease-apple-ease"
                                                 style={{ opacity: isMeetingActive ? 1 : 0 }}
                                             />
 
@@ -896,36 +927,87 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                             {/* Internal suspended-light hover glow */}
                                             <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none z-10" />
 
-                                            {/* Button content — crossfade between idle and meeting states */}
+                                            {/* Button content — crossfade between idle and meeting states.
+                                                popLayout pops the exiting block out of flow the instant it starts
+                                                exiting, so the button's `layout` resize isn't blocked waiting on the
+                                                220ms exit fade to finish — shape and content move together instead
+                                                of resize-then-fade. `layout` on each variant div prevents the text
+                                                from visibly stretching/squishing while the parent's width tweens. */}
                                             <div className="relative z-20 flex items-center gap-3">
-                                                <AnimatePresence mode="wait" initial={false}>
+                                                <AnimatePresence mode="popLayout" initial={false}>
                                                     {isMeetingActive ? (
                                                         <motion.div
                                                             key="meeting"
-                                                            initial={{ opacity: 0, y: 6 }}
-                                                            animate={{ opacity: 1, y: 0 }}
-                                                            exit={{ opacity: 0, y: -6 }}
-                                                            transition={{ duration: 0.22, ease: 'easeOut' }}
+                                                            layout
+                                                            initial={{ opacity: 0, y: 4, filter: 'blur(4px)' }}
+                                                            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                                                            exit={{
+                                                                opacity: 0, y: -3, filter: 'blur(3px)',
+                                                                transition: {
+                                                                    default: { duration: 0.14, ease: [0.25, 1, 0.5, 1] },
+                                                                    layout: { duration: 0.36, ease: [0.25, 1, 0.5, 1] },
+                                                                },
+                                                            }}
+                                                            transition={{
+                                                                default: { duration: 0.22, ease: [0.25, 1, 0.5, 1] },
+                                                                layout: { duration: 0.36, ease: [0.25, 1, 0.5, 1] },
+                                                            }}
                                                             className="flex items-center gap-3"
                                                         >
-                                                            {/* Ping live-indicator dot */}
-                                                            <span className="relative flex h-[9px] w-[9px] shrink-0">
+                                                            {/* Ping live-indicator dot — scales in slightly ahead of
+                                                                the label so the eye registers "live" before it reads
+                                                                the word, matching how a status light precedes text. */}
+                                                            <motion.span
+                                                                initial={{ opacity: 0, scale: 0.6 }}
+                                                                animate={{ opacity: 1, scale: 1 }}
+                                                                transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
+                                                                className="relative flex h-[9px] w-[9px] shrink-0"
+                                                            >
                                                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-60" />
                                                                 <span className="relative inline-flex rounded-full h-[9px] w-[9px] bg-white" />
-                                                            </span>
-                                                            <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)] text-[20px] leading-none">{t('Meeting ongoing')}</span>
+                                                            </motion.span>
+                                                            <motion.span
+                                                                initial={{ opacity: 0 }}
+                                                                animate={{ opacity: 1 }}
+                                                                transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1], delay: 0.03 }}
+                                                                className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)] text-[20px] leading-none"
+                                                            >
+                                                                {t('Meeting ongoing')}
+                                                            </motion.span>
                                                         </motion.div>
                                                     ) : (
                                                         <motion.div
                                                             key="start"
-                                                            initial={{ opacity: 0, y: 6 }}
-                                                            animate={{ opacity: 1, y: 0 }}
-                                                            exit={{ opacity: 0, y: -6 }}
-                                                            transition={{ duration: 0.22, ease: 'easeOut' }}
+                                                            layout
+                                                            initial={{ opacity: 0, y: 4, filter: 'blur(4px)' }}
+                                                            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                                                            exit={{
+                                                                opacity: 0, y: -3, filter: 'blur(3px)',
+                                                                transition: {
+                                                                    default: { duration: 0.14, ease: [0.25, 1, 0.5, 1] },
+                                                                    layout: { duration: 0.36, ease: [0.25, 1, 0.5, 1] },
+                                                                },
+                                                            }}
+                                                            transition={{
+                                                                default: { duration: 0.22, ease: [0.25, 1, 0.5, 1] },
+                                                                layout: { duration: 0.36, ease: [0.25, 1, 0.5, 1] },
+                                                            }}
                                                             className="flex items-center gap-3"
                                                         >
-                                                            <img src={icon} alt="Logo" className="w-[18px] h-[18px] object-contain brightness-0 invert drop-shadow-[0_1px_2px_rgba(0,0,0,0.1)] opacity-90" />
-                                                            <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)] text-[20px] leading-none">{t('Start Natively')}</span>
+                                                            <motion.img
+                                                                initial={{ opacity: 0, scale: 0.7 }}
+                                                                animate={{ opacity: 0.9, scale: 1 }}
+                                                                transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
+                                                                src={icon} alt="Logo" className="w-[18px] h-[18px] object-contain brightness-0 invert drop-shadow-[0_1px_2px_rgba(0,0,0,0.1)] opacity-90"
+                                                            />
+                                                            <motion.span
+                                                                initial={{ opacity: 0 }}
+                                                                animate={{ opacity: 1 }}
+                                                                transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1], delay: 0.03 }}
+                                                                className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)] text-[20px] leading-none"
+                                                            >
+                                                                {t('Start Natively')}
+                                                            </motion.span>
                                                         </motion.div>
                                                     )}
                                                 </AnimatePresence>
