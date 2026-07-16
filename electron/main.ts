@@ -2575,9 +2575,7 @@ export class AppState {
     this.broadcastMeetingState()
     this.audioMeetingRecorder = new AudioMeetingRecorder(app.getPath('userData'));
     this.audioMeetingRecorder.start(Date.now());
-    if (metadata) {
-      this.intelligenceManager.setMeetingMetadata(metadata);
-    }
+    this.intelligenceManager.startMeeting(metadata);
 
     if (metadata?.modelId) {
       try {

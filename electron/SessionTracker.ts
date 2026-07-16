@@ -99,6 +99,14 @@ export class SessionTracker {
         this.currentMeetingMetadata = metadata;
     }
 
+    public startMeeting(metadata?: any): void {
+        // A newly launched app has a SessionTracker before it has a meeting.
+        // Reset here so duration and context begin at the user's Start action,
+        // not at app startup or after any pre-meeting chat activity.
+        this.reset();
+        this.currentMeetingMetadata = metadata ?? null;
+    }
+
     public getMeetingMetadata() {
         return this.currentMeetingMetadata;
     }
