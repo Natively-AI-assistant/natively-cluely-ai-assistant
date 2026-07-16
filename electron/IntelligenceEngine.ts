@@ -2197,30 +2197,54 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             if (IntelligenceEngine.isNonAnswerSentinel(fullAnswer)) {
-                // [TRACE:LONGCTX] Campaign 2 forensics (temporary, R10). This is the
-                // GREETING-FAILURE-ADJACENT path: a real interviewer question produced
-                // a well-formed prompt, but the model itself emitted a "nothing
-                // actionable" sentinel — which this branch converts into a silent
-                // null with NO fallback message shown to the user.
+                // [TRACE:LONGCTX] Campaign 2, F-longsession-1 (2026-07-16): the
+                // "Nothing actionable right now." escape hatch in the WTA prompts is
+                // meant for the SPECULATIVE/auto-trigger path (ambient chatter, small
+                // talk — nothing should interrupt the user). Golden-Trace forensics
+                // (traces2/forensic-report.md, pinned amplifier #3) proved this same
+                // sentinel also fires on a MANUAL button press against a REAL
+                // interviewer question the model genuinely lacks grounding for (e.g.
+                // a long-range follow-up referencing content evicted from the
+                // transcript window — H6). Previously that silently returned null
+                // with no visible message — a real question, a well-formed prompt,
+                // and zero user-facing output: the same SHAPE as the greeting-failure
+                // defect class, even though the literal text differs. A manual press
+                // is explicit user intent; the user must always see SOMETHING. The
+                // speculative path is unaffected — small talk still shows nothing.
                 if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
                     try {
                         console.log('[TRACE:LONGCTX] nonanswer_sentinel_discard', JSON.stringify({
                             question: question || extractedQuestion.latestQuestion || lastInterviewerTurn || null,
                             rawAnswer: fullAnswer,
                             answerType: answerPlan?.answerType,
+                            isSpeculative,
                         }));
                     } catch (e) { console.warn('[TRACE:LONGCTX] nonanswer_sentinel_discard logging failed', e); }
+                }
+                if (!isSpeculative) {
+                    const honestFallback = "I don't have enough from the conversation to answer that specific point yet.";
+                    fullAnswer = honestFallback;
+                    console.log('[FIX:longsession-nonanswer-fallback]', JSON.stringify({
+                        answerType: answerPlan?.answerType,
+                        reason: 'manual_press_nonanswer_sentinel',
+                    }));
+                    trace.mark('fallback_answer_used', { answerType: answerPlan?.answerType, finalGenerationMode: 'nonanswer_sentinel_fallback' });
+                    if (openedStreamRow) {
+                        emitChunk(honestFallback);
+                    }
+                    this.session.addAssistantMessage(honestFallback, undefined, 'what_to_answer');
+                    this.emit('suggested_answer', honestFallback, question || extractedQuestion.latestQuestion || 'inferred', 0.9);
+                    this.setMode('idle');
+                    return honestFallback;
                 }
                 // Declined as a non-answer. Discard any open streaming row so it
                 // isn't left as an orphaned partial on the auto path (the manual
                 // path also resolves null via the renderer, but the discard is
                 // idempotent and covers the auto-trigger path too).
                 if (openedStreamRow) this.emit('suggested_answer_discard', 'no_answer');
-                if (isSpeculative) {
-                    this.speculativeText = null;
-                    this.speculativeTextExpiry = Infinity;
-                    this.lastTriggerTime = Date.now();
-                }
+                this.speculativeText = null;
+                this.speculativeTextExpiry = Infinity;
+                this.lastTriggerTime = Date.now();
                 this.setMode('idle');
                 return null;
             }

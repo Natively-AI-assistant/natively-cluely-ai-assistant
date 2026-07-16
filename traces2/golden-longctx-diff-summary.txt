@@ -10,5 +10,5 @@ totalTokensUsedByAssembler: minute2=492   minute24=566
 answerPlanQuestionSurvivesInPrompt: minute2=true   minute24=true
 
 answer (minute2):  Likely Cause:
-In a real-time Kafka pipeline, the hardest issues usually come from consumer lag silently growing, partition rebalances during a deploy, or skewed data causing a single task to hot-spot. If the symptom was a backlog with no obvious consumer errors, suspect uneven partition assignment c
-answer (minute24): I want to join a team where ownership is real, the systems are non-trivial, and the bar for engineering quality is high, which is exactly how this role reads. My background fits well: I've spent years operating large-scale Java services with Spring Boot, Kafka-driven event flows, and Istio service m
+In a real-time Kafka pipeline, the hardest issues usually show up as either consumer lag that keeps climbing, messages being silently dropped, or duplicate processing after a restart. Most of the time the root cause is one of three things: rebalance churn because of a slow or stuck con
+answer (minute24): I want to work here because the platform is a serious technical product dealing with high-volume, low-latency pipelines, and that's exactly where I've spent my time, owning observability and reliability on a data platform processing tens of millions of events per day. My work at Bullseye3D building 
