@@ -119,7 +119,7 @@ export const TEXT_PROVIDER_ORDER: TextModelFamily[] = [
   TextModelFamily.GEMINI_PRO,
 ];
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 const DISCOVERY_INTERVAL_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
 const PERSISTENCE_FILENAME = 'model_versions.json';
 const MAX_DISCOVERY_FAILURES_BEFORE_BACKOFF = 3;
@@ -127,6 +127,38 @@ const DISCOVERY_BACKOFF_MULTIPLIER = 2; // exponential backoff on repeated failu
 
 /** Cooldown to prevent event-driven discovery from firing too often */
 const EVENT_DISCOVERY_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+
+/**
+ * Model-list APIs include specialist models that cannot answer normal chat or
+ * screenshot prompts. Keep them out of both discovery paths even when their
+ * IDs happen to start with a supported family name (for example,
+ * gpt-4o-mini-transcribe-2025-12-15).
+ */
+const UNSUPPORTED_GENERATION_MODEL_MARKERS = [
+  'transcribe',
+  'transcription',
+  'whisper',
+  'text-to-speech',
+  'tts',
+  'audio',
+  'realtime',
+  'search',
+  'embedding',
+  'moderation',
+  'dall-e',
+  'dalle',
+  'image',
+  'computer-use',
+  'deep-research',
+  'codex',
+  'prompt-guard',
+  'llama-guard',
+];
+
+export function isUnsupportedGenerationModel(modelId: string): boolean {
+  const lower = modelId.toLowerCase();
+  return UNSUPPORTED_GENERATION_MODEL_MARKERS.some(marker => lower.includes(marker));
+}
 
 // ─── Version Parsing ────────────────────────────────────────────────────
 
@@ -150,6 +182,8 @@ export function parseModelVersion(modelId: string): ModelVersion | null {
   // Normalize: strip vendor prefixes and non-version suffixes
   let cleaned = modelId
     .replace(/^meta-llama\//, '')                // vendor prefix
+    .replace(/-\d{4}-\d{2}-\d{2}$/, '')         // dated snapshot like -2025-08-07
+    .replace(/-\d{8}$/, '')                      // compact dated snapshot like -20250514
     .replace(/-chat-latest$/, '')                // OpenAI suffix
     .replace(/-lite-preview$/, '')               // Gemini suffix
     .replace(/-preview$/, '')                    // Gemini suffix
@@ -251,6 +285,8 @@ export function versionDistance(older: ModelVersion, newer: ModelVersion): numbe
 export function classifyModel(modelId: string): ModelFamily | null {
   const lower = modelId.toLowerCase();
 
+  if (isUnsupportedGenerationModel(lower)) return null;
+
   // OpenAI GPT vision models (exclude instruct-only variants)
   if (lower.startsWith('gpt-') && !lower.includes('instruct')) {
     return ModelFamily.OPENAI;
@@ -285,6 +321,8 @@ export function classifyModel(modelId: string): ModelFamily | null {
  */
 export function classifyTextModel(modelId: string): TextModelFamily | null {
   const lower = modelId.toLowerCase();
+
+  if (isUnsupportedGenerationModel(lower)) return null;
 
   // OpenAI GPT text models
   if (lower.startsWith('gpt-') && !lower.includes('instruct')) {
@@ -969,12 +1007,25 @@ export class ModelVersionManager {
 
         if (parsed.schemaVersion === SCHEMA_VERSION) {
           console.log('[ModelVersionManager] Loaded persisted state from disk');
+          if (this.reconcilePersistedState(parsed)) {
+            this.persistState(parsed);
+          }
+          return parsed;
+        }
+
+        // Schema migration: v3 → v4 (reject specialist/non-chat models and
+        // repair any poisoned fallback tiers already saved on disk).
+        if (parsed.schemaVersion === 3) {
+          console.log('[ModelVersionManager] Migrating v3 → v4 state (validating model tiers)');
+          this.reconcilePersistedState(parsed);
+          parsed.schemaVersion = SCHEMA_VERSION;
+          this.persistState(parsed);
           return parsed;
         }
 
         // Schema migration: preserve what we can from v1
         if (parsed.schemaVersion === 1) {
-          console.log('[ModelVersionManager] Migrating v1 → v3 state');
+          console.log('[ModelVersionManager] Migrating v1 → v4 state');
           const migrated = this.createDefaultState();
           for (const [family, state] of Object.entries(parsed.families || {})) {
             if (migrated.families[family]) {
@@ -985,12 +1036,14 @@ export class ModelVersionManager {
             }
           }
           migrated.lastDiscoveryTimestamp = parsed.lastDiscoveryTimestamp || 0;
+          this.reconcilePersistedState(migrated);
+          this.persistState(migrated);
           return migrated;
         }
 
-        // Schema migration: v2 → v3 (add text families)
+        // Schema migration: v2 → v4 (add and validate text families)
         if (parsed.schemaVersion === 2) {
-          console.log('[ModelVersionManager] Migrating v2 → v3 state (adding text families)');
+          console.log('[ModelVersionManager] Migrating v2 → v4 state (adding text families)');
           // Carry over all existing vision families, add text families
           for (const txtFamily of Object.values(TextModelFamily)) {
             if (!parsed.families[txtFamily]) {
@@ -1007,7 +1060,9 @@ export class ModelVersionManager {
               };
             }
           }
+          this.reconcilePersistedState(parsed);
           parsed.schemaVersion = SCHEMA_VERSION;
+          this.persistState(parsed);
           return parsed;
         }
 
@@ -1020,7 +1075,144 @@ export class ModelVersionManager {
     return this.createDefaultState();
   }
 
-  private persistState() {
+  /**
+   * Validate persisted tiers against the family policy and current baselines.
+   * Model discovery is intentionally dynamic, so this startup guard is the
+   * final line of defense against stale or previously misclassified models.
+   */
+  private reconcilePersistedState(state: PersistedState): boolean {
+    let changed = false;
+
+    if (!state.families || typeof state.families !== 'object') {
+      state.families = {};
+      changed = true;
+    }
+    if (!state.discoveryFailureCounts || typeof state.discoveryFailureCounts !== 'object') {
+      state.discoveryFailureCounts = {};
+      changed = true;
+    }
+    if (typeof state.lastDiscoveryTimestamp !== 'number') {
+      state.lastDiscoveryTimestamp = 0;
+      changed = true;
+    }
+
+    const expectedBaselines: Record<string, string> = {
+      ...BASELINE_MODELS,
+      ...TEXT_BASELINE_MODELS,
+    };
+
+    const versionsMatch = (left: ModelVersion | null | undefined, right: ModelVersion | null): boolean =>
+      left?.major === right?.major &&
+      left?.minor === right?.minor &&
+      left?.patch === right?.patch &&
+      left?.raw === right?.raw;
+
+    for (const [family, baseline] of Object.entries(expectedBaselines)) {
+      const baselineVersion = parseModelVersion(baseline);
+      let entry = state.families[family];
+
+      if (!entry || typeof entry !== 'object') {
+        state.families[family] = {
+          baseline,
+          tier1: baseline,
+          latest: baseline,
+          latestVersion: baselineVersion,
+          tier1Version: baselineVersion,
+          previousTier1: null,
+          previousLatest: null,
+        };
+        changed = true;
+        continue;
+      }
+
+      const baselineChanged = entry.baseline !== baseline;
+      const tier1BelongsToFamily =
+        typeof entry.tier1 === 'string' &&
+        this.modelBelongsToFamily(family, entry.tier1);
+      const tier1Version = tier1BelongsToFamily ? parseModelVersion(entry.tier1) : null;
+      const tier1IsValid =
+        tier1BelongsToFamily &&
+        !!tier1Version &&
+        (!baselineVersion || compareVersions(tier1Version, baselineVersion) >= 0);
+
+      if (baselineChanged || !tier1IsValid) {
+        console.warn(
+          `[ModelVersionManager] Resetting invalid ${family} Tier 1 model ` +
+          `"${entry.tier1 || 'missing'}" to baseline "${baseline}"`
+        );
+        entry.baseline = baseline;
+        entry.tier1 = baseline;
+        entry.tier1Version = baselineVersion;
+        entry.previousTier1 = null;
+        entry.previousLatest = null;
+        changed = true;
+      } else {
+        entry.baseline = baseline;
+        if (!versionsMatch(entry.tier1Version, tier1Version)) {
+          entry.tier1Version = tier1Version;
+          changed = true;
+        }
+      }
+
+      const latestBelongsToFamily =
+        typeof entry.latest === 'string' &&
+        this.modelBelongsToFamily(family, entry.latest);
+      const latestVersion = latestBelongsToFamily ? parseModelVersion(entry.latest) : null;
+      const latestIsValid =
+        latestBelongsToFamily &&
+        !!latestVersion &&
+        (!baselineChanged || !baselineVersion || compareVersions(latestVersion, baselineVersion) >= 0);
+
+      if (!latestIsValid) {
+        console.warn(
+          `[ModelVersionManager] Resetting invalid ${family} fallback model ` +
+          `"${entry.latest || 'missing'}" to baseline "${baseline}"`
+        );
+        entry.latest = baseline;
+        entry.latestVersion = baselineVersion;
+        entry.previousTier1 = null;
+        entry.previousLatest = null;
+        changed = true;
+      } else if (!versionsMatch(entry.latestVersion, latestVersion)) {
+        entry.latestVersion = latestVersion;
+        changed = true;
+      }
+
+      if (baselineChanged && entry.previousLatest) {
+        entry.previousLatest = null;
+        changed = true;
+      }
+
+      if (
+        entry.previousTier1 &&
+        !this.modelBelongsToFamily(family, entry.previousTier1)
+      ) {
+        entry.previousTier1 = null;
+        changed = true;
+      }
+      if (
+        entry.previousLatest &&
+        !this.modelBelongsToFamily(family, entry.previousLatest)
+      ) {
+        entry.previousLatest = null;
+        changed = true;
+      }
+    }
+
+    return changed;
+  }
+
+  private modelBelongsToFamily(family: string, modelId: string): boolean {
+    if ((Object.values(ModelFamily) as string[]).includes(family)) {
+      return classifyModel(modelId) === family;
+    }
+    if ((Object.values(TextModelFamily) as string[]).includes(family)) {
+      return classifyTextModel(modelId) === family;
+    }
+    return false;
+  }
+
+  private persistState(state: PersistedState = this.state) {
     if (!this.persistPath) return;
     try {
       const dir = path.dirname(this.persistPath);
@@ -1028,7 +1220,7 @@ export class ModelVersionManager {
         fs.mkdirSync(dir, { recursive: true });
       }
       const tmpPath = this.persistPath + '.tmp';
-      fs.writeFileSync(tmpPath, JSON.stringify(this.state, null, 2), 'utf-8');
+      fs.writeFileSync(tmpPath, JSON.stringify(state, null, 2), 'utf-8');
       fs.renameSync(tmpPath, this.persistPath);
     } catch (e) {
       console.error('[ModelVersionManager] Failed to save state to disk', e);

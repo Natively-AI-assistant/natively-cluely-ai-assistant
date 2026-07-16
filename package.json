@@ -10,6 +10,8 @@
     "build:electron": "node scripts/build-electron.js",
     "build:electron:tsc": "tsc -p electron/tsconfig.json",
     "typecheck:electron": "tsc -p electron/tsconfig.json --noEmit",
+    "test": "npm run test:functional",
+    "test:functional": "npm run build:electron && node --test tests/*.test.js",
     "preview": "vite preview",
     "postinstall": "cross-env SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm rebuild sharp && electron-rebuild -f -w better-sqlite3,keytar && node scripts/download-models.js && node scripts/ensure-sqlite-vec.js && node scripts/patch-electron-plist.js",
     "electron:dev": "npm run build:electron && cross-env NODE_ENV=development electron .",
