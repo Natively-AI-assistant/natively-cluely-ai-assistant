@@ -165,6 +165,7 @@ import { SystemAudioCapture } from "./audio/SystemAudioCapture"
 import { MicrophoneCapture } from "./audio/MicrophoneCapture"
 import { AudioMeetingRecorder } from "./audio/AudioMeetingRecorder"
 import { AudioDevices } from "./audio/AudioDevices"
+import { shouldSkipDeviceAvailabilityCheck } from "./audio/deviceSelection"
 import { loadNativeModule } from "./audio/nativeModuleLoader"
 import { GoogleSTT } from "./audio/GoogleSTT"
 import { RestSTT } from "./audio/RestSTT"
@@ -1751,22 +1752,6 @@ export class AppState {
     return trimmed;
   }
 
-  private shouldUseDefaultForPossiblyStaleDevice(kind: 'input' | 'output', id: string): boolean {
-    if (kind === 'output' && id === 'sck') return false;
-
-    const normalized = id.toLowerCase();
-    if (normalized.includes('airpods')) return true;
-
-    // CoreAudio output route IDs for Bluetooth devices can stay in renderer
-    // storage after the device disconnects. Querying native device availability
-    // for those stale IDs has been observed to hang meeting startup.
-    if (kind === 'output' && /^[0-9a-f]{2}(?:-[0-9a-f]{2}){5}:output$/i.test(id)) {
-      return true;
-    }
-
-    return false;
-  }
-
   private isRequestedAudioDeviceAvailable(kind: 'input' | 'output', id: string | undefined): boolean {
     if (!id) return true;
     if (kind === 'output' && id === 'sck') return true;
@@ -1790,7 +1775,7 @@ export class AppState {
   ): string | undefined {
     if (!requested) return undefined;
 
-    if (this.shouldUseDefaultForPossiblyStaleDevice(kind, requested)) {
+    if (shouldSkipDeviceAvailabilityCheck(kind, requested)) {
       console.warn(`[Main] Saved ${kind} device may be stale or slow to resolve: ${requested}. Using default for this meeting.`);
       this.broadcastDeviceSelection({
         kind,

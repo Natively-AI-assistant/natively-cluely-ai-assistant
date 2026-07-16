@@ -11,6 +11,7 @@ import {
     prepareTranscriptForWhatToAnswer, buildTemporalContext,
     AssistantResponse as LLMAssistantResponse, classifyIntent
 } from './llm';
+import { getAutomaticAnswerThrottleReason } from './intelligencePolicy';
 
 // Mode types
 export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'follow_up' | 'recap' | 'clarify' | 'manual' | 'follow_up_questions' | 'code_hint' | 'brainstorm';
@@ -235,7 +236,7 @@ export class IntelligenceEngine extends EventEmitter {
                     : looksLikeInterviewerQuestion(question, segment.confidence);
                 if (!questionLooksUsable) return;
 
-                void this.runWhatShouldISay(question, segment.confidence ?? 0.82).catch(error => {
+                void this.runWhatShouldISay(question, segment.confidence ?? 0.82, undefined, true).catch(error => {
                     console.warn('[IntelligenceEngine] Auto-answer trigger failed:', error?.message || error);
                 });
             }, this.autoAnswerDebounceMs);
@@ -254,7 +255,7 @@ export class IntelligenceEngine extends EventEmitter {
             console.warn('[IntelligenceEngine] Skipping suggestion trigger during quota cooldown');
             return;
         }
-        await this.runWhatShouldISay(trigger.lastQuestion, trigger.confidence);
+        await this.runWhatShouldISay(trigger.lastQuestion, trigger.confidence, undefined, true);
     }
 
     // ============================================
@@ -316,17 +317,30 @@ export class IntelligenceEngine extends EventEmitter {
      * Manual trigger - uses clean transcript pipeline for question inference
      * NEVER returns null - always provides a usable response
      */
-    async runWhatShouldISay(question?: string, confidence: number = 0.8, imagePaths?: string[]): Promise<string | null> {
+    async runWhatShouldISay(
+        question?: string,
+        confidence: number = 0.8,
+        imagePaths?: string[],
+        isAutomatic: boolean = false,
+    ): Promise<string | null> {
         const now = Date.now();
 
-        // Bypass cooldown when the user explicitly attached images (capture-and-process intent).
-        // The cooldown exists to debounce auto-triggers, not explicit shortcuts with context.
+        // Cooldowns protect automatic transcript triggers from repeated paid
+        // requests. Explicit user actions must remain retryable.
         const hasImages = imagePaths && imagePaths.length > 0;
-        if (!hasImages && now < this.quotaCooldownUntil) {
+        const throttleReason = getAutomaticAnswerThrottleReason({
+            isAutomatic,
+            hasImages: Boolean(hasImages),
+            now,
+            quotaCooldownUntil: this.quotaCooldownUntil,
+            lastTriggerTime: this.lastTriggerTime,
+            triggerCooldown: this.triggerCooldown,
+        });
+        if (throttleReason === 'quota') {
             console.warn('[IntelligenceEngine] Skipping what_to_say during quota cooldown');
             return null;
         }
-        if (!hasImages && now - this.lastTriggerTime < this.triggerCooldown) {
+        if (throttleReason === 'trigger') {
             return null;
         }
 
