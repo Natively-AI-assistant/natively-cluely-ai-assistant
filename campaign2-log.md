@@ -12,7 +12,7 @@ untouched and may still be active in a separate session).
 | # | Hypothesis | Verdict | Evidence | Fix commit | Status |
 |---|---|---|---|---|---|
 | 1 | H3 — follow-up misclassification: `FOLLOW_UP_MARKERS` requires ≤14 words, so realistic long callback questions ("going back to X you mentioned earlier...") are silently NOT flagged `isFollowUp` | CONFIRMED (live trace, 2 runs) | traces2/golden-longctx-18.txt: `"isFollowUp":false` for a 26-word unambiguous follow-up | `4b41e1d` | **FIXED** — split WEAK/STRONG marker tiers; first-draft STRONG tier was itself over-broad (skeptic pass caught 7 false-positive cases: bare "earlier", open-object "going back to", "the previous <career noun>"), narrowed to require explicit recall-phrase/conversation-shaped object. 49 unit tests + 189 consumer tests green. Live-reverified on real backend post-narrowing. |
-| 2 | H6 — long-range recall only covers proper-noun entities (sessionFollowupResolver memory model), not free-text topics/incidents | CONFIRMED (live trace, 2 runs, real MiniMax-M3) | run2: model itself says "the transcript does not contain that story"; run1: same root cause manifests as a silent null via the sentinel guard | pending | pinned, not yet fixed — largest remaining fix, needs its own sub-investigation |
+| 2 | H6 — long-range recall only covers proper-noun entities (sessionFollowupResolver memory model), not free-text topics/incidents | CONFIRMED (live trace, 2 runs, real MiniMax-M3) | run2: model itself says "the transcript does not contain that story"; run1: same root cause manifests as a silent null via the sentinel guard | `9c3b79b` | **FIXED** — new bounded lexical-recall fallback (`electron/llm/longRangeTranscriptRecall.ts`) fires only when isFollowUp && entity-recall empty. Skeptic pass found 2 real problems in the first draft (HIGH: no mode-boundary awareness, could leak comp figures into non-negotiation answers; MEDIUM: single-keyword scoring risked wrong-turn misattribution) — both fixed (comp value-gate mirroring SessionMemory's own gate; MIN_MATCH_SCORE raised 1→2). 13 unit tests, 263 consumer tests green, live-reverified twice on real backend post-narrowing. |
 | 3 | Amplifier — `isNonAnswerSentinel` discard (IntelligenceEngine.ts:2199) has NO fallback message; any model "nothing actionable" on a REAL press = completely silent null, greeting-failure-shaped UX | CONFIRMED (live trace, run 1) | traces2/golden-longctx-18.txt run1: `chars:29` provider response, `answer preview: (null)` | `77deb1e` | **FIXED** — manual (non-speculative) presses now get an honest, non-misleading fallback message instead of silent null; speculative path unchanged. Skeptic-approved (1 required test update applied). Live-reverified on real backend (fix fired: `[FIX:longsession-nonanswer-fallback]`). |
 | 4 | H7 — `SessionTracker.getContext(180)` is actually hard-capped at 120s regardless of caller's requested window (`contextWindowDuration=120` in `evictOldEntries`) | CONFIRMED (code read), not yet proven as direct cause of a live failure at this script's turn density | SessionTracker.ts:426-429 vs :698-706 | logged only, not yet a fix priority | logged |
 | 5 | H1 (question lost in prompt assembly under token-budget eviction) | REFUTED for realistic session lengths — sparsifyTranscript caps transcript at 12 turns BEFORE the 2000+-token assembler budget is ever approached (totalTokensUsed 433-566 of budget ~2300-2450, on a 128k-ctx cloud model) | traces2/golden-longctx-*.txt, all 4 presses: `answerPlanQuestionSurvivesInPrompt: true` | N/A | refuted |
@@ -171,25 +171,93 @@ BEFORE commit, which is why that step is mandatory per loop2.md §3, not optiona
 well above 25% threshold). Account2 fully out (0% session) but 9Router routes around
 it automatically — continuing per §1.5.
 
-**NEXT ACTION**: Investigate H6 (long-range recall gap — `sessionFollowupResolver`'s
-memory model only tracks proper-noun entities, not free-text topics/incidents). This
-is the largest remaining pinned cause and likely needs its own sub-investigation
-before committing to an approach: read `electron/llm/sessionFollowupResolver.ts` and
-`electron/llm/liveSessionMemory.ts` in full to understand the current entity-note
-API (`mem.note(kind, value, timestamp, mode, opts)`) and how `resolveLiveFollowup`
-matches a later question against noted entities, then design a minimal extension
-that lets a free-text topic (e.g. a behavioral-answer incident description) become
-recallable without over-triggering false-positive recalls on unrelated later
-questions. Consider: is the right fix at the NOTING layer (extract more than just
-proper nouns from candidate answers — e.g. a short topic-gist summary per turn) or
-at the RESOLUTION layer (when no entity match is found but `isFollowUp` is true and
-a `followUpTarget` couldn't be resolved, fall back to a raw-transcript-snippet
-search over the durable window instead of giving up)? Whichever direction, follow
-the same discipline as fix#1/#2: state the pin + trace quote, minimal live-path
-change, `[FIX:*]` log, re-run the exact minute-18 press against the real backend,
-skeptic pass (assume it WILL find something, budget for at least one narrowing
-round), R8 smoke, then commit. After H6 lands (or a documented decision not to
-attempt it this iteration), decide whether to proceed to Phase 2 (the full
-30-minute 3-script harness) per loop2.md's phase ordering, or continue picking off
-any remaining Phase 0 findings (e.g. H7's `getContext(180)` actually being capped at
-120s) first if quota and context budget allow.
+## ITERATION 1 continued — Fix #3 (H6) landed, skeptic-verified after 1 narrowing round
+
+**Fix #3 (H6, commit `9c3b79b`)**: New `electron/llm/longRangeTranscriptRecall.ts` —
+a bounded, deterministic, no-LLM keyword-overlap search over
+`SessionTracker.getDurableContext()` that fires as a FALLBACK only when the
+extractor already flagged `isFollowUp` (fix#2) but entity-based recall
+(`resolveLiveFollowup`) found nothing — the exact gap H6 identified (a free-text
+incident like "a memory leak in a long-running consumer process" is never captured
+by `transcriptEntityExtractor.ts`, which only extracts proper nouns/CamelCase/a
+fixed CS-topic list). Wired into `IntelligenceEngine.ts`: prepends a small
+`<earlier_context>` block (real transcript text, verbatim, capped at 500 chars) to
+`preparedTranscript` when a match is found.
+
+**Skeptic pass found 2 real problems in the first draft, both fixed before commit**:
+1. **HIGH severity — mode-boundary bypass.** `SessionMemory.recall()` enforces
+   documented, tested mode-aware boundaries (comp gated to `negotiation` mode only).
+   The new lexical fallback had ZERO such awareness — it operated on raw transcript
+   text. Skeptic reproduced concretely: a coding-mode follow-up sharing keywords
+   with an earlier salary-figure turn would inject that comp figure into an
+   unrelated technical answer, bypassing the codebase's own "no salary leakage
+   outside comp Qs" hardening principle. FIXED: threaded the effective mode (via
+   the same `planAnswer`/`answerType` derivation already computed above for the
+   entity-recall path) into `recallLongRangeContext`, added a value-level comp
+   guard (`COMP_VALUE_RE`, mirrors `SessionMemory.add()`'s own `SALARY_VALUE_RE`)
+   that excludes any comp-looking candidate turn unless the effective mode is
+   `negotiation`.
+2. **MEDIUM severity — wrong-turn misattribution.** `MIN_MATCH_SCORE = 1` (a
+   single shared 5+-char word) was too weak in a topic-diverse transcript —
+   skeptic constructed two unrelated turns each sharing one incidental word with a
+   follow-up question; the fallback confidently picked one as "the most relevant
+   earlier turn" when neither was what the interviewer meant. Zero-fabrication
+   (R5) held, zero-misattribution did not. FIXED: raised `MIN_MATCH_SCORE` to 2.
+3. LOW — stopword list had golden-trace-sentence-specific entries ("cause",
+   "after", "finding"); removed, replaced with generic short filler words after
+   lowering `MIN_KEYWORD_LEN` to 4 (the real discriminator was "leak", 4 letters,
+   previously excluded by the 5-char minimum).
+
+After the round-1 fixes: strengthened 2 existing tests whose fixtures only had
+1-keyword overlap, added 4 new permanent regression tests for the skeptic findings
+— 13 total, all pass. Full consumer-test surface: 263 tests across 12 files, 0
+failures. Live-reverified TWICE on the real natively-api/MiniMax-M3 backend after
+narrowing: minute-18's `[TRACE:LONGCTX] long_range_recall_fired` marker fires
+consistently (`matchCount:1, bestAgeSeconds:933`, identical across both post-fix
+runs), does NOT fire for minutes 2/10/24 (fresh/unrelated questions). R8 smoke:
+11/11 green before and after narrowing.
+
+**Anti-thrash note (2nd instance this iteration)**: the mandatory skeptic-pass step
+caught a real, would-have-shipped regression on a first-draft fix for the SECOND
+time this iteration (fix#2's H3 false-positives, now fix#3's H6 mode-boundary
+bypass). Both times the fix's own narrow unit tests passed cleanly; only an
+adversarial, independently-reasoning pass surfaced the problem. Treat the
+skeptic-pass step as load-bearing for every remaining fix in this campaign.
+
+**Quota check** (post-fix#3): Account1 ~38% session (still above the 25%
+threshold). Account2 fully out but 9Router routes around it. Continuing per §1.5.
+
+**STATUS: all 3 pinned Phase 0 root causes are now fixed, skeptic-verified, and
+live-proven on the real backend.**
+
+**NEXT ACTION**: Decide between two paths, favoring (a) unless quota/context runs
+thin:
+(a) **Continue Phase 1 discipline on the logged-but-lower-priority H7 finding**
+    (`SessionTracker.getContext(180)` is actually hard-capped at 120s by
+    `evictOldEntries`'s fixed `contextWindowDuration`, ignoring the caller's
+    requested window — logged in forensic-report.md, not yet proven as the direct
+    cause of an observed failure at this script's turn density, but a real
+    discrepancy worth closing before Phase 2 in case a denser/longer real session
+    exposes it). If pursued: read `SessionTracker.ts`'s `getContext`/
+    `getContextWithInterim`/`evictOldEntries`, decide whether
+    `contextWindowDuration` should become a per-call parameter (so
+    `getContext(180)` truly returns 180s) or whether the 180s call sites should be
+    corrected to 120s to match actual behavior (check which is the
+    ACTUALLY-INTENDED contract), same fix discipline (pin+trace+live-proof+
+    skeptic+smoke+commit).
+(b) **Proceed to Phase 2** (loop2.md §4): spawn the test-engineer agent to build
+    the full 30-minute, 3-script (Script A: SWE interview w/ resume+JD, Script B:
+    technical deep-dive w/ reference PDF, Script C: adversarial/messy) benchmark
+    harness at `test/harness-longsession/` with the G1-G8 grading rubric (question
+    extraction >=98%, greeting failures=0, answer quality >=95%, hallucination=0,
+    long-range recall >=90%, desync=0, injection-resistant, latency curve). This
+    is the mandatory precursor to Phase 3's exit-condition loop (L4: two
+    consecutive green full-benchmark runs). NOTE:
+    `test/harness-longsession/golden-trace-driver.cjs` and
+    `short-session-smoke.cjs` already built this iteration are reusable
+    scaffolding (electron-stub/sqlite-shim bootstrap, real-backend wiring,
+    clock-fast-forward pattern) — the Phase 2 harness should reuse that bootstrap
+    rather than rebuilding it, per "touch least code."
+Either way: quota check before starting (§1.5, pre-check at 25% before an
+expensive full-benchmark run), and update this log's ANTI-THRASH LEDGER + SCORE
+HISTORY tables before ending the iteration.
