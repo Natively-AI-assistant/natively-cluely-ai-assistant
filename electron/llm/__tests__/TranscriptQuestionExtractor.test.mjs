@@ -87,6 +87,111 @@ describe('transcript question extractor', () => {
     assert.equal(r.followUpTarget, 'LedgerFlow', 'should resolve the recently-mentioned project noun');
   });
 
+  // Campaign 2 (longsession, 2026-07-16, forensic-report.md H3): a realistic
+  // LONG callback question using an explicit STRONG backward-reference marker
+  // ("mentioned earlier") must still be flagged isFollowUp=true even though it
+  // is well over the old blanket 14-word cap. Live-proven regression: this
+  // exact sentence returned isFollowUp:false pre-fix
+  // (traces2/golden-longctx-18.txt).
+  test('long callback question with "mentioned earlier" → follow_up regardless of length', () => {
+    const r = extractLatestQuestion([
+      turn('user', 'One time we had a memory leak in a long-running consumer process that took us three days to trace.'),
+      turn('interviewer', 'How did you eventually find the root cause?'),
+      turn('user', 'We used heap snapshots and eventually found an unbounded cache that never evicted old entries.'),
+      turn('interviewer', 'Going back to the memory leak you mentioned earlier — how long did it take your team to ship the fix after finding the root cause?'),
+    ]);
+    assert.equal(r.isFollowUp, true, 'a 26-word explicit callback ("mentioned earlier") must still be a follow-up');
+    assert.equal(r.questionType, 'follow_up');
+  });
+
+  // A long turn that merely CONTAINS a weak marker word ("that") but has no
+  // strong backward-reference cue is a fresh, self-contained question — the
+  // weak-marker word-cap must still gate normally so this is NOT misclassified
+  // as a follow-up.
+  test('long fresh question merely containing "that" → NOT a follow-up (weak-marker cap still applies)', () => {
+    const r = extractLatestQuestion([
+      turn('user', 'I optimized slow queries using EXPLAIN ANALYZE.'),
+      turn('interviewer', 'What would you do if a query that scans the whole table starts timing out under production load during a traffic spike?'),
+    ]);
+    assert.equal(r.isFollowUp, false, 'a long fresh question with only a weak marker word must not be misclassified as a follow-up');
+  });
+
+  // Skeptic-pass regression suite (Campaign 2, 2026-07-16): the first draft of
+  // STRONG_FOLLOW_UP_MARKERS matched bare "earlier" / "the previous" / an
+  // open-object "going back to" ANYWHERE in the sentence, misclassifying
+  // common, non-callback interview phrasings as follow-ups — which corrupted
+  // downstream grounding lookups (a bogus followUpTarget can overwrite an
+  // otherwise-correct identity/technical query) and let small talk escape the
+  // SOCIAL_PLEASANTRY confidence down-weight. Each case below is a FRESH,
+  // self-contained question that must NOT be classified as a follow-up despite
+  // containing one of the narrowed marker words in a non-callback shape.
+  describe('STRONG follow-up markers must not false-positive on ordinary phrasing', () => {
+    test('"graduated earlier than your cohort" (career timeline, not a callback)', () => {
+      const r = extractLatestQuestion([
+        turn('interviewer', 'I noticed on your resume that you graduated earlier than most of your cohort, what made you accelerate your degree and how did that shape your early career choices?'),
+      ]);
+      assert.equal(r.isFollowUp, false);
+    });
+
+    test('"in an earlier role" (candidate\'s own history, not a callback)', () => {
+      const r = extractLatestQuestion([
+        turn('interviewer', 'In an earlier role at a startup, how did you handle ambiguous requirements when the product spec kept changing week to week?'),
+      ]);
+      assert.equal(r.isFollowUp, false);
+    });
+
+    test('"come in earlier" (scheduling, not a callback)', () => {
+      const r = extractLatestQuestion([
+        turn('interviewer', 'Would you be able to come in earlier in the week for the onsite, say Tuesday instead of Thursday, if the team needed that flexibility?'),
+      ]);
+      assert.equal(r.isFollowUp, false);
+    });
+
+    test('"earlier deployment...canary rollout" (technical concept, not a callback)', () => {
+      const r = extractLatestQuestion([
+        turn('interviewer', 'Would you agree that earlier deployment in the pipeline reduces the blast radius of a bad release, and how would you design a canary rollout to take advantage of that?'),
+      ]);
+      assert.equal(r.isFollowUp, false);
+    });
+
+    test('"the previous role you held" (career history noun, not a conversation-shaped noun)', () => {
+      const r = extractLatestQuestion([
+        turn('interviewer', 'In the previous role you held before this most recent one, what was your biggest technical challenge and how did you resolve it?'),
+      ]);
+      assert.equal(r.isFollowUp, false);
+    });
+
+    test('"you mentioned...on your resume" (references an uploaded document, not a live prior turn)', () => {
+      const r = extractLatestQuestion([
+        turn('interviewer', 'You mentioned remote work experience on your resume, can you tell me more about how you stayed productive and collaborative while working remotely full time?'),
+      ]);
+      assert.equal(r.isFollowUp, false);
+    });
+
+    test('"going back to the office" (RTO policy chat, not a conversational callback)', () => {
+      const r = extractLatestQuestion([
+        turn('interviewer', 'If we ask everyone to start going back to the office three days a week, how would that affect your ability to focus on deep technical work?'),
+      ]);
+      assert.equal(r.isFollowUp, false);
+    });
+
+    test('genuine callback still fires: "you mentioned the load balancer outage earlier"', () => {
+      const r = extractLatestQuestion([
+        turn('user', 'We had a load balancer outage last quarter that took down checkout for twenty minutes.'),
+        turn('interviewer', 'You mentioned the load balancer outage earlier, can you walk me through how your team responded in the moment?'),
+      ]);
+      assert.equal(r.isFollowUp, true, 'an explicit "you mentioned X earlier" callback must still be classified as a follow-up');
+    });
+
+    test('social-pleasantry with "earlier" stays low-confidence, not a follow-up', () => {
+      const r = extractLatestQuestion([
+        turn('interviewer', 'Did you have any trouble finding parking or the building earlier today?'),
+      ]);
+      assert.equal(r.isFollowUp, false);
+      assert.ok(r.confidence < 0.75, 'must stay below the live speculative gate (0.75)');
+    });
+  });
+
   test('picks the LATEST interviewer question, not an earlier one', () => {
     const r = extractLatestQuestion([
       turn('interviewer', 'What is your name?'),

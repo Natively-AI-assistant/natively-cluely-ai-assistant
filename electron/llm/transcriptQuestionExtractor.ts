@@ -72,7 +72,43 @@ const QUESTION_MARK = /\?/;
 const INTERROGATIVE_LEAD = /^(\s*)(what|who|why|where|when|which|how|whose|whom|can|could|would|will|do|did|does|are|is|were|was|have|has|had|tell me|walk me|describe|explain|give me|share|let'?s talk about|talk about|i'?d like to (hear|know)|i want to (hear|know))\b/i;
 
 // Follow-up markers: the turn leans on a previously-mentioned thing.
-const FOLLOW_UP_MARKERS = /\b(that|this|it|those|these|the (project|one|system|approach|role|company)|in more detail|more about (that|it|this)|elaborate|go deeper|expand on|you (just )?(said|mentioned)|the previous|earlier)\b/i;
+//
+// Split into WEAK and STRONG tiers (Campaign 2, longsession, 2026-07-16 —
+// forensic-report.md H3). WEAK markers (bare "that"/"this"/"it"/"the project")
+// are common words that can appear in a perfectly ordinary FRESH question too
+// ("what did you build with that framework?"), so they only count as a
+// follow-up signal on a SHORT turn — a long turn containing "that" is more
+// likely a new, self-contained question that happens to use the word. STRONG
+// markers ("you mentioned", "earlier", "going back to", "the previous", "you
+// said") are unambiguous explicit backward-references regardless of how long
+// the sentence built around them is — a real interviewer callback like "going
+// back to the memory leak you mentioned earlier, how long did it take your
+// team to ship the fix?" is 26 words but is exactly as much a follow-up as a
+// 5-word one. Applying the same length cap to both tiers silently mis-typed
+// realistic long callback questions as fresh/standalone (live-proven:
+// traces2/golden-longctx-18.txt, isFollowUp:false on that exact sentence).
+const WEAK_FOLLOW_UP_MARKERS = /\b(that|this|it|those|these|the (project|one|system|approach|role|company)|in more detail|more about (that|it|this)|elaborate|go deeper|expand on)\b/i;
+// STRONG markers must be phrase-anchored to an explicit conversational
+// recall — NOT bare words that also occur constantly in ordinary fresh
+// speech. Skeptic-pass review (Campaign 2, 2026-07-16) found the first draft
+// of this tier matched bare "earlier" ("I graduated earlier than my cohort"),
+// bare "the previous" ("the previous role I held"), and open-object "going
+// back to" ("going back to the office three days a week") — all common,
+// NON-callback interview phrasings that got misclassified as follow-ups,
+// corrupting downstream grounding lookups (a bogus followUpTarget can
+// overwrite a perfectly good identity/technical query — see
+// IntelligenceEngine.ts's lookupQ override) and letting small talk escape the
+// SOCIAL_PLEASANTRY confidence down-weight. Each alternative below requires
+// the recall verb/phrase itself, not just a co-occurring word:
+//   - "you (just) said/mentioned ... earlier" or "mentioned earlier" as a unit
+//   - "going/coming back to" ONLY when the object is a demonstrative or an
+//     explicit "what you said/mentioned" — not an open noun phrase like "the
+//     office"/"school"
+//   - "the previous" ONLY when paired with a conversation-shaped noun
+//     (point/topic/question/thing/example you mentioned), not a career noun
+//     (role/company/job/quarter)
+const STRONG_FOLLOW_UP_MARKERS = /\b(you (just )?(said|mentioned)\b|\bmentioned (earlier|before)\b|\bsaid (earlier|before)\b|(going|coming) back to (that|this|it|what you (said|mentioned)|the (earlier|previous|last) (point|topic|question|thing))\b|the previous (point|topic|question|thing|example)( you (mentioned|said|brought up|raised))?\b|circling back|you (had )?(brought up|touched on|referenced))\b/i;
+const FOLLOW_UP_WORD_CAP = 14;
 
 // Demonstrative-only openers that strongly imply a follow-up ("can you explain that?").
 const DEMONSTRATIVE_FOLLOW_UP = /\b(explain|elaborate on|tell me more about|go deeper into|expand on)\s+(that|this|it|those|these)\b/i;
@@ -281,12 +317,18 @@ export function extractLatestQuestion(
     const hasMark = QUESTION_MARK.test(latestQuestion);
     const hasLead = INTERROGATIVE_LEAD.test(latestQuestion);
 
-    // Follow-up detection: demonstrative-only ask, or follow-up markers present
-    // AND there's a prior turn to refer back to.
+    // Follow-up detection: demonstrative-only ask, a STRONG explicit backward-
+    // reference marker (unambiguous regardless of sentence length), or a WEAK
+    // marker on a short turn (length-capped since a bare "that"/"this" is
+    // common in ordinary fresh questions too) — AND there's a prior turn to
+    // refer back to.
     const priorTurns = cleaned.slice(0, chosenIdx);
     const hasPrior = priorTurns.length > 0;
-    const isFollowUp = hasPrior && (DEMONSTRATIVE_FOLLOW_UP.test(latestQuestion) ||
-        (FOLLOW_UP_MARKERS.test(latestQuestion) && latestQuestion.split(/\s+/).length <= 14));
+    const isFollowUp = hasPrior && (
+        DEMONSTRATIVE_FOLLOW_UP.test(latestQuestion) ||
+        STRONG_FOLLOW_UP_MARKERS.test(latestQuestion) ||
+        (WEAK_FOLLOW_UP_MARKERS.test(latestQuestion) && latestQuestion.split(/\s+/).length <= FOLLOW_UP_WORD_CAP)
+    );
 
     // Follow-up target: the most recent salient noun phrase from a prior turn.
     // Strategy: scan backward through ALL prior turns (both candidate and
