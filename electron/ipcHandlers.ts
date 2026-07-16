@@ -10082,11 +10082,48 @@ export function initializeIpcHandlers(appState: AppState): void {
         // profile fast-path today, but an EXPLICIT "my resume/project" ask in a
         // reference_files_only / transcript_only mode must get the same
         // source-honest switch line here rather than a doc-grounded refusal.
+        //
+        // Senior-review fix (2026-07-16, audit ab9dc2f0): the prior commit
+        // body claimed phone-mirror was threaded with turnSourceDecision
+        // but the IPC handler was actually stale. Closing that gap here so
+        // the JD-only / resume-only / profile-only source selection survives
+        // on the phone surface.
         try {
           const { buildCustomModeExecutionContract } = require('./llm/customModeExecutionContract');
           const { resolveSourceOwnership, buildSourceSwitchClarification } = require('./llm/sourceOwnership');
+          const { resolveTurnSourceDecision } = require('./llm/turnSourceDecision') as typeof import('./llm/turnSourceDecision');
+          const { resolveExplicitSourceRequest: _pResolveSwitch, resolveExplicitSourceRequests: _pResolveSwitches } = require('./intelligence/context-os/explicitSourceSwitch') as typeof import('./intelligence/context-os/explicitSourceSwitch');
           const _pMode = (() => { try { return require('./services/ModesManager').ModesManager.getInstance().getActiveModeInfo?.(); } catch { return null; } })();
-          const _pHasProfile = Boolean(llmHelper.getKnowledgeOrchestrator?.()?.activeResume?.structured_data);
+          const _pOrch = llmHelper.getKnowledgeOrchestrator?.();
+          const _pHasProfile = Boolean(_pOrch?.activeResume?.structured_data);
+          const _pHasJd = Boolean((_pOrch as any)?.activeJD?.structured_data);
+          const _pSourceContract = (_pMode as any)?.sourceContract ?? null;
+          const _pExplicitSwitch = _pResolveSwitch(String(message || ''));
+          const _pExplicitRequests = _pResolveSwitches(String(message || ''));
+          // Canonical decision is the authority for capability issuance.
+          // Null only when no persisted contract exists (mid-boot) — the
+          // legacy heuristic then runs.
+          const _pTurnSourceDecision = _pSourceContract
+            ? resolveTurnSourceDecision({
+              sourceContract: _pSourceContract,
+              persistedSourceAuthority: _pSourceContract.sourceAuthority,
+              explicitRequest: _pExplicitSwitch,
+              explicitRequests: _pExplicitRequests,
+              availability: {
+                hasReferenceFiles: Boolean((_pMode as any)?.hasReferenceFiles),
+                hasProfileFacts: _pHasProfile,
+                hasJobDescription: _pHasJd,
+                hasLiveTranscript: Boolean(context && String(context).trim()),
+                hasMeetingRag: false,
+              },
+            })
+            : null;
+          // JD folds onto the profile family at the legacy layer; the
+          // canonical decision preserves their distinction at the
+          // allowedEvidenceKinds level.
+          const _pLegacyUserExplicitSource = _pExplicitSwitch === 'job_description'
+            ? 'profile'
+            : _pExplicitSwitch;
           const _pContract = buildCustomModeExecutionContract({
             question: String(message || ''),
             streamRoute: 'phone_mirror',
@@ -10102,6 +10139,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             hasMeetingRag: false,
             hasLongTermMemory: false,
             persistedSourceAuthority: (_pMode as any)?.sourceContract?.sourceAuthority ?? null,
+            userExplicitSource: _pLegacyUserExplicitSource,
+            turnSourceDecision: _pTurnSourceDecision,
           });
           const _pOwn = resolveSourceOwnership({
             question: String(message || ''),
@@ -10109,9 +10148,10 @@ export function initializeIpcHandlers(appState: AppState): void {
             profileContextPolicy: phonePlanForOwnership?.profileContextPolicy ?? 'allowed',
             answerType: phonePlanForOwnership?.answerType ?? 'unknown_answer',
             hasProfileFacts: _pHasProfile,
+            turnSourceDecision: _pTurnSourceDecision,
           });
           if (_pOwn.shouldClarifyInsteadOfProfile && _phoneChatLatestId === myPhoneId) {
-            const clarify = buildSourceSwitchClarification(_pOwn.owner);
+            const clarify = buildSourceSwitchClarification(_pOwn.owner, _pExplicitSwitch);
             try { phoneMirror.publishToken(String(myStreamId), clarify); } catch (_) {}
             try { phoneMirror.publishDone(String(myStreamId), clarify); } catch (_) {}
             win?.webContents.send('gemini-stream-token', clarify, { streamId: myStreamId });
