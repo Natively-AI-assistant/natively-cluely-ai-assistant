@@ -11,9 +11,9 @@ untouched and may still be active in a separate session).
 
 | # | Hypothesis | Verdict | Evidence | Fix commit | Status |
 |---|---|---|---|---|---|
-| 1 | H3 — follow-up misclassification: `FOLLOW_UP_MARKERS` requires ≤14 words, so realistic long callback questions ("going back to X you mentioned earlier...") are silently NOT flagged `isFollowUp` | CONFIRMED (live trace, 2 runs) | traces2/golden-longctx-18.txt: `"isFollowUp":false` for a 26-word unambiguous follow-up | pending | pinned, not yet fixed |
-| 2 | H6 — long-range recall only covers proper-noun entities (sessionFollowupResolver memory model), not free-text topics/incidents | CONFIRMED (live trace, 2 runs, real MiniMax-M3) | run2: model itself says "the transcript does not contain that story"; run1: same root cause manifests as a silent null via the sentinel guard | pending | pinned, not yet fixed |
-| 3 | Amplifier — `isNonAnswerSentinel` discard (IntelligenceEngine.ts:2199) has NO fallback message; any model "nothing actionable" on a REAL press = completely silent null, greeting-failure-shaped UX | CONFIRMED (live trace, run 1) | traces2/golden-longctx-18.txt run1: `chars:29` provider response, `answer preview: (null)` | pending | pinned, not yet fixed |
+| 1 | H3 — follow-up misclassification: `FOLLOW_UP_MARKERS` requires ≤14 words, so realistic long callback questions ("going back to X you mentioned earlier...") are silently NOT flagged `isFollowUp` | CONFIRMED (live trace, 2 runs) | traces2/golden-longctx-18.txt: `"isFollowUp":false` for a 26-word unambiguous follow-up | `4b41e1d` | **FIXED** — split WEAK/STRONG marker tiers; first-draft STRONG tier was itself over-broad (skeptic pass caught 7 false-positive cases: bare "earlier", open-object "going back to", "the previous <career noun>"), narrowed to require explicit recall-phrase/conversation-shaped object. 49 unit tests + 189 consumer tests green. Live-reverified on real backend post-narrowing. |
+| 2 | H6 — long-range recall only covers proper-noun entities (sessionFollowupResolver memory model), not free-text topics/incidents | CONFIRMED (live trace, 2 runs, real MiniMax-M3) | run2: model itself says "the transcript does not contain that story"; run1: same root cause manifests as a silent null via the sentinel guard | pending | pinned, not yet fixed — largest remaining fix, needs its own sub-investigation |
+| 3 | Amplifier — `isNonAnswerSentinel` discard (IntelligenceEngine.ts:2199) has NO fallback message; any model "nothing actionable" on a REAL press = completely silent null, greeting-failure-shaped UX | CONFIRMED (live trace, run 1) | traces2/golden-longctx-18.txt run1: `chars:29` provider response, `answer preview: (null)` | `77deb1e` | **FIXED** — manual (non-speculative) presses now get an honest, non-misleading fallback message instead of silent null; speculative path unchanged. Skeptic-approved (1 required test update applied). Live-reverified on real backend (fix fired: `[FIX:longsession-nonanswer-fallback]`). |
 | 4 | H7 — `SessionTracker.getContext(180)` is actually hard-capped at 120s regardless of caller's requested window (`contextWindowDuration=120` in `evictOldEntries`) | CONFIRMED (code read), not yet proven as direct cause of a live failure at this script's turn density | SessionTracker.ts:426-429 vs :698-706 | logged only, not yet a fix priority | logged |
 | 5 | H1 (question lost in prompt assembly under token-budget eviction) | REFUTED for realistic session lengths — sparsifyTranscript caps transcript at 12 turns BEFORE the 2000+-token assembler budget is ever approached (totalTokensUsed 433-566 of budget ~2300-2450, on a 128k-ctx cloud model) | traces2/golden-longctx-*.txt, all 4 presses: `answerPlanQuestionSurvivesInPrompt: true` | N/A | refuted |
 | 6 | H2 (system prompt eviction/dilution) | REFUTED same reasoning as H1 — systemPromptChars byte-identical (29961) across all 4 presses | traces2/golden-longctx-*.txt | N/A | refuted |
@@ -31,6 +31,8 @@ Confirmed working (same as Campaign 1's documented method): the reference script
 `curl -s http://localhost:20128/api/providers` → filter `provider=="claude"` → `curl -s http://localhost:20128/api/usage/{id}` → `.quotas."session (5h)".remainingPercentage`.
 
 QUOTA (iteration 1, 2026-07-16 ~23:1x local): Account1 (0bc80676…) 65% session / 73% weekly. Account2 (ead3018a…) 4% session / 80% weekly — low but 9Router fails over automatically; Account1 well above the 25%-pre-expensive-op and 10%-pause thresholds, so continuing normally per §1.5 ("pause ONLY when one account is fully out AND the other is <=10%").
+
+QUOTA (iteration 1 continued, 2026-07-17 ~00:4x local, after fix#1 + fix#2): Account1 49% session / 70% weekly. Account2 0% session / 80% weekly (fully out, but 9Router routes to Account1). Continuing per §1.5.
 
 ## ITERATION 1 (2026-07-16) — Phase 0 preflight + Golden Trace + Forensic Report
 
@@ -129,20 +131,65 @@ above both the 25% pre-expensive-op and 10% pause thresholds).
 driver + forensic report, no product-behavior fix yet (Phase 0 is diagnosis-only
 per R1).
 
-**NEXT ACTION**: Begin Phase 1 (loop2.md §3) on the pinned causes, highest-impact
-first. Start with the AMPLIFIER (#3 above — cheapest fix, directly matches the
-F-H1 pattern loop2.md already prescribes: give the non-answer-sentinel discard path
-a visible, honest fallback message instead of a silent null, mirroring the existing
-`liveDeadlineFired` fallback pattern already in the same file at ~line 1820). Then
-H3 (#1 — relax or contextualize the ≤14-word cap on FOLLOW_UP_MARKERS detection so
-realistic long callback questions are still flagged as follow-ups). Then investigate
-H6 (#2 — likely the largest single fix; may need its own sub-investigation into how
-to extend `sessionFollowupResolver`'s memory model to cover free-text topics, not
-just proper-noun entities, without over-triggering false-positive recalls). For each
-fix: state the pin + trace quote, make the minimal live-path change, show the
-`[FIX:*]` log firing by re-running the exact failing press (minute 18) against the
-real backend, run a skeptic pass, verify a short-session smoke suite stays green
-(none exists yet for this campaign — build a minimal one alongside the first fix),
-then commit with the fix + a note in this ledger. Do NOT build the full Phase 2
-30-minute 3-script harness yet — that's after the Phase 1 pinned-cause fixes land,
-per loop2.md's phase ordering.
+## ITERATION 1 continued — Fix #1 (amplifier) + Fix #2 (H3) landed, both skeptic-verified
+
+**Fix #1 (amplifier, commit `77deb1e`)**: Manual (non-speculative) presses hitting
+`isNonAnswerSentinel` now get an honest fallback message ("I don't have enough from
+the conversation to answer that specific point yet.") instead of a silent null.
+Speculative path untouched (verified byte-identical via diff + tests). Skeptic pass
+(code-reviewer subagent) approved with one required follow-up: updated 3 stale tests
+in `IntelligenceEngineSentinel.test.mjs` that asserted the old silent-null contract.
+Live-proof: re-ran the exact minute-18 press twice against the real
+natively-api/MiniMax-M3 backend; `[FIX:longsession-nonanswer-fallback]` fired and the
+user-visible answer changed from `(null)` to the honest fallback string. R8 smoke
+suite built (`test/harness-longsession/short-session-smoke.cjs`, 11 checks) — green.
+
+**Fix #2 (H3, commit `4b41e1d`)**: Split `FOLLOW_UP_MARKERS` into `WEAK_FOLLOW_UP_MARKERS`
+(still word-capped at 14) and `STRONG_FOLLOW_UP_MARKERS` (unambiguous regardless of
+length). CRITICAL: the skeptic pass on the FIRST draft caught a serious regression —
+the initial `STRONG_FOLLOW_UP_MARKERS` regex matched bare "earlier" and an open-object
+"going back to" ANYWHERE in a sentence, misclassifying common non-callback interview
+phrasing ("I graduated earlier than my cohort", "going back to the office three days
+a week", "the previous role I held") as follow-ups. This corrupted downstream
+grounding lookups (a bogus `followUpTarget` can overwrite an otherwise-correct
+identity/technical query) and let small talk escape the `SOCIAL_PLEASANTRY` confidence
+down-weight — a NEW and arguably worse failure class than the one being fixed.
+Narrowed every STRONG alternative to require the actual recall-verb phrase or an
+explicit conversation-shaped object, not a bare co-occurring word. Verified all 7 of
+the skeptic's false-positive cases now correctly classify `false`, the original bug
+case and a genuine callback correctly classify `true`, added as 9 new permanent
+regression tests (49 total in the file, 0 failures). Ran the full consumer-test
+surface the skeptic identified (189 tests across 8 files) — all green. Live-reverified
+on the real backend post-narrowing: minute 18 correctly resolves
+`isFollowUp:true`/`questionType:follow_up`; minutes 2/10/24 unaffected. R8 smoke green.
+
+**Anti-thrash note**: this is exactly the scenario R2 warns about — a first-draft fix
+for a pinned cause can introduce its own new bug. The skeptic-pass step caught it
+BEFORE commit, which is why that step is mandatory per loop2.md §3, not optional.
+
+**Quota check** (post-fix#1, post-fix#2): Account1 49% session / 70% weekly (still
+well above 25% threshold). Account2 fully out (0% session) but 9Router routes around
+it automatically — continuing per §1.5.
+
+**NEXT ACTION**: Investigate H6 (long-range recall gap — `sessionFollowupResolver`'s
+memory model only tracks proper-noun entities, not free-text topics/incidents). This
+is the largest remaining pinned cause and likely needs its own sub-investigation
+before committing to an approach: read `electron/llm/sessionFollowupResolver.ts` and
+`electron/llm/liveSessionMemory.ts` in full to understand the current entity-note
+API (`mem.note(kind, value, timestamp, mode, opts)`) and how `resolveLiveFollowup`
+matches a later question against noted entities, then design a minimal extension
+that lets a free-text topic (e.g. a behavioral-answer incident description) become
+recallable without over-triggering false-positive recalls on unrelated later
+questions. Consider: is the right fix at the NOTING layer (extract more than just
+proper nouns from candidate answers — e.g. a short topic-gist summary per turn) or
+at the RESOLUTION layer (when no entity match is found but `isFollowUp` is true and
+a `followUpTarget` couldn't be resolved, fall back to a raw-transcript-snippet
+search over the durable window instead of giving up)? Whichever direction, follow
+the same discipline as fix#1/#2: state the pin + trace quote, minimal live-path
+change, `[FIX:*]` log, re-run the exact minute-18 press against the real backend,
+skeptic pass (assume it WILL find something, budget for at least one narrowing
+round), R8 smoke, then commit. After H6 lands (or a documented decision not to
+attempt it this iteration), decide whether to proceed to Phase 2 (the full
+30-minute 3-script harness) per loop2.md's phase ordering, or continue picking off
+any remaining Phase 0 findings (e.g. H7's `getContext(180)` actually being capped at
+120s) first if quota and context budget allow.
