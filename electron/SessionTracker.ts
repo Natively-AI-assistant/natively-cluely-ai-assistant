@@ -69,6 +69,8 @@ export class SessionTracker {
     private static readonly MAX_EPOCH_SUMMARIES = 5;
     private transcriptEpochSummaries: string[] = [];
     private isCompacting: boolean = false;
+    private sessionGeneration: number = 0;
+    private compactionGeneration: number | null = null;
 
     // Track interim interviewer segment
     private lastInterimInterviewer: TranscriptSegment | null = null;
@@ -504,6 +506,9 @@ export class SessionTracker {
     // ============================================
 
     reset(): void {
+        this.sessionGeneration++;
+        this.isCompacting = false;
+        this.compactionGeneration = null;
         this.contextItems = [];
         this.fullTranscript = [];
         this.fullUsage = [];
@@ -546,7 +551,9 @@ export class SessionTracker {
     private async compactTranscriptIfNeeded(): Promise<void> {
         if (this.fullTranscript.length <= 1800 || this.isCompacting) return;
 
+        const generation = this.sessionGeneration;
         this.isCompacting = true;
+        this.compactionGeneration = generation;
         try {
             // Take the oldest 500 entries to summarize
             const summarizeCount = 500;
@@ -564,6 +571,7 @@ export class SessionTracker {
                     const epochSummary = await this.recapLLM.generate(
                         `Summarize this conversation segment into 3-5 concise bullet points preserving key topics, decisions, and questions:\n\n${summaryInput}`
                     );
+                    if (this.sessionGeneration !== generation) return;
                     if (epochSummary && epochSummary.trim().length > 0) {
                         this.transcriptEpochSummaries.push(epochSummary.trim());
                         console.log(`[SessionTracker] Epoch summary created (${this.transcriptEpochSummaries.length} total)`);
@@ -573,6 +581,7 @@ export class SessionTracker {
                         this.transcriptEpochSummaries.push(marker);
                     }
                 } catch (e) {
+                    if (this.sessionGeneration !== generation) return;
                     // If summarization fails, store a simple marker
                     const fallback = `[Earlier discussion: ${oldEntries.length} segments, topics: ${oldEntries.slice(0, 3).map(s => s.text.substring(0, 40)).join('; ')}...]`;
                     this.transcriptEpochSummaries.push(fallback);
@@ -586,6 +595,8 @@ export class SessionTracker {
                 console.warn('[SessionTracker] recapLLM not available — storing plain epoch marker');
             }
 
+            if (this.sessionGeneration !== generation) return;
+
             // Cap epoch summaries to prevent LLM context window overflow
             if (this.transcriptEpochSummaries.length > SessionTracker.MAX_EPOCH_SUMMARIES) {
                 this.transcriptEpochSummaries = this.transcriptEpochSummaries.slice(-SessionTracker.MAX_EPOCH_SUMMARIES);
@@ -594,7 +605,10 @@ export class SessionTracker {
             // Evict ONLY the exact 500 oldest entries that we just summarized
             this.fullTranscript = this.fullTranscript.slice(summarizeCount);
         } finally {
-            this.isCompacting = false;
+            if (this.compactionGeneration === generation) {
+                this.isCompacting = false;
+                this.compactionGeneration = null;
+            }
         }
     }
 }

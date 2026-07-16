@@ -339,7 +339,17 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                             ol: ({ node, ...props }) => <ol className="list-decimal ml-4 mb-2 space-y-1" {...props} />,
                                             li: ({ node, ...props }) => <li className="text-sm text-text-secondary" {...props} />,
                                             strong: ({ node, ...props }) => <strong className="font-semibold text-text-primary" {...props} />,
-                                            a: ({ node, ...props }) => <a className="text-blue-500 hover:underline" {...props} />,
+                                            a: ({ href, children }) => (
+                                                <button
+                                                    type="button"
+                                                    className="text-blue-500 hover:underline"
+                                                    onClick={() => {
+                                                        if (href) void window.electronAPI?.openExternal?.(href);
+                                                    }}
+                                                >
+                                                    {children}
+                                                </button>
+                                            ),
                                         }}
                                     >
                                         {meeting.detailedSummary?.overview || ''}
@@ -466,13 +476,10 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                             <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                                 <div className="space-y-6">
                                     {(() => {
-                                        console.log('Raw Transcript:', meeting.transcript);
                                         const filteredTranscript = meeting.transcript?.filter(entry => {
                                             const isHidden = ['system', 'ai', 'assistant', 'model'].includes(entry.speaker?.toLowerCase());
-                                            if (isHidden) console.log('Filtered out:', entry);
                                             return !isHidden;
                                         }) || [];
-                                        console.log('Filtered Transcript:', filteredTranscript);
 
                                         if (filteredTranscript.length === 0) {
                                             return <p className="text-text-tertiary">No transcript available.</p>;

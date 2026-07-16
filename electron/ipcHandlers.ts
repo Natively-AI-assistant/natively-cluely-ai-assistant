@@ -11,6 +11,8 @@ import { AudioDevices } from "./audio/AudioDevices";
 import { PhoneMirrorService } from "./services/PhoneMirrorService";
 import { InterviewContextManager } from "./services/InterviewContextManager";
 import { buildSafeConnectionErrorInfo, redactSensitiveText } from "./utils/safeConnectionError";
+import { formatSafeLogArgs } from "./utils/safeLog";
+import { isTrustedIpcSender } from "./utils/trustedRenderer";
 
 
 import { RECOGNITION_LANGUAGES, AI_RESPONSE_LANGUAGES } from "./config/languages"
@@ -18,7 +20,13 @@ import { RECOGNITION_LANGUAGES, AI_RESPONSE_LANGUAGES } from "./config/languages
 export function initializeIpcHandlers(appState: AppState): void {
   const safeHandle = (channel: string, listener: (event: any, ...args: any[]) => Promise<any> | any) => {
     ipcMain.removeHandler(channel);
-    ipcMain.handle(channel, listener);
+    ipcMain.handle(channel, (event, ...args) => {
+      if (!isTrustedIpcSender(event)) {
+        console.warn(`[IPC] Blocked untrusted sender for channel ${channel}.`);
+        throw new Error('Blocked untrusted IPC sender');
+      }
+      return listener(event, ...args);
+    });
   };
 
   /**
@@ -724,10 +732,11 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   // Fire-and-forget: renderer forwards its console output to the main-process log file.
   // Only written when verbose logging is enabled.
-  ipcMain.on("forward-log-to-file", (_event, level: string, msg: string) => {
+  ipcMain.on("forward-log-to-file", (event, level: string, msg: string) => {
+    if (!isTrustedIpcSender(event)) return;
     if (!appState.getVerboseLogging()) return;
     const tag = level === 'error' ? '[RENDERER-ERROR]' : level === 'warn' ? '[RENDERER-WARN]' : '[RENDERER]';
-    console.log(`${tag} ${msg}`);
+    console.log(`${tag} ${formatSafeLogArgs([msg])}`);
   });
 
   safeHandle("get-arch", async () => {
@@ -1458,16 +1467,6 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasIbmWatsonKey: hasKey(creds.ibmWatsonApiKey),
         ibmWatsonRegion: creds.ibmWatsonRegion || 'us-south',
         hasSonioxKey: hasKey(creds.sonioxApiKey),
-        // STT key values — returned so the settings UI can pre-populate input fields.
-        // AI model keys (Gemini/Groq/OpenAI/Claude) remain boolean-only; STT keys are
-        // surfaced here because users need to see which key is active when switching providers.
-        sttGroqKey: creds.groqSttApiKey || '',
-        sttOpenaiKey: creds.openAiSttApiKey || '',
-        sttDeepgramKey: creds.deepgramApiKey || '',
-        sttElevenLabsKey: creds.elevenLabsApiKey || '',
-        sttAzureKey: creds.azureApiKey || '',
-        sttIbmKey: creds.ibmWatsonApiKey || '',
-        sttSonioxKey: creds.sonioxApiKey || '',
         openAiSttBaseUrl: creds.openAiSttBaseUrl || '',
         hasTavilyKey: hasKey(creds.tavilyApiKey),
         // Dynamic Model Discovery - preferred models
@@ -1477,7 +1476,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         claudePreferredModel: creds.claudePreferredModel || undefined,
       };
     } catch (error: any) {
-      return { hasGeminiKey: false, hasGroqKey: false, hasOpenaiKey: false, hasClaudeKey: false, hasNativelyKey: false, googleServiceAccountPath: null, sttProvider: 'none', groqSttModel: 'whisper-large-v3-turbo', hasSttGroqKey: false, hasSttOpenaiKey: false, hasDeepgramKey: false, hasElevenLabsKey: false, hasAzureKey: false, azureRegion: 'eastus', hasIbmWatsonKey: false, ibmWatsonRegion: 'us-south', hasSonioxKey: false, hasTavilyKey: false, sttGroqKey: '', sttOpenaiKey: '', sttDeepgramKey: '', sttElevenLabsKey: '', sttAzureKey: '', sttIbmKey: '', sttSonioxKey: '' };
+      return { hasGeminiKey: false, hasGroqKey: false, hasOpenaiKey: false, hasClaudeKey: false, hasNativelyKey: false, googleServiceAccountPath: null, sttProvider: 'none', groqSttModel: 'whisper-large-v3-turbo', hasSttGroqKey: false, hasSttOpenaiKey: false, hasDeepgramKey: false, hasElevenLabsKey: false, hasAzureKey: false, azureRegion: 'eastus', hasIbmWatsonKey: false, ibmWatsonRegion: 'us-south', hasSonioxKey: false, hasTavilyKey: false };
     }
   });
 
@@ -1717,6 +1716,22 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle("test-stt-connection", async (_, provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox', apiKey: string, region?: string) => {
     console.log(`[IPC] Received test - stt - connection request for provider: ${provider} `);
     try {
+      if (!apiKey?.trim()) {
+        const { CredentialsManager } = require('./services/CredentialsManager');
+        const credentials = CredentialsManager.getInstance();
+        const storedKeys: Record<typeof provider, string | undefined> = {
+          groq: credentials.getGroqSttApiKey(),
+          openai: credentials.getOpenAiSttApiKey(),
+          deepgram: credentials.getDeepgramApiKey(),
+          elevenlabs: credentials.getElevenLabsApiKey(),
+          azure: credentials.getAzureApiKey(),
+          ibmwatson: credentials.getIbmWatsonApiKey(),
+          soniox: credentials.getSonioxApiKey(),
+        };
+        apiKey = storedKeys[provider] || '';
+      }
+      if (!apiKey.trim()) return { success: false, error: 'No API key is configured for this provider' };
+
       if (provider === 'deepgram') {
         const WebSocket = require('ws');
         const token = apiKey.trim();
@@ -2303,6 +2318,8 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle("flush-database", async () => {
+    if (appState.getIsMeetingActive()) await appState.endMeeting();
+    await appState.waitForCriticalMeetingTeardown();
     const result = DatabaseManager.getInstance().clearAllData();
     return { success: result };
   });

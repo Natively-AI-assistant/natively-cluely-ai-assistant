@@ -74,3 +74,18 @@ test('empty recordings finalize without leaving temp files', async (t) => {
   assert.equal(await recorder.finalize('empty'), null);
   assert.deepEqual(fs.readdirSync(path.join(tempDir, 'recordings', '.tmp')), []);
 });
+
+test('stream errors are observed and finalization cleans partial recordings', async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-recorder-error-'));
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+
+  const recorder = new AudioMeetingRecorder(tempDir);
+  recorder.start(1_000);
+  const streamError = new Error('simulated disk write failure');
+  recorder.channels.system.stream.emit('error', streamError);
+  recorder.addChunk('system', pcm([100, 200]), 24_000, 1_000);
+
+  assert.equal(await recorder.finalize('write-error'), null);
+  assert.equal(fs.existsSync(path.join(tempDir, 'recordings', 'write-error.wav')), false);
+  assert.deepEqual(fs.readdirSync(path.join(tempDir, 'recordings', '.tmp')), []);
+});

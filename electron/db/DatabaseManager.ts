@@ -120,6 +120,7 @@ export class DatabaseManager {
             }
 
             this.runMigrations();
+            this.cleanupPendingRecordingDeletes();
         } catch (error) {
             console.error('[DatabaseManager] Failed to initialize database:', error);
             throw error;
@@ -669,6 +670,28 @@ export class DatabaseManager {
             this.db.pragma('user_version = 16');
         }
 
+        // Version 16 → 17: Re-assert audio metadata columns for databases that
+        // were stamped by an older partial migration before all columns landed.
+        if (version < 17) {
+            console.log('[DatabaseManager] Applying migration v16 → v17: Verify meeting audio schema');
+            const columnsToAdd = [
+                { name: 'audio_recording_path', sql: 'ALTER TABLE meetings ADD COLUMN audio_recording_path TEXT' },
+                { name: 'audio_recording_format', sql: 'ALTER TABLE meetings ADD COLUMN audio_recording_format TEXT' },
+                { name: 'audio_recording_sample_rate', sql: 'ALTER TABLE meetings ADD COLUMN audio_recording_sample_rate INTEGER' },
+                { name: 'audio_recording_size_bytes', sql: 'ALTER TABLE meetings ADD COLUMN audio_recording_size_bytes INTEGER' },
+                { name: 'audio_recording_duration_ms', sql: 'ALTER TABLE meetings ADD COLUMN audio_recording_duration_ms INTEGER' },
+            ];
+            this.db.transaction(() => {
+                const existingColumns = new Set(
+                    (this.db!.pragma('table_info(meetings)') as Array<{ name: string }>).map(column => column.name)
+                );
+                for (const column of columnsToAdd) {
+                    if (!existingColumns.has(column.name)) this.db!.exec(column.sql);
+                }
+                this.db!.pragma('user_version = 17');
+            })();
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 
@@ -1058,6 +1081,101 @@ export class DatabaseManager {
         return resolved.startsWith(recordingsDir + path.sep);
     }
 
+    private makePendingRecordingDeletePath(filePath: string): string {
+        return `${filePath}.delete-pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+
+    private getOriginalRecordingPathFromPending(pendingPath: string): string | null {
+        const match = pendingPath.match(/^(.*)\.delete-pending-\d+-[a-z0-9]{6}$/i);
+        const originalPath = match?.[1];
+        return this.isSafeRecordingPath(originalPath) ? originalPath : null;
+    }
+
+    private quarantineRecording(filePath: string): { originalPath: string; pendingPath: string } | null {
+        if (!this.isSafeRecordingPath(filePath) || !fs.existsSync(filePath)) return null;
+        const pendingPath = this.makePendingRecordingDeletePath(filePath);
+        fs.renameSync(filePath, pendingPath);
+        return { originalPath: filePath, pendingPath };
+    }
+
+    private restoreQuarantinedRecordings(files: Array<{ originalPath: string; pendingPath: string }>): void {
+        for (const file of [...files].reverse()) {
+            try {
+                if (fs.existsSync(file.pendingPath) && !fs.existsSync(file.originalPath)) {
+                    fs.renameSync(file.pendingPath, file.originalPath);
+                }
+            } catch (error) {
+                console.error('[DatabaseManager] Failed to restore quarantined recording:', error);
+            }
+        }
+    }
+
+    private removePendingRecordingFiles(paths: string[]): boolean {
+        let removed = true;
+        for (const pendingPath of paths) {
+            try {
+                if (this.isSafeRecordingPath(pendingPath) && fs.existsSync(pendingPath)) {
+                    fs.unlinkSync(pendingPath);
+                }
+            } catch (error) {
+                removed = false;
+                console.error('[DatabaseManager] Failed to remove quarantined recording:', error);
+            }
+        }
+        return removed;
+    }
+
+    private listOwnedRecordingFiles(): string[] {
+        const recordingsDir = this.getRecordingsDir();
+        if (!fs.existsSync(recordingsDir)) return [];
+        const files: string[] = [];
+        const visit = (dir: string) => {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                const candidate = path.join(dir, entry.name);
+                if (entry.isDirectory()) {
+                    visit(candidate);
+                } else if (
+                    entry.isFile() &&
+                    this.isSafeRecordingPath(candidate) &&
+                    (/\.(wav|pcm)$/i.test(entry.name) || entry.name.includes('.delete-pending-'))
+                ) {
+                    files.push(candidate);
+                }
+            }
+        };
+        visit(recordingsDir);
+        return files;
+    }
+
+    private cleanupPendingRecordingDeletes(): void {
+        const pending = this.listOwnedRecordingFiles().filter(filePath => path.basename(filePath).includes('.delete-pending-'));
+        if (pending.length === 0 || !this.db) return;
+
+        const meetingReferencesRecording = this.db.prepare(
+            'SELECT 1 FROM meetings WHERE audio_recording_path = ? LIMIT 1'
+        );
+        const safeToRemove: string[] = [];
+
+        for (const pendingPath of pending) {
+            const originalPath = this.getOriginalRecordingPathFromPending(pendingPath);
+            if (!originalPath || !meetingReferencesRecording.get(originalPath)) {
+                safeToRemove.push(pendingPath);
+                continue;
+            }
+
+            if (fs.existsSync(originalPath)) {
+                safeToRemove.push(pendingPath);
+                continue;
+            }
+
+            // A crash may have happened after the recording was quarantined but
+            // before its meeting row was deleted. Restore the still-owned file.
+            this.restoreQuarantinedRecordings([{ originalPath, pendingPath }]);
+        }
+
+        this.removePendingRecordingFiles(safeToRemove);
+    }
+
     private rowToAudioRecording(row: any): Meeting['audioRecording'] | undefined {
         if (!row?.audio_recording_path) return undefined;
         if (!this.isSafeRecordingPath(row.audio_recording_path)) return undefined;
@@ -1129,10 +1247,15 @@ export class DatabaseManager {
         }
     }
 
-    public saveMeeting(meeting: Meeting, startTimeMs: number, durationMs: number) {
+    public saveMeeting(
+        meeting: Meeting,
+        startTimeMs: number,
+        durationMs: number,
+        options: { requireExisting?: boolean } = {}
+    ): boolean {
         if (!this.db) {
             console.error('[DatabaseManager] DB not initialized');
-            return;
+            return false;
         }
 
         const existingRecording = this.db.prepare(`
@@ -1144,13 +1267,31 @@ export class DatabaseManager {
         const recording = meeting.audioRecording ?? this.rowToAudioRecording(existingRecording);
 
         const insertMeeting = this.db.prepare(`
-            INSERT OR REPLACE INTO meetings (
+            INSERT INTO meetings (
                 id, title, start_time, duration_ms, summary_json, created_at, calendar_event_id, source, is_processed,
                 audio_recording_path, audio_recording_format, audio_recording_sample_rate,
                 audio_recording_size_bytes, audio_recording_duration_ms
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                title = excluded.title,
+                start_time = excluded.start_time,
+                duration_ms = excluded.duration_ms,
+                summary_json = excluded.summary_json,
+                created_at = excluded.created_at,
+                calendar_event_id = excluded.calendar_event_id,
+                source = excluded.source,
+                is_processed = excluded.is_processed,
+                audio_recording_path = excluded.audio_recording_path,
+                audio_recording_format = excluded.audio_recording_format,
+                audio_recording_sample_rate = excluded.audio_recording_sample_rate,
+                audio_recording_size_bytes = excluded.audio_recording_size_bytes,
+                audio_recording_duration_ms = excluded.audio_recording_duration_ms
         `);
+
+        const meetingExists = this.db.prepare('SELECT 1 FROM meetings WHERE id = ?');
+        const deleteTranscripts = this.db.prepare('DELETE FROM transcripts WHERE meeting_id = ?');
+        const deleteInteractions = this.db.prepare('DELETE FROM ai_interactions WHERE meeting_id = ?');
 
         const insertTranscript = this.db.prepare(`
             INSERT INTO transcripts (meeting_id, speaker, content, timestamp_ms)
@@ -1168,6 +1309,8 @@ export class DatabaseManager {
         });
 
         const runTransaction = this.db.transaction(() => {
+            if (options.requireExisting && !meetingExists.get(meeting.id)) return false;
+
             // 1. Insert Meeting
             insertMeeting.run(
                 meeting.id,
@@ -1185,6 +1328,11 @@ export class DatabaseManager {
                 recording?.sizeBytes || null,
                 recording?.durationMs || null
             );
+
+            // Refresh only the user-visible transcript/interaction children.
+            // Semantic chunks and embedding state must survive a later summary save.
+            deleteTranscripts.run(meeting.id);
+            deleteInteractions.run(meeting.id);
 
             // 2. Insert Transcript
             if (meeting.transcript) {
@@ -1227,11 +1375,14 @@ export class DatabaseManager {
                     );
                 }
             }
+            return true;
         });
 
         try {
-            runTransaction();
-            console.log(`[DatabaseManager] Successfully saved meeting ${meeting.id}`);
+            const saved = runTransaction();
+            if (saved) console.log(`[DatabaseManager] Successfully saved meeting ${meeting.id}`);
+            else console.log(`[DatabaseManager] Skipped save for missing meeting ${meeting.id}`);
+            return saved;
         } catch (err) {
             console.error(`[DatabaseManager] Failed to save meeting ${meeting.id}`, err);
             throw err;
@@ -1399,11 +1550,13 @@ export class DatabaseManager {
     public deleteMeeting(id: string): boolean {
         if (!this.db) return false;
 
+        let quarantined: { originalPath: string; pendingPath: string } | null = null;
         try {
             const row = this.db.prepare('SELECT audio_recording_path FROM meetings WHERE id = ?').get(id) as any;
             const recordingPath = this.isSafeRecordingPath(row?.audio_recording_path)
                 ? row.audio_recording_path as string
                 : null;
+            if (recordingPath) quarantined = this.quarantineRecording(recordingPath);
             const info = this.db.transaction(() => {
                 this.db!.prepare('DELETE FROM embedding_queue WHERE meeting_id = ?').run(id);
                 this.db!.prepare('DELETE FROM chunk_summaries WHERE meeting_id = ?').run(id);
@@ -1413,20 +1566,18 @@ export class DatabaseManager {
                 return this.db!.prepare('DELETE FROM meetings WHERE id = ?').run(id);
             })();
 
-            if (info.changes > 0 && recordingPath) {
-                try {
-                    if (fs.existsSync(recordingPath)) {
-                        fs.unlinkSync(recordingPath);
-                        console.log(`[DatabaseManager] Deleted recording for meeting ${id}.`);
-                    }
-                } catch (fileError) {
-                    console.error(`[DatabaseManager] Failed to delete recording for meeting ${id}:`, fileError);
-                }
+            if (info.changes === 0 && quarantined) {
+                this.restoreQuarantinedRecordings([quarantined]);
+                return false;
             }
 
+            const recordingRemoved = quarantined
+                ? this.removePendingRecordingFiles([quarantined.pendingPath])
+                : true;
             console.log(`[DatabaseManager] Deleted meeting ${id}. Changes: ${info.changes}`);
-            return info.changes > 0;
+            return info.changes > 0 && recordingRemoved;
         } catch (error) {
+            if (quarantined) this.restoreQuarantinedRecordings([quarantined]);
             console.error(`[DatabaseManager] Failed to delete meeting ${id}:`, error);
             return false;
         }
@@ -1472,11 +1623,17 @@ export class DatabaseManager {
     public clearAllData(): boolean {
         if (!this.db) return false;
 
+        const quarantined: Array<{ originalPath: string; pendingPath: string }> = [];
+        const existingPending: string[] = [];
         try {
-            const recordingRows = this.db.prepare('SELECT audio_recording_path FROM meetings').all() as Array<{ audio_recording_path?: string | null }>;
-            const recordingPaths = recordingRows
-                .map(row => row.audio_recording_path)
-                .filter((filePath): filePath is string => this.isSafeRecordingPath(filePath));
+            for (const filePath of this.listOwnedRecordingFiles()) {
+                if (path.basename(filePath).includes('.delete-pending-')) {
+                    existingPending.push(filePath);
+                    continue;
+                }
+                const moved = this.quarantineRecording(filePath);
+                if (moved) quarantined.push(moved);
+            }
 
             // Clear all tables atomically (order matters due to foreign keys,
             // but SQLite handles cascades). Using a transaction ensures we never
@@ -1492,19 +1649,15 @@ export class DatabaseManager {
                 this.db!.exec('DELETE FROM interview_roles');
             })();
 
-            let recordingsCleared = true;
-            for (const recordingPath of recordingPaths) {
-                try {
-                    if (fs.existsSync(recordingPath)) fs.unlinkSync(recordingPath);
-                } catch (error) {
-                    recordingsCleared = false;
-                    console.error('[DatabaseManager] Failed to remove a saved meeting recording during clear-all:', error);
-                }
-            }
+            const recordingsCleared = this.removePendingRecordingFiles([
+                ...existingPending,
+                ...quarantined.map(file => file.pendingPath),
+            ]);
 
             console.log('[DatabaseManager] Meeting, interview setup, and recording data cleared.');
             return recordingsCleared;
         } catch (error) {
+            this.restoreQuarantinedRecordings(quarantined);
             console.error('[DatabaseManager] Failed to clear all data:', error);
             return false;
         }

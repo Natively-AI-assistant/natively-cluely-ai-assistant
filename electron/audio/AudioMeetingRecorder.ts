@@ -15,6 +15,7 @@ export interface MeetingAudioRecordingMetadata {
 interface ChannelState {
   tempPath: string;
   stream: fs.WriteStream;
+  error: Error | null;
   nextSampleIndex: number;
   bytesWritten: number;
   chunks: number;
@@ -187,7 +188,7 @@ export class AudioMeetingRecorder {
   ): void {
     if (!this.active || this.finalizing || !this.channels) return;
     const state = this.channels[channel];
-    if (!state || chunk.length === 0) return;
+    if (!state || state.error || chunk.length === 0) return;
 
     try {
       const resampled = resamplePcm16Mono(chunk, inputSampleRate, this.outputSampleRate);
@@ -209,11 +210,13 @@ export class AudioMeetingRecorder {
         return;
       }
 
+      if (state.error) return;
       state.stream.write(aligned.output);
       state.nextSampleIndex = aligned.nextSampleIndex;
       state.bytesWritten += aligned.output.length;
       state.chunks++;
     } catch (err) {
+      state.error = err instanceof Error ? err : new Error(String(err));
       console.error(`[AudioMeetingRecorder] Failed to append ${channel} chunk:`, err);
     }
   }
@@ -228,7 +231,11 @@ export class AudioMeetingRecorder {
     let finalPath: string | null = null;
 
     try {
-      await Promise.all(Object.values(channels).map((state) => this.closeStream(state.stream)));
+      const closeResults = await Promise.allSettled(Object.values(channels).map((state) => this.closeStream(state)));
+      const closeFailure = closeResults.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+      if (closeFailure) throw closeFailure.reason;
+      const failedChannel = Object.values(channels).find((state) => state.error);
+      if (failedChannel?.error) throw failedChannel.error;
       const hasAnyAudio = Object.values(channels).some((state) => state.bytesWritten > 0);
       if (!hasAnyAudio) {
         await this.cleanupChannelTemps(channels);
@@ -298,19 +305,50 @@ export class AudioMeetingRecorder {
 
   private createChannelState(sessionId: string, channel: MeetingRecordingChannel): ChannelState {
     const tempPath = path.join(this.tempDir, `${sessionId}-${channel}.pcm`);
-    return {
+    const stream = fs.createWriteStream(tempPath, { flags: 'w' });
+    const state: ChannelState = {
       tempPath,
-      stream: fs.createWriteStream(tempPath, { flags: 'w' }),
+      stream,
+      error: null,
       nextSampleIndex: 0,
       bytesWritten: 0,
       chunks: 0,
     };
+    stream.on('error', (error) => {
+      state.error = error;
+      console.error(`[AudioMeetingRecorder] ${channel} recording stream failed:`, error);
+    });
+    return state;
   }
 
-  private closeStream(stream: fs.WriteStream): Promise<void> {
+  private closeStream(state: ChannelState): Promise<void> {
+    const stream = state.stream;
+    if (state.error) {
+      if (stream.closed) return Promise.reject(state.error);
+      const error = state.error;
+      return new Promise((_resolve, reject) => {
+        stream.once('close', () => reject(error));
+        stream.destroy();
+      });
+    }
+    if (stream.writableFinished || stream.closed) return Promise.resolve();
     return new Promise((resolve, reject) => {
-      stream.once('error', reject);
-      stream.end(() => resolve());
+      const onError = (error: Error) => {
+        cleanup();
+        reject(error);
+      };
+      const onFinish = () => {
+        cleanup();
+        if (state.error) reject(state.error);
+        else resolve();
+      };
+      const cleanup = () => {
+        stream.removeListener('error', onError);
+        stream.removeListener('finish', onFinish);
+      };
+      stream.once('error', onError);
+      stream.once('finish', onFinish);
+      stream.end();
     });
   }
 

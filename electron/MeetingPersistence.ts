@@ -6,6 +6,7 @@ import { SessionTracker, TranscriptSegment } from './SessionTracker';
 import { LLMHelper } from './LLMHelper';
 import { DatabaseManager, Meeting } from './db/DatabaseManager';
 import { GROQ_TITLE_PROMPT, GROQ_SUMMARY_JSON_PROMPT } from './llm';
+import { BrowserWindow } from 'electron';
 const crypto = require('crypto');
 
 export class MeetingPersistence {
@@ -51,11 +52,8 @@ export class MeetingPersistence {
         this.session.reset();
 
         const meetingId = crypto.randomUUID();
-        this.processAndSaveMeeting(snapshot, meetingId, metadataSnapshot).catch(err => {
-            console.error('[MeetingPersistence] Background processing failed:', err);
-        });
 
-        // 4. Initial Save (Placeholder)
+        // 3. Save the placeholder before any background finalizer can complete.
         const minutes = Math.floor(durationMs / 60000);
         const seconds = ((durationMs % 60000) / 1000).toFixed(0);
         const durationStr = `${minutes}:${Number(seconds) < 10 ? '0' : ''}${seconds}`;
@@ -73,13 +71,21 @@ export class MeetingPersistence {
         };
 
         try {
-            DatabaseManager.getInstance().saveMeeting(placeholder, snapshot.startTime, durationMs);
+            const saved = DatabaseManager.getInstance().saveMeeting(placeholder, snapshot.startTime, durationMs);
+            if (!saved) return null;
             // Notify Frontend
-            const wins = require('electron').BrowserWindow.getAllWindows();
+            const wins = BrowserWindow.getAllWindows();
             wins.forEach((w: any) => w.webContents.send('meetings-updated'));
         } catch (e) {
             console.error("Failed to save placeholder", e);
+            return null;
         }
+
+        // 4. Generate title/summary in the background. The final write is update-only,
+        // so deleting the placeholder while this runs is treated as cancellation.
+        this.processAndSaveMeeting(snapshot, meetingId, metadataSnapshot).catch(err => {
+            console.error('[MeetingPersistence] Background processing failed:', err);
+        });
 
         return meetingId;
     }
@@ -272,12 +278,21 @@ Return ONLY valid JSON (no markdown code blocks):
                 isProcessed: true
             };
 
-            DatabaseManager.getInstance().saveMeeting(meetingData, data.startTime, data.durationMs);
+            const saved = DatabaseManager.getInstance().saveMeeting(
+                meetingData,
+                data.startTime,
+                data.durationMs,
+                { requireExisting: true }
+            );
+            if (!saved) {
+                console.log(`[MeetingPersistence] Meeting ${meetingId} was deleted before finalization; skipping final save.`);
+                return;
+            }
 
             // Metadata was already snapshotted before session.reset() — nothing to clear here.
 
             // Notify Frontend to refresh list
-            const wins = require('electron').BrowserWindow.getAllWindows();
+            const wins = BrowserWindow.getAllWindows();
             wins.forEach((w: any) => w.webContents.send('meetings-updated'));
 
         } catch (error) {

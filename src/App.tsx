@@ -398,10 +398,12 @@ const App: React.FC = () => {
         // Let's explicitly request mode change.
         await window.electronAPI.setWindowMode('overlay');
       } else {
-        console.error("Failed to start meeting:", result.error);
+        throw new Error(result.error || 'Failed to start meeting');
       }
     } catch (err) {
       console.error("Failed to start meeting:", err);
+      localStorage.removeItem('natively_last_meeting_start');
+      throw err;
     }
   };
 

@@ -45,7 +45,7 @@ interface Meeting {
 }
 
 interface LauncherProps {
-    onStartMeeting: (metadata?: any) => void;
+    onStartMeeting: (metadata?: any) => Promise<void>;
     onOpenSettings: (tab?: string) => void;
     onOpenProfile?: () => void;
     onOpenModes?: () => void;
@@ -279,7 +279,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
             if (selectedModel) {
                 await window.electronAPI?.setModel?.(selectedModel);
             }
-            onStartMeeting(buildInterviewMeetingMetadata(contextId));
+            await onStartMeeting(buildInterviewMeetingMetadata(contextId));
             analytics.trackCommandExecuted('start_interview_setup');
         } catch (err: any) {
             setInterviewSetupError(err?.message || 'Could not start interview meeting');
@@ -419,20 +419,17 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         setIsSavingInterviewSetup(true);
         setInterviewSetupError(null);
         try {
-            const inputDeviceId = localStorage.getItem('preferredInputDeviceId');
-            const outputDeviceId = localStorage.getItem('preferredOutputDeviceId');
             const contextId = await saveInterviewSetup();
 
             if (selectedModel) {
                 await window.electronAPI?.setModel?.(selectedModel);
             }
 
-            await window.electronAPI.startMeeting({
+            await onStartMeeting({
                 title: preparedEvent.title,
                 calendarEventId: preparedEvent.id,
                 source: 'calendar',
                 ...buildInterviewMeetingMetadata(contextId),
-                audio: { inputDeviceId, outputDeviceId }
             });
             setIsPrepared(false);
         } catch (e) {
@@ -507,7 +504,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
             try {
                 console.log("[Launcher] Fetching full meeting details...");
                 const fullMeeting = await window.electronAPI.getMeetingDetails(meeting.id);
-                console.log("[Launcher] Got meeting details:", fullMeeting);
                 console.log("[Launcher] Transcript count:", fullMeeting?.transcript?.length);
                 console.log("[Launcher] Usage count:", fullMeeting?.usage?.length);
                 if (fullMeeting) {

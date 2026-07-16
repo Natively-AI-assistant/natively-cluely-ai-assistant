@@ -1,5 +1,6 @@
 import { BrowserWindow, screen, app, ipcMain, IpcMainEvent } from "electron"
 import path from "node:path"
+import { isTrustedIpcSender } from './utils/trustedRenderer'
 
 const isDev = process.env.NODE_ENV === "development"
 
@@ -104,6 +105,7 @@ export class CropperWindowHelper {
     constructor() {
         // Define IPC listeners as instance methods for proper cleanup
         this.confirmedListener = (event, bounds: unknown) => {
+            if (!isTrustedIpcSender(event)) return;
             // Type guard: validate incoming data from renderer process
             if (!isRectangle(bounds)) {
                 console.error('[CropperWindowHelper] Invalid bounds type received:', typeof bounds);
@@ -124,7 +126,8 @@ export class CropperWindowHelper {
             this.hideOrClose();
         };
 
-        this.cancelledListener = () => {
+        this.cancelledListener = (event) => {
+            if (!isTrustedIpcSender(event)) return;
             this.rejectCurrentSelection(null);
             this.hideOrClose();
         };

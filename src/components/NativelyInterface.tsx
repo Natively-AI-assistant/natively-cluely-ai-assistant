@@ -894,6 +894,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
             setAttachedContext([]);
             setManualTranscript('');
             setVoiceInput('');
+            isRecordingRef.current = false;
+            manualTranscriptRef.current = '';
+            voiceInputRef.current = '';
+            setIsManualRecording(false);
+            setIsInterviewerSpeaking(false);
             setInterviewerTranscriptTurns([]);
             setIsProcessing(false);
             // Optionally reset connection status if needed, but connection persists

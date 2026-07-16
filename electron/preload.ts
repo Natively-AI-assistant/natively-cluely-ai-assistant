@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron"
+import { formatSafeLogArgs } from './utils/safeLog'
 
 // Types for the exposed Electron API
 interface ElectronAPI {
@@ -1292,11 +1293,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   const _origError = console.error.bind(console);
 
   function serialize(...args: any[]): string {
-    return args.map(a => {
-      if (a instanceof Error) return a.stack || a.message;
-      if (typeof a === 'object') { try { return JSON.stringify(a); } catch { return String(a); } }
-      return String(a);
-    }).join(' ');
+    return formatSafeLogArgs(args);
   }
 
   console.log = (...args: any[]) => {

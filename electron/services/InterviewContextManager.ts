@@ -176,12 +176,13 @@ export class InterviewContextManager {
 
     public saveContext(input: SaveInterviewContextInput): InterviewContext {
         const timestamp = nowIso();
-        const roleId = this.upsertRole(input.roleId ?? null, input.role ?? null, timestamp);
         const id = input.id || makeId('ictx');
         const answerLength = VALID_LENGTHS.has(input.answerLength as InterviewAnswerLength) ? input.answerLength! : 'Balanced';
         const answerTone = VALID_TONES.has(input.answerTone as InterviewAnswerTone) ? input.answerTone! : 'Confident';
 
         const run = this.db.transaction(() => {
+            const previous = this.db.prepare('SELECT role_id FROM interview_contexts WHERE id = ?').get(id) as { role_id?: string | null } | undefined;
+            const roleId = this.upsertRole(input.roleId ?? null, input.role ?? null, timestamp);
             if (input.markLastUsed !== false) {
                 this.db.prepare('UPDATE interview_contexts SET is_last_used = 0').run();
             }
@@ -222,6 +223,10 @@ export class InterviewContextManager {
                 timestamp,
                 timestamp
             );
+
+            if (previous?.role_id && previous.role_id !== roleId) {
+                this.deleteRoleIfUnreferenced(previous.role_id);
+            }
         });
         run();
 
@@ -231,7 +236,11 @@ export class InterviewContextManager {
     }
 
     public deleteContext(id: string): void {
-        this.db.prepare('DELETE FROM interview_contexts WHERE id = ?').run(id);
+        this.db.transaction(() => {
+            const row = this.db.prepare('SELECT role_id FROM interview_contexts WHERE id = ?').get(id) as { role_id?: string | null } | undefined;
+            this.db.prepare('DELETE FROM interview_contexts WHERE id = ?').run(id);
+            if (row?.role_id) this.deleteRoleIfUnreferenced(row.role_id);
+        })();
     }
 
     public buildPromptBlock(contextId?: string | null, prefs?: { answerLength?: string; answerTone?: string }): string {
@@ -315,6 +324,14 @@ ${escapePromptText(normalizeText(context.optionalContextText, 16_000))}
             timestamp
         );
         return id;
+    }
+
+    private deleteRoleIfUnreferenced(roleId: string): void {
+        this.db.prepare(`
+            DELETE FROM interview_roles
+            WHERE id = ?
+              AND NOT EXISTS (SELECT 1 FROM interview_contexts WHERE role_id = ?)
+        `).run(roleId, roleId);
     }
 
     public async extractFile(filePath: string): Promise<{ text: string; fileName: string; filePath: string; extension: string }> {

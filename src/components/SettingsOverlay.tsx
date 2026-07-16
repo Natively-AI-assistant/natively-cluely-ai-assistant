@@ -858,14 +858,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                     setHasStoredSonioxKey(creds.hasSonioxKey || false);
                     
                     setHasNativelyKey(creds.hasNativelyKey || false);
-                    // Populate key fields so switching providers doesn't make saved keys appear gone
-                    if (creds.sttGroqKey) setSttGroqKey(creds.sttGroqKey);
-                    if (creds.sttOpenaiKey) setSttOpenaiKey(creds.sttOpenaiKey);
-                    if (creds.sttDeepgramKey) setSttDeepgramKey(creds.sttDeepgramKey);
-                    if (creds.sttElevenLabsKey) setSttElevenLabsKey(creds.sttElevenLabsKey);
-                    if (creds.sttAzureKey) setSttAzureKey(creds.sttAzureKey);
-                    if (creds.sttIbmKey) setSttIbmKey(creds.sttIbmKey);
-                    if (creds.sttSonioxKey) setSttSonioxKey(creds.sttSonioxKey);
                     if (typeof creds.openAiSttBaseUrl === 'string') setSttOpenaiBaseUrl(creds.openAiSttBaseUrl);
                 }
             } catch (e) {
@@ -1047,7 +1039,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
             soniox: sttSonioxKey,
         };
         const keyToTest = keyMap[sttProvider] || '';
-        if (!keyToTest.trim()) {
+        const hasStoredKeyMap: Record<string, boolean> = {
+            groq: hasStoredSttGroqKey,
+            openai: hasStoredSttOpenaiKey,
+            deepgram: hasStoredDeepgramKey,
+            elevenlabs: hasStoredElevenLabsKey,
+            azure: hasStoredAzureKey,
+            ibmwatson: hasStoredIbmWatsonKey,
+            soniox: hasStoredSonioxKey,
+        };
+        if (!keyToTest.trim() && !hasStoredKeyMap[sttProvider]) {
             setSttTestStatus('error');
             setSttTestError('Please enter an API key first');
             return;

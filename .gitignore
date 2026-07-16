@@ -208,6 +208,10 @@ docs/superpowers/
 **/.claude/
 .codex/
 
+# Local operator notes can contain machine paths and private interview history.
+HANDOFF.md
+docs/system-audio-permission-closeout-2026-06-23.md
+
 # Temporary working files
 temp/
 planning/live-negotiation/temp/

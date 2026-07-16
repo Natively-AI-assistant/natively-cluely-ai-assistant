@@ -3,6 +3,7 @@ import path from "path"
 import fs from "fs"
 import { autoUpdater } from "electron-updater"
 import { formatSafeLogArgs } from './utils/safeLog'
+import { isSafeExternalUrl, isTrustedIpcSender, isTrustedRendererUrl } from './utils/trustedRenderer'
 if (!app.isPackaged) {
   require('dotenv').config();
 }
@@ -264,6 +265,8 @@ export class AppState {
   // before booting a new session so the shared STT instances are not torn down
   // mid-meeting by a stale teardown task.
   private _pendingTeardown: Promise<void> | null = null;
+  private _pendingCriticalTeardown: Promise<void> | null = null;
+  private _meetingStartPromise: Promise<void> | null = null;
   private _meetingGeneration = 0;
   private _isQuitting: boolean = false;
   private _quitCleanupStarted: boolean = false;
@@ -515,6 +518,10 @@ export class AppState {
     return this.isMeetingActive;
   }
 
+  public async waitForCriticalMeetingTeardown(): Promise<void> {
+    if (this._pendingCriticalTeardown) await this._pendingCriticalTeardown;
+  }
+
   public isQuitting(): boolean {
     return this._isQuitting;
   }
@@ -541,7 +548,7 @@ export class AppState {
   private async prepareForQuit(): Promise<void> {
     this.stopAudioTest();
 
-    if (this.isMeetingActive) {
+    if (!this._pendingCriticalTeardown && this.isMeetingActive) {
       try {
         await this.endMeeting();
       } catch (err) {
@@ -549,9 +556,13 @@ export class AppState {
       }
     }
 
+    // Transcript and recording persistence are not optional. Wait for that work
+    // to finish before exiting, then give network/RAG cleanup a short bounded tail.
+    if (this._pendingCriticalTeardown) {
+      await this._pendingCriticalTeardown;
+    }
     if (this._pendingTeardown) {
-      await this.withTimeout(this._pendingTeardown, 6000, 'Meeting teardown during quit');
-      this._pendingTeardown = null;
+      await this.withTimeout(this._pendingTeardown, 1500, 'Optional meeting cleanup during quit');
     }
 
     this.stopDefaultOutputWatcher();
@@ -1968,13 +1979,14 @@ export class AppState {
     }
   }
 
-  private async withMeetingAudioInitTimeout<T>(work: Promise<T>): Promise<T> {
+  private async withMeetingAudioInitTimeout<T>(work: Promise<T>, onTimeout?: () => void): Promise<T> {
     let timer: NodeJS.Timeout | undefined;
     try {
       return await Promise.race([
         work,
         new Promise<never>((_, reject) => {
           timer = setTimeout(() => {
+            onTimeout?.();
             reject(new Error(`Meeting audio init timed out after ${MEETING_AUDIO_INIT_TIMEOUT_MS}ms`));
           }, MEETING_AUDIO_INIT_TIMEOUT_MS);
         }),
@@ -2521,6 +2533,20 @@ export class AppState {
   }
 
   public async startMeeting(metadata?: any): Promise<void> {
+    if (this._meetingStartPromise) return this._meetingStartPromise;
+
+    const startPromise = this.startMeetingInternal(metadata);
+    this._meetingStartPromise = startPromise;
+    try {
+      await startPromise;
+    } finally {
+      if (this._meetingStartPromise === startPromise) {
+        this._meetingStartPromise = null;
+      }
+    }
+  }
+
+  private async startMeetingInternal(metadata?: any): Promise<void> {
     console.log('[Main] Starting Meeting...', metadata);
 
     // If a previous endMeeting() is still draining STT in the background, wait
@@ -2535,6 +2561,11 @@ export class AppState {
         // teardown already logs; safe to swallow here
       }
       this._pendingTeardown = null;
+    }
+
+    if (this.isMeetingActive) {
+      console.warn('[Main] Ignoring duplicate meeting start while a meeting is already active.');
+      return;
     }
 
     // PR #173: Reset audio recovery state for fresh session
@@ -2613,30 +2644,34 @@ export class AppState {
         console.warn('[Main] Meeting was cancelled before audio pipeline could start — aborting init.');
         return;
       }
+      let audioInitCancelled = false;
+      const canContinueAudioInit = () => isCurrentMeeting() && !audioInitCancelled;
       try {
         const { systemStarted, micStarted } = await this.withMeetingAudioInitTimeout((async () => {
           // Check for audio configuration preference
           if (metadata?.audio) {
             console.log('[Main] Audio pipeline step: reconfigureAudio.');
             await this.reconfigureAudio(metadata.audio.inputDeviceId, metadata.audio.outputDeviceId);
-            if (!isCurrentMeeting()) return { systemStarted: false, micStarted: false };
+            if (!canContinueAudioInit()) return { systemStarted: false, micStarted: false };
           }
 
           // LAZY INIT: Ensure pipeline is ready (if not reconfigured above)
-          if (!isCurrentMeeting()) return { systemStarted: false, micStarted: false };
+          if (!canContinueAudioInit()) return { systemStarted: false, micStarted: false };
           console.log('[Main] Audio pipeline step: setupSystemAudioPipeline.');
           this.setupSystemAudioPipeline();
 
-          if (!isCurrentMeeting()) return { systemStarted: false, micStarted: false };
+          if (!canContinueAudioInit()) return { systemStarted: false, micStarted: false };
           console.log('[Main] Audio pipeline step: startSystemAudioForMeeting.');
           const systemStarted = this.startSystemAudioForMeeting();
           console.log('[Main] Audio pipeline step: startMicrophoneForMeeting.');
           const micStarted = this.startMicrophoneForMeeting(this._lastRequestedInputDeviceId);
 
           return { systemStarted, micStarted };
-        })());
+        })(), () => {
+          audioInitCancelled = true;
+        });
 
-        if (!isCurrentMeeting()) {
+        if (!canContinueAudioInit()) {
           console.log('[Main] Meeting ended during audio initialization; skipping post-start services.');
           return;
         }
@@ -2671,6 +2706,15 @@ export class AppState {
   }
 
   public async endMeeting(): Promise<void> {
+    if (this._pendingCriticalTeardown) {
+      console.log('[Main] Meeting teardown already in progress; ignoring duplicate stop.');
+      return;
+    }
+    if (!this.isMeetingActive) {
+      console.log('[Main] No active meeting to end.');
+      return;
+    }
+
     console.log('[Main] Ending Meeting...');
     this._meetingGeneration++;
 
@@ -2723,7 +2767,8 @@ export class AppState {
     const ragManager = this.ragManager;
     const meetingRecorder = this.audioMeetingRecorder;
     this.audioMeetingRecorder = null;
-    this._pendingTeardown = (async () => {
+
+    const criticalTeardown = (async (): Promise<string | null> => {
       try {
         // 1. Grace window for STT trailing finals (Google/Soniox/Deepgram all
         //    reply to finalize() within 100–200ms). 250ms is conservative.
@@ -2741,7 +2786,7 @@ export class AppState {
         //    intelligenceManager.stopMeeting itself runs LLM in background.
         const meetingId = await this.intelligenceManager.stopMeeting();
 
-        // 5. RAG cleanup — same logic as before, just inside the BG IIFE.
+        // 5. Persist the recording before shutdown is allowed to continue.
         if (meetingId) {
           if (meetingRecorder) {
             const metadata = await meetingRecorder.finalize(meetingId);
@@ -2763,30 +2808,52 @@ export class AppState {
               }
             }
           }
-
-          if (ragManager) {
-            await ragManager.stopLiveIndexing();
-            console.log('[Main] Live RAG indexing stopped.');
-          }
-          await this.processCompletedMeetingForRAG(meetingId);
-          if (ragManager && !this.isMeetingActive) {
-            ragManager.deleteMeetingData('live-meeting-current');
-            console.log('[Main] JIT RAG provisional chunks cleaned up.');
-          } else if (this.isMeetingActive) {
-            console.log('[Main] New meeting started during cleanup — skipping live-meeting-current deletion.');
-          }
         } else {
           meetingRecorder?.discard();
-          if (ragManager) {
-            await ragManager.stopLiveIndexing().catch(() => {});
-            if (!this.isMeetingActive) ragManager.deleteMeetingData('live-meeting-current');
-          }
         }
+        return meetingId;
       } catch (err) {
-        console.error('[Main] Background meeting teardown failed:', err);
+        console.error('[Main] Critical meeting teardown failed:', err);
         meetingRecorder?.discard();
+        if (this.isMeetingActive) {
+          this.isMeetingActive = false;
+          this.broadcastMeetingState();
+        }
+        return null;
       }
     })();
+
+    const criticalWait = criticalTeardown.then((): void => {});
+    this._pendingCriticalTeardown = criticalWait;
+
+    const fullTeardown = (async () => {
+      const meetingId = await criticalTeardown;
+      try {
+        if (ragManager) {
+          await ragManager.stopLiveIndexing();
+          console.log('[Main] Live RAG indexing stopped.');
+        }
+
+        if (meetingId) {
+          await this.processCompletedMeetingForRAG(meetingId);
+        }
+
+        if (ragManager && !this.isMeetingActive) {
+          ragManager.deleteMeetingData('live-meeting-current');
+          console.log('[Main] JIT RAG provisional chunks cleaned up.');
+        } else if (this.isMeetingActive) {
+          console.log('[Main] New meeting started during cleanup — skipping live-meeting-current deletion.');
+        }
+      } catch (err) {
+        console.error('[Main] Optional meeting cleanup failed:', err);
+      }
+    })();
+
+    this._pendingTeardown = fullTeardown;
+    void fullTeardown.finally(() => {
+      if (this._pendingTeardown === fullTeardown) this._pendingTeardown = null;
+      if (this._pendingCriticalTeardown === criticalWait) this._pendingCriticalTeardown = null;
+    });
     // endMeeting returns NOW — the IPC handler resolves and the renderer's
     // "Stop" button transitions instantly. Total endMeeting wall-clock time
     // is now bounded by the synchronous block above (~1–5ms typical).
@@ -3080,7 +3147,8 @@ export class AppState {
 
   // Window management methods
   public setupOllamaIpcHandlers(): void {
-    ipcMain.handle('get-ollama-models', async () => {
+    ipcMain.handle('get-ollama-models', async (event) => {
+      if (!isTrustedIpcSender(event)) throw new Error('Blocked untrusted IPC sender');
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 2000); // 2s timeout for detection
@@ -3827,6 +3895,30 @@ async function initializeApp() {
 
   // 2. Wait for app to be ready
   await app.whenReady()
+
+  // Privileged windows must never navigate their preload bridge onto remote content.
+  app.on('web-contents-created', (_event, contents) => {
+    const blockUntrustedNavigation = (event: Electron.Event, targetUrl: string) => {
+      if (isTrustedRendererUrl(targetUrl)) return;
+      event.preventDefault();
+      if (isSafeExternalUrl(targetUrl)) {
+        void Promise.resolve(shell.openExternal(targetUrl)).catch((error: unknown) => {
+          console.error('[Main] Failed to open external URL:', error);
+        });
+      }
+    };
+
+    contents.on('will-navigate', blockUntrustedNavigation);
+    contents.on('will-redirect', blockUntrustedNavigation);
+    contents.setWindowOpenHandler(({ url }) => {
+      if (isSafeExternalUrl(url)) {
+        void Promise.resolve(shell.openExternal(url)).catch((error: unknown) => {
+          console.error('[Main] Failed to open external window URL:', error);
+        });
+      }
+      return { action: 'deny' };
+    });
+  });
 
   // 2a. PRE-EMPTIVE dock hide: must happen before ANY operation that causes macOS to
   // register a dock entry (app.setName, BrowserWindow creation, etc.).

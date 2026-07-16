@@ -66,7 +66,6 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
 
     // Transcript updates
     cleanupFns.push(window.electronAPI.onNativeAudioTranscript((transcript) => {
-      console.log('[QueueCommands] Transcript:', transcript)
       setTranscripts(prev => [...prev.slice(-10), transcript]) // Keep last 10
       setAudioResult(`[${transcript.speaker}] ${transcript.text}`)
     }))
@@ -78,7 +77,6 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
     }))
 
     cleanupFns.push(window.electronAPI.onSuggestionGenerated((data) => {
-      console.log('[QueueCommands] Suggestion received:', data)
       setIsSuggestionLoading(false)
       setLatestSuggestion(data.suggestion)
     }))

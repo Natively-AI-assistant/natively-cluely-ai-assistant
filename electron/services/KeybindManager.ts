@@ -1,6 +1,7 @@
 import { app, globalShortcut, Menu, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import fs from 'fs';
+import { isTrustedIpcSender } from '../utils/trustedRenderer';
 
 export interface KeybindConfig {
     id: string;
@@ -464,17 +465,20 @@ export class KeybindManager {
     }
 
     public setupIpcHandlers() {
-        ipcMain.handle('keybinds:get-all', () => {
+        ipcMain.handle('keybinds:get-all', (event) => {
+            if (!isTrustedIpcSender(event)) throw new Error('Blocked untrusted IPC sender');
             return this.getAllKeybinds();
         });
 
-        ipcMain.handle('keybinds:set', (_, id: string, accelerator: string) => {
+        ipcMain.handle('keybinds:set', (event, id: string, accelerator: string) => {
+            if (!isTrustedIpcSender(event)) throw new Error('Blocked untrusted IPC sender');
             console.log(`[KeybindManager] Set ${id} -> ${accelerator}`);
             this.setKeybind(id, accelerator);
             return true;
         });
 
-        ipcMain.handle('keybinds:reset', () => {
+        ipcMain.handle('keybinds:reset', (event) => {
+            if (!isTrustedIpcSender(event)) throw new Error('Blocked untrusted IPC sender');
             console.log('[KeybindManager] Reset defaults');
             this.resetKeybinds();
             return this.getAllKeybinds();

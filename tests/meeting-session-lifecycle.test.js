@@ -25,3 +25,32 @@ test('meeting start resets stale context and anchors timing to the Start action'
   assert.deepEqual(session.getFullUsage(), []);
   assert.deepEqual(session.getMeetingMetadata(), { title: 'current meeting' });
 });
+
+test('an old compaction cannot mutate the next meeting after reset', async () => {
+  const session = new SessionTracker();
+  let resolveSummary;
+  session.setRecapLLM({
+    generate: () => new Promise(resolve => { resolveSummary = resolve; }),
+  });
+  session.fullTranscript = Array.from({ length: 1801 }, (_, index) => ({
+    speaker: 'interviewer',
+    text: `old-${index}`,
+    timestamp: index,
+    final: true,
+  }));
+
+  const oldCompaction = session.compactTranscriptIfNeeded();
+  session.reset();
+  session.fullTranscript = Array.from({ length: 600 }, (_, index) => ({
+    speaker: 'user',
+    text: `new-${index}`,
+    timestamp: index,
+    final: true,
+  }));
+
+  resolveSummary('old meeting summary');
+  await oldCompaction;
+
+  assert.equal(session.fullTranscript.length, 600);
+  assert.deepEqual(session.transcriptEpochSummaries, []);
+});
