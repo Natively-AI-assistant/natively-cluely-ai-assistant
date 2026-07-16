@@ -1,5 +1,7 @@
 # Handoff: Natively Dev App QA And Smoke Test
 
+> Current owner checklist: see [`docs/INTERVIEW_READINESS.md`](docs/INTERVIEW_READINESS.md). The entries below are historical implementation and test notes and may describe older builds.
+
 ## Latest Status: Installed App Works, Right-Rail Fallback Confirmed - 2026-06-23
 
 ### What changed after install

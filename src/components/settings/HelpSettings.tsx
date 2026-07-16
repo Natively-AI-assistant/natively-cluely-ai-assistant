@@ -7,7 +7,7 @@ import {
     SlidersHorizontal, PointerOff, ArrowRight, LayoutGrid
 } from 'lucide-react';
 import { SiOpenai, SiGoogle } from 'react-icons/si';
-import { useShortcuts } from '../../hooks/useShortcuts';
+import { useShortcuts, type ShortcutConfig } from '../../hooks/useShortcuts';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import nativelyIcon from '../icon.png';
 
@@ -439,7 +439,7 @@ const MockPermissionsAnim = () => {
                 </div>
             </div>
             <div className="text-xs text-text-secondary text-center max-w-[280px]">
-                Natively requires Accessibility and Screen Recording permissions to analyze screen context.
+                Screen context requires Screen Recording. Interview audio also requires Microphone and System Audio Recording permissions.
             </div>
         </div>
     );
@@ -597,7 +597,7 @@ const MockProviderSelectionAnim = () => {
 
     const options = [
         { id: 'natively', label: 'Natively API', badge: '', recommended: true, desc: 'Ultra-fast low latency transcription', color: 'indigo', icon: <img src={nativelyIcon} className={`w-[14px] h-[14px] object-contain opacity-80 ${isLight ? '' : 'filter brightness-0 invert'}`} alt="Natively" /> },
-        { id: 'deepgram', label: 'Deepgram Nova-3', badge: 'Saved', recommended: false, desc: 'High-accuracy REST transcription', color: 'purple', icon: <Mic size={14} /> },
+        { id: 'deepgram', label: 'Deepgram Nova-3', badge: 'Saved', recommended: false, desc: 'High-accuracy streaming transcription', color: 'purple', icon: <Mic size={14} /> },
         { id: 'google', label: 'Google Cloud', badge: 'Saved', recommended: false, desc: 'gRPC streaming via Service Account', color: 'blue', icon: <Mic size={14} /> },
         { id: 'groq', label: 'Groq Whisper', badge: '', recommended: false, desc: 'Fast LPU whisper transcription', color: 'orange', icon: <Mic size={14} /> },
         { id: 'azure', label: 'Azure Speech', badge: '', recommended: false, desc: 'Enterprise tier transcription', color: 'teal', icon: <Mic size={14} /> },
@@ -801,11 +801,13 @@ const AccordionSection: React.FC<AccordionSectionProps> = ({ title, icon, childr
     );
 };
 
-const SetupGuide = () => {
+const SetupGuide: React.FC<{
+    shortcuts: Pick<ShortcutConfig, 'toggleVisibility' | 'takeScreenshot' | 'captureAndProcess'>;
+}> = ({ shortcuts }) => {
     const steps = [
         {
             title: 'Grant Permissions',
-            desc: 'Enable Screen Recording and Accessibility for Natively in macOS Privacy & Security.',
+            desc: 'Enable Microphone, Screen & System Audio Recording, and Accessibility for Natively in macOS Privacy & Security.',
         },
         {
             title: 'Set Up Audio',
@@ -822,9 +824,9 @@ const SetupGuide = () => {
     ];
 
     const hotkeys = [
-        { label: 'Toggle', kbd: '⌘H' },
-        { label: 'Screenshot', kbd: '⌘⇧H' },
-        { label: 'Chat', kbd: '⌘K' },
+        { label: 'Show / Hide', keys: shortcuts.toggleVisibility || ['⌘', 'B'] },
+        { label: 'Queue Screenshot', keys: shortcuts.takeScreenshot || ['⌘', 'H'] },
+        { label: 'Screenshot + Ask AI', keys: shortcuts.captureAndProcess || ['⌘', '⇧', 'Enter'] },
     ];
 
     return (
@@ -858,10 +860,14 @@ const SetupGuide = () => {
                                 {isLast && (
                                     <div className="flex items-center gap-4 mt-3 flex-wrap">
                                         {hotkeys.map((h, hi) => (
-                                            <React.Fragment key={h.kbd}>
+                                            <React.Fragment key={h.label}>
                                                 <div className="flex items-center gap-1.5">
                                                     <span className="text-[12px] text-text-secondary">{h.label}</span>
-                                                    <kbd className="font-mono text-[11px] font-semibold text-text-primary bg-bg-item-surface border border-border-subtle rounded-md px-1.5 py-0.5 leading-none">{h.kbd}</kbd>
+                                                    <span className="flex items-center gap-1">
+                                                        {h.keys.map((key, keyIndex) => (
+                                                            <kbd key={`${h.label}-${key}-${keyIndex}`} className="font-mono text-[11px] font-semibold text-text-primary bg-bg-item-surface border border-border-subtle rounded-md px-1.5 py-0.5 leading-none">{key}</kbd>
+                                                        ))}
+                                                    </span>
                                                 </div>
                                                 {hi < hotkeys.length - 1 && <span className="text-border-subtle text-[12px] select-none">·</span>}
                                             </React.Fragment>
@@ -919,7 +925,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 )}
 
-                <SetupGuide />
+                <SetupGuide shortcuts={shortcuts} />
 
                 <div className="h-10" />
                 <div className="mb-4 flex items-center gap-2 border-b border-border-subtle pb-3">
@@ -935,10 +941,10 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                             <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
                                 <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
-                                    <Mic size={14} className="text-blue-500" /> Microphone & Speaker Loopback Selection
+                                    <Mic size={14} className="text-blue-500" /> Microphone & Meeting Audio Selection
                                 </h5>
                                 <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                    Natively can capture both what you say and what you hear globally. At the top of the Audio Settings, use the Dropdowns to explicitly select your hardware Input (e.g. your physical microphone) and Output capture (what the speakers play). By default, Natively utilizes the <strong>System Default</strong>, so audio routing will automatically follow your OS preferences.
+                                    Natively captures what you say through the selected microphone and what you hear through the selected output route. In Audio Settings, choose the microphone you will use and the same output device your meeting app uses. <strong>System Default</strong> follows the current macOS audio route.
                                 </p>
                             </div>
 
@@ -974,17 +980,25 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                         <div className="flex flex-col gap-3 mt-6">
                             <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
                                 <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
-                                    <Monitor className="w-4 h-4 text-accent-primary" /> System Audio / Screen Recording
+                                    <Mic className="w-4 h-4 text-blue-500" /> Microphone
                                 </h4>
-                                <p className="text-xs opacity-90 mb-2">Provides Natively the ability to capture meeting audio and read your screen temporarily when you capture context.</p>
-                                <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; System Audio Recording / Screen Recording</p>
+                                <p className="text-xs opacity-90 mb-2">Allows Natively to capture and transcribe your side of the conversation.</p>
+                                <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; Microphone</p>
+                            </div>
+
+                            <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
+                                <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
+                                    <Monitor className="w-4 h-4 text-accent-primary" /> System Audio & Screen Recording
+                                </h4>
+                                <p className="text-xs opacity-90 mb-2">System Audio Recording captures the interviewer; Screen Recording allows screenshot context. macOS may show these in one combined panel.</p>
+                                <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; Screen & System Audio Recording</p>
                             </div>
 
                             <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
                                 <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
                                     <Command className="w-4 h-4 text-purple-500" /> Accessibility
                                 </h4>
-                                <p className="text-xs opacity-90 mb-2">Required for Natively to detect the global keyboard shortcuts below, regardless of what window is focused.</p>
+                                <p className="text-xs opacity-90 mb-2">Allows Natively's global controls to work reliably while another interview app is focused.</p>
                                 <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; Accessibility</p>
                             </div>
                         </div>
@@ -1406,8 +1420,8 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                             <Image className="w-4 h-4 text-text-primary" />
                                         </div>
                                         <div>
-                                            <div className="font-semibold text-sm text-text-primary">Capture Contextual Screenshot</div>
-                                            <div className="text-xs text-text-secondary mt-1">Takes a silent screenshot in the background, feeding the visual data to the LLM context flow.</div>
+                                            <div className="font-semibold text-sm text-text-primary">Capture Screenshot (Queue Only)</div>
+                                            <div className="text-xs text-text-secondary mt-1">Adds a screenshot to pending context. It does not ask the AI until you use Process Captured Context.</div>
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
@@ -1421,8 +1435,8 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                             <MessageSquare className="w-4 h-4 text-text-primary" />
                                         </div>
                                         <div>
-                                            <div className="font-semibold text-sm text-text-primary">Process Captured Context (Execute)</div>
-                                            <div className="text-xs text-text-secondary mt-1">Triggers Natively to analyze the captured screenshots and text from the rolling buffer.</div>
+                                            <div className="font-semibold text-sm text-text-primary">Ask AI About Queued Context</div>
+                                            <div className="text-xs text-text-secondary mt-1">Analyzes screenshots already in the queue together with the current conversation context.</div>
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
@@ -1436,8 +1450,8 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                             <Zap className="w-4 h-4 text-text-primary" />
                                         </div>
                                         <div>
-                                            <div className="font-semibold text-sm text-text-primary">Capture + Execute Instantly</div>
-                                            <div className="text-xs text-text-secondary mt-1">Captures a screenshot AND processes it in one fluid action.</div>
+                                            <div className="font-semibold text-sm text-text-primary">Capture Screenshot + Ask AI</div>
+                                            <div className="text-xs text-text-secondary mt-1">Captures the current screen and asks the AI in one step.</div>
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
