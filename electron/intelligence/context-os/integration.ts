@@ -119,6 +119,13 @@ export interface BuildTurnContractForSurfaceInput {
   userExplicitSource?: BuildTurnContractInput['userExplicitSource'];
   /** Canonical turn source decision from electron/llm/turnSourceDecision. */
   turnSourceDecision?: import('../../llm/turnSourceDecision').TurnSourceDecision | null;
+  /**
+   * Persisted source-contract allowlist. Threaded into the legacy
+   * capability issuance path so JD is granted only when the contract
+   * permits it (or the user explicitly asked for it). Empty / null =
+   * legacy behavior (grant everything the authority permits).
+   */
+  allowedExplicitSwitches?: readonly ('reference_files' | 'profile' | 'job_description' | 'transcript')[] | null;
 }
 
 function normalizeSourceAuthority(value: string | null | undefined): SourceAuthority {
@@ -162,6 +169,7 @@ export function buildTurnContractForSurface(input: BuildTurnContractForSurfaceIn
     hasLiveTranscript: input.hasLiveTranscript,
     userExplicitSource: input.userExplicitSource ?? null,
     turnSourceDecision: input.turnSourceDecision ?? null,
+    allowedExplicitSwitches: input.allowedExplicitSwitches ?? null,
   });
 }
 

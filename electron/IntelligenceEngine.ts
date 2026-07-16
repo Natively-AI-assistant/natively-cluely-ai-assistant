@@ -1072,13 +1072,60 @@ export class IntelligenceEngine extends EventEmitter {
             //      get its candidate contextBlock (projects/experience/skills).
             // We take only the FACTS (contextBlock); the orchestrator's
             // systemPromptInjection (first-person persona) is intentionally
+            // Canonical Knowledge Source gate (2026-07-16): resolve the
+            // lossless per-turn decision ONCE, before any candidate-profile
+            // fetches below. A JD-only or reference_files-only turn must
+            // never trigger the résumé orchestrator. We hoist this BEFORE
+            // the groundable-question block (line 1081) so both candidate-
+            // profile gates consult the SAME canonical decision.
+            let _wtaTurnSourceDecision:
+                import('./llm/turnSourceDecision').TurnSourceDecision | null = null;
+            try {
+                const _wtaQHoist = extractedQuestion.latestQuestion || lastInterviewerTurn || '';
+                const _wtaOrchAvail = this.llmHelper.getKnowledgeOrchestrator?.();
+                const _wtaSourceContract = (snapshotModeInfo as any)?.sourceContract ?? null;
+                if (_wtaSourceContract) {
+                    const { resolveExplicitSourceRequests: _r, resolveTurnSourceDecision: _d } = require('./intelligence/context-os/explicitSourceSwitch') as typeof import('./intelligence/context-os/explicitSourceSwitch')
+                        & { resolveTurnSourceDecision?: unknown };
+                    const _tsd = require('./llm/turnSourceDecision');
+                    const _explicitRequests = _r(String(_wtaQHoist));
+                    _wtaTurnSourceDecision = _tsd.resolveTurnSourceDecision({
+                        sourceContract: _wtaSourceContract,
+                        persistedSourceAuthority: _wtaSourceContract.sourceAuthority,
+                        explicitRequest: null,
+                        explicitRequests: _explicitRequests,
+                        availability: {
+                            hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
+                            hasProfileFacts: Boolean((_wtaOrchAvail as any)?.activeResume?.structured_data),
+                            hasJobDescription: Boolean((_wtaOrchAvail as any)?.activeJD?.structured_data),
+                            hasLiveTranscript: true,
+                            hasMeetingRag: false,
+                        },
+                    });
+                }
+            } catch { /* leave null; legacy gate runs */ }
+            // Candidate-profile gate (never-retrieve): JD-only / reference_files-
+            // only / transcript-only turns must NEVER trigger the résumé
+            // orchestrator. Default true (no decision = legacy gate below).
+            let wtaDecisionAllowsCandidateProfile = true;
+            if (_wtaTurnSourceDecision) {
+                wtaDecisionAllowsCandidateProfile = _wtaTurnSourceDecision.outcome === 'default'
+                    || _wtaTurnSourceDecision.outcome === 'explicit_granted';
+                if (_wtaTurnSourceDecision.allowedEvidenceKinds.length > 0) {
+                    wtaDecisionAllowsCandidateProfile = wtaDecisionAllowsCandidateProfile
+                        && (_wtaTurnSourceDecision.allowedEvidenceKinds.includes('profile_resume')
+                            || _wtaTurnSourceDecision.allowedEvidenceKinds.includes('projects'));
+                }
+            }
+
             // ignored so it can't fight UNIVERSAL_WHAT_TO_ANSWER_PROMPT's voice
             // rules. Negotiation/coaching are NOT pulled here — salary stays on
             // its own gated channel. Fully dynamic; resume-derived.
             let candidateProfile = '';
             try {
                 const orchestrator = this.llmHelper.getKnowledgeOrchestrator?.();
-                if (orchestrator?.isKnowledgeMode?.() && !documentGroundedCustomModeActive) {
+                if (orchestrator?.isKnowledgeMode?.() && !documentGroundedCustomModeActive
+                    && wtaDecisionAllowsCandidateProfile) {
                     const extracted = extractedQuestion;
                     // Only ground question types that resolve to the candidate's
                     // own plain facts. jd_alignment/company questions are
@@ -1229,24 +1276,78 @@ export class IntelligenceEngine extends EventEmitter {
             // 1459) can consult the SAME legacy ownership decision this block
             // computes — see that short-circuit's comment for why.
             let wtaOwnershipDecision: import('./llm/sourceOwnership').SourceOwnershipDecision | null = null;
+            // Canonical Knowledge Source gate (2026-07-16): the lossless
+            // per-turn decision is the authority for whether the candidate
+            // profile orchestrator may even RUN this turn. A JD-only
+            // decision (allowedEvidenceKinds=['profile_jd']) must NEVER
+            // trigger the résumé/prefetch path. The legacy `wtaProfileAllowed`
+            // boolean is kept for callers that consult the contract caps
+            // directly, but the candidate-profile fetch is gated on
+            // wtaDecisionAllowsCandidateProfile alone (already hoisted
+            // above so the legacy orchestrator gate can consult it).
             try {
                 const { buildCustomModeExecutionContract } = require('./llm/customModeExecutionContract');
                 const { resolveSourceOwnership } = require('./llm/sourceOwnership');
                 const { getSourceOwnerEnforcementStage } = require('./intelligence/intelligenceFlags');
                 const { buildTurnContractIfEnabled, allowsEvidence: coAllowsEvidence } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
                 const _wtaQ = extractedQuestion.latestQuestion || lastInterviewerTurn || '';
-                const _wtaHasProfile = Boolean((this.llmHelper.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data);
+                const _wtaOrchForAvail = this.llmHelper.getKnowledgeOrchestrator?.();
+                const _wtaHasProfile = Boolean((_wtaOrchForAvail as any)?.activeResume?.structured_data);
+                const _wtaHasJd = Boolean((_wtaOrchForAvail as any)?.activeJD?.structured_data);
                 const _wtaPlan = planAnswer({
                     question: String(_wtaQ),
                     source: 'what_to_answer',
                     speakerPerspective: 'interviewer',
                     activeMode: snapshotModeInfo,
                 });
-                // Evidence-execution-repair (2026-07-11): resolve the SAME
-                // per-turn explicit switch the manual-chat path resolves — see
-                // electron/intelligence/context-os/explicitSourceSwitch.ts.
-                const { resolveExplicitSourceRequest: _wtaResolveSwitch, toLegacyUserExplicitSource: _wtaToLegacySwitch } = require('./intelligence/context-os/explicitSourceSwitch');
-                const _wtaUserExplicitSource = _wtaToLegacySwitch(_wtaResolveSwitch(String(_wtaQ)));
+                // Evidence-execution-repair (2026-07-11) + canonical-gate (2026-07-16):
+                // resolve BOTH the legacy scalar AND the multi-request list so
+                // comparison turns ("compare my résumé with the JD") can grant
+                // every requested family. The multi-request list is the
+                // lossless input to the canonical decision; the scalar is the
+                // legacy adapter for callers that haven't been migrated.
+                const { resolveExplicitSourceRequest: _wtaResolveSwitch, resolveExplicitSourceRequests: _wtaResolveSwitches, toLegacyUserExplicitSource: _wtaToLegacySwitch } = require('./intelligence/context-os/explicitSourceSwitch');
+                const _wtaExplicitSwitch = _wtaResolveSwitch(String(_wtaQ));
+                const _wtaExplicitRequests = _wtaResolveSwitches(String(_wtaQ));
+                // JD folds onto the profile family at the legacy layer; the
+                // canonical decision keeps them distinct.
+                const _wtaUserExplicitSource = _wtaExplicitSwitch === 'job_description'
+                    ? 'profile'
+                    : _wtaExplicitSwitch;
+                const _wtaSourceContract = (snapshotModeInfo as any)?.sourceContract ?? null;
+                // The canonical decision is the authority for capability
+                // issuance. It is null only when no persisted contract exists
+                // (e.g. mid-boot) — the legacy path then runs.
+                const _wtaTurnSourceDecision = _wtaSourceContract
+                    ? require('./llm/turnSourceDecision').resolveTurnSourceDecision({
+                        sourceContract: _wtaSourceContract,
+                        persistedSourceAuthority: _wtaSourceContract.sourceAuthority,
+                        explicitRequest: _wtaExplicitSwitch,
+                        explicitRequests: _wtaExplicitRequests,
+                        availability: {
+                            hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
+                            hasProfileFacts: _wtaHasProfile,
+                            hasJobDescription: _wtaHasJd,
+                            hasLiveTranscript: true,
+                            hasMeetingRag: false,
+                        },
+                    })
+                    : null;
+                // Candidate-profile gate: a turn whose decision is JD-only (or
+                // transcript-only / reference_files) must NEVER trigger the
+                // résumé orchestrator. The boolean is the OR of: the decision
+                // is null (legacy fallback allowed) OR the decision explicitly
+                // grants profile_resume / projects.
+                if (_wtaTurnSourceDecision) {
+                    wtaDecisionAllowsCandidateProfile =
+                        _wtaTurnSourceDecision.outcome === 'default'
+                        || _wtaTurnSourceDecision.outcome === 'explicit_granted';
+                    if (_wtaTurnSourceDecision.allowedEvidenceKinds.length > 0) {
+                        wtaDecisionAllowsCandidateProfile = wtaDecisionAllowsCandidateProfile
+                            && (_wtaTurnSourceDecision.allowedEvidenceKinds.includes('profile_resume')
+                                || _wtaTurnSourceDecision.allowedEvidenceKinds.includes('projects'));
+                    }
+                }
                 const _wtaContract = buildCustomModeExecutionContract({
                     question: String(_wtaQ),
                     streamRoute: 'wta_live',
@@ -1266,6 +1367,7 @@ export class IntelligenceEngine extends EventEmitter {
                     // docs/context-os/real-custom-mode-repair/06_ROOT_CAUSE_REPORT.md.
                     persistedSourceAuthority: (snapshotModeInfo as any)?.sourceContract?.sourceAuthority ?? null,
                     userExplicitSource: _wtaUserExplicitSource,
+                    turnSourceDecision: _wtaTurnSourceDecision,
                 });
                 const _wtaOwn = resolveSourceOwnership({
                     question: String(_wtaQ),
@@ -1273,6 +1375,7 @@ export class IntelligenceEngine extends EventEmitter {
                     profileContextPolicy: _wtaPlan.profileContextPolicy,
                     answerType: _wtaPlan.answerType,
                     hasProfileFacts: _wtaHasProfile,
+                    turnSourceDecision: _wtaTurnSourceDecision,
                 });
                 wtaOwnershipDecision = _wtaOwn;
                 // Staged enforcement (plan §6): `off` restores the legacy
@@ -1299,21 +1402,20 @@ export class IntelligenceEngine extends EventEmitter {
                     hasProfileFacts: _wtaHasProfile,
                     hasLiveTranscript: true,
                     userExplicitSource: _wtaUserExplicitSource,
+                    turnSourceDecision: _wtaTurnSourceDecision,
                 });
                 if (_wtaEarlyContract) {
-                    // Evidence-execution-repair (2026-07-11): this gate previously
-                    // checked only profile_resume/profile_project, never
-                    // profile_jd — the identical gap fixed on the manual-chat
-                    // path (ipcHandlers.ts _contractAllowsProfile). A strictly
-                    // reference_files_only WTA turn could still leak JD content
-                    // through this exact hole.
-                    const contractAllowsProfileEarly = coAllowsEvidence(_wtaEarlyContract, 'profile_resume')
-                        || coAllowsEvidence(_wtaEarlyContract, 'profile_project')
-                        || coAllowsEvidence(_wtaEarlyContract, 'profile_jd');
-                    wtaProfileAllowed = wtaProfileAllowed && contractAllowsProfileEarly;
+                    // Candidate-profile (NOT JD) gate. A JD-only decision may
+                    // legitimately grant profile_jd, but never profile_resume
+                    // or projects — so the orchestrator prefetch MUST stay
+                    // silent. This is the new (correct) narrowing vs the
+                    // historical _contractAllowsProfile shape that leaked JD.
+                    const contractAllowsCandidateProfileEarly = coAllowsEvidence(_wtaEarlyContract, 'profile_resume')
+                        || coAllowsEvidence(_wtaEarlyContract, 'profile_project');
+                    wtaProfileAllowed = wtaProfileAllowed && contractAllowsCandidateProfileEarly;
                 }
             } catch { /* keep legacy doc-grounded guard */ }
-            if (!candidateProfile && wtaProfileAllowed) {
+            if (!candidateProfile && wtaProfileAllowed && wtaDecisionAllowsCandidateProfile) {
                 try {
                     const orch = this.llmHelper.getKnowledgeOrchestrator?.();
                     const resume = (orch as any)?.activeResume?.structured_data ?? null;

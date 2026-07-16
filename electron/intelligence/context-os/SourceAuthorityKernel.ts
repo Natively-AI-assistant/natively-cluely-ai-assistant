@@ -57,6 +57,15 @@ export interface BuildTurnContractInput {
   /** Explicit user source override ("answer from my resume instead"). */
   userExplicitSource?: 'reference_files' | 'profile' | 'transcript' | null;
   /**
+   * The persisted ModeSourceContract.allowedExplicitSwitches — only checked
+   * on the legacy (no-decision) capability path. When the user did NOT
+   * explicitly request profile OR JD, JD is granted only if the persisted
+   * allowlist includes 'job_description'. Closes the historical
+   * `profile_jd: evidence` always-issued leak for a mode whose user
+   * deselected the JD toggle.
+   */
+  allowedExplicitSwitches?: readonly ('reference_files' | 'profile' | 'job_description' | 'transcript')[] | null;
+  /**
    * Lossless canonical decision from electron/llm/turnSourceDecision.
    * When supplied, capability issuance reads from `decision.allowedEvidenceKinds`
    * instead of re-deriving owner → caps (the historical leak path that
@@ -311,10 +320,19 @@ export class SourceAuthorityKernel {
         caps.push(capability('okf_document_card', 'evidence', decision.reasonCode, input.activeModeId));
       } else if (kind === 'profile_resume') {
         caps.push(capability('profile_resume', 'evidence', decision.reasonCode));
+        // OKF profile cards are sourced from profile_resume text. A JD-only
+        // decision does NOT grant profile_resume, so OKF profile cards
+        // are not granted either (no leakage of card-derived candidate
+        // facts into a JD answer).
+        caps.push(capability('okf_profile_card', 'evidence', decision.reasonCode));
       } else if (kind === 'profile_jd') {
         caps.push(capability('profile_jd', 'evidence', decision.reasonCode));
+        // Profile JD facts do NOT generate OKF profile cards — JD content
+        // is structurally role requirements, not candidate claims, and
+        // would mislead any downstream profile-card consumer.
       } else if (kind === 'projects') {
         caps.push(capability('profile_project', 'evidence', decision.reasonCode));
+        caps.push(capability('okf_profile_card', 'evidence', decision.reasonCode));
       } else if (kind === 'live_transcript') {
         caps.push(capability('live_transcript', 'evidence', decision.reasonCode));
       } else if (kind === 'meeting_rag') {
@@ -368,8 +386,17 @@ export class SourceAuthorityKernel {
       caps.push(capability('okf_profile_card', 'evidence', 'profile OKF cards support profile answer'));
       // Invariant 7: the JD proves ROLE REQUIREMENTS, not candidate claims —
       // granted as evidence but validators must keep role_requirement facts
-      // out of candidate_experience claims (Phase 5/13).
-      caps.push(capability('profile_jd', 'evidence', 'JD supports role-fit framing; JD facts are role requirements, never candidate claims'));
+      // out of candidate_experience claims (Phase 5/13). Only grant JD
+      // when the persisted allowlist permits it OR the user explicitly
+      // asked for JD via userExplicitSource. Closes the historical leak
+      // where every profile-mode turn got JD evidence by default.
+      const jdPermittedByContract = !input.allowedExplicitSwitches
+        || input.allowedExplicitSwitches.length === 0
+        || input.allowedExplicitSwitches.includes('job_description');
+      if (jdPermittedByContract || input.userExplicitSource === 'profile') {
+        caps.push(capability('profile_jd', 'evidence',
+          'JD supports role-fit framing; JD facts are role requirements, never candidate claims'));
+      }
       caps.push(capability('profile_persona', 'style', 'persona is style only'));
       caps.push(capability('custom_profile_notes', 'evidence', 'custom notes are user-provided weak profile context'));
       if (input.hasLiveTranscript) {
@@ -388,10 +415,17 @@ export class SourceAuthorityKernel {
 
     if (sourceOwner === 'mixed') {
       // Strict mixed: profile answers candidate-side questions; transcript
-      // provides question context. Mixed does NOT mean "everything".
+      // provides question context. Mixed does NOT mean "everything". JD
+      // is granted only when the contract permits or the user explicitly
+      // asked for it (same gate as the profile branch above).
       caps.push(capability('profile_resume', 'evidence', 'profile can answer candidate-side question'));
       caps.push(capability('profile_project', 'evidence', 'profile project evidence allowed'));
-      caps.push(capability('profile_jd', 'evidence', 'JD supports target-role framing only'));
+      const jdPermittedByContract = !input.allowedExplicitSwitches
+        || input.allowedExplicitSwitches.length === 0
+        || input.allowedExplicitSwitches.includes('job_description');
+      if (jdPermittedByContract || input.userExplicitSource === 'profile') {
+        caps.push(capability('profile_jd', 'evidence', 'JD supports target-role framing only'));
+      }
       caps.push(capability('profile_persona', 'style', 'persona is style only'));
       if (input.hasLiveTranscript) {
         caps.push(capability('live_transcript', 'evidence', 'transcript is a peer source in mixed ownership'));
