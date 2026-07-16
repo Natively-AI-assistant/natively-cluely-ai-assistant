@@ -22,6 +22,7 @@ import {
   SAFE_DOCUMENT_MAX_BYTES,
 } from './SafeDocumentTextExtractor';
 
+// Retain the Modes-facing exports while sharing one document-format contract.
 export const MODE_REFERENCE_FILE_EXTENSIONS = SAFE_DOCUMENT_EXTENSIONS;
 export const MODE_REFERENCE_FILE_MAX_BYTES = SAFE_DOCUMENT_MAX_BYTES;
 
