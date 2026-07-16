@@ -64,6 +64,25 @@ export interface CustomModeExecutionContract {
 
   // Source policy
   sourceAuthority: SourceAuthority;
+  /**
+   * How `sourceAuthority` was determined this turn — observability field
+   * (Knowledge Source canonical-gate repair, 2026-07-16):
+   *   - 'persisted' = came directly from the mode's persisted
+   *     ModeSourceContract (Knowledge Source UI selection or per-template
+   *     default seed). This is the desired, audited path.
+   *   - 'legacy_fallback' = no persisted contract reachable (or the caller
+   *     didn't thread it through); the legacy heuristic chain in
+   *     `buildCustomModeExecutionContract` inferred an authority from live
+   *     signals. Surfaces in `[SOURCE-ARBITER]` telemetry so a regression
+   *     where persistedSourceAuthority silently stops reaching the call site
+   *     becomes visible instead of silently flipping mode behavior. Not used
+   *     as a security boundary itself — the contract's allowedSources are
+   *     still authoritative.
+   *   - 'canonical_decision' = the lossless TurnSourceDecision was supplied;
+   *     its allowedEvidenceKinds fully drove allowedSources/forbiddenSources,
+   *     and `sourceAuthority` mirrors the decision's owner.
+   */
+  sourceAuthorityOrigin: 'persisted' | 'legacy_fallback' | 'canonical_decision';
   allowedSources: SourceKind[];
   forbiddenSources: SourceKind[];
   referentOnlySources: SourceKind[];
@@ -218,6 +237,19 @@ export function buildCustomModeExecutionContract(input: ContractBuildInput): Cus
     }
     return 'ask_if_ambiguous';
   })();
+
+  // Knowledge Source canonical-gate observability (2026-07-16): record
+  // WHETHER the sourceAuthority came from the persisted contract, the
+  // lossless canonical decision, or the legacy heuristic chain. Surfaced
+  // via `logArbitratedContract` so a regression where the persisted value
+  // stops reaching this call site becomes visible in telemetry rather than
+  // silently flipping mode behavior.
+  const sourceAuthorityOrigin: 'persisted' | 'legacy_fallback' | 'canonical_decision' =
+    turnSourceDecision
+      ? 'canonical_decision'
+      : persistedSourceAuthority
+        ? 'persisted'
+        : 'legacy_fallback';
 
   // 2. Determine allowed / forbidden / referent-only sources
   const allowed = new Set<SourceKind>();
@@ -400,6 +432,7 @@ export function buildCustomModeExecutionContract(input: ContractBuildInput): Cus
     answerType: answerType ?? 'unknown',
     streamRoute,
     sourceAuthority,
+    sourceAuthorityOrigin,
     allowedSources: Array.from(allowed).sort(),
     forbiddenSources: Array.from(forbidden).sort(),
     referentOnlySources: Array.from(referentOnly).sort(),
@@ -422,6 +455,7 @@ function hashContract(c: Omit<CustomModeExecutionContract, 'contractHash'>): str
     modeId: c.modeId,
     answerType: c.answerType,
     sourceAuthority: c.sourceAuthority,
+    sourceAuthorityOrigin: c.sourceAuthorityOrigin,
     allowedSources: c.allowedSources,
     forbiddenSources: c.forbiddenSources,
     evidenceRequired: c.evidenceRequired,
@@ -454,6 +488,7 @@ export function logArbitratedContract(contract: CustomModeExecutionContract, que
     answerType: contract.answerType,
     streamRoute: contract.streamRoute,
     sourceAuthority: contract.sourceAuthority,
+    sourceAuthorityOrigin: contract.sourceAuthorityOrigin,
     allowedSources: contract.allowedSources,
     forbiddenSources: contract.forbiddenSources,
     referentOnlySources: contract.referentOnlySources,

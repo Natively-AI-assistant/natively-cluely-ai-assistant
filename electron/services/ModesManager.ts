@@ -489,9 +489,38 @@ export class ModesManager {
 
     public updateMode(id: string, updates: { name?: string; templateType?: ModeTemplateType; customContext?: string; sourceContract?: ModeSourceContract }): void {
         const { sourceContract, ...rest } = updates;
+        // Knowledge Source canonical-gate repair (2026-07-16): the renderer can
+        // change a mode's templateType AFTER creation (PI v3 W7). The mode's
+        // persisted ModeSourceContract was seeded by `createMode(...)` for the
+        // ORIGINAL template — silently keeping it after a template switch
+        // produces the exact failure reported by the user: a mode named
+        // "Technical Interview" with `sourceAuthority: 'reference_files_primary'`
+        // and `forbiddenSources: [profile_resume, profile_jd, ...]`. Fix: when
+        // templateType actually changes AND the existing contract is a system
+        // seed (`default_new_mode`), re-seed to the new template's default
+        // BEFORE persisting, so the mode's Knowledge Source policy matches its
+        // current template. `user_selected` and `migrated_from_prompt`
+        // contracts are NEVER overwritten — those are authoritative user/heuristic
+        // choices that survive template changes (matches the existing
+        // `isTemplateAwareSeed` invariant at `getOrMigrateSourceContract`).
+        let resolvedSourceContract: ModeSourceContract | undefined = sourceContract;
+        if (updates.templateType !== undefined && !sourceContract) {
+            const current = this.resolveMode(id);
+            if (current && current.templateType !== updates.templateType) {
+                if (current.sourceContract?.origin === 'default_new_mode') {
+                    resolvedSourceContract = defaultSourceContractForNewMode(updates.templateType);
+                }
+                // user_selected / migrated_from_prompt survive template change.
+                // Missing sourceContract on a pre-fix mode → defer to the
+                // getOrMigrateSourceContract self-heal (which migrates on next
+                // read), preserving backward compatibility with older modes.
+            }
+        }
         DatabaseManager.getInstance().updateMode(id, {
             ...rest,
-            ...(sourceContract !== undefined ? { sourceContractJson: serializeModeSourceContract(sourceContract) } : {}),
+            ...(resolvedSourceContract !== undefined
+                ? { sourceContractJson: serializeModeSourceContract(resolvedSourceContract) }
+                : {}),
         });
         this.invalidateActiveModeCache();
     }
@@ -586,13 +615,37 @@ export class ModesManager {
         // contract (the user's explicit choice); only `migrated_from_prompt`
         // contracts carry a migrationRevision and are eligible.
         const isTemplateAwareSeed = mode.sourceContract?.origin === 'default_new_mode'
-            && mode.templateType !== 'general';
+            && (mode.sourceContract.seededForTemplateType === mode.templateType
+                || (!mode.sourceContract.seededForTemplateType && mode.templateType !== 'general'));
         const staleMigration = mode.sourceContract?.origin === 'migrated_from_prompt'
             && (mode.sourceContract.migrationRevision ?? 1) < CURRENT_MIGRATION_REVISION;
+        // Stale-seed detection (Knowledge Source canonical-gate repair, 2026-07-16):
+        // a default_new_mode contract whose seededForTemplateType differs from the
+        // mode's current templateType was created for the wrong template (someone
+        // updated templateType without updating the contract — a direct-DB or
+        // pre-fix code path). Force a re-seed so the persisted authority matches
+        // the active template. This is the defense-in-depth companion to
+        // `updateMode`'s re-seed, catching paths the renderer-side update bypasses.
+        const staleSeedForCurrentTemplate = mode.sourceContract?.origin === 'default_new_mode'
+            && mode.sourceContract.seededForTemplateType !== undefined
+            && mode.sourceContract.seededForTemplateType !== mode.templateType;
         const needsMigration = !mode.sourceContract
             || (mode.sourceContract.origin === 'default_new_mode' && !isTemplateAwareSeed && (hasCustomPrompt || hasReferenceFiles))
-            || staleMigration;
+            || staleMigration
+            || staleSeedForCurrentTemplate;
         if (!needsMigration) return mode.sourceContract!;
+        // Stale-seed path (Knowledge Source canonical-gate repair, 2026-07-16):
+        // when the persisted default_new_mode seed was built for a DIFFERENT
+        // template than the mode's current templateType, re-seed with the
+        // correct per-template default. `migrateSourceContractFromPrompt`
+        // doesn't know about the template dimension (it only sees hasRefFiles
+        // + hasProfileFacts), so it's the wrong tool here — it would collapse
+        // to `ask_if_ambiguous` and lose the user's template intent.
+        if (staleSeedForCurrentTemplate) {
+            const reseeded = defaultSourceContractForNewMode(mode.templateType);
+            this.updateMode(mode.id, { sourceContract: reseeded });
+            return reseeded;
+        }
         // Profile-facts availability is not known to ModesManager (it lives in
         // KnowledgeOrchestrator/profile services); migration only needs to
         // distinguish "has files" from "no files" for its decision tree — see

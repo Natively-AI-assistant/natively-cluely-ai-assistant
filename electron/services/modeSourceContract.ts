@@ -40,6 +40,21 @@ export type ModeSourceAuthority =
   | 'general_mixed'
   | 'ask_if_ambiguous';
 
+/**
+ * Built-in mode template types. Mirrors `ModeTemplateType` in
+ * `electron/services/ModesManager.ts`. Kept as a SEPARATE type here so
+ * `modeSourceContract.ts` has no ModesManager dependency (the contract is a
+ * pure data type that must remain importable from lightweight contexts).
+ */
+export type ContractTemplateType =
+  | 'general'
+  | 'looking-for-work'
+  | 'sales'
+  | 'recruiting'
+  | 'team-meet'
+  | 'lecture'
+  | 'technical-interview';
+
 export type ModeConflictPolicy =
   | 'reference_files_win'
   | 'profile_wins'
@@ -77,6 +92,19 @@ export interface ModeSourceContract {
    * the migration would compute has been corrected.
    */
   migrationRevision?: number;
+  /**
+   * Which `templateType` this contract was SEEDED for, for
+   * `origin: 'default_new_mode'` only. Defense-in-depth self-heal field
+   * (Knowledge Source canonical-gate repair, 2026-07-16): if a mode's
+   * templateType is later changed via the dropdown without the contract
+   * being re-seeded (e.g. a code path that bypasses `updateMode`), the
+   * persisted authority would silently remain the OLD template's default.
+   * `getOrMigrateSourceContract` uses this field to detect that mismatch
+   * and re-seed on next read. `user_selected` and `migrated_from_prompt`
+   * contracts carry this as `undefined` (they're authoritative regardless
+   * of template).
+   */
+  seededForTemplateType?: ContractTemplateType;
 }
 
 /**
@@ -161,7 +189,25 @@ export function defaultSourceContractForNewMode(
       ? { allowPriorAssistantFacts: false, allowPriorAssistantReferents: true, allowHindsight: false }
       : { allowPriorAssistantFacts: true, allowPriorAssistantReferents: true, allowHindsight: true },
     origin: 'default_new_mode',
+    // Defense-in-depth self-heal: record which templateType this seed was
+    // built for so getOrMigrateSourceContract can detect a stale seed after
+    // the renderer later switches the mode's templateType via the dropdown
+    // (PI v3 W7). Only populated for `default_new_mode`; `user_selected` and
+    // `migrated_from_prompt` carry undefined (they're authoritative
+    // regardless of template).
+    seededForTemplateType: isContractTemplateType(templateType) ? templateType : undefined,
   };
+}
+
+/** Type-guard narrowing a string to a known ContractTemplateType. */
+function isContractTemplateType(s: string | undefined): s is ContractTemplateType {
+  return s === 'general'
+    || s === 'looking-for-work'
+    || s === 'sales'
+    || s === 'recruiting'
+    || s === 'team-meet'
+    || s === 'lecture'
+    || s === 'technical-interview';
 }
 
 /**

@@ -257,8 +257,24 @@ export class SourceAuthorityKernel {
         return input.hasReferenceFiles ? 'reference_files' : 'clarify';
 
       case 'profile_only':
+        // Canonical Knowledge Source agreement (2026-07-16): the kernel and
+        // the legacy `resolveSourceOwnership` resolver must agree on which
+        // source owns each authority. Legacy `sourceOwnership.ts`'s
+        // `profile_only` case treats `profileAllowed: true` regardless of
+        // `hasProfileFacts` — there is exactly one possible owner by
+        // construction of the authority, so clarifying would be a source-
+        // ownership question with nothing to disambiguate between. When
+        // facts are not loaded, the *retrieval* layer naturally returns empty
+        // (a no-evidence answer / refusal), not a source-ownership
+        // clarification. The two failure modes must not be conflated.
+        return 'profile';
+
       case 'profile_plus_transcript':
-        return input.hasProfileFacts ? 'profile' : 'clarify';
+        // Mirrors `sourceOwnership.ts` which treats profile_plus_transcript
+        // as `owner: 'mixed'` (profile + transcript are both valid owners).
+        // Never clarify — the authority itself names both valid owners;
+        // there is nothing ambiguous to ask the user about.
+        return 'mixed';
 
       case 'transcript_only':
         return input.hasLiveTranscript ? 'transcript' : 'clarify';

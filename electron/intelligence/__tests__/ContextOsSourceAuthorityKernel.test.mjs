@@ -101,15 +101,29 @@ test('profile_only: profile owns; reference files ABSENT; persona is style-only'
   assert.equal(c.conflictPolicy, 'profile_wins');
 });
 
-test('profile_plus_transcript: transcript referent-only (interviewer question, not candidate facts)', () => {
+test('profile_plus_transcript: mixed ownership — profile is evidence, transcript is peer evidence', () => {
+  // Knowledge Source canonical-gate repair (2026-07-16): profile_plus_transcript
+  // now resolves to sourceOwner='mixed' (matches legacy resolveSourceOwnership).
+  // Both profile and transcript are valid owners; the kernel permits BOTH
+  // as evidence. The retrieval layer (orchestrator gate) is what filters
+  // out the transcript when the question is purely candidate-directed —
+  // the kernel contract permits it, which is the conservative choice.
   const c = build({ sourceAuthority: 'profile_plus_transcript', question: 'What are my strongest skills?' });
-  assert.equal(c.sourceOwner, 'profile');
-  assert.equal(authorityOf(c, 'live_transcript'), 'referent_only');
+  assert.equal(c.sourceOwner, 'mixed');
+  assert.equal(authorityOf(c, 'profile_resume'), 'evidence');
+  assert.equal(authorityOf(c, 'live_transcript'), 'evidence');
 });
 
-test('profile mode without profile facts → clarify', () => {
+test('profile mode without profile facts: never clarifies — retrieval layer handles empty', () => {
+  // Knowledge Source canonical-gate repair (2026-07-16): profile_only is
+  // never ambiguous — the authority itself names the only possible owner.
+  // With no facts loaded the kernel still resolves sourceOwner='profile';
+  // the retrieval layer naturally returns empty, surfacing as a no-evidence
+  // answer / refusal rather than a source-ownership clarification question
+  // (which would have nothing to clarify between).
   const c = build({ sourceAuthority: 'profile_only', hasProfileFacts: false });
-  assert.equal(c.sourceOwner, 'clarify');
+  assert.equal(c.sourceOwner, 'profile');
+  assert.notEqual(c.sourceOwner, 'clarify');
 });
 
 // ── transcript_only ─────────────────────────────────────────────────────────

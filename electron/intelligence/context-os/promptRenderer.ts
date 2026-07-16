@@ -8,6 +8,7 @@
 
 import type { TurnContextContract } from './types';
 import type { EvidencePack } from './evidencePack';
+import { buildRenderedEvidenceManifest, type RenderedEvidenceManifest } from './renderedEvidenceManifest';
 
 export function escapeXml(value: string): string {
   return String(value ?? '')
@@ -40,16 +41,23 @@ export function renderContractForPrompt(contract: TurnContextContract): string {
  * Referent-only items render in a separate <referent_context> element so the
  * model can resolve pronouns without being handed them as facts.
  */
-export function renderEvidencePackForPrompt(pack: EvidencePack): string {
+export interface RenderedEvidencePack {
+  prompt: string;
+  manifest: RenderedEvidenceManifest;
+}
+
+/** Render factual XML and its manifest from the same evidence-item loop. */
+export function renderEvidencePackWithManifest(pack: EvidencePack): RenderedEvidencePack {
+  const manifest = buildRenderedEvidenceManifest(pack);
   if (pack.answerPolicy === 'ask_clarification') {
-    return '<evidence_pack answer_policy="ask_clarification" />';
+    return { prompt: '<evidence_pack answer_policy="ask_clarification" />', manifest };
   }
 
   const factual = pack.items.filter((i) => i.authority === 'evidence');
   const referent = pack.items.filter((i) => i.authority === 'referent_only');
 
   if (factual.length === 0 && referent.length === 0) {
-    return '<evidence_pack answer_policy="refuse_insufficient_evidence" />';
+    return { prompt: '<evidence_pack answer_policy="refuse_insufficient_evidence" />', manifest };
   }
 
   const lines: string[] = [
@@ -75,7 +83,11 @@ export function renderEvidencePackForPrompt(pack: EvidencePack): string {
   }
 
   lines.push('</evidence_pack>');
-  return lines.join('\n');
+  return { prompt: lines.join('\n'), manifest };
+}
+
+export function renderEvidencePackForPrompt(pack: EvidencePack): string {
+  return renderEvidencePackWithManifest(pack).prompt;
 }
 
 /**

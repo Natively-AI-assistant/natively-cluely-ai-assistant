@@ -55,10 +55,16 @@ test('doc-grounded WTA: persona, custom notes, hindsight, prior claims all forbi
   }
 });
 
-test('interview WTA: profile allowed; transcript is referent-only (interviewer question)', () => {
+test('interview WTA: profile allowed; transcript is a peer evidence source in mixed mode', () => {
+  // Knowledge Source canonical-gate repair (2026-07-16): profile_plus_transcript
+  // resolves to sourceOwner='mixed' (mirrors legacy resolveSourceOwnership).
+  // In mixed mode the transcript is a peer evidence source, not just a
+  // referent. The retrieval layer still rejects the transcript when the
+  // question is purely candidate-directed (the canonical answer-types
+  // orchestrator gate handles that), but the kernel contract permits it.
   const c = wtaContract({ sourceAuthority: 'profile_plus_transcript', question: 'Tell me about your best project.' });
   assert.equal(co.allowsEvidence(c, 'profile_resume'), true);
-  assert.equal(co.isReferentOnly(c, 'live_transcript'), true);
+  assert.equal(co.allowsEvidence(c, 'live_transcript'), true);
 });
 
 test('WTA prior assistant facts are denied for EVERY authority', () => {

@@ -146,11 +146,15 @@ const MATRIX = [
   },
 
   // ── interview/profile mode ───────────────────────────────────────────────
+  //
+  // Knowledge Source canonical-gate repair (2026-07-16): `profile_plus_transcript`
+  // now resolves to sourceOwner='mixed' (mirrors legacy resolveSourceOwnership).
+  // Profile evidence is still the primary owner; transcript is the peer.
   {
     name: 'interview: what is my best project → profile, candidate_project',
     mode: 'interview',
     question: 'What is my best project?',
-    expectOwner: 'profile',
+    expectOwner: 'mixed',
     expectProperty: 'candidate_project',
     expectAction: 'answer',
     forbidden: ['mode_reference_file', 'mode_reference_chunk', 'okf_document_card', 'hindsight_memory'],
@@ -160,7 +164,7 @@ const MATRIX = [
     name: 'interview: what are my strongest skills → profile, candidate_experience',
     mode: 'interview',
     question: 'What are my strongest skills?',
-    expectOwner: 'profile',
+    expectOwner: 'mixed',
     expectProperty: 'candidate_experience',
     forbiddenRetrievers: ['mode'],
   },
@@ -168,7 +172,7 @@ const MATRIX = [
     name: 'interview: why am I fit for this role → profile owner',
     mode: 'interview',
     question: 'Why am I a good fit for this role?',
-    expectOwner: 'profile',
+    expectOwner: 'mixed',
     expectProperty: 'candidate_experience',
     forbiddenRetrievers: ['mode'],
   },
@@ -176,7 +180,7 @@ const MATRIX = [
     name: 'interview: what is my current status → profile, candidate_identity',
     mode: 'interview',
     question: 'What is my current status?',
-    expectOwner: 'profile',
+    expectOwner: 'mixed',
     expectProperty: 'candidate_identity',
     forbiddenRetrievers: ['mode'],
   },
@@ -184,7 +188,7 @@ const MATRIX = [
     name: 'interview: my experience with ROS → profile owner (uploaded thesis must not answer)',
     mode: 'interview',
     question: 'What is my experience with ROS?',
-    expectOwner: 'profile',
+    expectOwner: 'mixed',
     expectProperty: 'candidate_experience',
     forbidden: ['mode_reference_file', 'mode_reference_chunk'],
     forbiddenRetrievers: ['mode'],
