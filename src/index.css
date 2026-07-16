@@ -524,6 +524,10 @@ body {
   border-bottom: 1px solid var(--overlay-border-soft);
 }
 
+.interview-workspace-grid--answer-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .interview-answer-panel {
   min-height: 0;
 }

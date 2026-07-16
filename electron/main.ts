@@ -2,6 +2,7 @@ import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPref
 import path from "path"
 import fs from "fs"
 import { autoUpdater } from "electron-updater"
+import { formatSafeLogArgs } from './utils/safeLog'
 if (!app.isPackaged) {
   require('dotenv').config();
 }
@@ -12,11 +13,11 @@ process.stdout?.on?.('error', () => { });
 process.stderr?.on?.('error', () => { });
 
 process.on('uncaughtException', (err) => {
-  logToFile('[CRITICAL] Uncaught Exception: ' + (err.stack || err.message || err));
+  logToFile('[CRITICAL] Uncaught Exception: ' + formatSafeLogArgs([err]));
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  logToFile('[CRITICAL] Unhandled Rejection at: ' + promise + ' reason: ' + (reason instanceof Error ? reason.stack : reason));
+  logToFile('[CRITICAL] Unhandled Rejection: ' + formatSafeLogArgs([reason, promise]));
 });
 
 // CQ-04 fix: do NOT call app.getPath() at module load time.
@@ -126,7 +127,7 @@ function getMacScreenCaptureStatus(): 'granted' | 'denied' | 'not-determined' | 
 }
 
 console.log = (...args: any[]) => {
-  const msg = args.map(a => (a instanceof Error) ? a.stack || a.message : (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+  const msg = formatSafeLogArgs(args);
   logToFile('[LOG] ' + msg);
   try {
     originalLog.apply(console, args);
@@ -134,7 +135,7 @@ console.log = (...args: any[]) => {
 };
 
 console.warn = (...args: any[]) => {
-  const msg = args.map(a => (a instanceof Error) ? a.stack || a.message : (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+  const msg = formatSafeLogArgs(args);
   logToFile('[WARN] ' + msg);
   try {
     originalWarn.apply(console, args);
@@ -142,7 +143,7 @@ console.warn = (...args: any[]) => {
 };
 
 console.error = (...args: any[]) => {
-  const msg = args.map(a => (a instanceof Error) ? a.stack || a.message : (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+  const msg = formatSafeLogArgs(args);
   logToFile('[ERROR] ' + msg);
   try {
     originalError.apply(console, args);
@@ -263,6 +264,7 @@ export class AppState {
   // before booting a new session so the shared STT instances are not torn down
   // mid-meeting by a stale teardown task.
   private _pendingTeardown: Promise<void> | null = null;
+  private _meetingGeneration = 0;
   private _isQuitting: boolean = false;
   private _quitCleanupStarted: boolean = false;
   private _gracefulQuitPromise: Promise<void> | null = null;
@@ -548,7 +550,7 @@ export class AppState {
     }
 
     if (this._pendingTeardown) {
-      await this.withTimeout(this._pendingTeardown, 3500, 'Meeting teardown during quit');
+      await this.withTimeout(this._pendingTeardown, 6000, 'Meeting teardown during quit');
       this._pendingTeardown = null;
     }
 
@@ -1050,13 +1052,12 @@ export class AppState {
         return;
       }
 
-      const preview = segment.text.length > 120
-        ? `${segment.text.slice(0, 117)}...`
-        : segment.text;
-      console.log(
-        `[Main] STT transcript (${speaker}) ${segment.isFinal ? 'final' : 'interim'} ` +
-        `conf=${segment.confidence?.toFixed?.(2) ?? segment.confidence}: "${preview}"`
-      );
+      if (this._verboseLogging) {
+        console.log(
+          `[Main][debug] STT transcript (${speaker}) ${segment.isFinal ? 'final' : 'interim'} ` +
+          `chars=${segment.text.length} conf=${segment.confidence?.toFixed?.(2) ?? segment.confidence}`
+        );
+      }
 
       this.intelligenceManager.handleTranscript({
         speaker: speaker,
@@ -2568,6 +2569,8 @@ export class AppState {
       // dialog itself when it first attempts to access screen content.
     }
 
+    const meetingGeneration = ++this._meetingGeneration;
+    const isCurrentMeeting = () => this.isMeetingActive && this._meetingGeneration === meetingGeneration;
     this.isMeetingActive = true;
     this.broadcastMeetingState()
     this.audioMeetingRecorder = new AudioMeetingRecorder(app.getPath('userData'));
@@ -2608,7 +2611,7 @@ export class AppState {
       // BUG-02 fix: a fast start→stop sequence can call endMeeting() before
       // this callback fires, leaving isMeetingActive=false. If that happened,
       // do NOT boot the audio pipeline — it would run forever with no stop signal.
-      if (!this.isMeetingActive) {
+      if (!isCurrentMeeting()) {
         console.warn('[Main] Meeting was cancelled before audio pipeline could start — aborting init.');
         return;
       }
@@ -2618,12 +2621,15 @@ export class AppState {
           if (metadata?.audio) {
             console.log('[Main] Audio pipeline step: reconfigureAudio.');
             await this.reconfigureAudio(metadata.audio.inputDeviceId, metadata.audio.outputDeviceId);
+            if (!isCurrentMeeting()) return { systemStarted: false, micStarted: false };
           }
 
           // LAZY INIT: Ensure pipeline is ready (if not reconfigured above)
+          if (!isCurrentMeeting()) return { systemStarted: false, micStarted: false };
           console.log('[Main] Audio pipeline step: setupSystemAudioPipeline.');
           this.setupSystemAudioPipeline();
 
+          if (!isCurrentMeeting()) return { systemStarted: false, micStarted: false };
           console.log('[Main] Audio pipeline step: startSystemAudioForMeeting.');
           const systemStarted = this.startSystemAudioForMeeting();
           console.log('[Main] Audio pipeline step: startMicrophoneForMeeting.');
@@ -2631,6 +2637,11 @@ export class AppState {
 
           return { systemStarted, micStarted };
         })());
+
+        if (!isCurrentMeeting()) {
+          console.log('[Main] Meeting ended during audio initialization; skipping post-start services.');
+          return;
+        }
 
         // Start JIT RAG live indexing
         if (this.ragManager) {
@@ -2663,6 +2674,7 @@ export class AppState {
 
   public async endMeeting(): Promise<void> {
     console.log('[Main] Ending Meeting...');
+    this._meetingGeneration++;
 
     // Reset Mouse Passthrough so the next meeting overlay starts fresh and focusable
     if (this.overlayMousePassthrough) {
@@ -2734,17 +2746,24 @@ export class AppState {
         // 5. RAG cleanup — same logic as before, just inside the BG IIFE.
         if (meetingId) {
           if (meetingRecorder) {
-            meetingRecorder.finalize(meetingId)
-              .then((metadata) => {
-                if (!metadata) return;
-                const saved = DatabaseManager.getInstance().updateMeetingAudioRecording(meetingId, metadata);
-                if (saved) {
-                  this.broadcast('meetings-updated');
+            const metadata = await meetingRecorder.finalize(meetingId);
+            if (metadata) {
+              const saved = DatabaseManager.getInstance().updateMeetingAudioRecording(meetingId, metadata);
+              if (saved) {
+                this.broadcast('meetings-updated');
+              } else {
+                const meetingExists = DatabaseManager.getInstance().meetingExists(meetingId);
+                if (meetingExists === false) {
+                  await fs.promises.unlink(metadata.path).catch((error: any) => {
+                    if (error?.code !== 'ENOENT') {
+                      console.error(`[Main] Failed to clean up recording for deleted meeting ${meetingId}:`, error);
+                    }
+                  });
+                } else {
+                  console.error(`[Main] Meeting recording was written but metadata could not be saved for meeting ${meetingId}.`);
                 }
-              })
-              .catch((err) => {
-                console.error('[Main] Meeting recording finalization failed:', err);
-              });
+              }
+            }
           }
 
           if (ragManager) {

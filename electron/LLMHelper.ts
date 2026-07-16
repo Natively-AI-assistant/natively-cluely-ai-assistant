@@ -459,7 +459,7 @@ export class LLMHelper {
           || msg.includes("rate_limit") || msg.includes("rate limit");
         if (!isRetryable) throw e;
 
-        console.warn(`[LLMHelper] Transient error (${status || msg.slice(0, 40)}). Retrying in ${delay}ms...`);
+        console.warn(`[LLMHelper] Transient provider error (status=${status || 'unknown'}). Retrying in ${delay}ms...`);
         await new Promise(r => setTimeout(r, delay));
         delay *= 2;
       }
@@ -493,7 +493,7 @@ export class LLMHelper {
       const candidate = response.candidates?.[0];
       if (!candidate) {
         console.error("[LLMHelper] No candidates returned!");
-        console.error("[LLMHelper] Full response:", JSON.stringify(response, null, 2).substring(0, 1000));
+        console.error(`[LLMHelper] Response metadata: candidates=${response.candidates?.length ?? 0}`);
         return "";
       }
 
@@ -863,7 +863,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
   public async chatWithGemini(message: string, imagePaths?: string[], context?: string, skipSystemPrompt: boolean = false, alternateGroqMessage?: string): Promise<string> {
     try {
-      console.log(`[LLMHelper] chatWithGemini called with message:`, message.substring(0, 50))
+      console.log(`[LLMHelper] chatWithGemini called (messageChars=${message.length}).`)
 
       // ============================================================
       // KNOWLEDGE MODE INTERCEPT
@@ -1596,10 +1596,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       clearTimeout(customTimeout);
 
       const data = await response.json();
-      console.log(`[LLMHelper] Custom Provider raw response:`, JSON.stringify(data).substring(0, 1000));
+      console.log(`[LLMHelper] Custom Provider response received (shape=${Array.isArray(data) ? 'array' : typeof data}).`);
 
       if (!response.ok) {
-        throw new Error(`Custom Provider HTTP ${response.status}: ${JSON.stringify(data).substring(0, 200)}`);
+        throw new Error(`Custom Provider returned HTTP ${response.status}`);
       }
 
       // 6. Extract Answer - try common response formats
@@ -1987,7 +1987,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
    * MULTIMODAL: Gemini-only (existing logic)
    */
   public async * streamChatWithGemini(message: string, imagePaths?: string[], context?: string, skipSystemPrompt: boolean = false): AsyncGenerator<string, void, unknown> {
-    console.log(`[LLMHelper] streamChatWithGemini called with message:`, message.substring(0, 50));
+    console.log(`[LLMHelper] streamChatWithGemini called (messageChars=${message.length}).`);
 
     const isMultimodal = !!(imagePaths?.length);
 
@@ -2917,8 +2917,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       clearTimeout(streamTimeout);
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Custom Provider HTTP ${response.status}: ${errorText.substring(0, 200)}`);
+        await response.body?.cancel().catch(() => {});
+        console.error(`Custom Provider returned HTTP ${response.status}`);
         yield `Error: Custom Provider returned HTTP ${response.status}`;
         return;
       }

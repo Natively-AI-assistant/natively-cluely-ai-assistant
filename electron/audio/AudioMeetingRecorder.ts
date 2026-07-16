@@ -22,6 +22,8 @@ interface ChannelState {
 
 export const MEETING_RECORDING_SAMPLE_RATE = 24_000;
 const PCM_BYTES_PER_SAMPLE = 2;
+const MIX_CHUNK_BYTES = 64 * 1024;
+const DELIVERY_JITTER_TOLERANCE_MS = 100;
 
 const clampInt16 = (value: number): number => {
   if (value > 32767) return 32767;
@@ -192,7 +194,15 @@ export class AudioMeetingRecorder {
       if (resampled.length === 0) return;
 
       const offsetMs = Math.max(0, capturedAtMs - this.startTimeMs);
-      const desiredStartSample = Math.round(offsetMs * this.outputSampleRate / 1000);
+      // JS delivery timestamps can bunch together when the main loop is busy.
+      // Never trim valid audio just because a later chunk was delivered early;
+      // use the clock only to add genuine gaps between contiguous chunks.
+      const clockStartSample = Math.round(offsetMs * this.outputSampleRate / 1000);
+      const gapSamples = clockStartSample - state.nextSampleIndex;
+      const gapThresholdSamples = Math.round(DELIVERY_JITTER_TOLERANCE_MS * this.outputSampleRate / 1000);
+      const desiredStartSample = state.nextSampleIndex === 0 || gapSamples > gapThresholdSamples
+        ? Math.max(state.nextSampleIndex, clockStartSample)
+        : state.nextSampleIndex;
       const aligned = alignPcm16Chunk(resampled, desiredStartSample, state.nextSampleIndex);
       if (aligned.output.length === 0) {
         state.nextSampleIndex = aligned.nextSampleIndex;
@@ -215,6 +225,7 @@ export class AudioMeetingRecorder {
 
     const channels = this.channels;
     this.channels = null;
+    let finalPath: string | null = null;
 
     try {
       await Promise.all(Object.values(channels).map((state) => this.closeStream(state.stream)));
@@ -225,19 +236,16 @@ export class AudioMeetingRecorder {
       }
 
       fs.mkdirSync(this.recordingsDir, { recursive: true });
-      const systemPcm = channels.system.bytesWritten > 0 ? await fs.promises.readFile(channels.system.tempPath) : null;
-      const micPcm = channels.mic.bytesWritten > 0 ? await fs.promises.readFile(channels.mic.tempPath) : null;
-      const mixedPcm = mixPcm16Mono(systemPcm, micPcm);
-      if (mixedPcm.length === 0) {
+      finalPath = path.join(this.recordingsDir, `${meetingId}.wav`);
+      const mixedPcmBytes = await this.mixChannelsToWav(channels, finalPath);
+      if (mixedPcmBytes === 0) {
         await this.cleanupChannelTemps(channels);
         return null;
       }
 
-      const finalPath = path.join(this.recordingsDir, `${meetingId}.wav`);
-      await fs.promises.writeFile(finalPath, createWavBuffer(mixedPcm, this.outputSampleRate, 1));
       await this.cleanupChannelTemps(channels);
       const stat = await fs.promises.stat(finalPath);
-      const durationMs = Math.round((mixedPcm.length / PCM_BYTES_PER_SAMPLE) * 1000 / this.outputSampleRate);
+      const durationMs = Math.round((mixedPcmBytes / PCM_BYTES_PER_SAMPLE) * 1000 / this.outputSampleRate);
 
       console.log(`[AudioMeetingRecorder] Saved mixed meeting recording: ${finalPath}`);
       return {
@@ -249,6 +257,13 @@ export class AudioMeetingRecorder {
       };
     } catch (err) {
       console.error('[AudioMeetingRecorder] Failed to finalize recording:', err);
+      if (finalPath) {
+        await fs.promises.unlink(finalPath).catch((unlinkError: any) => {
+          if (unlinkError?.code !== 'ENOENT') {
+            console.error('[AudioMeetingRecorder] Failed to remove partial recording:', unlinkError);
+          }
+        });
+      }
       await this.cleanupChannelTemps(channels).catch(() => {});
       return null;
     } finally {
@@ -297,6 +312,69 @@ export class AudioMeetingRecorder {
       stream.once('error', reject);
       stream.end(() => resolve());
     });
+  }
+
+  private async mixChannelsToWav(
+    channels: Record<MeetingRecordingChannel, ChannelState>,
+    finalPath: string,
+  ): Promise<number> {
+    const outputBytes = Math.max(channels.system.bytesWritten, channels.mic.bytesWritten);
+    if (outputBytes === 0) return 0;
+    if (outputBytes > 0xffffffff - 36) {
+      throw new Error('Meeting recording exceeds the WAV file size limit');
+    }
+
+    const [systemFile, micFile, outputFile] = await Promise.all([
+      channels.system.bytesWritten > 0 ? fs.promises.open(channels.system.tempPath, 'r') : null,
+      channels.mic.bytesWritten > 0 ? fs.promises.open(channels.mic.tempPath, 'r') : null,
+      fs.promises.open(finalPath, 'w'),
+    ]);
+
+    try {
+      await this.writeAll(outputFile, createWavHeader(outputBytes, this.outputSampleRate, 1), 0);
+
+      for (let offset = 0; offset < outputBytes; offset += MIX_CHUNK_BYTES) {
+        const chunkBytes = Math.min(MIX_CHUNK_BYTES, outputBytes - offset);
+        const [systemPcm, micPcm] = await Promise.all([
+          this.readPcmChunk(systemFile, channels.system.bytesWritten, offset, chunkBytes),
+          this.readPcmChunk(micFile, channels.mic.bytesWritten, offset, chunkBytes),
+        ]);
+        const mixedPcm = mixPcm16Mono(systemPcm, micPcm);
+        await this.writeAll(outputFile, mixedPcm, 44 + offset);
+      }
+    } finally {
+      await Promise.all([
+        systemFile?.close(),
+        micFile?.close(),
+        outputFile.close(),
+      ]);
+    }
+
+    return outputBytes;
+  }
+
+  private async readPcmChunk(
+    file: fs.promises.FileHandle | null,
+    totalBytes: number,
+    offset: number,
+    requestedBytes: number,
+  ): Promise<Buffer | null> {
+    const bytesToRead = Math.min(requestedBytes, Math.max(0, totalBytes - offset));
+    if (!file || bytesToRead === 0) return null;
+
+    const buffer = Buffer.allocUnsafe(bytesToRead);
+    const { bytesRead } = await file.read(buffer, 0, bytesToRead, offset);
+    const evenBytesRead = bytesRead - (bytesRead % PCM_BYTES_PER_SAMPLE);
+    return evenBytesRead > 0 ? buffer.subarray(0, evenBytesRead) : null;
+  }
+
+  private async writeAll(file: fs.promises.FileHandle, buffer: Buffer, position: number): Promise<void> {
+    let written = 0;
+    while (written < buffer.length) {
+      const result = await file.write(buffer, written, buffer.length - written, position + written);
+      if (result.bytesWritten <= 0) throw new Error('Failed to write meeting recording');
+      written += result.bytesWritten;
+    }
   }
 
   private async cleanupChannelTemps(channels: Record<MeetingRecordingChannel, ChannelState>): Promise<void> {

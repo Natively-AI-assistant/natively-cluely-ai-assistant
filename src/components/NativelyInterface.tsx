@@ -316,7 +316,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
     }, [messages, autoScroll]);
 
-    const [rollingTranscript, setRollingTranscript] = useState('');  // For interviewer rolling text bar
     const [interviewerTranscriptTurns, setInterviewerTranscriptTurns] = useState<InterviewerTranscriptTurn[]>([]);
     const [isInterviewerSpeaking, setIsInterviewerSpeaking] = useState(false);  // Track if actively speaking
     const [voiceInput, setVoiceInput] = useState('');  // Accumulated user voice input
@@ -895,7 +894,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
             setAttachedContext([]);
             setManualTranscript('');
             setVoiceInput('');
-            setRollingTranscript('');
             setInterviewerTranscriptTurns([]);
             setIsProcessing(false);
             // Optionally reset connection status if needed, but connection persists
@@ -1115,15 +1113,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                 setSystemAudioWarning(null);
             }
 
-            // Route to rolling transcript bar - accumulate text continuously
             setIsInterviewerSpeaking(!transcript.final);
 
             if (transcript.final) {
-                // Append finalized text to accumulated transcript
-                setRollingTranscript(prev => {
-                    const separator = prev ? '  ·  ' : '';
-                    return prev + separator + transcript.text;
-                });
                 setInterviewerTranscriptTurns(prev => [
                     ...prev.filter(turn => turn.final),
                     {
@@ -1139,13 +1131,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                     setIsInterviewerSpeaking(false);
                 }, 3000);
             } else {
-                // For partial transcripts, show current segment appended to accumulated
-                setRollingTranscript(prev => {
-                    // Find where previous finalized content ends (look for last separator)
-                    const lastSeparator = prev.lastIndexOf('  ·  ');
-                    const accumulated = lastSeparator >= 0 ? prev.substring(0, lastSeparator + 5) : '';
-                    return accumulated + transcript.text;
-                });
                 setInterviewerTranscriptTurns(prev => [
                     ...prev.filter(turn => turn.final),
                     {
@@ -2957,6 +2942,8 @@ Provide only the answer, nothing else.`;
                                 shortcuts={shortcuts}
                                 subtleSurfaceClass={subtleSurfaceClass}
                                 textInputRef={textInputRef}
+                                showTranscript={showTranscript}
+                                transcriptLayout={transcriptLayout}
                                 turns={visibleInterviewerTurns}
                                 voiceInput={voiceInput}
                             />

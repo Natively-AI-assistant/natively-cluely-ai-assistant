@@ -303,13 +303,13 @@ export class NativelyProSTT extends EventEmitter {
         ws.on('message', (data: WebSocket.Data) => guard(() => {
             try {
                 const msg = JSON.parse(data.toString());
-                // Log every server message (excluding frequent interim transcripts)
+                // Log message shape, never transcript or provider payload content.
                 if (!msg.text || msg.is_final) {
-                    console.log(`[NativelyProSTT:${this.channel}] Server msg:`, JSON.stringify(msg).slice(0, 120));
+                    console.log(`[NativelyProSTT:${this.channel}] Server message keys: ${Object.keys(msg).sort().join(',')}`);
                 }
 
                 if (msg.error) {
-                    console.error('[NativelyProSTT] Server error:', msg.error, msg.message || '');
+                    console.error(`[NativelyProSTT] Server error code: ${msg.error}`);
                     this.emit('error', new Error(msg.error));
                     // Fatal errors — stop reconnecting entirely
                 if (msg.error === 'auth_timeout' ||

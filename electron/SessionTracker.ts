@@ -144,7 +144,7 @@ export class SessionTracker {
             this.detectedCodingQuestion = trimmed;
             this.codingQuestionSource = source;
             this.codingQuestionSetAt = now;
-            console.log(`[SessionTracker] Coding question stored (source: ${source}): "${trimmed.substring(0, 80)}..."`);
+            console.log(`[SessionTracker] Coding question stored (source=${source}, chars=${trimmed.length}).`);
             return;
         }
 
@@ -153,7 +153,7 @@ export class SessionTracker {
             this.detectedCodingQuestion = trimmed;
             this.codingQuestionSource = source;
             this.codingQuestionSetAt = now;
-            console.log(`[SessionTracker] Coding question updated via screenshot: "${trimmed.substring(0, 80)}..."`);
+            console.log(`[SessionTracker] Coding question updated via screenshot (chars=${trimmed.length}).`);
             return;
         }
 
@@ -166,7 +166,7 @@ export class SessionTracker {
             this.detectedCodingQuestion = trimmed;
             this.codingQuestionSource = source;
             this.codingQuestionSetAt = now;
-            console.log(`[SessionTracker] Coding question updated via transcript (prev was ${this.codingQuestionSource}, stale=${isStale}): "${trimmed.substring(0, 80)}..."`);
+            console.log(`[SessionTracker] Coding question updated via transcript (stale=${isStale}, chars=${trimmed.length}).`);
         } else {
             console.log(`[SessionTracker] Transcript question ignored — screenshot question is recent (< ${SessionTracker.SCREENSHOT_STALE_MS / 1000}s)`);
         }
@@ -258,7 +258,7 @@ export class SessionTracker {
      * Add assistant-generated message to context
      */
     addAssistantMessage(text: string): void {
-        console.log(`[SessionTracker] addAssistantMessage called with:`, text.substring(0, 50));
+        console.log(`[SessionTracker] addAssistantMessage called (chars=${text.length}).`);
 
         // Natively-style filtering
         if (!text) return;
@@ -320,12 +320,12 @@ export class SessionTracker {
         // Track interim segments for interviewer to prevent data loss on stop
         if (segment.speaker === 'user') {
             if (isVerboseLogging() && (Math.random() < 0.05 || segment.final)) {
-                console.log(`[SessionTracker] RX User Segment: Final=${segment.final} Text="${segment.text.substring(0, 50)}..."`);
+                console.log(`[SessionTracker] RX User Segment: Final=${segment.final} Chars=${segment.text.length}`);
             }
         }
         if (segment.speaker === 'interviewer') {
             if (isVerboseLogging() && (Math.random() < 0.05 || segment.final)) {
-                console.log(`[SessionTracker] RX Interviewer Segment: Final=${segment.final} Text="${segment.text.substring(0, 50)}..."`);
+                console.log(`[SessionTracker] RX Interviewer Segment: Final=${segment.final} Chars=${segment.text.length}`);
             }
 
             if (!segment.final) {
@@ -484,7 +484,7 @@ export class SessionTracker {
      */
     flushInterimTranscript(): void {
         if (this.lastInterimInterviewer) {
-            console.log('[SessionTracker] Force-saving pending interim transcript:', this.lastInterimInterviewer.text);
+            console.log(`[SessionTracker] Force-saving pending interim transcript (chars=${this.lastInterimInterviewer.text.length}).`);
             const finalSegment = { ...this.lastInterimInterviewer, final: true };
             this.addTranscript(finalSegment);
             this.lastInterimInterviewer = null;

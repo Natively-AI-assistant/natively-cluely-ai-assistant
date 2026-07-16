@@ -175,7 +175,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
                         const alt = data.channel?.alternatives?.[0];
                         const transcript = alt?.transcript;
                         const isFinal = data.is_final ?? false;
-                        console.log(`[DeepgramStreaming] Transcript event — isFinal=${isFinal}, text="${transcript ?? '(empty)'}"`);
+                        console.log(`[DeepgramStreaming] Transcript event — isFinal=${isFinal}, chars=${transcript?.length ?? 0}`);
                         if (!transcript) return;
                         this.emit('transcript', {
                             text: transcript,

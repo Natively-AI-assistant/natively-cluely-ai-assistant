@@ -333,7 +333,7 @@ export class GoogleSTT extends EventEmitter {
                     const isFinal = result.isFinal;
 
                     if (transcript) {
-                        console.log(`[GoogleSTT/${this.label}] Transcript (${isFinal ? 'final' : 'interim'}): "${transcript.substring(0, 60)}..."`);
+                        console.log(`[GoogleSTT/${this.label}] Transcript (${isFinal ? 'final' : 'interim'}, chars=${transcript.length}).`);
                         this.emit('transcript', {
                             text: transcript,
                             isFinal,

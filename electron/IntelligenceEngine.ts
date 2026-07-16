@@ -384,7 +384,7 @@ export class IntelligenceEngine extends EventEmitter {
                     (lastItem.text === lastInterim.text || Math.abs(lastItem.timestamp - lastInterim.timestamp) < 1000);
 
                 if (!isDuplicate) {
-                    console.log(`[IntelligenceEngine] Injecting interim transcript: "${lastInterim.text.substring(0, 50)}..."`);
+                    console.log(`[IntelligenceEngine] Injecting interim transcript (chars=${lastInterim.text.length}).`);
                     contextItems.push({
                         role: 'interviewer',
                         text: lastInterim.text,
@@ -403,7 +403,7 @@ export class IntelligenceEngine extends EventEmitter {
                 );
 
                 if (!alreadyPresent && !hasInterviewerQuestion) {
-                    console.log(`[IntelligenceEngine] Injecting explicit question as interviewer context: "${explicitQuestion.substring(0, 50)}..."`);
+                    console.log('[IntelligenceEngine] Injecting an explicit question into interviewer context.');
                     contextItems.push({
                         role: 'interviewer',
                         text: explicitQuestion,

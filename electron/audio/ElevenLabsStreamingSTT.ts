@@ -221,7 +221,7 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
         this.isConnecting = true;
         this.isSessionReady = false;
         
-        console.log(`[ElevenLabsStreaming] Connecting... key=${this.apiKey?.slice(0, 8)}...`);
+        console.log(`[ElevenLabsStreaming] Connecting with ${this.apiKey ? 'configured' : 'missing'} credentials...`);
 
         // raw WebSocket URL with parameters
         let url = `${ELEVENLABS_WS_URL}?model_id=scribe_v2_realtime&include_timestamps=true&sample_rate=${this.targetSampleRate}`;
@@ -232,7 +232,7 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
         }
         url += `&include_language_detection=true`;
         
-        console.log(`[ElevenLabsStreaming] Connecting with URL: ${url.replace(this.apiKey, '***')}`);
+        console.log(`[ElevenLabsStreaming] Connecting to realtime STT (language=${this.languageCode || 'auto'}, sampleRate=${this.targetSampleRate}).`);
 
         // streamingStttWsOptions: IPv4-only DNS + 15s handshake cap (dnsHelpers.ts).
         this.ws = new WebSocket(url, streamingStttWsOptions({

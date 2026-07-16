@@ -574,6 +574,8 @@ interface InterviewWorkspaceProps {
     shortcuts: ShortcutConfig;
     subtleSurfaceClass: string;
     textInputRef: React.RefObject<HTMLInputElement>;
+    showTranscript: boolean;
+    transcriptLayout: 'ticker' | 'feed';
     turns: WorkspaceTranscriptTurn[];
     voiceInput: string;
 }
@@ -613,14 +615,17 @@ const InterviewWorkspace = React.memo(function InterviewWorkspace({
     shortcuts,
     subtleSurfaceClass,
     textInputRef,
+    showTranscript,
+    transcriptLayout,
     turns,
     voiceInput,
 }: InterviewWorkspaceProps) {
     const latestQuestion = turns.length > 0 ? turns[turns.length - 1] : null;
+    const visibleTurns = transcriptLayout === 'ticker' ? turns.slice(-1) : turns;
 
     return (
         <div className="interview-workspace">
-            <div className="interview-workspace-grid">
+            <div className={`interview-workspace-grid ${showTranscript ? '' : 'interview-workspace-grid--answer-only'}`}>
                 <AnswerPanel
                     messages={messages}
                     latestQuestion={latestQuestion}
@@ -635,11 +640,13 @@ const InterviewWorkspace = React.memo(function InterviewWorkspace({
                     renderMessageText={renderMessageText}
                     onCopy={onCopy}
                 />
-                <QuestionRail
-                    turns={turns}
-                    isInterviewerSpeaking={isInterviewerSpeaking}
-                    isLightTheme={isLightTheme}
-                />
+                {showTranscript && (
+                    <QuestionRail
+                        turns={visibleTurns}
+                        isInterviewerSpeaking={isInterviewerSpeaking}
+                        isLightTheme={isLightTheme}
+                    />
+                )}
             </div>
             <OverlayCommandBar
                 actionButtonMode={actionButtonMode}
