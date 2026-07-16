@@ -1161,7 +1161,7 @@ export class ModelVersionManager {
       const latestIsValid =
         latestBelongsToFamily &&
         !!latestVersion &&
-        (!baselineChanged || !baselineVersion || compareVersions(latestVersion, baselineVersion) >= 0);
+        (!baselineVersion || compareVersions(latestVersion, baselineVersion) >= 0);
 
       if (!latestIsValid) {
         console.warn(

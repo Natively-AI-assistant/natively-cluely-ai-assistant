@@ -122,3 +122,37 @@ test('v3 persisted state self-repairs invalid fallback models on startup', (t) =
   assert.ok(repaired.families.gemini_flash, 'missing families should be restored');
   assert.ok(repaired.families.text_groq, 'missing text families should be restored');
 });
+
+test('current v4 state repairs generation tiers older than the baseline', (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-model-state-v4-'));
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+  currentUserData = tempDir;
+
+  const state = {
+    schemaVersion: 4,
+    lastDiscoveryTimestamp: Date.now(),
+    discoveryFailureCounts: {},
+    families: {
+      openai: {
+        baseline: 'gpt-5.4',
+        tier1: 'gpt-5.4',
+        latest: 'gpt-4.1',
+        latestVersion: { major: 4, minor: 1, patch: 0, raw: 'gpt-4.1' },
+        tier1Version: { major: 5, minor: 4, patch: 0, raw: 'gpt-5.4' },
+        previousTier1: null,
+        previousLatest: null,
+      },
+    },
+  };
+  const statePath = path.join(tempDir, 'model_versions.json');
+  fs.writeFileSync(statePath, JSON.stringify(state), 'utf8');
+
+  const manager = new ModelVersionManager();
+  assert.deepEqual(manager.getTieredModels(ModelFamily.OPENAI), {
+    tier1: 'gpt-5.4',
+    tier2: 'gpt-5.4',
+    tier3: 'gpt-5.4',
+  });
+  const repaired = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+  assert.equal(repaired.families.openai.latest, 'gpt-5.4');
+});
