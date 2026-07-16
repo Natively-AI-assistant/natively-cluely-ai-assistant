@@ -10,6 +10,7 @@ import * as fs from "fs";
 import { AudioDevices } from "./audio/AudioDevices";
 import { PhoneMirrorService } from "./services/PhoneMirrorService";
 import { InterviewContextManager } from "./services/InterviewContextManager";
+import { buildSafeConnectionErrorInfo, redactSensitiveText } from "./utils/safeConnectionError";
 
 
 import { RECOGNITION_LANGUAGES, AI_RESPONSE_LANGUAGES } from "./config/languages"
@@ -1707,11 +1708,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  // Helper to sanitize error messages (remove API key references)
-  const sanitizeErrorMessage = (msg: string): string => {
-    // Remove patterns like ": sk-***...***" or ": sdasdada***...dwwC"
-    return msg.replace(/:\s*[a-zA-Z0-9*]+\*+[a-zA-Z0-9*]+\.?$/g, '').trim();
-  };
+  // Helper to sanitize provider errors before returning them to the renderer.
+  const sanitizeErrorMessage = (
+    msg: string,
+    secrets: Array<string | null | undefined> = [],
+  ): string => redactSensitiveText(msg, secrets);
 
   safeHandle("test-stt-connection", async (_, provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox', apiKey: string, region?: string) => {
     console.log(`[IPC] Received test - stt - connection request for provider: ${provider} `);
@@ -1744,7 +1745,10 @@ export function initializeIpcHandlers(appState: AppState): void {
             let body = '';
             response.on('data', (chunk: Buffer) => { body += chunk.toString(); });
             response.on('end', () => {
-              const errMsg = `Unexpected server response: ${status} - ${body}`;
+              const errMsg = sanitizeErrorMessage(
+                `Unexpected server response: ${status} - ${body}`,
+                [token],
+              );
               console.error(`[IPC] Deepgram test failed: ${errMsg}`);
               resolve({ success: false, error: errMsg });
             });
@@ -1752,8 +1756,9 @@ export function initializeIpcHandlers(appState: AppState): void {
 
           ws.on('error', (err: any) => {
             clearTimeout(timeout);
-            console.error(`[IPC] Deepgram test error: ${err.message}`);
-            resolve({ success: false, error: err.message || 'Connection failed' });
+            const errMsg = sanitizeErrorMessage(err.message || 'Connection failed', [token]);
+            console.error(`[IPC] Deepgram test error: ${errMsg}`);
+            resolve({ success: false, error: errMsg });
           });
         });
       }
@@ -1800,7 +1805,13 @@ export function initializeIpcHandlers(appState: AppState): void {
             try {
               const res = JSON.parse(msg.toString());
               if (res.error_code) {
-                done({ success: false, error: `${res.error_code}: ${res.error_message}` });
+                done({
+                  success: false,
+                  error: sanitizeErrorMessage(
+                    `${res.error_code}: ${res.error_message}`,
+                    [apiKey],
+                  ),
+                });
               }
               // Non-error message is unexpected but treat as success
             } catch {
@@ -1923,7 +1934,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       const respData = error?.response?.data;
       const rawMsg = respData?.error?.message || respData?.detail?.message || respData?.message || error.message || 'Connection failed';
-      const msg = sanitizeErrorMessage(rawMsg);
+      const msg = sanitizeErrorMessage(rawMsg, [apiKey]);
       console.error("STT connection test failed:", msg);
       return { success: false, error: msg };
     }
@@ -1994,9 +2005,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
 
     } catch (error: any) {
-      console.error("LLM connection test failed:", error);
+      const safeInfo = buildSafeConnectionErrorInfo(provider, error, [apiKey]);
+      console.error("LLM connection test failed:", safeInfo);
       const rawMsg = error?.response?.data?.error?.message || error?.response?.data?.message || (error.response?.data?.error?.type ? `${error.response.data.error.type}: ${error.response.data.error.message}` : error.message) || 'Connection failed';
-      const msg = sanitizeErrorMessage(rawMsg);
+      const msg = sanitizeErrorMessage(rawMsg, [apiKey]);
       return { success: false, error: msg };
     }
   });
