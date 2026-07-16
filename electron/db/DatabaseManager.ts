@@ -411,7 +411,7 @@ export class DatabaseManager {
             }
 
             this.runMigrations();
-            this.cleanupPendingRecordingDeletes();
+            this.reconcileRecordingFilesOnStartup();
         } catch (error) {
             console.error('[DatabaseManager] Failed to initialize database:', error);
             throw error;
@@ -2419,7 +2419,7 @@ export class DatabaseManager {
             .map((entry) => path.join(recordingsDir, entry.name));
     }
 
-    private cleanupPendingRecordingDeletes(): void {
+    private reconcileRecordingFilesOnStartup(): void {
         if (!this.db) return;
         const pendingFiles = this.listOwnedRecordingFiles().filter((filePath) => path.basename(filePath).includes('.wav.delete-pending-'));
         for (const pendingPath of pendingFiles) {
@@ -2429,6 +2429,25 @@ export class DatabaseManager {
                 this.restoreQuarantinedRecordings([{ originalPath, pendingPath }]);
             } else {
                 this.removeQuarantinedRecordings([{ pendingPath }]);
+            }
+        }
+
+        // A recording is finalized before its path is attached to the meeting
+        // row. If that database update fails and the immediate unlink is also
+        // blocked (for example EACCES, EPERM, or EBUSY), an ordinary WAV can be
+        // left behind with no history entry that can ever delete it. Reconcile
+        // those app-owned files on every startup. Failed unlinks remain in place
+        // and are retried on the next launch.
+        const ordinaryFiles = this.listOwnedRecordingFiles().filter((filePath) => path.extname(filePath).toLowerCase() === '.wav');
+        const findReference = this.db.prepare('SELECT 1 FROM meetings WHERE audio_recording_path = ? LIMIT 1');
+        for (const filePath of ordinaryFiles) {
+            if (findReference.get(filePath)) continue;
+            try {
+                const ownedPath = this.resolveOwnedRecordingPath(filePath);
+                if (ownedPath && fs.existsSync(ownedPath)) fs.unlinkSync(ownedPath);
+            } catch (error) {
+                const code = (error as NodeJS.ErrnoException)?.code || 'unknown error';
+                console.error(`[DatabaseManager] Failed to remove unreferenced recording (${code}); will retry on next startup`);
             }
         }
     }

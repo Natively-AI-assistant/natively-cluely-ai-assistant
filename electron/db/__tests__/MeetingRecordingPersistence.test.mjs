@@ -47,10 +47,25 @@ describe('meeting recording persistence and deletion', () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-recording-db-'));
     recordingsDir = path.join(tempDir, 'recordings');
     process.env.NATIVELY_TEST_USERDATA = tempDir;
+
+    // Seed a referenced recording, then restart the real DatabaseManager with
+    // both that file and an unreferenced ordinary WAV present. Startup must
+    // protect the former and remove the latter.
     delete require.cache[databaseModule];
-    const { DatabaseManager } = require(databaseModule);
+    let { DatabaseManager } = require(databaseModule);
     dbManager = DatabaseManager.getInstance();
     assert.equal(dbManager.isAvailable(), true, 'test requires the real SQLite database');
+    const referencedId = 'recording-startup-reference';
+    dbManager.saveMeeting(meeting(referencedId), 0, 1000);
+    const referencedPath = createRecording(`${referencedId}.wav`, 'keep-on-startup');
+    assert.equal(dbManager.updateMeetingAudioRecording(referencedId, metadata(referencedPath)), true);
+    dbManager.close();
+
+    createRecording('recording-startup-orphan.wav', 'remove-on-startup');
+    delete require.cache[databaseModule];
+    ({ DatabaseManager } = require(databaseModule));
+    dbManager = DatabaseManager.getInstance();
+    assert.equal(dbManager.isAvailable(), true, 'reopened test database must remain available');
   });
 
   after(() => {
@@ -77,6 +92,11 @@ describe('meeting recording persistence and deletion', () => {
     const details = dbManager.getMeetingDetails(id);
     assert.equal(details.audioRecording.exists, true);
     assert.equal(details.audioRecording.path, undefined, 'absolute filesystem paths must stay in the main process');
+  });
+
+  test('startup removes unreferenced ordinary WAVs and preserves referenced recordings', () => {
+    assert.equal(fs.existsSync(path.join(recordingsDir, 'recording-startup-orphan.wav')), false);
+    assert.equal(fs.readFileSync(path.join(recordingsDir, 'recording-startup-reference.wav'), 'utf8'), 'keep-on-startup');
   });
 
   test('deleting one meeting deletes only its owned WAV', () => {
