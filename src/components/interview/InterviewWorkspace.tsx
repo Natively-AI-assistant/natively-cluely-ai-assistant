@@ -312,10 +312,15 @@ interface OverlayCommandBarProps {
 
 const formatModelName = (model: string) => {
     if (model.startsWith('ollama-')) return model.replace('ollama-', '');
+    if (model === 'gemini-3-flash-preview') return 'Gemini 3 Flash';
+    if (model === 'gemini-3.1-flash-lite') return 'Gemini 3.1 Flash-Lite';
+    if (model === 'gemini-2.5-flash') return 'Gemini 2.5 Flash';
+    if (model === 'gemini-2.5-flash-lite') return 'Gemini 2.5 Flash-Lite';
     if (model === 'gemini-3.5-flash') return 'Gemini 3.5 Flash';
     if (model === 'gemini-3.1-flash-lite-preview') return 'Gemini 3.1 Flash';
     if (model === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
     if (model === 'llama-3.3-70b-versatile') return 'Groq Llama 3.3';
+    if (model === 'gpt-5.4-mini') return 'GPT 5.4 Mini';
     if (model === 'gpt-5.4') return 'GPT 5.4';
     if (model === 'claude-sonnet-4-6') return 'Sonnet 4.6';
     return model;

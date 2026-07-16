@@ -34,6 +34,7 @@ export class WindowHelper {
 
   // Constants
   private static readonly OVERLAY_DEFAULT_WIDTH = 600;
+  private static readonly OVERLAY_DEFAULT_HEIGHT = 720;
   private static readonly OVERLAY_MIN_HEIGHT = 216;
   // Vertical offset for the meeting overlay's initial position, expressed as
   // a fraction of the screen's work-area height. 0.035 places the top edge
@@ -268,14 +269,18 @@ export class WindowHelper {
     // constructor is the only reliable guard against OS-level position persistence.
     const overlayDefaultX = Math.floor(workArea.x + (workArea.width - WindowHelper.OVERLAY_DEFAULT_WIDTH) / 2);
     const overlayDefaultY = Math.floor(workArea.y + workArea.height * WindowHelper.OVERLAY_DEFAULT_TOP_RATIO);
+    const overlayDefaultHeight = Math.min(
+      WindowHelper.OVERLAY_DEFAULT_HEIGHT,
+      Math.floor(workArea.height * 0.9)
+    );
 
     const overlaySettings: Electron.BrowserWindowConstructorOptions = {
       width: WindowHelper.OVERLAY_DEFAULT_WIDTH,
-      height: 1,
+      height: overlayDefaultHeight,
       x: overlayDefaultX,
       y: overlayDefaultY,
       minWidth: 300,
-      minHeight: 1,
+      minHeight: WindowHelper.OVERLAY_MIN_HEIGHT,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -598,7 +603,7 @@ export class WindowHelper {
       const savedBounds = this.overlayBounds
         ? {
             ...this.overlayBounds,
-            height: Math.max(this.overlayBounds.height, WindowHelper.OVERLAY_MIN_HEIGHT)
+            height: Math.max(this.overlayBounds.height, WindowHelper.OVERLAY_DEFAULT_HEIGHT)
           }
         : null;
       const workArea = this.getDisplayWorkArea(savedBounds ?? currentBounds);
@@ -615,7 +620,7 @@ export class WindowHelper {
             x: Math.floor(workArea.x + (workArea.width - WindowHelper.OVERLAY_DEFAULT_WIDTH) / 2),
             y: Math.floor(workArea.y + workArea.height * WindowHelper.OVERLAY_DEFAULT_TOP_RATIO),
             width: WindowHelper.OVERLAY_DEFAULT_WIDTH,
-            height: Math.max(Math.min(currentBounds.height, maxAllowedHeight), WindowHelper.OVERLAY_MIN_HEIGHT)
+            height: Math.min(Math.max(currentBounds.height, WindowHelper.OVERLAY_DEFAULT_HEIGHT), maxAllowedHeight)
           };
 
       this.overlayWindow.setBounds(targetBounds);

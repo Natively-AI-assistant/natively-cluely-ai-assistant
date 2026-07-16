@@ -3,12 +3,12 @@
  * patch-electron-plist.js
  *
  * Patches the development Electron.app Info.plist to add the required
- * NSScreenCaptureUsageDescription and NSMicrophoneUsageDescription keys.
+ * NSScreenCaptureUsageDescription, NSAudioCaptureUsageDescription, and
+ * NSMicrophoneUsageDescription keys.
  *
- * Without NSScreenCaptureUsageDescription in the Info.plist, macOS silently
- * refuses to show the TCC screen recording permission prompt — or grants it
- * under the generic "com.github.Electron" bundle ID, which means the entry
- * is lost the next time electron is reinstalled / node_modules is cleared.
+ * Without the usage descriptions in Info.plist, macOS can silently refuse to
+ * grant the TCC permissions needed by Electron, ScreenCaptureKit, and CoreAudio
+ * taps, or grant them under the generic "com.github.Electron" bundle ID.
  *
  * Run this script after every `npm install` via `postinstall` in package.json.
  * It is idempotent — safe to run multiple times.
@@ -41,12 +41,33 @@ let modified = false;
 if (!content.includes('NSScreenCaptureUsageDescription')) {
   content = content.replace(
     '<key>NSMicrophoneUsageDescription</key>',
-    '<key>NSScreenCaptureUsageDescription</key>\n\t<string>Natively needs Screen Recording permission to capture system audio for meeting transcription.</string>\n\t<key>NSMicrophoneUsageDescription</key>'
+    '<key>NSScreenCaptureUsageDescription</key>\n\t<string>Natively needs Screen Recording permission to capture meeting context.</string>\n\t<key>NSMicrophoneUsageDescription</key>'
   );
   modified = true;
   console.log('[patch-electron-plist] Added NSScreenCaptureUsageDescription.');
 } else {
   console.log('[patch-electron-plist] NSScreenCaptureUsageDescription already present — skipping.');
+}
+
+if (content.includes('Natively needs Screen Recording permission to capture system audio for meeting transcription.')) {
+  content = content.replace(
+    '<string>Natively needs Screen Recording permission to capture system audio for meeting transcription.</string>',
+    '<string>Natively needs Screen Recording permission to capture meeting context.</string>'
+  );
+  modified = true;
+  console.log('[patch-electron-plist] Updated NSScreenCaptureUsageDescription text.');
+}
+
+// Patch NSAudioCaptureUsageDescription
+if (!content.includes('NSAudioCaptureUsageDescription')) {
+  content = content.replace(
+    '<key>NSMicrophoneUsageDescription</key>',
+    '<key>NSAudioCaptureUsageDescription</key>\n\t<string>Natively needs System Audio Recording permission to capture meeting audio for transcription.</string>\n\t<key>NSMicrophoneUsageDescription</key>'
+  );
+  modified = true;
+  console.log('[patch-electron-plist] Added NSAudioCaptureUsageDescription.');
+} else {
+  console.log('[patch-electron-plist] NSAudioCaptureUsageDescription already present — skipping.');
 }
 
 // Patch NSMicrophoneUsageDescription if it has the generic stock text

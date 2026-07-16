@@ -85,6 +85,24 @@ const App: React.FC = () => {
     };
   }, [isLauncherWindow, isOverlayWindow, isDefault]);
 
+  useEffect(() => {
+    if (!window.electronAPI?.onDeviceSelectionApplied) return;
+
+    return window.electronAPI.onDeviceSelectionApplied((payload) => {
+      if (!payload.fellBack) return;
+
+      if (payload.kind === 'input') {
+        localStorage.removeItem('preferredInputDeviceId');
+      } else {
+        localStorage.removeItem('preferredOutputDeviceId');
+      }
+
+      console.warn(
+        `[App] Cleared stale preferred ${payload.kind} device after fallback: ${payload.requested || 'unknown'}`
+      );
+    });
+  }, []);
+
   // State
   // One-shot first-run startup sequence. Once the user dismisses it (or any
   // future code flips the flag), it never appears again on subsequent launches.

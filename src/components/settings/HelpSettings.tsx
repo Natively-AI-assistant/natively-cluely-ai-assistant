@@ -974,10 +974,10 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                         <div className="flex flex-col gap-3 mt-6">
                             <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
                                 <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
-                                    <Monitor className="w-4 h-4 text-accent-primary" /> Screen Recording
+                                    <Monitor className="w-4 h-4 text-accent-primary" /> System Audio / Screen Recording
                                 </h4>
-                                <p className="text-xs opacity-90 mb-2">Provides Natively the ability to read your screen temporarily when you capture context.</p>
-                                <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; Screen Recording</p>
+                                <p className="text-xs opacity-90 mb-2">Provides Natively the ability to capture meeting audio and read your screen temporarily when you capture context.</p>
+                                <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; System Audio Recording / Screen Recording</p>
                             </div>
 
                             <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>

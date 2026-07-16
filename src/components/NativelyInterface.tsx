@@ -75,6 +75,23 @@ interface InterviewerTranscriptTurn {
     timestamp: number;
 }
 
+const looksLikeDirectQuestion = (text: string): boolean => {
+    const trimmed = text.trim();
+    if (trimmed.length < 12 || trimmed.length > 180) return false;
+
+    const words = trimmed.split(/\s+/).filter(Boolean);
+    if (words.length > 32) return false;
+
+    const startsWithQuestion = /^(can|could|would|will|do|does|did|are|is|was|were|have|has|how|what|why|when|where|which|who|tell me|walk me through|explain|describe|give me an example)\b/i.test(trimmed);
+    const hasQuestionMark = /\?$/.test(trimmed);
+    if (!startsWithQuestion && !hasQuestionMark) return false;
+
+    const answerFragmentSignals = /\b(i|i'm|i've|i'd|i'll|my|we|we're|we've|our)\b/i;
+    if (answerFragmentSignals.test(trimmed) && !startsWithQuestion) return false;
+
+    return true;
+};
+
 interface NativelyInterfaceProps {
     onEndMeeting?: () => void;
     overlayOpacity?: number;
@@ -515,7 +532,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     useEffect(() => {
         const unsub = window.electronAPI?.onSystemAudioPermissionDenied?.((message: string) => {
             setSystemAudioWarning({
-                title: 'Screen Recording Permission Needed',
+                title: 'System Audio / Screen Recording Permission Needed',
                 message,
                 actionLabel: 'Open Settings',
                 actionUrl: 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
@@ -539,15 +556,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                 const isPermissionMessage = /permission|notallowed|not allowed|access denied/i.test(payload.message);
                 const isMic = payload.channel === 'mic';
                 const isWaitingForSystemAudio = payload.reason === 'no-system-audio';
+                const isSilentSystemAudio = payload.reason === 'silent-system-audio';
                 setSystemAudioWarning({
-                    title: isPermissionMessage
+                    title: isPermissionMessage || isSilentSystemAudio
                         ? (isMic ? 'Microphone Permission Needed' : 'System Audio Permission Needed')
                         : isWaitingForSystemAudio
                             ? 'Waiting for System Audio'
                         : (isMic ? 'Microphone Not Available' : 'System Audio Not Detected'),
                     message: payload.message,
-                    actionLabel: isPermissionMessage ? 'Open Settings' : undefined,
-                    actionUrl: isPermissionMessage
+                    actionLabel: (isPermissionMessage || isSilentSystemAudio) ? 'Open Settings' : undefined,
+                    actionUrl: (isPermissionMessage || isSilentSystemAudio)
                         ? (isMic
                             ? 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'
                             : 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture')
@@ -1055,6 +1073,36 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
             // Ignore user mic transcripts when not recording
             // Only interviewer (system audio) transcripts should appear in chat
             if (transcript.speaker === 'user') {
+                const fallbackQuestionText = transcript.text.trim();
+                if (fallbackQuestionText && looksLikeDirectQuestion(fallbackQuestionText)) {
+                    setIsInterviewerSpeaking(!transcript.final);
+
+                    if (transcript.final) {
+                        setInterviewerTranscriptTurns(prev => [
+                            ...prev.filter(turn => turn.final),
+                            {
+                                id: `mic-question-${Date.now()}-${prev.length}`,
+                                text: fallbackQuestionText,
+                                final: true,
+                                timestamp: Date.now(),
+                            },
+                        ].slice(-40));
+
+                        setTimeout(() => {
+                            setIsInterviewerSpeaking(false);
+                        }, 3000);
+                    } else {
+                        setInterviewerTranscriptTurns(prev => [
+                            ...prev.filter(turn => turn.final),
+                            {
+                                id: 'mic-question-interim',
+                                text: fallbackQuestionText,
+                                final: false,
+                                timestamp: Date.now(),
+                            },
+                        ].slice(-40));
+                    }
+                }
                 return;  // Skip user mic input - only relevant when Answer button is active
             }
 

@@ -511,7 +511,8 @@ body {
 .interview-workspace {
   display: flex;
   min-height: 0;
-  max-height: min(680px, calc(100vh - 96px));
+  min-height: 560px;
+  max-height: 680px;
   flex-direction: column;
 }
 
@@ -519,7 +520,7 @@ body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;
   min-height: 0;
-  height: min(560px, calc(100vh - 220px));
+  height: 500px;
   border-bottom: 1px solid var(--overlay-border-soft);
 }
 
@@ -588,12 +589,13 @@ body {
 
 @media (max-width: 900px) {
   .interview-workspace {
-    max-height: min(720px, calc(100vh - 80px));
+    min-height: 520px;
+    max-height: 620px;
   }
 
   .interview-workspace-grid {
     grid-template-columns: minmax(0, 1fr);
-    height: min(620px, calc(100vh - 238px));
+    height: 430px;
   }
 
   .interview-question-rail {

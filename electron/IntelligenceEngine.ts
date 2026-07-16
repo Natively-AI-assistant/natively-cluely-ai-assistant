@@ -40,7 +40,7 @@ function detectRefinementIntent(userText: string): { isRefinement: boolean; inte
 function looksLikeInterviewerQuestion(text: string, confidence?: number): boolean {
     const trimmed = text.trim();
     if (trimmed.length < 18) return false;
-    if (confidence !== undefined && confidence > 0 && confidence < 0.7) return false;
+    if (confidence !== undefined && confidence > 0 && confidence < 0.5) return false;
 
     const questionSignals = [
         /\?$/,
@@ -50,6 +50,32 @@ function looksLikeInterviewerQuestion(text: string, confidence?: number): boolea
     const nonQuestionChatter = /\b(thank you|thanks|sounds good|great|awesome|perfect|one moment|hold on)\b/i;
     if (nonQuestionChatter.test(trimmed) && trimmed.length < 50) return false;
     return questionSignals.some(pattern => pattern.test(trimmed));
+}
+
+function looksLikeDirectUserQuestion(text: string, confidence?: number): boolean {
+    const trimmed = text.trim();
+    if (trimmed.length < 12 || trimmed.length > 180) return false;
+    if (confidence !== undefined && confidence > 0 && confidence < 0.75) return false;
+
+    const words = trimmed.split(/\s+/).filter(Boolean);
+    if (words.length > 32) return false;
+
+    const startsWithQuestion = /^(can|could|would|will|do|does|did|are|is|was|were|have|has|how|what|why|when|where|which|who|tell me|walk me through|explain|describe|give me an example)\b/i.test(trimmed);
+    const hasQuestionMark = /\?$/.test(trimmed);
+    if (!startsWithQuestion && !hasQuestionMark) return false;
+
+    const answerFragmentSignals = /\b(i|i'm|i've|i'd|i'll|my|we|we're|we've|our)\b/i;
+    if (answerFragmentSignals.test(trimmed) && !startsWithQuestion) return false;
+
+    return looksLikeInterviewerQuestion(trimmed, confidence);
+}
+
+function isQuotaError(error: unknown): boolean {
+    const message = error instanceof Error
+        ? `${error.name} ${error.message} ${error.stack ?? ''}`
+        : String(error);
+
+    return /RESOURCE_EXHAUSTED|Quota exceeded|Too Many Requests|code["']?:\s*429|\b429\b/i.test(message);
 }
 
 // Events emitted by IntelligenceEngine
@@ -109,6 +135,8 @@ export class IntelligenceEngine extends EventEmitter {
     private readonly triggerCooldown: number = 3000; // 3 seconds
     private pendingAutoAnswerTimer: NodeJS.Timeout | null = null;
     private readonly autoAnswerDebounceMs: number = 1200;
+    private quotaCooldownUntil: number = 0;
+    private readonly quotaCooldownMs: number = 60000;
 
     constructor(llmHelper: LLMHelper, session: SessionTracker) {
         super();
@@ -172,13 +200,19 @@ export class IntelligenceEngine extends EventEmitter {
             }
         }
 
-        if (
-            result &&
-            result.role === 'interviewer' &&
+        const canUseUserQuestionFallback = Boolean(this.session.getMeetingMetadata()?.interviewContextId);
+        const isAutoAnswerCoolingDown = Date.now() < this.quotaCooldownUntil;
+        const isQuestionLikeTranscript = result?.role === 'user'
+            ? looksLikeDirectUserQuestion(segment.text, segment.confidence)
+            : looksLikeInterviewerQuestion(segment.text, segment.confidence);
+        const canAutoAnswerFromTranscript = result &&
             segment.final &&
             this.activeMode === 'idle' &&
-            looksLikeInterviewerQuestion(segment.text, segment.confidence)
-        ) {
+            !isAutoAnswerCoolingDown &&
+            isQuestionLikeTranscript &&
+            (result.role === 'interviewer' || (result.role === 'user' && canUseUserQuestionFallback));
+
+        if (canAutoAnswerFromTranscript) {
             if (this.pendingAutoAnswerTimer) {
                 clearTimeout(this.pendingAutoAnswerTimer);
             }
@@ -190,11 +224,16 @@ export class IntelligenceEngine extends EventEmitter {
                     .filter(item => item.role === 'interviewer')
                     .map(item => item.text.trim())
                     .filter(Boolean);
-                const question = recentInterviewerTurns.length > 0
+                const question = result.role === 'user'
+                    ? segment.text.trim()
+                    : recentInterviewerTurns.length > 0
                     ? recentInterviewerTurns.join(' ')
                     : segment.text.trim();
 
-                if (!looksLikeInterviewerQuestion(question, segment.confidence)) return;
+                const questionLooksUsable = result.role === 'user'
+                    ? looksLikeDirectUserQuestion(question, segment.confidence)
+                    : looksLikeInterviewerQuestion(question, segment.confidence);
+                if (!questionLooksUsable) return;
 
                 void this.runWhatShouldISay(question, segment.confidence ?? 0.82).catch(error => {
                     console.warn('[IntelligenceEngine] Auto-answer trigger failed:', error?.message || error);
@@ -209,6 +248,10 @@ export class IntelligenceEngine extends EventEmitter {
      */
     async handleSuggestionTrigger(trigger: SuggestionTrigger): Promise<void> {
         if (trigger.confidence < 0.5) {
+            return;
+        }
+        if (Date.now() < this.quotaCooldownUntil) {
+            console.warn('[IntelligenceEngine] Skipping suggestion trigger during quota cooldown');
             return;
         }
         await this.runWhatShouldISay(trigger.lastQuestion, trigger.confidence);
@@ -279,6 +322,10 @@ export class IntelligenceEngine extends EventEmitter {
         // Bypass cooldown when the user explicitly attached images (capture-and-process intent).
         // The cooldown exists to debounce auto-triggers, not explicit shortcuts with context.
         const hasImages = imagePaths && imagePaths.length > 0;
+        if (!hasImages && now < this.quotaCooldownUntil) {
+            console.warn('[IntelligenceEngine] Skipping what_to_say during quota cooldown');
+            return null;
+        }
         if (!hasImages && now - this.lastTriggerTime < this.triggerCooldown) {
             return null;
         }
@@ -346,6 +393,25 @@ export class IntelligenceEngine extends EventEmitter {
                 }
             }
 
+            const explicitQuestion = question?.trim();
+            if (explicitQuestion) {
+                const lastItem = contextItems[contextItems.length - 1];
+                const alreadyPresent = lastItem && lastItem.text.trim() === explicitQuestion;
+                const hasInterviewerQuestion = contextItems.some(item =>
+                    item.role === 'interviewer' &&
+                    item.text.trim() === explicitQuestion
+                );
+
+                if (!alreadyPresent && !hasInterviewerQuestion) {
+                    console.log(`[IntelligenceEngine] Injecting explicit question as interviewer context: "${explicitQuestion.substring(0, 50)}..."`);
+                    contextItems.push({
+                        role: 'interviewer',
+                        text: explicitQuestion,
+                        timestamp: Date.now()
+                    });
+                }
+            }
+
             const transcriptTurns = contextItems.map(item => ({
                 role: item.role,
                 text: item.text,
@@ -364,7 +430,7 @@ export class IntelligenceEngine extends EventEmitter {
                 180
             );
 
-            const lastInterviewerTurn = this.session.getLastInterviewerTurn();
+            const lastInterviewerTurn = explicitQuestion || this.session.getLastInterviewerTurn();
             const intentResult = await classifyIntent(
                 lastInterviewerTurn,
                 preparedTranscript,
@@ -469,6 +535,10 @@ export class IntelligenceEngine extends EventEmitter {
 
         } catch (error) {
             this.emit('error', error as Error, 'what_to_say');
+            if (isQuotaError(error)) {
+                this.quotaCooldownUntil = Date.now() + this.quotaCooldownMs;
+                console.warn(`[IntelligenceEngine] LLM quota exhausted. Pausing auto-answer for ${Math.round(this.quotaCooldownMs / 1000)}s.`);
+            }
             this.setMode('idle');
             return "Could you repeat that? I want to make sure I address your question properly.";
         }

@@ -1219,6 +1219,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         if (!window.electronAPI?.onDeviceSelectionApplied) return;
         const unsubscribe = window.electronAPI.onDeviceSelectionApplied((payload) => {
             if (payload.fellBack) {
+                if (payload.kind === 'input') {
+                    localStorage.removeItem('preferredInputDeviceId');
+                    setSelectedInput('default');
+                } else {
+                    localStorage.removeItem('preferredOutputDeviceId');
+                    setSelectedOutput('default');
+                }
                 setDeviceFallbackNotice({
                     kind: payload.kind,
                     requested: payload.requested,

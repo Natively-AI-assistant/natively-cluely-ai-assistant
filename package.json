@@ -80,7 +80,8 @@
       "identity": null,
       "hardenedRuntime": false,
       "extendInfo": {
-        "NSScreenCaptureUsageDescription": "Natively needs Screen Recording permission to capture system audio for meeting transcription.",
+        "NSScreenCaptureUsageDescription": "Natively needs Screen Recording permission to capture meeting context.",
+        "NSAudioCaptureUsageDescription": "Natively needs System Audio Recording permission to capture meeting audio for transcription.",
         "NSMicrophoneUsageDescription": "Natively needs microphone access to transcribe your voice during meetings."
       }
     },

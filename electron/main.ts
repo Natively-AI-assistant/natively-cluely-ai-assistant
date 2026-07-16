@@ -40,6 +40,7 @@ const originalError = console.error;
 
 /** Maximum log file size before rotation (10 MB). */
 const LOG_MAX_BYTES = 10 * 1024 * 1024;
+const MEETING_AUDIO_INIT_TIMEOUT_MS = 12_000;
 
 function logToFile(msg: string) {
   try {
@@ -90,11 +91,14 @@ async function ensureMacMicrophoneAccess(context: string): Promise<boolean> {
 
 /**
  * Check macOS Screen Recording (kTCCServiceScreenCapture) permission status.
+ * System Audio Recording / CoreAudio tap permission has no equivalent public
+ * status API, so silent-buffer detection handles that case after capture starts.
  *
  * Electron has no askForMediaAccess('screen') API — macOS only shows the TCC
  * dialog when the app actually calls a protected API (SCK / CoreAudio tap).
  * If the permission is 'denied', we cannot re-prompt; the user must re-enable
- * manually in System Settings → Privacy & Security → Screen Recording.
+ * manually in System Settings → Privacy & Security → Screen Recording or
+ * System Audio Recording.
  *
  * Returns false only when the permission is explicitly 'denied'. All other
  * statuses ('granted', 'not-determined', 'restricted') return true because:
@@ -1346,10 +1350,10 @@ export class AppState {
           zerofillLatched = true;
         } else if (Date.now() - firstChunkAt >= ZEROFILL_OBSERVATION_MS) {
           zerofillTriggered = true;
-          console.warn(`${prefix}SystemAudio chunks all zero-filled for ${ZEROFILL_OBSERVATION_MS / 1000}s — output route may be silent or macOS may be zero-filling capture.`);
+          console.warn(`${prefix}SystemAudio chunks all zero-filled for ${ZEROFILL_OBSERVATION_MS / 1000}s — macOS may be returning silent buffers because System Audio Recording permission is missing.`);
           this.broadcast('audio-capture-failed', {
             channel: 'system',
-            message: 'System audio capture is running, but the incoming audio is silent. If your call is playing through AirPods, a headset profile, a monitor, or a virtual device, switch the meeting app to the same output Natively is capturing, then restart the meeting.',
+            message: 'System audio is running but macOS is returning silent buffers. Grant System Audio Recording permission to Natively, then quit and reopen Natively.',
             reason: 'silent-system-audio',
             attempt: 0,
             maxAttempts: 3,
@@ -1735,13 +1739,31 @@ export class AppState {
     return trimmed;
   }
 
+  private shouldUseDefaultForPossiblyStaleDevice(kind: 'input' | 'output', id: string): boolean {
+    if (kind === 'output' && id === 'sck') return false;
+
+    const normalized = id.toLowerCase();
+    if (normalized.includes('airpods')) return true;
+
+    // CoreAudio output route IDs for Bluetooth devices can stay in renderer
+    // storage after the device disconnects. Querying native device availability
+    // for those stale IDs has been observed to hang meeting startup.
+    if (kind === 'output' && /^[0-9a-f]{2}(?:-[0-9a-f]{2}){5}:output$/i.test(id)) {
+      return true;
+    }
+
+    return false;
+  }
+
   private isRequestedAudioDeviceAvailable(kind: 'input' | 'output', id: string | undefined): boolean {
     if (!id) return true;
     if (kind === 'output' && id === 'sck') return true;
 
+    console.log(`[Main] Checking ${kind} device availability for "${id}"...`);
     const devices = kind === 'input'
       ? AudioDevices.getInputDevices()
       : AudioDevices.getOutputDevices();
+    console.log(`[Main] ${kind} device availability check returned ${devices.length} device(s).`);
 
     // If native enumeration is unavailable, do not reject the device up front;
     // construction/start will still surface a concrete native error.
@@ -1755,6 +1777,19 @@ export class AppState {
     requested: string | undefined,
   ): string | undefined {
     if (!requested) return undefined;
+
+    if (this.shouldUseDefaultForPossiblyStaleDevice(kind, requested)) {
+      console.warn(`[Main] Saved ${kind} device may be stale or slow to resolve: ${requested}. Using default for this meeting.`);
+      this.broadcastDeviceSelection({
+        kind,
+        requested,
+        actual: 'default',
+        fellBack: true,
+        reason: 'saved-device-skipped-for-meeting-start',
+      });
+      return undefined;
+    }
+
     if (this.isRequestedAudioDeviceAvailable(kind, requested)) return requested;
 
     console.warn(`[Main] Requested ${kind} device is not currently available: ${requested}. Falling back to default for this session.`);
@@ -1770,27 +1805,17 @@ export class AppState {
 
   private async reconfigureAudio(inputDeviceId?: string | null, outputDeviceId?: string | null): Promise<void> {
     console.log(`[Main] Reconfiguring Audio: Input=${inputDeviceId}, Output=${outputDeviceId}`);
+    console.log('[Main] Audio reconfigure step: normalize requested devices.');
 
-    // PERF: skip the entire destroy+recreate cycle when neither device changed
-    // since the last reconfigure AND both captures already exist. Each
-    // destroy()+new() costs 50–200ms (macOS CoreAudio Tap re-init, Windows
-    // WASAPI device contention, CPAL stream open). The common case — user
-    // starts a second meeting with the same mic/speakers — hits this path.
+    // Always rebuild the native captures for a fresh meeting. Reusing a stopped
+    // CoreAudio/CPAL mic monitor across meetings can hang on the next start().
     const requestedInput = this.normalizeDeviceId(inputDeviceId);
     const requestedOutput = this.normalizeDeviceId(outputDeviceId);
+    console.log(`[Main] Audio reconfigure step: resolve input request "${requestedInput || 'default'}".`);
     const wantedInput = this.fallbackUnavailableDevice('input', requestedInput);
+    console.log(`[Main] Audio reconfigure step: resolve output request "${requestedOutput || 'default'}".`);
     const wantedOutput = this.fallbackUnavailableDevice('output', requestedOutput);
-    if (
-      this.systemAudioCapture &&
-      this.microphoneCapture &&
-      !wantedInput &&
-      !wantedOutput &&
-      this._lastRequestedInputDeviceId === wantedInput &&
-      this._lastRequestedOutputDeviceId === wantedOutput
-    ) {
-      console.log('[Main] Audio reconfigure skipped — device IDs unchanged.');
-      return;
-    }
+    console.log(`[Main] Audio reconfigure resolved devices: input=${wantedInput || 'default'}, output=${wantedOutput || 'default'}.`);
 
     // Remember the input id so the mic-recovery handler can recreate with the
     // same selection if the cpal stream errors out mid-meeting.
@@ -1801,6 +1826,7 @@ export class AppState {
 
     // 1. System Audio (Output Capture)
     if (this.systemAudioCapture) {
+      console.log('[Main] Audio reconfigure step: destroy existing SystemAudioCapture.');
       // destroy() calls stop() AND removeAllListeners(), preventing EventEmitter listener leaks.
       // Using stop()+null would orphan all 'data', 'speech_ended', 'sample_rate_changed'
       // closures (they still hold a ref to `this`) and trigger them on the next meeting.
@@ -1848,6 +1874,7 @@ export class AppState {
 
     // 2. Microphone (Input Capture)
     if (this.microphoneCapture) {
+      console.log('[Main] Audio reconfigure step: destroy existing MicrophoneCapture.');
       // destroy() calls stop() AND removeAllListeners(), preventing EventEmitter listener leaks.
       this.microphoneCapture.destroy();
       this.microphoneCapture = null;
@@ -1937,6 +1964,22 @@ export class AppState {
           });
         }
       }
+    }
+  }
+
+  private async withMeetingAudioInitTimeout<T>(work: Promise<T>): Promise<T> {
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      return await Promise.race([
+        work,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            reject(new Error(`Meeting audio init timed out after ${MEETING_AUDIO_INIT_TIMEOUT_MS}ms`));
+          }, MEETING_AUDIO_INIT_TIMEOUT_MS);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 
@@ -2508,8 +2551,9 @@ export class AppState {
       throw new Error(message);
     }
 
-    // Check Screen Recording permission required for system audio capture
-    // (CoreAudio Global Process Tap + ScreenCaptureKit both need this).
+    // Check Screen Recording permission required by ScreenCaptureKit. CoreAudio
+    // tap system-audio permission has no public status API, so the zero-fill
+    // detector surfaces that failure after capture starts.
     // NOTE: The 'not-determined' TCC dialog is triggered once at app startup
     // (in initializeApp) so it never pops up mid-meeting here. We only act on
     // explicit 'denied' — in that case warn the user but let the meeting continue
@@ -2569,16 +2613,24 @@ export class AppState {
         return;
       }
       try {
-        // Check for audio configuration preference
-        if (metadata?.audio) {
-          await this.reconfigureAudio(metadata.audio.inputDeviceId, metadata.audio.outputDeviceId);
-        }
+        const { systemStarted, micStarted } = await this.withMeetingAudioInitTimeout((async () => {
+          // Check for audio configuration preference
+          if (metadata?.audio) {
+            console.log('[Main] Audio pipeline step: reconfigureAudio.');
+            await this.reconfigureAudio(metadata.audio.inputDeviceId, metadata.audio.outputDeviceId);
+          }
 
-        // LAZY INIT: Ensure pipeline is ready (if not reconfigured above)
-        this.setupSystemAudioPipeline();
+          // LAZY INIT: Ensure pipeline is ready (if not reconfigured above)
+          console.log('[Main] Audio pipeline step: setupSystemAudioPipeline.');
+          this.setupSystemAudioPipeline();
 
-        const systemStarted = this.startSystemAudioForMeeting();
-        const micStarted = this.startMicrophoneForMeeting(metadata?.audio?.inputDeviceId);
+          console.log('[Main] Audio pipeline step: startSystemAudioForMeeting.');
+          const systemStarted = this.startSystemAudioForMeeting();
+          console.log('[Main] Audio pipeline step: startMicrophoneForMeeting.');
+          const micStarted = this.startMicrophoneForMeeting(this._lastRequestedInputDeviceId);
+
+          return { systemStarted, micStarted };
+        })());
 
         // Start JIT RAG live indexing
         if (this.ragManager) {

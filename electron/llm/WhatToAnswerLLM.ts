@@ -59,7 +59,18 @@ ANSWER SHAPE: ${intentResult.answerShape}
 
         } catch (error) {
             console.error("[WhatToAnswerLLM] Stream failed:", error);
+            if (isQuotaError(error)) {
+                throw error;
+            }
             yield "Could you repeat that? I want to make sure I address your question properly.";
         }
     }
+}
+
+function isQuotaError(error: unknown): boolean {
+    const message = error instanceof Error
+        ? `${error.name} ${error.message} ${error.stack ?? ''}`
+        : String(error);
+
+    return /RESOURCE_EXHAUSTED|Quota exceeded|Too Many Requests|code["']?:\s*429|\b429\b/i.test(message);
 }
