@@ -115,6 +115,7 @@ interface ElectronAPI {
   onSystemAudioPermissionDenied: (callback: (message: string) => void) => () => void
   onDeviceSelectionApplied: (callback: (payload: { kind: 'input' | 'output'; requested: string | null; actual: string | null; fellBack: boolean; reason?: string }) => void) => () => void
   onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; reason?: string; attempt: number; maxAttempts: number; terminal?: boolean; stuck?: boolean }) => void) => () => void
+  onAudioCaptureRecovered: (callback: (payload: { channel: 'system' | 'mic'; reason?: string }) => void) => () => void
 
   // STT Status Events
   onSttStatusChanged: (callback: (data: { state: 'connected' | 'reconnecting' | 'failed'; provider: string; error?: string; channel: 'user' | 'interviewer'; reconnectAttempts?: number }) => void) => () => void
@@ -132,8 +133,7 @@ interface ElectronAPI {
   interviewGetContexts: () => Promise<any[]>
   interviewSaveContext: (input: any) => Promise<{ success: boolean; context?: any; error?: string }>
   interviewDeleteContext: (id: string) => Promise<{ success: boolean; error?: string }>
-  interviewSelectFile: () => Promise<{ success?: boolean; cancelled?: boolean; filePath?: string; fileName?: string; extension?: string; error?: string }>
-  interviewExtractFile: (filePath: string) => Promise<{ success: boolean; text?: string; fileName?: string; filePath?: string; extension?: string; error?: string }>
+  interviewSelectFile: () => Promise<{ success?: boolean; cancelled?: boolean; text?: string; filePath?: string; fileName?: string; extension?: string; error?: string }>
   interviewGetActiveContext: () => Promise<any | null>
 
   // Meeting Lifecycle
@@ -752,7 +752,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   interviewSaveContext: (input: any) => ipcRenderer.invoke("interview:save-context", input),
   interviewDeleteContext: (id: string) => ipcRenderer.invoke("interview:delete-context", id),
   interviewSelectFile: () => ipcRenderer.invoke("interview:select-file"),
-  interviewExtractFile: (filePath: string) => ipcRenderer.invoke("interview:extract-file", filePath),
   interviewGetActiveContext: () => ipcRenderer.invoke("interview:get-active-context"),
 
   // Action Button Mode (Dynamic Recap / Brainstorm toggle)

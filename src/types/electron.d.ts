@@ -164,8 +164,7 @@ export interface ElectronAPI {
   interviewGetContexts: () => Promise<InterviewContext[]>
   interviewSaveContext: (input: SaveInterviewContextInput) => Promise<{ success: boolean; context?: InterviewContext; error?: string }>
   interviewDeleteContext: (id: string) => Promise<{ success: boolean; error?: string }>
-  interviewSelectFile: () => Promise<{ success?: boolean; cancelled?: boolean; filePath?: string; fileName?: string; extension?: string; error?: string }>
-  interviewExtractFile: (filePath: string) => Promise<{ success: boolean; text?: string; fileName?: string; filePath?: string; extension?: string; error?: string }>
+  interviewSelectFile: () => Promise<{ success?: boolean; cancelled?: boolean; text?: string; filePath?: string; fileName?: string; extension?: string; error?: string }>
   interviewGetActiveContext: () => Promise<InterviewContext | null>
 
   // Dynamic Action Button Mode

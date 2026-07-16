@@ -184,36 +184,25 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         setAnswerTone('Confident');
     };
 
-    const extractInterviewFile = async (kind: 'resume' | 'context', filePath?: string) => {
+    const extractInterviewFile = async (kind: 'resume' | 'context') => {
         setInterviewSetupError(null);
         try {
-            const chosen = filePath
-                ? { success: true, filePath }
-                : await window.electronAPI?.interviewSelectFile?.();
-            if (!chosen || chosen.cancelled || !chosen.filePath) return;
-            const extracted = await window.electronAPI?.interviewExtractFile?.(chosen.filePath);
-            if (!extracted?.success || extracted.text === undefined) {
-                throw new Error(extracted?.error || 'Could not extract text');
+            const extracted = await window.electronAPI?.interviewSelectFile?.();
+            if (!extracted || extracted.cancelled) return;
+            if (!extracted.success || extracted.text === undefined) {
+                throw new Error(extracted.error || 'Could not extract text');
             }
             if (kind === 'resume') {
                 setResumeText(extracted.text);
                 setResumeFileName(extracted.fileName || null);
-                setResumeFilePath(extracted.filePath || chosen.filePath);
+                setResumeFilePath(extracted.filePath || null);
             } else {
                 setOptionalContextText(extracted.text);
                 setOptionalContextFileName(extracted.fileName || null);
-                setOptionalContextFilePath(extracted.filePath || chosen.filePath);
+                setOptionalContextFilePath(extracted.filePath || null);
             }
         } catch (err: any) {
             setInterviewSetupError(err?.message || 'Could not read that file');
-        }
-    };
-
-    const handleInterviewDrop = (kind: 'resume' | 'context') => (event: React.DragEvent<HTMLDivElement>) => {
-        event.preventDefault();
-        const file = event.dataTransfer.files?.[0] as any;
-        if (file?.path) {
-            extractInterviewFile(kind, file.path);
         }
     };
 
@@ -1060,11 +1049,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                             </div>
 
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                <div
-                                                    onDragOver={(event) => event.preventDefault()}
-                                                    onDrop={handleInterviewDrop('resume')}
-                                                    className="rounded-lg border border-border-subtle bg-bg-input/70 p-3 space-y-2"
-                                                >
+                                                <div className="rounded-lg border border-border-subtle bg-bg-input/70 p-3 space-y-2">
                                                     <div className="flex items-center justify-between gap-2">
                                                         <span className="flex items-center gap-2 text-[12px] font-semibold text-text-primary"><FileText size={14} /> Resume</span>
                                                         <button onClick={() => extractInterviewFile('resume')} className="p-1.5 rounded-md hover:bg-bg-elevated text-text-secondary hover:text-text-primary transition-colors" title="Upload resume">
@@ -1079,16 +1064,12 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                             setResumeFileName(null);
                                                             setResumeFilePath(null);
                                                         }}
-                                                        placeholder="Paste resume text or drop a file"
+                                                        placeholder="Paste resume text or choose a file"
                                                         rows={5}
                                                         className="w-full resize-none bg-transparent text-[12px] text-text-primary outline-none placeholder:text-text-tertiary"
                                                     />
                                                 </div>
-                                                <div
-                                                    onDragOver={(event) => event.preventDefault()}
-                                                    onDrop={handleInterviewDrop('context')}
-                                                    className="rounded-lg border border-border-subtle bg-bg-input/70 p-3 space-y-2"
-                                                >
+                                                <div className="rounded-lg border border-border-subtle bg-bg-input/70 p-3 space-y-2">
                                                     <div className="flex items-center justify-between gap-2">
                                                         <span className="flex items-center gap-2 text-[12px] font-semibold text-text-primary"><FileText size={14} /> Extra context</span>
                                                         <button onClick={() => extractInterviewFile('context')} className="p-1.5 rounded-md hover:bg-bg-elevated text-text-secondary hover:text-text-primary transition-colors" title="Upload context">
@@ -1103,7 +1084,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                             setOptionalContextFileName(null);
                                                             setOptionalContextFilePath(null);
                                                         }}
-                                                        placeholder="Paste notes or drop a file"
+                                                        placeholder="Paste notes or choose a file"
                                                         rows={5}
                                                         className="w-full resize-none bg-transparent text-[12px] text-text-primary outline-none placeholder:text-text-tertiary"
                                                     />

@@ -604,16 +604,31 @@ export class DatabaseManager {
         if (version < 15) {
             console.log('[DatabaseManager] Applying migration v14 → v15: Add meeting audio recording columns');
             const columnsToAdd = [
-                "ALTER TABLE meetings ADD COLUMN audio_recording_path TEXT",
-                "ALTER TABLE meetings ADD COLUMN audio_recording_format TEXT",
-                "ALTER TABLE meetings ADD COLUMN audio_recording_sample_rate INTEGER",
-                "ALTER TABLE meetings ADD COLUMN audio_recording_size_bytes INTEGER",
-                "ALTER TABLE meetings ADD COLUMN audio_recording_duration_ms INTEGER"
+                { name: 'audio_recording_path', sql: 'ALTER TABLE meetings ADD COLUMN audio_recording_path TEXT' },
+                { name: 'audio_recording_format', sql: 'ALTER TABLE meetings ADD COLUMN audio_recording_format TEXT' },
+                { name: 'audio_recording_sample_rate', sql: 'ALTER TABLE meetings ADD COLUMN audio_recording_sample_rate INTEGER' },
+                { name: 'audio_recording_size_bytes', sql: 'ALTER TABLE meetings ADD COLUMN audio_recording_size_bytes INTEGER' },
+                { name: 'audio_recording_duration_ms', sql: 'ALTER TABLE meetings ADD COLUMN audio_recording_duration_ms INTEGER' },
             ];
-            for (const sql of columnsToAdd) {
-                try { this.db.exec(sql); } catch (e) { /* Column already exists */ }
-            }
-            this.db.pragma('user_version = 15');
+            this.db.transaction(() => {
+                const existingColumns = new Set(
+                    (this.db!.pragma('table_info(meetings)') as Array<{ name: string }>).map(column => column.name)
+                );
+                for (const column of columnsToAdd) {
+                    if (!existingColumns.has(column.name)) {
+                        this.db!.exec(column.sql);
+                    }
+                }
+
+                const migratedColumns = new Set(
+                    (this.db!.pragma('table_info(meetings)') as Array<{ name: string }>).map(column => column.name)
+                );
+                const missingColumns = columnsToAdd.filter(column => !migratedColumns.has(column.name));
+                if (missingColumns.length > 0) {
+                    throw new Error(`Meeting audio migration incomplete: ${missingColumns.map(column => column.name).join(', ')}`);
+                }
+                this.db!.pragma('user_version = 15');
+            })();
         }
 
         // Version 15 → 16: Local interview setup roles and answer contexts
@@ -1056,6 +1071,32 @@ export class DatabaseManager {
         };
     }
 
+    public getMeetingAudioRecording(id: string): Meeting['audioRecording'] | undefined {
+        if (!this.db) return undefined;
+        try {
+            const row = this.db.prepare(`
+                SELECT audio_recording_path, audio_recording_format, audio_recording_sample_rate,
+                       audio_recording_size_bytes, audio_recording_duration_ms
+                FROM meetings
+                WHERE id = ?
+            `).get(id) as any;
+            return this.rowToAudioRecording(row);
+        } catch (error) {
+            console.error(`[DatabaseManager] Failed to load audio recording for meeting ${id}:`, error);
+            return undefined;
+        }
+    }
+
+    public meetingExists(id: string): boolean | null {
+        if (!this.db) return null;
+        try {
+            return Boolean(this.db.prepare('SELECT 1 FROM meetings WHERE id = ?').get(id));
+        } catch (error) {
+            console.error(`[DatabaseManager] Failed to check meeting ${id}:`, error);
+            return null;
+        }
+    }
+
     public updateMeetingAudioRecording(id: string, metadata: MeetingAudioRecording): boolean {
         if (!this.db) return false;
         if (!this.isSafeRecordingPath(metadata.path)) {
@@ -1360,19 +1401,29 @@ export class DatabaseManager {
 
         try {
             const row = this.db.prepare('SELECT audio_recording_path FROM meetings WHERE id = ?').get(id) as any;
-            if (this.isSafeRecordingPath(row?.audio_recording_path)) {
+            const recordingPath = this.isSafeRecordingPath(row?.audio_recording_path)
+                ? row.audio_recording_path as string
+                : null;
+            const info = this.db.transaction(() => {
+                this.db!.prepare('DELETE FROM embedding_queue WHERE meeting_id = ?').run(id);
+                this.db!.prepare('DELETE FROM chunk_summaries WHERE meeting_id = ?').run(id);
+                this.db!.prepare('DELETE FROM chunks WHERE meeting_id = ?').run(id);
+                this.db!.prepare('DELETE FROM ai_interactions WHERE meeting_id = ?').run(id);
+                this.db!.prepare('DELETE FROM transcripts WHERE meeting_id = ?').run(id);
+                return this.db!.prepare('DELETE FROM meetings WHERE id = ?').run(id);
+            })();
+
+            if (info.changes > 0 && recordingPath) {
                 try {
-                    if (fs.existsSync(row.audio_recording_path)) {
-                        fs.unlinkSync(row.audio_recording_path);
-                        console.log(`[DatabaseManager] Deleted recording for meeting ${id}: ${row.audio_recording_path}`);
+                    if (fs.existsSync(recordingPath)) {
+                        fs.unlinkSync(recordingPath);
+                        console.log(`[DatabaseManager] Deleted recording for meeting ${id}.`);
                     }
                 } catch (fileError) {
                     console.error(`[DatabaseManager] Failed to delete recording for meeting ${id}:`, fileError);
                 }
             }
 
-            const stmt = this.db.prepare('DELETE FROM meetings WHERE id = ?');
-            const info = stmt.run(id);
             console.log(`[DatabaseManager] Deleted meeting ${id}. Changes: ${info.changes}`);
             return info.changes > 0;
         } catch (error) {
@@ -1422,6 +1473,11 @@ export class DatabaseManager {
         if (!this.db) return false;
 
         try {
+            const recordingRows = this.db.prepare('SELECT audio_recording_path FROM meetings').all() as Array<{ audio_recording_path?: string | null }>;
+            const recordingPaths = recordingRows
+                .map(row => row.audio_recording_path)
+                .filter((filePath): filePath is string => this.isSafeRecordingPath(filePath));
+
             // Clear all tables atomically (order matters due to foreign keys,
             // but SQLite handles cascades). Using a transaction ensures we never
             // end up in a half-cleared state if one statement fails.
@@ -1432,10 +1488,22 @@ export class DatabaseManager {
                 this.db!.exec('DELETE FROM ai_interactions');
                 this.db!.exec('DELETE FROM transcripts');
                 this.db!.exec('DELETE FROM meetings');
+                this.db!.exec('DELETE FROM interview_contexts');
+                this.db!.exec('DELETE FROM interview_roles');
             })();
 
-            console.log('[DatabaseManager] All data cleared from database.');
-            return true;
+            let recordingsCleared = true;
+            for (const recordingPath of recordingPaths) {
+                try {
+                    if (fs.existsSync(recordingPath)) fs.unlinkSync(recordingPath);
+                } catch (error) {
+                    recordingsCleared = false;
+                    console.error('[DatabaseManager] Failed to remove a saved meeting recording during clear-all:', error);
+                }
+            }
+
+            console.log('[DatabaseManager] Meeting, interview setup, and recording data cleared.');
+            return recordingsCleared;
         } catch (error) {
             console.error('[DatabaseManager] Failed to clear all data:', error);
             return false;

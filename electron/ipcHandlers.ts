@@ -418,7 +418,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const result = await appState.processingHelper.getLLMHelper().chatWithGemini(message, imagePaths, context, options?.skipSystemPrompt);
 
-      console.log(`[IPC] gemini - chat response: `, result ? result.substring(0, 50) : "(empty)");
+      console.log(`[IPC] gemini-chat response received (chars=${result?.length ?? 0}).`);
 
       // Don't process empty responses
       if (!result || result.trim().length === 0) {
@@ -442,7 +442,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // 2. Add assistant response and set as last message
       console.log(`[IPC] Updating IntelligenceManager with assistant message...`);
       intelligenceManager.addAssistantMessage(result);
-      console.log(`[IPC] Updated IntelligenceManager.Last message: `, intelligenceManager.getLastAssistantMessage()?.substring(0, 50));
+      console.log('[IPC] Updated IntelligenceManager last assistant message.');
 
       // Log Usage
       intelligenceManager.logUsage('chat', message, result);
@@ -824,7 +824,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       await OllamaManager.getInstance().init({ force: true });
       return { success: true };
     } catch (error: any) {
-      return { success: false, message: error.message };
+      return { success: false, error: error.message };
     }
   });
 
@@ -1821,7 +1821,10 @@ export function initializeIpcHandlers(appState: AppState): void {
 
           ws.on('error', (err: any) => {
             clearTimeout(connectTimeout);
-            done({ success: false, error: err.message || 'Connection failed' });
+            done({
+              success: false,
+              error: sanitizeErrorMessage(err.message || 'Connection failed', [apiKey]),
+            });
           });
 
           ws.on('close', (code: number) => {
@@ -2208,32 +2211,17 @@ export function initializeIpcHandlers(appState: AppState): void {
       const result = await (dialog.showOpenDialog({
         properties: ['openFile'],
         filters: [
-          { name: 'Text & Documents', extensions: ['txt', 'md', 'pdf', 'docx', 'doc'] },
-          { name: 'All Files', extensions: ['*'] },
+          { name: 'Text & Documents', extensions: ['txt', 'md', 'pdf', 'docx'] },
         ],
       }) as unknown as Promise<Electron.OpenDialogReturnValue>);
       if (result.canceled || !result.filePaths.length) {
         return { success: false, cancelled: true };
       }
       const filePath = result.filePaths[0];
-      return {
-        success: true,
-        filePath,
-        fileName: path.basename(filePath),
-        extension: path.extname(filePath).toLowerCase(),
-      };
+      const extracted = await InterviewContextManager.getInstance().extractFile(filePath);
+      return { success: true, ...extracted };
     } catch (error: any) {
       console.error("[IPC] interview:select-file error:", error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  safeHandle("interview:extract-file", async (_, filePath: string) => {
-    try {
-      const result = await InterviewContextManager.getInstance().extractFile(filePath);
-      return { success: true, ...result };
-    } catch (error: any) {
-      console.error("[IPC] interview:extract-file error:", error);
       return { success: false, error: error.message };
     }
   });
@@ -2273,8 +2261,8 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle("open-meeting-recording", async (_, meetingId: string) => {
-    const meeting = DatabaseManager.getInstance().getMeetingDetails(meetingId);
-    const recordingPath = resolveSafeRecordingPath(meeting?.audioRecording?.path);
+    const recording = DatabaseManager.getInstance().getMeetingAudioRecording(meetingId);
+    const recordingPath = resolveSafeRecordingPath(recording?.path);
     if (!recordingPath) return { success: false, error: 'Recording not found' };
     if (!fs.existsSync(recordingPath)) return { success: false, error: 'Recording file is missing' };
 
@@ -2283,8 +2271,8 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle("reveal-meeting-recording", async (_, meetingId: string) => {
-    const meeting = DatabaseManager.getInstance().getMeetingDetails(meetingId);
-    const recordingPath = resolveSafeRecordingPath(meeting?.audioRecording?.path);
+    const recording = DatabaseManager.getInstance().getMeetingAudioRecording(meetingId);
+    const recordingPath = resolveSafeRecordingPath(recording?.path);
     if (!recordingPath) return { success: false, error: 'Recording not found' };
     if (!fs.existsSync(recordingPath)) return { success: false, error: 'Recording file is missing' };
 
