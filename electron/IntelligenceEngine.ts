@@ -863,7 +863,7 @@ export class IntelligenceEngine extends EventEmitter {
                 timestamp: item.timestamp
             }));
 
-            const preparedTranscript = prepareTranscriptForWhatToAnswer(transcriptTurns, 12);
+            let preparedTranscript = prepareTranscriptForWhatToAnswer(transcriptTurns, 12);
 
             const temporalContext = buildTemporalContext(
                 contextItems,
@@ -1073,6 +1073,73 @@ export class IntelligenceEngine extends EventEmitter {
                             ageBucket: ageBucket((fr as any).recalledAgeSeconds),
                             reason: fr.reason,
                         });
+                    }
+                    // LONG-RANGE LEXICAL RECALL FALLBACK (Campaign 2, H6 fix,
+                    // 2026-07-16): SessionMemory/resolveLiveFollowup above only
+                    // recall EXPLICITLY-NOTED proper-noun entities (projects,
+                    // companies, skills, a small fixed algorithm/CS topic list) —
+                    // a free-text incident/story mentioned once in prose ("a
+                    // memory leak in a long-running consumer process") is never
+                    // captured there, so a later paraphrased callback
+                    // ("the memory leak you mentioned earlier") finds nothing to
+                    // recall even though the extractor correctly flagged
+                    // isFollowUp=true (fix#2, H3). Live-proven on the real
+                    // backend (traces2/forensic-report.md H6): the model either
+                    // honestly said the transcript doesn't contain the story, or
+                    // (pre fix#1) emitted the "nothing actionable" sentinel.
+                    // Fire ONLY when: the extractor already thinks this is a
+                    // follow-up, AND entity-based recall did NOT already resolve
+                    // it (never runs redundantly, never overrides a real entity
+                    // match), AND we're not already just answering a typed
+                    // question. Bounded, deterministic, no LLM — real transcript
+                    // text only, so zero fabrication risk (R5): either the
+                    // model gets the ACTUAL earlier turn or nothing changes.
+                    const entityRecallSucceeded = Boolean(fr && !fr.isClarification && fr.confidence >= 0.7 && (fr as any).recalledEntity);
+                    if (!question && extractedQuestion.isFollowUp && !entityRecallSucceeded) {
+                        try {
+                            const { recallLongRangeContext } = require('./llm/longRangeTranscriptRecall') as typeof import('./llm/longRangeTranscriptRecall');
+                            const durableWindow = this.session.getDurableContext(this.LIVE_MEMORY_WINDOW_SECONDS);
+                            const recentWindowCutoffMs = transcriptTurns.length > 0 ? transcriptTurns[0].timestamp : Date.now();
+                            // Mode-boundary gate (skeptic-pass finding, 2026-07-16): mirror
+                            // effectiveMemoryMode's own "is this turn's INTENT a comp
+                            // question" derivation (line ~1029 above) so a comp figure
+                            // discussed earlier can only ever be recalled back into another
+                            // comp/negotiation question — never leaked into an unrelated
+                            // technical/coding/general follow-up via this lexical fallback.
+                            let isNegotiationTurn = false;
+                            try {
+                                isNegotiationTurn = planAnswer({
+                                    question: extractedQuestion.latestQuestion,
+                                    source: 'what_to_answer',
+                                    speakerPerspective: 'interviewer',
+                                    activeMode: snapshotModeInfo,
+                                }).answerType === 'negotiation_answer';
+                            } catch { /* default: not negotiation → comp stays gated */ }
+                            const recall = recallLongRangeContext(
+                                extractedQuestion.latestQuestion,
+                                durableWindow,
+                                recentWindowCutoffMs,
+                                Date.now(),
+                                isNegotiationTurn,
+                            );
+                            if (recall.block) {
+                                preparedTranscript = `${recall.block}\n\n${preparedTranscript}`;
+                                trace.mark('repair_used', { reason: 'long_range_lexical_recall', matchCount: recall.matchCount });
+                                piTelemetry.emit('session_memory_recall_attempted', {
+                                    via: 'lexical_transcript_fallback',
+                                    matchCount: recall.matchCount,
+                                    ageBucket: ageBucket(recall.bestAgeSeconds ?? undefined),
+                                });
+                                if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
+                                    console.log('[TRACE:LONGCTX] long_range_recall_fired', JSON.stringify({
+                                        question: extractedQuestion.latestQuestion,
+                                        matchCount: recall.matchCount,
+                                        bestAgeSeconds: recall.bestAgeSeconds,
+                                        blockChars: recall.block.length,
+                                    }));
+                                }
+                            }
+                        } catch { /* fallback is best-effort; never blocks the answer */ }
                     }
                 } catch { /* keep extractor result */ }
             }

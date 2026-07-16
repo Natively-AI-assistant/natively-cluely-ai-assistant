@@ -1,8 +1,8 @@
 === GOLDEN TRACE — minute 18 ===
-Simulated latency (clock-advance only, not real wall time): 5571ms
+Simulated latency (clock-advance only, not real wall time): 11059ms
 
 --- [TRACE:LONGCTX] question_extracted ---
-[TRACE:LONGCTX] question_extracted {"contextItemsCount":6,"transcriptTurnsCount":6,"rawTranscriptChars":492,"preparedTranscriptChars":569,"latestQuestion":"going back to the memory leak you mentioned earlier — how long did it take your team to ship the fix after finding the root cause?","questionType":"follow_up","detectedSpeaker":"interviewer","confidence":0.8,"isFollowUp":true,"sessionStartTime":1784228901871,"nowMs":1784229994353}
+[TRACE:LONGCTX] question_extracted {"contextItemsCount":6,"transcriptTurnsCount":6,"rawTranscriptChars":492,"preparedTranscriptChars":569,"latestQuestion":"going back to the memory leak you mentioned earlier — how long did it take your team to ship the fix after finding the root cause?","questionType":"follow_up","detectedSpeaker":"interviewer","confidence":0.8,"isFollowUp":true,"sessionStartTime":1784231494615,"nowMs":1784232586376}
 
   contextItemsCount:      6
   transcriptTurnsCount:   6
@@ -13,15 +13,15 @@ Simulated latency (clock-advance only, not real wall time): 5571ms
   confidence:             0.8
 
 --- [TRACE:LONGCTX] prompt_assembled ---
-[TRACE:LONGCTX] prompt_assembled {"systemPromptChars":29961,"systemPromptTokensEst":7491,"userMessageChars":1731,"userMessageTokensEst":433,"transcriptForPromptChars":569,"workingTranscriptChars":569,"cleanedTranscriptChars":569,"modeContextBlockChars":0,"pinnedModeInstructionsChars":0,"candidateProfileChars":0,"assemblerBudget":2276,"blockCount":2,"blockTypes":[{"type":"intent_context","trustLevel":"developer_policy","chars":1104},{"type":"transcript","trustLevel":"untrusted_transcript","chars":625}],"totalTokensUsedByAssembler":433,"maxContextTokens":128000,"outputBudgetTokens":4000,"modelId":"natively","answerPlanQuestion":"going back to the memory leak you mentioned earlier — how long did it take your team to ship the fix after finding the root cause?","answerPlanQuestionSurvivesInPrompt":true,"userMessageTail":"vestigate:\n[Concrete debugging steps.]\n\nFix:\n[Specific fix or mitigation.]\n\nValidation:\n[How to prove it works.]\n\nPrevention:\n[How to prevent recurrence.]\n</answer_contract>\n\n<transcript trust_level=\"untrusted\">\n[INTERVIEWER]: how did that resolve?\n[ME]: the team agreed to adopt graphql for the public api but keep rest internally.\n[INTERVIEWER]: let&apos;s talk about testing practices — what is your philosophy on unit versus integration tests?\n[ME]: i favor a testing pyramid — many fast unit tests, fewer integration tests, and a small number of end-to-end tests.\n[INTERVIEWER]: good. one more question on this topic before we move on.\n[INTERVIEWER]: going back to the memory leak you mentioned earlier — how long did it take your team to ship the fix after finding the root cause?\n</transcript>","systemPromptTail":"ected_context>\n\n   <formatting>\n   - No # headers. **Bold** for emphasis and labels.\n   - Bullets for lists. Sub-bullets for detail. Not everything needs to be a list.\n   - LaTeX for math: $...$ inline, $$...$$ block.\n   - Non-coding answers: short enough to say aloud in 15 to 30 seconds (shorter when the question is simple).\n   - No filler openers. No closers. No meta-commentary.\n   </formatting>"}
+[TRACE:LONGCTX] prompt_assembled {"systemPromptChars":29961,"systemPromptTokensEst":7491,"userMessageChars":2050,"userMessageTokensEst":513,"transcriptForPromptChars":861,"workingTranscriptChars":861,"cleanedTranscriptChars":861,"modeContextBlockChars":0,"pinnedModeInstructionsChars":0,"candidateProfileChars":0,"assemblerBudget":2276,"blockCount":2,"blockTypes":[{"type":"intent_context","trustLevel":"developer_policy","chars":1104},{"type":"transcript","trustLevel":"untrusted_transcript","chars":944}],"totalTokensUsedByAssembler":512,"maxContextTokens":128000,"outputBudgetTokens":4000,"modelId":"natively","answerPlanQuestion":"going back to the memory leak you mentioned earlier — how long did it take your team to ship the fix after finding the root cause?","answerPlanQuestionSurvivesInPrompt":true,"userMessageTail":"s conversation; this is the most relevant earlier turn found, verbatim&quot;&gt;\n[ME]: One time we had a memory leak in a long-running consumer process that took us three days to trace.\n&lt;/earlier_context&gt;\n\n[INTERVIEWER]: how did that resolve?\n[ME]: the team agreed to adopt graphql for the public api but keep rest internally.\n[INTERVIEWER]: let&apos;s talk about testing practices — what is your philosophy on unit versus integration tests?\n[ME]: i favor a testing pyramid — many fast unit tests, fewer integration tests, and a small number of end-to-end tests.\n[INTERVIEWER]: good. one more question on this topic before we move on.\n[INTERVIEWER]: going back to the memory leak you mentioned earlier — how long did it take your team to ship the fix after finding the root cause?\n</transcript>","systemPromptTail":"ected_context>\n\n   <formatting>\n   - No # headers. **Bold** for emphasis and labels.\n   - Bullets for lists. Sub-bullets for detail. Not everything needs to be a list.\n   - LaTeX for math: $...$ inline, $$...$$ block.\n   - Non-coding answers: short enough to say aloud in 15 to 30 seconds (shorter when the question is simple).\n   - No filler openers. No closers. No meta-commentary.\n   </formatting>"}
 
   systemPromptChars:      29961 (~7491 tok)
-  userMessageChars:       1731 (~433 tok)
-  transcriptForPromptChars: 569
-  workingTranscriptChars:   569
-  cleanedTranscriptChars:   569
+  userMessageChars:       2050 (~513 tok)
+  transcriptForPromptChars: 861
+  workingTranscriptChars:   861
+  cleanedTranscriptChars:   861
   assemblerBudget:          2276
-  totalTokensUsedByAssembler: 433
+  totalTokensUsedByAssembler: 512
   maxContextTokens:         128000
   modelId:                  natively
   answerPlanQuestion:              "going back to the memory leak you mentioned earlier — how long did it take your team to ship the fix after finding the root cause?"
@@ -29,24 +29,14 @@ Simulated latency (clock-advance only, not real wall time): 5571ms
 
   blockTypes:
     - intent_context (developer_policy): 1104 chars
-    - transcript (untrusted_transcript): 625 chars
+    - transcript (untrusted_transcript): 944 chars
 
   userMessageTail (last 800 chars sent to provider):
   ---
-vestigate:
-[Concrete debugging steps.]
+s conversation; this is the most relevant earlier turn found, verbatim&quot;&gt;
+[ME]: One time we had a memory leak in a long-running consumer process that took us three days to trace.
+&lt;/earlier_context&gt;
 
-Fix:
-[Specific fix or mitigation.]
-
-Validation:
-[How to prove it works.]
-
-Prevention:
-[How to prevent recurrence.]
-</answer_contract>
-
-<transcript trust_level="untrusted">
 [INTERVIEWER]: how did that resolve?
 [ME]: the team agreed to adopt graphql for the public api but keep rest internally.
 [INTERVIEWER]: let&apos;s talk about testing practices — what is your philosophy on unit versus integration tests?
@@ -58,20 +48,25 @@ Prevention:
 
 --- Raw model answer ---
 Likely Cause:
-The candidate may not have actually mentioned a memory leak earlier in the conversation, and the interviewer is testing recall or fabricating continuity.
+A memory leak in a long-running consumer process is usually caused by **unbounded growth of internal data structures** (caches, buffers, message maps) or **event-listener / subscription handles that are never released**, so the heap keeps climbing across each iteration.
 
 How I Would Investigate:
-I'd review the full transcript to confirm whether a memory leak was actually discussed, and if not, clarify politely rather than fabricate details.
+- Pull a heap dump during a steady-state run and again after the leak has grown, then diff them to see which object type is accumulating.
+- Capture GC logs and watch the old-gen occupancy curve after each full GC. A leak shows up as a rising baseline that never recovers.
+- Use a profiler (pprof, async-profiler, dotMemory, etc.) and trigger allocations on suspect paths to confirm what is retaining the references.
 
 Fix:
-Honestly acknowledge that no memory leak was discussed in this session, and offer to address the topic directly if the interviewer wants to explore it now.
+Identify the offending holder and bound it. Common remediations are switching to an LRU/TTL-bounded cache, fixing a missing `removeListener` / `close()` / `dispose()` in shutdown paths, or clearing per-batch accumulators after processing. Ship behind a flag so you can watch the heap curve flatten in production.
 
 Validation:
-A clear, factual answer that doesn't invent prior context demonstrates integrity and accurate listening.
+Before the fix, baseline old-gen usage over a 24-hour soak test. After deploying, re-run the same soak and confirm the heap stabilizes with no monotonic growth across multiple full GCs. A short load test that previously caused OOM should now run cleanly.
 
 Prevention:
-Track topics discussed throughout the interview so you can flag when a question refers to something that wasn't actually covered.
+- Add a long-running soak test (12 to 24 hours) to CI for any service that holds state.
+- Wire JVM/runtime metrics (heap after GC, open handles, buffer sizes) into dashboards with alerts on trend, not just threshold.
+- Enforce bounded collections in code review and require explicit close/cleanup on resources held by long-lived components.
 
 --- ALL captured [TRACE:LONGCTX] lines for this press ---
-[TRACE:LONGCTX] question_extracted {"contextItemsCount":6,"transcriptTurnsCount":6,"rawTranscriptChars":492,"preparedTranscriptChars":569,"latestQuestion":"going back to the memory leak you mentioned earlier — how long did it take your team to ship the fix after finding the root cause?","questionType":"follow_up","detectedSpeaker":"interviewer","confidence":0.8,"isFollowUp":true,"sessionStartTime":1784228901871,"nowMs":1784229994353}
-[TRACE:LONGCTX] prompt_assembled {"systemPromptChars":29961,"systemPromptTokensEst":7491,"userMessageChars":1731,"userMessageTokensEst":433,"transcriptForPromptChars":569,"workingTranscriptChars":569,"cleanedTranscriptChars":569,"modeContextBlockChars":0,"pinnedModeInstructionsChars":0,"candidateProfileChars":0,"assemblerBudget":2276,"blockCount":2,"blockTypes":[{"type":"intent_context","trustLevel":"developer_policy","chars":1104},{"type":"transcript","trustLevel":"untrusted_transcript","chars":625}],"totalTokensUsedByAssembler":433,"maxContextTokens":128000,"outputBudgetTokens":4000,"modelId":"natively","answerPlanQuestion":"going back to the memory leak you mentioned earlier — how long did it take your team to ship the fix after finding the root cause?","answerPlanQuestionSurvivesInPrompt":true,"userMessageTail":"vestigate:\n[Concrete debugging steps.]\n\nFix:\n[Specific fix or mitigation.]\n\nValidation:\n[How to prove it works.]\n\nPrevention:\n[How to prevent recurrence.]\n</answer_contract>\n\n<transcript trust_level=\"untrusted\">\n[INTERVIEWER]: how did that resolve?\n[ME]: the team agreed to adopt graphql for the public api but keep rest internally.\n[INTERVIEWER]: let&apos;s talk about testing practices — what is your philosophy on unit versus integration tests?\n[ME]: i favor a testing pyramid — many fast unit tests, fewer integration tests, and a small number of end-to-end tests.\n[INTERVIEWER]: good. one more question on this topic before we move on.\n[INTERVIEWER]: going back to the memory leak you mentioned earlier — how long did it take your team to ship the fix after finding the root cause?\n</transcript>","systemPromptTail":"ected_context>\n\n   <formatting>\n   - No # headers. **Bold** for emphasis and labels.\n   - Bullets for lists. Sub-bullets for detail. Not everything needs to be a list.\n   - LaTeX for math: $...$ inline, $$...$$ block.\n   - Non-coding answers: short enough to say aloud in 15 to 30 seconds (shorter when the question is simple).\n   - No filler openers. No closers. No meta-commentary.\n   </formatting>"}
+[TRACE:LONGCTX] question_extracted {"contextItemsCount":6,"transcriptTurnsCount":6,"rawTranscriptChars":492,"preparedTranscriptChars":569,"latestQuestion":"going back to the memory leak you mentioned earlier — how long did it take your team to ship the fix after finding the root cause?","questionType":"follow_up","detectedSpeaker":"interviewer","confidence":0.8,"isFollowUp":true,"sessionStartTime":1784231494615,"nowMs":1784232586376}
+[TRACE:LONGCTX] long_range_recall_fired {"question":"going back to the memory leak you mentioned earlier — how long did it take your team to ship the fix after finding the root cause?","matchCount":1,"bestAgeSeconds":933,"blockChars":290}
+[TRACE:LONGCTX] prompt_assembled {"systemPromptChars":29961,"systemPromptTokensEst":7491,"userMessageChars":2050,"userMessageTokensEst":513,"transcriptForPromptChars":861,"workingTranscriptChars":861,"cleanedTranscriptChars":861,"modeContextBlockChars":0,"pinnedModeInstructionsChars":0,"candidateProfileChars":0,"assemblerBudget":2276,"blockCount":2,"blockTypes":[{"type":"intent_context","trustLevel":"developer_policy","chars":1104},{"type":"transcript","trustLevel":"untrusted_transcript","chars":944}],"totalTokensUsedByAssembler":512,"maxContextTokens":128000,"outputBudgetTokens":4000,"modelId":"natively","answerPlanQuestion":"going back to the memory leak you mentioned earlier — how long did it take your team to ship the fix after finding the root cause?","answerPlanQuestionSurvivesInPrompt":true,"userMessageTail":"s conversation; this is the most relevant earlier turn found, verbatim&quot;&gt;\n[ME]: One time we had a memory leak in a long-running consumer process that took us three days to trace.\n&lt;/earlier_context&gt;\n\n[INTERVIEWER]: how did that resolve?\n[ME]: the team agreed to adopt graphql for the public api but keep rest internally.\n[INTERVIEWER]: let&apos;s talk about testing practices — what is your philosophy on unit versus integration tests?\n[ME]: i favor a testing pyramid — many fast unit tests, fewer integration tests, and a small number of end-to-end tests.\n[INTERVIEWER]: good. one more question on this topic before we move on.\n[INTERVIEWER]: going back to the memory leak you mentioned earlier — how long did it take your team to ship the fix after finding the root cause?\n</transcript>","systemPromptTail":"ected_context>\n\n   <formatting>\n   - No # headers. **Bold** for emphasis and labels.\n   - Bullets for lists. Sub-bullets for detail. Not everything needs to be a list.\n   - LaTeX for math: $...$ inline, $$...$$ block.\n   - Non-coding answers: short enough to say aloud in 15 to 30 seconds (shorter when the question is simple).\n   - No filler openers. No closers. No meta-commentary.\n   </formatting>"}

@@ -9,8 +9,11 @@ systemPromptChars:       minute2=29961   minute24=29961
 totalTokensUsedByAssembler: minute2=492   minute24=566
 answerPlanQuestionSurvivesInPrompt: minute2=true   minute24=true
 
-answer (minute2):  ## Likely Cause
-A production streaming pipeline issue, most often caused by **consumer lag or backpressure**,  Kafka consumers can't keep up with the ingest rate because of slow downstream processing, partition skew, or a stuck/deserializing record blocking the consumer thread.
+answer (minute2):  Likely Cause:
 
-## How I Would Inves
-answer (minute24): I've spent my career on data pipelines and backend systems, and the work on the Beam SDK at Google, building pythonic pipelines on Flink and Spark engines, maps directly to the realtime data work I'm describing. I'm looking for a more focused environment where I can go deep on streaming infrastructu
+A timing or ordering issue where a downstream consumer processed an event before the corresponding upstream write was durably committed, so the data it read was stale or missing.
+
+How I Would Investigate:
+
+Reproduce the issue in a staging environment with the same load profile, then a
+answer (minute24): Honestly, what pulled me in is that this team is shipping real-time ad infrastructure at serious scale, and that's exactly the kind of system I want to keep building. I've worked across Kafka-heavy streaming pipelines, built gRPC services handling high-throughput requests, and spent real time tuning
