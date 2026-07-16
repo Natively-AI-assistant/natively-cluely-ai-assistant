@@ -74,7 +74,6 @@ export default defineConfig({
                         'rehype-katex',
                         'katex',
                         'react-syntax-highlighter',
-                        'react-code-blocks',
                         'marked',
                     ],
                     'media-vendor': [
@@ -89,7 +88,6 @@ export default defineConfig({
                     'data-vendor': [
                         '@tanstack/react-query',
                         '@huggingface/transformers',
-                        'diff',
                         'axios',
                     ],
                 }

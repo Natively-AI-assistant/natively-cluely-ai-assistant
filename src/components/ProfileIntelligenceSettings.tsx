@@ -85,14 +85,6 @@ const PI_CSS = `
         100% { transform: scale(1); }
     }
     @keyframes pi-spin { to { transform: rotate(360deg); } }
-    @keyframes pi-num-in {
-        from { opacity: 0; transform: translateY(6px); }
-        to   { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes pi-fill-in {
-        from { width: 0; }
-        to   { width: var(--pi-fill-w, 60%); }
-    }
     @keyframes pi-shimmer {
         from { transform: translateX(-120%); }
         to   { transform: translateX(220%); }
@@ -342,22 +334,14 @@ const PI_CSS = `
     .pi-add-file-btn:hover { color: var(--pi-primary); }
     .pi-add-file-btn:active { transform: scale(0.97); }
 
-    /* ── Metric row ── */
-    .pi-metric-row {
-        display: flex; align-items: center; justify-content: center;
-        border: 1px solid var(--pi-border); border-radius: var(--pi-r-md); overflow: hidden;
-    }
-    .pi-metric-cell {
-        flex: 1; padding: 14px 10px;
-        display: flex; flex-direction: column; align-items: center; gap: 4px;
-    }
-    .pi-metric-cell + .pi-metric-cell { border-left: 1px solid var(--pi-border); }
-    .pi-metric-fill {
-        height: 5px; border-radius: 3px;
-        width: var(--pi-fill-w, 60%);
-        box-shadow: 0 0 8px var(--pi-fill-color, currentColor);
-        animation: pi-fill-in 640ms cubic-bezier(0.23, 1, 0.32, 1) 160ms both;
-    }
+    /* ── Sub-list staggered reveal ── */
+    .pi-stagger > .pi-list-item:nth-child(1) { animation-delay: 0ms; }
+    .pi-stagger > .pi-list-item:nth-child(2) { animation-delay: 40ms; }
+    .pi-stagger > .pi-list-item:nth-child(3) { animation-delay: 80ms; }
+    .pi-stagger > .pi-list-item:nth-child(4) { animation-delay: 120ms; }
+    .pi-stagger > .pi-list-item:nth-child(5) { animation-delay: 160ms; }
+    .pi-stagger > .pi-list-item:nth-child(6) { animation-delay: 200ms; }
+    .pi-stagger > .pi-list-item:nth-child(n+7) { animation-delay: 220ms; }
 
     /* ── Skill chips ── */
     .pi-chip {
@@ -372,11 +356,14 @@ const PI_CSS = `
     }
     @media (hover: hover) and (pointer: fine) {
         .pi-chip:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 3px 8px rgba(0,0,0,0.20);
-            border-color: rgba(255,255,255,0.18);
+            border-color: var(--pi-btn-bg-hover);
             color: var(--pi-primary);
         }
+    }
+    /* "+N more" chip — reads as secondary, not a real skill */
+    .pi-chip--more {
+        color: var(--pi-tertiary); background: transparent;
+        border-style: dashed; cursor: default;
     }
 
     /* ── Status dot ── */
@@ -385,9 +372,8 @@ const PI_CSS = `
     /* ── Reduced motion ── */
     @media (prefers-reduced-motion: reduce) {
         .pi-panel-fade { animation: none; }
-        .pi-list-item  { animation-duration: 100ms; }
+        .pi-list-item  { animation-duration: 100ms; animation-delay: 0ms !important; }
         .pi-press:active, .pi-press-soft:active { transform: none; }
-        .pi-metric-fill { animation: none; }
         .pi-cta--shimmer::after { animation: none; }
         .pi-skeleton { animation: none; opacity: 0.5; }
         .pi-chip:hover { transform: none; }
@@ -550,6 +536,7 @@ const FileUploadEmpty = ({ hint, uploading, hasAccess, onBrowse, onNeedUpgrade }
 // ─── Nav items ────────────────────────────────────────────────────────────────
 const NAV_ITEMS = [
     { id: 'identity',    label: 'Identity',           Icon: User },
+    { id: 'insights',    label: 'Profile',            Icon: FileText },
     { id: 'tavily',      label: 'Tavily Search',      Icon: Globe },
     { id: 'company',     label: 'Company Intel',      Icon: Building2 },
     { id: 'negotiation', label: 'Negotiation Script', Icon: Gift },
@@ -993,6 +980,255 @@ export function ProfileIntelligenceSettings({
         );
     };
 
+    const renderInsights = () => {
+        // Empty state — no resume yet.
+        if (!profileStatus.hasProfile) {
+            return (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
+                    <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(129,140,248,0.08)', border: '1px solid rgba(129,140,248,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <FileText size={18} style={{ color: 'var(--pi-accent)' }} />
+                    </div>
+                    <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>No resume yet</div>
+                        <div style={{ fontSize: 12, color: 'var(--pi-secondary)', lineHeight: 1.6, maxWidth: 260 }}>
+                            Add your resume in <strong style={{ color: 'var(--pi-primary)' }}>Identity</strong> and I'll summarize it here.
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ── Data (all optional; guard every access) ──
+        const experienceCount: number = profileData?.experienceCount ?? 0;
+        const experience: any[] = Array.isArray(profileData?.experience) ? profileData.experience : [];
+        const education: any[] = Array.isArray(profileData?.education) ? profileData.education : [];
+        const projects: any[] = Array.isArray(profileData?.projects) ? profileData.projects : [];
+        const skills = profileData?.skills;
+        const skillsFlat: string[] = Array.isArray(profileData?.skillsFlat) ? profileData.skillsFlat : [];
+
+        // Sentence-case sub-block header — quieter than an all-caps micro-label.
+        const sectionLabel: React.CSSProperties = {
+            fontSize: 11, fontWeight: 600, color: 'var(--pi-secondary)', textTransform: 'none', letterSpacing: 'normal', marginBottom: 10,
+        };
+        // Small tertiary style kept for the skills-category sub-labels.
+        const categoryLabel: React.CSSProperties = {
+            fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--pi-tertiary)',
+        };
+
+        // Single hero stat — total experience, rounded so 0.4 → 0 → "Less than a year".
+        // Distinguish "genuinely under a year" from "years unknown": the backend can
+        // report roles while omitting totalExperienceYears (degraded processing), and
+        // we must not claim <1yr when we simply don't have the number.
+        const yrs = profileStatus.totalExperienceYears;
+        const yrsKnown = yrs != null && Number.isFinite(yrs);
+        const rounded = yrsKnown ? Math.round(yrs as number) : 0;
+        const roleClause = experienceCount > 0
+            ? `${experienceCount} ${experienceCount === 1 ? 'role' : 'roles'}`
+            : '';
+
+        // Skills → categorized entries. Handle categorized object, array, or empty.
+        const ACRONYMS: Record<string, string> = { ml: 'ML', ai: 'AI', ui: 'UI', ux: 'UX', qa: 'QA', devops: 'DevOps', db: 'DB' };
+        const humanizeCategory = (raw: string) =>
+            raw.replace(/_/g, ' ').replace(/\S+/g, w => ACRONYMS[w.toLowerCase()] ?? (w.charAt(0).toUpperCase() + w.slice(1)));
+        // Cross-category dedupe (case-insensitive) so chip counts stay in sync with
+        // the backend's already-deduped skillsFlat — a skill placed in two buckets by
+        // the extractor renders once, and "+N more" never under/over-reports.
+        const seenSkill = new Set<string>();
+        const skillCategories: { name: string; items: string[] }[] = [];
+        if (skills && !Array.isArray(skills) && typeof skills === 'object') {
+            for (const [cat, items] of Object.entries(skills)) {
+                if (!Array.isArray(items) || items.length === 0) continue;
+                const uniqueItems = (items as string[]).filter(s => {
+                    const key = String(s).toLowerCase();
+                    if (seenSkill.has(key)) return false;
+                    seenSkill.add(key);
+                    return true;
+                });
+                if (uniqueItems.length > 0) {
+                    skillCategories.push({ name: humanizeCategory(cat), items: uniqueItems });
+                }
+            }
+        }
+        const hasCategorizedSkills = skillCategories.length > 0;
+        // Chip-cloud cap across all shown skills (~30).
+        const SKILL_CAP = 30;
+        let chipsUsed = 0;
+
+        const fmtDate = (d: any) => (d == null || d === '' ? null : String(d));
+        const dateRange = (start: any, end: any) => {
+            const s = fmtDate(start);
+            const e = fmtDate(end) ?? 'Present';
+            if (!s && (e === 'Present')) return null;
+            return `${s ?? '—'} – ${e}`;
+        };
+
+        const EXP_CAP = 6;
+        const PROJ_CAP = 5;
+
+        return (
+            <>
+                {/* Header */}
+                <div style={{ marginBottom: 24 }}>
+                    <h3 className="pi-section-label" style={{ margin: 0 }}>Your profile</h3>
+                    <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: '4px 0 0', lineHeight: 1.5 }}>
+                        Pulled from your resume. This is what I'll draw on to help you answer questions during interviews.
+                    </p>
+                </div>
+
+                {/* Quiet notice — only when the resume was read without AI */}
+                {profileStatus.extractionMode === 'heuristic' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24, padding: '10px 12px', borderRadius: 'var(--pi-r-md)', border: '1px solid rgba(245,158,11,0.20)', background: 'rgba(245,158,11,0.06)' }}>
+                        <Info size={14} style={{ color: '#f59e0b', flexShrink: 0 }} />
+                        <span style={{ fontSize: 12, color: 'var(--pi-secondary)', lineHeight: 1.5, flex: 1 }}>Read without AI, so some details may be missing.</span>
+                        <button className="pi-pill-btn pi-press" style={{ flexShrink: 0 }} onClick={browseResume}><RefreshCw size={12} /> Re-upload</button>
+                    </div>
+                )}
+
+                {/* Hero stat — total experience */}
+                {yrsKnown && rounded >= 1 ? (
+                    <div className="pi-list-item" style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 28 }}>
+                        <span style={{ fontSize: 34, fontWeight: 600, letterSpacing: '-0.03em', lineHeight: 1, color: 'var(--pi-hero)', fontVariantNumeric: 'tabular-nums' }}>{rounded}</span>
+                        <span style={{ fontSize: 13, color: 'var(--pi-secondary)' }}>
+                            {rounded === 1 ? 'year of experience' : 'years of experience'}
+                            {roleClause && (
+                                <span style={{ color: 'var(--pi-tertiary)' }}> · {roleClause}</span>
+                            )}
+                        </span>
+                    </div>
+                ) : yrsKnown && experienceCount > 0 ? (
+                    <div className="pi-list-item" style={{ fontSize: 13, color: 'var(--pi-secondary)', marginBottom: 28 }}>
+                        Less than a year of experience
+                        <span style={{ color: 'var(--pi-tertiary)' }}> · {roleClause}</span>
+                    </div>
+                ) : roleClause ? (
+                    <div className="pi-list-item" style={{ fontSize: 13, color: 'var(--pi-secondary)', marginBottom: 28 }}>
+                        {roleClause}
+                    </div>
+                ) : null}
+
+                {/* Experience */}
+                {experience.length > 0 && (
+                    <div style={{ marginBottom: 24 }}>
+                        <div style={sectionLabel}>Experience</div>
+                        <div className="pi-stagger" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {experience.slice(0, EXP_CAP).map((exp, i) => {
+                                const range = dateRange(exp?.start_date, exp?.end_date);
+                                return (
+                                    <div key={i} className="pi-list-item" style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+                                        <div style={{ minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                                            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--pi-primary)' }}>{exp?.role || 'Role'}</span>
+                                            {exp?.company && (
+                                                <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--pi-secondary)' }}> · {exp.company}</span>
+                                            )}
+                                        </div>
+                                        {range && (
+                                            <span style={{ fontSize: 11, color: 'var(--pi-tertiary)', flexShrink: 0, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{range}</span>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                            {experience.length > EXP_CAP && (
+                                <div style={{ fontSize: 11, color: 'var(--pi-tertiary)', marginTop: 2 }}>+{experience.length - EXP_CAP} more</div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Skills */}
+                {(hasCategorizedSkills || skillsFlat.length > 0) && (
+                    <div style={{ marginBottom: 24 }}>
+                        <div style={sectionLabel}>Skills</div>
+                        {hasCategorizedSkills ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                {skillCategories.map(({ name, items }) => {
+                                    if (chipsUsed >= SKILL_CAP) return null;
+                                    const remaining = SKILL_CAP - chipsUsed;
+                                    const shown = items.slice(0, remaining);
+                                    chipsUsed += shown.length;
+                                    return (
+                                        <div key={name}>
+                                            <div style={{ ...categoryLabel, marginBottom: 7 }}>{name}</div>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                                                {shown.map(s => <span key={s} className="pi-chip">{s}</span>)}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                {chipsUsed < seenSkill.size && (
+                                    <span className="pi-chip pi-chip--more">+{seenSkill.size - chipsUsed} more</span>
+                                )}
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                                {skillsFlat.slice(0, SKILL_CAP).map(s => <span key={s} className="pi-chip">{s}</span>)}
+                                {skillsFlat.length > SKILL_CAP && (
+                                    <span className="pi-chip pi-chip--more">+{skillsFlat.length - SKILL_CAP} more</span>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Projects */}
+                {projects.length > 0 && (
+                    <div style={{ marginBottom: 24 }}>
+                        <div style={sectionLabel}>Projects</div>
+                        <div className="pi-stagger" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {projects.slice(0, PROJ_CAP).map((proj, i) => {
+                                const title = proj?.name || proj?.title;
+                                const desc = proj?.description;
+                                if (!title && !desc) return null;
+                                return (
+                                    <div key={i} className="pi-list-item" style={{ minWidth: 0 }}>
+                                        {title && (
+                                            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--pi-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
+                                        )}
+                                        {desc && (
+                                            <div style={{ fontSize: 11, color: 'var(--pi-secondary)', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{desc}</div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                            {projects.length > PROJ_CAP && (
+                                <div style={{ fontSize: 11, color: 'var(--pi-tertiary)', marginTop: 2 }}>+{projects.length - PROJ_CAP} more</div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Education */}
+                {education.length > 0 && (
+                    <div>
+                        <div style={sectionLabel}>Education</div>
+                        <div className="pi-stagger" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {education.map((ed, i) => {
+                                const primary = [ed?.degree, ed?.field ? `in ${ed.field}` : '']
+                                    .filter(Boolean).join(' ');
+                                const end = fmtDate(ed?.end_date);
+                                if (!primary && !ed?.institution && !end) return null;
+                                return (
+                                    <div key={i} className="pi-list-item" style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+                                        <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                                            {primary && (
+                                                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--pi-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{primary}</div>
+                                            )}
+                                            {ed?.institution && (
+                                                <div style={{ fontSize: 11, color: 'var(--pi-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ed.institution}</div>
+                                            )}
+                                        </div>
+                                        {end && (
+                                            <span style={{ fontSize: 11, color: 'var(--pi-tertiary)', flexShrink: 0, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{end}</span>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+            </>
+        );
+    };
+
     const renderTavily = () => (
         <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
@@ -1372,6 +1608,7 @@ export function ProfileIntelligenceSettings({
 
     const SECTION_RENDERERS: Record<string, () => React.ReactNode> = {
         identity: renderIdentity,
+        insights: renderInsights,
         tavily: renderTavily,
         company: renderCompany,
         negotiation: renderNegotiation,

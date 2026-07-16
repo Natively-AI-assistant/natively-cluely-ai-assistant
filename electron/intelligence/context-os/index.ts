@@ -83,6 +83,13 @@ export {
   type ProfileEvidenceServiceInput,
 } from './ProfileEvidenceService';
 export {
+  TurnEvidenceCoordinator,
+  allocateRequiredEvidenceFamilies,
+  type RequiredFamilyFailure,
+  type TurnEvidenceCoordinatorInput,
+  type TurnEvidenceCoordinatorResult,
+} from './TurnEvidenceCoordinator';
+export {
   meetingChunksToEvidenceItems,
   MEETING_RAG_MIN_SIMILARITY,
   type MeetingRagConversionResult,
@@ -101,10 +108,21 @@ export {
 export {
   renderContractForPrompt,
   renderEvidencePackForPrompt,
+  renderEvidencePackWithManifest,
   renderEvidenceUseRule,
   renderContextOsPromptPrefix,
   escapeXml,
+  type RenderedEvidencePack,
 } from './promptRenderer';
+export {
+  RENDERED_EVIDENCE_FAMILIES,
+  familyForTurnEvidenceKind,
+  familyForRenderedSourceKind,
+  buildRenderedEvidenceManifest,
+  manifestIncludesSerializedEvidence,
+  type RenderedEvidenceFamily,
+  type RenderedEvidenceManifest,
+} from './renderedEvidenceManifest';
 export {
   validateFinalPromptEvidence,
   familyForEvidenceKind,

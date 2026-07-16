@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "fileName": "institutional_thesis.pdf",
+    "binarySha256": "67e8206533b425d63cda1627ed9f6c2cbbcb2506051bf6c415c650026a28afb3",
+    "parser": "pdf-parse/PDFParse.getText",
+    "physicalPageCount": 66,
+    "extractedCharCount": 127403
+  },
+  "splitCounts": {
+    "development": 140,
+    "validation": 30,
+    "holdout": 30
+  }
+}

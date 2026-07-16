@@ -1,0 +1,14 @@
+=== MINUTE-2 vs MINUTE-24 DIFF SUMMARY ===
+
+contextItemsCount:       minute2=6   minute24=6
+extracted question:      minute2="tell me about a time you had to debug a really difficult production issue."
+                         minute24="why do you want to work here specifically, and what makes you a good fit for this role?"
+question confidence:     minute2=0.8   minute24=0.95
+userMessageChars:        minute2=1968   minute24=2261
+systemPromptChars:       minute2=29961   minute24=29961
+totalTokensUsedByAssembler: minute2=492   minute24=566
+answerPlanQuestionSurvivesInPrompt: minute2=true   minute24=true
+
+answer (minute2):  Likely Cause:
+In a real-time Kafka pipeline, the hardest issues usually come from consumer lag silently growing, partition rebalances during a deploy, or skewed data causing a single task to hot-spot. If the symptom was a backlog with no obvious consumer errors, suspect uneven partition assignment c
+answer (minute24): I want to join a team where ownership is real, the systems are non-trivial, and the bar for engineering quality is high, which is exactly how this role reads. My background fits well: I've spent years operating large-scale Java services with Spring Boot, Kafka-driven event flows, and Istio service m

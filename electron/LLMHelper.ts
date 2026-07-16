@@ -1334,14 +1334,18 @@ export class LLMHelper {
 
     await this.rateLimiters.gemini.acquire();
     // console.log(`[LLMHelper] Calling ${GEMINI_FLASH_MODEL}...`)
-    const response = await this.client.models.generateContent({
+    const request = {
       model: GEMINI_FLASH_MODEL,
       contents: contents,
       config: {
         maxOutputTokens: MAX_OUTPUT_TOKENS,
         temperature: 0.3,      // Lower = faster, more focused
       }
-    })
+    };
+    require('./llm/providerPayloadCapture').captureProviderPayload({
+      provider: 'gemini', classification: 'sdk_request_object_before_serialization', payload: request,
+    });
+    const response = await this.client.models.generateContent(request)
     return response.text || ""
   }
 
@@ -1443,15 +1447,19 @@ export class LLMHelper {
     console.log(`[LLMHelper] Calling ${targetModel}...`)
 
     return this.withRetry(async () => {
-      // @ts-ignore
-      const response = await this.client!.models.generateContent({
+      const request = {
         model: targetModel,
         contents: contents,
         config: {
           maxOutputTokens: MAX_OUTPUT_TOKENS,
           temperature: 0.4,
         }
+      };
+      require('./llm/providerPayloadCapture').captureProviderPayload({
+        provider: 'gemini', classification: 'sdk_request_object_before_serialization', payload: request,
       });
+      // @ts-ignore
+      const response = await this.client!.models.generateContent(request);
 
       // Debug: log full response structure
       // console.log(`[LLMHelper] Full response:`, JSON.stringify(response, null, 2).substring(0, 500))
@@ -2922,10 +2930,17 @@ const isMultimodal = !!(imagePaths?.length);
     const overallTimer = setTimeout(() => overallController.abort(), OVERALL_DEADLINE_MS);
     let response: Response;
     try {
+      const serializedBody = JSON.stringify(body);
+      require('./llm/providerPayloadCapture').captureProviderPayload({
+        provider: 'natively_gateway',
+        classification: 'exact_serialized_provider_payload',
+        payload: body,
+        serializedPayload: serializedBody,
+      });
       response = await fetch(endpointUrl, {
         method: 'POST',
         headers,
-        body: JSON.stringify(body),
+        body: serializedBody,
         signal: AbortSignal.any([AbortSignal.timeout(timeoutMs), overallController.signal]),
       });
     } catch (fetchErr: any) {
@@ -3041,15 +3056,19 @@ const isMultimodal = !!(imagePaths?.length);
     }
 
     const cacheKey = this.getOpenAiPromptCacheKey(systemPrompt);
+    const request = {
+      model,
+      messages,
+      // OPENAI_NO_SAMPLING_PARAMS — do NOT add temperature/seed/top_p here (gpt-5/o-series 400 on them).
+      max_completion_tokens: model.toLowerCase().includes('claude') ? this.getClaudeMaxOutput(model) : getOpenAiMaxOutput(model, MAX_OUTPUT_TOKENS),
+      ...openaiReasoningParam(model), // minimal reasoning for gpt-5/o-series (fast TTFT)
+      ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
+    };
+    require('./llm/providerPayloadCapture').captureProviderPayload({
+      provider: 'openai', classification: 'sdk_request_object_before_serialization', payload: request,
+    });
     const response = await this.withTimeout(
-      this.withRetry(() => this.openaiClient!.chat.completions.create({
-        model,
-        messages,
-        // OPENAI_NO_SAMPLING_PARAMS — do NOT add temperature/seed/top_p here (gpt-5/o-series 400 on them).
-        max_completion_tokens: model.toLowerCase().includes('claude') ? this.getClaudeMaxOutput(model) : getOpenAiMaxOutput(model, MAX_OUTPUT_TOKENS),
-        ...openaiReasoningParam(model), // minimal reasoning for gpt-5/o-series (fast TTFT)
-        ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
-      })),
+      this.withRetry(() => this.openaiClient!.chat.completions.create(request)),
       60000,
       `OpenAI (${model})`
     );
@@ -3116,12 +3135,16 @@ const isMultimodal = !!(imagePaths?.length);
     }
 
     const maxTokens = await this.resolveLitellmMaxTokens(litellmModel);
+    const request = {
+      model: litellmModel,
+      messages,
+      max_tokens: maxTokens,
+    };
+    require('./llm/providerPayloadCapture').captureProviderPayload({
+      provider: 'litellm', classification: 'sdk_request_object_before_serialization', payload: request,
+    });
     const response = await this.withTimeout(
-      this.withRetry(() => this.litellmClient!.chat.completions.create({
-        model: litellmModel,
-        messages,
-        max_tokens: maxTokens,
-      })),
+      this.withRetry(() => this.litellmClient!.chat.completions.create(request)),
       60000,
       `LiteLLM (${litellmModel})`
     );
@@ -3185,6 +3208,15 @@ const isMultimodal = !!(imagePaths?.length);
     // whole session for ~2 min (Node's default socket timeout). 60s is generous
     // for a non-streaming completion while still failing over in bounded time.
     try {
+      const templateSource = JSON.stringify(curlConfig.data ?? {});
+      const markerIntegrity = /\{\{\s*TEXT\s*\}\}/.test(templateSource);
+      require('./llm/providerPayloadCapture').captureProviderPayload({
+        provider: 'raw_curl',
+        classification: 'custom_template_expanded_payload',
+        payload: data,
+        serializedPayload: (() => { try { return JSON.stringify(data); } catch { return undefined; } })(),
+        markerIntegrity,
+      });
       const response = await axios({
         method: curlConfig.method || 'POST',
         url: url,
@@ -3243,16 +3275,20 @@ const isMultimodal = !!(imagePaths?.length);
     // enough that the dynamic timeout exceeds 10 minutes (formula: 60*60*max_tokens/128000s,
     // tripped at max_tokens > ~21333). max_tokens is per-model (see getClaudeMaxOutput);
     // streaming sidesteps the SDK gate regardless of ceiling.
+    const request = {
+      model,
+      max_tokens: this.getClaudeMaxOutput(model),
+      thinking: { type: 'disabled' as const }, // extended thinking off (default, made explicit) for low TTFT
+      // CACHE BOUNDARY: system blocks are static; dynamic content lives in `messages` only.
+      ...(systemPrompt ? { system: this.buildClaudeSystemBlocks(systemPrompt, model) } : {}),
+      messages: [{ role: "user" as const, content }],
+    };
+    require('./llm/providerPayloadCapture').captureProviderPayload({
+      provider: 'claude', classification: 'sdk_request_object_before_serialization', payload: request,
+    });
     const response = await this.withTimeout(
       this.withRetry(async () => {
-        const stream = this.claudeClient!.messages.stream({
-          model,
-          max_tokens: this.getClaudeMaxOutput(model),
-          thinking: { type: 'disabled' }, // extended thinking off (default, made explicit) for low TTFT
-          // CACHE BOUNDARY: system blocks are static; dynamic content lives in `messages` only.
-          ...(systemPrompt ? { system: this.buildClaudeSystemBlocks(systemPrompt, model) } : {}),
-          messages: [{ role: "user", content }],
-        });
+        const stream = this.claudeClient!.messages.stream(request);
         return await stream.finalMessage();
       }),
       120000,
@@ -3332,10 +3368,23 @@ const isMultimodal = !!(imagePaths?.length);
     const customAbort = new AbortController();
     const customTimeout = setTimeout(() => customAbort.abort(), 30_000);
     try {
+      const serializedBody = JSON.stringify(body);
+      // markerIntegrity reports whether the template actually substituted our
+      // placeholders (TEXT/PROMPT/USER_MESSAGE) into the expanded body — a
+      // template that never referenced them would silently drop the prompt.
+      const templateSource = JSON.stringify(requestConfig.data ?? {});
+      const markerIntegrity = /\{\{\s*(TEXT|PROMPT|USER_MESSAGE)\s*\}\}/.test(templateSource);
+      require('./llm/providerPayloadCapture').captureProviderPayload({
+        provider: 'custom_curl',
+        classification: 'custom_template_expanded_payload',
+        payload: body,
+        serializedPayload: serializedBody,
+        markerIntegrity,
+      });
       const response = await fetch(url, {
         method: requestConfig.method || 'POST',
         headers: headers,
-        body: JSON.stringify(body),
+        body: serializedBody,
         signal: customAbort.signal,
       });
       clearTimeout(customTimeout);
@@ -3484,15 +3533,19 @@ const isMultimodal = !!(imagePaths?.length);
     }
     messages.push({ role: "user", content: contentParts });
 
-    const response = await this.groqClient.chat.completions.create({
+    const request = {
       model: "meta-llama/llama-4-scout-17b-16e-instruct",
       messages,
       temperature: 1,
       max_completion_tokens: 28672,
       top_p: 1,
-      stream: false,
-      stop: null
+      stream: false as const,
+      stop: null as string[] | null
+    };
+    require('./llm/providerPayloadCapture').captureProviderPayload({
+      provider: 'groq', classification: 'sdk_request_object_before_serialization', payload: request,
     });
+    const response = await this.groqClient.chat.completions.create(request);
 
     return response.choices[0]?.message?.content || "";
   }
@@ -5108,11 +5161,16 @@ const isMultimodal = !!(imagePaths?.length);
     if (contextOsGovernedPack) {
       const cog = routeOptions?.contextOsGeneration as import('./intelligence/context-os').ContextOsGenerationContext | undefined;
       if (cog) {
-        const { validateFinalPromptEvidence, buildInsufficientPropertyAnswer, recordContextOsBenchmarkAudit } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+        const { validateFinalPromptEvidence, buildInsufficientPropertyAnswer, recordContextOsBenchmarkAudit, buildRenderedEvidenceManifest } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+        // Normal governing rendering stores this exact object. The fallback is
+        // only for compatibility callers that supplied a prebuilt pack without
+        // passing through renderGoverningFactualBlock.
+        const manifest = cog.renderedEvidenceManifest ?? buildRenderedEvidenceManifest(contextOsGovernedPack);
         const finalPromptValidation = validateFinalPromptEvidence({
           decision: cog.turnSourceDecision,
           contract: cog.contract,
           pack: contextOsGovernedPack,
+          manifest,
           finalUserPrompt: userContent,
         });
         cog.finalPromptValidation = finalPromptValidation;
@@ -5700,10 +5758,17 @@ const isMultimodal = !!(imagePaths?.length);
       for (let attempt = 0; attempt < 3; attempt++) {
         if (streamController.signal.aborted) break;
         try {
+          const serializedBody = JSON.stringify(body);
+          require('./llm/providerPayloadCapture').captureProviderPayload({
+            provider: 'natively_gateway',
+            classification: 'exact_serialized_provider_payload',
+            payload: body,
+            serializedPayload: serializedBody,
+          });
           response = await fetch(endpointUrl, {
             method: 'POST',
             headers: streamHeaders,
-            body: JSON.stringify(body),
+            body: serializedBody,
             signal: streamController.signal,
           });
           responseStartedAt = nowMs();
@@ -5909,14 +5974,18 @@ const isMultimodal = !!(imagePaths?.length);
     messages.push({ role: "user", content: userMessage });
 
     if (abortSignal?.aborted) return;
-    const stream = await this.groqClient.chat.completions.create({
+    const request = {
       model: modelId,
       messages,
-      stream: true,
+      stream: true as const,
       temperature: INTERACTIVE_TEMPERATURE,
       seed: INTERACTIVE_SEED, // Groq honors seed for near-deterministic output
       max_tokens: 8192,
-    }, { signal: abortSignal });
+    };
+    require('./llm/providerPayloadCapture').captureProviderPayload({
+      provider: 'groq', classification: 'sdk_request_object_before_serialization', payload: request,
+    });
+    const stream = await this.groqClient.chat.completions.create(request, { signal: abortSignal });
 
     try {
       for await (const chunk of stream) {
@@ -6007,17 +6076,21 @@ const isMultimodal = !!(imagePaths?.length);
 
     const cacheKey = this.getOpenAiPromptCacheKey(systemPrompt);
     if (abortSignal?.aborted) return;
-    const stream = await this.openaiClient.chat.completions.create({
+    const request = {
       model,
       messages,
-      stream: true,
+      stream: true as const,
       // OPENAI_NO_SAMPLING_PARAMS — do NOT add temperature/seed/top_p here. gpt-5/o-series
       // reasoning models (incl. default gpt-5.4) 400 on non-default sampling; use API default
       // for ALL OpenAI models. Steer via reasoning_effort only. Guarded by OpenAiNoSamplingParams.test.mjs.
       max_completion_tokens: model.toLowerCase().includes('claude') ? this.getClaudeMaxOutput(model) : getOpenAiMaxOutput(model, MAX_OUTPUT_TOKENS),
       ...openaiReasoningParam(model), // minimal reasoning for gpt-5/o-series (fast TTFT)
       ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
-    }, { signal: abortSignal });
+    };
+    require('./llm/providerPayloadCapture').captureProviderPayload({
+      provider: 'openai', classification: 'sdk_request_object_before_serialization', payload: request,
+    });
+    const stream = await this.openaiClient.chat.completions.create(request, { signal: abortSignal });
 
     try {
       for await (const chunk of stream) {
@@ -6046,15 +6119,19 @@ const isMultimodal = !!(imagePaths?.length);
     const model = modelId || (this.isClaudeModel(this.currentModelId) ? this.currentModelId : CLAUDE_MODEL);
 
     if (abortSignal?.aborted) return;
-    const stream = this.claudeClient.messages.stream({
+    const request = {
       model,
       max_tokens: this.getClaudeMaxOutput(model),
       temperature: INTERACTIVE_TEMPERATURE, // Claude has no seed param; low temp is the determinism lever
-      thinking: { type: 'disabled' }, // extended thinking off (default, made explicit) for low TTFT
+      thinking: { type: 'disabled' as const }, // extended thinking off (default, made explicit) for low TTFT
       // CACHE BOUNDARY: system blocks are static; dynamic content lives in `messages` only.
       ...(systemPrompt ? { system: this.buildClaudeSystemBlocks(systemPrompt, model) } : {}),
-      messages: [{ role: "user", content: userMessage }],
+      messages: [{ role: "user" as const, content: userMessage }],
+    };
+    require('./llm/providerPayloadCapture').captureProviderPayload({
+      provider: 'claude', classification: 'sdk_request_object_before_serialization', payload: request,
     });
+    const stream = this.claudeClient.messages.stream(request);
     const onAbort = () => { try { stream.abort(); } catch {} };
     abortSignal?.addEventListener('abort', onAbort, { once: true });
     try {
@@ -6147,12 +6224,16 @@ const isMultimodal = !!(imagePaths?.length);
 
     const maxTokens = await this.resolveLitellmMaxTokens(litellmModel);
     if (abortSignal?.aborted) return;
-    const stream = await this.litellmClient.chat.completions.create({
+    const request = {
       model: litellmModel,
       messages,
-      stream: true,
+      stream: true as const,
       max_tokens: maxTokens,
-    }, { signal: abortSignal });
+    };
+    require('./llm/providerPayloadCapture').captureProviderPayload({
+      provider: 'litellm', classification: 'sdk_request_object_before_serialization', payload: request,
+    });
+    const stream = await this.litellmClient.chat.completions.create(request, { signal: abortSignal });
 
     try {
       for await (const chunk of stream) {
@@ -6246,20 +6327,24 @@ const isMultimodal = !!(imagePaths?.length);
     }
 
     if (abortSignal?.aborted) return;
-    const stream = this.claudeClient.messages.stream({
+    const request = {
       model,
       max_tokens: this.getClaudeMaxOutput(model),
-      thinking: { type: 'disabled' }, // extended thinking off (default, made explicit) for low TTFT
+      thinking: { type: 'disabled' as const }, // extended thinking off (default, made explicit) for low TTFT
       // CACHE BOUNDARY: system blocks are static; image bytes + user text stay in `messages`.
       ...(systemPrompt ? { system: this.buildClaudeSystemBlocks(systemPrompt, model) } : {}),
       messages: [{
-        role: "user",
+        role: "user" as const,
         content: [
           ...imageContentParts,
-          { type: "text", text: userMessage }
+          { type: "text" as const, text: userMessage }
         ]
       }],
+    };
+    require('./llm/providerPayloadCapture').captureProviderPayload({
+      provider: 'claude', classification: 'sdk_request_object_before_serialization', payload: request,
     });
+    const stream = this.claudeClient.messages.stream(request);
     const onAbort = () => { try { stream.abort(); } catch {} };
     abortSignal?.addEventListener('abort', onAbort, { once: true });
     try {
@@ -6371,11 +6456,11 @@ const isMultimodal = !!(imagePaths?.length);
 
     let streamResult: any;
     try {
-      streamResult = await this.client.models.generateContentStream({
-        model,
-        contents,
-        config: buildConfig(cacheName),
+      const request = { model, contents, config: buildConfig(cacheName) };
+      require('./llm/providerPayloadCapture').captureProviderPayload({
+        provider: 'gemini', classification: 'sdk_request_object_before_serialization', payload: request,
       });
+      streamResult = await this.client.models.generateContentStream(request);
     } catch (err: any) {
       if (isAbortError(err)) return;
       // The cache may have expired between getOrCreate() and this call. If we
@@ -6385,11 +6470,11 @@ const isMultimodal = !!(imagePaths?.length);
         console.warn(`[LLMHelper] Gemini cachedContent ${cacheName} stale (${msg}); retrying with systemInstruction`);
         this.geminiPromptCache.invalidate(cacheName);
         try {
-          streamResult = await this.client.models.generateContentStream({
-            model,
-            contents,
-            config: buildConfig(null),
+          const retryRequest = { model, contents, config: buildConfig(null) };
+          require('./llm/providerPayloadCapture').captureProviderPayload({
+            provider: 'gemini', classification: 'sdk_request_object_before_serialization', payload: retryRequest,
           });
+          streamResult = await this.client.models.generateContentStream(retryRequest);
         } catch (retryErr: any) {
           if (isAbortError(retryErr)) return;
           throw retryErr;
@@ -6579,10 +6664,17 @@ const isMultimodal = !!(imagePaths?.length);
       const ollamaSignal = abortSignal
         ? AbortSignal.any([AbortSignal.timeout(120_000), abortSignal])
         : AbortSignal.timeout(120_000);
+      const serializedBody = JSON.stringify(streamBody);
+      require('./llm/providerPayloadCapture').captureProviderPayload({
+        provider: 'ollama',
+        classification: 'exact_serialized_provider_payload',
+        payload: streamBody,
+        serializedPayload: serializedBody,
+      });
       const response = await fetch(`${this.ollamaUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(streamBody),
+        body: serializedBody,
         signal: ollamaSignal,
       });
 
@@ -7257,13 +7349,18 @@ const isMultimodal = !!(imagePaths?.length);
       return false;
     };
 
+    const captureGemini = (request: any) => {
+      require('./llm/providerPayloadCapture').captureProviderPayload({
+        provider: 'gemini', classification: 'sdk_request_object_before_serialization', payload: request,
+      });
+    };
+
     // 1. Initial Attempt (Flash)
     try {
       await this.rateLimiters.gemini.acquire();
-      const response = await client.models.generateContent({
-        ...args,
-        model: originalModel
-      });
+      const initialRequest = { ...args, model: originalModel };
+      captureGemini(initialRequest);
+      const response = await client.models.generateContent(initialRequest);
       if (isValidResponse(response)) return response;
       console.warn(`[LLMHelper] Initial ${originalModel} call returned empty/invalid response.`);
     } catch (error: any) {
@@ -7278,7 +7375,9 @@ const isMultimodal = !!(imagePaths?.length);
       // Small delay before retry to let system settle? No, user said "immediately"
       try {
         await this.rateLimiters.gemini.acquire();
-        const res = await client.models.generateContent({ ...args, model: originalModel });
+        const retryRequest = { ...args, model: originalModel };
+        captureGemini(retryRequest);
+        const res = await client.models.generateContent(retryRequest);
         if (isValidResponse(res)) return { type: 'flash', res };
         throw new Error("Empty Flash Response");
       } catch (e) { throw e; }
@@ -7288,7 +7387,9 @@ const isMultimodal = !!(imagePaths?.length);
       try {
         // Pro might be slower, but it's the robust backup
         await this.rateLimiters.gemini.acquire();
-        const res = await client.models.generateContent({ ...args, model: GEMINI_PRO_MODEL });
+        const proRequest = { ...args, model: GEMINI_PRO_MODEL };
+        captureGemini(proRequest);
+        const res = await client.models.generateContent(proRequest);
         if (isValidResponse(res)) return { type: 'pro', res };
         throw new Error("Empty Pro Response");
       } catch (e) { throw e; }
@@ -7314,7 +7415,9 @@ const isMultimodal = !!(imagePaths?.length);
     // 4. Last Resort: Flash Final Retry
     console.log(`[LLMHelper] ⚠️ All parallel attempts failed. Trying Flash one last time...`);
     try {
-      return await client.models.generateContent({ ...args, model: originalModel });
+      const finalRequest = { ...args, model: originalModel };
+      captureGemini(finalRequest);
+      return await client.models.generateContent(finalRequest);
     } catch (finalError) {
       console.error(`[LLMHelper] Final retry failed.`);
       throw finalError;

@@ -27,14 +27,15 @@
 import type { TurnSourceDecision, TurnEvidenceKind } from '../../llm/turnSourceDecision';
 import type { EvidencePack } from './evidencePack';
 import type { TurnContextContract } from './types';
+import {
+  RENDERED_EVIDENCE_FAMILIES,
+  familyForTurnEvidenceKind,
+  manifestIncludesSerializedEvidence,
+  type RenderedEvidenceFamily,
+  type RenderedEvidenceManifest,
+} from './renderedEvidenceManifest';
 
-export type PromptEvidenceFamily =
-  | 'reference_files'
-  | 'resume'
-  | 'projects'
-  | 'job_description'
-  | 'transcript'
-  | 'meeting_rag';
+export type PromptEvidenceFamily = RenderedEvidenceFamily;
 
 export interface FinalPromptEvidenceValidation {
   ok: boolean;
@@ -43,35 +44,11 @@ export interface FinalPromptEvidenceValidation {
   renderedFamilies: PromptEvidenceFamily[];
   forbiddenFamilies: PromptEvidenceFamily[];
   countsByFamily: Record<PromptEvidenceFamily, number>;
+  serializedMarkerIntegrity: boolean;
 }
-
-const FAMILIES: PromptEvidenceFamily[] = [
-  'reference_files', 'resume', 'projects', 'job_description', 'transcript', 'meeting_rag',
-];
 
 export function familyForEvidenceKind(kind: TurnEvidenceKind): PromptEvidenceFamily {
-  switch (kind) {
-    case 'profile_resume': return 'resume';
-    case 'projects': return 'projects';
-    case 'profile_jd': return 'job_description';
-    case 'live_transcript': return 'transcript';
-    case 'meeting_rag': return 'meeting_rag';
-    case 'reference_files': return 'reference_files';
-  }
-}
-
-function familyForSourceKind(kind: string): PromptEvidenceFamily | null {
-  if (kind === 'mode_reference_file' || kind === 'mode_reference_chunk' || kind === 'okf_document_card') return 'reference_files';
-  if (kind === 'profile_resume') return 'resume';
-  if (kind === 'profile_project' || kind === 'profile_projects') return 'projects';
-  if (kind === 'profile_jd') return 'job_description';
-  if (kind === 'live_transcript') return 'transcript';
-  if (kind === 'meeting_rag_chunk') return 'meeting_rag';
-  return null;
-}
-
-function emptyCounts(): Record<PromptEvidenceFamily, number> {
-  return Object.fromEntries(FAMILIES.map((family) => [family, 0])) as Record<PromptEvidenceFamily, number>;
+  return familyForTurnEvidenceKind(kind);
 }
 
 /**
@@ -84,65 +61,63 @@ export function validateFinalPromptEvidence(input: {
   decision?: TurnSourceDecision | null;
   contract: TurnContextContract;
   pack: EvidencePack;
-  finalUserPrompt: string;
+  manifest: RenderedEvidenceManifest;
+  /** Verification-only serialization integrity check. */
+  finalUserPrompt?: string;
 }): FinalPromptEvidenceValidation {
-  const countsByFamily = emptyCounts();
   const requiredFamilies = Array.from(new Set((input.decision?.requiredEvidenceKinds ?? [])
     .map(familyForEvidenceKind)));
+  const allowedKinds = new Set(input.decision?.allowedEvidenceKinds ?? []);
   const allowedFamilies = new Set((input.decision?.allowedEvidenceKinds ?? [])
     .map(familyForEvidenceKind));
-
-  for (const item of input.pack.items) {
-    if (item.authority !== 'evidence') continue;
-    // The final text assertion is deliberate: a pack item is not sufficient if
-    // prompt assembly or a provider adapter later dropped it.
-    if (!input.finalUserPrompt.includes(`id="${item.evidenceId}"`)) continue;
-    const family = familyForSourceKind(item.sourceKind);
-    if (family) countsByFamily[family] += 1;
-  }
-
-  const renderedFamilies = FAMILIES.filter((family) => countsByFamily[family] > 0);
+  const packEvidenceIds = new Set(input.pack.items
+    .filter((item) => item.authority === 'evidence')
+    .map((item) => item.evidenceId));
+  const manifestIdsArePermitted = input.manifest.evidenceIds.every((id) => packEvidenceIds.has(id));
+  const manifestIdsAreUnique = input.manifest.evidenceIds.length === new Set(input.manifest.evidenceIds).size;
+  const serializedMarkerIntegrity = input.finalUserPrompt === undefined
+    ? true
+    : manifestIncludesSerializedEvidence(input.manifest, input.finalUserPrompt);
+  const countsByFamily = input.manifest.countsByFamily;
+  const renderedFamilies = RENDERED_EVIDENCE_FAMILIES.filter((family) => countsByFamily[family] > 0);
   const forbiddenFamilies = input.decision
     ? renderedFamilies.filter((family) => !allowedFamilies.has(family))
     : [];
+  const forbiddenKinds = input.manifest.evidenceKinds.filter((kind) => {
+    if (!input.decision) return false;
+    const turnKind = kind === 'mode_reference_file' || kind === 'mode_reference_chunk' || kind === 'okf_document_card'
+      ? 'reference_files'
+      : kind === 'profile_project' || kind === 'profile_projects'
+        ? 'projects'
+        : kind === 'meeting_rag_chunk'
+          ? 'meeting_rag'
+          : kind as TurnEvidenceKind;
+    return !allowedKinds.has(turnKind);
+  });
   const missing = requiredFamilies.filter((family) => countsByFamily[family] === 0);
 
-  if (input.pack.answerPolicy === 'ask_clarification' || input.pack.answerPolicy === 'refuse_insufficient_evidence') {
-    return {
-      ok: false,
-      reason: `answer_policy_${input.pack.answerPolicy}`,
-      requiredFamilies,
-      renderedFamilies,
-      forbiddenFamilies,
-      countsByFamily,
-    };
-  }
-  if (missing.length > 0) {
-    return {
-      ok: false,
-      reason: `missing_required_evidence_family:${missing.join(',')}`,
-      requiredFamilies,
-      renderedFamilies,
-      forbiddenFamilies,
-      countsByFamily,
-    };
-  }
-  if (forbiddenFamilies.length > 0) {
-    return {
-      ok: false,
-      reason: `forbidden_evidence_family_rendered:${forbiddenFamilies.join(',')}`,
-      requiredFamilies,
-      renderedFamilies,
-      forbiddenFamilies,
-      countsByFamily,
-    };
-  }
-  return {
-    ok: true,
-    reason: 'ok',
+  const base = {
     requiredFamilies,
     renderedFamilies,
     forbiddenFamilies,
     countsByFamily,
+    serializedMarkerIntegrity,
   };
+  if (!manifestIdsArePermitted || !manifestIdsAreUnique) {
+    return { ok: false, reason: 'rendered_manifest_invalid', ...base };
+  }
+  if (!serializedMarkerIntegrity) {
+    return { ok: false, reason: 'serialized_evidence_marker_missing', ...base };
+  }
+  if (input.pack.answerPolicy === 'ask_clarification' || input.pack.answerPolicy === 'refuse_insufficient_evidence') {
+    return { ok: false, reason: `answer_policy_${input.pack.answerPolicy}`, ...base };
+  }
+  if (missing.length > 0) {
+    return { ok: false, reason: `missing_required_evidence_family:${missing.join(',')}`, ...base };
+  }
+  if (forbiddenKinds.length > 0 || forbiddenFamilies.length > 0) {
+    const violation = forbiddenKinds.length > 0 ? forbiddenKinds.join(',') : forbiddenFamilies.join(',');
+    return { ok: false, reason: `forbidden_evidence_rendered:${violation}`, ...base };
+  }
+  return { ok: true, reason: 'ok', ...base };
 }

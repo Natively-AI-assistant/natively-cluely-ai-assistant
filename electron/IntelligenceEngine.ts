@@ -929,6 +929,28 @@ export class IntelligenceEngine extends EventEmitter {
                 })();
             const extractedQuestion = extractLatestQuestion(transcriptTurns);
 
+            // [TRACE:LONGCTX] Campaign 2 forensics (temporary, R10: removed before
+            // production). Dumps transcript-window size + extraction result at every
+            // WTA press so the Golden Trace driver can diff minute-2 vs minute-24.
+            if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
+                try {
+                    const rawCharLen = transcriptTurns.reduce((n, t) => n + (t.text?.length || 0), 0);
+                    console.log('[TRACE:LONGCTX] question_extracted', JSON.stringify({
+                        contextItemsCount: contextItems.length,
+                        transcriptTurnsCount: transcriptTurns.length,
+                        rawTranscriptChars: rawCharLen,
+                        preparedTranscriptChars: preparedTranscript.length,
+                        latestQuestion: extractedQuestion.latestQuestion,
+                        questionType: extractedQuestion.questionType,
+                        detectedSpeaker: extractedQuestion.detectedSpeaker,
+                        confidence: extractedQuestion.confidence,
+                        isFollowUp: extractedQuestion.isFollowUp,
+                        sessionStartTime: this.session.getSessionStartTime(),
+                        nowMs: Date.now(),
+                    }));
+                } catch (e) { console.warn('[TRACE:LONGCTX] question_extracted logging failed', e); }
+            }
+
             // LIVE TRANSCRIPT BRAIN (Phase 6 wiring, SHADOW/PARITY behind live_transcript_brain_enabled):
             // the WTA path already builds the hot window inline (getContext(180) + interim
             // injection above) and extracts the question — exactly what LiveTranscriptBrain
@@ -1112,9 +1134,23 @@ export class IntelligenceEngine extends EventEmitter {
                 wtaDecisionAllowsCandidateProfile = _wtaTurnSourceDecision.outcome === 'default'
                     || _wtaTurnSourceDecision.outcome === 'explicit_granted';
                 if (_wtaTurnSourceDecision.allowedEvidenceKinds.length > 0) {
+                    // Grounding-campaign fix (2026-07-16): this check previously
+                    // omitted 'profile_jd', so a JD-only-granted turn (e.g.
+                    // jd_requirements_answer, outcome='explicit_granted',
+                    // allowedEvidenceKinds=['profile_jd']) always computed false
+                    // here, even though the canonical decision explicitly granted
+                    // JD access. That blocked orchestrator.processQuestion() from
+                    // ever running, so the model received the answer contract
+                    // (requiredContextLayers: jd) with ZERO grounding evidence and
+                    // confidently fabricated plausible-sounding requirements absent
+                    // from the real JD — a live hallucination on the WTA/meeting-
+                    // overlay path. Mirrors the identical fix already applied to
+                    // the manual-chat path's equivalent gate in ipcHandlers.ts's
+                    // _contractAllowsProfile (Evidence-execution-repair, 2026-07-11).
                     wtaDecisionAllowsCandidateProfile = wtaDecisionAllowsCandidateProfile
                         && (_wtaTurnSourceDecision.allowedEvidenceKinds.includes('profile_resume')
-                            || _wtaTurnSourceDecision.allowedEvidenceKinds.includes('projects'));
+                            || _wtaTurnSourceDecision.allowedEvidenceKinds.includes('projects')
+                            || _wtaTurnSourceDecision.allowedEvidenceKinds.includes('profile_jd'));
                 }
             }
 
@@ -1987,7 +2023,13 @@ export class IntelligenceEngine extends EventEmitter {
                     if (!wtaTurnContract) return true;
                     try {
                         const { allowsEvidence } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
-                        return allowsEvidence(wtaTurnContract, 'profile_resume') || allowsEvidence(wtaTurnContract, 'profile_project');
+                        // Grounding-campaign fix (2026-07-16): same missing-profile_jd
+                        // gap as wtaDecisionAllowsCandidateProfile above — kept in sync
+                        // so a JD-only-granted turn isn't treated inconsistently by the
+                        // repair gate vs the initial fetch gate.
+                        return allowsEvidence(wtaTurnContract, 'profile_resume')
+                            || allowsEvidence(wtaTurnContract, 'profile_project')
+                            || allowsEvidence(wtaTurnContract, 'profile_jd');
                     } catch { return true; }
                 })();
                 if (profileLoaded && contractPermitsProfileRepair && answerPlan.voicePerspective === 'first_person_candidate') {
@@ -2155,6 +2197,20 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             if (IntelligenceEngine.isNonAnswerSentinel(fullAnswer)) {
+                // [TRACE:LONGCTX] Campaign 2 forensics (temporary, R10). This is the
+                // GREETING-FAILURE-ADJACENT path: a real interviewer question produced
+                // a well-formed prompt, but the model itself emitted a "nothing
+                // actionable" sentinel — which this branch converts into a silent
+                // null with NO fallback message shown to the user.
+                if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
+                    try {
+                        console.log('[TRACE:LONGCTX] nonanswer_sentinel_discard', JSON.stringify({
+                            question: question || extractedQuestion.latestQuestion || lastInterviewerTurn || null,
+                            rawAnswer: fullAnswer,
+                            answerType: answerPlan?.answerType,
+                        }));
+                    } catch (e) { console.warn('[TRACE:LONGCTX] nonanswer_sentinel_discard logging failed', e); }
+                }
                 // Declined as a non-answer. Discard any open streaming row so it
                 // isn't left as an orphaned partial on the auto path (the manual
                 // path also resolves null via the renderer, but the discard is
