@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useId } from 'react';
 import { useT } from '../i18n';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
-import { ArrowLeft, Search, Mail, Link, ChevronDown, Play, ArrowUp, Copy, Check, MoreHorizontal, Settings, ArrowRight, RefreshCw, Info, Eye, EyeOff, History, Pencil, X, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Search, Mail, Link, ChevronDown, Play, ArrowUp, Copy, Check, MoreHorizontal, Settings, ArrowRight, RefreshCw, Info, Eye, EyeOff, History, Pencil, X, ChevronRight, FileAudio, FolderOpen } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { genMessageId } from '../utils/messageId';
 import { mapLanguageForPrism, isBlockCode } from '../utils/prismLanguage';
@@ -25,6 +25,12 @@ const formatDuration = (ms: number) => {
     const minutes = Math.floor(ms / 60000);
     const seconds = ((ms % 60000) / 1000).toFixed(0);
     return `${minutes}:${Number(seconds) < 10 ? '0' : ''}${seconds}`;
+};
+
+const formatFileSize = (bytes: number) => {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+    if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
 // Some stored answers arrive with their list newlines collapsed to spaces, so a
@@ -848,6 +854,13 @@ interface Meeting {
         answer?: string;
         items?: string[];
     }>;
+    audioRecording?: {
+        format: 'wav';
+        sampleRate: number;
+        sizeBytes: number;
+        durationMs: number;
+        exists?: boolean;
+    };
 }
 
 interface MeetingDetailsProps {
@@ -866,6 +879,7 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const [isCopied, setIsCopied] = useState(false);
     const [isChatOpen, setIsChatOpen] = useState(false);
     const [submittedQuery, setSubmittedQuery] = useState('');
+    const [recordingError, setRecordingError] = useState<string | null>(null);
 
     // Stable client-side keys for the action-item and key-point lists. The
     // persisted shape is string[], so React keyed the rows by index, but the
@@ -883,6 +897,28 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     );
 
     const isV3Summary = meeting.detailedSummary?.schemaVersion === 3;
+    const recording = meeting.audioRecording;
+    const recordingAvailable = Boolean(recording && recording.exists !== false);
+
+    const handleRecordingAction = async (action: 'open' | 'reveal') => {
+        if (!recordingAvailable) return;
+        setRecordingError(null);
+        try {
+            const result = action === 'open'
+                ? await window.electronAPI?.openMeetingRecording?.(meeting.id)
+                : await window.electronAPI?.revealMeetingRecording?.(meeting.id);
+            if (result?.success) return;
+            setMeeting((previous) => previous.audioRecording
+                ? { ...previous, audioRecording: { ...previous.audioRecording, exists: false } }
+                : previous);
+            setRecordingError(result?.error || 'Recording unavailable');
+        } catch {
+            setMeeting((previous) => previous.audioRecording
+                ? { ...previous, audioRecording: { ...previous.audioRecording, exists: false } }
+                : previous);
+            setRecordingError('Recording unavailable');
+        }
+    };
     const v3Actions = meeting.detailedSummary?.actionItemsV3 || [];
     const v3Decisions = meeting.detailedSummary?.decisions || [];
     const v3Questions = meeting.detailedSummary?.openQuestions || [];
@@ -1174,6 +1210,44 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                         {/* Moved Actions: Follow-up & Share (REMOVED per user request) */}
                         {/* <div className="flex items-center gap-2 mt-1"> ... </div> */}
                     </div>
+
+                    {recording && (
+                        <div className="mb-6 flex items-center justify-between gap-4 rounded-xl border border-border-subtle bg-bg-primary/40 px-4 py-3">
+                            <div className="flex min-w-0 items-center gap-3">
+                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-bg-item-active">
+                                    <FileAudio size={16} className="text-text-secondary" aria-hidden="true" />
+                                </div>
+                                <div className="min-w-0">
+                                    <div className="text-sm font-medium text-text-primary">{t('Recording')}</div>
+                                    <div className="truncate text-xs text-text-tertiary">
+                                        {recordingAvailable
+                                            ? `${formatDuration(recording.durationMs)} · ${formatFileSize(recording.sizeBytes)}`
+                                            : recordingError || t('Recording unavailable')}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => handleRecordingAction('open')}
+                                    disabled={!recordingAvailable}
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-item-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                    <Play size={13} aria-hidden="true" />
+                                    {t('Open')}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleRecordingAction('reveal')}
+                                    disabled={!recordingAvailable}
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-item-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                    <FolderOpen size={13} aria-hidden="true" />
+                                    {t('Reveal')}
+                                </button>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Tabs */}
                     {/* Designing Tabs to match reference 1:1 (Dark Pill Container) */}

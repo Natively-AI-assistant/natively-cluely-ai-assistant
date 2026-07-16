@@ -798,6 +798,9 @@ interface ElectronAPI {
   onMeetingRetentionChanged: (
     callback: (retention: 'forever' | '7d' | '30d' | 'never') => void,
   ) => () => void;
+  getSaveMeetingRecordings: () => Promise<boolean>;
+  setSaveMeetingRecordings: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  onSaveMeetingRecordingsChanged: (callback: (enabled: boolean) => void) => () => void;
   getProviderDataScopes: () => Promise<{
     transcript?: boolean;
     screenshots?: boolean;
@@ -1655,6 +1658,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   finalizeMicSTT: () => ipcRenderer.invoke('finalize-mic-stt'),
   getRecentMeetings: () => ipcRenderer.invoke('get-recent-meetings'),
   getMeetingDetails: (id: string) => ipcRenderer.invoke('get-meeting-details', id),
+  openMeetingRecording: (id: string) => ipcRenderer.invoke('open-meeting-recording', id),
+  revealMeetingRecording: (id: string) => ipcRenderer.invoke('reveal-meeting-recording', id),
   searchGlobalMeetings: (query: string, filters?: any) => ipcRenderer.invoke('search:global-meetings', { query, filters }),
   searchInMeeting: (query: string) => ipcRenderer.invoke('search:in-meeting', { query }),
   generateLectureNotes: (opts?: { title?: string; course?: string }) => ipcRenderer.invoke('lecture:generate-notes', opts),
@@ -2349,6 +2354,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('meeting-retention-changed', subscription);
     return () => {
       ipcRenderer.removeListener('meeting-retention-changed', subscription);
+    };
+  },
+  getSaveMeetingRecordings: () => ipcRenderer.invoke('get-save-meeting-recordings'),
+  setSaveMeetingRecordings: (enabled: boolean) =>
+    ipcRenderer.invoke('set-save-meeting-recordings', enabled),
+  onSaveMeetingRecordingsChanged: (callback: (enabled: boolean) => void) => {
+    const subscription = (_: any, enabled: boolean) => callback(enabled);
+    ipcRenderer.on('save-meeting-recordings-changed', subscription);
+    return () => {
+      ipcRenderer.removeListener('save-meeting-recordings-changed', subscription);
     };
   },
   getProviderDataScopes: () => ipcRenderer.invoke('get-provider-data-scopes'),

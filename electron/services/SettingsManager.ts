@@ -94,6 +94,10 @@ export interface AppSettings {
     // documented in docs/engineering/LOCAL_DB_ENCRYPTION_DESIGN.md.
     // 'forever' (default), '7d', '30d', or 'never' (do not store transcripts).
     meetingRetention?: 'forever' | '7d' | '30d' | 'never';
+    // Explicit opt-in for saving a mixed microphone + system-audio WAV beside
+    // meeting history. Default false: live capture/transcription does not imply
+    // durable raw-audio storage.
+    saveMeetingRecordings?: boolean;
     providerDataScopes?: {
         transcript?: boolean;
         screenshots?: boolean;

@@ -338,6 +338,29 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   };
 
+  const resolveSafeMeetingRecordingPath = (meetingId: unknown): string | null => {
+    if (typeof meetingId !== 'string' || !meetingId) return null;
+    const recording = DatabaseManager.getInstance().getMeetingAudioRecording(meetingId);
+    if (!recording?.path) return null;
+    const recordingsDir = path.resolve(app.getPath('userData'), 'recordings');
+    const resolved = path.resolve(recording.path);
+    const relative = path.relative(recordingsDir, resolved);
+    if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return null;
+    try {
+      const stat = fs.lstatSync(resolved);
+      if (!stat.isFile() || stat.isSymbolicLink()) return null;
+      const realPath = fs.realpathSync(resolved);
+      const realRecordingsDir = fs.existsSync(recordingsDir)
+        ? fs.realpathSync(recordingsDir)
+        : recordingsDir;
+      const realRelative = path.relative(realRecordingsDir, realPath);
+      if (!realRelative || realRelative.startsWith('..') || path.isAbsolute(realRelative)) return null;
+      return realPath;
+    } catch {
+      return null;
+    }
+  };
+
   // --- NEW Test Helper ---
   safeHandle('test-release-fetch', async () => {
     try {
@@ -3966,9 +3989,45 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: false, error: 'invalid_retention' };
     }
     SettingsManager.getInstance().set('meetingRetention', retention);
+    if (retention === 'never') {
+      appState.discardActiveMeetingRecording();
+      if (SettingsManager.getInstance().get('saveMeetingRecordings') === true) {
+        SettingsManager.getInstance().set('saveMeetingRecordings', false);
+        BrowserWindow.getAllWindows().forEach((win) => {
+          if (!win.isDestroyed()) win.webContents.send('save-meeting-recordings-changed', false);
+        });
+      }
+    }
     BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) {
         win.webContents.send('meeting-retention-changed', retention);
+      }
+    });
+    return { success: true };
+  });
+
+  safeHandle('get-save-meeting-recordings', async () => {
+    return SettingsManager.getInstance().get('saveMeetingRecordings') === true;
+  });
+
+  safeHandle('set-save-meeting-recordings', async (_, enabled: boolean) => {
+    if (typeof enabled !== 'boolean') {
+      return { success: false, error: 'invalid_recording_setting' };
+    }
+    if (enabled && SettingsManager.getInstance().get('meetingRetention') === 'never') {
+      SettingsManager.getInstance().set('saveMeetingRecordings', false);
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) {
+          win.webContents.send('save-meeting-recordings-changed', false);
+        }
+      });
+      return { success: false, error: 'meeting_history_disabled' };
+    }
+    SettingsManager.getInstance().set('saveMeetingRecordings', enabled);
+    if (!enabled) appState.discardActiveMeetingRecording();
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send('save-meeting-recordings-changed', enabled);
       }
     });
     return { success: true };
@@ -7016,6 +7075,20 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('get-meeting-details', async (event, id) => {
     // Helper to fetch full details
     return DatabaseManager.getInstance().getMeetingDetails(id);
+  });
+
+  safeHandle('open-meeting-recording', async (_event, meetingId: string) => {
+    const recordingPath = resolveSafeMeetingRecordingPath(meetingId);
+    if (!recordingPath) return { success: false, error: 'Recording not found' };
+    const error = await shell.openPath(recordingPath);
+    return error ? { success: false, error } : { success: true };
+  });
+
+  safeHandle('reveal-meeting-recording', async (_event, meetingId: string) => {
+    const recordingPath = resolveSafeMeetingRecordingPath(meetingId);
+    if (!recordingPath) return { success: false, error: 'Recording not found' };
+    shell.showItemInFolder(recordingPath);
+    return { success: true };
   });
 
   // GLOBAL MEETING SEARCH V2 (Phase 9 wiring, behind global_search_v2_enabled).

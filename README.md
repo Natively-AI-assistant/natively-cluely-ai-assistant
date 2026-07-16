@@ -825,7 +825,7 @@ timeline
 
 Natively processes audio, screen context, and user input locally, maintains a rolling context window, and sends only the required prompt data to the selected AI provider (local or cloud).
 
-No raw audio, screenshots, or transcripts are stored or transmitted unless explicitly enabled by the user.
+Natively stores meeting history locally according to your retention setting. Raw meeting audio is not saved by default; you can explicitly enable local mixed WAV recordings in Settings. When enabled, recordings stay on this device and are deleted with their meeting history. Audio, screenshots, or transcripts are sent to a provider only when required by a feature you choose and allowed by your provider-data settings.
 
 ---
 

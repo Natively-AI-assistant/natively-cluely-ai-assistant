@@ -312,6 +312,8 @@ export interface ElectronAPI {
   finalizeMicSTT: () => Promise<void>
   getRecentMeetings: () => Promise<Array<{ id: string; title: string; date: string; duration: string; summary: string }>>
   getMeetingDetails: (id: string) => Promise<any>
+  openMeetingRecording: (id: string) => Promise<{ success: boolean; error?: string }>
+  revealMeetingRecording: (id: string) => Promise<{ success: boolean; error?: string }>
   searchGlobalMeetings: (query: string, filters?: any) => Promise<{ enabled: boolean; results: any[] }>
   searchInMeeting: (query: string) => Promise<{ enabled: boolean; results: any[] }>
   generateLectureNotes: (opts?: { title?: string; course?: string }) => Promise<{ enabled: boolean; notes: any }>
@@ -571,6 +573,9 @@ export interface ElectronAPI {
   getMeetingRetention: () => Promise<'forever' | '7d' | '30d' | 'never'>;
   setMeetingRetention: (retention: 'forever' | '7d' | '30d' | 'never') => Promise<{ success: boolean; error?: string }>;
   onMeetingRetentionChanged: (callback: (retention: 'forever' | '7d' | '30d' | 'never') => void) => () => void;
+  getSaveMeetingRecordings: () => Promise<boolean>;
+  setSaveMeetingRecordings: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  onSaveMeetingRecordingsChanged: (callback: (enabled: boolean) => void) => () => void;
   getProviderDataScopes: () => Promise<{ transcript?: boolean; screenshots?: boolean; reference_files?: boolean; profile_history?: boolean; embeddings?: boolean; post_call_summary?: boolean }>;
   setProviderDataScopes: (scopes: { transcript?: boolean; screenshots?: boolean; reference_files?: boolean; profile_history?: boolean; embeddings?: boolean; post_call_summary?: boolean }) => Promise<{ success: boolean; error?: string }>;
   onProviderDataScopesChanged: (callback: (scopes: { transcript?: boolean; screenshots?: boolean; reference_files?: boolean; profile_history?: boolean; embeddings?: boolean; post_call_summary?: boolean }) => void) => () => void;

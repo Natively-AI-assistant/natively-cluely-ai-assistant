@@ -7,7 +7,7 @@ import {
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
     ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Settings, Activity, ExternalLink, Trash2,
     Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff, Folder,
-    Star, AlertCircle, Gift, Smartphone, Cpu, Shield
+    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, FileAudio
 } from 'lucide-react';
 import { analytics } from '../lib/analytics/analytics.service';
 import { AboutSection } from './AboutSection';
@@ -401,6 +401,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
     const [verboseLogging, setVerboseLogging] = useState(false);
     const [meetingRetention, setMeetingRetention] = useState<'forever' | '7d' | '30d' | 'never'>('forever');
+    const [saveMeetingRecordings, setSaveMeetingRecordings] = useState(false);
     const [showVerboseToast, setShowVerboseToast] = useState(false);
     const verboseToastTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -416,6 +417,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             window.electronAPI?.getDisguise?.().then(setDisguiseMode).catch(() => { });
             window.electronAPI?.getVerboseLogging?.().then(setVerboseLogging).catch(() => { });
             window.electronAPI?.getMeetingRetention?.().then(setMeetingRetention).catch(() => { });
+            window.electronAPI?.getSaveMeetingRecordings?.().then(setSaveMeetingRecordings).catch(() => { });
         }
     }, [isOpen]);
 
@@ -441,6 +443,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     useEffect(() => {
         if (window.electronAPI?.onMeetingRetentionChanged) {
             const unsubscribe = window.electronAPI.onMeetingRetentionChanged(setMeetingRetention);
+            return () => unsubscribe();
+        }
+    }, []);
+
+    useEffect(() => {
+        if (window.electronAPI?.onSaveMeetingRecordingsChanged) {
+            const unsubscribe = window.electronAPI.onSaveMeetingRecordingsChanged(setSaveMeetingRecordings);
             return () => unsubscribe();
         }
     }, []);
@@ -1728,6 +1737,40 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     >
                                                         <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${meetingRetention === 'never' ? 'translate-x-5' : 'translate-x-0'}`} />
                                                     </div>
+                                                </div>
+
+                                                {/* Local Meeting Recordings */}
+                                                <div className="flex items-start justify-between px-4 py-3 gap-4">
+                                                    <div className="flex items-start gap-4">
+                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
+                                                            saveMeetingRecordings
+                                                                ? isLight
+                                                                    ? 'border-indigo-500/30 text-indigo-600 bg-indigo-50/50'
+                                                                    : 'border-indigo-500/40 text-indigo-400 bg-indigo-500/5'
+                                                                : 'border-border-subtle text-text-tertiary'
+                                                        }`}>
+                                                            <FileAudio size={20} />
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <h3 className="text-sm font-bold text-text-primary">{t('Save local meeting recordings')}</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5 leading-normal">{t('When enabled, new meetings save a mixed microphone and system-audio WAV on this device. Deleting meeting history also deletes its recording.')}</p>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const nextValue = !saveMeetingRecordings;
+                                                            setSaveMeetingRecordings(nextValue);
+                                                            window.electronAPI?.setSaveMeetingRecordings?.(nextValue);
+                                                        }}
+                                                        disabled={meetingRetention === 'never'}
+                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer shrink-0 mt-2 disabled:cursor-not-allowed disabled:opacity-40 ${saveMeetingRecordings ? 'bg-indigo-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                        role="switch"
+                                                        aria-checked={saveMeetingRecordings}
+                                                        aria-label={t('Save local meeting recordings')}
+                                                    >
+                                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${saveMeetingRecordings ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                    </button>
                                                 </div>
 
                                                 {/* Debug Logging */}

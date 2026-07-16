@@ -226,7 +226,13 @@ export class IntelligenceManager extends EventEmitter {
     // Meeting Lifecycle (delegates to persistence)
     // ============================================
 
+    startMeeting(metadata?: any): void {
+        this.engine.reset();
+        this.session.startMeeting(metadata);
+    }
+
     async stopMeeting(): Promise<string | null> {
+        this.engine.reset();
         return this.persistence.stopMeeting();
     }
 
