@@ -53,11 +53,12 @@ test('quit defers database shutdown until critical meeting persistence completes
   assert.match(quit, /meetingShutdownReady = true;[\s\S]{0,80}app\.quit\(\)/);
 });
 
-test('failed recording metadata persistence removes the untracked WAV', () => {
-  const recordingSaveStart = main.indexOf('const saved = DatabaseManager.getInstance().updateMeetingAudioRecording');
+test('recording publication uses durable database staging instead of unlinking an untracked WAV', () => {
+  const recordingSaveStart = main.indexOf('const saved = DatabaseManager.getInstance().publishMeetingAudioRecording');
   const recordingSaveEnd = main.indexOf('return meetingId;', recordingSaveStart);
   const recordingSave = main.slice(recordingSaveStart, recordingSaveEnd);
   assert.ok(recordingSaveStart >= 0 && recordingSaveEnd > recordingSaveStart);
-  assert.match(recordingSave, /if \(saved\) \{[\s\S]*?\} else \{[\s\S]*?fs\.promises\.unlink\(recording\.path\)/);
-  assert.match(recordingSave, /Removed recording because its metadata could not be saved/);
+  assert.match(recordingSave, /publishMeetingAudioRecording\(meetingId, recording\)/);
+  assert.doesNotMatch(recordingSave, /fs\.promises\.unlink\(recording\.path\)/);
+  assert.match(recordingSave, /startup reconciliation will retry or remove it safely/);
 });

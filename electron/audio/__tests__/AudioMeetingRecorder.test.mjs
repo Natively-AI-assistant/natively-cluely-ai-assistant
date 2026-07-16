@@ -42,7 +42,7 @@ test('PCM helpers resample, mix without clipping, and emit a valid mono WAV head
   assert.equal(header.readUInt32LE(40), 8);
 });
 
-test('recorder streams both channels into an atomically published mixed WAV', async () => {
+test('recorder streams both channels into an atomically staged mixed WAV', async () => {
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-recorder-'));
   tempDirs.push(userData);
   const recorder = new AudioMeetingRecorder(userData);
@@ -52,7 +52,7 @@ test('recorder streams both channels into an atomically published mixed WAV', as
 
   const result = await recorder.finalize('meeting-safe-1');
   assert.ok(result, 'a recording with PCM input should finalize');
-  assert.match(path.basename(result.path), /^meeting-safe-1-[a-f0-9-]+\.wav$/i);
+  assert.match(path.basename(result.path), /^meeting-safe-1-[a-f0-9-]+\.publish-pending\.wav$/i);
   assert.equal(result.sampleRate, 24_000);
   assert.equal(result.durationMs, 0, 'four 24 kHz samples round to less than one millisecond');
 

@@ -224,8 +224,8 @@ export class AudioMeetingRecorder {
 
     const channels = this.channels;
     this.channels = null;
-    let finalPath: string | null = null;
-    let stagedPath: string | null = null;
+    let pendingPath: string | null = null;
+    let mixedTempPath: string | null = null;
 
     try {
       const closeResults = await Promise.allSettled(Object.values(channels).map((state) => this.closeStream(state)));
@@ -239,25 +239,27 @@ export class AudioMeetingRecorder {
       }
 
       fs.mkdirSync(this.recordingsDir, { recursive: true });
-      finalPath = path.join(this.recordingsDir, `${meetingId}-${crypto.randomUUID()}.wav`);
-      stagedPath = path.join(this.tempDir, `${crypto.randomUUID()}-mixed.wav`);
-      const mixedPcmBytes = await this.mixChannelsToWav(channels, stagedPath);
+      const recordingId = crypto.randomUUID();
+      pendingPath = path.join(this.recordingsDir, `${meetingId}-${recordingId}.publish-pending.wav`);
+      mixedTempPath = path.join(this.tempDir, `${recordingId}-mixed.wav`);
+      const mixedPcmBytes = await this.mixChannelsToWav(channels, mixedTempPath);
       if (mixedPcmBytes === 0) {
         await this.cleanupChannelTemps(channels);
         return null;
       }
 
-      // Publish atomically from the app-owned temp directory. A random suffix
-      // makes the destination non-colliding, so we never overwrite or follow an
-      // attacker-planted path while finalizing.
-      await fs.promises.rename(stagedPath, finalPath);
-      stagedPath = null;
+      // Move the completed WAV into a recoverable publication state before it
+      // is associated with SQLite. The meeting ID and random recording ID in
+      // this filename let startup repair a crash between this rename and the
+      // database update without treating the complete audio as an orphan.
+      await fs.promises.rename(mixedTempPath, pendingPath);
+      mixedTempPath = null;
       await this.cleanupChannelTemps(channels);
-      const stat = await fs.promises.stat(finalPath);
+      const stat = await fs.promises.stat(pendingPath);
       const durationMs = Math.round((mixedPcmBytes / PCM_BYTES_PER_SAMPLE) * 1000 / this.outputSampleRate);
-      console.log(`[AudioMeetingRecorder] Saved mixed meeting recording: ${finalPath}`);
+      console.log('[AudioMeetingRecorder] Prepared mixed meeting recording for durable publication');
       return {
-        path: finalPath,
+        path: pendingPath,
         format: 'wav',
         sampleRate: this.outputSampleRate,
         sizeBytes: stat.size,
@@ -265,11 +267,11 @@ export class AudioMeetingRecorder {
       };
     } catch (error) {
       console.error('[AudioMeetingRecorder] Failed to finalize recording:', error);
-      if (finalPath) {
-        await fs.promises.unlink(finalPath).catch(() => {});
+      if (pendingPath) {
+        await fs.promises.unlink(pendingPath).catch(() => {});
       }
-      if (stagedPath) {
-        await fs.promises.unlink(stagedPath).catch(() => {});
+      if (mixedTempPath) {
+        await fs.promises.unlink(mixedTempPath).catch(() => {});
       }
       await this.cleanupChannelTemps(channels).catch(() => {});
       return null;

@@ -5472,17 +5472,11 @@ export class AppState {
         if (meetingId && meetingRecorder) {
           const recording = await meetingRecorder.finalize(meetingId);
           if (recording) {
-            const saved = DatabaseManager.getInstance().updateMeetingAudioRecording(meetingId, recording);
+            const saved = DatabaseManager.getInstance().publishMeetingAudioRecording(meetingId, recording);
             if (saved) {
               this.broadcast('meetings-updated');
             } else {
-              await fs.promises.unlink(recording.path).catch((error: any) => {
-                if (error?.code !== 'ENOENT') console.error('[Main] Failed to remove orphaned meeting recording:', error);
-              });
-              const meetingStillExists = DatabaseManager.getInstance().meetingExists(meetingId);
-              console.error(meetingStillExists === false
-                ? `[Main] Removed recording because meeting ${meetingId} no longer exists.`
-                : `[Main] Removed recording because its metadata could not be saved for meeting ${meetingId}.`);
+              console.error(`[Main] Recording could not be associated with meeting ${meetingId}; startup reconciliation will retry or remove it safely.`);
             }
           }
         } else {

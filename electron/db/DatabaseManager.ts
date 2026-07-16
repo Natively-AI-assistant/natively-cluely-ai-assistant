@@ -74,6 +74,14 @@ export interface StoredMeetingAudioRecording extends NonNullable<Meeting['audioR
     path: string;
 }
 
+interface PendingRecordingPublication {
+    meetingId: string;
+    pendingPath: string;
+    finalPath: string;
+}
+
+const PENDING_RECORDING_PUBLICATION = /^([A-Za-z0-9_-]{1,128})-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.publish-pending\.wav$/i;
+
 export class DatabaseManager {
     private static instance: DatabaseManager;
     private db: Database.Database | null = null;
@@ -2298,6 +2306,56 @@ export class DatabaseManager {
         return resolved;
     }
 
+    private getPendingRecordingPublication(filePath: string | null | undefined): PendingRecordingPublication | null {
+        const pendingPath = this.resolveOwnedRecordingPath(filePath);
+        if (!pendingPath) return null;
+        const match = path.basename(pendingPath).match(PENDING_RECORDING_PUBLICATION);
+        if (!match) return null;
+        const finalPath = this.resolveOwnedRecordingPath(path.join(path.dirname(pendingPath), `${match[1]}-${match[2]}.wav`));
+        if (!finalPath) return null;
+        return { meetingId: match[1], pendingPath, finalPath };
+    }
+
+    private readOwnedWavMetadata(filePath: string): StoredMeetingAudioRecording | null {
+        const recordingPath = this.resolveOwnedRecordingPath(filePath);
+        if (!recordingPath || !fs.existsSync(recordingPath)) return null;
+        let fd: number | null = null;
+        try {
+            const stat = fs.statSync(recordingPath);
+            if (stat.size < 44) return null;
+            const header = Buffer.alloc(44);
+            fd = fs.openSync(recordingPath, 'r');
+            if (fs.readSync(fd, header, 0, header.length, 0) !== header.length) return null;
+            if (
+                header.toString('ascii', 0, 4) !== 'RIFF' ||
+                header.toString('ascii', 8, 12) !== 'WAVE' ||
+                header.toString('ascii', 12, 16) !== 'fmt ' ||
+                header.readUInt16LE(20) !== 1 ||
+                header.toString('ascii', 36, 40) !== 'data'
+            ) return null;
+            const channels = header.readUInt16LE(22);
+            const sampleRate = header.readUInt32LE(24);
+            const bitsPerSample = header.readUInt16LE(34);
+            const dataBytes = header.readUInt32LE(40);
+            if (channels !== 1 || bitsPerSample !== 16 || sampleRate <= 0 || 44 + dataBytes > stat.size) return null;
+            return {
+                path: recordingPath,
+                format: 'wav',
+                sampleRate,
+                sizeBytes: stat.size,
+                durationMs: Math.round(dataBytes * 1000 / (sampleRate * channels * (bitsPerSample / 8))),
+            };
+        } catch (error) {
+            const code = (error as NodeJS.ErrnoException)?.code || 'unknown error';
+            console.error(`[DatabaseManager] Failed to inspect pending recording (${code})`);
+            return null;
+        } finally {
+            if (fd !== null) {
+                try { fs.closeSync(fd); } catch { /* best effort */ }
+            }
+        }
+    }
+
     private rowToStoredAudioRecording(row: any): StoredMeetingAudioRecording | undefined {
         const recordingPath = this.resolveOwnedRecordingPath(row?.audio_recording_path);
         if (!recordingPath) return undefined;
@@ -2377,6 +2435,52 @@ export class DatabaseManager {
         }
     }
 
+    public publishMeetingAudioRecording(id: string, metadata: StoredMeetingAudioRecording): boolean {
+        const publication = this.getPendingRecordingPublication(metadata.path);
+        if (!publication || publication.meetingId !== id) {
+            console.warn(`[DatabaseManager] Rejecting invalid pending recording publication for ${id}`);
+            return false;
+        }
+        if (!this.updateMeetingAudioRecording(id, { ...metadata, path: publication.pendingPath })) {
+            return false;
+        }
+        return this.completePendingRecordingPublication(id, metadata, publication);
+    }
+
+    private completePendingRecordingPublication(
+        id: string,
+        metadata: StoredMeetingAudioRecording,
+        publication: PendingRecordingPublication,
+    ): boolean {
+        try {
+            if (fs.existsSync(publication.pendingPath) && !fs.existsSync(publication.finalPath)) {
+                fs.renameSync(publication.pendingPath, publication.finalPath);
+            }
+            if (!fs.existsSync(publication.finalPath)) {
+                // The database still references the valid pending WAV, so this
+                // remains durable and startup can retry publication later.
+                return true;
+            }
+
+            const finalMetadata = this.readOwnedWavMetadata(publication.finalPath) || {
+                ...metadata,
+                path: publication.finalPath,
+            };
+            if (!this.updateMeetingAudioRecording(id, finalMetadata)) {
+                console.error(`[DatabaseManager] Final recording path update failed for ${id}; startup will retry`);
+                return true;
+            }
+            if (fs.existsSync(publication.pendingPath)) {
+                try { fs.unlinkSync(publication.pendingPath); } catch { /* startup will retry cleanup */ }
+            }
+            return true;
+        } catch (error) {
+            const code = (error as NodeJS.ErrnoException)?.code || 'unknown error';
+            console.error(`[DatabaseManager] Recording publication deferred (${code}); startup will retry`);
+            return true;
+        }
+    }
+
     private quarantineRecording(filePath: string): { originalPath: string; pendingPath: string } | null {
         const originalPath = this.resolveOwnedRecordingPath(filePath);
         if (!originalPath || !fs.existsSync(originalPath)) return null;
@@ -2421,8 +2525,72 @@ export class DatabaseManager {
 
     private reconcileRecordingFilesOnStartup(): void {
         if (!this.db) return;
-        const pendingFiles = this.listOwnedRecordingFiles().filter((filePath) => path.basename(filePath).includes('.wav.delete-pending-'));
+        const protectedFinalPaths = new Set<string>();
+
+        // First finish publications that already have a durable database
+        // association. This covers a crash after the pending path was stored,
+        // including the narrower window after the WAV rename but before the
+        // final path update.
+        const pendingRows = this.db.prepare(`
+            SELECT id, audio_recording_path, audio_recording_format, audio_recording_sample_rate,
+                   audio_recording_size_bytes, audio_recording_duration_ms
+            FROM meetings
+            WHERE audio_recording_path LIKE '%.publish-pending.wav'
+        `).all() as any[];
+        const associatedPendingPaths = new Set<string>();
+        for (const row of pendingRows) {
+            const publication = this.getPendingRecordingPublication(row.audio_recording_path);
+            if (!publication || publication.meetingId !== row.id) continue;
+            associatedPendingPaths.add(publication.pendingPath);
+            const metadata: StoredMeetingAudioRecording = {
+                path: publication.pendingPath,
+                format: 'wav',
+                sampleRate: Number(row.audio_recording_sample_rate) || 24_000,
+                sizeBytes: Number(row.audio_recording_size_bytes) || 0,
+                durationMs: Number(row.audio_recording_duration_ms) || 0,
+            };
+            this.completePendingRecordingPublication(row.id, metadata, publication);
+            if (fs.existsSync(publication.finalPath)) protectedFinalPaths.add(publication.finalPath);
+        }
+
+        // A crash can also land after the recorder atomically stages the WAV
+        // but before main has stored any path. The recoverable filename carries
+        // the meeting ID; validate the WAV, associate it only with that exact
+        // existing meeting, and then finish publication.
+        const pendingFiles = this.listOwnedRecordingFiles().filter((filePath) => this.getPendingRecordingPublication(filePath));
         for (const pendingPath of pendingFiles) {
+            if (associatedPendingPaths.has(pendingPath)) continue;
+            const publication = this.getPendingRecordingPublication(pendingPath);
+            if (!publication) continue;
+            const meeting = this.db.prepare('SELECT audio_recording_path FROM meetings WHERE id = ?').get(publication.meetingId) as any;
+            if (!meeting) {
+                this.removeQuarantinedRecordings([{ pendingPath }]);
+                continue;
+            }
+            if (meeting.audio_recording_path === publication.finalPath) {
+                if (!fs.existsSync(publication.finalPath)) {
+                    try { fs.renameSync(publication.pendingPath, publication.finalPath); } catch { /* retry next startup */ }
+                } else {
+                    this.removeQuarantinedRecordings([{ pendingPath }]);
+                }
+                if (fs.existsSync(publication.finalPath)) protectedFinalPaths.add(publication.finalPath);
+                continue;
+            }
+            if (meeting.audio_recording_path) {
+                this.removeQuarantinedRecordings([{ pendingPath }]);
+                continue;
+            }
+            const metadata = this.readOwnedWavMetadata(publication.pendingPath);
+            if (!metadata) {
+                this.removeQuarantinedRecordings([{ pendingPath }]);
+                continue;
+            }
+            this.publishMeetingAudioRecording(publication.meetingId, metadata);
+            if (fs.existsSync(publication.finalPath)) protectedFinalPaths.add(publication.finalPath);
+        }
+
+        const deletePendingFiles = this.listOwnedRecordingFiles().filter((filePath) => path.basename(filePath).includes('.wav.delete-pending-'));
+        for (const pendingPath of deletePendingFiles) {
             const originalPath = pendingPath.replace(/\.delete-pending-\d+-[a-z0-9]+$/i, '');
             const referenced = this.db.prepare('SELECT 1 FROM meetings WHERE audio_recording_path = ? LIMIT 1').get(originalPath);
             if (referenced && !fs.existsSync(originalPath)) {
@@ -2432,16 +2600,16 @@ export class DatabaseManager {
             }
         }
 
-        // A recording is finalized before its path is attached to the meeting
-        // row. If that database update fails and the immediate unlink is also
-        // blocked (for example EACCES, EPERM, or EBUSY), an ordinary WAV can be
-        // left behind with no history entry that can ever delete it. Reconcile
-        // those app-owned files on every startup. Failed unlinks remain in place
+        // Clean up ordinary WAVs left by an older interrupted flow or a failed
+        // immediate cleanup. Recoverable publish-pending WAVs were handled
+        // above and are deliberately excluded. Failed unlinks remain in place
         // and are retried on the next launch.
-        const ordinaryFiles = this.listOwnedRecordingFiles().filter((filePath) => path.extname(filePath).toLowerCase() === '.wav');
+        const ordinaryFiles = this.listOwnedRecordingFiles().filter((filePath) =>
+            path.extname(filePath).toLowerCase() === '.wav' && !this.getPendingRecordingPublication(filePath)
+        );
         const findReference = this.db.prepare('SELECT 1 FROM meetings WHERE audio_recording_path = ? LIMIT 1');
         for (const filePath of ordinaryFiles) {
-            if (findReference.get(filePath)) continue;
+            if (findReference.get(filePath) || protectedFinalPaths.has(filePath)) continue;
             try {
                 const ownedPath = this.resolveOwnedRecordingPath(filePath);
                 if (ownedPath && fs.existsSync(ownedPath)) fs.unlinkSync(ownedPath);
