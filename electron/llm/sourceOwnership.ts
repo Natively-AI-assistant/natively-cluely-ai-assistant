@@ -66,6 +66,13 @@ export interface ResolveSourceOwnershipInput {
   answerType: string;
   /** Whether the user actually has structured profile facts loaded. */
   hasProfileFacts?: boolean;
+  /**
+   * Canonical, lossless source decision from electron/llm/turnSourceDecision.
+   * When supplied, this adapter MUST NOT re-interpret JD as résumé/profile;
+   * the decision preserves JD-vs-résumé intent at the allowedEvidenceKinds
+   * level. When absent, fall back to the legacy heuristic chain below.
+   */
+  turnSourceDecision?: import('./turnSourceDecision').TurnSourceDecision | null;
 }
 
 // ── Explicit ownership shape (GENERAL — never an entity name) ────────────────
@@ -102,6 +109,28 @@ export function isExplicitProfileAsk(question: string): boolean {
  * turn from a silent block into a clarify-and-offer-to-switch response.
  */
 export function resolveSourceOwnership(input: ResolveSourceOwnershipInput): SourceOwnershipDecision {
+  // Canonical decision short-circuit: when the lossless per-turn decision is
+  // available, derive owner/shouldClarify/etc from it. This preserves JD-vs-
+  // résumé intent — the legacy heuristic chain below folds JD → profile.
+  if (input.turnSourceDecision) {
+    const d = input.turnSourceDecision;
+    const profileAllowed = d.outcome === 'explicit_granted'
+      && d.allowedEvidenceKinds.some((k) => (
+        k === 'profile_resume' || k === 'profile_jd' || k === 'projects'
+      ));
+    const explicitProfileAsk = d.explicitRequests.some((s) => (
+      s === 'profile' || s === 'job_description'
+    ));
+    const owner: SourceOwner = d.owner === 'clarify' ? 'unknown' : d.owner;
+    return {
+      owner,
+      profileAllowed,
+      explicitProfileAsk,
+      shouldClarifyInsteadOfProfile:
+        d.outcome === 'explicit_denied' || d.outcome === 'source_unavailable',
+      reason: `turn_source_decision:${d.reasonCode}`,
+    };
+  }
   const { question, contract, profileContextPolicy } = input;
   const authority = contract?.sourceAuthority ?? 'ask_if_ambiguous';
   const explicitProfileAsk = isExplicitProfileAsk(question);
@@ -202,13 +231,27 @@ export function resolveSourceOwnership(input: ResolveSourceOwnershipInput): Sour
 // Emitted when `shouldClarifyInsteadOfProfile` is true. General wording — names
 // the active source class ("uploaded material" / "this meeting"), never a
 // specific document or project. Kept deterministic so it never itself leaks.
-export function buildSourceSwitchClarification(owner: SourceOwner): string {
+/** Render the requested-source name for the source-aware clarification line. */
+const requestedSourceLabel = (
+  rs: 'reference_files' | 'profile' | 'job_description' | 'transcript' | null | undefined,
+): string => {
+  if (rs === 'job_description') return 'job description';
+  if (rs === 'transcript') return 'meeting transcript';
+  if (rs === 'reference_files') return 'uploaded material';
+  return 'résumé';
+};
+
+export function buildSourceSwitchClarification(
+  owner: SourceOwner,
+  requestedSource?: 'reference_files' | 'profile' | 'job_description' | 'transcript' | null,
+): string {
+  const label = requestedSourceLabel(requestedSource);
   if (owner === 'transcript') {
-    return "This mode answers from the current conversation, not your saved profile. Switch to a profile or interview mode and I'll answer from your résumé.";
+    return `This mode answers from the current conversation, not your ${label}. Switch to a mode that enables that source and I'll use it.`;
   }
   if (owner === 'mixed') {
-    return "This mode has multiple possible sources, so I need a clearer source before using your résumé for that.";
+    return `This mode has multiple possible sources, so I need a clearer source before using your ${label} for that.`;
   }
   // reference_files / unknown (default)
-  return "This mode only answers from your uploaded material, so I'm not pulling from your résumé here. Switch to a profile or interview mode and I'll answer about your own projects and experience.";
+  return `This mode only answers from your uploaded material, so I'm not pulling from your ${label} here. Switch to a mode that enables that source and I'll use it.`;
 }

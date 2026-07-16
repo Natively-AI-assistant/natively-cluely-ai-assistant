@@ -117,6 +117,8 @@ export interface BuildTurnContractForSurfaceInput {
   hasProfileFacts: boolean;
   hasLiveTranscript: boolean;
   userExplicitSource?: BuildTurnContractInput['userExplicitSource'];
+  /** Canonical turn source decision from electron/llm/turnSourceDecision. */
+  turnSourceDecision?: import('../../llm/turnSourceDecision').TurnSourceDecision | null;
 }
 
 function normalizeSourceAuthority(value: string | null | undefined): SourceAuthority {
@@ -159,6 +161,7 @@ export function buildTurnContractForSurface(input: BuildTurnContractForSurfaceIn
     hasProfileFacts: input.hasProfileFacts,
     hasLiveTranscript: input.hasLiveTranscript,
     userExplicitSource: input.userExplicitSource ?? null,
+    turnSourceDecision: input.turnSourceDecision ?? null,
   });
 }
 

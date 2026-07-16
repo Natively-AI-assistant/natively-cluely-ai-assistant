@@ -138,6 +138,13 @@ export interface ContractBuildInput {
    * heuristic (backward compatible for callers that haven't been updated yet).
    */
   persistedSourceAuthority?: SourceAuthority | null;
+  /**
+   * Lossless canonical decision (electron/llm/turnSourceDecision). When
+   * supplied, this is the AUTHORITATIVE answer for allowedSources/forbiddenSources;
+   * the switch-on-sourceAuthority fallback below only runs when the decision is
+   * null (legacy callers).
+   */
+  turnSourceDecision?: import('./turnSourceDecision').TurnSourceDecision | null;
 }
 
 // ── Construction ──────────────────────────────────────────────────────────
@@ -181,6 +188,7 @@ export function buildCustomModeExecutionContract(input: ContractBuildInput): Cus
     hasLongTermMemory,
     userExplicitSource,
     persistedSourceAuthority,
+    turnSourceDecision,
   } = input;
 
   // 1. Determine source authority. The PERSISTED contract (when supplied) is
@@ -226,7 +234,30 @@ export function buildCustomModeExecutionContract(input: ContractBuildInput): Cus
     forbidden.add('persona');
   }
 
-  switch (sourceAuthority) {
+  if (turnSourceDecision) {
+    // Canonical-decision path. The decision's allowedEvidenceKinds are the
+    // EXACT list the runtime must respect. Every other source kind is
+    // forbidden — including prior assistant facts. Prior assistant
+    // messages remain referent_only for pronoun resolution only.
+    const grantedKinds = new Set<SourceKind>(
+      turnSourceDecision.allowedEvidenceKinds.map((k) => k as SourceKind),
+    );
+    const grantable: SourceKind[] = [
+      'reference_files', 'profile_resume', 'profile_jd', 'projects',
+      'live_transcript', 'meeting_rag',
+    ];
+    allowed.add('active_mode_pinned');
+    allowed.add('custom_context');
+    for (const kind of grantedKinds) {
+      allowed.add(kind);
+    }
+    for (const kind of grantable) {
+      if (!grantedKinds.has(kind)) forbidden.add(kind);
+    }
+    for (const kind of MEMORY_SOURCES) forbidden.add(kind);
+    forbidden.add('prior_assistant_facts');
+    referentOnly.add('prior_assistant_referent');
+  } else switch (sourceAuthority) {
     case 'reference_files_only': {
       // Strict doc-grounded mode: only the uploaded material is allowed.
       allowed.add('reference_files');
@@ -339,7 +370,12 @@ export function buildCustomModeExecutionContract(input: ContractBuildInput): Cus
   const isReferenceFilesAuthority = sourceAuthority === 'reference_files_only'
     || sourceAuthority === 'reference_files_primary'
     || sourceAuthority === 'reference_files_plus_transcript';
-  const evidenceRequired = isReferenceFilesAuthority
+  // When the canonical decision has required kinds, treat the turn as
+  // evidence-required regardless of authority (the user explicitly asked
+  // for a source, the answer must reflect that source).
+  const decisionRequiresEvidence = Boolean(turnSourceDecision?.requiredEvidenceKinds.length);
+  const evidenceRequired = decisionRequiresEvidence
+    || isReferenceFilesAuthority
     || isDocGroundedAnswerType(answerType);
   const evidenceNamespace: 'reference_files' | 'live_transcript' | 'all_active' =
     isReferenceFilesAuthority

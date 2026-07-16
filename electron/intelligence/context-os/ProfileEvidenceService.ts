@@ -38,23 +38,52 @@ export class ProfileEvidenceService {
   /** May the deterministic fast path even be consulted for this turn? */
   canAnswerDeterministically(input: Pick<ProfileEvidenceServiceInput, 'contract'>): boolean {
     return allowsEvidence(input.contract, 'profile_resume')
-      || allowsEvidence(input.contract, 'profile_project');
+      || allowsEvidence(input.contract, 'profile_project')
+      || allowsEvidence(input.contract, 'profile_jd');
   }
 
   /**
    * Contract-gated wrapper around the legacy fast path. Returns null when the
    * contract denies profile evidence — the legacy selector is NOT invoked at
    * all (capability-scoped access, not post-hoc filtering).
+   *
+   * The 2026-07-15 canonical-decision update closes the historical
+   * `_contractAllowsProfile` shape gap: the gate now also recognizes
+   * profile_jd (a JD-only decision grants JD evidence but NOT résumé/project).
+   * The pre-filter also withholds an unauthorized source family BEFORE the
+   * selector sees it, and the result is filtered defensively by the same
+   * set so a future selector-emitter cannot regress this guarantee.
    */
   selectEvidence(input: ProfileEvidenceServiceInput): ManualProfileRouteResult | null {
     if (!this.canAnswerDeterministically(input)) return null;
     try {
-      return selectManualProfileEvidence({
+      const allowsResume = allowsEvidence(input.contract, 'profile_resume');
+      const allowsProjects = allowsEvidence(input.contract, 'profile_project');
+      const allowsJd = allowsEvidence(input.contract, 'profile_jd');
+      const selection = selectManualProfileEvidence({
         question: input.question,
-        profile: input.profile,
-        jobDescription: allowsEvidence(input.contract, 'profile_jd') ? input.jobDescription : undefined,
+        // Withhold an unauthorized family BEFORE the legacy selector runs:
+        // pass undefined (instead of the structured object) so the selector
+        // emits zero items of that family. Post-hoc filtering is also
+        // applied below as defense-in-depth.
+        profile: allowsResume || allowsProjects ? input.profile : undefined,
+        jobDescription: allowsJd ? input.jobDescription : undefined,
         answerType: input.answerType as any,
       });
+      if (!selection) return null;
+      const allowedKinds = new Set<string>();
+      if (allowsResume) allowedKinds.add('profile_resume');
+      if (allowsProjects) allowedKinds.add('projects');
+      if (allowsJd) allowedKinds.add('profile_jd');
+      const items = selection.items.filter((item) => allowedKinds.has(item.sourceKind));
+      if (items.length === 0) return null;
+      return {
+        ...selection,
+        items,
+        selectedFacts: items,
+        checkedSources: selection.checkedSources.filter((kind) => allowedKinds.has(kind)),
+        sourceRefs: Array.from(new Set(items.map((item) => (item as any).sourceRef).filter(Boolean) as string[])),
+      };
     } catch {
       return null;
     }

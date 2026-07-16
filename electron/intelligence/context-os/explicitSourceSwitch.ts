@@ -37,7 +37,7 @@ export type ExplicitSourceSwitch = 'reference_files' | 'profile' | 'job_descript
 // recap/follow-up) should call before building a contract.
 
 const PROFILE_RE =
-  /\b(?:my|mine|our|your)\b[\s\w-]{0,40}\b(?:resume|cv|profile|projects?|portfolio|experience|background|skills?|education|career|work\s+history)\b|\b(?:from|on|in|per|according\s+to|based\s+on|using)\s+(?:my|mine|our)\b[\s\w-]{0,20}\b(?:resume|cv|profile|projects?|portfolio|experience|background|skills?|education|career)\b/i;
+  /\b(?:my|mine|our|your)\b[\s\w-]{0,40}\b(?:resume|résumé|cv|profile|projects?|portfolio|experience|background|skills?|education|career|work\s+history)\b|\b(?:from|on|in|per|according\s+to|based\s+on|using)\s+(?:my|mine|our)\b[\s\w-]{0,20}\b(?:resume|résumé|cv|profile|projects?|portfolio|experience|background|skills?|education|career)\b/i;
 
 // A job description is an artifact the user did not author — commonly
 // referenced with the definite article ("the JD"), not a possessive.
@@ -45,27 +45,43 @@ const JD_RE =
   /\b(?:the|this|my)\s+(?:job\s+description|jd)\b|\baccording\s+to\s+(?:the|my)\s+(?:job\s+description|jd)\b|\bdoes\s+the\s+jd\b/i;
 
 // "return to the thesis", "use the uploaded file", "back to the document".
+// Widened prepositions (in/from/against) to cover "answer in the deck",
+// "info from the upload", "compare against the contract" etc.
 const REFERENCE_FILES_RE =
-  /\b(?:return|go|back)\s+(?:to|back to)\s+(?:the\s+)?(?:uploaded\s+)?(?:document|thesis|file|material|paper|pdf)\b|\b(?:use|using|answer\s+from|based\s+on)\s+(?:the\s+)?(?:uploaded\s+)?(?:document|thesis|file|material|paper|pdf)\b/i;
+  /\b(?:return|go|back)\s+(?:to|back to)\s+(?:the\s+)?(?:uploaded\s+)?(?:document|thesis|file|material|paper|pdf)\b|\b(?:use|using|answer\s+from|based\s+on|in|from|against)\s+(?:the\s+)?(?:uploaded\s+)?(?:document|thesis|file|material|paper|pdf)\b/i;
 
 // "based on the meeting", "use the transcript", "according to the call".
 const TRANSCRIPT_RE =
   /\b(?:use|using|answer\s+from|based\s+on|according\s+to)\s+(?:the\s+)?(?:meeting|transcript|conversation|call)\b/i;
 
+type RequestedSource = Exclude<ExplicitSourceSwitch, null>;
+
 /**
- * Resolve an explicit user source-switch request from the question text
- * alone. GENERAL shape detection only — no entity, document, or mode name
- * is ever referenced. Order matters: JD is checked before the generic
- * profile shape so "according to the JD" isn't mis-captured as a profile
- * switch via an overlapping token; reference-files and transcript switches
- * are checked last since they're the least ambiguous shapes.
+ * Lossless multi-request resolver. Returns every independently-named source
+ * the user's question requests so a comparison turn ("compare my résumé
+ * with the JD") can grant both — the legacy scalar API collapses two
+ * requests into one and silently picks the wrong family.
+ */
+export function resolveExplicitSourceRequests(question: string): RequestedSource[] {
+  const q = String(question || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const requests: RequestedSource[] = [];
+  if (REFERENCE_FILES_RE.test(q)) requests.push('reference_files');
+  if (PROFILE_RE.test(q)) requests.push('profile');
+  if (JD_RE.test(q)) requests.push('job_description');
+  if (TRANSCRIPT_RE.test(q)) requests.push('transcript');
+  return requests;
+}
+
+/**
+ * Legacy scalar adapter. New policy code must use resolveExplicitSourceRequests
+ * so it can retain every requested family for comparisons and synthesis.
  */
 export function resolveExplicitSourceRequest(question: string): ExplicitSourceSwitch {
-  const q = String(question || '');
-  if (JD_RE.test(q)) return 'job_description';
-  if (PROFILE_RE.test(q)) return 'profile';
-  if (REFERENCE_FILES_RE.test(q)) return 'reference_files';
-  if (TRANSCRIPT_RE.test(q)) return 'transcript';
+  const requests = resolveExplicitSourceRequests(question);
+  if (requests.includes('job_description')) return 'job_description';
+  if (requests.includes('profile')) return 'profile';
+  if (requests.includes('reference_files')) return 'reference_files';
+  if (requests.includes('transcript')) return 'transcript';
   return null;
 }
 

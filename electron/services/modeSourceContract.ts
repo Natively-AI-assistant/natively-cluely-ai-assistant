@@ -134,13 +134,22 @@ export function defaultSourceContractForNewMode(
 ): ModeSourceContract {
   const isInterviewPrep = templateType === 'looking-for-work'
     || templateType === 'technical-interview';
-  const allowedExplicitSwitches: string[] = isInterviewPrep
+  const allowedExplicitSwitches: ModeSourceSwitch[] = isInterviewPrep
     ? ['profile', 'job_description']
     : ['reference_files'];
   const defaultOwner: ModeSourceOwner = isInterviewPrep ? 'profile' : 'reference_files';
-  const sourceAuthority: ModeSourceAuthority = isInterviewPrep
+  const sourceAuthority: ModeSourceAuthority = (isInterviewPrep
     ? 'profile_only'
-    : 'reference_files_primary';
+    : 'reference_files_primary') as ModeSourceAuthority;
+  // Interview-prep modes (Looking-for-Work, Technical Interview) are
+  // profile-first: they must remember prior assistant context (the
+  // ongoing interview) and may use Hindsight (cross-meeting recall).
+  // Document-grounded modes must NOT — that's invariant #3 (Hindsight is
+  // forbidden when sourceOwner in {reference_files, transcript, mixed}).
+  const isReferenceFilesAuthority =
+    sourceAuthority === 'reference_files_only'
+    || sourceAuthority === 'reference_files_primary'
+    || sourceAuthority === 'reference_files_plus_transcript';
   return {
     version: 1,
     defaultOwner,
@@ -148,9 +157,7 @@ export function defaultSourceContractForNewMode(
     sourceAuthority,
     evidenceRequired: EVIDENCE_REQUIRED_FOR_AUTHORITY[sourceAuthority],
     conflictPolicy: CONFLICT_POLICY_FOR_AUTHORITY[sourceAuthority],
-    memoryPolicy: sourceAuthority === 'reference_files_only'
-      || sourceAuthority === 'reference_files_primary'
-      || sourceAuthority === 'reference_files_plus_transcript'
+    memoryPolicy: isReferenceFilesAuthority
       ? { allowPriorAssistantFacts: false, allowPriorAssistantReferents: true, allowHindsight: false }
       : { allowPriorAssistantFacts: true, allowPriorAssistantReferents: true, allowHindsight: true },
     origin: 'default_new_mode',

@@ -1102,23 +1102,30 @@ export function initializeIpcHandlers(appState: AppState): void {
           // a parallel Profile Intelligence heuristic while the contract stays
           // locked at reference_files_only. See
           // docs/context-os/evidence-execution-repair/07_SOURCE_SWITCH_RESULTS.md.
-          const { resolveExplicitSourceRequest, toLegacyUserExplicitSource } = require('./intelligence/context-os/explicitSourceSwitch');
+          const { resolveExplicitSourceRequest, resolveExplicitSourceRequests, toLegacyUserExplicitSource } = require('./intelligence/context-os/explicitSourceSwitch');
+          const _explicitRequests = resolveExplicitSourceRequests(String(message || ''));
           const _explicitSwitch = resolveExplicitSourceRequest(String(message || ''));
           _userExplicitSource = toLegacyUserExplicitSource(_explicitSwitch);
           const _activeSourceContract = manualActiveMode?.sourceContract ?? null;
           const _orchForAvailability = llmHelper.getKnowledgeOrchestrator?.();
-          manualTurnSourceDecision = resolveTurnSourceDecision({
-            sourceContract: _activeSourceContract,
-            persistedSourceAuthority: _activeSourceContract?.sourceAuthority ?? null,
-            explicitRequest: _explicitSwitch,
-            availability: {
-              hasReferenceFiles: _hasRefFiles,
-              hasProfileFacts: _hasProfileFacts,
-              hasJobDescription: Boolean(_orchForAvailability?.activeJD?.structured_data),
-              hasLiveTranscript: _hasLiveTranscript,
-              hasMeetingRag: _hasMeetingRag,
-            },
-          });
+          // Keep pre-contract/no-mode calls on the existing compatibility
+          // path. A persisted source contract is the boundary that must fail
+          // closed against the 4 named failure modes.
+          manualTurnSourceDecision = _activeSourceContract
+            ? resolveTurnSourceDecision({
+                sourceContract: _activeSourceContract,
+                persistedSourceAuthority: _activeSourceContract.sourceAuthority,
+                explicitRequest: _explicitSwitch,
+                explicitRequests: _explicitRequests,
+                availability: {
+                  hasReferenceFiles: _hasRefFiles,
+                  hasProfileFacts: _hasProfileFacts,
+                  hasJobDescription: Boolean(_orchForAvailability?.activeJD?.structured_data),
+                  hasLiveTranscript: _hasLiveTranscript,
+                  hasMeetingRag: _hasMeetingRag,
+                },
+              })
+            : null;
           manualSourceContract = buildCustomModeExecutionContract({
             question: String(message || ''),
             streamRoute: 'manual_chat_stream',
@@ -1662,6 +1669,17 @@ export function initializeIpcHandlers(appState: AppState): void {
         if (profileEvidenceEligible) {
           try {
             const orchestrator = llmHelper.getKnowledgeOrchestrator?.();
+            // Senior review r1 fix (2026-07-15): the canonical decision narrows
+            // the legacy selector BEFORE it touches the structured resume/JD
+            // objects. Without this, the selector emits items that the JIT
+            // prompt builder then filters out for the rendered prompt — but
+            // the unfiltered `evidenceRoute.items` leaks into _attr telemetry
+            // and chatTrace logs, falsely over-reporting resume usage.
+            const allowedSourceKinds: string[] | undefined = manualTurnSourceDecision
+              ? manualTurnSourceDecision.allowedEvidenceKinds.filter(
+                  (k) => k === 'profile_resume' || k === 'profile_jd' || k === 'projects',
+                )
+              : undefined;
             const { route: evidenceRoute, routeLog } = buildManualProfileEvidenceRoute({
               question: message,
               orchestrator,
@@ -1670,6 +1688,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               // FULL source-tagged JD/resume evidence for the JD-source and
               // resume+JD shapes (not just title/company).
               answerType: answerPlan.answerType,
+              allowedSourceKinds,
             });
             if (evidenceRoute || routeLog.profileFactsReady) {
               console.log('[ProfileIntelligence] manual evidence route', routeLog);
@@ -2183,6 +2202,16 @@ export function initializeIpcHandlers(appState: AppState): void {
                         modeName: manualActiveMode?.name ?? null,
                         sourceAuthority: manualSourceContract?.sourceAuthority ?? 'ask_if_ambiguous',
                       },
+                      // Senior review r1 fix (2026-07-15): the final-prompt
+                      // validator (validateFinalPromptEvidence in
+                      // finalPromptValidation.ts) needs the canonical
+                      // decision to compute the required/forbidden family
+                      // split. Without this field the validator fails-OPEN
+                      // (forbiddenFamilies=[]), allowing a JD-only decision
+                      // to silently render resume content into the prompt.
+                      // Threading the same decision the kernel saw keeps the
+                      // last provider boundary consistent.
+                      turnSourceDecision: manualTurnSourceDecision,
                       govern: true,
                     }),
                   }

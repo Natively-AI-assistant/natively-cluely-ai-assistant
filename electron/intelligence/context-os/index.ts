@@ -105,3 +105,9 @@ export {
   renderContextOsPromptPrefix,
   escapeXml,
 } from './promptRenderer';
+export {
+  validateFinalPromptEvidence,
+  familyForEvidenceKind,
+  type FinalPromptEvidenceValidation,
+  type PromptEvidenceFamily,
+} from './finalPromptValidation';

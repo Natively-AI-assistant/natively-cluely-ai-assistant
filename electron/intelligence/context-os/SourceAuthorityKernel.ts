@@ -39,6 +39,7 @@ import type {
 } from './types';
 import { ALL_SOURCE_KINDS } from './sourceKinds';
 import { detectRequestedProperty } from './requestedPropertyDetector';
+import type { TurnSourceDecision } from '../../llm/turnSourceDecision';
 
 export interface BuildTurnContractInput {
   surface: TurnSurface;
@@ -55,6 +56,14 @@ export interface BuildTurnContractInput {
   hasLiveTranscript: boolean;
   /** Explicit user source override ("answer from my resume instead"). */
   userExplicitSource?: 'reference_files' | 'profile' | 'transcript' | null;
+  /**
+   * Lossless canonical decision from electron/llm/turnSourceDecision.
+   * When supplied, capability issuance reads from `decision.allowedEvidenceKinds`
+   * instead of re-deriving owner → caps (the historical leak path that
+   * folded JD → profile_resume silently). Always preferred over the legacy
+   * `userExplicitSource` scalar when both are available.
+   */
+  turnSourceDecision?: TurnSourceDecision | null;
 }
 
 // Nouns that can NAME a thing owned by a specific source universe (uploaded
@@ -155,11 +164,18 @@ function capability(
 export class SourceAuthorityKernel {
   build(input: BuildTurnContractInput): TurnContextContract {
     const requestedProperty = detectRequestedProperty(input.question);
-    const sourceOwner = this.resolveSourceOwner(input);
+    // Canonical decision takes priority: when supplied, owner + capabilities
+    // are read directly from it (covers the case where the legacy
+    // userExplicitSource scalar would silently fold JD into profile_resume).
+    const sourceOwner = input.turnSourceDecision
+      ? this.ownerFromDecision(input.turnSourceDecision)
+      : this.resolveSourceOwner(input);
 
-    const allowedSources = sourceOwner === 'clarify'
+    const allowedSources = (sourceOwner === 'clarify' || input.turnSourceDecision?.owner === 'clarify')
       ? this.baseInstructionCapabilities()
-      : this.issueCapabilities(input, sourceOwner);
+      : input.turnSourceDecision
+        ? this.issueDecisionCapabilities(input, input.turnSourceDecision)
+        : this.issueCapabilities(input, sourceOwner);
     const allowedKinds = new Set(allowedSources.map((s) => s.sourceKind));
 
     const forbiddenSources = ALL_SOURCE_KINDS.filter((s) => !allowedKinds.has(s));
@@ -264,6 +280,51 @@ export class SourceAuthorityKernel {
         return 'unknown';
       }
     }
+  }
+
+  /**
+   * Map the canonical decision's owner to the kernel's SourceOwner enum.
+   * 'unknown' is preserved (caller decides for general_mixed authorities).
+   */
+  private ownerFromDecision(decision: import('../../llm/turnSourceDecision').TurnSourceDecision): SourceOwner {
+    if (decision.owner === 'clarify') return 'clarify';
+    if (decision.owner === 'unknown') return 'unknown';
+    return decision.owner as SourceOwner;
+  }
+
+  /**
+   * Issue capabilities directly from a TurnSourceDecision instead of
+   * re-deriving owner → caps. Closes the historical leak where
+   * `userExplicitSource='profile'` folded JD into the profile family,
+   * granting profile_resume on a JD-only ask. The decision preserves JD
+   * as profile_jd, never profile_resume.
+   */
+  private issueDecisionCapabilities(
+    input: BuildTurnContractInput,
+    decision: import('../../llm/turnSourceDecision').TurnSourceDecision,
+  ): SourceCapability[] {
+    const caps = this.baseInstructionCapabilities();
+    for (const kind of decision.allowedEvidenceKinds) {
+      if (kind === 'reference_files') {
+        caps.push(capability('mode_reference_file', 'evidence', decision.reasonCode, input.activeModeId));
+        caps.push(capability('mode_reference_chunk', 'evidence', decision.reasonCode, input.activeModeId));
+        caps.push(capability('okf_document_card', 'evidence', decision.reasonCode, input.activeModeId));
+      } else if (kind === 'profile_resume') {
+        caps.push(capability('profile_resume', 'evidence', decision.reasonCode));
+      } else if (kind === 'profile_jd') {
+        caps.push(capability('profile_jd', 'evidence', decision.reasonCode));
+      } else if (kind === 'projects') {
+        caps.push(capability('profile_project', 'evidence', decision.reasonCode));
+      } else if (kind === 'live_transcript') {
+        caps.push(capability('live_transcript', 'evidence', decision.reasonCode));
+      } else if (kind === 'meeting_rag') {
+        caps.push(capability('meeting_rag_chunk', 'evidence', decision.reasonCode, input.activeModeId));
+      }
+    }
+    if (decision.owner !== 'unknown' && decision.owner !== 'clarify') {
+      caps.push(capability('prior_assistant_message', 'referent_only', 'prior assistant can resolve references only'));
+    }
+    return caps;
   }
 
   // ── Capability issuance ────────────────────────────────────────────────────

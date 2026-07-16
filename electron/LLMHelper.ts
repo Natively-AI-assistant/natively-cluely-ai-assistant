@@ -5099,6 +5099,38 @@ const isMultimodal = !!(imagePaths?.length);
       combinedContext = '';
     }
 
+    // ── FINAL CONTEXT-OS PROMPT BOUNDARY ───────────────────────────────────
+    // Validate the EXACT userContent that will be passed to every provider
+    // branch. Retrieval success is insufficient: a required family might
+    // have been trimmed while rendering or dropped by a legacy transport
+    // adapter. This is the LAST chance to fail closed before dispatch.
+    let contextOsFinalPromptValidation: import('./intelligence/context-os').FinalPromptEvidenceValidation | undefined;
+    if (contextOsGovernedPack) {
+      const cog = routeOptions?.contextOsGeneration as import('./intelligence/context-os').ContextOsGenerationContext | undefined;
+      if (cog) {
+        const { validateFinalPromptEvidence, buildInsufficientPropertyAnswer, recordContextOsBenchmarkAudit } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+        const finalPromptValidation = validateFinalPromptEvidence({
+          decision: cog.turnSourceDecision,
+          contract: cog.contract,
+          pack: contextOsGovernedPack,
+          finalUserPrompt: userContent,
+        });
+        cog.finalPromptValidation = finalPromptValidation;
+        contextOsFinalPromptValidation = finalPromptValidation;
+        if (!finalPromptValidation.ok) {
+          recordContextOsBenchmarkAudit({
+            contract: cog.contract,
+            sourceAuthority: cog.modeSnapshot.sourceAuthority,
+            pack: contextOsGovernedPack,
+            providerDispatch: false,
+            terminal: 'refuse',
+          });
+          yield buildInsufficientPropertyAnswer({ property: contextOsGovernedPack.requestedProperty });
+          return;
+        }
+      }
+    }
+
     // ── CONTEXT OS PROMPT AUDIT (Phase 10, dev/test only) ──────────────────
     // NATIVELY_CONTEXT_OS_PROMPT_AUDIT=1 records a REDACTED structural summary of
     // the final factual prompt (block presence + counts + hashes, NEVER content,

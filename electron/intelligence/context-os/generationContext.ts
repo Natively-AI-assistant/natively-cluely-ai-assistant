@@ -11,6 +11,8 @@
 
 import type { TurnContextContract } from './types';
 import type { EvidencePack } from './evidencePack';
+import type { TurnSourceDecision } from '../../llm/turnSourceDecision';
+import type { FinalPromptEvidenceValidation } from './finalPromptValidation';
 import { parseModeSnippets } from './EvidenceOrchestrator';
 import { textCanProveProperty } from './requestedProperty';
 import { renderContractForPrompt, renderEvidenceUseRule, renderEvidencePackForPrompt } from './promptRenderer';
@@ -30,6 +32,14 @@ export interface ContextOsGenerationContext {
   modeSnapshot: ContextOsModeSnapshot;
   /** Whether the typed pack should REPLACE the legacy factual block in the prompt. */
   govern: boolean;
+  /**
+   * Canonical per-turn source policy. Surfaced to the final-prompt validator
+   * so a required evidence family that's missing from the rendered prompt
+   * fails closed at the last provider boundary, not at retrieval time.
+   */
+  turnSourceDecision?: TurnSourceDecision | null;
+  /** Written only at the final prompt boundary; reused by E2E/audit callers. */
+  finalPromptValidation?: FinalPromptEvidenceValidation;
 }
 
 /**

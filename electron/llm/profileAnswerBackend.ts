@@ -28,6 +28,16 @@ export interface BuildManualProfileBackendAnswerInput {
   /** Pre-computed planner answer type — enables full JD/resume evidence for the
    * JD-source and resume+JD shapes (Stage 4/5). */
   answerType?: AnswerType;
+  /**
+   * Capability-scoped source grant from the canonical turn decision. When
+   * supplied, the legacy selector receives only the source objects the user
+   * is entitled to, and its result is filtered defensively by the same set
+   * before returning. Without this filter, a JD-only turn could still
+   * receive résumé items from selectManualProfileEvidence (the historical
+   * leak), and `_attr.structured_resume_used = route.items.some(...)`
+   * would over-report.
+   */
+  allowedSourceKinds?: string[];
 }
 
 export interface BuildManualProfileBackendAnswerResult {
@@ -49,17 +59,42 @@ export const buildManualProfileEvidenceRoute = ({
   orchestrator,
   source = 'manual_input',
   answerType,
+  allowedSourceKinds,
 }: BuildManualProfileBackendAnswerInput): BuildManualProfileBackendAnswerResult => {
-  const profile = activeResumeFacts(orchestrator);
-  const jobDescription = activeJobFacts(orchestrator);
+  const availableProfile = activeResumeFacts(orchestrator);
+  const availableJobDescription = activeJobFacts(orchestrator);
+  // Withhold an unauthorized source family BEFORE the selector sees it.
+  // This is the architecturally correct placement — filter at the boundary,
+  // not after. With no filter the legacy fallback path is preserved.
+  const allowed = allowedSourceKinds ? new Set(allowedSourceKinds) : null;
+  const allowsResume = !allowed || allowed.has('profile_resume') || allowed.has('projects');
+  const allowsJd = !allowed || allowed.has('profile_jd');
+  const profile = allowsResume ? availableProfile : null;
+  const jobDescription = allowsJd ? availableJobDescription : null;
   const ready = profileFactsReady(profile);
-  const route = selectManualProfileEvidence({
+  const routeSelection = selectManualProfileEvidence({
     question,
     profile,
     jobDescription,
     source,
     answerType,
   });
+  // Defensive post-filter on the selection's emitted items — protects against
+  // a future selector emitter that adds source kinds without honoring the
+  // pre-filter.
+  const route = routeSelection && allowed
+    ? (() => {
+      const items = routeSelection.items.filter((item) => allowed.has(item.sourceKind));
+      if (items.length === 0) return null;
+      return {
+        ...routeSelection,
+        items,
+        selectedFacts: routeSelection.selectedFacts.filter((item) => allowed.has(item.sourceKind)),
+        checkedSources: routeSelection.checkedSources.filter((kind) => allowed.has(kind)),
+        sourceRefs: Array.from(new Set(items.map((item) => (item as any).sourceRef).filter(Boolean) as string[])),
+      };
+    })()
+    : routeSelection;
 
   return {
     route,
