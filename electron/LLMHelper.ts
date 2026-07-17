@@ -3995,13 +3995,13 @@ const isMultimodal = !!(imagePaths?.length);
         providers.push({ name: `Groq (meta-llama/llama-4-scout-17b-16e-instruct)`, execute: () => this.streamWithGroqMultimodal(userContent, imagePaths!, openaiSystemPrompt, abortSignal) });
       }
     } else {
-      // TEXT-ONLY PROVIDER ORDER: [Natively] -> Groq -> Codex CLI -> OpenAI -> Claude -> Gemini Flash-Lite -> Gemini Flash -> Gemini Pro
+      // TEXT-ONLY PROVIDER ORDER: [Natively] -> Codex CLI -> OpenAI -> Claude -> Gemini Flash-Lite -> Gemini Flash -> Gemini Pro -> Groq
+      // Groq is demoted to LAST because llama-3.3-70b-versatile has a 12k TPM
+      // rate-limit that 413s on context-heavy prompts (e.g. a full meeting
+      // summary + transcript shovelled into the fallback Gemini call).
+      // Gemini cascade handles the same prompts at much higher quotas.
       if (this.hasNatively()) {
         providers.push({ name: 'Natively API', execute: () => this.streamWithNatively(userContent, openaiSystemPrompt, undefined, abortSignal) });
-      }
-      if (this.groqClient) {
-        // CACHE: pass system separately so Groq prefix-cache hits across turns.
-        providers.push({ name: `Groq (${textGroq})`, execute: () => this.streamWithGroq(userContent, textGroq, groqSystemForCache, abortSignal) });
       }
       if (this.isCodexAvailable()) {
         providers.push({ name: `Codex CLI (${this.codexCliConfig.model})`, execute: () => this.streamWithCodexCli(userContent, openaiSystemPrompt, false, undefined, abortSignal) });
@@ -4037,6 +4037,12 @@ const isMultimodal = !!(imagePaths?.length);
         providers.push({ name: `Gemini Flash-Lite (${GEMINI_FLASH_LITE_MODEL})`, execute: () => this.streamWithGeminiModel(userContent, GEMINI_FLASH_LITE_MODEL, undefined, geminiSystemForCache, abortSignal) });
         providers.push({ name: `Gemini Flash (${textGeminiFlash})`, execute: () => this.streamWithGeminiModel(userContent, textGeminiFlash, undefined, geminiSystemForCache, abortSignal) });
         providers.push({ name: `Gemini Pro (${textGeminiPro})`, execute: () => this.streamWithGeminiModel(userContent, textGeminiPro, undefined, geminiSystemForCache, abortSignal) });
+      }
+      // Groq moved to the END of the chain so it only fires when no other
+      // configured provider handles the request. See comment above.
+      if (this.groqClient) {
+        // CACHE: pass system separately so Groq prefix-cache hits across turns.
+        providers.push({ name: `Groq (${textGroq})`, execute: () => this.streamWithGroq(userContent, textGroq, groqSystemForCache, abortSignal) });
       }
     }
 
@@ -5037,7 +5043,19 @@ const isMultimodal = !!(imagePaths?.length);
     try {
       const _cog = routeOptions?.contextOsGeneration as import('./intelligence/context-os').ContextOsGenerationContext | undefined;
       const { isIntelligenceFlagEnabled } = require('./intelligence/intelligenceFlags');
-      if (_cog && _cog.govern && forceDocumentGrounding && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
+      // TurnEvidenceCoordinator (2026-07-17): a non-doc-grounded manual-chat
+      // turn (profile-only, JD-only, résumé+JD, …) is governed by a pack the
+      // CALLER already fully resolved (ipcHandlers.ts's TurnEvidenceCoordinator)
+      // before streamChat was invoked — `_cog.evidencePack` arrives non-null.
+      // The doc-grounded-only `forceDocumentGrounding` gate below predates that
+      // caller and would otherwise silently skip rendering the pack for these
+      // turns, discarding the coordinator's evidence entirely. Widening to
+      // "doc-grounded OR the caller already supplied a resolved pack" changes
+      // nothing for the doc-grounded path (that branch still resolves via
+      // EvidenceResolver above, unaffected) and only ADDS rendering for a
+      // pre-resolved, non-doc-grounded governed pack.
+      const callerPreResolvedPack = Boolean(_cog?.evidencePack);
+      if (_cog && _cog.govern && (forceDocumentGrounding || callerPreResolvedPack) && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
         const { renderGoverningFactualBlock } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
         const pack = _cog.evidencePack;
         if (!pack) throw new Error('governed turn missing canonical EvidencePack');
@@ -5399,19 +5417,41 @@ const isMultimodal = !!(imagePaths?.length);
 
     // Groq (Text + Multimodal)
     if (this.isGroqModel(this.currentModelId) && this.groqClient) {
-      if (isMultimodal && imagePaths) {
-        // Route multimodal to Groq Llama 4 Scout (vision-capable)
-        const groqSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
+      try {
+        if (isMultimodal && imagePaths) {
+          // Route multimodal to Groq Llama 4 Scout (vision-capable)
+          const groqSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
+          const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
+          yield* this.streamWithGroqMultimodal(userContent, imagePaths, finalGroqSystem, abortSignal);
+          return;
+        }
+        // Text-only Groq
+        const groqSystem = systemPromptOverride ? baseSystemPrompt : GROQ_SYSTEM_PROMPT;
         const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
-        yield* this.streamWithGroqMultimodal(userContent, imagePaths, finalGroqSystem, abortSignal);
+        // CACHE: pass system separately so Groq prefix-cache hits across turns.
+        yield* this.streamWithGroq(userContent, this.currentModelId, finalGroqSystem, abortSignal);
         return;
+      } catch (e: any) {
+        // 413 / 429 / 5xx on Groq → fall through to Natively / Gemini cascade
+        // instead of letting the error propagate to the renderer's "couldn't
+        // get a response" toast. Groq's TPM ceiling (12k) is too small for
+        // long custom-mode prompts; the user's actual answer path lives in
+        // the providers below.
+        const msg = String(e?.message || '');
+        const isOverCapacity = /413|rate_limit_exceeded|tokens? per minute|TPM|429/i.test(msg);
+        const isAuthFailure = /401|invalid[_\s-]api[_\s-]key/i.test(msg);
+        if (isAuthFailure) {
+          this._groqLocalDisabled = true;
+          console.warn('[LLMHelper] Local Groq key rejected (401) — disabling local Groq for the rest of this session.');
+        }
+        if (isOverCapacity) {
+          console.warn('[LLMHelper] Groq over capacity (413/429), falling through to Natively/Gemini cascade:', msg.slice(0, 120));
+        } else {
+          // Unknown error — log and fall through anyway so the user still gets an answer
+          console.warn('[LLMHelper] Groq streaming failed, falling through:', msg.slice(0, 120));
+        }
+        // Fall through to Natively at line ~5435
       }
-      // Text-only Groq
-      const groqSystem = systemPromptOverride ? baseSystemPrompt : GROQ_SYSTEM_PROMPT;
-      const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
-      // CACHE: pass system separately so Groq prefix-cache hits across turns.
-      yield* this.streamWithGroq(userContent, this.currentModelId, finalGroqSystem, abortSignal);
-      return;
     }
 
     // 3b. Natively API — TTFT RACE (REPORT_TO_CHATGPT §21 L1 / §18)

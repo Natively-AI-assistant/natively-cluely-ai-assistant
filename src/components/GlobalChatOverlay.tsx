@@ -4,6 +4,7 @@ import { X, Copy, Check, Globe, ArrowUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { genMessageId } from '../utils/messageId';
 import nativelyIcon from './icon.png';
+import { useResolvedTheme } from '../hooks/useResolvedTheme';
 
 // ============================================
 // Types
@@ -85,13 +86,6 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
         >
             <div className="text-text-primary text-[15px] leading-relaxed max-w-[85%]">
                 {content}
-                {isStreaming && (
-                    <motion.span
-                        className="inline-block w-0.5 h-4 bg-text-secondary ml-0.5 align-middle"
-                        animate={{ opacity: [1, 0] }}
-                        transition={{ duration: 0.5, repeat: Infinity }}
-                    />
-                )}
             </div>
             {!isStreaming && content && (
                 <button
@@ -122,6 +116,10 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [query, setQuery] = useState('');
     const streamBuffer = useStreamBuffer();
+    // Match the meeting chat overlay / modes manager --mm-bg exactly so
+    // the expanded card looks like the same dark grey surface.
+    const isLightTheme = useResolvedTheme() === 'light';
+    const chatWindowBg = isLightTheme ? '#f9f9f9' : '#111111';
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const chatWindowRef = useRef<HTMLDivElement>(null);
@@ -189,6 +187,14 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
 
         const assistantMessageId = genMessageId();
 
+        // Track active listener cleanups so the finally block can always
+        // remove them — even if the IPC done/error events never arrive.
+        // Without this, a hung stream leaves `chatState` stuck at
+        // 'waiting_for_llm' / 'streaming_response' and the guard at the
+        // top of submitQuestion silently drops every subsequent message
+        // (no user-message push, no response).
+        let activeCleanups: Array<() => void> = [];
+
         try {
             // Add typing indicator delay (200ms) - makes the AI feel "thoughtful"
             await new Promise(resolve => setTimeout(resolve, 200));
@@ -239,6 +245,10 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
                 errorCleanup?.();
             });
 
+            if (tokenCleanup) activeCleanups.push(tokenCleanup);
+            if (doneCleanup) activeCleanups.push(doneCleanup);
+            if (errorCleanup) activeCleanups.push(errorCleanup);
+
             // Use global RAG query
             const result = await window.electronAPI?.ragQueryGlobal(question);
 
@@ -248,6 +258,7 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
                 tokenCleanup?.();
                 doneCleanup?.();
                 errorCleanup?.();
+                activeCleanups = [];
 
                 // Setup fallback listeners (Standard Gemini)
                 streamBuffer.reset();
@@ -287,6 +298,10 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
                     oldErrorCleanup?.();
                 });
 
+                if (oldTokenCleanup) activeCleanups.push(oldTokenCleanup);
+                if (oldDoneCleanup) activeCleanups.push(oldDoneCleanup);
+                if (oldErrorCleanup) activeCleanups.push(oldErrorCleanup);
+
                 // Call standard chat
                 await window.electronAPI?.streamGeminiChat(question, undefined, undefined, { skipSystemPrompt: false });
             }
@@ -296,6 +311,15 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
             setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
             setErrorMessage("Something went wrong. Please try again.");
             setChatState('error');
+        } finally {
+            // Always remove listeners and reset chatState — even if the
+            // IPC done/error callbacks never fired. Without this, a single
+            // hung stream leaves chatState stuck and silently drops every
+            // subsequent submitQuestion (no user-message push, no response).
+            activeCleanups.forEach(fn => fn());
+            activeCleanups = [];
+            setChatState(prev => (prev === 'error' ? prev : 'idle'));
+            streamBuffer.reset();
         }
     }, [chatState]);
 
@@ -335,7 +359,8 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
                             height: { type: "spring", stiffness: 300, damping: 30, mass: 0.8 },
                             opacity: { duration: 0.2 }
                         }}
-                        className="relative mx-auto w-full max-w-[680px] mb-0 bg-bg-secondary rounded-t-[24px] border-t border-x border-border-subtle shadow-2xl overflow-hidden flex flex-col"
+                        className="relative mx-auto w-full max-w-[680px] mb-0 rounded-t-[24px] border-t border-x border-border-subtle shadow-2xl overflow-hidden flex flex-col"
+                        style={{ backgroundColor: chatWindowBg }}
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle shrink-0">
