@@ -162,4 +162,27 @@ See `traces/forensic-report.md` §6c for the full NEW-1/NEW-2/NEW-3 ledger rows;
 ### QUOTA
 QUOTA (iteration 4, continued, ~08:5x local Jul 17): Account 1 90% session / Account 2 0% session (fully out, resets ~07:00 UTC). 9Router auto-fails-over to Account 1 — continuing normally per L9 (only pause if BOTH drop below 10%).
 
-**NEXT ACTION**: Commit these 4 fixes (electron/llm/AnswerPlanner.ts export, electron/llm/index.ts barrel export, electron/IntelligenceEngine.ts gate widen, premium/electron/knowledge/KnowledgeOrchestrator.ts carve-out, premium/electron/knowledge/IntentClassifier.ts disqualifier, premium/electron/knowledge/ProfileContextBuilder.ts compensation render) + the strengthened manifest.json rubric + new fix-verify reports. Then re-check git branch/status and quota. After that: expand the harness with more cases per category (currently only 1-4 cases each) for better statistical confidence, retest C3-001/C3-003/C3-004/C6-001/C6-002/C7-001 to confirm the NEW-2 fix chain didn't regress anything already passing, and consider adding C8 properly once/if a renderer-driving harness exists.
+**NEXT ACTION (superseded)**: ~~commit 4 fixes~~ — done (commits `5f37eee` + submodule `be0cc4d`). ~~run full regression~~ — done, 10/10 clean (`run-002-full-regression`). ~~run existing 200q thesis benchmark~~ — done, see below.
+
+## ITERATION 5 (2026-07-17) — Ran the pre-existing 200-question thesis benchmark for the first time this session (C1/C2/C5 coverage)
+
+User asked "all phases done?" — answer was no (Phase 3/4 + final report all still open). User said keep going. Ran `tests/context-os-real-backend/run-200q-benchmark.mjs` against the `development` split (140 cases, real Electron + real MiniMax-M3, manual-chat surface) for the first time this session — `test-results/context-os-real-backend/` didn't exist before this run.
+
+**Result: 119/140 deterministic (85.0%), 124/140 two-tier after LLM judge (88.6%).** Matches a prior session's memory (`ctxos-prodready-session2-2026-07-13.md`: "114→119/140 det") almost exactly — this specific benchmark's score has been STABLE since 2026-07-13, unaffected by any of this session's H3/NEW-1/NEW-2 fixes (expected: those all targeted the WTA/live-overlay path, not this benchmark's manual-chat `EvidenceResolver` path).
+
+**Triaged all 16 two-tier failures individually against the source document** (not just trusting the scorer) — this took real effort and materially changed the picture:
+- 8 genuine false refusals (fact IS in the document, retrieval isn't surfacing it) — real open H1/H6 gaps.
+- 1 CONFIRMED entity-substitution hallucination: Mercury X1's hardware-spec-table "Control System: NVIDIA Jetson Xavier" question got answered with a different-but-also-real Mercury X1 fact (the AutoGen/LLaMA software framework) instead — genuine table-vs-prose retrieval-precision confusion.
+- 7 turned out to be PRE-EXISTING BENCHMARK RUBRIC ARTIFACTS, not live defects: several "name two X" questions hardcode one specific valid pair when the source lists 4-5 valid options, and the model's (different, equally correct) answer got scored as wrong. Confirmed via direct source-document search, not assumed. This is NOT a live grounding bug — do not attempt to "fix" the app to produce one specific hardcoded subset.
+
+Full writeup with per-case citations in `traces/forensic-report.md` §6d.
+
+### Ledger update
+- #8 (H6 — table vs prose entity confusion on Mercury X1): OPEN, confirmed, not yet fixed. Different code path than this session's WTA fixes.
+- #9 (H1/H6 — 8 genuine false refusals on thesis benchmark): OPEN, confirmed, not yet root-caused. Real work for next iteration.
+- #10 (benchmark rubric rigidity): flagged as a fixture limitation, explicitly NOT something to "fix" in the app.
+
+### QUOTA
+QUOTA (iteration 5, ~03:2x local Jul 17): Account 1 74% session / Account 2 0% (fully out, 9Router auto-fails-over). Continuing per L9 — only pause if BOTH drop below 10%.
+
+**NEXT ACTION**: Pick 2-3 of the 8 confirmed false-refusal cases from the thesis benchmark (e.g. THESIS-072 ITU/3GPP, THESIS-079 Logitech C920, THESIS-094 the numeric value) and do a FULL golden trace (loop.md §2.1: dump the exact retrieved chunks, scores, and final assembled context for each) to find the actual retrieval-stage failure mechanism — do not guess at a fix without live evidence, per R1. This is the manual-chat surface's `EvidenceResolver` path, not the WTA path this session's fixes touched, so expect a different root cause class (likely genuine H6 retrieval-precision, not a classifier-routing bug). After that, decide whether to also chase the Mercury X1 table-confusion (H6, entity #8) or move to Phase 4 (production hardening) given the WTA-path fixes are now solid and the remaining gaps are on a different, less-tested code path. Re-check git branch/status and quota before starting (shared workspace) — commit the thesis benchmark results (test-results/context-os-real-backend/dev-run-001/) and updated forensic-report.md/campaign-log.md first if not already committed.
