@@ -753,6 +753,7 @@ interface ElectronAPI {
   profileSetMode: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   profileDelete: () => Promise<{ success: boolean; error?: string }>;
   profileGetProfile: () => Promise<any>;
+  profileGetCompanyDossier: () => Promise<any | null>;
   profileSelectFile: () => Promise<{
     success?: boolean;
     cancelled?: boolean;
@@ -773,6 +774,9 @@ interface ElectronAPI {
   profileGenerateNegotiation: (
     force?: boolean,
   ) => Promise<{ success: boolean; script?: any; error?: string }>;
+  profileGenerateCoverLetter: (
+    force?: boolean,
+  ) => Promise<{ success: boolean; letter?: any; error?: string }>;
   profileGetNegotiationState: () => Promise<{
     success: boolean;
     state?: any;
@@ -2275,6 +2279,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   profileSetMode: (enabled: boolean) => ipcRenderer.invoke('profile:set-mode', enabled),
   profileDelete: () => ipcRenderer.invoke('profile:delete'),
   profileGetProfile: () => ipcRenderer.invoke('profile:get-profile'),
+  profileGetCompanyDossier: () => ipcRenderer.invoke('profile:get-company-dossier'),
   profileSelectFile: () => ipcRenderer.invoke('profile:select-file'),
 
   // JD & Research API
@@ -2290,6 +2295,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('profile:research-company', companyName),
   profileGenerateNegotiation: (force?: boolean) =>
     ipcRenderer.invoke('profile:generate-negotiation', force),
+  profileGenerateCoverLetter: (force?: boolean) =>
+    ipcRenderer.invoke('profile:generate-cover-letter', force),
   profileGetNegotiationState: () => ipcRenderer.invoke('profile:get-negotiation-state'),
   profileResetNegotiation: () => ipcRenderer.invoke('profile:reset-negotiation'),
 
