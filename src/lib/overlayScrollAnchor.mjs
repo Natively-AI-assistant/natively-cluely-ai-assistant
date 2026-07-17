@@ -47,11 +47,12 @@ export function restoreScrollAnchor(container, snapshot) {
   }
 
   const nodes = Array.from(container.querySelectorAll(SCROLL_ITEM_SELECTOR));
+  const nodesById = new Map(
+    nodes.map((node) => [node.dataset.scrollItemId, node]),
+  );
 
   for (const entry of snapshot.entries) {
-    const node = nodes.find(
-      (candidate) => candidate.dataset.scrollItemId === entry.id,
-    );
+    const node = nodesById.get(entry.id);
     if (!node) continue;
 
     const delta =

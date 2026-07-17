@@ -1774,7 +1774,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       });
     }
     verticalCap.set(nextCap);
-  }, [attachedContext.length, verticalCap, workspaceMode]);
+  }, [attachedContext.length, verticalCap]);
 
   // Measure the panel card's top edge (viewport-relative) into panelTopMV so the
   // floating resize toggle can ride the panel's TOP-RIGHT CORNER, not the window
@@ -1854,7 +1854,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       reportShellSize();
     });
     return () => cancelAnimationFrame(id);
-  }, [attachedContext, reportShellSize, measureVerticalCap, measureButtonTop]);
+  }, [
+    attachedContext,
+    workspaceMode,
+    reportShellSize,
+    measureVerticalCap,
+    measureButtonTop,
+  ]);
 
   useEffect(() => {
     const timer = setTimeout(() => {

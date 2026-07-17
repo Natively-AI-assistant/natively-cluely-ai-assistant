@@ -1,6 +1,7 @@
 import {
     useCallback,
     useEffect,
+    useLayoutEffect,
     useRef,
     useState,
     type RefObject,
@@ -79,6 +80,7 @@ export function usePaneFollowLive({
     const [isFollowing, setIsFollowing] = useState(autoScroll);
     const [workspaceState, setWorkspaceState] = useState(createWorkspaceState);
     const previousLogicalRef = useRef(logicalRevision);
+    const appliedResetKeyRef = useRef(resetKey);
     const rafRef = useRef<number | null>(null);
     const latestEligibilityRef = useRef<FollowFrameEligibility>({
         pane,
@@ -87,13 +89,15 @@ export function usePaneFollowLive({
         isFollowing,
         visible,
     });
-    latestEligibilityRef.current = {
-        pane,
-        resetKey,
-        autoScroll,
-        isFollowing,
-        visible,
-    };
+    useLayoutEffect(() => {
+        latestEligibilityRef.current = {
+            pane,
+            resetKey,
+            autoScroll,
+            isFollowing,
+            visible,
+        };
+    }, [autoScroll, isFollowing, pane, resetKey, visible]);
 
     const cancelScheduledBottom = useCallback(() => {
         if (rafRef.current === null) return;
@@ -230,11 +234,19 @@ export function usePaneFollowLive({
     }, [autoScroll, cancelScheduledBottom, scrollRef]);
 
     useEffect(() => {
+        if (appliedResetKeyRef.current === resetKey) return;
+
+        appliedResetKeyRef.current = resetKey;
         cancelScheduledBottom();
         setWorkspaceState(createWorkspaceState());
         setIsFollowing(autoScroll);
         previousLogicalRef.current = logicalRevision;
-    }, [cancelScheduledBottom, resetKey]);
+    }, [
+        autoScroll,
+        cancelScheduledBottom,
+        logicalRevision,
+        resetKey,
+    ]);
 
     useEffect(
         () => () => {
