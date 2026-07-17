@@ -1540,3 +1540,29 @@ repeatedly over several minutes before committing to a 20-30 min run,
 not just once at launch) — a decision for whoever picks this campaign
 up next, since neither path is clearly superior from inside this
 session's own vantage.
+
+## ITERATION 19 (2026-07-17) — Sustained-quiescence check before launch (option b from iter 18)
+
+Picked option (b) from iteration 18's NEXT ACTION rather than deferring
+to Phase 4: a launch-time-only `ps aux` check has now failed to predict a
+clean run 3 times (iterations 14/17/18 all started clear and were
+contended mid-run by a different session's activity starting seconds to
+minutes later). Instead, polled `ps aux` for `run-all.mjs`/
+`run-script-*.mjs`/`golden-trace`/`run-200q-benchmark`/`ctxos-200q` SIX
+times over ~2.5 minutes (25s apart) before committing to launch — all six
+checks came back clean (0 hits), a materially different signal than a
+single instantaneous check.
+
+**Launched a full 3-script judged benchmark run** immediately after the
+sustained-quiet window. Monitoring in progress; result to be logged in a
+follow-up entry once complete (or if contention appears mid-run despite
+this precaution — that would itself be a useful data point about just
+how loaded this shared workspace is).
+
+**Process note for future iterations**: a single `ps aux` check at launch
+is NOT sufficient evidence of a clean run in this workspace — prefer
+polling several times over 2+ minutes before committing quota to an
+expensive judged benchmark. Six checks 25s apart (a `for` loop with
+`sleep 25` inside a Monitor call) is a cheap, mechanical way to do this
+without burning real backend/LLM quota — it's pure local `ps aux`
+polling, zero cost beyond wall-clock time.
