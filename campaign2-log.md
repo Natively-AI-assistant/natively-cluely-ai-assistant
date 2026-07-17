@@ -26,6 +26,7 @@ untouched and may still be active in a separate session).
 |---|---|---|---|---|---|---|---|
 | - | (Phase 2 harness not yet built — no benchmark run yet, only Phase 0 golden-trace presses) | | | | | | |
 | run-001 | 2026-07-17T04:10:19Z | 0 | 0 | 80.0% | 40.0% | 25.0% | First real full-suite run (3 scripts, 50 presses, real MiniMax-M3 + real MiniMax judge). Desync 42%, injection resistance 100%. Baseline for Phase 3. |
+| run-002 | 2026-07-17T04:37:24Z | 1 | 0 | 94.0% | 34.0% | 25.0% | Post fix#5 (stale-"?"-turn selection). Extraction +14pt (script-a 16/18->18/18, script-b 15/17->16/17, script-c 9/15->13/15). Desync 38%, injection resistance 100%. 1 NEW greeting flag (press C14, unrelated to fix#5 — a distinct "profile truncated... how can I help you use it?" boilerplate leak, logged not fixed this iteration). Answer quality/desync did NOT rise proportionally — confirmed many now-correctly-extracted questions still get an answer missing required facts (a generation/grounding gap, not extraction). |
 
 ## QUOTA CHECK METHOD
 Confirmed working (same as Campaign 1's documented method): the reference script in loop2.md §1.5 works as-is.
@@ -500,28 +501,126 @@ ipcHandlers.ts, intelligenceFlags.ts, ProfileEvidenceService.ts, various
 `__tests__`/`src/components/*` files, plus the untracked `natively-api`
 submodule-looking entry) untouched and unstaged across all 5 commits.
 
-**NEXT ACTION**: Resume Phase 3 (loop2.md §5) — the harness now exists and
-run-001 is the baseline. Next iteration should: (1) quota pre-check per
-§1.5 (>=25% before any expensive operation); (2) pick the failure cluster
-costing the most per §5's ordering (greeting flags first — already 0, skip;
-hallucination second — already 0, skip; EXTRACTION third — this is the
-biggest lever given G1=80%/G6=42% and the two concrete extraction-window
-bugs identified above (stale-"?"-turn selection AND rephrase/self-
-interruption handling) are BOTH plausible root causes of the low G6 desync
-score too, since G6 is partly derived from G1); (3) mini-forensics on ONE
-representative failing press (e.g. `traces2/harness-script-a-press-A15.txt`
-or `-A12.txt`, both showing the stale-"?"-turn mechanism with a full trace
-already captured) — check the anti-thrash ledger first (R2): confirm this
-is NOT a recurrence of fix #2 (H3, commit `4b41e1d`, "follow-up
-misclassification") before pinning a new cause, since both bugs live in
-`electron/llm/transcriptQuestionExtractor.ts`'s `extractLatestQuestion()`;
-(4) fix -> live-path proof -> skeptic pass -> R8 short-session smoke green
--> re-run the FULL 3-script benchmark (not just the affected script) to
-measure real improvement, since G1/G6 gains may also lift G3/G5 (many G3
-failures stem from the model correctly answering the WRONG extracted
-question); (5) append the new run's scores to SCORE HISTORY above and
-re-check the L4 exit condition (needs TWO consecutive green full-benchmark
-runs, not one). This is squarely Phase 3/fixer-agent work now, not
-test-engineer scope — a separate fixer agent should pick this up per
-loop2.md §4's stated division of labor ("the test-engineer never edits
-product code; a separate fixer agent does").
+**NEXT ACTION (superseded)**: ~~mini-forensics on the stale-"?"-turn
+mechanism~~ — done, see ITERATION 7.
+
+## ITERATION 7 (2026-07-17) — Fix #5 (extraction-window bug) landed + re-benchmarked
+
+Per iteration 6's NEXT ACTION, picked the extraction cluster (biggest lever
+given G1=80%/G6=42%).
+
+**Mini-forensics**: read `traces2/harness-script-a-press-A15.txt` and
+`-A12.txt` directly (both showing the exact mechanism). Confirmed via 2 more
+traces (`-c-press-C11.txt`, `-c-press-C14.txt`) that all 4 failing presses
+share ONE root cause: `extractLatestQuestion()`'s walk-backward loop in
+`electron/llm/transcriptQuestionExtractor.ts` only accepted a turn as
+`chosen` OUTRIGHT when it matched `QUESTION_MARK||INTERROGATIVE_LEAD` — a
+genuine imperative ask with no "?" and a non-sentence-initial lead ("one more
+open-source question — tell me about levee.") was kept only as a "weak
+candidate" while the loop kept walking backward for an older, more
+question-shaped turn, inverting recency.
+
+**Anti-thrash check (R2, per iteration 6's own instruction)**: confirmed
+this is NOT a recurrence of fix #2 (H3, commit `4b41e1d`, `isFollowUp`
+misclassification via `FOLLOW_UP_MARKERS`). H3 operates on an
+ALREADY-SELECTED question (deciding if IT is a follow-up); this bug is in
+turn SELECTION itself, upstream of follow-up classification. Same file,
+different function region, different mechanism — legitimate new pin, not a
+repeat.
+
+**Fix #5 (commit `4c0c2e6`)**: the walk-backward loop now takes the first
+(most recent) non-greeting, non-empty interviewer turn outright — shape
+(question-mark/interrogative-lead) no longer gates WHICH turn is chosen,
+only how `isFollowUp`/confidence are scored afterward on the turn recency
+already selected. Greeting-only turns are still skipped as before.
+
+**Second bug found and fixed incidentally**: this change's more direct
+backward-walk surfaced a second latent bug — `cleanText()` (in
+`transcriptCleaner.ts`) strips "nice"/"great" as leading-acknowledgement
+noise, so "Nice to meet you" cleaned to "to meet you", which no longer
+matched `GREETING_ONLY`. The OLD extractor silently tolerated this (it kept
+searching past non-question-shaped turns anyway); the fixed extractor now
+checks `GREETING_ONLY` against BOTH the cleaned text and the turn's original
+raw text, so a genuine greeting is still correctly skipped.
+
+**Live-proof**: reproduced both real A15/A12 traces directly against the
+compiled extractor before/after the fix (before: wrong stale turn selected;
+after: correct latest turn selected) — captured as 2 new permanent
+regression tests in `TranscriptQuestionExtractor.test.mjs` (not temp
+`[TRACE:*]` logs, since this exercises the compiled function directly rather
+than the live IPC path — consistent with how fix #4/H7 was proven).
+
+**Verified**: `npm run typecheck:electron` clean. `TranscriptQuestionExtractor.
+test.mjs` 51/51 (49 pre-existing + 2 new). Full consumer surface
+(`LiveBrainShadowWiring`, `LiveTranscriptBrainLatency`, `LiveTranscriptBrain`,
+`WtaRegression`, `InterviewerPerspectiveGrounding`,
+`InterviewerPerspectiveEval`) 197/197 green. `code-review-graph`
+`callers_of(extractLatestQuestion)` confirms exactly ONE production caller
+(`IntelligenceEngine.runWhatShouldISay`) — full blast radius covered by the
+above suites. R8 short-session smoke: 11/11 green.
+
+**Re-ran the full 3-script benchmark** (run-002, real MiniMax-M3 + real
+MiniMax judge, 50 presses) to measure real improvement — see SCORE HISTORY
+above. G1 question extraction: **80.0% → 94.0%** (script-a 16/18→18/18,
+script-b 15/17→16/17, script-c 9/15→13/15) — a real, substantial gain,
+though still short of the ≥98% L4 target. G2/G4/G7 unchanged (0
+hallucination, 100% injection resistance) except **1 NEW greeting flag**
+(press C14 — a distinct "profile truncated... how can I help you use it?"
+boilerplate leak, confirmed unrelated to fix #5 by inspecting the trace:
+extraction was CORRECT for that press, the boilerplate came from the answer
+generation itself — logged as a new finding below, not fixed this
+iteration). **G3/G6 did NOT rise proportionally with G1** — inspected the
+per-press data directly (not just the aggregate score) and confirmed this is
+a REAL, separate finding: many presses where G1 now correctly extracts the
+question still fail G3 because the model's ANSWER omits required facts
+(e.g. A1's self-intro correctly extracts the question but the answer is
+missing "10 years"; A12's education question now extracts correctly
+("degree"/"school") but the answer is a completely unrelated coding-problem
+response) — a generation/grounding-quality gap, not an extraction bug.
+Correctly NOT conflated with this fix's scope (R2 discipline: don't claim a
+fix solved something it didn't touch).
+
+**New finding, NOT fixed this iteration** (logged for a future pin): press
+C14's greeting-failure-shaped answer ("I don't have the rest of your profile
+loaded (it cuts off mid-bullet at Datadog)... How can I help you use it?")
+is a real G2 flag on a press where extraction was correct — the model itself
+produced assistant-style boilerplate mid-answer. Different mechanism from
+fix #1's non-answer-sentinel amplifier (commit `77deb1e`) — that fix
+addressed a SILENT null; this is a NON-null answer that STILL contains
+greeting boilerplate. Needs its own mini-forensics before pinning.
+
+**Quota check** (iteration 7): Account1 52% session (start) → re-checked
+before the full benchmark run, still comfortably above 25%. Account2 fully
+out (0% session), 9Router routes around it automatically per §1.5. No pause
+needed throughout.
+
+**Shared-workspace note**: re-verified `git branch --show-current` (still
+`fix/longsession-campaign`) and `git status` immediately before staging;
+committed ONLY `electron/llm/transcriptQuestionExtractor.ts`,
+`electron/llm/__tests__/TranscriptQuestionExtractor.test.mjs`, and the new
+`test/harness-longsession/reports/run-002.{json,md}` — left every other
+concurrently-modified file untouched and unstaged (the working tree
+continues to accumulate other sessions' in-flight changes to README.md,
+LLMHelper.ts, ipcHandlers.ts, intelligenceFlags.ts, ProfileEvidenceService.ts,
+various `__tests__`/`src/components/*` files — none of this iteration's
+concern).
+
+**NEXT ACTION**: L4 needs TWO consecutive green full-benchmark runs — run-002
+is NOT green (G1 still <98%, G3/answer-quality at 34%, G5/recall at 25%, G6/
+desync at 38%), so the loop continues. Highest-value next target per the
+run-002 findings above: **G3/G6 answer-quality gap** (not further extraction
+work — G1 is now close to target and diminishing-returns; the NEW dominant
+failure cluster is the model's ANSWER omitting required facts even when the
+question is correctly extracted). Recommended next steps: (1) quota
+pre-check per §1.5 before any expensive operation; (2) mini-forensics on 2-3
+representative G3-failing-but-G1-passing presses (e.g. A1 self-intro missing
+"10 years", A12 education press answering an unrelated coding problem instead
+of "Berkeley"/"Electrical Engineering") — read the FULL prompt composition in
+their `traces2/harness-script-a-press-{A1,A12}.txt` dumps to see whether the
+required facts were even IN the assembled prompt (a retrieval/grounding gap)
+or were present but the model ignored them (a generation-quality gap) — these
+have different fixes; (3) separately, the NEW C14 greeting-boilerplate finding
+above deserves its own smaller mini-forensics pass since it's a clean, isolated
+G2 regression-candidate; (4) after any fix: live-path proof, skeptic pass, R8
+smoke green, re-run the FULL 3-script benchmark, append to SCORE HISTORY,
+re-check L4 (needs 2 consecutive green runs, currently at 0).
