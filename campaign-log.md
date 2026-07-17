@@ -135,4 +135,23 @@ Per user instruction ("continue reviewing the rest and continue with other phase
 ### QUOTA
 QUOTA (iteration 4 start, 2026-07-17 ~01:2x local): Account 1 100% session (fresh window) / Account 2 92% session. Both healthy.
 
-**NEXT ACTION**: Build `test/harness/` (Node/TS, reusing the `tests/context-os-real-backend/` Electron-launch + IPC-driving pattern from this session's own `traces/golden-trace-*.mjs` scripts, which are already proven working entry points). Start with fixtures: reuse `/tmp/ctxos-fixtures/{resume,jd}.txt` content (promote into a committed fixture under `test/harness/fixtures/`, since `/tmp` is not durable/committed) for C3/C4, reuse `tests/context-os-real-backend/fixtures/sample-thesis/` for C1/C2/C5 reference-doc categories, generate a small adversarial-injection fixture for C6. Write the manifest format, then the runner, then the LLM-judge grading wiring (can likely reuse `tests/context-os-real-backend/llm-judge.mjs`'s pattern directly). Re-check git branch/status and L9 quota before starting (shared workspace).
+**NEXT ACTION (superseded)**: ~~build test/harness~~ — DONE, see below.
+
+### Phase 2 harness built + first run + 1 more fix landed (same iteration 4, continued)
+
+Built `test/harness/` (fixtures/manifest.json + run-benchmark.mjs), committed as `951e3a3`. First run (`run-001`, 10 cases, real MiniMax-M3) scored 8/10 and surfaced 2 NEW confirmed defects (NEW-1, NEW-2) plus verified adversarial-injection resistance holds (NEW-3, positive finding). Full detail in `traces/forensic-report.md` §6c.
+
+**NEW-1 FIXED AND VERIFIED THIS ITERATION**: `AnswerPlanner.ts`'s coding-pattern regex `\bin\s?order\b` (meant for "in-order traversal") false-positived on the ordinary English phrase "in order" (e.g. "worked at, in order?"), misrouting résumé questions to `coding_question_answer` — which forbids the resume context layer per spec, so the model fabricated a fictional employment history instead of grounding correctly. Fixed with a narrow co-occurrence guard (order-word variants now require an explicit tree/traversal-adjacent term), mirroring the file's own existing `class`/`method` narrowing pattern. Verified: standalone regex tests (false positives gone, all genuine DSA phrasings still match), `npm run typecheck:electron` clean, `AnswerPlannerValidator.test.mjs` 12/12 pass, full `electron/llm/__tests__` suite 2483/2543 pass (the 60 failures are all pre-existing, unrelated, dated files — none mention "in order"/"traversal"/coding patterns), and a LIVE re-run of the exact failing benchmark case now passes with the correct 4-employer answer.
+
+**NEW-2 (negotiation-classified questions get zero grounding on the WTA path) remains OPEN** — needs a design decision, not a quick patch, per the reasoning in `traces/forensic-report.md` §6c. Deferred to next iteration.
+
+### Ledger update
+See `traces/forensic-report.md` §6c for the full NEW-1/NEW-2/NEW-3 ledger rows (already written there in detail); campaign-log.md tracks the short version:
+- #5 (NEW-1): DONE, verified live.
+- #6 (NEW-2): OPEN, pinned, needs design work.
+- #7 (NEW-3, adversarial injection resistance): confirmed holding, no action needed.
+
+### QUOTA
+QUOTA (iteration 4, continued, ~08:2x local Jul 17): Account 1 100% session (fresh window) / Account 2 26% session. Both healthy — 9Router fails over automatically; only pause if BOTH drop below 10%.
+
+**NEXT ACTION**: Design and implement the NEW-2 fix (distinguish a pure factual JD/document lookup — safe to ground — from genuine negotiation-coaching — the gated case — likely by consulting `AnswerPlanner`'s own `answerType` alongside `transcriptQuestionExtractor`'s cruder `negotiation` classification in `IntelligenceEngine.ts`'s `groundable` gate, rather than trusting either classifier alone). Verify live via `test/harness/run-benchmark.mjs` C4-002 before considering it done. After that, expand the harness with more cases per category (currently only 1-4 cases each) for better statistical confidence, and consider adding C8 properly once/if a renderer-driving harness exists. Re-check git branch/status and L9 quota before starting (shared workspace).

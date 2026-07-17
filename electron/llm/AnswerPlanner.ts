@@ -549,7 +549,19 @@ const COMMON_CODING_PROBLEM_PATTERNS = [
   /\banagram\b|\bsubarray\b|\bsubstring\b/i,
   /\bmerge (?:two )?(?:sorted )?(?:arrays?|lists?)\b/i,
   /\b(?:detect|find)\b.*\bcycle\b|\blinked list cycle\b/i,
-  /\blevel order\b|\bin\s?order\b|\bpre\s?order\b|\bpost\s?order\b|\btraversal\b/i,
+  // Grounding-campaign fix (2026-07-17): bare "in order"/"level order"/etc.
+  // false-positived on ordinary English ("what companies have you worked at,
+  // IN ORDER?", "list your certifications in order of date") — a confirmed
+  // live incident where a résumé question got misrouted to
+  // coding_question_answer (which forbids the resume context layer per spec
+  // §8.3), so the model got zero evidence for a "coding" answer type and
+  // fabricated a fictional employment history instead of grounding correctly.
+  // "traversal" alone is unambiguous DSA vocabulary and stays a bare match;
+  // the order-word variants now require an explicit tree/traversal-adjacent
+  // co-occurrence (checked via lookahead so word order in the sentence
+  // doesn't matter), mirroring the class/method narrowing above in this file.
+  /\btraversal\b/i,
+  /(?=.*\b(?:tree|node|binary|bst)\b)(?=.*\b(?:level|in|pre|post)\s?order\b)/i,
   /\bgcd\b|\blcm\b|\bgreatest common divisor\b/i,
   /\bbubble sort\b|\bquick\s?sort\b|\bmerge sort\b|\binsertion sort\b/i,
 ];
