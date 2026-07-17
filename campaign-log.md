@@ -631,4 +631,12 @@ QUOTA note: Account 1 was rate-limited (429) at last check; Account 2 healthy at
 - The Electron process from this launch remains alive after the runner timed out. It was not killed or signaled because shared-session process ownership cannot be inferred safely. Do not launch another Electron forensic until that process exits or the local environment is demonstrably clean.
 - This is separate from the provider instability recorded for dev-run-007. The current state has two infrastructure blockers: intermittent generation-provider availability after successful setup, and this later pre-case Electron window-startup timeout. Neither warrants changing evidence ranking or retrieval code.
 
-**NEXT ACTION:** On the active THESIS-072 Electron process exit (or a later clean-environment retry), rerun exactly one THESIS-072 forensic command. If it again cannot create a window, checkpoint a repeated Electron-startup infrastructure blocker and defer all live forensics. Do not kill the process, alter ranking, or begin another full benchmark.
+**NEXT ACTION (attempted and blocked):** rerun THESIS-072 only after the active Electron process exits or a clean environment is demonstrated.
+
+## ITERATION (2026-07-17) — THESIS-072 retry stopped to avoid concurrent Electron contention
+
+- A subsequent retry was mistakenly started while the original timed-out THESIS-072 runner and its Electron child were still alive. It likewise did not reach a benchmark case promptly. Per the shared-workspace safety rule, the newly-started campaign-owned retry was stopped rather than allowing two competing Electron launches to consume resources or create ambiguous evidence.
+- The original timed-out runner (`60610`) and Electron child (`60618`) remain untouched because they predate this retry and their ownership is ambiguous. No retrieval, selection, or provider evidence was collected from either THESIS-072 attempt.
+- The campaign must not launch further Electron benchmarks while this orphaned runner remains alive. This is now a repeated infrastructure block, not a product finding.
+
+**NEXT ACTION:** Wait for the original THESIS-072 runner (`60610`) to exit naturally. On exit, run exactly one clean THESIS-072 forensic. If it still cannot create a window, commit a repeated-startup blocker and defer all live Electron work until the shared environment is repaired. Do not kill or signal the original runner.
