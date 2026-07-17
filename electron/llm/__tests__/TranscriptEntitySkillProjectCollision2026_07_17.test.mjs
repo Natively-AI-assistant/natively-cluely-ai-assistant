@@ -34,6 +34,16 @@
 // narrow KNOWN_NON_PROJECT_PROPER_NOUNS allowlist (GitHub, FedRAMP, etc.) folded
 // into the same isSkillToken exclusion check.
 //
+// SECOND FOLLOW-UP FINDING (same day, run-014): "use X"/"using X" — kept in the
+// cued-noun trigger list as an "unambiguous project-adoption cue" by the FIRST
+// fix — turned out to be ambiguous too: "using Envoy and Istio for the mesh
+// layer" is a TOOL LIST, not "adopted a project called Envoy". Detects the
+// "and <CapitalizedWord>" continuation immediately after a cued match (a real
+// project-adoption statement doesn't continue this way) and skips the cue when
+// present. Also extended KNOWN_NON_PROJECT_PROPER_NOUNS with common non-
+// CamelCase infra tool names (Envoy, Istio, Grafana, etc.) as defense-in-depth
+// for standalone (non-list) mentions.
+//
 // Run: npm run build:electron && node --test electron/llm/__tests__/TranscriptEntitySkillProjectCollision2026_07_17.test.mjs
 
 import { test, describe } from 'node:test';
@@ -214,6 +224,47 @@ describe('Follow-up finding (2026-07-17, run-009): non-skill CamelCase proper no
       assert.ok(
         !/\bgithub\b/i.test(result.resolvedQuestion),
         `resolved question must never splice in "GitHub" for the pronoun "that": got "${result.resolvedQuestion}"`,
+      );
+    }
+  });
+});
+
+describe('Follow-up finding (2026-07-17, run-014): "using X and Y" tool-listing is not a project-adoption cue', () => {
+  const LOCAL_MIN = 60;
+
+  test('the first item in a "using X and Y" tool list is NOT tagged as a project', () => {
+    const text = "I've operated 1.2k-node clusters in production, using Envoy and Istio for the mesh layer.";
+    const entities = extractTranscriptEntities(text, 'user');
+    const projects = entities.filter((e) => e.kind === 'project').map((e) => e.value);
+    assert.ok(!projects.includes('Envoy'), `Envoy (first item in a tool list) must never be tagged as a project (got projects: ${JSON.stringify(projects)})`);
+  });
+
+  test('"use X." / "using X under the hood." (a genuine SINGLE project-adoption statement, no list) is still tagged', () => {
+    const useText = 'Actually use TalentScope.';
+    const usingText = 'I built it using Tinroof under the hood.';
+    for (const [text, expected] of [[useText, 'TalentScope'], [usingText, 'Tinroof']]) {
+      const entities = extractTranscriptEntities(text, 'user');
+      const projects = entities.filter((e) => e.kind === 'project').map((e) => e.value);
+      assert.ok(projects.includes(expected), `"${text}" must still tag ${expected} as a project (got: ${JSON.stringify(projects)})`);
+    }
+  });
+
+  test('end-to-end: a later "we\'ll cover that" follow-up does not resolve to Envoy', () => {
+    const turns = [
+      { role: 'interviewer', text: "Let's talk Kubernetes — what scale have you operated it at?", t: 20 * LOCAL_MIN },
+      { role: 'user', text: "I've operated 1.2k-node clusters in production, using Envoy and Istio for the mesh layer.", t: 21 * LOCAL_MIN },
+      { role: 'interviewer', text: "Good question, we'll cover that in the next round. Before we close — is there anything about your background we haven't covered?", t: 30 * LOCAL_MIN },
+    ];
+    const result = resolveLiveFollowup({
+      turns,
+      latestQuestion: "Good question, we'll cover that in the next round. Before we close — is there anything about your background we haven't covered?",
+      mode: 'technical-interview',
+      surface: 'what_to_answer',
+    });
+    if (result.resolvedQuestion) {
+      assert.ok(
+        !/\benvoy\b/i.test(result.resolvedQuestion),
+        `resolved question must never splice in "Envoy" for the pronoun "that": got "${result.resolvedQuestion}"`,
       );
     }
   });

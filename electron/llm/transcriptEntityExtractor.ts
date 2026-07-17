@@ -33,7 +33,12 @@ const KNOWN_SKILLS = /^(TypeScript|JavaScript|FastAPI|GraphQL|PostgreSQL|MongoDB
 // Deliberately narrow — a generic catch-all would risk swallowing a genuine
 // CamelCase project name; this list is CamelCase nouns with an unambiguous,
 // well-known non-project referent (a hosting platform, a compliance standard).
-const KNOWN_NON_PROJECT_PROPER_NOUNS = /^(GitHub|GitLab|Bitbucket|LinkedIn|YouTube|FedRAMP|HIPAA|SOC2|PCIDSS|GDPR)$/i;
+// Also covers a few common infra/tooling proper nouns that aren't CamelCase-
+// shaped (Envoy, Istio, Grafana, Jaeger — live-reproduced 2026-07-17, run-014:
+// "using Envoy and Istio for the mesh layer" mis-tagged Envoy as a project via
+// the cued-noun rule) — this check applies to the cued-noun match too, not
+// just the CamelCase rule, so non-CamelCase tool names benefit from it as well.
+const KNOWN_NON_PROJECT_PROPER_NOUNS = /^(GitHub|GitLab|Bitbucket|LinkedIn|YouTube|FedRAMP|HIPAA|SOC2|PCIDSS|GDPR|Envoy|Istio|Grafana|Jaeger|Prometheus|Terraform|Ansible|Jenkins|CircleCI)$/i;
 // Common sentence-initial / interjection / filler words capitalized by grammar but
 // NOT entities — excluded from the short-answer proper-noun heuristic.
 const STOP_PROPER = new Set([
@@ -109,8 +114,21 @@ export function extractTranscriptEntities(text: string, speakerRole?: 'interview
   // topic-return cue, live-tested in LiveSessionMemory2026_06_07c.test.mjs) and
   // "use X"/"using X" are kept — those two are unambiguously about a
   // tool/project being adopted, not a person being addressed.
+  //
+  // Follow-up finding (2026-07-17, run-014 live trace): "use X"/"using X" is
+  // itself ambiguous between "adopted project X" (a real project-adoption cue)
+  // and "used tool X" as the first of a LIST of tools ("using Envoy and Istio
+  // for the mesh layer" — Envoy is a service-mesh proxy, not a project the
+  // candidate built). A tool-listing sentence almost always continues with
+  // "X and Y" / "X, Y, and Z" right after the cued noun; a genuine
+  // project-adoption statement doesn't. Detect the "and <CapitalizedWord>"
+  // list-continuation immediately after the match and skip the cue if present
+  // — cheap enough to check per-match, and doesn't touch the CamelCase/
+  // short-answer rules (a real project name mentioned this way, e.g. "use
+  // TalentScope.", has no such continuation).
   const cued = t.match(/\b(?:tell me about|about|project called|called|use|using|back to)\s+([A-Z][a-z][a-zA-Z0-9]{2,})\b/);
-  if (cued && !STOP_PROPER.has(cued[1]) && !isSkillToken(cued[1]) && !out.some(e => e.value === cued[1])) out.push({ kind: 'project', value: cued[1] });
+  const cuedIsToolList = cued ? /^\s+and\s+[A-Z]/.test(t.slice(cued.index! + cued[0].length)) : false;
+  if (cued && !cuedIsToolList && !STOP_PROPER.has(cued[1]) && !isSkillToken(cued[1]) && !out.some(e => e.value === cued[1])) out.push({ kind: 'project', value: cued[1] });
   // a SHORT candidate answer that is just a proper noun ("Natively.") names a project.
   if (speakerRole !== 'interviewer') {
     const words = t.trim().replace(/[.?!,]/g, '').split(/\s+/).filter(Boolean);
