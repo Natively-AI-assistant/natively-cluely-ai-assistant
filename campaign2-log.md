@@ -1658,3 +1658,65 @@ quality by an unknown but nonzero margin. Given script-b's clean 76.5%/
 100%/82.4% result this iteration, recommend (c) as the most information-
 dense next step if effort is available — it's the one lever left that's
 both cheap AND known-high-value.
+
+## ITERATION 21 (2026-07-17) — Picked option (c): fixed the containsFact thousands-separator false-negative
+
+**Grading-harness fix (commit `9fd87c4`)**: the `containsFact`/
+`normalizeForMatch` false-negative flagged as open since iteration 13
+finally root-caused and fixed. `normalizeForMatch`'s generic punctuation
+strip treated a thousands-separator comma exactly like any other
+punctuation and replaced it with a space — "37,000" normalized to
+"37 000", which no longer contains the fixture's annotated fact "37000"
+as a substring even though the model's answer (run-013 press B10:
+"approximately 37,000 tokens") was factually correct. Fixed by stripping
+commas from digit-group patterns (`\d{1,3}` + one-or-more `,\d{3}`
+groups) BEFORE the generic strip runs, so "37,000" and "37000" normalize
+identically regardless of which side (fixture or model) uses which
+format — a plain, symmetric substring-matching fix, no fuzzy logic
+introduced. 7 new unit tests
+(`grading/__tests__/GatesThousandsSeparatorFix_2026_07_17.test.mjs`).
+
+**Verified impact honestly, not just claimed**: re-ran the fixed
+`containsFact` logic offline against run-013's actual recorded answers
+(no new LLM calls needed — pure local re-grading) and counted exactly
+which presses flip from fail to pass. Result: **1 press** (script-b B10)
+flips. This confirms two things: (1) the fix is real and correctly
+targeted — it fixes exactly the case it was designed for; (2) it is NOT
+a broad rescue of run-013's other G3/G5 failures — those remain
+GENUINE content gaps (verified case-by-case in this iteration: A1
+never says "10 years", A13 never says "Kafka" despite discussing the
+same pipeline, B7 states the wrong hardware/duration entirely, A14/C's
+provider-transport-error and meta-commentary leaks are real generation
+bugs, not grading artifacts). This campaign should NOT expect this fix
+alone to meaningfully move the overall G3/G5 percentages on a re-run —
+its value is precision/trustworthiness of the SCORE, not score
+inflation.
+
+**Also checked, deliberately NOT fixed this iteration**: the G3/G5
+tense-mismatch false-negative from iteration 12 ("rolled back" vs "roll
+back", the C12 case) remains open — still assessed as disproportionate
+to hand-roll (a tense-variant list or stemmer) for the harness's own
+remaining lifetime, consistent with iteration 13's original judgment
+call. Logged as still-open, not silently dropped, same convention as
+before.
+
+**Quota check**: zero real-backend/LLM calls spent this iteration — the
+fix was verified via pure local re-grading of already-collected run-013
+data plus local unit tests. No pause needed, no quota consumed.
+
+**NEXT ACTION**: the grading-harness precision sub-thread (G1 fixed
+iteration 13, G3/G5 thousands-separator fixed this iteration, G3/G5
+tense-matching still open) and the extraction-bug sub-thread (fix#5
+through #9c, 4 independent post-fix confirmations) are both now in a
+reasonable stopping state for this campaign's remaining effort budget.
+Recommend one of: (a) if quota/time remains, ONE more full judged run
+now that BOTH the extraction fixes (#9/#9b/#9c) AND this grading fix
+have landed together for the first time — this would be the
+highest-fidelity single data point this campaign could still produce;
+(b) otherwise, move to Phase 4 hardening prep (removing temporary
+`[TRACE:LONGCTX]`/`[FIX:*]` debug logs per R10, drafting
+`traces2/final-report.md` per loop2.md §6) using the substantial
+evidence already accumulated (iterations 8-21) even without a perfectly
+clean numeric L4 run, since the shared-workspace contention confound has
+proven persistent and is outside this campaign's ability to resolve
+from the inside.
