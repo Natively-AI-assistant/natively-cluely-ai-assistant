@@ -1140,3 +1140,92 @@ tense-matching grading gap, not a real recall failure); (c) the deferred
 G3/G5 tense-matching grading fix from this iteration is still available
 low-risk work if a future iteration wants a quick win before/instead of a
 full judged run.
+
+## ITERATION 14 (2026-07-17, ~13:0x UTC+5:30) — Own judged run collided with a concurrent session's judged run; stood down
+
+Acted on iteration 13's NEXT ACTION (a): re-checked quota (Account1 still
+`errorCode 429`/exhausted; Account2 `testStatus: active`, no recent error
+— the 9Router usage-percentage API itself is unavailable on both
+connections, "Usage API requires admin permissions", so judged the
+pause condition qualitatively per §1.5's documented fallback: a healthy,
+non-erroring account counts as clear to proceed) and launched a full
+3-script JUDGED benchmark run (`node test/harness-longsession/run-all.mjs`,
+no flags) in the background.
+
+**False alarm, investigated and resolved**: partway through Script A, a
+Monitor event showed press A3's answer near-verbatim identical to A2's
+(different canonical questions — A2 "walk me through your most recent
+role", A3 "what was the biggest quantified win from that project?" — but
+byte-for-byte the same generated text apart from one casing difference:
+"chaos-mesh" vs "Chaos-Mesh"). This looked exactly like the kind of
+answer-caching/staleness bug this campaign exists to find, so it was
+investigated immediately rather than deferred. `answerPlanQuestion` in
+A3's own trace read `"what was the biggest quantified win from
+QuickBooks?"` — a question that matches NEITHER A2's nor A3's real
+canonical question (nor anything in Script A's fixture at all — no
+fixture in this repo mentions QuickBooks/Intuit). That phrase is
+foreign to this codebase's active harness fixtures entirely.
+
+**Root cause: NOT a product bug — a harness race condition.** `ps aux`
+showed TWO `run-all.mjs`/`run-script-a.mjs` process trees running
+concurrently: mine (PID 90348/90350, started 13:02:36) and a second one
+from a different concurrent session (PID 90985/90987, started 13:03:39,
+~1 minute later). Both processes run the SAME Script A fixture and both
+write to the IDENTICAL output paths
+(`traces2/harness-script-a-press-<pressId>.txt`,
+`test/harness-longsession/reports/run-NNN.json` via the next-available
+run number) — `lib/run-script.cjs`'s `fs.writeFileSync(outPath, dump)`
+has no run-scoping or locking. The two processes' presses interleaved
+and clobbered each other's trace files mid-write, producing a spliced
+Frankenstein trace file (A1 showed a real Marcus/Stripe self-intro from
+ONE run; A2/A3 showed near-identical Kafka/Flink/Stripe answers that
+were likely each run's own A2, one of them overwriting the other's A3
+output with its own A2 content moments apart) and, separately, the
+QuickBooks/Intuit content visible in one Monitor event's A1 preview
+belongs to a THIRD, unrelated profile fixture — meaning at least one of
+the two colliding runs, or a prior stale run, was using a different
+resume fixture than `test-fixtures/profiles/p01/resume.pdf`. This is
+exactly the shared-workspace hazard this campaign's protocol warns about
+(loop2.md's shared-workspace note; see also the
+`shared-workspace-branch-hazard-2026-07-11` memory) — TWO real
+product-under-test harness runs writing to the same output directory,
+not a product defect.
+
+**Action taken**: killed MY OWN run's processes (`kill 90348 90350`) and
+let the OTHER session's run (90985/90987, plus its Script B child 92722
+that had already started) continue undisturbed — it started later, so
+letting it finish and clobbering my incomplete one is the smaller
+disruption. Stopped my Monitor watch. Did NOT touch any trace files,
+report JSONs, or the grading code to try to "recover" my run's partial
+output — the other session's still-in-flight run will overwrite those
+paths anyway, and any recovery attempt risks corrupting ITS output
+instead.
+
+**Process gap identified for later, not fixed now** (would require
+touching `lib/run-script.cjs`'s hardcoded `traces2/harness-<scriptId>-
+press-<pressId>.txt` path and `run-all.mjs`'s report-numbering scheme to
+add a run-id/PID namespace — a real improvement but non-trivial scope
+creep mid-collision-recovery, and risks colliding with whichever session
+touches that file next): the harness has no collision guard for two
+concurrent full-benchmark runs. Given this is a single-operator dev
+repo where concurrent AGENT sessions (not concurrent real users) are the
+actual source of the two simultaneous runs, the higher-leverage fix is
+PROCESS discipline (check `ps aux` for an existing `run-all.mjs` before
+starting a new one) rather than code — logging this as a candidate
+Phase 4 hardening note, not a Phase 1-3 pinned bug.
+
+**Quota check**: not re-spent this iteration beyond the aborted partial
+run (killed early, ~3 presses in). Account1 exhausted, Account2 healthy
+per the same qualitative read as iteration 12/13.
+
+**NEXT ACTION**: do NOT start another full judged run until confirming
+via `ps aux | grep -i "run-all.mjs\|run-script"` that no other session's
+harness run is active — this check is now a hard precondition, not
+optional, given the actual collision observed. Once clear, retry the
+full 3-script judged benchmark run (still the single highest-value next
+step per iteration 13's assessment — G1 grading fix has landed, G1/G2/G4/
+G6/G7 look strong campaign-wide). If the OTHER session's currently-running
+judged run (90985/...) completes first and produces a valid `run-NNN.json`
++ `.md`, that run itself may already satisfy the need — check
+`test/harness-longsession/reports/` for a new report with `skipJudge:
+false` and both G3_judge/G4_judge populated before starting a duplicate.
