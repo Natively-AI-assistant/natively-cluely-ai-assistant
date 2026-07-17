@@ -11,6 +11,7 @@ import { useShortcuts } from '../../hooks/useShortcuts';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { isMac, getModifierSymbol } from '../../utils/platformUtils';
 import nativelyIcon from '../icon.png';
+import zoomCaptureModeScreenshot from '../../assets/zoom-capture-mode.png';
 
 // ----------------------
 // Animations & Mocks
@@ -1814,6 +1815,26 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                         <strong>⚠️ Warning:</strong> This renders the Natively overlay completely unclickable. You MUST memorize the Global Hotkeys (e.g. <strong>{isMac ? 'Cmd' : 'Ctrl'}+Shift+Arrows</strong> to move, <strong>{isMac ? 'Cmd' : 'Ctrl'}+B</strong> to hide, <strong>{isMac ? 'Cmd' : 'Ctrl'}+1-7</strong> for actions) to control the application once this is active.
                                     </p>
                                 </div>
+                            </div>
+
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <EyeOff className="w-4 h-4 text-text-secondary" /> Zoom Screen Share (One Setting Required)
+                                </h4>
+                                <p className="text-[11px] text-text-secondary mb-3">
+                                    Google Meet, Microsoft Teams, and QuickTime hide Natively automatically — nothing to configure. Zoom is the one exception: whether it respects Natively's "don't capture me" flag depends on a single setting.
+                                </p>
+                                <p className="text-[11px] text-text-secondary mb-3">
+                                    Go to <strong>Zoom → Settings → Share Screen → Advanced → Screen capture mode</strong> and choose <strong>"Advanced capture with window filtering."</strong>
+                                </p>
+                                <img
+                                    src={zoomCaptureModeScreenshot}
+                                    alt="Zoom Settings → Share Screen → Screen capture mode set to Advanced capture with window filtering"
+                                    className="w-full max-w-[480px] mx-auto rounded-lg border border-border-subtle shadow-sm block mb-3"
+                                />
+                                <p className="text-[11px] text-text-secondary mb-0">
+                                    The "...with window filtering" modes tell Zoom to leave out windows that mark themselves as private, which is exactly what Natively does. <strong>"Advanced capture without window filtering"</strong> grabs the raw screen and will show Natively, so avoid it.
+                                </p>
                             </div>
                         </div>
                     </div>
