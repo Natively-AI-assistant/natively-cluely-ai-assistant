@@ -224,4 +224,28 @@ Both accounts hit the pause threshold simultaneously: Account 1 dropped to 10% s
 
 QUOTA: Account 1 10% / Account 2 0% (session). Resets: Account 2 at 2026-07-17T07:00:00Z. Using that as the resume target (+2min buffer per L9 pause procedure) since it's the account that's fully dead; Account 1 should also refresh soon given its own 5h window.
 
-**NEXT ACTION on resume**: First re-check quota (both accounts) before resuming heavy work — if still low, reschedule another wakeup rather than burn the last of it. Once quota is healthy: (1) commit the verified cap fix (electron/intelligence/context-os/evidenceSufficiency.ts, electron/intelligence/__tests__/EvidenceSufficiency.test.mjs, updated forensic-report.md/campaign-log.md, plus the dev-run-002-capfix results) — only my own files, re-check git status for concurrent-session changes first. (2) Consider whether to chase THESIS-079 (list-cap residual gap) or move to Phase 4 (production hardening) — the WTA-path fixes (H3, NEW-1, NEW-2) and this manual-chat-path fix (H6/cap) together represent solid, well-verified progress; Phase 4 hardening + the final report (traces/final-report.md) are still fully untouched and loop.md's L4 exit condition requires them. Re-check git branch/status before any git operation (shared workspace).
+**NEXT ACTION (superseded)**: ~~re-check quota, commit cap fix~~ — cap fix commit landed (bundled into concurrent commit `c4ac05d`, confirmed present via grep/content check, not lost). See ITERATION 8.
+
+## ITERATION 8 (2026-07-17) — Resume after quota pause; found TurnEvidenceCoordinator now wired live
+
+Resumed after the L9 pause. Account 1 (Claude session) hit 0%, but Account 2 recovered to 48% (past its reset) — 9Router fails over automatically, so per L9 this is a "continue normally" state, not a further pause.
+
+While reviewing the shared working tree during the pause window (no model calls needed for this), discovered the concurrent session has wired `TurnEvidenceCoordinator` — the exact module iteration 1's forensic report flagged as "well-tested but dead code" — into `ipcHandlers.ts`'s manual-chat path, dated "CONTEXT OS (2026-07-17)" in its own comments, behind a new `contextOsMultiFamilyEvidenceEnabled` flag. This directly resolves that iteration-1 finding. Documented in `traces/forensic-report.md` §5's wiring table, explicitly flagged as NOT independently verified live by me — found by reading code during a pause, not via a live trace, per this campaign's own evidence-before-edits discipline (R1/R3). A future iteration should confirm it actually fires and helps before counting it as done.
+
+### QUOTA
+QUOTA (iteration 8, resume ~07:3x local): Account 1 0% / Account 2 48% (recovered). Continuing per L9 (at least one account healthy, 9Router fails over).
+
+**NEXT ACTION (superseded)**: chose (b) — wrote `traces/final-report.md`, see below.
+
+## ITERATION 9 (2026-07-17) — Wrote traces/final-report.md (honest, not claiming L4 exit)
+
+Wrote the first `traces/final-report.md`, consolidating all 8 iterations of findings: 4 verified fixes with commit references (H3, NEW-1, NEW-2's 4-sub-fix chain, H6-cap), confirmed-holding items (adversarial injection resistance, H1/H2/H5 refuted, H8 corrected), the newly-discovered `TurnEvidenceCoordinator` wiring (logged, not independently verified), confirmed-open gaps (list-cap residual, Mercury X1 entity confusion, 6-7 untraced false refusals, H4 untested, C8 untestable without a renderer harness), and an honest "what's left to reach 95%" section rather than overclaiming L4 exit.
+
+**Explicitly NOT claiming the loop.md L4 exit condition is met.** The campaign has real, live-verified progress (4 solid fixes, 2 benchmark improvements) but has not run two consecutive full passes at ≥95%/≥90%-per-category/zero-hallucination/≤2%-false-refusal. The final report says so plainly in its opening line, per this campaign's own L5 ("premature success is the failure mode").
+
+Also captured 5 process lessons in the final report's closing section (verify real reachability before pinning a test-only-handler-found root cause; a scorer failure isn't automatically a live defect; check git history before changing a hardcoded constant; multiple uncoordinated classifiers is a systemic risk; commit promptly/narrowly in a shared workspace) — these are reusable across future sessions on this repo, not just this campaign.
+
+### QUOTA
+QUOTA (iteration 9, ~08:0x local Jul 17): Account 1 0% / Account 2 reports "Usage API requires admin permissions" (treated as healthy/unknown per L9, since it's actively serving requests). Continuing normally.
+
+**NEXT ACTION**: Per loop.md L4, this campaign is NOT done — `traces/final-report.md` existing does not by itself satisfy the exit condition (it also requires two consecutive ≥95% runs, which haven't happened). Given the scope remaining (§6 of the final report: 2 more confirmed fixes, 6-7 untraced false refusals, harness expansion, TurnEvidenceCoordinator verification, a production-default decision, two clean consecutive full runs, remaining Phase 4 hardening items), the realistic path forward is: continue picking off items from final-report.md §6 one at a time with the same live-trace-then-fix-then-regress discipline used so far, OR stop here and hand off to the user with an honest status (this campaign has been running many iterations across a very long session with real, valuable, well-verified progress, but reaching literal 95%-twice-consecutively is a much larger scope than what's been covered). Re-check git branch/status and quota before any further work (shared workspace).
