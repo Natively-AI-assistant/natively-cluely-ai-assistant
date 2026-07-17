@@ -73,7 +73,16 @@ export interface AssistantResponse {
 export class SessionTracker {
     // Context management (mirrors Swift ContextManager)
     private contextItems: ContextItem[] = [];
-    private readonly contextWindowDuration: number = 120; // 120 seconds
+    // Grounding-campaign2 fix (H7, 2026-07-17): this eviction bound must be >=
+    // the largest `lastSeconds` any live call site actually requests, or
+    // getContext(N) silently truncates to whatever this value is regardless of
+    // N. Every live caller (IntelligenceEngine.runWhatShouldISay/
+    // planSuggestionTrigger, LiveTranscriptBrain's DEFAULT_ANSWER_WINDOW_SECONDS,
+    // main.ts's comp-evidence provider) requests 180s — this was hard-coded to
+    // 120, so getContext(180) returned only the last ~120s of a 180s window and
+    // called it a match. Raised to 180 so the write-side retention actually
+    // covers every documented 180s read. Fixture-proven: traces2/... (H7).
+    private readonly contextWindowDuration: number = 180; // seconds
     private readonly maxContextItems: number = 500;
 
     // Last assistant message for follow-up mode
