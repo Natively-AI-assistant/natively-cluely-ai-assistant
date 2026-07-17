@@ -18,6 +18,7 @@ untouched and may still be active in a separate session).
 | 5 | H1 (question lost in prompt assembly under token-budget eviction) | REFUTED for realistic session lengths — sparsifyTranscript caps transcript at 12 turns BEFORE the 2000+-token assembler budget is ever approached (totalTokensUsed 433-566 of budget ~2300-2450, on a 128k-ctx cloud model) | traces2/golden-longctx-*.txt, all 4 presses: `answerPlanQuestionSurvivesInPrompt: true` | N/A | refuted |
 | 6 | H2 (system prompt eviction/dilution) | REFUTED same reasoning as H1 — systemPromptChars byte-identical (29961) across all 4 presses | traces2/golden-longctx-*.txt | N/A | refuted |
 | 7 | H8 (tokenization/counting drift) | REFUTED for cloud tier — `fitContextForCurrentModel` is a no-op when maxContextTokens>=100k | LLMHelper.ts:1141 | N/A | refuted |
+| 8 | New (iter 8) — a real provider-transport error (429/expired key/billing) yielded by `WhatToAnswerLLM.generateStream`'s catch block had no persistence guard, so its actionable error string got written into session history like a real answer, poisoning a LATER unrelated press | CONFIRMED (live trace, real 30-min benchmark run-003) | `traces2/harness-script-a-press-A12.txt`: poisoned `[ASSISTANT]: I couldn't reach the AI provider...` turn in the prompt; model answered as if mid error-recovery on an unrelated question | `cf45f3c` | **FIXED** — new `isProviderTransportError` detector + early-return guard (`do_not_store` write policy, ungated user-facing delivery). Skeptic pass found a real, live-reproduced gap in the first draft (guard placed too late — `repairCodingMarkdown` mutated the error text into a 6-section scaffold for coding-type questions before the exact-match check ran, silently missing it) — fixed by converting both this guard AND the sibling `isLeakedSchemaStub` guard into full early returns (mirrors the existing `isNonAnswerSentinel` precedent). 10 unit tests (incl. a coding-type regression reproducing the skeptic's exact failure), 94 consumer tests green, typecheck clean, R8 smoke green. NOT yet re-verified against the full real-backend benchmark this iteration — quota dropped to 11%/0% mid-verification; deferred to next iteration per §1.5. |
 
 ## SCORE HISTORY
 (benchmark run # / timestamp / greeting-failures / hallucination flags / question-extraction acc / answer quality / long-range recall)
@@ -858,12 +859,75 @@ concurrent session's `IntelligenceEngine.ts` changes and their new
 `electron/llm/__tests__/ProviderTransportErrorGuard.test.mjs` (visible on
 disk, confirmed it runs green, but not mine to commit) completely alone.
 
-**NEXT ACTION**: (a) once the concurrent session's provider-transport-error
-guard commits, re-run a `--skip-judge` structural check on script-a to
-confirm A12 is clean, then decide on a fresh FULL 3-script benchmark run
-(fix#6 + fix#7 + the transport-error guard have all landed since run-002's
-baseline — worth measuring real combined improvement); (b) A1's mini-
-forensics (self-intro missing "10 years") from iteration 8's NEXT ACTION is
-still open — same "read the FULL prompt to see if the required fact was
-even present" treatment A6/A12 got; (c) after the next full run: append to
-SCORE HISTORY, re-check L4 (needs 2 consecutive green runs, currently 0).
+## ITERATION 11 (2026-07-17, ~11:2x local) — provider-transport-error guard landed (commit `cf45f3c`) + PAUSE FOR QUOTA
+
+This session picked up the campaign concurrently with the session that wrote
+iteration 9/10 above (see their "Shared-workspace note" — they correctly
+identified this session's in-progress `IntelligenceEngine.ts` edit as an
+independent, well-scoped fix and deliberately left it alone rather than
+collide). Confirming here: yes, that in-progress edit was exactly the
+provider-transport-error persistence guard both sessions' notes describe.
+
+**Ledger numbering collision (reconciled, not a duplicate fix)**: this
+session and the concurrent session both independently used the label
+"fix#7" for two DIFFERENT bugs found from the same A6/A12 forensics thread:
+`0d26439` ("fix#7", concurrent session) = the escaping-unaware
+`answerPlanQuestionSurvivesInPrompt` false-negative in `WhatToAnswerLLM.ts`.
+`cf45f3c` (this session's commit, described as fix#7 in its own commit
+message before this reconciliation) = the provider-transport-error
+persistence guard in `IntelligenceEngine.ts`/`answerPolish.ts`. Renumbering
+this session's fix as **#8** in the ANTI-THRASH LEDGER above to avoid two
+ledger rows both claiming "fix#7" — no code changed, this is purely a log
+bookkeeping fix. Both fixes are real, independently verified, non-competing
+(different files, different root causes), and both already committed.
+
+**Fix #8 (commit `cf45f3c`)**: full detail in the ANTI-THRASH LEDGER row
+above. Summary: `WhatToAnswerLLM.generateStream`'s catch-block
+provider-transport-error string had no persistence guard and got written
+into session history like a real answer, poisoning later presses — exactly
+the mechanism the concurrent session's iteration-9 note predicted was
+"likely what caused this session's OWN run-003 finding of A12." Fixed with
+an early-return guard (`isProviderTransportError` detector +
+`do_not_store` write policy, ungated user delivery). Skeptic pass caught a
+real ordering bug in the first draft (coding-type answers' repair pipeline
+mutated the error text before the guard's exact-match check could catch
+it) — fixed by converting to a true early return, consistent with the
+existing `isNonAnswerSentinel` precedent in the same file. 10 new unit
+tests (including a coding-type regression reproducing the skeptic's exact
+failure), 94 consumer tests green, typecheck clean, R8 smoke green.
+
+**Quota check → PAUSE TRIGGERED**: Account1 8% session (Account2 already
+0%). This crosses the documented pause threshold (§1.5: "Pause ONLY when
+one account is fully out AND the other is <=10% session remaining") for
+the first time in either campaign's iterations so far. Per procedure:
+checkpointed cleanly (fix#8 already committed before this check, no
+in-progress edit left uncommitted), NOT starting the full 3-script
+real-backend benchmark run this iteration (would need many more real LLM
+calls than remaining quota safely covers) — the mock-based unit-test
+suite + cheap 2-press R8 smoke already gathered this iteration stand as
+this fix's verification evidence instead. Account1 resets 2026-07-17T07:30:00Z,
+Account2 resets 2026-07-17T06:59:59Z (already past — but 9Router's own
+quota read still shows 0%, so treating the LATER of the two,
+Account1's ~07:30Z, as the binding resume target +2min buffer per
+§1.5's pause procedure).
+
+**NEXT ACTION (post-pause, resume at/after ~2026-07-17T07:32:00Z or when a
+fresh quota check shows >25% on the healthier account, whichever is
+later)**: (a) re-run a `--skip-judge` structural check on script-a first
+(cheap) to confirm A12 is now clean with fix#8 in place; (b) if clean,
+decide whether a FULL 3-script benchmark run is worth the quota spend given
+THREE fixes (fix#6, the concurrent session's escaping fix, and fix#8) have
+landed since run-002's baseline — if so, run it, append to SCORE HISTORY,
+re-check L4 (needs 2 consecutive green runs, currently 0); (c) A1's mini-
+forensics (self-intro missing "10 years") from iteration 8 is still open —
+NOTE per this session's own investigation, this line of inquiry crosses
+into Campaign 1's active grounding/profile-intelligence domain
+(`KnowledgeOrchestrator`/`selectManualProfileEvidence`/`buildProfileJitPrompt`
+— the same code Campaign 1's `campaign-log.md` iteration 6 is independently
+deep in, investigating `EvidenceResolver`'s cap). Recommend NOT duplicating
+that investigation in Campaign 2 — if A1-class failures persist after the
+next full benchmark run, cross-reference Campaign 1's `campaign-log.md`
+before re-investigating, since a fix there may already resolve it. Campaign
+2's OWN mandate is long-session-SPECIFIC degradation; A1's fact-omission at
+minute 0 (not evicted, not long-range) is more a general grounding-quality
+question than this campaign's chartered scope.

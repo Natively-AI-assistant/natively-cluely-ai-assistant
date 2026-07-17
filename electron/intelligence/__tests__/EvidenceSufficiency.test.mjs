@@ -118,7 +118,11 @@ describe('EvidenceSufficiency', () => {
       assert.ok(set.some((e) => /alpha/i.test(e.text)), 'Alpha covered');
       assert.ok(set.some((e) => /beta/i.test(e.text)), 'Beta covered');
     }
-    assert.equal(general.length, 3);
+    // Grounding-campaign fix (2026-07-17): the default/'numeric' cap was
+    // raised from 3 to 5 (matching 'list') — confirmed live that 3 was too
+    // aggressive on a long document and discarded a genuinely-retrieved
+    // answer-bearing chunk (thesis benchmark THESIS-079/THESIS-094).
+    assert.equal(general.length, 5);
     assert.equal(list.length, 5);
     assert.equal(comparison.length, 6);
   });

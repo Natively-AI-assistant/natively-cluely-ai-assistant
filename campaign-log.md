@@ -204,4 +204,24 @@ Cleaned up all 3 temporary diagnostic logs before finishing — carefully, since
 ### QUOTA
 QUOTA (iteration 6, ~04:0x local Jul 17): Account 1 66% session / Account 2 0% (9Router auto-fails-over). Continuing per L9.
 
-**NEXT ACTION**: Design the cap fix for `selectSmallestSufficientEvidence` in `electron/intelligence/context-os/evidenceSufficiency.ts`. First check `git log -p` / `git blame` on the cap line and any tests referencing it, to understand why 3/5/6 were chosen (likely a prompt-size/noise tradeoff from an earlier benchmark round) before changing anything. Candidate fix: raise the 'numeric'/default cap (currently 3) to something closer to 5, OR improve `answerRelevanceScore`'s ranking so specific-value chunks sort higher without needing a larger cap. Whichever is chosen, verify via (a) the 2 specific failing cases (THESIS-079, THESIS-094) now passing, AND (b) a FULL re-run of the 140-case thesis benchmark to confirm the 119 currently-passing cases don't regress (a too-large cap could dilute the prompt and cause new failures). Re-check git branch/status and quota before starting (shared workspace, watch for further unrelated concurrent edits to ipcHandlers.ts / evidenceSufficiency.ts).
+**NEXT ACTION (superseded)**: ~~design the cap fix~~ — DONE, verified, see below.
+
+## ITERATION 7 (2026-07-17) — Cap fix landed and verified via full 140-case regression; PAUSING for quota
+
+Checked `git log -p`/`git blame` on the cap line first, per R1/R2: the 3/5/6 numbers were the ORIGINAL values from the function's introduction, never separately tuned later. A subsequent commit (`be7d7e0`) diagnosed this EXACT symptom class and fixed the ranking algorithm while deliberately leaving the cap itself alone — confirming raising the cap now is a legitimate untried step, not a re-fix.
+
+**Fix**: raised the default/`'numeric'` cap in `selectSmallestSufficientEvidence` (`electron/intelligence/context-os/evidenceSufficiency.ts`) from 3 to 5, matching the existing `'list'` cap. `'comparison'` (6) and `'list'` (5) untouched. Updated the one pinned unit test asserting the old cap value.
+
+**Full regression run** (`dev-run-002-capfix`, 140 cases): raw deterministic score held flat at 119/140, but a case-by-case diff showed the REAL story — exactly one flip each way. THESIS-094 (the pinned target) flipped fail→pass: fixed for real. THESIS-026 flipped pass→fail, investigated immediately: its new answer is factually identical to the old one, just reformatted as a bulleted list instead of a joined phrase — a scorer-rigidity artifact (same class as iteration 5's findings), confirmed by the second-tier LLM judge upgrading it right back to a pass. **Two-tier pass rate genuinely improved: 124/140 (88.6%) → 126/140 (90.0%)**. `electron/intelligence/__tests__` full suite: 838/857, the 10 failures confirmed pre-existing and unrelated (different files, different subsystem).
+
+THESIS-079 (a `'list'`-shaped case with 6 eligible chunks against an unchanged cap of 5) remains open — deliberately not touched this round to keep the fix narrow and independently verifiable.
+
+### Ledger update
+- #11 (H1/H6 — EvidenceResolver cap): DONE for numeric/default bucket, verified via full regression. List-shape residual gap (THESIS-079) logged as a smaller, separate open item.
+
+### PAUSING FOR QUOTA
+Both accounts hit the pause threshold simultaneously: Account 1 dropped to 10% session (right at the pause floor), Account 2 fully out (0%, reset ~07:00 UTC). Per L9: pause when one account is out AND the other is ≤10%. Both conditions now hold.
+
+QUOTA: Account 1 10% / Account 2 0% (session). Resets: Account 2 at 2026-07-17T07:00:00Z. Using that as the resume target (+2min buffer per L9 pause procedure) since it's the account that's fully dead; Account 1 should also refresh soon given its own 5h window.
+
+**NEXT ACTION on resume**: First re-check quota (both accounts) before resuming heavy work — if still low, reschedule another wakeup rather than burn the last of it. Once quota is healthy: (1) commit the verified cap fix (electron/intelligence/context-os/evidenceSufficiency.ts, electron/intelligence/__tests__/EvidenceSufficiency.test.mjs, updated forensic-report.md/campaign-log.md, plus the dev-run-002-capfix results) — only my own files, re-check git status for concurrent-session changes first. (2) Consider whether to chase THESIS-079 (list-cap residual gap) or move to Phase 4 (production hardening) — the WTA-path fixes (H3, NEW-1, NEW-2) and this manual-chat-path fix (H6/cap) together represent solid, well-verified progress; Phase 4 hardening + the final report (traces/final-report.md) are still fully untouched and loop.md's L4 exit condition requires them. Re-check git branch/status before any git operation (shared workspace).

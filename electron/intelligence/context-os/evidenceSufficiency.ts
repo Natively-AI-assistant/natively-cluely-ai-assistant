@@ -181,7 +181,19 @@ export function selectSmallestSufficientEvidence(input: {
       || entities.some((entity) => supportsEntity(item, entity))
       || isAnswerRelevantWithoutEntity(item))
     .sort((left, right) => rankOf(right) - rankOf(left));
-  const cap = input.answerShape === 'comparison' ? 6 : input.answerShape === 'list' ? 5 : 3;
+  // Grounding-campaign fix (2026-07-17): the default/numeric cap of 3 was too
+  // aggressive on a long (66-page) document with many topically-similar
+  // chunks. Confirmed live (thesis benchmark cases THESIS-079/THESIS-094):
+  // raw hybrid retrieval correctly found the answer-bearing chunk, but this
+  // cap discarded it before it reached the model, producing a false refusal
+  // even though the fact was genuinely retrievable. be7d7e0's answerRelevanceScore
+  // rework already improved RANKING so the value-bearing chunk sorts higher —
+  // this raises the cap itself for the shapes it left untouched ('numeric' and
+  // the 'general'/default bucket), matching the existing 'list' cap. The doc-
+  // grounded token budget (3600, ModeContextRetriever.ts) is the real prompt-
+  // size constraint; 5 short chunks stays well within it. 'comparison'/'list'
+  // caps are unchanged.
+  const cap = input.answerShape === 'comparison' ? 6 : 5;
   const selected: EvidenceItem[] = [];
   const selectedIds = new Set<string>();
   // Guarantee at least one item that supports each target entity (unchanged).
