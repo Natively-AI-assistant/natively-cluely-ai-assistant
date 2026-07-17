@@ -4685,6 +4685,13 @@ export class AppState {
     if (this.isMeetingActive) {
       throw new Error('Audio test is unavailable while a meeting is active. End the meeting first, then test your microphone.');
     }
+    if (this._pendingTeardown) {
+      await this._pendingTeardown;
+    }
+    // A meeting may have started while the previous teardown was awaited.
+    if (this.isMeetingActive) {
+      throw new Error('Audio test is unavailable while a meeting is active. End the meeting first, then test your microphone.');
+    }
     this._audioTestStarting = true;
     try {
       await this._startAudioTestImpl(deviceId);
@@ -5152,13 +5159,18 @@ export class AppState {
         // `[Microphone] Device: ...`). Keep launch-time mic discipline by
         // staying lazy, but restore the pre-fix HAL ordering inside meetings.
         this.microphoneCapture?.start();
-        this.googleSTT_User?.start();
-        userSttStartedByInit = true;
 
         // Start System Audio after the mic stream has been constructed.
         this.systemAudioCapture?.start();
+
+        // Start the visible interviewer/system STT first. Local Whisper keeps
+        // one preloaded worker, so the first STT instance to start receives
+        // the warm worker. Giving it to the hidden user-mic channel made the
+        // interviewer channel cold-start and remain blank in short meetings.
         this.googleSTT?.start();
         systemSttStartedByInit = true;
+        this.googleSTT_User?.start();
+        userSttStartedByInit = true;
 
         // Start JIT RAG live indexing
         if (this.ragManager) {
@@ -5411,6 +5423,10 @@ export class AppState {
         // 2. Tear down STT sockets now that finals have arrived.
         this.googleSTT?.stop();
         this.googleSTT_User?.stop();
+        await Promise.all([
+          (this.googleSTT as any)?.waitForShutdown?.(),
+          (this.googleSTT_User as any)?.waitForShutdown?.(),
+        ]);
 
         // 3. Snapshot transcript + persist placeholder + queue title/summary LLM.
         //    intelligenceManager.stopMeeting itself runs LLM in background.

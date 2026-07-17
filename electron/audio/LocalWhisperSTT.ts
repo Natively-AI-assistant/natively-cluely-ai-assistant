@@ -103,10 +103,11 @@ export class LocalWhisperSTT extends EventEmitter {
     // stops sending audio before VAD's hangover completes.
     private gapFlushTimer: ReturnType<typeof setTimeout> | null = null;
     private static readonly GAP_FLUSH_MS = 400;
-    // 5s grace timer for the previous worker to finish in-flight transcribes
-    // before we terminate it. Tracked so rapid stop/start cycles or app quit
-    // don't pin the event loop with stale termination timers.
-    private workerTerminateTimer: ReturnType<typeof setTimeout> | null = null;
+    // Resolves only after the native ONNX worker has exited cooperatively.
+    // New audio work waits on this barrier so old and new native sessions do
+    // not overlap during teardown on Windows.
+    private workerShutdownPromise: Promise<void> | null = null;
+    private resolveWorkerShutdown: (() => void) | null = null;
 
     // Streaming inference loop state.
     // Self-chaining setTimeout (not setInterval) so the delay can adapt at
@@ -247,6 +248,8 @@ export class LocalWhisperSTT extends EventEmitter {
     stop(): void {
         if (!this.isActive) return;
         this.isActive = false;
+
+        if (this.worker) this.ensureWorkerShutdownPromise();
 
         this.stopStreamingLoop();
         if (this.gapFlushTimer) {
@@ -612,6 +615,10 @@ export class LocalWhisperSTT extends EventEmitter {
     /* ──────────────── Worker lifecycle ──────────────── */
 
     private async spawnWorker(): Promise<void> {
+        // Never overlap a new ONNX session with the previous worker's native
+        // teardown. main.ts also awaits this through its teardown barrier;
+        // this local guard protects direct/re-entrant callers as well.
+        await this.waitForShutdown();
         const warm = modelPreloader.takeWarmWorker(this.modelId);
         if (warm) {
             console.log(`[LocalWhisperSTT] Using preloaded warm worker for ${this.modelId}`);
@@ -730,8 +737,9 @@ export class LocalWhisperSTT extends EventEmitter {
             this.clearStreamingWatchdog();
             this.streamingTaskInFlight = false;
             this.streamingTaskId = null;
-            // Free the shared ONNX gate slot — Whisper's session is gone.
-            if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
+            // Keep the shared ONNX slot until the worker's `exit` event. The
+            // error event can arrive before native ONNX teardown has finished;
+            // releasing here would let another worker overlap that unwind.
             this.workerReady = false;
             // Symmetric with the exit handler below: a worker `error` is
             // followed by a non-zero `exit` in node:worker_threads, so the
@@ -757,13 +765,16 @@ export class LocalWhisperSTT extends EventEmitter {
         // streaming loop must be unblocked — otherwise streamingTaskInFlight
         // stays true and the next tick silently stalls forever.
         this.worker.on('exit', (code) => {
+            // Release the shared slot only after the native ONNX session has
+            // actually exited, then unblock the serialized teardown barrier.
+            if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
+            this.finishWorkerShutdown();
             if (code === 0) {
                 clearLoadSentinel(this.modelId);
                 return; // clean shutdown
             }
             modelPreloader.recordLoadFailure(this.modelId);
             this.clearStreamingWatchdog();
-            if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
             const hadInFlight = this.streamingTaskInFlight;
             this.streamingTaskInFlight = false;
             this.streamingTaskId = null;
@@ -789,25 +800,43 @@ export class LocalWhisperSTT extends EventEmitter {
     }
 
     private beginWorkerTermination(w: Worker): void {
+        this.ensureWorkerShutdownPromise();
         this.worker = null;
         this.workerReady = false;
         this.isDrainingFinals = false;
         this.drainingFinalsInFlight = 0;
-        // Free the shared ONNX gate slot on clean shutdown — the session's
-        // BFCArena is being torn down with the worker, so the slot can go.
-        if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
+        // Keep the ONNX gate slot until the worker's exit event confirms that
+        // its native session and BFCArena have finished unwinding.
         // Reset the sent-prompt tracker: a future spawnWorker call will get a
         // fresh worker with empty cache, so we must re-push on next ready.
         this.contextPromptSentToWorker = '';
         w.removeAllListeners('message');
-        w.removeAllListeners('error');
-        if (this.workerTerminateTimer) clearTimeout(this.workerTerminateTimer);
-        const t = setTimeout(() => {
-            this.workerTerminateTimer = null;
-            w.terminate();
-        }, 5000);
-        // unref so the timer doesn't pin the Node event loop on app quit.
-        (t as any).unref?.();
-        this.workerTerminateTimer = t;
+        try {
+            w.postMessage({ type: 'shutdown' });
+        } catch (err) {
+            // The worker may already have exited between stop() and this call.
+            console.warn('[LocalWhisperSTT] Worker was already unavailable during shutdown:', err);
+            if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
+            this.finishWorkerShutdown();
+        }
+    }
+
+    private ensureWorkerShutdownPromise(): Promise<void> {
+        if (!this.workerShutdownPromise) {
+            this.workerShutdownPromise = new Promise<void>((resolve) => {
+                this.resolveWorkerShutdown = resolve;
+            });
+        }
+        return this.workerShutdownPromise;
+    }
+
+    public waitForShutdown(): Promise<void> {
+        return this.workerShutdownPromise ?? Promise.resolve();
+    }
+
+    private finishWorkerShutdown(): void {
+        this.resolveWorkerShutdown?.();
+        this.resolveWorkerShutdown = null;
+        this.workerShutdownPromise = null;
     }
 }

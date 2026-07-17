@@ -130,7 +130,42 @@ async function loadTransformers(): Promise<{ pipeline: any; env: any }> {
   return (new Function('return import("@huggingface/transformers")')()) as any;
 }
 
+// A forced Worker.terminate() while ONNX Runtime is inside native inference can
+// abort the entire Electron process on Windows. Shutdown is cooperative: stop
+// accepting work, let already-started operations finish, then close the port so
+// the worker exits naturally.
+let shutdownRequested = false;
+let activeOperations = 0;
+let shutdownClosing = false;
+
+async function closeWhenIdle(): Promise<void> {
+  if (shutdownRequested && activeOperations === 0 && !shutdownClosing) {
+    shutdownClosing = true;
+    try {
+      // Transformers exposes Pipeline.dispose(), which awaits disposal of all
+      // underlying ONNX sessions. Without it the closed message port can leave
+      // native thread pools alive for 60-90 seconds after a real transcription.
+      await pipe?.dispose?.();
+    } catch (err) {
+      console.warn('[WhisperWorker] Pipeline disposal failed during shutdown:', err);
+    } finally {
+      pipe = null;
+      parentPort!.close();
+    }
+  }
+}
+
 parentPort.on('message', async (msg: any) => {
+  if (msg.type === 'shutdown') {
+    shutdownRequested = true;
+    void closeWhenIdle();
+    return;
+  }
+
+  if (shutdownRequested) return;
+
+  activeOperations++;
+  try {
   if (msg.type === 'init') {
     // Validate required fields BEFORE entering the try/catch so the error
     // surfaces as a structured `error` postMessage rather than an unhandled
@@ -325,5 +360,9 @@ parentPort.on('message', async (msg: any) => {
         message: `Transcription failed: ${e.message}`,
       });
     }
+  }
+  } finally {
+    activeOperations = Math.max(0, activeOperations - 1);
+    void closeWhenIdle();
   }
 });
