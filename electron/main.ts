@@ -9,6 +9,7 @@
 import './nativeArchGate';
 
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPreferences, screen, desktopCapturer } from "electron"
+import { ensureNativeModuleAbi } from './utils/nativeModuleGuard'
 import * as crypto from "crypto"
 import path from "path"
 import fs from "fs"
@@ -16,6 +17,15 @@ import os from "os"
 import dns from "dns"
 import { SystemAudioHealthClassifier } from "./audio/systemAudioHealthClassifier.mjs"
 import { autoUpdater } from "electron-updater"
+
+// Local Windows compatibility override. On this machine Chromium's renderer
+// sandbox terminates every GPU/renderer child with 0x80000003. The narrower
+// GPU-sandbox and RendererCodeIntegrity switches were tested and did not help.
+// The user explicitly approved this reduced-isolation build on 2026-07-16.
+if (process.platform === 'win32') {
+  app.commandLine.appendSwitch('no-sandbox');
+  console.warn('[WindowsCompat] Chromium sandbox disabled for local compatibility');
+}
 
 // Override global dns.lookup to resolve macOS system resolver issues with api.natively.software
 const originalLookup = dns.lookup;
@@ -4685,6 +4695,13 @@ export class AppState {
     if (this.isMeetingActive) {
       throw new Error('Audio test is unavailable while a meeting is active. End the meeting first, then test your microphone.');
     }
+    if (this._pendingTeardown) {
+      await this._pendingTeardown;
+    }
+    // A meeting may have started while the previous teardown was awaited.
+    if (this.isMeetingActive) {
+      throw new Error('Audio test is unavailable while a meeting is active. End the meeting first, then test your microphone.');
+    }
     this._audioTestStarting = true;
     try {
       await this._startAudioTestImpl(deviceId);
@@ -5152,13 +5169,18 @@ export class AppState {
         // `[Microphone] Device: ...`). Keep launch-time mic discipline by
         // staying lazy, but restore the pre-fix HAL ordering inside meetings.
         this.microphoneCapture?.start();
-        this.googleSTT_User?.start();
-        userSttStartedByInit = true;
 
         // Start System Audio after the mic stream has been constructed.
         this.systemAudioCapture?.start();
+
+        // Start the visible interviewer/system STT first. Local Whisper keeps
+        // one preloaded worker, so the first STT instance to start receives
+        // the warm worker. Giving it to the hidden user-mic channel made the
+        // interviewer channel cold-start and remain blank in short meetings.
         this.googleSTT?.start();
         systemSttStartedByInit = true;
+        this.googleSTT_User?.start();
+        userSttStartedByInit = true;
 
         // Start JIT RAG live indexing
         if (this.ragManager) {
@@ -5411,6 +5433,10 @@ export class AppState {
         // 2. Tear down STT sockets now that finals have arrived.
         this.googleSTT?.stop();
         this.googleSTT_User?.stop();
+        await Promise.all([
+          (this.googleSTT as any)?.waitForShutdown?.(),
+          (this.googleSTT_User as any)?.waitForShutdown?.(),
+        ]);
 
         // 3. Snapshot transcript + persist placeholder + queue title/summary LLM.
         //    intelligenceManager.stopMeeting itself runs LLM in background.
@@ -6726,36 +6752,28 @@ export class AppState {
 
 // Application initialization
 
+// Acquire the lock before the ABI guard can rebuild or relaunch native
+// modules. This prevents concurrent launches from racing over the same files.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+logStartupPhase('single-instance-lock', { gotLock: gotSingleInstanceLock });
+if (!gotSingleInstanceLock) {
+  console.log('[Main] Another instance is already running. Exiting this instance.');
+  process.exit(0);
+}
+
+ensureNativeModuleAbi();
+
+app.on('second-instance', () => {
+  try {
+    const appState = AppState.getInstance();
+    appState.centerAndShowWindow();
+  } catch (err) {
+    console.error('[Main] second-instance handler failed:', err);
+  }
+});
+
 async function initializeApp() {
   logStartupPhase('initializeApp:start');
-  // 1. Enforce single instance — prevent duplicate dock icons from leftover processes.
-  // In development mode with hot-reload this is still safe because electron is restarted
-  // by the build step, not re-launched by concurrently while the old process is alive.
-  const gotLock = app.requestSingleInstanceLock();
-  logStartupPhase('single-instance-lock', { gotLock });
-  if (!gotLock) {
-    console.log('[Main] Another instance is already running. Exiting this instance.');
-    // Use app.exit(0) — app.quit() before whenReady can be deferred or no-op'd
-    // (it tries to close all windows first, but none exist yet), leaving the
-    // duplicate process alive long enough to register a second tray icon on
-    // macOS Tahoe + Spotlight launches. exit() terminates immediately and
-    // cannot be intercepted by before-quit handlers.
-    app.exit(0);
-    return;
-  }
-
-  // When a duplicate launch is attempted (e.g. user invokes Spotlight again
-  // while Natively is running), focus and recenter the existing window so the
-  // launch is visibly handled instead of silently absorbed.
-  app.on('second-instance', () => {
-    try {
-      const appState = AppState.getInstance();
-      appState.centerAndShowWindow();
-    } catch (err) {
-      console.error('[Main] second-instance handler failed:', err);
-    }
-  });
-
   // PHASE-2E: install lifecycle tracking BEFORE app.whenReady() so we never
   // miss a renderer crash, GPU crash, or worker death that occurs during
   // initial window creation.

@@ -303,7 +303,7 @@ interface ElectronAPI {
 
   // Native Audio Service Events
   onNativeAudioTranscript: (
-    callback: (transcript: { speaker: string; text: string; final: boolean }) => void,
+    callback: (transcript: { speaker: string; text: string; timestamp: number; final: boolean; confidence: number }) => void,
   ) => () => void;
   onNativeAudioSuggestion: (
     callback: (suggestion: { context: string; lastQuestion: string; confidence: number }) => void,
@@ -1461,7 +1461,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Native Audio Service Events
   onNativeAudioTranscript: (
-    callback: (transcript: { speaker: string; text: string; final: boolean }) => void,
+    callback: (transcript: { speaker: string; text: string; timestamp: number; final: boolean; confidence: number }) => void,
   ) => {
     const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('native-audio-transcript', subscription);

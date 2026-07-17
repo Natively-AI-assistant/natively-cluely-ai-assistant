@@ -19,10 +19,6 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import {
-  mergeRollingTranscriptFinal,
-  mergeRollingTranscriptPartial,
-} from '../../electron/utils/rollingTranscriptState.ts';
 import { categorizeSttError } from '../lib/sttErrorMapper';
 
 import type { SkillSummary } from '../types/electron';
@@ -119,6 +115,7 @@ import React, {
   useEffect,
   useLayoutEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
 } from 'react';
@@ -154,6 +151,19 @@ import {
 import { shouldAcceptIntelligenceIpc } from '../lib/overlayIntelligenceGeneration.mjs';
 import { shouldUseStreamingCodeUi } from '../lib/overlayStreamingCodeUi.mjs';
 import { widthDerivedScrollMax, verticalScrollCap } from '../lib/overlayScrollBudget.mjs';
+import {
+  createInitialTranscriptState,
+  transcriptSegmentsReducer,
+} from '../lib/transcriptSegments.mjs';
+import {
+  resolveWorkspaceMode,
+  type WorkspaceMode,
+} from '../lib/overlayWorkspaceState.mjs';
+import {
+  captureScrollAnchor,
+  restoreScrollAnchor,
+  type ScrollAnchorSnapshot,
+} from '../lib/overlayScrollAnchor.mjs';
 import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch } from '../lib/chatStreamGuard.mjs';
 import {
   applyFirstStreamingToken,
@@ -191,9 +201,11 @@ import type { DynamicActionPayload } from '../types/electron';
 import { getCodexCliModelDisplayName } from '../utils/modelUtils';
 import { getModifierSymbol, isMac } from '../utils/platformUtils';
 import { DynamicActionBar } from './dynamic-actions/DynamicActionBar';
+import AdaptiveMeetingWorkspace from './ui/AdaptiveMeetingWorkspace';
+import CopilotPane from './ui/CopilotPane';
 import GlassEffectLayer from './ui/GlassEffectLayer';
 import ResizeToggle from './ui/ResizeToggle';
-import RollingTranscript from './ui/RollingTranscript';
+import TranscriptTimeline from './ui/TranscriptTimeline';
 import TopPill from './ui/TopPill';
 
 // PERF: hoisted plugin arrays. ReactMarkdown receives `remarkPlugins` and
@@ -851,16 +863,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
-  // Auto-scroll to bottom on every messages update when toggle is enabled.
-  // 'auto' (instant) instead of 'smooth' is intentional: streaming tokens fire
-  // this effect tens of times per second; smooth would restart the animation
-  // each time and never reach bottom, producing visible chase/jitter.
-  useEffect(() => {
-    if (!autoScroll) return;
-    if (messages.length === 0) return;
-    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-  }, [messages, autoScroll]);
-
   const hasActiveSystemAnswer = useMemo(
     () =>
       messages.some(
@@ -884,12 +886,18 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     answerPanelPinnedRef.current = answerPanelPinned;
   }, [answerPanelPinned]);
 
-  const [rollingTranscript, setRollingTranscript] = useState(''); // For interviewer rolling text bar
-  const [isInterviewerSpeaking, setIsInterviewerSpeaking] = useState(false); // Track if actively speaking
-  // Debounce partial STT ticks so answer/solution rows are not drowned in re-renders.
-  const rollingPartialDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingRollingPartialRef = useRef<string | null>(null);
-  const interviewerSpeakingRef = useRef(false);
+  const [transcriptState, dispatchTranscript] = useReducer(
+    transcriptSegmentsReducer,
+    createInitialTranscriptState(),
+  );
+  const transcriptScrollRef = useRef<HTMLDivElement>(null);
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('tabs');
+  const [workspaceResetKey, setWorkspaceResetKey] = useState(0);
+  const layoutTransitionGenerationRef = useRef(0);
+  const widthAnchorRef = useRef<{
+    transcript: ScrollAnchorSnapshot | null;
+    copilot: ScrollAnchorSnapshot | null;
+  }>({ transcript: null, copilot: null });
   const pinAnswerPanelRef = useRef<() => void>(() => {});
   const [voiceInput, setVoiceInput] = useState(''); // Accumulated user voice input
   const voiceInputRef = useRef<string>(''); // Ref for capturing in async handlers
@@ -1739,28 +1747,34 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // under scroll-height changes, so feeding it back to bound the scroll height
   // is not circular. availHeight uses the display the window sits on.
   const measureVerticalCap = useCallback(() => {
-    const scrollEl = scrollContainerRef.current;
     const contentEl = contentRef.current;
-    // No chat panel mounted → nothing to cap; let the width bound apply.
-    if (!scrollEl || !contentEl) {
+    const visibleScrolls = [transcriptScrollRef.current, scrollContainerRef.current]
+      .filter((node): node is HTMLDivElement =>
+        node !== null &&
+        node.closest('[data-visibility="visible"]') !== null &&
+        node.clientHeight > 0,
+      );
+    // No visible meeting pane mounted → nothing to cap; let the width bound apply.
+    if (!contentEl || visibleScrolls.length === 0) {
       verticalCap.set(Infinity);
       return;
     }
-    const availHeight = typeof window !== 'undefined' ? window.screen?.availHeight ?? 0 : 0;
-    const chromeHeight = contentEl.offsetHeight - scrollEl.clientHeight;
+    const scrollClientHeight = Math.min(...visibleScrolls.map((node) => node.clientHeight));
+    const availHeight = window.screen?.availHeight ?? 0;
+    const chromeHeight = contentEl.offsetHeight - scrollClientHeight;
     const nextCap = verticalScrollCap({ availHeight, chromeHeight });
     if (process.env.NODE_ENV === 'development') {
       console.log('[overlay-resize] measureVerticalCap', {
         availHeight,
         chromeHeight,
         contentOffsetHeight: contentEl.offsetHeight,
-        scrollClientHeight: scrollEl.clientHeight,
+        scrollClientHeight,
         nextCap,
         attachedContextCount: attachedContext.length,
       });
     }
     verticalCap.set(nextCap);
-  }, [attachedContext.length, verticalCap]);
+  }, [attachedContext.length, verticalCap, workspaceMode]);
 
   // Measure the panel card's top edge (viewport-relative) into panelTopMV so the
   // floating resize toggle can ride the panel's TOP-RIGHT CORNER, not the window
@@ -1907,6 +1921,23 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const startTransition = useCallback(
     (targetWidth: number) => {
       codeExpandedRef.current = targetWidth === SHELL_WIDTH_EXPANDED;
+      const generation = ++layoutTransitionGenerationRef.current;
+      const targetWide = targetWidth === SHELL_WIDTH_EXPANDED;
+      widthAnchorRef.current = {
+        transcript: captureScrollAnchor(transcriptScrollRef.current),
+        copilot: captureScrollAnchor(scrollContainerRef.current),
+      };
+      if (!targetWide) {
+        setWorkspaceMode((current) => resolveWorkspaceMode(current, {
+          targetWide: false,
+          settled: false,
+          reducedMotion: prefersReducedMotionRef.current,
+        }));
+      }
+      const restoreWorkspaceAnchors = () => {
+        restoreScrollAnchor(transcriptScrollRef.current, widthAnchorRef.current.transcript);
+        restoreScrollAnchor(scrollContainerRef.current, widthAnchorRef.current.copilot);
+      };
 
       const fromWidth = Math.round(shellWidth.get());
 
@@ -1925,8 +1956,21 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (Math.abs(targetWidth - fromWidth) <= 1) {
         if (animationControlsRef.current) animationControlsRef.current.stop();
         animationControlsRef.current = null;
+        heightReportSuppressedUntilRef.current = 0;
         // Snap the live width to the target so the box rests at the exact width.
         shellWidth.set(targetWidth);
+        setWorkspaceMode((current) => resolveWorkspaceMode(current, {
+          targetWide,
+          settled: true,
+          reducedMotion: prefersReducedMotionRef.current,
+        }));
+        requestAnimationFrame(() => {
+          if (generation !== layoutTransitionGenerationRef.current) return;
+          restoreWorkspaceAnchors();
+          pinScrollBottomIfNeeded();
+          const settledHeight = contentRef.current?.offsetHeight ?? 0;
+          if (settledHeight > 0) resizeOverlayWindowCentered(settledHeight);
+        });
         return;
       }
 
@@ -1940,9 +1984,18 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // Snap the width to the target with no animated travel; content reflows
         // once to the final width.
         shellWidth.set(targetWidth);
-        pinScrollBottomIfNeeded();
-        const h = contentRef.current?.offsetHeight ?? 0;
-        if (h > 0) resizeOverlayWindowCentered(h);
+        setWorkspaceMode((current) => resolveWorkspaceMode(current, {
+          targetWide,
+          settled: true,
+          reducedMotion: true,
+        }));
+        requestAnimationFrame(() => {
+          if (generation !== layoutTransitionGenerationRef.current) return;
+          restoreWorkspaceAnchors();
+          pinScrollBottomIfNeeded();
+          const settledHeight = contentRef.current?.offsetHeight ?? 0;
+          if (settledHeight > 0) resizeOverlayWindowCentered(settledHeight);
+        });
         return;
       }
 
@@ -2000,6 +2053,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       animationControlsRef.current = animate(shellWidth, targetWidth, {
         ...OVERLAY_RESIZE_SPRING,
         onUpdate: () => {
+          if (generation !== layoutTransitionGenerationRef.current) return;
+          restoreWorkspaceAnchors();
           pinScrollBottomIfNeeded();
           const now = Date.now();
           if (now - lastHeightReportAt < HEIGHT_REPORT_INTERVAL_MS) return;
@@ -2010,6 +2065,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           resizeOverlayWindowCentered(h);
         },
         onComplete: () => {
+          if (generation !== layoutTransitionGenerationRef.current) return;
           animationControlsRef.current = null;
           // Hand reporting back to normal FIRST so the settle below actually
           // fires (the ResizeObserver early-returns while suppression is live).
@@ -2018,26 +2074,40 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           // content height after the width (and therefore the width-derived
           // scroll max) has fully settled — guarantees the final frame is exact
           // even if the last rate-limited sample landed a few px short.
-          const settledHeight = contentRef.current?.offsetHeight ?? 0;
-          resizeOverlayWindowCentered(settledHeight);
+          setWorkspaceMode((current) => resolveWorkspaceMode(current, {
+            targetWide,
+            settled: true,
+            reducedMotion: false,
+          }));
+          requestAnimationFrame(() => {
+            if (generation !== layoutTransitionGenerationRef.current) return;
+            restoreWorkspaceAnchors();
+            pinScrollBottomIfNeeded();
+            const settledHeight = contentRef.current?.offsetHeight ?? 0;
+            if (settledHeight > 0) resizeOverlayWindowCentered(settledHeight);
+          });
         },
       });
     },
     [shellWidth, SHELL_WIDTH_EXPANDED, resizeOverlayWindowCentered, pinScrollBottomIfNeeded],
   );
 
-  // Manual resize toggle. Reads the LIVE shell width (not codeExpandedRef) so it
-  // toggles correctly even mid-tween, pins the chosen width as a manual override
-  // (suspending auto-resize), and animates through the SAME startTransition path
-  // the auto-machinery uses — so manual and automatic expansion are visually
-  // identical (both CSS-only now).
+  // Manual resize toggle. The icon state follows the LIVE shell-width midpoint,
+  // so using that same visible state here makes a second click reverse an
+  // in-flight tween instead of re-targeting its current endpoint. The chosen
+  // width is pinned as a manual override (suspending auto-resize) and animated
+  // through the SAME startTransition path the auto-machinery uses.
   const handleManualResizeToggle = useCallback(() => {
-    const current = Math.round(shellWidth.get());
+    if (stableVisibilityTimerRef.current) {
+      clearTimeout(stableVisibilityTimerRef.current);
+      stableVisibilityTimerRef.current = null;
+    }
+    pendingVisibilityRef.current = null;
     const target =
-      current >= SHELL_WIDTH_EXPANDED ? SHELL_WIDTH_COLLAPSED : SHELL_WIDTH_EXPANDED;
+      isShellWide ? SHELL_WIDTH_COLLAPSED : SHELL_WIDTH_EXPANDED;
     manualWidthOverrideRef.current = target;
     startTransition(target);
-  }, [shellWidth, startTransition, SHELL_WIDTH_COLLAPSED, SHELL_WIDTH_EXPANDED]);
+  }, [isShellWide, startTransition, SHELL_WIDTH_COLLAPSED, SHELL_WIDTH_EXPANDED]);
 
   // Derive the resize-button icon state from the live shell width. Subscribing
   // to the motion value (rather than tracking each startTransition caller)
@@ -2134,6 +2204,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       stableVisibilityTimerRef.current = null;
       const target = pendingVisibilityRef.current;
       pendingVisibilityRef.current = null;
+      if (manualWidthOverrideRef.current !== null) return;
       if (target !== null && target !== codeExpandedRef.current) {
         startTransition(target ? SHELL_WIDTH_EXPANDED : SHELL_WIDTH_COLLAPSED);
       }
@@ -2146,21 +2217,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     return () => cancelAnimationFrame(raf);
   }, [messages, checkCodeVisibility]);
 
-  // (Re)attach the scroll listener whenever the scroll container mounts.
-  // The OUTER shell (the always-mounted `data-shell-root` motion.div) now
-  // stays in the DOM across Cmd+B so scrollTop survives, but the scroll
-  // container ITSELF is still gated by `showAnswerPanel` (the
-  // `{showAnswerPanel && <motion.div ref={scrollContainerRef}>}` block): it
-  // unmounts when the chat is empty (no messages, not recording/processing,
-  // panel not pinned) and remounts when content appears. So we re-run this
-  // effect when that gate flips —
-  // without it the listener would bind once to a null/stale node and never
-  // re-attach, silently killing scroll-driven code-width auto-resize. We
-  // inline the gate boolean here (rather than referencing the `showAnswerPanel`
-  // const, which is declared far below this effect) to avoid a temporal-dead-
-  // zone reference. `messages` itself is not a dep: the gate already flips on
-  // the first message and stays true while content exists, so the container
-  // element is stable across message updates within a session.
+  // Attach to CopilotPane's always-mounted scroll node. AdaptiveMeetingWorkspace
+  // changes only visibility/layout, so the node and its scrollTop survive both
+  // compact tab switches and Cmd+B hide/show cycles.
   //
   // The visibility check does layout reads (querySelectorAll +
   // getBoundingClientRect on every code element). Running it synchronously
@@ -2168,8 +2227,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // shows up as text jitter during fast scrolls. rAF-coalescing it ensures
   // at most one check per frame and lets the read happen at the natural
   // post-scroll layout point in the frame lifecycle.
-  const scrollContainerMounted =
-    messages.length > 0 || isManualRecording || isProcessing || answerPanelPinned;
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -2186,11 +2243,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       container.removeEventListener('scroll', onScroll);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [scrollContainerMounted, checkCodeVisibility]);
+  }, [checkCodeVisibility]);
 
   // Cancel all in-flight async work on unmount.
   useEffect(() => {
     return () => {
+      layoutTransitionGenerationRef.current += 1;
       animationControlsRef.current?.stop();
       animationControlsRef.current = null;
       heightReportSuppressedUntilRef.current = 0;
@@ -2222,11 +2280,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         cancelAnimationFrame(streamingCodeRafRef.current);
         streamingCodeRafRef.current = null;
       }
-      if (rollingPartialDebounceRef.current !== null) {
-        clearTimeout(rollingPartialDebounceRef.current);
-        rollingPartialDebounceRef.current = null;
-      }
-      pendingRollingPartialRef.current = null;
     };
   }, []);
   // ────────────────────────────────────────────────────────────────────────
@@ -2358,9 +2411,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       chatStreamIdRef.current = null;
       requestStartTimeRef.current = null;
       setMessages([]);
+      setCopilotLogicalRevision(0);
+      previousCopilotMessageKeyRef.current = null;
       eagerCodeExpansionHoldRef.current = false;
       answerPanelPinnedRef.current = false;
       setAnswerPanelPinned(false);
+      dispatchTranscript({ type: 'reset' });
+      setWorkspaceResetKey((value) => value + 1);
+      layoutTransitionGenerationRef.current += 1;
+      setWorkspaceMode('tabs');
+      transcriptScrollRef.current?.scrollTo({ top: 0 });
 
       // ─── COLLAPSE THE CODE-WIDTH EXPANSION SYNCHRONOUSLY ───────────────────
       // The overlay window/renderer is reused across meetings (never
@@ -2404,14 +2464,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       setManualTranscript('');
       setVoiceInput('');
       setIsProcessing(false);
-      if (rollingPartialDebounceRef.current !== null) {
-        clearTimeout(rollingPartialDebounceRef.current);
-        rollingPartialDebounceRef.current = null;
-      }
-      pendingRollingPartialRef.current = null;
-      setRollingTranscript('');
-      setIsInterviewerSpeaking(false);
-      interviewerSpeakingRef.current = false;
       // Reset STT status to 'awaiting-audio' on session reset. The previous
       // session's 'connected' state must not carry over into a new meeting
       // before we've verified live audio is flowing on the new pipeline.
@@ -2819,6 +2871,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const resetChatState = useCallback(() => {
     cancelActiveChatStream();
     setMessages([]);
+    setCopilotLogicalRevision(0);
+    previousCopilotMessageKeyRef.current = null;
     answerPanelPinnedRef.current = false;
     setAnswerPanelPinned(false);
     lastManualSubmitRef.current = null;
@@ -2941,33 +2995,23 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     () => collapseConsecutiveDuplicateSystemMessages(messages),
     [messages],
   );
+  const latestCopilotMessageKey = displayMessages.at(-1)?.id ?? null;
+  const [copilotLogicalRevision, setCopilotLogicalRevision] = useState(0);
+  const previousCopilotMessageKeyRef = useRef<string | null>(latestCopilotMessageKey);
+  useEffect(() => {
+    if (
+      latestCopilotMessageKey &&
+      latestCopilotMessageKey !== previousCopilotMessageKeyRef.current
+    ) {
+      setCopilotLogicalRevision((value) => value + 1);
+    }
+    previousCopilotMessageKeyRef.current = latestCopilotMessageKey;
+  }, [latestCopilotMessageKey]);
+  const copilotContentRevision = useMemo(
+    () => displayMessages.reduce((total, message) => total + message.text.length, 0),
+    [displayMessages],
+  );
   // ──────────────────────────────────────────────────────────────────────────
-
-  const applyRollingPartialPreview = useCallback((partialText: string) => {
-    pendingRollingPartialRef.current = partialText;
-    if (rollingPartialDebounceRef.current !== null) {
-      clearTimeout(rollingPartialDebounceRef.current);
-    }
-    rollingPartialDebounceRef.current = setTimeout(() => {
-      rollingPartialDebounceRef.current = null;
-      const text = pendingRollingPartialRef.current;
-      pendingRollingPartialRef.current = null;
-      if (text == null) return;
-      setRollingTranscript((prev) => mergeRollingTranscriptPartial(prev, text));
-    }, 80);
-  }, []);
-
-  const flushRollingPartialPreview = useCallback(() => {
-    if (rollingPartialDebounceRef.current !== null) {
-      clearTimeout(rollingPartialDebounceRef.current);
-      rollingPartialDebounceRef.current = null;
-    }
-    const text = pendingRollingPartialRef.current;
-    pendingRollingPartialRef.current = null;
-    if (text != null) {
-      setRollingTranscript((prev) => mergeRollingTranscriptPartial(prev, text));
-    }
-  }, []);
 
   // Connect to Native Audio Backend — deps must NOT include isExpanded (see clarify effect).
   useEffect(() => {
@@ -2995,55 +3039,43 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // Real-time Transcripts
     cleanups.push(
       window.electronAPI.onNativeAudioTranscript((transcript) => {
-        // When Answer button is active, capture USER transcripts for voice input
-        // Use ref to avoid stale closure issue
-        if (isRecordingRef.current && transcript.speaker === 'user') {
-          if (transcript.final) {
-            // Accumulate final transcripts
-            setVoiceInput((prev) => {
-              const updated = prev + (prev ? ' ' : '') + transcript.text;
-              voiceInputRef.current = updated;
-              return updated;
-            });
-            setManualTranscript(''); // Clear partial preview
-            manualTranscriptRef.current = '';
-          } else {
-            // Show live partial transcript
-            setManualTranscript(transcript.text);
-            manualTranscriptRef.current = transcript.text;
+        const speaker = transcript.speaker === 'interviewer' || transcript.speaker === 'user'
+          ? transcript.speaker
+          : null;
+        const text = typeof transcript.text === 'string' ? transcript.text.trim() : '';
+        if (!speaker || !text) return;
+        const timestamp = Number.isFinite(transcript.timestamp)
+          ? transcript.timestamp
+          : Date.now();
+
+        dispatchTranscript({
+          type: 'transcript-event',
+          event: {
+            speaker,
+            text,
+            final: transcript.final,
+            timestamp,
+            confidence: transcript.confidence,
+          },
+        });
+
+        if (speaker === 'user') {
+          if (isRecordingRef.current) {
+            if (transcript.final) {
+              setVoiceInput((prev) => {
+                const updated = prev + (prev ? ' ' : '') + text;
+                voiceInputRef.current = updated;
+                return updated;
+              });
+              setManualTranscript('');
+              manualTranscriptRef.current = '';
+            } else {
+              setManualTranscript(text);
+              manualTranscriptRef.current = text;
+            }
           }
-          return; // Don't add to messages while recording
-        }
-
-        // Ignore user mic transcripts when not recording
-        // Only interviewer (system audio) transcripts should appear in chat
-        if (transcript.speaker === 'user') {
-          return; // Skip user mic input - only relevant when Answer button is active
-        }
-
-        // Only show interviewer (system audio) transcripts in rolling bar
-        if (transcript.speaker !== 'interviewer') {
-          return; // Safety check for any other speaker types
-        }
-
-        // Route to rolling transcript bar — partials debounced; finals commit immediately.
-        if (!transcript.final) {
-          if (!interviewerSpeakingRef.current) {
-            interviewerSpeakingRef.current = true;
-            setIsInterviewerSpeaking(true);
-          }
-          applyRollingPartialPreview(transcript.text);
           return;
         }
-
-        flushRollingPartialPreview();
-        interviewerSpeakingRef.current = false;
-        setIsInterviewerSpeaking(false);
-        setRollingTranscript((prev) => mergeRollingTranscriptFinal(prev, transcript.text));
-
-        setTimeout(() => {
-          setIsInterviewerSpeaking(false);
-        }, 3000);
       }),
     );
 
@@ -3348,13 +3380,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       }),
     );
     return () => {
-      if (rollingPartialDebounceRef.current !== null) {
-        clearTimeout(rollingPartialDebounceRef.current);
-        rollingPartialDebounceRef.current = null;
-      }
       cleanups.forEach((fn) => fn());
     };
-  }, [queueToken, flushToken, applyRollingPartialPreview, flushRollingPartialPreview, pinAnswerPanel, finalizeStreamingByIntent, prepareIntelligenceStreamPlaceholder]);
+  }, [queueToken, flushToken, pinAnswerPanel, finalizeStreamingByIntent, prepareIntelligenceStreamPlaceholder]);
 
   // Stable mount-only effect for screenshot listeners.
   // These MUST NOT be inside the [isExpanded] effect — when a screenshot is
@@ -5547,6 +5575,11 @@ Provide only the answer, nothing else.`;
   );
   const showAnswerPanel =
     messages.length > 0 || isManualRecording || isProcessing || answerPanelPinned;
+  const hasWorkspaceContent =
+    transcriptState.finals.length > 0 ||
+    transcriptState.partials.interviewer !== null ||
+    transcriptState.partials.user !== null ||
+    showAnswerPanel;
   // Only surface the STT pill for genuine problems (config error, failed, or a
   // dropped-then-reconnecting channel). The neutral 'awaiting-audio' state
   // ("Listening for audio…") is intentionally suppressed — it added a pill on
@@ -5652,7 +5685,7 @@ Provide only the answer, nothing else.`;
         it keeps the window interactive; stealth passthrough still wins when
         undetectable mode is on (syncOverlayInteractionPolicy in WindowHelper
         ORs the master passthrough flag). Only rendered once there's content. */}
-    {messages.length > 0 && (
+    {hasWorkspaceContent && (
       <ResizeToggle
         ref={resizeToggleRef}
         expanded={isShellWide}
@@ -6039,36 +6072,9 @@ Provide only the answer, nothing else.`;
                 }}
               />
 
-              {/* Rolling Transcript Bar — live transcript + on-demand diagnostics
-                  for hard failures. Reconnecting/awaiting-audio status is owned by
-                  the top status pill, so the bar no longer mounts for those (which
-                  also avoids an empty bar / duplicated status text). */}
-              {showTranscript && rollingTranscript ? (
-                <RollingTranscript
-                  text={rollingTranscript}
-                  isActive={isInterviewerSpeaking}
-                  surfaceStyle={appearance.transcriptStyle}
-                  interviewerChannel={{
-                    status: interviewerSttIndicatorStatus,
-                    error: interviewerSttIndicatorError,
-                    provider: sttInterviewerProvider,
-                  }}
-                  microphoneChannel={{
-                    status: sttUserStatus,
-                    error: sttUserError,
-                    provider: sttUserProvider,
-                  }}
-                />
-              ) : null}
-
-              {/* Chat History - Only show if there are messages OR active states */}
-              {showAnswerPanel && (
-                <motion.div
-                  ref={scrollContainerRef}
-                  className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-3 no-drag isolate"
-                  layout={false}
-                  style={{ scrollbarWidth: 'none', maxHeight: scrollMaxH }}
-                >
+              {(() => {
+                const copilotHistory = (
+                  <>
                   {/* Every row spans the full inner width of the scroll
                                         container, which itself rides the shell's animated
                                         width. Bubble max-widths are percentages so the text
@@ -6086,14 +6092,15 @@ Provide only the answer, nothing else.`;
                                         re-render every prior message — bailout fires on
                                         identity equality (msg, theme, callbacks). */}
                   {displayMessages.map((msg: Message) => (
-                    <MessageRow
-                      key={msg.id}
-                      msg={msg}
-                      isLightTheme={isLightTheme}
-                      appearance={appearance}
-                      onCopy={handleCopy}
-                      renderMessageText={renderMessageText}
-                    />
+                    <div key={msg.id} data-scroll-item-id={msg.id} className="min-w-0">
+                      <MessageRow
+                        msg={msg}
+                        isLightTheme={isLightTheme}
+                        appearance={appearance}
+                        onCopy={handleCopy}
+                        renderMessageText={renderMessageText}
+                      />
+                    </div>
                   ))}
 
                   {/* Active Recording State with Live Transcription */}
@@ -6166,12 +6173,15 @@ Provide only the answer, nothing else.`;
                     </div>
                   )}
                   <div ref={messagesEndRef} />
-                </motion.div>
-              )}
+                  </>
+                );
 
+                const copilotFooter = (
+                  <div className="min-w-0" data-testid="copilot-footer">
               {/* Quick Actions - Minimal & Clean */}
               <div
-                className={`flex flex-nowrap justify-center items-center gap-1.5 px-4 pb-3 overflow-x-hidden ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3'}`}
+                data-testid="overlay-actions"
+                className="flex flex-wrap justify-center items-center gap-1.5 px-3 pb-2 pt-2"
               >
                 <button
                   onClick={handleWhatToSay}
@@ -6232,7 +6242,7 @@ Provide only the answer, nothing else.`;
               </div>
 
               {/* Input Area */}
-              <div className="p-3 pt-0">
+              <div className="min-w-0 p-3 pt-0">
                 {/* Latent Context Preview (Attached Screenshot) */}
                 {attachedContext.length > 0 && (
                   <div
@@ -6414,9 +6424,9 @@ Provide only the answer, nothing else.`;
 
                   {/* Custom Rich Placeholder */}
                   {!inputValue && (
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none text-[13px] overlay-text-muted">
-                      <span>{t('Ask anything on screen or conversation, or')}</span>
-                      <div className="flex items-center gap-1 opacity-80">
+                    <div className="absolute left-3 right-10 top-1/2 -translate-y-1/2 flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap pointer-events-none text-[13px] overlay-text-muted">
+                      <span className="truncate">{t('Ask anything on screen or conversation, or')}</span>
+                      <div className="flex shrink-0 items-center gap-1 opacity-80">
                         {(
                           shortcuts.selectiveScreenshot || [getModifierSymbol('cmd'), 'Shift', 'H']
                         ).map((key, i) => (
@@ -6431,7 +6441,9 @@ Provide only the answer, nothing else.`;
                           </React.Fragment>
                         ))}
                       </div>
-                      <span>{t('for selective screenshot')}</span>
+                      <span className={workspaceMode === 'tabs' ? 'hidden' : 'inline'}>
+                        {t('for selective screenshot')}
+                      </span>
                     </div>
                   )}
 
@@ -6570,6 +6582,59 @@ Provide only the answer, nothing else.`;
                   </button>
                 </div>
               </div>
+                  </div>
+                );
+
+                return (
+                  <AdaptiveMeetingWorkspace
+                    mode={workspaceMode}
+                    transcriptEnabled={showTranscript}
+                    transcriptCommitRevision={transcriptState.commitRevision}
+                    transcriptPartialActive={Boolean(
+                      transcriptState.partials.interviewer || transcriptState.partials.user
+                    )}
+                    copilotMessageKey={latestCopilotMessageKey}
+                    resetKey={workspaceResetKey}
+                    transcriptPane={(visible) => (
+                      <TranscriptTimeline
+                        state={transcriptState}
+                        channels={{
+                          interviewer: {
+                            status: interviewerSttIndicatorStatus,
+                            error: interviewerSttIndicatorError,
+                            provider: sttInterviewerProvider,
+                          },
+                          user: {
+                            status: sttUserStatus,
+                            error: sttUserError,
+                            provider: sttUserProvider,
+                          },
+                        }}
+                        scrollRef={transcriptScrollRef}
+                        maxHeight={scrollMaxH}
+                        visible={visible}
+                        resetKey={workspaceResetKey}
+                        rowSurfaceStyle={appearance.subtleStyle}
+                      />
+                    )}
+                    copilotPane={(visible) => (
+                      <CopilotPane
+                        scrollRef={scrollContainerRef}
+                        maxHeight={scrollMaxH}
+                        visible={visible}
+                        autoScroll={autoScroll}
+                        logicalRevision={copilotLogicalRevision}
+                        contentRevision={copilotContentRevision}
+                        resetKey={workspaceResetKey}
+                        empty={!showAnswerPanel}
+                      >
+                        {copilotHistory}
+                      </CopilotPane>
+                    )}
+                    footer={copilotFooter}
+                  />
+                );
+              })()}
             </motion.div>
           </motion.div>
       {/* end always-mounted shell */}
