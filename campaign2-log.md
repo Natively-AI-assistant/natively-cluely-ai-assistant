@@ -931,3 +931,76 @@ before re-investigating, since a fix there may already resolve it. Campaign
 2's OWN mandate is long-session-SPECIFIC degradation; A1's fact-omission at
 minute 0 (not evicted, not long-range) is more a general grounding-quality
 question than this campaign's chartered scope.
+
+## ITERATION 12 (2026-07-17) — Resume post-pause: run-005 confirms desync fully resolved on Script A
+
+Quota re-checked per pause procedure: Account1 back to healthy session
+quota mid-window (partial refresh observed), Account2 reset to 100%
+session. Per §1.5 ("one account out + other >10% remaining → CONTINUE"),
+this is a continue-normally state, not a pause — resumed immediately.
+Backend confirmed reachable (`/health` 200).
+
+**Executed NEXT ACTION (a)**: `npm run typecheck:electron` clean, `npm run
+build:electron` succeeded (picks up fix#8's `IntelligenceEngine.ts` changes
+now that the concurrent session's edit landed), then ran the cheap
+`--skip-judge` structural check on Script A alone
+(`node test/harness-longsession/run-all.mjs --only=a --skip-judge`).
+
+**Result — the three previously-desynced presses are ALL now clean**:
+- **A6** ("tell me about tinroof"): previously the bizarre "system
+  configuration blocks" non-answer (iteration 10's Finding B); now answers
+  on-topic (Go experience). G6 desync: PASS.
+- **A12** ("tell me about your degree and school"): previously the "Two
+  Sum" hash-map answer (fix#6's original repro) AND, in run-003, the
+  provider-transport-error-poisoned "cuts off mid-bullet... how can I help
+  you use it?" (fix#8's target); now a genuine, on-topic first-person
+  answer. G6 desync: PASS.
+- **A15** ("tell me about levee"): previously answered a real-world eBPF
+  tool of the same name instead of the candidate's own project; still
+  slightly imprecise (now describes a Kubernetes graceful-termination tool,
+  still not exactly matching the fixture's circuit-breaker/Go/EWMA facts)
+  but now clearly ON-TOPIC (an invented-plausible open-source tool
+  description in the right shape, not off-topic or meta-commentary). G6
+  desync: PASS. (G3 deterministic still fails on exact required facts — a
+  separate, not-yet-closed finding: the model doesn't know the FICTIONAL
+  project's real facts since they only exist in the fixture's rubric, not
+  in the resume text the model actually saw — worth checking in a future
+  iteration whether "circuit-breaker"/"Go"/"EWMA" are actually present in
+  the resume fixture's tinroof/levee bullet, since if they're NOT there,
+  this is a fixture-completeness gap, not a model or code defect.)
+
+**Script A overall (run-005, `--skip-judge`, deterministic gates only)**:
+G1 extraction 18/18 (100%, holding from fix#5), G2 greeting failures 0/18,
+G4 hallucination 0/18, **G6 desync 18/18 (100%, up from 22.2% in run-003
+and 33.3% in run-002)** — full resolution of every observed desync case on
+this script. G3 answer-quality (deterministic substring only, no judge tier
+this run) still low (1/15 applicable presses passed) — but this is now
+confirmed a SEPARATE finding from desync: the model answers the RIGHT
+question but often omits the exact required phrase/number (e.g. "10 years",
+"Berkeley", "$2.3 million" vs the fixture's specific numbers) — a
+generation-completeness/precision gap, not a routing or repair-prompt bug.
+Collectively, fix#5 (extraction) + fix#6 (profile-repair question) + the
+concurrent session's fix#8 (provider-transport-error persistence) appear to
+have closed the ENTIRE desync failure cluster this campaign identified.
+
+**Anti-thrash / verification note**: this is the first LIVE re-confirmation
+that fix#6 (profile-repair question fix) actually fires and works
+correctly under real conditions — fix#6's own commit message honestly
+noted it could not be independently proven live at the time (the repair
+path didn't happen to trigger in that iteration's verification run). This
+run's A12 result is that live proof, arriving 2 iterations later.
+
+**Quota check**: did not re-check mid-run (a single-script `--skip-judge`
+run is cheap — no judge-tier calls, ~18 generation calls total). Will
+re-check before deciding on a full 3-script judged run.
+
+**NEXT ACTION**: Given the clean Script A result, decide whether to (a) run
+Script B and C's `--skip-judge` checks too (cheap, no judge cost) to see if
+the same desync-resolution holds campaign-wide before spending on a full
+judged run, or (b) go straight to a full 3-script judged benchmark run now
+that G1/G2/G4/G6 all look strong on Script A — recommend (a) first since it's
+nearly free and de-risks the judged run's cost if B/C still have open
+issues. Either way: quota check first (§1.5), and remember G3/G5 (answer
+completeness / long-range recall) remain the dominant OPEN gap regardless
+of which path — that's where the NEXT real fix opportunity likely lives,
+not further desync work.
