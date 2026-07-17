@@ -52,9 +52,31 @@ function fuzzyQuestionMatch(extracted, canonical) {
   let shared = 0;
   for (const w of wa) if (wb.has(w)) shared++;
   const overlap = shared / Math.max(wa.size, wb.size);
+  // Long-session harness campaign2 (2026-07-17): a max-size-denominator Jaccard
+  // unfairly penalizes a legitimately SHORT extracted fragment referencing a much
+  // LONGER canonical question (e.g. a bare follow-up "and what about
+  // english-to-french?" against the canonical "What BLEU score did the model
+  // achieve on WMT 2014 English-to-French?" — every one of the fragment's content
+  // words appears in the canonical, but the max-based ratio scores only 0.27 since
+  // the denominator is dominated by the much longer canonical's word count).
+  // A pure containment ratio (shared / smaller-set-size) fixes this but
+  // introduces a NEW false positive: a tiny 2-word fragment that happens to
+  // share both words with an unrelated long canonical scores 100% containment
+  // (verified: "team engineers" vs "What led your team of senior engineers
+  // through the migration?" — 2/2 containment, but plausibly a different
+  // question). Require BOTH a high containment ratio (>=0.6) AND a minimum
+  // ABSOLUTE shared-word count (>=3) before trusting containment over the
+  // stricter max-based ratio — this passes the genuine short-follow-up case
+  // (3 shared words, 100% containment) while still rejecting small
+  // coincidental overlaps regardless of their ratio.
+  const smallerSize = Math.min(wa.size, wb.size);
+  const containment = smallerSize > 0 ? shared / smallerSize : 0;
+  const MIN_SHARED_FOR_CONTAINMENT = 3;
+  const containmentQualifies = containment >= 0.6 && shared >= MIN_SHARED_FOR_CONTAINMENT;
+  const blended = containmentQualifies ? 1 : overlap;
   // High bar: >=0.6 token overlap counts as "the same question, reworded".
   // Below that is treated as extracting a DIFFERENT question (score 0).
-  return { match: overlap >= 0.6, overlap };
+  return { match: blended >= 0.6, overlap: blended };
 }
 
 /**
