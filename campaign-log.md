@@ -472,4 +472,13 @@ The single-case known-good benchmark could not launch Electron within 60 seconds
 - No campaign Electron process launched, no external process was touched, and no product code changed. THESIS-079's list-cap hypothesis remains open without new live evidence.
 - Retaining the already-active process-exit watch as primary signal; use another 30-minute fallback heartbeat. No additional polling/watch process will be created.
 
+**NEXT ACTION (superseded by iteration-21 monitor status)**: On the active process-exit watch completion event (or the next 30-minute fallback), verify PIDs `37130`, `37146`, `38618`, and `38640` are gone. If all are gone, run exactly one prepared forensic command: `CTXOS_BENCHMARK_SPLITS=development CTXOS_BENCHMARK_CASE_IDS=THESIS-079 CTXOS_BENCHMARK_CAPTURE_RAW_RETRIEVAL=1 CTXOS_BENCHMARK_RUN_ID=thesis-079-forensic NODE_OPTIONS=--enable-source-maps node tests/context-os-real-backend/run-200q-benchmark.mjs`. If any remain, do not launch Electron, retain the watch, write one checkpoint, and schedule another 30-minute fallback. Never kill or signal concurrent-session processes.
+
+## ITERATION 21 (2026-07-17) — Continue safely while external workers remain blocked
+
+- The active process-exit watch `b6ehjeeo1` remains running. Direct recheck confirms all four unrelated Electron workers remain alive after ~19 hours: `37130/37146` sleeping; `38618/38640` sleeping/nice. They remain the same non-campaign WTA/service test batch.
+- No competing Electron launch occurred; no concurrent process was killed, signaled, or modified. The THESIS-079 list-cap hypothesis stays unmodified because the required raw-vs-selected evidence capture cannot run safely yet.
+- Codex quota remains healthy at **33%** session (67/100 used). This delay is solely shared local Electron resource contention.
+- Continue retaining the already-active process-exit watch as primary wake signal with one 30-minute fallback. Do not create more watchers or repeat pre-product Electron launches.
+
 **NEXT ACTION**: On the active process-exit watch completion event (or the next 30-minute fallback), verify PIDs `37130`, `37146`, `38618`, and `38640` are gone. If all are gone, run exactly one prepared forensic command: `CTXOS_BENCHMARK_SPLITS=development CTXOS_BENCHMARK_CASE_IDS=THESIS-079 CTXOS_BENCHMARK_CAPTURE_RAW_RETRIEVAL=1 CTXOS_BENCHMARK_RUN_ID=thesis-079-forensic NODE_OPTIONS=--enable-source-maps node tests/context-os-real-backend/run-200q-benchmark.mjs`. If any remain, do not launch Electron, retain the watch, write one checkpoint, and schedule another 30-minute fallback. Never kill or signal concurrent-session processes.
