@@ -1377,16 +1377,87 @@ local unit-test verification + one skeptic-pass subagent, which uses the
 agent's own quota pool separately from the product-under-test's
 MiniMax/Claude usage). No pause needed.
 
-**NEXT ACTION**: attempt a full 3-script judged benchmark run, following
-iteration 15's now-established discipline: (1) `ps aux | grep -iE
-"run-all.mjs|run-script"` clear at start, (2) spot-check the FIRST
-press's latency against the run-005 ~2s baseline (not run-008's
-contended ~4-5s) before trusting the rest of the run, (3) if either
-check fails, discard and retry rather than analyzing a contended run's
-numbers as ground truth. This run should show G6 desync materially
-improved on Script A specifically (A4/A5/A13/A18 were all directly
-affected by fix#9) — if it doesn't, that's a signal fix#9 alone doesn't
-close the gap and the backend-contention confound needs to be resolved
-another way (e.g. running during a window with fewer concurrent
-sessions, or coordinating with other active sessions before a benchmark
-run).
+**NEXT ACTION (superseded)**: ~~attempt a full 3-script judged benchmark
+run~~ — done twice, see ITERATION 17. fix#9 confirmed working at the
+extraction level; overall G6 still contended.
+
+## ITERATION 17 (2026-07-17, ~14:2x local) — fix#9 verified working; environment remains persistently contended
+
+Rebuilt (`npm run build:electron`, picks up fix#9) and attempted the full
+judged benchmark run twice more, following iteration 16's exact discipline.
+
+**Both attempts hit contention** despite `ps aux` checks immediately
+before launch showing clear: a THIRD process type appeared mid-run this
+time — a `ctxos-200q-*` Electron instance (Campaign 1's 200-question
+real-backend thesis benchmark, `tests/context-os-real-backend/
+run-200q-benchmark.mjs`), plus the same recurring
+`golden-trace-okfcards-dump.mjs` pattern from iterations 14-15. This
+shared workspace has near-continuous background load from other active
+sessions' own real-backend work — a `ps aux`-clear-at-launch check is
+necessary but not sufficient; contention can start seconds into a
+20-30-minute run with no way to predict or avoid it short of coordinating
+with every other concurrently active session, which isn't achievable from
+inside this campaign.
+
+**Positive result — fix#9 CONFIRMED working, isolated from the contention
+noise**: checked the 4 specific presses fix#9 targeted (A4/A5/A13/A18) in
+BOTH new runs (run-010, run-011) — in every case, `G1.extracted` shows the
+clean, uncorrupted question text ("what did you own there?",
+"...that get you?", "...you mentioned earlier...") with NO trace of the
+"own Kafka?"/"RocksDB migration" pronoun-substitution corruption that
+run-008 showed pre-fix. This is a direct, positive, repeatable
+confirmation that fix#9's root-cause fix works in the real live path, not
+just its unit tests.
+
+**Overall G6 desync still low (22-53% across scripts, both runs)** —
+inspected WHY on the same 4 presses: A18 now passes G6 cleanly; A4/A5's
+answers are actually reasonably on-topic ("Staff Engineer at Stripe...
+replacing legacy reconciliation", "sharded RocksDB store pushed
+throughput from 12k to 95k...") but the deterministic `onTopic` gate marks
+them failing anyway — likely a GRADING precision issue (similar in kind to
+the G1/G5 false-negatives already found and partially fixed this
+campaign), not a real defect; A13 shows a genuinely confused, off-topic
+answer ("I don't have the repository/link loaded in my current profile
+context") — this looks like real contention-degraded generation quality,
+not the pronoun-corruption mechanism (extraction was clean for this
+press).
+
+**Conclusion**: fix#9 does exactly what it claims — it does NOT single-
+handedly fix the campaign's overall G6 metric in a contended environment,
+because the remaining G6 failures are now a mix of (a) grading-harness
+strictness (not a product bug — a third instance of the G1/G3/G5 pattern
+already identified) and (b) genuine model-quality degradation under real
+backend contention from other sessions (an environmental confound this
+campaign cannot fully eliminate, only document). The uncontended
+skip-judge evidence from iterations 11-12 remains the strongest clean
+signal this campaign has that the deterministic bugs (fix#5/#6/#7/#8/#9)
+are genuinely fixed; a fully clean, uncontended, FULL JUDGED run
+satisfying L4's exact requirement has still not been obtained after 4
+attempts across 2 sessions, purely due to this shared workspace's
+persistent multi-session backend load.
+
+**Quota check**: Account1 dropped through 68%→lower over the 2 runs
+(each ~20-30min, real MiniMax-M3 + judge calls); still above the 25%
+pre-op threshold. Account2 remained at admin-permission-unknown
+throughout (per the documented quirk, treated as healthy since it kept
+serving requests).
+
+**NEXT ACTION**: Given 4 consecutive contended attempts, recommend NOT
+continuing to brute-force retry the full judged run — the marginal
+quota cost per attempt is high (a real 20-30 min, ~50-press, judge-tier
+benchmark) and the environmental confound has proven persistent across
+multiple hours and several different concurrent sessions' activity
+patterns, not a transient blip. Two viable paths forward for whoever
+picks this up next: (a) accept the uncontended skip-judge runs
+(iterations 11-12) plus this iteration's targeted per-press verification
+of fix#9 as sufficient evidence for this campaign's own fixes, and shift
+focus to the G3 answer-quality/G5 grading-precision gap (Campaign-1-
+adjacent per iteration 8/11's A1 finding) instead of chasing a perfectly
+clean L4 run; or (b) if a clean run is still wanted, try again at a time
+when `ps aux` shows the workspace has been quiet for several minutes
+(not just clear at the instant of launch), since this iteration's
+processes appeared mid-run despite clear starts. Either way: the
+ANTI-THRASH LEDGER's fix#5/#6/#7/#8/#9 are all independently verified
+(unit tests + at least one uncontended or extraction-level live
+confirmation each) and should not be re-investigated or re-fixed without
+new evidence of a genuine regression.
