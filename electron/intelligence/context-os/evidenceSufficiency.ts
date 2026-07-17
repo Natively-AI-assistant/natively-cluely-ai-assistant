@@ -35,7 +35,7 @@ const normalize = (value: string): string => value
   .replace(/\s+/g, ' ')
   .trim();
 
-const supportsEntity = (item: EvidenceItem, entity: string): boolean => {
+export const supportsEntity = (item: EvidenceItem, entity: string): boolean => {
   const normalizedEntity = normalize(entity);
   if (!normalizedEntity) return true;
   return normalize(item.supports.entity || '').includes(normalizedEntity)
@@ -207,27 +207,53 @@ export function selectSmallestSufficientEvidence(input: {
   // Dynamic marginal-coverage fill: add the next-highest-ranked item only while
   // it either (a) contributes a distinctive term not yet covered, or (b) we
   // have not yet reached a minimum floor of 3 (the prior fixed count, kept as a
-  // floor so recall never drops below the previous behavior). Stop at the cap.
+  // floor so recall never drops below the previous behavior), or (c) no
+  // SINGLE selected item has yet achieved strong (strict-majority) coverage by
+  // itself. Stop at the cap.
   const coveredTerms = new Set<string>();
   const distinctiveLc = [...new Set(distinctive.map((t) => t.toLowerCase()).filter(Boolean))];
+  const itemDistinctiveHits = (item: EvidenceItem): number => {
+    const words = new Set(tokenize(item.text));
+    return distinctiveLc.filter((t) => words.has(t)).length;
+  };
   const addCoverage = (item: EvidenceItem): void => {
     const words = new Set(tokenize(item.text));
     for (const t of distinctiveLc) if (words.has(t)) coveredTerms.add(t);
   };
   selected.forEach(addCoverage);
   const floor = Math.min(3, eligible.length);
+  // Grounding-campaign fix (2026-07-17, THESIS-093): the early-stop above was
+  // driven purely by the UNION of covered terms across ALL selected items —
+  // several individually-weak decoy chunks (each covering only a couple of the
+  // question's distinctive terms, but from unrelated sections of the
+  // document) could jointly "cover" every term after just 2-3 picks, ending
+  // selection right before a higher-composite-ranked chunk that actually
+  // answers the question but which shares only a MINORITY of the same
+  // distinctive terms (its correct fact is phrased differently from the
+  // question, e.g. "no interaction is performed with them" vs the question's
+  // "never interacted with"). Confirmed live: composite rank #1 ("never
+  // interacted with", the WRONG pair of objects) + rank #2/#3 (generic
+  // "objects visible" chunks) jointly covered all 4 distinctive terms and
+  // stopped selection at exactly floor=3, one slot before rank #4 — the
+  // genuinely correct chunk. Requiring at least one SELECTED item to
+  // individually reach strict-majority term coverage before the union-based
+  // early-stop is allowed to fire prevents several weak, possibly-unrelated
+  // partial matches from masquerading as sufficient evidence.
+  let hasStrongSingleMatch = selected.some((item) => itemDistinctiveHits(item) * 2 > distinctiveLc.length);
   for (const item of eligible) {
     if (selected.length >= cap) break;
     if (selectedIds.has(item.evidenceId)) continue;
     const words = new Set(tokenize(item.text));
     const addsNewTerm = distinctiveLc.some((t) => words.has(t) && !coveredTerms.has(t));
     const belowFloor = selected.length < floor;
-    // Once every distinctive term is already covered AND we are at/above the
-    // floor, additional topical-only items add nothing but prompt bloat — stop.
-    if (!addsNewTerm && !belowFloor && distinctiveLc.length > 0) break;
+    // Once every distinctive term is already covered, at least one selected
+    // item is individually a strong match, and we are at/above the floor,
+    // additional topical-only items add nothing but prompt bloat — stop.
+    if (!addsNewTerm && !belowFloor && hasStrongSingleMatch && distinctiveLc.length > 0) break;
     selected.push(item);
     selectedIds.add(item.evidenceId);
     addCoverage(item);
+    if (itemDistinctiveHits(item) * 2 > distinctiveLc.length) hasStrongSingleMatch = true;
   }
   return selected;
 }

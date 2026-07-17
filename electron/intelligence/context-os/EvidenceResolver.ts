@@ -54,6 +54,7 @@ import {
   deriveEvidenceSufficiency,
   MIN_ANSWER_CONFIDENCE,
   selectSmallestSufficientEvidence,
+  supportsEntity,
   type EvidenceSufficiency,
 } from './evidenceSufficiency';
 import {
@@ -432,16 +433,34 @@ export class EvidenceResolver {
         // card. Requiring merely ANY distinctive term let a high-frequency filler
         // word ("working" in "what working voltage…") spuriously retain a topical
         // parent card that never contained the real answer word ("voltage"). The
-        // answer then lives only in hybrid's section-routed chunk. Checking the
-        // whole selected set (not just the top card) keeps a case where the
-        // answer-bearing card ranked 2nd behind a topical parent.
+        // answer then lives only in hybrid's section-routed chunk.
         //
         // Match on WHOLE-WORD membership, not substring: a substring `includes`
         // would count "storage" as covering the distinctive term "age", spuriously
         // retaining a topical card. Tokenize the card text into a word set instead.
         const salient = salientDistinctiveTerms(distinctive, corpusBodies);
-        const cardWords = new Set(items.flatMap((it) => contentTokens(it.text)));
-        const covered = salient.some((term) => cardWords.has(term));
+        // Grounding-campaign fix (2026-07-17, THESIS-129/131): checking the
+        // POOLED set of selected cards (any card anywhere carries the salient
+        // term) let a card about a DIFFERENT entity satisfy the gate merely by
+        // sharing a word — e.g. "What model is the visual backbone for the
+        // Self-Awareness Tool?" (entity: "Self-Awareness Tool", salient term:
+        // "backbone") was satisfied because an unrelated "OpenVLA" card
+        // mentions "backbone" (OpenVLA's OWN backbone, not the Self-Awareness
+        // Tool's), so the resolver answered from cards that never actually
+        // named the Self-Awareness Tool's architecture at all. When the
+        // question names a target entity, require the SAME card to carry both
+        // the salient term AND the entity — not just any card in the pool for
+        // each independently. Falls back to the prior pooled check when the
+        // question names no entity (unaffected — matches iteration 5's
+        // "working voltage" tests, which don't exercise this branch).
+        const entities = classification.targetEntities || [];
+        const covered = entities.length > 0
+          ? items.some((it) => {
+              const words = new Set(contentTokens(it.text));
+              if (!salient.some((term) => words.has(term))) return false;
+              return entities.some((entity) => supportsEntity(it, entity));
+            })
+          : salient.some((term) => items.some((it) => contentTokens(it.text).includes(term)));
         if (!covered) return null;
       }
     }

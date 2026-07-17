@@ -158,4 +158,39 @@ describe('EvidenceSufficiency', () => {
     assert.ok(selected.some((e) => e.evidenceId === 'answer'), 'answer chunk selected');
     assert.ok(selected.length <= 3, 'bounded by the general-shape cap');
   });
+
+  // Regression (2026-07-17, THESIS-093): the dynamic early-stop above used to
+  // fire once the UNION of coverage across ALL selected items included every
+  // distinctive term — even when no single selected item individually covered
+  // more than half of them. Real failure: for "What two objects are visible
+  // but never interacted with?" (distinctive terms: objects/visible/never/
+  // interacted), the top-ranked chunk discussed a DIFFERENT pair of objects
+  // but happened to contain the literal phrase "never interacted with", and
+  // the next two ranked chunks were generic "objects visible" filler from
+  // unrelated sections — together these 3 weak partial matches "covered" all
+  // 4 terms and triggered early-stop at the floor (3), one slot before the
+  // 4th-ranked chunk that actually answered the question (using different
+  // wording: "no interaction is performed with them" instead of the
+  // question's "never interacted with"). The fix requires at least one
+  // SELECTED item to individually reach strict-majority term coverage before
+  // the union-based early-stop may fire.
+  test('early-stop requires at least one single item with strong (strict-majority) term coverage — several weak partial matches must not mask a missing strong chunk', () => {
+    const decoyPhrase = item({ id: 'decoy-phrase', text: 'The second fruit was never interacted with by the finetuned model.', property: 'unknown', score: 0.95 });
+    const decoyObjects1 = item({ id: 'decoy-objects-1', text: 'Objects visible in the workspace are logged by the scene interpretation module.', property: 'unknown', score: 0.90 });
+    const decoyObjects2 = item({ id: 'decoy-objects-2', text: 'All visible objects are tracked across frames for anomaly detection.', property: 'unknown', score: 0.85 });
+    const correctAnswer = item({ id: 'correct-answer', text: 'Other objects such as an apple and an orange are visible in the scene, but no interaction is performed with them.', property: 'unknown', score: 0.80 });
+    const moreFiller = item({ id: 'more-filler', text: 'Objects visible from the top-down camera are cropped before processing.', property: 'unknown', score: 0.75 });
+
+    const selected = selectSmallestSufficientEvidence({
+      items: [decoyPhrase, decoyObjects1, decoyObjects2, correctAnswer, moreFiller],
+      requestedProperty: 'unknown',
+      answerShape: 'general',
+      targetEntities: [],
+      distinctiveTerms: ['objects', 'visible', 'never', 'interacted'],
+    });
+    assert.ok(
+      selected.some((e) => e.evidenceId === 'correct-answer'),
+      'the genuinely answer-bearing chunk must survive selection even though no single decoy nor itself covers a strict majority of the distinctive terms',
+    );
+  });
 });

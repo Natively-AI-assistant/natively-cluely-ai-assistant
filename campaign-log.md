@@ -280,4 +280,83 @@ Deep-verified all 6 against the real source PDF text (`tests/context-os-real-bac
 ### QUOTA
 QUOTA (iteration 10, ~09:0x local Jul 17): not re-checked this iteration (no model-provider calls made beyond the real MiniMax-M3 backend already in use for traces — this iteration was investigation/instrumentation, same call volume as prior traces). Will check before starting the next fix-design work.
 
-**NEXT ACTION**: Design and land fixes for #12 and #13 (the two most concretely pinned new findings), one at a time with the same live-trace-then-fix-then-regress discipline: (a) #13 (OKF fallback-on-weak-coverage) is likely the more impactful and more surgical fix — teach `resolveFromOkf` to check its own selected cards' `answerRelevanceScore` against the question and fall through to `resolveFromHybrid` when coverage is weak, reusing existing machinery rather than inventing new. (b) #12 (ranking tie-break) needs more design thought since a scoring-signal change has broader blast radius than a per-strategy fallback — consider before touching `answerRelevanceScore` directly. #14 (THESIS-091) is lower-priority (recall gap, not yet even root-caused) — leave open. After landing whichever fix(es), re-run the full 140-case thesis benchmark for regression per R2, and commit promptly (re-check git branch/status first, shared workspace).
+**NEXT ACTION (superseded)**: ~~design and land fixes for #12 and #13~~ — BOTH landed and live-verified this iteration. See ITERATION 11.
+
+## ITERATION 11 (2026-07-17) — Landed and verified fixes for #13 (OKF entity-scoping) and #12 (evidence-selection early-stop); full benchmark re-running
+
+Quota healthy at start (Account 1: 80% session remaining) — no pause needed.
+
+### Fix #13 — OKF distinctive-term gate must be ENTITY-SCOPED, not pooled (THESIS-129/131)
+
+Before touching anything, re-derived the exact mechanism live: added a permanent `entities`/`tags`/`sourceSections` field to the existing `__e2e__:dump-okf-cards` handler and dumped the full 61-card OKF pack for the thesis document. Confirmed precisely: the 2026-07-13 "salient distinctive term" gate (`resolveFromOkf` in `EvidenceResolver.ts`, added by `81517be`) checks whether a salient term appears **anywhere across the pooled set of selected cards** — not whether it co-occurs with the question's named entity in the SAME card. For "What model is the visual backbone for the Self-Awareness Tool?" (entity: "Self-Awareness Tool", salient term: "backbone"), the pooled check was satisfied because an unrelated "OpenVLA" card mentions "backbone" — OpenVLA's OWN backbone, not the Self-Awareness Tool's — so the gate wrongly let OKF answer from cards that never actually named the target entity's architecture. Same root cause for THESIS-131 ("perspective").
+
+**Fix**: when the question names a target entity, require the SAME card to carry both the salient term AND the entity (reusing the existing `supportsEntity` helper from `evidenceSufficiency.ts`, now exported for reuse) — not just any card in the pool for each independently. Falls back to the prior pooled check when the question names no entity, so the existing "working voltage" tests (which don't name a target-entity-scoped salient-term scenario in this way) are unaffected.
+
+**Verified**: added a 4th regression test to `EvidenceResolver.test.mjs` reproducing the exact real-document pattern (entity-named card with the fact but not the salient word, vs. a different-entity's card with the salient word but not the fact) — passes, and the 3 pre-existing tests in that describe block still pass unchanged. Live-traced THESIS-129 and THESIS-131 fresh (`golden-trace-thesis129-full.mjs`, `-thesis131-full.mjs`): both now correctly answer ("Gemma 3 12B from Google DeepMind", "third-person camera perspective") instead of falsely refusing.
+
+### Fix #12 — evidence-selection early-stop must require one item with STRONG coverage, not just pooled union coverage (THESIS-093)
+
+Re-derived the exact live mechanism (temporarily reinstrumenting `EvidenceResolver.finalizePack`, then fully reverting after — same discipline as prior iterations). Real numbers from the live manual-chat path (differ from the earlier `inspect-retrieval`-based reconstruction, which uses a different retrieval call — the resolver's real numbers are the ones that matter): composite-ranked pool has the WRONG chunk (139, "the second fruit was never interacted with" — about banana/grapes in an unrelated benchmark) at rank #1, two generic "objects visible" filler chunks at ranks #2/#3, and the CORRECT chunk (93, "an apple and an orange are visible... but no interaction is performed with them") at rank #4 — one slot past the `floor=3` early-stop.
+
+Root cause, precisely: `selectSmallestSufficientEvidence`'s dynamic early-stop (`evidenceSufficiency.ts`, from `be7d7e0`) tracks covered distinctive terms as a **union across all selected items** — rank #1 covers {never, interacted}, ranks #2/#3 each cover {objects, visible}; together these 3 individually-weak, mutually-unrelated chunks "cover" all 4 distinctive terms and the floor(3) stop fires, one slot before rank #4 (the chunk that actually answers the question, using different wording — "no interaction is performed with them" vs. the question's "never interacted with" — so it doesn't share the same 2 terms as rank #1).
+
+**Fix**: require at least one SELECTED item to individually reach strict-majority distinctive-term coverage (reusing the exact "covered * 2 > distinctive.length" pattern the codebase already uses in `isAnswerRelevantWithoutEntity`) before the union-based early-stop is allowed to fire. Several weak partial matches can no longer masquerade as sufficient evidence.
+
+**Verified**: added a 6th regression test to `EvidenceSufficiency.test.mjs` reproducing the exact real-document pattern (5 items: a phrase-decoy, two generic-filler decoys, the correct answer, one more filler — none individually covering a strict majority) — passes, and the 5 pre-existing tests in that file still pass unchanged (including the "dynamic stop... bounded by cap" test, whose assertion is `<=3` not `===3`, so it tolerates the new item surviving). Live-traced THESIS-093 THREE times fresh (`golden-trace-thesis093-detail.mjs`) — all 3 runs now correctly answer "apple and orange", up from the pre-fix 3-of-3 mix of hallucination/refusal/hallucination (the pre-fix nondeterminism itself was interesting: identical evidence selection every time, but MiniMax-M3 nondeterministically hallucinated a plausible-but-wrong answer from the wrong chunk vs. correctly refusing — now moot since the correct chunk is in the pack).
+
+### Regression checks (both fixes together)
+
+- `npx tsc --noEmit` clean.
+- `electron/intelligence/__tests__/EvidenceResolver.test.mjs` + `EvidenceSufficiency.test.mjs`: 17/17 pass (both new tests included).
+- Full `electron/intelligence/__tests__/**` suite (75 files, run via `ELECTRON_RUN_AS_NODE=1 electron --test`): 840/859 (2 more tests than before from my additions), same **10 pre-existing, confirmed-unrelated failures** (`ProfileIdentityBaseline.test.mjs`, `IntelligenceOsE2E.test.mjs` — different subsystem, unrelated to `evidenceSufficiency.ts`/`EvidenceResolver.ts`) as every prior iteration's regression check.
+- Live-verified THESIS-129, THESIS-131, THESIS-093 (3x) all fixed and stable after both changes landed together, not just individually.
+- Full 140-case thesis benchmark (`dev-run-004-okf-and-093fix`) launched in background for the definitive before/after comparison; result pending at time of this writeup.
+
+### Anti-thrash / discipline notes
+
+- Checked `git log --all -p` on both touched functions before changing anything: `resolveFromOkf`'s salient-term gate traced to `81517be`; `selectSmallestSufficientEvidence`'s floor traced to `be7d7e0`. Neither fix re-touches a prior fix's already-resolved symptom (the H6-cap fix from iteration 7 raised the CAP; these two fixes touch the EARLY-STOP and the OKF ENTITY-SCOPING respectively — distinct mechanisms, confirmed in iteration 10's writeup).
+- All temporary trace instrumentation (re-added in `EvidenceResolver.ts` to derive ground-truth numbers for the #12 design) was fully reverted after use — confirmed via `git diff --stat` showing only the intended fix diff remains, no stray `console.log`/`TRACE:` lines.
+- Extended the existing `__e2e__:dump-okf-cards` E2E-only diagnostic handler (added last iteration) with `entities`/`tags`/`sourceSections` fields — kept permanently, same precedent as before.
+
+### Ledger update
+- #12 (THESIS-093 — evidence-selection early-stop): **FIXED AND LIVE-VERIFIED.** Full benchmark regression pending.
+- #13 (THESIS-129/131 — OKF entity-scoped salient-term gate): **FIXED AND LIVE-VERIFIED.** Full benchmark regression pending.
+- #14 (THESIS-091 — query-dependent recall gap): still OPEN, not attempted this iteration (lower priority, not yet root-caused past "query-dependent").
+
+### QUOTA
+QUOTA (iteration 11, ~14:3x local Jul 17): Account 1 50% session remaining. Continuing normally, no pause needed.
+
+**NEXT ACTION (superseded)**: ~~wait for dev-run-004, compare vs dev-run-003~~ — done below, WITH AN IMPORTANT SELF-CAUGHT LABELING CORRECTION.
+
+## ITERATION 12 (2026-07-17) — Benchmark comparison completed; caught and corrected a mislabeled baseline
+
+`dev-run-004-okf-and-093fix` finished all 140 cases (09:32-09:36 UTC): deterministic 123/140, vs. the `dev-run-003-okffix` figure I'd been treating as "pre-fix" (121/140).
+
+**Before accepting this as the final number, investigated the flip list and found something that didn't add up**: THESIS-129/131 already showed `pass: true` via `hybrid_rag` strategy in `dev-run-003-okffix` — but I hadn't landed the OKF fix until partway through THAT SAME iteration, and `dev-run-003-okffix` was launched only ~37 minutes after committing iteration 10 (before the OKF fix existed). Cross-checked against `dev-run-001` and `dev-run-002-capfix` (both genuinely pre-either-fix, hours earlier): both show THESIS-129/131 failing via `okf_exact`/`okf_property`, consistently. Reconstructing my own action sequence this iteration confirmed the actual order was: (1) design + land the OKF entity-scoping fix (#13) and rebuild, (2) launch `dev-run-003-okffix` — mislabeling it as a "pre-fix" baseline when it was actually already running against the OKF-fix build, (3) only then investigate and land the evidence-selection fix (#12).
+
+**Corrected comparison, using `dev-run-002-capfix` (genuinely pre-both-fixes) as the true baseline against `dev-run-004-okf-and-093fix` (genuinely both-fixes-landed):**
+
+- **Deterministic: 119/140 → 123/140.**
+- Flipped fail→pass: **THESIS-093, THESIS-129, THESIS-131** (the 3 targeted fixes) **+ THESIS-042** (a bonus — see below).
+- Flipped pass→fail: **none.**
+
+**THESIS-042 bonus finding, investigated before accepting it as a real win**: this is the exact "Mercury X1 hardware-spec-table vs. AI-framework-layer entity confusion" case (H6) flagged as an open, unfixed gap in `final-report.md` §5 (paired with THESIS-060). It now correctly answers "ALOHA" (required fact) instead of "Mercury X1" (the wrong-but-plausible entity). Checked whether H6 is now fully resolved by testing its paired case, THESIS-060 — **it is NOT**: THESIS-060 still fails identically before and after both fixes (same entity-confusion pattern, different specific fact). So the entity-scoping/strong-match generalization in both fixes incidentally resolved ONE of the two known H6 instances as a side effect, but H6 itself remains a real, open, only-partially-mitigated gap — not claiming it as fixed.
+
+**THESIS-100 apparent regression, investigated and cleared as NOT a regression**: `dev-run-003-okffix` (the noisy intermediate run) showed THESIS-100 passing, but it fails in BOTH `dev-run-002-capfix` (true pre-fix) and `dev-run-004` (both fixes) — meaning THESIS-100 was never actually flipped by either fix; it's a pre-existing rubric-rigidity near-miss (source text: "RGB images... Joint angles for both arms (14-dimensional vector)"; the model's stable answer across repeated fresh traces: "images... 14-dimensional joint states array" — same facts, different wording, correctly failing the strict deterministic substring rubric both before and after). Live re-traced twice fresh to confirm this is a STABLE near-miss, not one-off nondeterminism: both fresh runs gave the same paraphrase-mismatch answer. Not a regression; not touched.
+
+**Process lesson (adding to the running list)**: label benchmark run IDs and directories at LAUNCH time based on the actual git/build state at that moment, not based on what fix is "in flight" or "about to land" — a run started between two fix-landing points is neither a clean before nor a clean after, and treating it as either without re-deriving the true baseline from an independently-verified earlier run risks over- or under-counting a fix's real impact. Caught this only by noticing an inconsistency (THESIS-129 passing in a run I'd labeled pre-fix) and cross-checking against two independent, unambiguously-earlier runs rather than trusting the label.
+
+### Final, honest scorecard for this iteration's 2 fixes (#12, #13)
+- Deterministic thesis-benchmark score: **119/140 (85.0%) → 123/140 (87.9%)**, zero regressions, +1 unplanned bonus fix (THESIS-042, one of two H6 instances).
+- Both fixes independently unit-tested (10 new/existing tests across 2 files, all passing) and live-verified via fresh golden traces before AND after the full-benchmark comparison.
+
+### Ledger update
+- #12 (THESIS-093): CONFIRMED FIXED against the correct baseline.
+- #13 (THESIS-129/131): CONFIRMED FIXED against the correct baseline.
+- THESIS-042 (H6, one of two instances): fixed as a side effect, logged, NOT claimed as full H6 resolution (THESIS-060, the other H6 instance, still fails).
+- THESIS-100: investigated, confirmed a pre-existing, unaffected rubric-rigidity near-miss — not a regression, not touched.
+
+### QUOTA
+QUOTA (iteration 12, ~15:1x local Jul 17): not re-checked (no new provider-heavy work beyond the 2 confirmatory golden-traces + reading existing benchmark JSONL files). Will check before the next fix-design work.
+
+**NEXT ACTION**: Commit both fixes (`EvidenceResolver.ts`, `evidenceSufficiency.ts`, their 2 test files) plus the updated `campaign-log.md`/`forensic-report.md` — re-check git branch/status first (shared workspace). Then decide next: attempt #14 (THESIS-091, lower priority, not yet root-caused), investigate H6/THESIS-060 further (now that THESIS-042 unexpectedly resolved, the remaining instance may share a nearby, findable cause), or move to other `final-report.md` §6 items (harness expansion, TurnEvidenceCoordinator verification, production-default decision, two-consecutive-clean-runs requirement for the L4 exit bar).

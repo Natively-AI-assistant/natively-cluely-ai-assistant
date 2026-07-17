@@ -10401,7 +10401,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             const matchesGrep = grep ? c.body.toLowerCase().includes(grep.toLowerCase()) : false;
             const matchesTitle = titles ? titles.includes(c.title.toLowerCase()) : false;
             const matches = grep || titles ? (matchesGrep || matchesTitle) : true;
-            out.push({ title: c.title, type: c.type, confidence: c.confidence, bodyLen: c.body.length, matchesGrep: matches, body: matches ? c.body : undefined });
+            out.push({ title: c.title, type: c.type, confidence: c.confidence, entities: c.entities, tags: c.tags, sourceSections: c.sourceSections, bodyLen: c.body.length, matchesGrep: matches, body: matches ? c.body : undefined });
           }
         }
         return { success: true, cards: out };

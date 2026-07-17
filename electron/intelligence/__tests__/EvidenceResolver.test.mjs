@@ -331,6 +331,60 @@ describe('EvidenceResolver: distinctive-term gate falls through to hybrid for en
     assert.equal(result.strategy, 'okf_exact');
     assert.match(result.pack.items[0].text, /Working Voltage: 24 V/);
   });
+
+  // Regression (2026-07-17, THESIS-129/131): the salient-term gate above checked
+  // the POOLED set of selected cards — any card anywhere in the pool carrying
+  // the salient term satisfied it, even when that card discusses a DIFFERENT
+  // entity than the one the question names. Real failure: "What model is the
+  // visual backbone for the Self-Awareness Tool?" (entity: "Self-Awareness
+  // Tool", salient term: "backbone") was satisfied because an unrelated
+  // "OpenVLA" card mentions "backbone" (OpenVLA's own backbone, not the
+  // Self-Awareness Tool's) — so the resolver answered from cards that never
+  // named the Self-Awareness Tool's architecture at all, producing a false
+  // "the material does not mention" refusal despite hybrid RAG correctly
+  // finding the real passage. The gate must require the SAME card to carry
+  // both the salient term AND the named entity.
+  test('salient term present only on a card about a DIFFERENT entity must fall through to hybrid, not be treated as covered', async () => {
+    const contract = referenceFilesContract('What model is the visual backbone for the Self-Awareness Tool?');
+    let hybridCalled = false;
+    const resolver = new EvidenceResolver(fakeDeps({
+      classifyQuestion: () => ({ type: 'entity_lookup', isSynthesis: false, targetEntities: ['Self-Awareness Tool'] }),
+      knowledgeManager: {
+        getPackForFile: () => ({
+          packId: 'pack-1', packVersion: 1,
+          cards: [
+            // Names the target entity but never says what its backbone is —
+            // matches the real "Framework summary" card that compressed the
+            // architecture description down to a line without the model name.
+            { id: 'c-framework', title: 'Framework summary', body: 'The Self-Awareness Tool verifies that the action is feasible by analyzing the scene captured from a third-view camera.', sourcePages: [42], sourceSections: ['3.5 Framework summary'], entities: ['Self-Awareness Tool'], confidence: 'high', approvalStatus: 'approved' },
+            // Mentions "backbone" (the salient term) but for a COMPLETELY
+            // different entity (OpenVLA, not the Self-Awareness Tool).
+            { id: 'c-openvla', title: 'OpenVLA', body: 'OpenVLA is built on a pretrained, visually-conditioned language model backbone that captures visual features at various granularities.', sourcePages: [23], sourceSections: ['2.1.1 OpenVLA'], entities: ['OpenVLA'], confidence: 'high', approvalStatus: 'approved' },
+          ],
+        }),
+      },
+      queryOkfCards: (pack) => pack.cards.map((card) => ({ card, score: 0.9 })),
+      hybridRetriever: {
+        retrieveHybrid: async () => {
+          hybridCalled = true;
+          return {
+            chunks: [{ sourceId: 'file-1', fileName: 'thesis.pdf', text: '[Section 3.4.3] Self-awareness Tool\nUsing Gemma 3 12B from Google DeepMind as the visual backbone, the tool identifies objects visible to the robot.', chunkIndex: 0, score: 0.9, ftsScore: 0.5, vectorScore: 0.7 }],
+            formattedContext: '', usedFallback: false, usedHybrid: true,
+          };
+        },
+      },
+    }));
+    const result = await resolver.resolve({
+      turnId: 'turn-backbone',
+      question: 'What model is the visual backbone for the Self-Awareness Tool?',
+      sourceContract: contract,
+      activeMode: { modeId: 'mode-test' },
+      requestedProperty: 'unknown',
+    });
+    assert.equal(hybridCalled, true, 'a salient term on an unrelated entity\'s card must not satisfy the gate for a different named entity');
+    assert.equal(result.strategy, 'hybrid_rag');
+    assert.match(result.pack.items[0].text, /Gemma 3 12B/);
+  });
 });
 
 describe('EvidenceResolver: insufficient evidence never fabricates', () => {
