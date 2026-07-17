@@ -87,4 +87,29 @@ Concretely observed: another session ("campaign2", working on a DIFFERENT invest
 
 QUOTA (iteration 2 end, 2026-07-16 ~23:2x local): Account 1 90% / Account 2 51% (session, refreshed since iteration 1's 5h window rolled over). Both healthy, well above thresholds.
 
-**NEXT ACTION**: Continue Phase 1 — investigate H1 (reference-file grounding) under TRUE live-transcript auto-trigger conditions (not scripted `__e2e__:ask`), since the founder's real usage is a continuous meeting transcript, not one-shot Q&A. If no new defect found there, move to Phase 2 (test harness) by extending the existing `tests/context-os-real-backend/` + `_ks_realfixture_verify.mjs` infrastructure with the C1-C8 category matrix from loop.md §4, reusing the Electron-launch/IPC-driving pattern already proven working in this iteration's traces. Before starting, re-check `git branch --show-current`/`git status` since the shared workspace may have changed again. Re-run `curl -s http://localhost:20128/api/providers` quota check per L9 before any expensive operation.
+**NEXT ACTION (superseded)**: ~~investigate H1 under true live-transcript conditions~~ — done, see ITERATION 3.
+
+## ITERATION 3 (2026-07-16/17, continued) — H1 retest (refuted again) + H8 confirmed (deferred fix)
+
+Asked user whether to keep going autonomously given the chaotic shared-workspace situation; user said keep going. Continued.
+
+### H1 retest under more realistic conditions
+`traces/golden-trace-live-transcript-race.mjs`: built a realistic multi-turn prior transcript (3 turns of interviewer/candidate small talk) before attaching a reference doc, then asked the very next question at t+4ms after attach. **Correctly grounded** (mentioned both facts asked about, no refusal). Further refutes H1/H6 for this scenario class. Still not tested under a TRUE live microphone / real-time STT pipeline — that remains the one gap for fully closing out symptom #1.
+
+### H8 (double execution / desync) — CONFIRMED, root cause pinned, fix DEFERRED (not rushed)
+Fired 3 distinct fact-specific questions in overlapping flight (`traces/golden-trace-rapidfire-desync.mjs` + `-console.mjs` for the mechanism trace). Reproduced the founder's exact "answers a completely different question" symptom: only 1 of 3 questions produced any answer (the other 2 hit the auto-trigger's `cooldown` gate, which is itself correct/intended behavior), but that ONE answer was delivered as the response to a DIFFERENT question's promise than the one that generated it.
+
+Root cause: `IntelligenceEngine.ts`'s final `emit('suggested_answer', finalWtaAnswer, question, confidence)` (~line 2439) is deliberately "UNGATED" against the method's own `currentGenerationId` supersession-check machinery (per its own code comment) — a documented earlier fix for a DIFFERENT bug ("What to answer stops responding after a few messages"). Confirmed this is reachable in real production (not just my E2E harness): `ipcHandlers.ts`'s manual-press handler (`generate-what-to-say`) explicitly passes `skipCooldown: true` so a user's manual button press can genuinely race an in-flight auto-triggered generation for a different question, and the renderer's `finalizeStreamingByIntentMessages` has no per-answer question/generationId check — only cross-INTENT clobbering is guarded, not cross-QUESTION-within-the-same-intent.
+
+**Deliberately did NOT rush a fix this iteration.** A naive fix (gate the emit on generation match, drop stale answers) would very likely reintroduce the exact "app goes silent" regression the ungating was originally added to fix — R2 anti-thrash forbids re-fixing an already-fixed pattern by breaking it a different way. The right fix needs the emit to carry generation/question identity through to the renderer so the renderer can render a superseded-but-still-real answer as ITS OWN correctly-labeled turn (never silently dropped, never misattached to a different question's row) — a coordinated 2-3 file change (engine emit signature → preload/IPC channel → renderer finalize logic) that deserves its own focused iteration.
+
+### Ledger update
+
+| # | Hypothesis | Verdict | Evidence | Fix commit | Status |
+|---|---|---|---|---|---|
+| 4 | H8 — `emit('suggested_answer', ...)` ungated vs `currentGenerationId`; renderer has no per-answer question/generation check; manual press's `skipCooldown:true` makes this reachable in production | CONFIRMED, root cause pinned | `traces/golden-trace-rapidfire-desync.mjs`, `-console.mjs`; `traces/forensic-report.md` §6b | none yet — DEFERRED, needs coordinated engine+IPC+renderer design, not a quick patch | **OPEN — top Phase 1 priority for next iteration. Do NOT attempt a one-line gate-on-generationId fix without checking it doesn't reintroduce the "app goes silent" regression the ungating fixed.** |
+
+### QUOTA
+QUOTA (iteration 3, ~00:0x local Jul 17): Account 1 90% / Account 2 ~40% session. Both healthy.
+
+**NEXT ACTION**: Design and implement the H8 fix (generation/question identity threaded from `IntelligenceEngine.ts`'s emit through to the renderer's finalize logic, so a superseded answer renders as its own correctly-labeled turn instead of either being dropped OR misattached to the wrong question's row). Re-verify the existing "app goes silent" regression test (search for a test asserting the ungated-emit behavior, likely named around P0/"stops responding") still passes after the fix. Before starting, re-check `git branch --show-current`/`git status` (shared workspace) and re-run the L9 quota check.
