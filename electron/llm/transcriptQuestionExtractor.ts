@@ -283,9 +283,22 @@ export function extractLatestQuestion(
         .map(t => `[${t.role === 'interviewer' ? 'INTERVIEWER' : t.role === 'user' ? 'ME' : 'ASSISTANT'}]: ${t.text}`)
         .join('\n');
 
-    // Walk backwards for the latest meaningful INTERVIEWER turn that looks like
-    // a question (or an imperative ask like "tell me about ..."). Greeting-only
+    // Walk backwards for the latest meaningful INTERVIEWER turn. Greeting-only
     // interviewer turns are skipped, so "Hi, can you hear me?" → keep walking.
+    // Otherwise take the FIRST (i.e. most recent) non-greeting, non-empty
+    // interviewer turn outright — do NOT keep searching backward for an OLDER
+    // turn that merely LOOKS more question-shaped (has "?" or an interrogative
+    // lead). "Tell me about X" / "One more question — tell me about levee." are
+    // genuine imperative asks that don't match QUESTION_MARK/INTERROGATIVE_LEAD
+    // (no "?", and the lead word isn't sentence-initial), so the old logic kept
+    // them only as a "weak candidate" and preferred an earlier, more question-
+    // shaped turn instead — inverting recency in a live conversation (harness
+    // longsession campaign2, 2026-07-17: live-proven on 4 real presses —
+    // traces2/harness-script-{a,c}-press-{A12,A15,C11,C14}.txt — where the
+    // extractor locked onto a stale prior "?"-turn while the interviewer had
+    // already moved on to a new imperative ask). The shape signals
+    // (QUESTION_MARK/INTERROGATIVE_LEAD) still matter for isFollowUp/confidence
+    // scoring below, just not for WHICH turn is chosen — recency wins.
     let chosen: TranscriptTurn | null = null;
     let chosenIdx = -1;
     for (let i = cleaned.length - 1; i >= 0; i--) {
@@ -293,19 +306,22 @@ export function extractLatestQuestion(
         if (turn.role !== 'interviewer') continue;
         const text = turn.text.trim();
         if (!text) continue;
-        if (GREETING_ONLY.test(text)) {
+        // Check GREETING_ONLY against both the cleaned text AND the original
+        // raw turn. cleanText() strips leading acknowledgement words (e.g.
+        // "nice", "great") as discourse-marker noise, so "Nice to meet you"
+        // cleans to "to meet you" — no longer matching the greeting pattern.
+        // Falling through to the raw text catches this so a genuine greeting
+        // isn't mistaken for a real (fragmentary, meaningless) question now
+        // that this loop stops at the first non-greeting turn instead of
+        // continuing to search for a more question-shaped one.
+        const original = turns.find(t => t.timestamp === turn.timestamp)?.text?.trim() || text;
+        if (GREETING_ONLY.test(text) || GREETING_ONLY.test(original)) {
             ignoredTranscriptNoise.push(turn.text.trim());
             continue;
         }
-        const looksLikeQuestion = QUESTION_MARK.test(text) || INTERROGATIVE_LEAD.test(text);
-        if (looksLikeQuestion) {
-            chosen = turn;
-            chosenIdx = i;
-            break;
-        }
-        // First non-greeting interviewer turn that ISN'T obviously a question:
-        // keep it as a weak candidate but keep looking for a stronger one.
-        if (!chosen) { chosen = turn; chosenIdx = i; }
+        chosen = turn;
+        chosenIdx = i;
+        break;
     }
 
     if (!chosen) {

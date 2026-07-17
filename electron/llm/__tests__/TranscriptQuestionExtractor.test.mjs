@@ -223,6 +223,35 @@ describe('transcript question extractor', () => {
     assert.match(r.latestQuestion, /background/i);
   });
 
+  // Long-session harness campaign2 (2026-07-17): a genuine imperative ask with
+  // NO question mark and a non-sentence-initial lead ("one more open-source
+  // question — tell me about levee.") does not match QUESTION_MARK or
+  // INTERROGATIVE_LEAD (the lead word isn't at position 0). The extractor used
+  // to treat this as only a "weak candidate" and keep walking backward for an
+  // older, more question-shaped turn — inverting recency. Live-proven on 4 real
+  // presses: traces2/harness-script-{a,c}-press-{A12,A15,C11,C14}.txt.
+  describe('a genuinely LATEST imperative ask (no "?", no sentence-initial lead) must win over an OLDER "?"-shaped turn', () => {
+    test('"one more open-source question — tell me about levee." (real A15 repro)', () => {
+      const r = extractLatestQuestion([
+        turn('interviewer', "good. let's talk about the jd's soc 2 / fedramp requirement — any experience there?"),
+        turn('user', "i've worked adjacent to soc 2 controls at stripe, though not as the primary owner."),
+        turn('interviewer', 'one more open-source question — tell me about levee.'),
+      ]);
+      assert.match(r.latestQuestion, /levee/i);
+      assert.doesNotMatch(r.latestQuestion, /fedramp/i);
+    });
+
+    test('"let\'s talk education — tell me about your degree and school." (real A12 repro)', () => {
+      const r = extractLatestQuestion([
+        turn('interviewer', "understood, thanks for sharing. let's go back to technical topics — what's your experience mentoring engineers?"),
+        turn('user', 'yes, mentored two junior engineers.'),
+        turn('interviewer', "let's talk education — tell me about your degree and school."),
+      ]);
+      assert.match(r.latestQuestion, /degree/i);
+      assert.doesNotMatch(r.latestQuestion, /mentoring/i);
+    });
+  });
+
   test('no interviewer turn → unknown speaker, empty question, zero confidence', () => {
     const r = extractLatestQuestion([
       turn('user', 'I think I did well.'),
