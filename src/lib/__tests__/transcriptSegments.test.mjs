@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  TRANSCRIPT_DEDUPE_WINDOW_MS,
   TRANSCRIPT_FINAL_LIMIT,
   createInitialTranscriptState,
   transcriptSegmentsReducer,
@@ -101,66 +100,24 @@ test('a final without a partial uses its own timestamp', () => {
   assert.equal(state.commitRevision, 1);
 });
 
-test('a normalized same-speaker final from 0 through 1000ms is ignored without an intervening partial', () => {
+test('distinct repeated finals are preserved even when text and timestamps match', () => {
   let state = transcriptSegmentsReducer(
     createInitialTranscriptState(),
-    transcriptEvent('interviewer', 'Hello World', true, 1_000),
-  );
-
-  const duplicateAtZero = transcriptSegmentsReducer(
-    state,
-    transcriptEvent('interviewer', '  hello   world  ', true, 1_000),
-  );
-  assert.strictEqual(duplicateAtZero, state);
-
-  const duplicateAtWindowEnd = transcriptSegmentsReducer(
-    state,
-    transcriptEvent(
-      'interviewer',
-      'HELLO WORLD',
-      true,
-      1_000 + TRANSCRIPT_DEDUPE_WINDOW_MS,
-    ),
-  );
-  assert.strictEqual(duplicateAtWindowEnd, state);
-  assert.equal(state.finals.length, 1);
-  assert.equal(state.contentRevision, 1);
-  assert.equal(state.commitRevision, 1);
-});
-
-test('the same phrase is accepted after the dedupe window or after an intervening partial', () => {
-  let state = transcriptSegmentsReducer(
-    createInitialTranscriptState(),
-    transcriptEvent('interviewer', 'Repeat me', true, 0),
+    transcriptEvent('interviewer', 'Sim', true, 1_000),
   );
 
   state = transcriptSegmentsReducer(
     state,
-    transcriptEvent(
-      'interviewer',
-      ' repeat   ME ',
-      true,
-      TRANSCRIPT_DEDUPE_WINDOW_MS + 1,
-    ),
+    transcriptEvent('interviewer', '  sim  ', true, 1_000),
   );
-  assert.equal(state.finals.length, 2);
-
   state = transcriptSegmentsReducer(
     state,
-    transcriptEvent('interviewer', 'intervening words', false, 1_500),
+    transcriptEvent('interviewer', 'SIM', true, 1_500),
   );
-  assert.equal(state.dedupe.interviewer.partialSeenAfter, true);
 
-  state = transcriptSegmentsReducer(
-    state,
-    transcriptEvent('interviewer', 'Repeat me', true, 1_501),
-  );
   assert.equal(state.finals.length, 3);
-  assert.equal(state.finals.at(-1).timestamp, 1_500);
-  assert.equal(state.dedupe.interviewer.committedAt, 1_501);
-  assert.equal('timestamp' in state.dedupe.interviewer, false);
-  assert.equal(state.dedupe.interviewer.partialSeenAfter, false);
-  assert.equal(state.contentRevision, 4);
+  assert.deepEqual(state.finals.map(({ text }) => text), ['Sim', 'sim', 'SIM']);
+  assert.equal(state.contentRevision, 3);
   assert.equal(state.commitRevision, 3);
 });
 
@@ -274,5 +231,4 @@ test('reset returns a fresh initial state', () => {
   assert.notStrictEqual(resetState, anotherInitialState);
   assert.notStrictEqual(resetState.finals, anotherInitialState.finals);
   assert.notStrictEqual(resetState.partials, anotherInitialState.partials);
-  assert.notStrictEqual(resetState.dedupe, anotherInitialState.dedupe);
 });

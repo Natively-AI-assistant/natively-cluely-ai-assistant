@@ -1,5 +1,4 @@
 export const TRANSCRIPT_FINAL_LIMIT = 100;
-export const TRANSCRIPT_DEDUPE_WINDOW_MS = 1_000;
 
 const SPEAKERS = new Set(['interviewer', 'user']);
 
@@ -14,10 +13,6 @@ export function createInitialTranscriptState() {
     contentRevision: 0,
     commitRevision: 0,
     lastCommittedId: null,
-    dedupe: {
-      interviewer: null,
-      user: null,
-    },
   };
 }
 
@@ -58,21 +53,6 @@ function createSegmentId(arrivalSequence) {
   return `transcript-${arrivalSequence}`;
 }
 
-function markPartialSeenAfter(dedupe, speaker) {
-  const entry = dedupe[speaker];
-  if (entry === null || entry.partialSeenAfter) {
-    return dedupe;
-  }
-
-  return {
-    ...dedupe,
-    [speaker]: {
-      ...entry,
-      partialSeenAfter: true,
-    },
-  };
-}
-
 function reducePartial(state, event) {
   const currentPartial = state.partials[event.speaker];
   const arrivalSequence = currentPartial?.arrivalSequence ?? state.nextSequence;
@@ -94,22 +74,7 @@ function reducePartial(state, event) {
     nextSequence:
       currentPartial === null ? state.nextSequence + 1 : state.nextSequence,
     contentRevision: state.contentRevision + 1,
-    dedupe: markPartialSeenAfter(state.dedupe, event.speaker),
   };
-}
-
-function isDuplicateFinal(state, event) {
-  const entry = state.dedupe[event.speaker];
-  if (
-    entry === null ||
-    entry.partialSeenAfter ||
-    entry.normalizedText !== event.text.toLowerCase()
-  ) {
-    return false;
-  }
-
-  const elapsed = event.timestamp - entry.committedAt;
-  return elapsed >= 0 && elapsed <= TRANSCRIPT_DEDUPE_WINDOW_MS;
 }
 
 function sortFinals(left, right) {
@@ -120,10 +85,6 @@ function sortFinals(left, right) {
 }
 
 function reduceFinal(state, event) {
-  if (isDuplicateFinal(state, event)) {
-    return state;
-  }
-
   const currentPartial = state.partials[event.speaker];
   const arrivalSequence = currentPartial?.arrivalSequence ?? state.nextSequence;
   const finalSegment = currentPartial
@@ -162,14 +123,6 @@ function reduceFinal(state, event) {
     contentRevision: state.contentRevision + 1,
     commitRevision: state.commitRevision + 1,
     lastCommittedId: finalSegment.id,
-    dedupe: {
-      ...state.dedupe,
-      [event.speaker]: {
-        normalizedText: event.text.toLowerCase(),
-        committedAt: event.timestamp,
-        partialSeenAfter: false,
-      },
-    },
   };
 }
 

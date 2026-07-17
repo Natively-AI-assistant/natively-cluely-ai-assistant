@@ -1,5 +1,4 @@
 export declare const TRANSCRIPT_FINAL_LIMIT: 100;
-export declare const TRANSCRIPT_DEDUPE_WINDOW_MS: 1000;
 
 export type TranscriptSpeaker = 'interviewer' | 'user';
 export type TranscriptStatus = 'partial' | 'final';
@@ -21,12 +20,6 @@ export interface TranscriptSegment {
   arrivalSequence: number;
 }
 
-export interface TranscriptDedupeEntry {
-  normalizedText: string;
-  committedAt: number;
-  partialSeenAfter: boolean;
-}
-
 export interface TranscriptState {
   finals: TranscriptSegment[];
   partials: Record<TranscriptSpeaker, TranscriptSegment | null>;
@@ -34,7 +27,6 @@ export interface TranscriptState {
   contentRevision: number;
   commitRevision: number;
   lastCommittedId: string | null;
-  dedupe: Record<TranscriptSpeaker, TranscriptDedupeEntry | null>;
 }
 
 export type TranscriptAction =
