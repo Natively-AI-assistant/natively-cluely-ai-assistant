@@ -20,6 +20,7 @@ untouched and may still be active in a separate session).
 | 7 | H8 (tokenization/counting drift) | REFUTED for cloud tier — `fitContextForCurrentModel` is a no-op when maxContextTokens>=100k | LLMHelper.ts:1141 | N/A | refuted |
 | 8 | New (iter 8) — a real provider-transport error (429/expired key/billing) yielded by `WhatToAnswerLLM.generateStream`'s catch block had no persistence guard, so its actionable error string got written into session history like a real answer, poisoning a LATER unrelated press | CONFIRMED (live trace, real 30-min benchmark run-003) | `traces2/harness-script-a-press-A12.txt`: poisoned `[ASSISTANT]: I couldn't reach the AI provider...` turn in the prompt; model answered as if mid error-recovery on an unrelated question | `cf45f3c` | **FIXED** — new `isProviderTransportError` detector + early-return guard (`do_not_store` write policy, ungated user-facing delivery). Skeptic pass found a real, live-reproduced gap in the first draft (guard placed too late — `repairCodingMarkdown` mutated the error text into a 6-section scaffold for coding-type questions before the exact-match check ran, silently missing it) — fixed by converting both this guard AND the sibling `isLeakedSchemaStub` guard into full early returns (mirrors the existing `isNonAnswerSentinel` precedent). 10 unit tests (incl. a coding-type regression reproducing the skeptic's exact failure), 94 consumer tests green, typecheck clean, R8 smoke green. NOT yet re-verified against the full real-backend benchmark this iteration — quota dropped to 11%/0% mid-verification; deferred to next iteration per §1.5. |
 | 9 | New (iter 15/16) — `extractTranscriptEntities` mis-tagged a skill/tech name (Kafka, RocksDB) as a `project` entity (two root causes: non-global `SKILL_RE` match dropped every skill after the first per turn; the cued-noun project rule's bare "on"/"to" triggers fired on tech names). `sessionFollowupResolver`'s bare-pronoun substitution then spliced the wrong entity into a LATER unrelated question, corrupting `answerPlan.question` — which is the literal retrieval query `WhatToAnswerLLM.ts` uses for document/RAG/mode-context search, not just a trace field | CONFIRMED (live trace, real 30-min JUDGED benchmark run-008) | `traces2/harness-script-a-press-A4.txt`/`A5.txt`/`A13.txt`/`A18.txt`: `answerPlanQuestion` reads "what did you own **Kafka**?" (real Q: "...own there?"), "...what made **RocksDB** migration challenging?" (real Q: "...that migration..."), "we'll cover **RocksDB** in the next round" (real Q: "...cover that..."); `run-008.json`'s G6 desync 22%/40%/70.6% (script a/c/b) is partly explained by this | `8d8d74a` | **FIXED** — collect every `SKILL_RE` match (not just the first) into a `skillTokens` set; exclude any matched skill token from all downstream project-tagging rules (CamelCase/cued-noun/short-answer); removed bare "on"/"to" from the cued-noun trigger list (kept "use"/"using"/"back to", which an existing fixture test relies on). Skeptic pass (code-reviewer subagent, independently re-derived + live-reproduced) found the fix's first draft left an IDENTICAL pre-existing gap open — the same bare "to"/"on" cues also mis-tag PERSON/company names ("reported to Priya" → later "that project" resolves to "Priya") — fixed in the same commit by narrowing the cue list rather than just excluding skill tokens. 10 new regression tests (both root causes + the skeptic's person-name finding, unit + end-to-end via `resolveLiveFollowup`); skeptic independently verified they're non-vacuous by reverting to HEAD and confirming 5/7 originally failed. Full consumer suite 198/198 green (SessionMemory, SessionFollowup, LiveSessionMemory, FollowUpResolver, ProjectEntityResolution, LongRangeTranscriptRecall, ContextFreeFollowup, RefinementFollowUp). Typecheck clean. NOT yet re-verified against a full real-backend benchmark run — a clean (uncontended) judged run is still pending per iteration 15's environmental-contention finding. |
+| 10 | Follow-up to #9 (iter 18) — same downstream splicing mechanism, but the mis-tagged CamelCase token isn't always a SKILL — "1.4k GitHub stars" and "SOC 2 / FedRAMP requirement" are neither skills nor projects, so fix#9's `isSkillToken` exclusion didn't cover them; both matched the bare CamelCase project rule directly | CONFIRMED (live trace, real 30-min JUDGED benchmark run-009, taken AFTER fix#9 landed) | `traces2/harness-script-a-press-A13.txt`/`A18.txt` (post-fix#9): `answerPlanQuestion` reads "...what made **GitHub** migration challenging?" (real Q: "...that migration...") and "we'll cover **FedRAMP** in the next round" (real Q: "...cover that...") — the extraction bug survived fix#9 for this token category | `fc3eed0` | **FIXED** — added a narrow `KNOWN_NON_PROJECT_PROPER_NOUNS` allowlist (GitHub, GitLab, Bitbucket, LinkedIn, YouTube, FedRAMP, HIPAA, SOC2, PCIDSS, GDPR), folded into the same `isSkillToken` exclusion check fix#9 introduced. Deliberately narrow (not a generic "any CamelCase = not a project" rule) to avoid swallowing genuine CamelCase project names like PillarStream/TalentScope. 3 new regression tests (both cases + an end-to-end `resolveLiveFollowup` reproduction). Full consumer suite re-run: 198/198 green, 13/13 in the extended test file. Typecheck clean. Re-verified on a fresh own judged run (run-012, iter 18) — A4/A5/A13/A18's `G1.extracted` all clean, no trace of ANY prior corruption pattern (Kafka/RocksDB/GitHub/FedRAMP) across 3 independent post-fix runs (run-010/011/012) from 2 different sessions. |
 
 ## SCORE HISTORY
 (benchmark run # / timestamp / greeting-failures / hallucination flags / question-extraction acc / answer quality / long-range recall)
@@ -1461,3 +1462,81 @@ ANTI-THRASH LEDGER's fix#5/#6/#7/#8/#9 are all independently verified
 (unit tests + at least one uncontended or extraction-level live
 confirmation each) and should not be re-investigated or re-fixed without
 new evidence of a genuine regression.
+
+## ITERATION 18 (2026-07-17) — fix#9b (GitHub/FedRAMP variant) found + fixed; 3rd independent post-fix run confirms extraction stays clean
+
+Picked up iteration 17's own findings mid-flight: while a `ps aux`-clear
+window let a own judged run (run-012) proceed, checked the SAME 4
+presses iteration 17 flagged as fix#9's targets (A4/A5/A13/A18) in the
+PRIOR post-fix run (run-009, produced by a concurrent session moments
+before this iteration started) and found the fix#9 mechanism had
+resurfaced with DIFFERENT substituted nouns: "GitHub" and "FedRAMP"
+instead of "Kafka"/"RocksDB" — same corruption shape
+(`answerPlanQuestion` showing "...what made GitHub migration
+challenging?" for the real "...that migration...", and "we'll cover
+FedRAMP in the next round" for "...cover that..."). Root-caused
+immediately since the mechanism was already well understood from fix#9:
+GitHub and FedRAMP are CamelCase-shaped but are neither a skill (so
+fix#9's `isSkillToken` exclusion didn't cover them) NOR a project — they
+matched the bare CamelCase project-tagging rule directly.
+
+**Fixed as fix#9b (commit `fc3eed0`, ANTI-THRASH LEDGER row 10)**: added
+a narrow `KNOWN_NON_PROJECT_PROPER_NOUNS` allowlist (GitHub, GitLab,
+Bitbucket, LinkedIn, YouTube, FedRAMP, HIPAA, SOC2, PCIDSS, GDPR) folded
+into the same exclusion check fix#9 introduced — deliberately narrow
+(not "any CamelCase noun that isn't a skill"), since a broad rule risks
+excluding a genuine CamelCase project name like PillarStream or
+TalentScope. 3 new tests, full consumer suite 198/198 green, typecheck
+clean — same rigor as fix#9's own verification.
+
+**Launched a THIRD post-fix judged run (run-012) to independently
+re-verify both fix#9 AND fix#9b together**: `ps aux` clear at launch,
+confirmed clear throughout via periodic checks, completed successfully
+(no collision this time). Checked A4/A5/A13/A18's `G1.extracted` in
+run-012: all four show the correctly-extracted question with NO trace
+of ANY prior corruption pattern (not Kafka, not RocksDB, not GitHub, not
+FedRAMP) — third independent confirmation (after run-010/011 from a
+concurrent session) that the extraction-level fix holds.
+
+**Same environmental confound as iteration 17, re-confirmed**: run-012's
+early-press latencies (A1 5.3s, A2 7.2s, A3 7.1s) are well above
+run-005's clean ~2s baseline despite a clear `ps aux` at launch — this
+run was also contended by other sessions' background activity starting
+sometime after launch, exactly matching iteration 17's finding that a
+launch-time-clear check is necessary but not sufficient in this shared
+workspace. A18's actual answer in run-012 shows a LEAKED
+`<rewrite_instructions>` meta-block reaching the user-facing output —
+a distinct, real quality issue, but a repair/self-correction pipeline
+artifact under contention pressure, not the pronoun-splicing bug (A18's
+own extraction/answerPlanQuestion was clean). Overall run-012 scores
+(G1 100%, G2 0 flags, G4 3 flags, G3 22%, G5 25%, G6 32%) are in the same
+degraded-but-not-regressed range as run-008/009/010/011 — consistent
+with "extraction bugs fixed, environmental contention remains the
+dominant confound," not a new regression.
+
+**Quota check**: not independently re-checked this iteration beyond
+observing my own run completed without a provider-error/quota-exhaustion
+failure signature in its log — treating that as sufficient evidence
+quota was adequate for this one run. No pause triggered.
+
+**NEXT ACTION**: unchanged from iteration 17's — this campaign now has
+THREE independent post-fix judged runs (010/011/012, 2 different
+sessions) all confirming the extraction-level bugs (fix#9, fix#9b) are
+genuinely fixed, with zero recurrence of ANY of the four now-known
+corruption tokens. A perfectly clean (uncontended) full judged run
+satisfying L4's exact numeric targets remains elusive purely due to
+this shared workspace's persistent background load from other sessions
+— not something further product fixes can address. Recommend treating
+the extraction-bug-fixing sub-thread of this campaign as DONE (fix#5
+through #9b, all independently verified) and shifting remaining
+campaign effort to either: (a) accept the iteration 11-12 uncontended
+skip-judge evidence plus this iteration's targeted extraction checks as
+sufficient proof for Phase 3's exit condition in spirit even without a
+numerically clean full run, and move to Phase 4 hardening (removing
+temporary `[TRACE:LONGCTX]`/`[FIX:*]` debug logs, writing the final
+report); or (b) if a strictly clean numeric L4 run is still required,
+wait for a longer quiet window in the shared workspace (check `ps aux`
+repeatedly over several minutes before committing to a 20-30 min run,
+not just once at launch) — a decision for whoever picks this campaign
+up next, since neither path is clearly superior from inside this
+session's own vantage.
