@@ -181,6 +181,44 @@ describe('EvidenceResolver: falls through to hybrid RAG when OKF has no pack', (
     assert.equal(result.pack.items[0].sourceKind, 'mode_reference_chunk');
   });
 
+  test('a main control-system question falls through past ROS/agent-controller OKF decoys to the labeled spec row', async () => {
+    const contract = referenceFilesContract('What main control system is listed for Robot X?');
+    let hybridCalled = false;
+    const resolver = new EvidenceResolver(fakeDeps({
+      classifyQuestion: () => ({ type: 'entity_lookup', isSynthesis: false, targetEntities: ['Robot X'] }),
+      knowledgeManager: {
+        getPackForFile: () => ({
+          packId: 'pack-control', packVersion: 1,
+          cards: [
+            { id: 'ros', title: 'Teleoperation', body: 'The control interface uses ROS to stream commands from a VR controller.', sourcePages: [27], sourceSections: ['Control'], entities: ['Robot X'], confidence: 'high', approvalStatus: 'approved' },
+            { id: 'agent', title: 'Agentic framework', body: 'An AutoGen agent acts as a controller capable of interacting with the environment.', sourcePages: [38], sourceSections: ['Agentic AI'], entities: ['Robot X'], confidence: 'high', approvalStatus: 'approved' },
+            { id: 'spec', title: 'Technical Specifications', body: 'Control System NVIDIA Jetson Xavier (main), Jetson Nano (aux).', sourcePages: [17], sourceSections: ['Specifications'], entities: ['Robot X'], confidence: 'high', approvalStatus: 'approved' },
+          ],
+        }),
+      },
+      queryOkfCards: (pack) => pack.cards.filter((card) => card.id !== 'spec').map((card) => ({ card, score: 0.9 })),
+      hybridRetriever: {
+        retrieveHybrid: async () => {
+          hybridCalled = true;
+          return {
+            chunks: [{ sourceId: 'file-1', fileName: 'thesis.pdf', text: 'Control System NVIDIA Jetson Xavier (main), Jetson Nano (aux).', chunkIndex: 0, score: 0.9, ftsScore: 0.6, vectorScore: 0.8 }],
+            formattedContext: '', usedFallback: false, usedHybrid: true,
+          };
+        },
+      },
+    }));
+    const result = await resolver.resolve({
+      turnId: 'turn-main-control',
+      question: 'What main control system is listed for Robot X?',
+      sourceContract: contract,
+      activeMode: { modeId: 'mode-test' },
+      requestedProperty: 'processor_or_controller',
+    });
+    assert.equal(hybridCalled, true, 'generic controller vocabulary must not let decoy OKF cards short-circuit a labeled control-system lookup');
+    assert.equal(result.strategy, 'hybrid_rag');
+    assert.match(result.pack.items[0].text, /NVIDIA Jetson Xavier/);
+  });
+
   test('no OKF pack -> hybrid retrieval runs and its chunks become the pack', async () => {
     const contract = referenceFilesContract('What controller does the robot use?');
     const resolver = new EvidenceResolver(fakeDeps({

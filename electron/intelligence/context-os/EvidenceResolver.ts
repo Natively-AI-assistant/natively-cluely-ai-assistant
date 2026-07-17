@@ -255,6 +255,22 @@ function salientDistinctiveTerms(distinctive: string[], cardBodies: string[]): s
   return sorted.filter((t) => df.get(t)! <= cutoffDf);
 }
 
+/**
+ * A broad requested-property category is not enough when the question names a
+ * specific field within it. For example, generic mentions of a game controller,
+ * a VR controller, or an agent that "acts as a controller" cannot prove a
+ * question asking for a robot's "main control system". Keep the general
+ * vocabulary check in requestedProperty.ts for ordinary controller questions,
+ * but require this exact field label when the user explicitly asks for it.
+ */
+function matchesRequestedField(question: string, text: string, requestedProperty: RequestedProperty): boolean {
+  if (requestedProperty !== 'processor_or_controller') return true;
+  if (/\b(?:main\s+|primary\s+)?control\s+system\b/i.test(question)) {
+    return /\bcontrol\s+system\b/i.test(text);
+  }
+  return true;
+}
+
 export class EvidenceResolver {
   constructor(private readonly deps: EvidenceResolverDeps) {}
 
@@ -371,7 +387,8 @@ export class EvidenceResolver {
     // For a property-bearing question, require at least one card that
     // actually PROVES the requested property (never trust score alone).
     const items: EvidenceItem[] = scoredAcrossFiles.map((s, i) => {
-      const canProve = textCanProveProperty(s.card.body, requestedProperty);
+      const canProve = textCanProveProperty(s.card.body, requestedProperty)
+        && matchesRequestedField(question, s.card.body, requestedProperty);
       return {
         evidenceId: `${turnId}:okf:${i}`,
         sourceKind: 'okf_document_card' as const,
@@ -522,7 +539,8 @@ export class EvidenceResolver {
     }
 
     const items: EvidenceItem[] = result.chunks.map((c, i) => {
-      const canProve = textCanProveProperty(c.text, requestedProperty);
+      const canProve = textCanProveProperty(c.text, requestedProperty)
+        && matchesRequestedField(question, c.text, requestedProperty);
       return {
         evidenceId: `${turnId}:hybrid:${i}`,
         sourceKind: 'mode_reference_chunk' as const,
