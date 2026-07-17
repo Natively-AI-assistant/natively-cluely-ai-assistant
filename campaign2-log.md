@@ -690,3 +690,59 @@ fix: live-path proof, skeptic pass (this campaign has now caught real
 regressions on 2 of 3 non-trivial fixes at the skeptic stage — budget for at
 least one narrowing round), R8 smoke green, re-run the FULL 3-script
 benchmark, append to SCORE HISTORY, re-check L4.
+
+## ITERATION 9 (2026-07-17) — C14 finding explained (covered by fix#6, not a new pin)
+
+Investigated the previously-logged "NEW greeting flag on press C14"
+(iteration 7's finding, before fix#6 existed) to determine if it needs its
+own separate pin, per iteration 7's own NEXT ACTION note ("deserves its own
+smaller mini-forensics pass").
+
+**Finding: C14 is fully explained by fix#6, not a distinct bug.** Read the
+raw `run-002` log around the C14 press: TWO `[NativelyAPI] stream completed`
+events fire for this single press (3 tokens/141 chars, then 31 tokens/233
+chars) — the same profile-repair double-generation signature fix#6 targets.
+The FIRST prompt was well-formed (`answerPlanQuestion` correctly set to the
+real Raft/Datadog question, `answerPlanQuestionSurvivesInPrompt: true`,
+`candidateProfileChars: 11060` — not actually truncated), so the first-pass
+answer (very short, likely itself a false-refusal) tripped the
+`ProfileOutputValidator` critical-violation check and triggered the SAME
+repair regeneration path fix#6 already patches. Pre-fix, that repair's
+`<question>` block rendered empty (the exact bug fix#6 fixes), so the
+regeneration had no anchor and produced the incoherent "I don't have the
+rest of your profile loaded (it cuts off mid-bullet at Datadog)... How can I
+help you use it?" — the model's OWN description of missing question context,
+not a real fact about the profile (the profile block was never truncated).
+
+**Conclusion**: no new pin needed. C14 should be re-verified as fixed
+(alongside A12) on the NEXT full benchmark run after fix#6, rather than
+investigated as a separate root cause. Not spending quota on a dedicated
+re-run of C14 alone this iteration (the standing NEXT ACTION already calls
+for one more full run once the A1/A12/A6 mini-forensics + any resulting fix
+lands) — logging the explanation now so a future iteration doesn't
+re-diagnose it as fresh.
+
+**Shared-workspace note**: `git status` at this iteration's start shows
+`electron/IntelligenceEngine.ts` modified by a CONCURRENT session — read the
+diff (not committed by this session) and confirmed it's an independent,
+well-scoped fix for a DIFFERENT but related bug: a provider-transport-error
+string (e.g. "I couldn't reach the AI provider...") was being persisted into
+session history via the default write policy, poisoning a LATER press's
+prompt with a fake `[ASSISTANT]: I couldn't reach...` turn — this is likely
+what caused this session's OWN run-003 finding of A12 answering "That
+context wasn't part of a meeting transcript... What would you like help
+with?" after A11's real connect-timeout in that run. Left that file
+completely untouched (no edits, no commit) since another session is actively
+working in it — per the standing protocol, only touch files this session
+itself modifies, and re-check `git status`/`git branch --show-current`
+immediately before every git operation since concurrent commits can land at
+any time.
+
+**NEXT ACTION (unchanged)**: proceed with the A1/A12/A6 mini-forensics per
+iteration 8's NEXT ACTION above. Before starting, re-check whether the
+concurrent session's provider-transport-error guard has landed (it may
+independently resolve some of the G3/G6 failures this session was about to
+investigate, particularly A12 in run-003, since that specific confusion came
+from the same poisoned-history mechanism) — re-run a cheap structural check
+(`--skip-judge`) first to see current state before spending judge-tier
+quota on a full re-diagnosis of findings that may already be fixed.
