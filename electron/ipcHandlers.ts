@@ -10378,6 +10378,38 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
     });
 
+    // Dump OKF card titles/types/bodies for a mode's reference files — used to
+    // diagnose card-selection false refusals/hallucinations where the OKF
+    // extractor lossily compressed or misfiled a fact (see forensic-report.md
+    // §6f finding B, THESIS-129/131). Filter with `grepBody` or `titles` to
+    // avoid returning every card body by default.
+    safeHandle('__e2e__:dump-okf-cards', async (_, params: { modeId: string; grepBody?: string; titles?: string[] }) => {
+      try {
+        const modeId = typeof params === 'string' ? params : params.modeId;
+        const grep = typeof params === 'object' ? params.grepBody : undefined;
+        const titles = typeof params === 'object' && Array.isArray(params.titles) ? params.titles.map((t) => t.toLowerCase()) : undefined;
+        const { ModesManager } = require('./services/ModesManager');
+        const { KnowledgeManager } = require('./services/knowledge/KnowledgeManager');
+        const mm = ModesManager.getInstance();
+        const files = mm.getReferenceFiles(modeId);
+        const km = KnowledgeManager.getInstance();
+        const out: any[] = [];
+        for (const f of files) {
+          const pack = km.getPackForFile(f.id);
+          if (!pack) continue;
+          for (const c of pack.cards) {
+            const matchesGrep = grep ? c.body.toLowerCase().includes(grep.toLowerCase()) : false;
+            const matchesTitle = titles ? titles.includes(c.title.toLowerCase()) : false;
+            const matches = grep || titles ? (matchesGrep || matchesTitle) : true;
+            out.push({ title: c.title, type: c.type, confidence: c.confidence, bodyLen: c.body.length, matchesGrep: matches, body: matches ? c.body : undefined });
+          }
+        }
+        return { success: true, cards: out };
+      } catch (e: any) {
+        return { success: false, error: e.message };
+      }
+    });
+
     // Run the REAL active-mode retrieval for a query and return the context block
     // + top score, so the harness can verify the right chunks are retrieved.
     safeHandle('__e2e__:inspect-retrieval', async (
