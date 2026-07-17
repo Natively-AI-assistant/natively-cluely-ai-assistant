@@ -1218,14 +1218,80 @@ Phase 4 hardening note, not a Phase 1-3 pinned bug.
 run (killed early, ~3 presses in). Account1 exhausted, Account2 healthy
 per the same qualitative read as iteration 12/13.
 
-**NEXT ACTION**: do NOT start another full judged run until confirming
-via `ps aux | grep -i "run-all.mjs\|run-script"` that no other session's
-harness run is active — this check is now a hard precondition, not
-optional, given the actual collision observed. Once clear, retry the
-full 3-script judged benchmark run (still the single highest-value next
-step per iteration 13's assessment — G1 grading fix has landed, G1/G2/G4/
-G6/G7 look strong campaign-wide). If the OTHER session's currently-running
-judged run (90985/...) completes first and produces a valid `run-NNN.json`
-+ `.md`, that run itself may already satisfy the need — check
-`test/harness-longsession/reports/` for a new report with `skipJudge:
-false` and both G3_judge/G4_judge populated before starting a duplicate.
+**NEXT ACTION (superseded)**: ~~do NOT start another full judged run until
+confirming no collision~~ — done, see ITERATION 15.
+
+## ITERATION 15 (2026-07-17, ~13:1x local) — Two more judged-run attempts, both confounded by backend contention (not a product regression)
+
+**First retry (discarded, not committed)**: confirmed via `ps aux` that
+this session's OWN prior run (PID 90985 from iteration 14, mistakenly
+identified as "the other session's run" in that entry — it was actually
+MY OWN process from an earlier launch this same iteration, collided with
+by a THIRD session's simultaneous run) had already completed and written
+`run-008.json`. Read it: severe regression vs run-005's clean baseline —
+Script A G6 desync dropped from 100% (run-005) to 33%, with answers like
+"That response got cut off mid-sentence" and "there's no follow-up
+question in the conversation yet" (the same confused-non-answer failure
+class as fix#6/#7's original repros). Per iteration 14's own diagnosis,
+this WAS the collided/spliced-trace-file output (two processes writing to
+the identical `traces2/harness-*-press-*.txt` paths). **Deleted this
+run-008 without committing it** — corrupted data, not evidence of
+anything real about the product.
+
+**Second retry (clean process, still confounded — committed as labeled
+evidence)**: re-checked `ps aux` for any `run-all.mjs`/`run-script-*.mjs`
+process before starting — confirmed clear, launched a fresh run, verified
+throughout that only this session's own PID tree was running. This
+produced a NEW `run-008.json`/`.md` (previous discarded one had the same
+filename slot; not the same content) that is procedurally clean (no file
+collision) but still shows a severe regression from run-005: script-a G6
+desync 22%, script-c G6 40% (both down from ~90-100% in the skip-judge
+runs), 3 G4 hallucination flags (up from 0), and answers again showing the
+confused-non-answer pattern ("[Resume content truncated...", "repetitive
+generation loop" per the judge's own C14 note).
+
+**Investigated whether this is a real regression or an environmental
+confound — found clear evidence of the latter**: `ps aux` during the run
+showed a THIRD concurrent session actively running a full Electron-app
+golden-trace script (`traces/golden-trace-okfcards-dump.mjs`) hitting the
+SAME shared local `natively-api` backend on `:3000` for unrelated
+OKF-cards work. This run's latency buckets are 2-3x slower than run-005's
+(p50 ~4-5s vs run-005's ~1.7-2s) and the raw log shows 24 connect-timeout/
+fallback-related lines — a real, measurable backend contention signal
+correlating exactly with the quality drop. This is NOT a file-write
+collision (verified clean via `ps aux` at start), it's REQUEST-level
+contention on the shared backend/MiniMax-M3 capacity from a DIFFERENT
+session's simultaneous real API traffic — a distinct but related instance
+of the same shared-workspace hazard iteration 14 hit.
+
+**Conclusion — genuinely uncertain, logged honestly rather than
+resolved**: this campaign's own resolution rule ("Benchmark is flaky...
+treat an item as failed only if it fails 2 of 2 runs") assumes flakiness
+from MODEL variance, not from CONCURRENT-SESSION backend contention — this
+run doesn't cleanly fit either category. The desync-resolution claim from
+iterations 11-12 (based on 3 skip-judge runs, all apparently free of
+backend contention at the time they ran) remains the best evidence this
+campaign has that fix#5/#6/#7/#8 genuinely work — but this iteration's 2
+consecutive contaminated attempts mean the OFFICIAL L4-measuring judged
+run still has not been cleanly obtained. Committing `run-008` anyway (not
+discarding) because it's real, honestly-labeled data — a future iteration
+comparing runs should know this one was contended, not silently treat its
+low scores as ground truth.
+
+**Quota check**: Account1 88% session (healthy, recovered significantly
+since iteration 13's 0%/exhausted read). Continuing per §1.5 — no pause
+needed.
+
+**NEXT ACTION**: getting a genuinely CLEAN full judged run requires either
+(a) exclusive backend access, which this shared multi-session workspace
+cannot guarantee on demand — consider running at a time with observably
+fewer `ps aux` hits on `natively-api`/other harness processes, or (b)
+accepting that a single clean run may not be obtainable and instead
+running the SAME script multiple times back-to-back, discarding any run
+where `ps aux` shows contention DURING the run, and only trusting a result
+where 2 CONSECUTIVE clean-process, low-latency (p50 comparable to
+run-005's ~2s baseline, not run-008's ~4-5s) runs agree — this is more
+expensive but is the only way to get a trustworthy L4 measurement in this
+environment. Given quota is healthy (88%), a future iteration should
+attempt (b) if backend contention signals (via `ps aux` + a quick latency
+sanity check on the FIRST press) are clear at start.
