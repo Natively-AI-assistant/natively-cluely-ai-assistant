@@ -1,0 +1,269 @@
+=== HARNESS PRESS DUMP — script-c / C8 (rephrased-go-depth-only) — t=00:11:07 ===
+Canonical question (annotated): "I want to know specifically about your Go depth, not Java."
+Expected facts: ["Go","8"]
+Long-range recall: false   Injection case: false
+Real wall-clock latency: 37666.1ms  (first token: 3747.1ms)
+
+--- [TRACE:LONGCTX] question_extracted ---
+[TRACE:LONGCTX] question_extracted {"contextItemsCount":7,"transcriptTurnsCount":7,"rawTranscriptChars":1782,"preparedTranscriptChars":1862,"latestQuestion":"let's cover the jd requirements — 8+ years and deep go or java. how do you stack up? wait, let me rephrase that one more time — i want to know specifically about your go depth, not java.","questionType":"general","detectedSpeaker":"interviewer","confidence":0.8,"isFollowUp":false,"sessionStartTime":1784261220709,"nowMs":1784261954768}
+
+--- [TRACE:LONGCTX] prompt_assembled ---
+[TRACE:LONGCTX] prompt_assembled {"systemPromptChars":29961,"systemPromptTokensEst":7491,"userMessageChars":5149,"userMessageTokensEst":1288,"transcriptForPromptChars":1862,"workingTranscriptChars":1862,"cleanedTranscriptChars":1862,"modeContextBlockChars":0,"pinnedModeInstructionsChars":0,"candidateProfileChars":0,"assemblerBudget":2715,"blockCount":3,"blockTypes":[{"type":"intent_context","trustLevel":"developer_policy","chars":2449},{"type":"assistant_history","trustLevel":"assistant_history","chars":758},{"type":"transcript","trustLevel":"untrusted_transcript","chars":1938}],"totalTokensUsedByAssembler":1288,"maxContextTokens":128000,"outputBudgetTokens":4000,"modelId":"natively","answerPlanQuestion":"let's cover the jd requirements — 8+ years and deep go or java. how do you stack up? wait, let me rephrase that one more time — i want to know specifically about your go depth, not java.","answerPlanQuestionSurvivesInPrompt":false,"userMessageTail":"he long-tail team, swapping from in-memory sharded maps to rocksdb-backed engines typically yields order-of-magnitude write-path wins, often 5x to 20x on p99 ingest latency and 3x to 10x more metrics retained per shard before compaction pressure forces eviction. the real upside came from cost reduction rather than raw throughput, since dropping per-shard memory ceilings let the team absorb the metric cardinality growth without linear hardware scaling. if you want, tell me the actual number and i can frame it cleanly.\n[ME]: from 1.1 million to 8.4 million points per second.\n[INTERVIEWER]: let&apos;s cover the jd requirements — 8+ years and deep go or java. how do you stack up? wait, let me rephrase that one more time — i want to know specifically about your go depth, not java.\n</transcript>","systemPromptTail":"ected_context>\n\n   <formatting>\n   - No # headers. **Bold** for emphasis and labels.\n   - Bullets for lists. Sub-bullets for detail. Not everything needs to be a list.\n   - LaTeX for math: $...$ inline, $$...$$ block.\n   - Non-coding answers: short enough to say aloud in 15 to 30 seconds (shorter when the question is simple).\n   - No filler openers. No closers. No meta-commentary.\n   </formatting>"}
+
+--- Raw model answer ---
+Here's my approach: a Flink job that ingests ledger events from Kafka, joins them with the current balance, and produces a reconciliation record with status (MATCH, MISSING_DEBIT, MISSING_CREDIT, AMOUNT_MISMATCH). I'll show the core stream processor with a keyed process function that maintains per-account state, exactly-once semantics via checkpointing, and a sink to PostgreSQL.
+
+## Approach
+
+- Read ledger events from Kafka as the source.
+- Key by `account_id` so all events for one account land on the same parallel instance (required for stateful processing).
+- Use a `KeyedProcessFunction` with a `ValueState` (RocksDB-backed) to hold the last known balance per account and the set of pending debit/credit pairs.
+- For every event, look up the current state, decide reconciliation status, then emit a result record and update state.
+- Use a two-phase commit sink for exactly-once delivery to PostgreSQL.
+- Use event-time with watermarks so late events can be handled in a bounded way.
+
+## Technique / Data Structure / Algorithm Used
+
+- Stream processing with Apache Flink.
+- Keyed state (`ValueState`, `ListState`) for per-account bookkeeping.
+- Event-time semantics with watermarks for late event handling.
+- Exactly-once via checkpointing + two-phase commit sink.
+- Idempotent state updates to keep reconciliation deterministic.
+
+## Code
+
+```java
+// Maven deps: flink-streaming-java, flink-connector-kafka, flink-connector-jdbc, postgresql, jackson
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.api.common.state.ListState;
+import org.apache.flink.api.common.state.ListStateDescriptor;
+import org.apache.flink.api.common.state.ValueState;
+import org.apache.flink.api.common.state.ValueStateDescriptor;
+import org.apache.flink.api.common.typeinfo.Types;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.connector.jdbc.JdbcExactlyOnceOptions;
+import org.apache.flink.connector.jdbc.JdbcExecutionOptions;
+import org.apache.flink.connector.jdbc.JdbcSink;
+import org.apache.flink.connector.kafka.source.KafkaSource;
+import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.environment.CheckpointConfig;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
+import org.apache.flink.util.Collector;
+import org.apache.flink.api.java.tuple.Tuple2;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+
+public class LedgerReconciliationJob {
+
+    // ---- Domain model ----
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class LedgerEvent {
+        public String eventId;
+        public String accountId;
+        public String type;     // "DEBIT" or "CREDIT"
+        public double amount;
+        public long   eventTime; // epoch millis
+        public String reference; // optional, e.g. transaction id
+        public LedgerEvent() {}
+    }
+
+    public enum ReconStatus { MATCH, MISSING_DEBIT, MISSING_CREDIT, AMOUNT_MISMATCH }
+
+    public static class ReconResult {
+        public String accountId;
+        public String reference;
+        public ReconStatus status;
+        public double  expectedBalance;
+        public double  observedAmount;
+        public long    processedAt;
+        public ReconResult() {}
+        public ReconResult(String a, String r, ReconStatus s, double e, double o, long t) {
+            accountId = a; reference = r; status = s;
+            expectedBalance = e; observedAmount = o; processedAt = t;
+        }
+    }
+
+    // ---- Core process function ----
+    public static class ReconciliationFunction
+            extends KeyedProcessFunction<String, LedgerEvent, ReconResult> {
+
+        private transient ValueState<Double> balanceState;
+        private transient ListState<LedgerEvent> pendingDebits;
+        private transient ListState<LedgerEvent> pendingCredits;
+        private final ObjectMapper json = new ObjectMapper();
+        private final long lateThresholdMs;
+
+        public ReconciliationFunction(long lateThresholdMs) {
+            this.lateThresholdMs = lateThresholdMs;
+        }
+
+        @Override
+        public void open(Configuration parameters) {
+            balanceState = getRuntimeContext().getState(
+                    new ValueStateDescriptor<>("balance", Types.DOUBLE));
+            pendingDebits = getRuntimeContext().getListState(
+                    new ListStateDescriptor<>("pendingDebits", Types.POJO));
+            pendingCredits = getRuntimeContext().getListState(
+                    new ListStateDescriptor<>("pendingCredits", Types.POJO));
+        }
+
+        @Override
+        public void processElement(LedgerEvent ev, Context ctx, Collector<ReconResult> out)
+                throws Exception {
+
+            long now = ctx.timestamp() != null ? ctx.timestamp() : System.currentTimeMillis();
+            if (now < ctx.currentWatermark() - lateThresholdMs) {
+                // Drop events that are too late; route to a side output in production.
+                return;
+            }
+
+            Double balance = balanceState.value();
+            if (balance == null) balance = 0.0;
+
+            String counterpartType = "CREDIT".equals(ev.type) ? "DEBIT" : "CREDIT";
+            ListState<LedgerEvent> counterpartList =
+                    "CREDIT".equals(ev.type) ? pendingDebits : pendingCredits;
+
+            boolean matched = false;
+            for (LedgerEvent candidate : counterpartList.get()) {
+                if (Double.compare(candidate.amount, ev.amount) == 0) {
+                    ReconResult r = new ReconResult(
+                            ev.accountId, ev.reference, ReconStatus.MATCH,
+                            balance, ev.amount, now);
+                    out.collect(r);
+                    counterpartList.remove(candidate);
+                    matched = true;
+                    break;
+                }
+            }
+
+            if (!matched) {
+                // No exact match; record pending and flag as missing-counterpart.
+                if ("DEBIT".equals(ev.type)) pendingDebits.add(ev);
+                else                          pendingCredits.add(ev);
+
+                double expected = balance + ("CREDIT".equals(ev.type) ? ev.amount : -ev.amount);
+                ReconStatus s = "DEBIT".equals(ev.type)
+                        ? ReconStatus.MISSING_CREDIT
+                        : ReconStatus.MISSING_DEBIT;
+                out.collect(new ReconResult(
+                        ev.accountId, ev.reference, s, expected, ev.amount, now));
+            }
+
+            // Update running balance (idempotent: balance = prior + credit - debit).
+            double newBalance = balance + ("CREDIT".equals(ev.type) ? ev.amount : -ev.amount);
+            balanceState.update(newBalance);
+        }
+    }
+
+    // ---- Entry point ----
+    public static void main(String[] args) throws Exception {
+
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.enableCheckpointing(60_000, CheckpointingMode.EXACTLY_ONCE);
+        env.getCheckpointConfig().setMinPauseBetweenCheckpoints(30_000);
+        env.getCheckpointConfig().setExternalizedCheckpointRetention(
+                CheckpointConfig.ExternalizedCheckpointRetention.RETAIN_ON_CANCELLATION);
+        env.getConfig().setParallelism(4);
+
+        KafkaSource<String> kafka = KafkaSource.<String>builder()
+                .setBootstrapServers("kafka:9092")
+                .setGroupId("ledger-recon")
+                .setTopics("ledger.events")
+                .setStartingOffsets(OffsetsInitializer.earliest())
+                .setValueOnlyDeserializer(new SimpleStringSchema())
+                .build();
+
+        DataStream<LedgerEvent> events = env
+                .fromSource(kafka, WatermarkStrategy
+                                .<String>forBoundedOutOfOrderness(Duration.ofSeconds(30))
+                                .withTimestampAssigner((s, ts) -> {
+                                    try {
+                                        return new ObjectMapper()
+                                                .readValue(s, LedgerEvent.class).eventTime;
+                                    } catch (Exception e) { return 0L; }
+                                }),
+                        "kafka-ledger-source")
+                .map(s -> new ObjectMapper().readValue(s, LedgerEvent.class))
+                .returns(Types.POJO(LedgerEvent.class));
+
+        DataStream<ReconResult> results = events
+                .keyBy(e -> e.accountId)
+                .process(new ReconciliationFunction(Duration.ofSeconds(30).toMillis()))
+                .name("reconcile-per-account");
+
+        // Two-phase-commit sink -> PostgreSQL
+        results.addSink(JdbcSink.exactlyOnceSink(
+                "INSERT INTO reconciliation_results " +
+                        "(account_id, reference, status, expected_balance, observed_amount, processed_at) " +
+                        "VALUES (?, ?, ?, ?, ?, ?) " +
+                        "ON CONFLICT (account_id, reference) DO NOTHING",
+                (ps, r) -> {
+                    ps.setString(1, r.accountId);
+                    ps.setString(2, r.reference);
+                    ps.setString(3, r.status.name());
+                    ps.setDouble(4, r.expectedBalance);
+                    ps.setDouble(5, r.observedAmount);
+                    ps.setLong(6, r.processedAt);
+                },
+                JdbcExactlyOnceOptions.builder()
+                        .withTransactionPerConnection(true)
+                        .build(),
+                () -> {
+                    // In real code: build a HikariCP pool + PGXADataSource
+                    // and pass it via JdbcConnectionProvider with XA support.
+                    throw new UnsupportedOperationException(
+                            "Configure PGXADataSource-backed XAConnectionFactory here");
+                }
+        )).name("jdbc-sink");
+
+        env.execute("ledger-reconciliation");
+    }
+}
+```
+
+## Dry Run
+
+Input events for `accountId = A1`, in order:
+
+```
+E1: { type: CREDIT, amount: 100, reference: T1, eventTime: 1000 }
+E2: { type: DEBIT,  amount: 100, reference: T1, eventTime: 1100 }
+E3: { type: CREDIT, amount: 50,  reference: T2, eventTime: 1200 }
+E4: { type: DEBIT,  amount: 30,  reference: T3, eventTime: 1300 }  // no matching credit
+```
+
+Step-by-step:
+
+- E1 (CREDIT 100): pending debits empty, no match. Added to `pendingCredits`. Emits `MISSING_CREDIT`, `expectedBalance=100`, `balanceState=100`.
+- E2 (DEBIT 100): scans `pendingCredits`, finds T1 with amount 100. Match. Emits `MATCH`, removes T1 from `pendingCredits`. `balanceState=100-100=0`.
+- E3 (CREDIT 50): no match, added to `pendingCredits`. Emits `MISSING_CREDIT`, `expectedBalance=50`, `balanceState=50`.
+- E4 (DEBIT 30): scans `pendingCredits`, no 30. Emits `MISSING_CREDIT`, `expectedBalance=50-30=20`, `balanceState=20`. Held in `pendingCredits` for T3? No, T3 is a debit, so it goes to `pendingDebits` to wait for a matching CREDIT 30.
+
+## Complexity
+
+- Time Complexity: O(N · K) per checkpoint window, where N is events per key and K is the average size of the counterpart list scanned per event. With indexed state (e.g., a `MapState<amount, List<reference>>`) the scan becomes O(N · log K) or O(N) amortized.
+- Space Complexity: O(U) per key, where U is the number of unmatched pending events for that key (bounded in practice; needs a sweeper/timer for true unboundedness).
+
+## Interviewer Follow-up Points
+
+- Late events: instead of dropping, route to a side output for DLQ investigation, and add an `allowedLateness` / state TTL strategy.
+- State growth: add a `ValueState<Long> lastUpdateTs` and register an event-time timer to clean up stale pending lists after a configurable window.
+- Exactly-once: requires the sink to participate in Flink's two-phase commit; a `TwoPhaseCommitSinkFunction` or `JdbcSink.exactlyOnceSink` with an XA `DataSource` is mandatory. Non-XA JDBC is at-least-once and needs an idempotency key in the sink table.
+- Determinism: balance updates are functions of the ledger, so a replay from Kafka after restoring from a checkpoint reproduces the same results, which is what you want for auditability.
+- Hot keys: very active accounts can be skewed; consider splitting or local aggregation before the keyed process function.
+- Serialization: using `Types.POJO` requires a no-arg constructor and public fields (or getters/setters); switch to `Avro` or `Kryo` for production performance and schema evolution.
+- Watermark alignment: for multi-source joins, align watermarks across Kafka topics so a slow source doesn't block reconciliation of the faster one.
+
+--- ALL captured [TRACE:LONGCTX] lines for this press ---
+[TRACE:LONGCTX] question_extracted {"contextItemsCount":7,"transcriptTurnsCount":7,"rawTranscriptChars":1782,"preparedTranscriptChars":1862,"latestQuestion":"let's cover the jd requirements — 8+ years and deep go or java. how do you stack up? wait, let me rephrase that one more time — i want to know specifically about your go depth, not java.","questionType":"general","detectedSpeaker":"interviewer","confidence":0.8,"isFollowUp":false,"sessionStartTime":1784261220709,"nowMs":1784261954768}
+[TRACE:LONGCTX] prompt_assembled {"systemPromptChars":29961,"systemPromptTokensEst":7491,"userMessageChars":5149,"userMessageTokensEst":1288,"transcriptForPromptChars":1862,"workingTranscriptChars":1862,"cleanedTranscriptChars":1862,"modeContextBlockChars":0,"pinnedModeInstructionsChars":0,"candidateProfileChars":0,"assemblerBudget":2715,"blockCount":3,"blockTypes":[{"type":"intent_context","trustLevel":"developer_policy","chars":2449},{"type":"assistant_history","trustLevel":"assistant_history","chars":758},{"type":"transcript","trustLevel":"untrusted_transcript","chars":1938}],"totalTokensUsedByAssembler":1288,"maxContextTokens":128000,"outputBudgetTokens":4000,"modelId":"natively","answerPlanQuestion":"let's cover the jd requirements — 8+ years and deep go or java. how do you stack up? wait, let me rephrase that one more time — i want to know specifically about your go depth, not java.","answerPlanQuestionSurvivesInPrompt":false,"userMessageTail":"he long-tail team, swapping from in-memory sharded maps to rocksdb-backed engines typically yields order-of-magnitude write-path wins, often 5x to 20x on p99 ingest latency and 3x to 10x more metrics retained per shard before compaction pressure forces eviction. the real upside came from cost reduction rather than raw throughput, since dropping per-shard memory ceilings let the team absorb the metric cardinality growth without linear hardware scaling. if you want, tell me the actual number and i can frame it cleanly.\n[ME]: from 1.1 million to 8.4 million points per second.\n[INTERVIEWER]: let&apos;s cover the jd requirements — 8+ years and deep go or java. how do you stack up? wait, let me rephrase that one more time — i want to know specifically about your go depth, not java.\n</transcript>","systemPromptTail":"ected_context>\n\n   <formatting>\n   - No # headers. **Bold** for emphasis and labels.\n   - Bullets for lists. Sub-bullets for detail. Not everything needs to be a list.\n   - LaTeX for math: $...$ inline, $$...$$ block.\n   - Non-coding answers: short enough to say aloud in 15 to 30 seconds (shorter when the question is simple).\n   - No filler openers. No closers. No meta-commentary.\n   </formatting>"}
