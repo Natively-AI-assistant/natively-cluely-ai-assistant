@@ -22,7 +22,7 @@ export interface ExtractedEntity {
 }
 
 // CamelCase tokens that are actually SKILLS/tech, not project names.
-const KNOWN_SKILLS = /^(TypeScript|JavaScript|FastAPI|GraphQL|PostgreSQL|MongoDB|PowerBI|TensorFlow|PyTorch|NodeJS)$/i;
+const KNOWN_SKILLS = /^(TypeScript|JavaScript|FastAPI|GraphQL|PostgreSQL|MongoDB|PowerBI|TensorFlow|PyTorch|NodeJS|RocksDB|DynamoDB|CockroachDB|Elasticsearch|Kubernetes|OpenTelemetry|ZooKeeper|RabbitMQ)$/i;
 // Common sentence-initial / interjection / filler words capitalized by grammar but
 // NOT entities — excluded from the short-answer proper-noun heuristic.
 const STOP_PROPER = new Set([
@@ -54,22 +54,52 @@ export function extractTranscriptEntities(text: string, speakerRole?: 'interview
   // Compensation FIRST — any comp-looking value is tagged sensitive (caller gates it).
   if (SALARY_VALUE_RE.test(t)) out.push({ kind: 'comp', value: t.trim().slice(0, 80), sensitive: true });
 
-  // skills (before CamelCase so a CamelCase skill like TypeScript isn't a "project")
-  const skill = t.match(SKILL_RE);
-  if (skill) out.push({ kind: 'skill', value: skill[0] });
+  // skills (before CamelCase so a CamelCase skill like TypeScript isn't a "project").
+  // Collect EVERY skill mention, not just the first — `t.match(SKILL_RE)` without the
+  // `g` flag silently drops every skill after the first one in the same turn (e.g. "a
+  // streaming Kafka and Flink pipeline" only tagged Hadoop from an earlier sentence,
+  // never Kafka), which then let the later CamelCase/cued-noun rule below mis-tag the
+  // untagged skill as a `project` instead. All matched skill tokens are gathered into
+  // `skillTokens` (lowercased) so the CamelCase/cued rules can exclude them too.
+  const skillMatches = t.match(new RegExp(SKILL_RE.source, 'gi')) || [];
+  const skillTokens = new Set<string>();
+  for (const s of skillMatches) {
+    const key = s.toLowerCase();
+    if (skillTokens.has(key)) continue;
+    skillTokens.add(key);
+    out.push({ kind: 'skill', value: s });
+  }
+  const isSkillToken = (tok: string) => KNOWN_SKILLS.test(tok) || skillTokens.has(tok.toLowerCase());
 
-  // PROJECT names: CamelCase tokens (excluding known skills).
+  // PROJECT names: CamelCase tokens (excluding known/mentioned skills — a tech name
+  // like RocksDB, Kafka, or TensorFlow is CamelCase-shaped but is a SKILL, not a
+  // project, and must never be recalled as one; see isSkillToken above).
   const camel = t.match(/\b[A-Z][a-z0-9]+[A-Z][a-zA-Z0-9]*\b/g) || [];
-  for (const c of camel) { if (!KNOWN_SKILLS.test(c) && !out.some(e => e.value === c)) out.push({ kind: 'project', value: c }); }
-  // a single capitalized proper noun introduced by a product cue.
-  const cued = t.match(/\b(?:tell me about|about|project called|called|use|using|on|back to|to)\s+([A-Z][a-z][a-zA-Z0-9]{2,})\b/);
-  if (cued && !STOP_PROPER.has(cued[1]) && !KNOWN_SKILLS.test(cued[1]) && !out.some(e => e.value === cued[1])) out.push({ kind: 'project', value: cued[1] });
+  for (const c of camel) { if (!isSkillToken(c) && !out.some(e => e.value === c)) out.push({ kind: 'project', value: c }); }
+  // a single capitalized proper noun introduced by a product cue. Deliberately
+  // excludes any skill token (e.g. "a streaming system ON Kafka" must not tag Kafka as
+  // a project just because "on" is one of the cue words — Kafka is already captured as
+  // a skill above).
+  //
+  // Skeptic-pass finding (2026-07-17, live-reproduced): bare "on"/"to" are NOT
+  // reliable project cues — they precede person/company names just as often as
+  // project names ("reported TO Priya", "escalated TO Priya", "Going back TO
+  // Stripe"), and the same downstream bare-pronoun substitution
+  // (sessionFollowupResolver.ts's /\b(it|that|there)\b/i fallback) that spliced
+  // Kafka/RocksDB into unrelated later questions does the identical thing with a
+  // mis-tagged person name ("what was the hardest part of that project?" ->
+  // "...of Priya?"). Removed from the trigger list; "back to X" (a genuine
+  // topic-return cue, live-tested in LiveSessionMemory2026_06_07c.test.mjs) and
+  // "use X"/"using X" are kept — those two are unambiguously about a
+  // tool/project being adopted, not a person being addressed.
+  const cued = t.match(/\b(?:tell me about|about|project called|called|use|using|back to)\s+([A-Z][a-z][a-zA-Z0-9]{2,})\b/);
+  if (cued && !STOP_PROPER.has(cued[1]) && !isSkillToken(cued[1]) && !out.some(e => e.value === cued[1])) out.push({ kind: 'project', value: cued[1] });
   // a SHORT candidate answer that is just a proper noun ("Natively.") names a project.
   if (speakerRole !== 'interviewer') {
     const words = t.trim().replace(/[.?!,]/g, '').split(/\s+/).filter(Boolean);
     if (words.length <= 3) {
       for (const w of words) {
-        if (/^[A-Z][a-z][a-zA-Z0-9]{2,}$/.test(w) && !STOP_PROPER.has(w) && !KNOWN_SKILLS.test(w) && !out.some(e => e.value === w)) {
+        if (/^[A-Z][a-z][a-zA-Z0-9]{2,}$/.test(w) && !STOP_PROPER.has(w) && !isSkillToken(w) && !out.some(e => e.value === w)) {
           out.push({ kind: 'project', value: w });
         }
       }
