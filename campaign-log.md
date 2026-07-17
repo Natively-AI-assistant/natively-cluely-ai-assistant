@@ -623,4 +623,12 @@ QUOTA note: Account 1 was rate-limited (429) at last check; Account 2 healthy at
 - **THESIS-079 is the exception with valid causal evidence:** focused live retry passed; full run passed; exact selected pack has the Logitech chunk first; deterministic unit pair is green. This is sufficient to mark the ranking defect fixed, while the full suite comparison remains blocked by provider instability.
 - No provider retry, ranking, or timeout code was changed. Do not interpret pass→fail deterministic differences in this invalid run as regressions, and do not change `evidenceSufficiency.ts` further for this provider problem.
 
-**NEXT ACTION:** Check quota. If sufficient, inspect the next highest-impact stable false-refusal cluster from clean `dev-run-005-fieldproof` excluding THESIS-079, using a one-case raw-retrieval + selected-pack forensic trace. Do not rerun the full 140-case benchmark until the MiniMax provider is stable enough to complete all sampled calls.
+**NEXT ACTION (attempted below):** inspect the next highest-impact stable false-refusal cluster from clean `dev-run-005-fieldproof` excluding THESIS-079, using a one-case raw-retrieval + selected-pack forensic trace.
+
+## ITERATION (2026-07-17) — THESIS-072 forensic blocked at Electron window startup
+
+- Chose THESIS-072 as the next stable clean-baseline false refusal and launched the prescribed single-case raw-retrieval/selected-pack forensic (`CTXOS_BENCHMARK_CASE_IDS=THESIS-072`, capture enabled). It failed **before mode creation, upload, indexing, retrieval, provider dispatch, or scoring** because Playwright never received an Electron window within 30 seconds (`electronApplication.firstWindow: Timeout 30000ms`). No THESIS-072 product evidence was collected.
+- The Electron process from this launch remains alive after the runner timed out. It was not killed or signaled because shared-session process ownership cannot be inferred safely. Do not launch another Electron forensic until that process exits or the local environment is demonstrably clean.
+- This is separate from the provider instability recorded for dev-run-007. The current state has two infrastructure blockers: intermittent generation-provider availability after successful setup, and this later pre-case Electron window-startup timeout. Neither warrants changing evidence ranking or retrieval code.
+
+**NEXT ACTION:** On the active THESIS-072 Electron process exit (or a later clean-environment retry), rerun exactly one THESIS-072 forensic command. If it again cannot create a window, checkpoint a repeated Electron-startup infrastructure blocker and defer all live forensics. Do not kill the process, alter ranking, or begin another full benchmark.
