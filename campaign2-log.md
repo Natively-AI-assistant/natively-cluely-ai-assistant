@@ -19,6 +19,7 @@ untouched and may still be active in a separate session).
 | 6 | H2 (system prompt eviction/dilution) | REFUTED same reasoning as H1 — systemPromptChars byte-identical (29961) across all 4 presses | traces2/golden-longctx-*.txt | N/A | refuted |
 | 7 | H8 (tokenization/counting drift) | REFUTED for cloud tier — `fitContextForCurrentModel` is a no-op when maxContextTokens>=100k | LLMHelper.ts:1141 | N/A | refuted |
 | 8 | New (iter 8) — a real provider-transport error (429/expired key/billing) yielded by `WhatToAnswerLLM.generateStream`'s catch block had no persistence guard, so its actionable error string got written into session history like a real answer, poisoning a LATER unrelated press | CONFIRMED (live trace, real 30-min benchmark run-003) | `traces2/harness-script-a-press-A12.txt`: poisoned `[ASSISTANT]: I couldn't reach the AI provider...` turn in the prompt; model answered as if mid error-recovery on an unrelated question | `cf45f3c` | **FIXED** — new `isProviderTransportError` detector + early-return guard (`do_not_store` write policy, ungated user-facing delivery). Skeptic pass found a real, live-reproduced gap in the first draft (guard placed too late — `repairCodingMarkdown` mutated the error text into a 6-section scaffold for coding-type questions before the exact-match check ran, silently missing it) — fixed by converting both this guard AND the sibling `isLeakedSchemaStub` guard into full early returns (mirrors the existing `isNonAnswerSentinel` precedent). 10 unit tests (incl. a coding-type regression reproducing the skeptic's exact failure), 94 consumer tests green, typecheck clean, R8 smoke green. NOT yet re-verified against the full real-backend benchmark this iteration — quota dropped to 11%/0% mid-verification; deferred to next iteration per §1.5. |
+| 9 | New (iter 15/16) — `extractTranscriptEntities` mis-tagged a skill/tech name (Kafka, RocksDB) as a `project` entity (two root causes: non-global `SKILL_RE` match dropped every skill after the first per turn; the cued-noun project rule's bare "on"/"to" triggers fired on tech names). `sessionFollowupResolver`'s bare-pronoun substitution then spliced the wrong entity into a LATER unrelated question, corrupting `answerPlan.question` — which is the literal retrieval query `WhatToAnswerLLM.ts` uses for document/RAG/mode-context search, not just a trace field | CONFIRMED (live trace, real 30-min JUDGED benchmark run-008) | `traces2/harness-script-a-press-A4.txt`/`A5.txt`/`A13.txt`/`A18.txt`: `answerPlanQuestion` reads "what did you own **Kafka**?" (real Q: "...own there?"), "...what made **RocksDB** migration challenging?" (real Q: "...that migration..."), "we'll cover **RocksDB** in the next round" (real Q: "...cover that..."); `run-008.json`'s G6 desync 22%/40%/70.6% (script a/c/b) is partly explained by this | `8d8d74a` | **FIXED** — collect every `SKILL_RE` match (not just the first) into a `skillTokens` set; exclude any matched skill token from all downstream project-tagging rules (CamelCase/cued-noun/short-answer); removed bare "on"/"to" from the cued-noun trigger list (kept "use"/"using"/"back to", which an existing fixture test relies on). Skeptic pass (code-reviewer subagent, independently re-derived + live-reproduced) found the fix's first draft left an IDENTICAL pre-existing gap open — the same bare "to"/"on" cues also mis-tag PERSON/company names ("reported to Priya" → later "that project" resolves to "Priya") — fixed in the same commit by narrowing the cue list rather than just excluding skill tokens. 10 new regression tests (both root causes + the skeptic's person-name finding, unit + end-to-end via `resolveLiveFollowup`); skeptic independently verified they're non-vacuous by reverting to HEAD and confirming 5/7 originally failed. Full consumer suite 198/198 green (SessionMemory, SessionFollowup, LiveSessionMemory, FollowUpResolver, ProjectEntityResolution, LongRangeTranscriptRecall, ContextFreeFollowup, RefinementFollowUp). Typecheck clean. NOT yet re-verified against a full real-backend benchmark run — a clean (uncontended) judged run is still pending per iteration 15's environmental-contention finding. |
 
 ## SCORE HISTORY
 (benchmark run # / timestamp / greeting-failures / hallucination flags / question-extraction acc / answer quality / long-range recall)
@@ -1295,3 +1296,97 @@ expensive but is the only way to get a trustworthy L4 measurement in this
 environment. Given quota is healthy (88%), a future iteration should
 attempt (b) if backend contention signals (via `ps aux` + a quick latency
 sanity check on the FIRST press) are clear at start.
+
+## ITERATION 16 (2026-07-17) — Fix#9: real bug found by deep-reading run-008's contended-but-still-diagnostic traces
+
+Rather than treating run-008 purely as "confounded, discard the numbers"
+(iteration 15's read), dug into individual per-press traces for concrete
+NEW failure signatures the contention explanation doesn't fully cover —
+contention explains SLOWER/WORSE answers, but doesn't obviously explain
+GARBLED PROMPT TEXT. Found one: `answerPlanQuestion` in
+`traces2/harness-script-a-press-A4.txt`/`A5.txt`/`A13.txt`/`A18.txt`
+showed a real, previously-extracted-correctly question with a bare
+pronoun ("there", "that") silently replaced by an unrelated tech-name
+noun ("Kafka", "RocksDB") — e.g. "what did you own **there**?" became
+"what did you own **Kafka**?" in the field that actually drives
+retrieval. `extractedQuestion.latestQuestion` (the pre-mutation value)
+was correct in every case; only the POST-`resolveLiveFollowup`-mutation
+value was corrupted — ruling out extraction and pointing squarely at the
+long-range follow-up resolver.
+
+**Root-caused, fixed, and skeptic-reviewed (full detail: ANTI-THRASH
+LEDGER row 9, commit `8d8d74a`)**: `extractTranscriptEntities` (the
+function that populates `SessionMemory` from each transcript turn for
+later demonstrative-pronoun resolution) had two bugs that let a skill/
+tech name get mis-tagged as a `project` entity — (1) a non-global
+`SKILL_RE` match only ever captured the FIRST skill per turn, so "a
+streaming Kafka and Flink pipeline" (after an earlier "legacy Hadoop
+batch job" in the same turn) left Kafka untagged; (2) the cued-noun
+project rule's trigger words included bare "on"/"to", so "...a
+streaming system **on** Kafka..." mis-tagged Kafka as a project.
+`sessionFollowupResolver.ts`'s bare-pronoun substitution
+(`/\b(it|that|there)\b/i`) then spliced that wrong entity into ANY
+later question containing "it"/"that"/"there" — regardless of topic.
+This is NOT cosmetic: `WhatToAnswerLLM.ts` uses `answerPlan.question`
+directly as the retrieval query for document/RAG/mode-context search
+(lines ~315/363/380/392/398), so a corrupted pronoun substitution
+corrupts semantic search, not just a debug trace field — plausibly a
+real, material contributor to run-008's G6 desync collapse (22-70.6%
+across scripts) independent of the backend-contention confound
+iteration 15 identified.
+
+Dispatched a code-reviewer skeptic pass BEFORE committing (per campaign
+discipline). It independently re-derived the bug (reverted the fix,
+rebuilt, confirmed 5/7 new tests genuinely fail against `HEAD`) and found
+a real, live-reproduced gap the first draft left open: the SAME bare
+"to"/"on" cues also mis-tag PERSON and company names as projects
+("reported to Priya", "escalated to Priya" → a later "that project"
+follow-up resolves to "Priya") — pre-existing, not introduced by the
+fix, but the identical downstream corruption mechanism, and evidently
+likely to reproduce again on a real session given how often interview
+transcripts mention people by name. Fixed in the same commit: narrowed
+the cue-word list to drop bare "on"/"to" entirely, keeping "use"/
+"using"/"back to" (unambiguous project-adoption cues; "back to X" is
+relied on by an existing passing fixture test in
+`LiveSessionMemory2026_06_07c.test.mjs`, so it could not simply be
+dropped).
+
+**Verification**: 10 new regression tests
+(`TranscriptEntitySkillProjectCollision2026_07_17.test.mjs`) covering
+both root causes, the skeptic's person-name finding, and two end-to-end
+reproductions via `resolveLiveFollowup` of the exact live garbled-question
+shapes. Full consumer suite re-run after BOTH fixes (the skill-exclusion
+change and the cue-list narrowing): 198/198 green across 8 files
+(SessionMemory, SessionFollowup, LiveSessionMemory, FollowUpResolver,
+ProjectEntityResolution, LongRangeTranscriptRecall, ContextFreeFollowup,
+RefinementFollowUp2026_06_15) — zero regressions from either change.
+Typecheck clean. Confirmed via a fixture sweep across all 3 harness
+scripts that no real script relies on the removed bare "on"/"to" cues
+for a legitimate project mention (the real project-adoption mentions in
+script-a/b/c all use "using X", already preserved).
+
+**Not yet done**: a full real-backend judged benchmark run to measure
+this fix's actual impact on G6 desync / answer quality — iteration 15's
+environmental-contention problem (a third concurrent session hitting the
+same local backend) means the NEXT judged run still needs the same
+`ps aux`-clear discipline iteration 14/15 established before it can be
+trusted as a clean measurement.
+
+**Quota check**: not spent on real-backend calls this iteration (pure
+local unit-test verification + one skeptic-pass subagent, which uses the
+agent's own quota pool separately from the product-under-test's
+MiniMax/Claude usage). No pause needed.
+
+**NEXT ACTION**: attempt a full 3-script judged benchmark run, following
+iteration 15's now-established discipline: (1) `ps aux | grep -iE
+"run-all.mjs|run-script"` clear at start, (2) spot-check the FIRST
+press's latency against the run-005 ~2s baseline (not run-008's
+contended ~4-5s) before trusting the rest of the run, (3) if either
+check fails, discard and retry rather than analyzing a contended run's
+numbers as ground truth. This run should show G6 desync materially
+improved on Script A specifically (A4/A5/A13/A18 were all directly
+affected by fix#9) — if it doesn't, that's a signal fix#9 alone doesn't
+close the gap and the backend-contention confound needs to be resolved
+another way (e.g. running during a window with fewer concurrent
+sessions, or coordinating with other active sessions before a benchmark
+run).
