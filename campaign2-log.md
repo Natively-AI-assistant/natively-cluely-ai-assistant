@@ -738,11 +738,132 @@ itself modifies, and re-check `git status`/`git branch --show-current`
 immediately before every git operation since concurrent commits can land at
 any time.
 
-**NEXT ACTION (unchanged)**: proceed with the A1/A12/A6 mini-forensics per
-iteration 8's NEXT ACTION above. Before starting, re-check whether the
-concurrent session's provider-transport-error guard has landed (it may
-independently resolve some of the G3/G6 failures this session was about to
-investigate, particularly A12 in run-003, since that specific confusion came
-from the same poisoned-history mechanism) — re-run a cheap structural check
-(`--skip-judge`) first to see current state before spending judge-tier
-quota on a full re-diagnosis of findings that may already be fixed.
+**NEXT ACTION (superseded)**: ~~proceed with A1/A12/A6 mini-forensics~~ —
+A6's mini-forensics done this iteration, see ITERATION 10. A1/A12 still
+pending (A12 likely already resolved by the concurrent session's
+provider-transport-error guard once it lands — re-verify on the next full
+run rather than re-diagnosing from run-003's stale data).
+
+## ITERATION 10 (2026-07-17) — A6 mini-forensics: 2 findings, 1 fixable, 1 model-quirk (not fixed)
+
+Read the FULL prompt composition for press A6 ("tell me about tinroof") from
+`/tmp/run003_a.log` (the raw run-003 log, not just the committed trace file)
+per iteration 8's NEXT ACTION. `electron/IntelligenceEngine.ts` was NOT
+touched (concurrent session still has it modified, uncommitted) — this
+iteration's findings are documented only, no code changed.
+
+**Finding A — real, fixable diagnostic bug (NOT the root cause of A6's bad
+answer, but worth fixing for accurate future diagnosis):**
+`answerPlanQuestionSurvivesInPrompt` (`WhatToAnswerLLM.ts:631-633`) checks
+`packet.userMessage.includes(answerPlan.question.trim())` — a literal,
+un-normalized substring check. But the transcript block embeds turns through
+XML-escaping (apostrophes become `&apos;`, likely via `escapeXmlText` or an
+equivalent), so ANY extracted question containing an apostrophe (`"let's
+talk..."`) will FALSE-NEGATIVE this check even though the question's
+SEMANTIC content is genuinely present in the prompt (confirmed by direct
+string comparison: `"let's talk...tinroof."` is NOT a substring of
+`"...let&apos;s talk...tinroof."`, but the escaped form unambiguously
+represents the same text). This trace field is not just diagnostic dressing
+— `test/harness-longsession/short-session-smoke.cjs:260` asserts
+`answerPlanQuestionSurvivesInPrompt === true` as a REAL R8 regression gate,
+so this false-negative could silently mask a genuine future regression (or
+cry wolf on a healthy prompt) whenever the extracted question contains an
+apostrophe, quote, ampersand, or angle bracket. NOT fixed this iteration
+(the concurrent session owns `IntelligenceEngine.ts` right now, and this
+bug lives in the sibling `WhatToAnswerLLM.ts` — belongs to whichever
+iteration picks up next once the file isn't contended). Logged as a
+found-but-deferred fixable bug, not a mystery.
+
+**Finding B — real model-quirk, NOT reproducible as a code bug, NOT
+fixed:** A6's actual bad answer — *"The user hasn't actually sent a message
+yet, only system configuration blocks appeared. I should not generate a
+response until there's a real user input."* — is genuine MiniMax-M3
+confusion about its OWN prompt, not caused by prompt-assembly truncation or
+malformation. Verified directly: `candidateProfileChars: 11060` (present,
+not zero/truncated), `blockCount: 4` (all expected blocks present:
+`intent_context`, `candidate_profile`, `assistant_history`,
+`untrusted_transcript`), and the `<transcript>` block's tail genuinely
+contains `[INTERVIEWER]: let&apos;s talk about your open-source work — tell
+me about tinroof.` — a real, well-formed, unambiguous question. The model
+simply misjudged a normal, correctly-assembled prompt as containing "only
+system configuration blocks" — the same class of unpredictable hallucination
+as A15's "Levee is an eBPF observability tool" (confidently answering a
+DIFFERENT real-world "levee"/"tinroof" project than the candidate's actual
+one, since these are invented company-internal project names a real model
+has no way to disambiguate from public open-source projects sharing the
+name — see run-002/A15's G3 judge reason). This is a fixture-realism
+artifact (the harness invents plausible-sounding but non-existent
+open-source project names like "tinroof"/"levee" that collide with real
+public repos of the same name) more than a product defect, and separately,
+occasional single-digit-token confused non-answers appear to be within
+MiniMax-M3's normal variance on ambiguous asks — not something a prompt or
+code change can deterministically prevent. Compounding concern (not yet
+verified as ACTUALLY happening, flagged for awareness): this bad answer gets
+persisted into `assistant_history` via the default
+`store_conversational_only` write policy (confirmed:
+`[SessionTracker] addAssistantMessage called` with this exact text fires
+right after), so IF a later press's prompt includes this turn in its
+`assistant_history` block, it could theoretically compound similarly to the
+provider-transport-error persistence bug the concurrent session is fixing —
+but this is a plausible mechanism, not confirmed; would need a dedicated
+trace showing a SECOND press degrading specifically because of this
+poisoned turn to promote from hypothesis to pinned finding.
+
+**Conclusion**: neither A1 nor A6 turned into a clean, pinnable, low-risk
+code fix this iteration. A6 is dominated by real model unpredictability on a
+correctly-assembled prompt (fixture-name collision + occasional confused
+non-answer), which this campaign's tools (deterministic prompt
+assembly, evidence validators) cannot fully eliminate — the honest
+conclusion, not a forced fix. Finding A (the escaping false-negative) is a
+real, cheap, mechanically-obvious fix for a future iteration once
+`IntelligenceEngine.ts` frees up (it's a `WhatToAnswerLLM.ts`-only change,
+so it COULD be done now without touching the contended file — flagging as
+available low-risk work for whoever picks up next).
+
+**Quota check**: Account1 ~38% session (holding steady — this iteration was
+read-only investigation, no LLM calls spent). Continuing per §1.5.
+
+**NEXT ACTION**: Two independent threads available, pick based on whichever
+session picks this up: (a) fix Finding A
+(`answerPlanQuestionSurvivesInPrompt`'s escaping-unaware substring check in
+`WhatToAnswerLLM.ts` — normalize both sides through the same XML-unescape,
+or compare against the pre-escape raw question text instead) — low-risk,
+`WhatToAnswerLLM.ts`-only, doesn't touch the contended `IntelligenceEngine.ts`;
+(b) once the concurrent session's provider-transport-error guard lands,
+re-run a `--skip-judge` structural check on script-a to see whether A12 is
+now clean (likely), then decide whether a fresh FULL 3-script benchmark run
+is worth the quota spend given TWO fixes (fix#6 + the transport-error guard)
+have landed since run-002's baseline — if so, re-run, append to SCORE
+HISTORY, re-check L4 (still needs 2 consecutive green runs, currently 0).
+
+**Fix #7 landed this same iteration (commit `0d26439`)**: took up Finding A
+from above since it's `WhatToAnswerLLM.ts`-only and doesn't touch the
+contended `IntelligenceEngine.ts`. `answerPlanQuestionSurvivesInPrompt`
+(line ~631) compared the RAW extracted question against the assembled
+`userMessage` via literal substring — but transcript turns pass through
+`escapeUserContent()` (`PromptAssembler.ts`, apostrophes→`&apos;` etc.)
+before embedding, so the check false-negatived on any question containing
+ordinary punctuation. Fixed by checking both the raw AND escaped forms.
+Verified: typecheck clean, build succeeds, direct reproduction against the
+compiled `escapeUserContent` confirms the exact A6 case now matches,
+consumer suite (`suggestionPromptAssembly`/`WtaParallelPrestream`/
+`WtaHybridRetrievalBudget`/`WhatToAnswerProfileGrounding`/`GracefulRetry`)
+39/39 green, R8 smoke 11/11 green (including the fixed check itself).
+
+**Shared-workspace note**: confirmed `git branch --show-current` still
+`fix/longsession-campaign` and `IntelligenceEngine.ts` still uncommitted
+by the concurrent session before staging — only staged
+`electron/llm/WhatToAnswerLLM.ts` (this fix) in its own commit, left the
+concurrent session's `IntelligenceEngine.ts` changes and their new
+`electron/llm/__tests__/ProviderTransportErrorGuard.test.mjs` (visible on
+disk, confirmed it runs green, but not mine to commit) completely alone.
+
+**NEXT ACTION**: (a) once the concurrent session's provider-transport-error
+guard commits, re-run a `--skip-judge` structural check on script-a to
+confirm A12 is clean, then decide on a fresh FULL 3-script benchmark run
+(fix#6 + fix#7 + the transport-error guard have all landed since run-002's
+baseline — worth measuring real combined improvement); (b) A1's mini-
+forensics (self-intro missing "10 years") from iteration 8's NEXT ACTION is
+still open — same "read the FULL prompt to see if the required fact was
+even present" treatment A6/A12 got; (c) after the next full run: append to
+SCORE HISTORY, re-check L4 (needs 2 consecutive green runs, currently 0).
