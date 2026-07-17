@@ -25,6 +25,15 @@
 // set, and exclude ANY matched skill token (not just the static KNOWN_SKILLS list)
 // from the CamelCase/cued/short-answer project rules.
 //
+// FOLLOW-UP FINDING (same day, run-009): the exact same downstream splicing
+// mechanism also fires for CamelCase proper nouns that are neither a skill NOR a
+// person's name — a platform brand ("1.4k GitHub stars") or a compliance-standard
+// acronym ("SOC 2 / FedRAMP requirement") both matched the bare CamelCase project
+// rule directly (they're not skills, so the isSkillToken exclusion above didn't
+// help) and got spliced into a later unrelated question the same way. Added a
+// narrow KNOWN_NON_PROJECT_PROPER_NOUNS allowlist (GitHub, FedRAMP, etc.) folded
+// into the same isSkillToken exclusion check.
+//
 // Run: npm run build:electron && node --test electron/llm/__tests__/TranscriptEntitySkillProjectCollision2026_07_17.test.mjs
 
 import { test, describe } from 'node:test';
@@ -167,6 +176,44 @@ describe('End-to-end regression: the exact live-reproduced garbled-question bug 
       assert.ok(
         !/\brocksdb\b/i.test(result.resolvedQuestion),
         `resolved question must never splice in "RocksDB" for the pronoun "that": got "${result.resolvedQuestion}"`,
+      );
+    }
+  });
+});
+
+describe('Follow-up finding (2026-07-17, run-009): non-skill CamelCase proper nouns (GitHub, FedRAMP) are the same bug class', () => {
+  const LOCAL_MIN = 60;
+
+  test('a platform brand name mentioned via CamelCase ("1.4k GitHub stars") is not tagged as a project', () => {
+    const text = 'Tinroof is a pure-Go implementation of the Raft consensus algorithm with a built-in linearizable KV store, about 1.4k GitHub stars.';
+    const entities = extractTranscriptEntities(text, 'user');
+    const projects = entities.filter((e) => e.kind === 'project').map((e) => e.value);
+    assert.ok(!projects.includes('GitHub'), `GitHub must never be tagged as a project (got projects: ${JSON.stringify(projects)})`);
+  });
+
+  test('a compliance-standard acronym ("SOC 2 / FedRAMP requirement") is not tagged as a project', () => {
+    const text = "Good. Let's talk about the JD's SOC 2 / FedRAMP requirement — any experience there?";
+    const entities = extractTranscriptEntities(text, 'interviewer');
+    const projects = entities.filter((e) => e.kind === 'project').map((e) => e.value);
+    assert.ok(!projects.includes('FedRAMP'), `FedRAMP must never be tagged as a project (got projects: ${JSON.stringify(projects)})`);
+  });
+
+  test('end-to-end: a later "that migration" follow-up does not resolve to GitHub', () => {
+    const turns = [
+      { role: 'interviewer', text: 'Tell me about your open-source work.', t: 8 * LOCAL_MIN },
+      { role: 'user', text: 'Tinroof is a pure-Go implementation of the Raft consensus algorithm, about 1.4k GitHub stars.', t: 9 * LOCAL_MIN },
+      { role: 'interviewer', text: 'Going back to what you said earlier about your most recent role — you mentioned replacing a legacy Hadoop batch job with a streaming pipeline. What made that migration challenging?', t: 25 * LOCAL_MIN },
+    ];
+    const result = resolveLiveFollowup({
+      turns,
+      latestQuestion: 'Going back to what you said earlier about your most recent role — you mentioned replacing a legacy Hadoop batch job with a streaming pipeline. What made that migration challenging?',
+      mode: 'technical-interview',
+      surface: 'what_to_answer',
+    });
+    if (result.resolvedQuestion) {
+      assert.ok(
+        !/\bgithub\b/i.test(result.resolvedQuestion),
+        `resolved question must never splice in "GitHub" for the pronoun "that": got "${result.resolvedQuestion}"`,
       );
     }
   });

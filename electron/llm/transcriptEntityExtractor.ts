@@ -23,6 +23,17 @@ export interface ExtractedEntity {
 
 // CamelCase tokens that are actually SKILLS/tech, not project names.
 const KNOWN_SKILLS = /^(TypeScript|JavaScript|FastAPI|GraphQL|PostgreSQL|MongoDB|PowerBI|TensorFlow|PyTorch|NodeJS|RocksDB|DynamoDB|CockroachDB|Elasticsearch|Kubernetes|OpenTelemetry|ZooKeeper|RabbitMQ)$/i;
+// CamelCase-shaped proper nouns that are common industry/platform/compliance
+// names — NOT a skill (so they don't belong with KNOWN_SKILLS above) and NEVER
+// a project the candidate built (so, like KNOWN_SKILLS, must be excluded from
+// the project-tagging rules below). Live-reproduced (2026-07-17, run-009): "1.4k
+// GitHub stars" and "SOC 2 / FedRAMP requirement" both matched the bare CamelCase
+// project rule and were later spliced into an unrelated later question via the
+// same bare-pronoun substitution mechanism as the Kafka/RocksDB bug (fix#9).
+// Deliberately narrow — a generic catch-all would risk swallowing a genuine
+// CamelCase project name; this list is CamelCase nouns with an unambiguous,
+// well-known non-project referent (a hosting platform, a compliance standard).
+const KNOWN_NON_PROJECT_PROPER_NOUNS = /^(GitHub|GitLab|Bitbucket|LinkedIn|YouTube|FedRAMP|HIPAA|SOC2|PCIDSS|GDPR)$/i;
 // Common sentence-initial / interjection / filler words capitalized by grammar but
 // NOT entities — excluded from the short-answer proper-noun heuristic.
 const STOP_PROPER = new Set([
@@ -69,7 +80,13 @@ export function extractTranscriptEntities(text: string, speakerRole?: 'interview
     skillTokens.add(key);
     out.push({ kind: 'skill', value: s });
   }
-  const isSkillToken = (tok: string) => KNOWN_SKILLS.test(tok) || skillTokens.has(tok.toLowerCase());
+  // isSkillToken: excludes skill/tech tokens AND well-known non-project CamelCase
+  // proper nouns (KNOWN_NON_PROJECT_PROPER_NOUNS — GitHub, FedRAMP, etc.; see that
+  // const's comment) from every project-tagging rule below. Name kept as
+  // `isSkillToken` (not renamed to `isNonProjectToken`) to minimize the diff at
+  // every call site; its actual contract is "never a project", which both skills
+  // and these other proper-noun categories satisfy.
+  const isSkillToken = (tok: string) => KNOWN_SKILLS.test(tok) || skillTokens.has(tok.toLowerCase()) || KNOWN_NON_PROJECT_PROPER_NOUNS.test(tok);
 
   // PROJECT names: CamelCase tokens (excluding known/mentioned skills — a tech name
   // like RocksDB, Kafka, or TensorFlow is CamelCase-shaped but is a SKILL, not a
