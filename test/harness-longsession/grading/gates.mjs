@@ -24,8 +24,27 @@
 // G1 — QUESTION EXTRACTION (target >= 98%)
 // ---------------------------------------------------------------------------
 
+/**
+ * Grading-harness precision fix (campaign2, 2026-07-17, iteration 20's NEXT
+ * ACTION): a thousands-separator comma inside a number ("37,000") was being
+ * treated as ordinary punctuation and replaced with a SPACE by the generic
+ * `[^a-z0-9' ]` strip below — "37,000" normalized to "37 000", which no
+ * longer contains the fixture-annotated fact "37000" as a substring, even
+ * though the model's answer was factually correct (live-confirmed: run-013's
+ * press B10 answered "approximately 37,000 tokens" — exactly right — but
+ * G3_deterministic still failed on this formatting difference alone). Strip
+ * the comma from a digit-group pattern (one-to-three digits, then one or more
+ * ",ddd" groups) BEFORE the generic punctuation strip runs, so "37,000" and
+ * "37000" (whichever the fixture or the model happens to use) both normalize
+ * to the same "37000" — comparison stays a plain substring match, no fuzzy
+ * logic introduced.
+ */
+function stripThousandsSeparators(s) {
+  return String(s || '').replace(/\b(\d{1,3}(?:,\d{3})+)\b/g, (m) => m.replace(/,/g, ''));
+}
+
 function normalizeForMatch(s) {
-  return String(s || '')
+  return stripThousandsSeparators(String(s || ''))
     .toLowerCase()
     .replace(/[’‘]/g, "'")
     .replace(/[""]/g, '"')
