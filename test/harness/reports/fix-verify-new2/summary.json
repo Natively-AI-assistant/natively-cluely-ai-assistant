@@ -1,0 +1,19 @@
+{
+  "runId": "fix-verify-new2",
+  "finishedAt": "2026-07-17T02:44:11.367Z",
+  "resultCount": 1,
+  "providerCalls": 1,
+  "overall": {
+    "total": 1,
+    "passed": 0
+  },
+  "hallucinationFlags": [],
+  "falseRefusals": [],
+  "byCategory": {
+    "mode_jd_grounding": {
+      "total": 1,
+      "passed": 0,
+      "hallucinations": 0
+    }
+  }
+}

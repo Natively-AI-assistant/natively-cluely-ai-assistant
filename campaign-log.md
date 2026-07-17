@@ -143,15 +143,23 @@ Built `test/harness/` (fixtures/manifest.json + run-benchmark.mjs), committed as
 
 **NEW-1 FIXED AND VERIFIED THIS ITERATION**: `AnswerPlanner.ts`'s coding-pattern regex `\bin\s?order\b` (meant for "in-order traversal") false-positived on the ordinary English phrase "in order" (e.g. "worked at, in order?"), misrouting résumé questions to `coding_question_answer` — which forbids the resume context layer per spec, so the model fabricated a fictional employment history instead of grounding correctly. Fixed with a narrow co-occurrence guard (order-word variants now require an explicit tree/traversal-adjacent term), mirroring the file's own existing `class`/`method` narrowing pattern. Verified: standalone regex tests (false positives gone, all genuine DSA phrasings still match), `npm run typecheck:electron` clean, `AnswerPlannerValidator.test.mjs` 12/12 pass, full `electron/llm/__tests__` suite 2483/2543 pass (the 60 failures are all pre-existing, unrelated, dated files — none mention "in order"/"traversal"/coding patterns), and a LIVE re-run of the exact failing benchmark case now passes with the correct 4-employer answer.
 
-**NEW-2 (negotiation-classified questions get zero grounding on the WTA path) remains OPEN** — needs a design decision, not a quick patch, per the reasoning in `traces/forensic-report.md` §6c. Deferred to next iteration.
+**NEW-2 FIXED AND VERIFIED THIS ITERATION — turned out to be 4 stacked bugs, not 1.** Chasing the single false-refusal symptom required fixing, in order:
+1. `IntelligenceEngine.ts`'s `groundable` gate excluding all `negotiation`-classified questions (added a narrow widen via new exported `isJdFactualLookupNotNegotiationAdvice` helper in `AnswerPlanner.ts`).
+2. `KnowledgeOrchestrator.processQuestion`'s `factualRecall` gate ALSO by-design excluding NEGOTIATION intent — fixed via an early carve-out that returns the existing `maybeGroundedOnlyResult` (clean JD-only grounding, no coaching leak) for the JD-fact-not-advice shape specifically.
+3. `IntentClassifier.ts`'s `IDENTITY_DIRECT_PATTERNS` bare `'what company'`/`'which company'` match false-positiving on JD-framed questions ("what company IS THIS ROLE at" vs "what company do YOU work at"), forcing INTRO intent before scoring even ran — fixed with a `JD_ROLE_FRAME_RE` disqualifier.
+4. `ProfileContextBuilder.ts`'s `buildTargetJobBlock` never rendering the extracted `compensation_hint` field at all — fixed by adding it to the rendered sections.
+
+All 4 verified together live: "What company is this role at, and what's the compensation range?" now correctly answers "This role is at Helio Labs. The compensation range is 175,000 to 200,000 base salary plus meaningful equity." Full detail + reasoning for why each was necessary in `traces/forensic-report.md` §6c.
+
+Full regression check: `npm run typecheck:electron` clean; `electron/llm/__tests__` full suite 2483/2543 pass (same pre-existing unrelated failures as before, zero new regressions from any of the 4 changes).
 
 ### Ledger update
-See `traces/forensic-report.md` §6c for the full NEW-1/NEW-2/NEW-3 ledger rows (already written there in detail); campaign-log.md tracks the short version:
+See `traces/forensic-report.md` §6c for the full NEW-1/NEW-2/NEW-3 ledger rows; campaign-log.md tracks the short version:
 - #5 (NEW-1): DONE, verified live.
-- #6 (NEW-2): OPEN, pinned, needs design work.
+- #6 (NEW-2): DONE (4 stacked sub-fixes), verified live.
 - #7 (NEW-3, adversarial injection resistance): confirmed holding, no action needed.
 
 ### QUOTA
-QUOTA (iteration 4, continued, ~08:2x local Jul 17): Account 1 100% session (fresh window) / Account 2 26% session. Both healthy — 9Router fails over automatically; only pause if BOTH drop below 10%.
+QUOTA (iteration 4, continued, ~08:5x local Jul 17): Account 1 90% session / Account 2 0% session (fully out, resets ~07:00 UTC). 9Router auto-fails-over to Account 1 — continuing normally per L9 (only pause if BOTH drop below 10%).
 
-**NEXT ACTION**: Design and implement the NEW-2 fix (distinguish a pure factual JD/document lookup — safe to ground — from genuine negotiation-coaching — the gated case — likely by consulting `AnswerPlanner`'s own `answerType` alongside `transcriptQuestionExtractor`'s cruder `negotiation` classification in `IntelligenceEngine.ts`'s `groundable` gate, rather than trusting either classifier alone). Verify live via `test/harness/run-benchmark.mjs` C4-002 before considering it done. After that, expand the harness with more cases per category (currently only 1-4 cases each) for better statistical confidence, and consider adding C8 properly once/if a renderer-driving harness exists. Re-check git branch/status and L9 quota before starting (shared workspace).
+**NEXT ACTION**: Commit these 4 fixes (electron/llm/AnswerPlanner.ts export, electron/llm/index.ts barrel export, electron/IntelligenceEngine.ts gate widen, premium/electron/knowledge/KnowledgeOrchestrator.ts carve-out, premium/electron/knowledge/IntentClassifier.ts disqualifier, premium/electron/knowledge/ProfileContextBuilder.ts compensation render) + the strengthened manifest.json rubric + new fix-verify reports. Then re-check git branch/status and quota. After that: expand the harness with more cases per category (currently only 1-4 cases each) for better statistical confidence, retest C3-001/C3-003/C3-004/C6-001/C6-002/C7-001 to confirm the NEW-2 fix chain didn't regress anything already passing, and consider adding C8 properly once/if a renderer-driving harness exists.

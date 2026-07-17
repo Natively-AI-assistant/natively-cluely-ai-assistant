@@ -10,7 +10,7 @@ import {
     FollowUpQuestionsLLM, WhatToAnswerLLM,
     prepareTranscriptForWhatToAnswer, buildTemporalContext,
     AssistantResponse as LLMAssistantResponse, classifyIntent, planNextAssistantAction, PlannerDecision,
-    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCodingAnswerType, resolveFollowUp, resolveFollowUpOrClarify,
+    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
     isLiveSessionMemoryEnabled, resolveLiveFollowup, toMemoryMode, toSurface, effectiveMemoryMode,
     resolveLiveSessionMemoryConfig, piTelemetry, ageBucket,
     buildContextRoute, summarizeContextRoute, shouldThrottleTrigger,
@@ -1248,6 +1248,25 @@ export class IntelligenceEngine extends EventEmitter {
                     // non-profile (e.g. negotiation) results, so widening the type
                     // set here only ADDS legitimate candidate grounding; it cannot
                     // pull salary/coaching into a plain answer.
+                    // Grounding-campaign fix (2026-07-17): 'negotiation' is normally
+                    // excluded here so genuine salary-coaching questions never pull
+                    // résumé/JD facts into a coaching answer (coaching has its own
+                    // gated channel). But transcriptQuestionExtractor.classifyType's
+                    // negotiation match is a bare keyword scan ("compensation",
+                    // "salary") with no JD-frame awareness — it also fires on a pure
+                    // FACTUAL lookup like "what's the compensation range for THIS
+                    // ROLE?", which AnswerPlanner's own (more precise) classifier
+                    // correctly resolves to jd_fact_answer, not negotiation_answer.
+                    // Confirmed live (test/harness case C4-002): excluding this
+                    // question from grounding entirely left the model with no real
+                    // JD evidence, so it falsely claimed the JD "does not specify"
+                    // facts that were literally present. isJdFactualLookupNotNegotiationAdvice
+                    // reuses the exact JD-reference + negotiation-advice cues
+                    // AnswerPlanner's resolveJdSourceType already relies on, so a
+                    // genuine "how should I negotiate my salary" ask still routes
+                    // through the existing negotiation-exclusion, untouched.
+                    const isNegotiationButActuallyJdFact = extracted.questionType === 'negotiation'
+                        && isJdFactualLookupNotNegotiationAdvice(extracted.latestQuestion || '');
                     const groundable = extracted.detectedSpeaker === 'interviewer'
                         && extracted.confidence >= 0.6
                         && (extracted.questionType === 'identity'
@@ -1255,7 +1274,8 @@ export class IntelligenceEngine extends EventEmitter {
                             || extracted.questionType === 'behavioral'
                             || extracted.questionType === 'jd_alignment'
                             || extracted.questionType === 'general'
-                            || extracted.questionType === 'follow_up');
+                            || extracted.questionType === 'follow_up'
+                            || isNegotiationButActuallyJdFact);
                     // Grounding runs when NO explicit typed question was supplied
                     // (pure transcript-driven), OR when the supplied `question` IS
                     // the transcript's latest interviewer question — i.e. the LIVE

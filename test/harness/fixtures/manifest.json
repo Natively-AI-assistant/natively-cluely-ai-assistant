@@ -78,9 +78,10 @@
       "profileDocs": ["resume", "jd"],
       "question": "What company is this role at, and what's the compensation range?",
       "rubric": {
-        "requiredFacts": ["Helio Labs"],
-        "forbiddenFacts": [],
-        "refusalExpected": false
+        "requiredFacts": ["Helio Labs", "175"],
+        "forbiddenFacts": ["does not specify", "does not state"],
+        "refusalExpected": false,
+        "notes": "Regression case for THREE stacked fixes (2026-07-17): (1) IntelligenceEngine.ts's negotiation-classified groundable-gate exclusion, (2) IntentClassifier.ts's 'what company' IDENTITY_DIRECT_PATTERNS false-positive on JD-framed questions, (3) ProfileContextBuilder.ts's buildTargetJobBlock never rendering compensation_hint. Requires BOTH facts (company name AND the real 175-200k figure) since the first two fixes alone left the compensation half falsely refused."
       }
     },
     {
