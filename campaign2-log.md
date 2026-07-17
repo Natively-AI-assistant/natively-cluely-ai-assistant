@@ -994,13 +994,94 @@ run's A12 result is that live proof, arriving 2 iterations later.
 run is cheap — no judge-tier calls, ~18 generation calls total). Will
 re-check before deciding on a full 3-script judged run.
 
-**NEXT ACTION**: Given the clean Script A result, decide whether to (a) run
-Script B and C's `--skip-judge` checks too (cheap, no judge cost) to see if
-the same desync-resolution holds campaign-wide before spending on a full
-judged run, or (b) go straight to a full 3-script judged benchmark run now
-that G1/G2/G4/G6 all look strong on Script A — recommend (a) first since it's
-nearly free and de-risks the judged run's cost if B/C still have open
-issues. Either way: quota check first (§1.5), and remember G3/G5 (answer
-completeness / long-range recall) remain the dominant OPEN gap regardless
-of which path — that's where the NEXT real fix opportunity likely lives,
-not further desync work.
+**NEXT ACTION (superseded)**: ~~run Script B and C's `--skip-judge` checks~~ — done, see iteration 12 below.
+
+## ITERATION 12 (2026-07-17, ~07:1x-07:2x UTC) — RESUMED from quota pause; B+C `--skip-judge` checks; 2 grading-harness false-negatives found
+
+**Resume**: quota recovered while paused — Account2's 5h session window
+reset to 100% (its `resetAt` had passed), so 9Router routes there while
+Account1 (0%) stays exhausted until its own later reset. This is a healthy
+resume, not a rule violation: §1.5's pause condition ("one account fully out
+AND the other <=10%") no longer held once Account2 recovered.
+
+**Ran Script A alone first** (`--skip-judge`, confirms iteration 11's
+analysis independently): G1 100%, G2 0 flags, G4 0 hallucination, G6 100%
+desync — all clean. G3 answer-quality 6.7% and G5 long-range-recall 50%
+remain the open gap, and inspecting the actual G3 misses (`run-005.json`)
+confirms the SAME pattern iteration 11 found: every miss is the model
+giving a plausible, on-topic answer that just uses different specific
+numbers/names/technologies than the fixture's exact expected string (e.g.
+A5 expected "1.1M"/"8.4M", got "50,000"/"350,000"; A9 expected "Go"/"8
+years", got a values-fit answer with no version-specific years-of-Go claim).
+This is uniform across EVERY press including minute-0 ones (A1, A2) — not
+correlated with session length at all, confirming (again) this is a general
+grounding-fidelity/precision question, not a long-session-specific bug.
+
+**Ran Script B (`--skip-judge`)**: G1 94.1%, G2 0, G4 0, G5 **100%**
+(long-range recall — the doc-grounded technical deep-dive script recalls
+distant reference-PDF content perfectly), G6 94.1%. The single G1/G6 "miss"
+(press B6, "and what about english-to-french?") is a GRADING-HARNESS FALSE
+NEGATIVE, not a product bug: the extracted question IS a correct bare
+follow-up fragment (a real, deliberate script feature), the model's actual
+answer is fully correct ("BLEU score of 41.8... WMT 2014
+English-to-French" — and G3_deterministic PASSED, confirming the fact IS
+present), but G1's fuzzy-overlap scorer compares the SHORT extracted
+fragment against the LONG canonical question text and scores only 0.27
+overlap — below whatever threshold the grader uses. The extractor did its
+job correctly; the grader's matching is too strict for legitimately short
+follow-up fragments.
+
+**Ran Script C (`--skip-judge`)**: G1 86.7%, G2 0, G4 0, G7 **100%**
+(injection resistance — holding clean), G5 0% (1/1 applicable — the SAME
+kind of grading-precision false negative, not a real recall failure):
+press C12 (a deliberate H6-style >10-min back-reference, "going back to
+the incident where you were commander... how did the team decide to roll
+back rather than fix forward?") extracted CORRECTLY (G1 pass, 0.82
+overlap — confirming fix#3/fix#8's fixes are holding on exactly this shape
+of question) and the model's answer directly and correctly discusses the
+rollback trigger and decision ("The trigger to roll back was a hard signal
+in the metrics..."), but G5's exact-substring check requires the LITERAL
+string "rolled back" (past tense) and the answer says "roll back"
+(infinitive) — a tense mismatch, not a missing fact. Also a
+grading-harness precision issue, not a product recall failure.
+
+**Conclusion — de-risked**: once the grading-harness's two known
+strict-matching false negatives (short-fragment G1 overlap threshold;
+G5/G3 exact-substring-not-fuzzy matching) are accounted for, this
+campaign's own metrics (G1 extraction, G2 greeting, G4 hallucination, G6
+desync, G7 injection) are effectively CLEAN across all 3 scripts. The
+remaining real, substantive gap is G3 answer-quality/completeness — the
+model answering the RIGHT question correctly in shape and topic, but with
+different specific facts/numbers than the fixture expects. This is NOT
+long-session-specific (it happens identically at minute 0 and minute 20+)
+and increasingly looks like it belongs to Campaign 1's active
+grounding/profile-intelligence domain rather than this campaign's charter
+— consistent with the A1 finding from iteration 8/11.
+
+**Quota check**: Account1 0% (still exhausted, resets later). Account2 46%
+after all 3 `--skip-judge` scripts (started ~68%, well above the 25%
+pre-op threshold throughout, never approached the pause condition).
+Continuing per §1.5.
+
+**NEXT ACTION**: The 3 `--skip-judge` runs (run-005/006/007) are NOT the
+official L4-measuring runs (L4 needs the real judge tier for G3/G4, and a
+`--skip-judge` run structurally cannot satisfy L4 even if every gate were
+100%, since G3_judge/G4_judge would be null). Two real choices: (a) spend
+the remaining ~46% Account2 quota on ONE full 3-script JUDGED benchmark run
+now — this is the actual measurement L4 needs, and current evidence
+strongly suggests G1/G2/G4/G6/G7 will score well; the judge tier may also
+correctly credit some of today's "G3/G5 misses" as passing once a real
+LLM-judge (rather than exact-substring matching) evaluates semantic
+correctness rather than literal phrase presence — OR (b) first FIX the two
+identified grading-harness false-negatives (G1's short-fragment overlap
+threshold; G3/G5's exact-substring vs fuzzy/case/tense-insensitive
+matching in `test/harness-longsession/grading/gates.mjs`) since they're
+cheap, well-evidenced, zero-risk (grading code, not product code) fixes
+that will make EVERY future run's numbers more trustworthy, THEN run the
+judged benchmark. Recommend (b) first if quota allows — a judged run
+against a known-imprecise grader risks under-counting real progress and
+wasting judge-tier quota on scoring noise; grading fixes are also
+consistent with this campaign's own STRUCTURE (fixing the harness that
+measures the product, is in scope, same as building it was). If quota
+looks tight, skip straight to (a) since a REAL number, even against an
+imperfect grader, is worth more than another zero-benchmark iteration.
