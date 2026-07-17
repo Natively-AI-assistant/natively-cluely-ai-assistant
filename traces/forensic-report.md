@@ -335,6 +335,25 @@ A new resolver regression uses exactly the observed ROS/AutoGen decoys and requi
 
 **Process lesson**: a benchmark run started mid-iteration, between landing one fix and designing the next, is neither a clean "before" nor a clean "after" — label run IDs based on the actual git/build state at launch time, and when a comparison result looks inconsistent with independently-established evidence (in this case, the golden traces earlier in this section), investigate the discrepancy rather than accepting the diff at face value. This is now the 3rd time this campaign has caught and corrected an initial finding that didn't hold up under further scrutiny (alongside the H8 correction in §3 and the THESIS-026 scorer-artifact investigation in §6e) — a recurring, healthy pattern worth continuing.
 
+## 6h. THESIS-079 root cause pinned via the prepared forensic harness — a THIRD distinct mechanism, NOT fixed this session
+
+The concurrent session prepared a single-case `CTXOS_BENCHMARK_CASE_IDS=THESIS-079 CTXOS_BENCHMARK_CAPTURE_RAW_RETRIEVAL=1` forensic benchmark but logged it as blocked by 4 other-session Electron test-worker PIDs (37130/37146/38618/38640) for ~19 hours. Ran the exact prepared command directly — it launched and completed in ~4 seconds; those PIDs (confirmed via `ps`, near-zero CPU over their whole lifetime) were stalled/idle workers, not actual launch contention against a fresh Electron process.
+
+**Forensic result**: raw hybrid retrieval correctly finds the answer-bearing chunk (chunkIdx 82: "...the two USB cameras are both Logitech C920 HD Webcams" — the single HIGHEST raw retrieval score of all 12 candidates in the pool, 0.5169) but it is excluded from the 3-item set that reaches the model. Two compounding mechanisms, verified independently:
+
+1. **Entity classifier false-positive**: `QuestionClassifier.ENTITY_TOKEN_RE` (a generic 2-6-character all-caps acronym pattern) tags "USB" as a target entity for "What camera model was used for the USB camera views?" — but here USB functions as a common descriptive adjective, not a named entity to disambiguate retrieval by. `selectSmallestSufficientEvidence`'s entity-seed step then guarantees a slot for the highest-ranked item merely containing the substring "usb" — chunk 111, a JSON example-data table using `usb_1_camera`/`usb_2_camera` as field names, not the real hardware description.
+2. **Ranking formula over-weights literal term coverage over raw retrieval confidence**: independent of the entity issue, `answerRelevanceScore`'s 0.6× coverage coefficient lets two unrelated "OpenVLA-OFT" chunks (discussing the AI model's "camera views" processing capability, nothing to do with physical hardware) outrank the correct chunk purely because they happen to repeat all 3 distinctive terms ("camera", "model", "views") together, while the correct chunk shares only "camera" (1 of 3) despite having the pool's single highest raw score.
+
+**Confirmed structurally distinct from every other fix landed this campaign**: not the union-coverage early-stop bug (THESIS-093, §6g), not the OKF pooled-entity-scoping bug (THESIS-129/131, §6g), and not the OKF property-vocabulary-too-broad bug (THESIS-060, iteration 14). Verified all 4 of those fixes still hold together with this new investigation layered on top (fresh live re-traces of THESIS-093/129/131/060 all still pass; `EvidenceResolver.test.mjs` + `EvidenceSufficiency.test.mjs`: 19/19 pass).
+
+**Deliberately NOT attempting a fix this session**: both candidate root causes (a scoring-weight rebalance in `answerRelevanceScore`, or narrowing `ENTITY_TOKEN_RE`'s acronym matching) have a materially larger blast radius than the narrow, single-mechanism fixes landed so far — either would affect every question in the benchmark, not just this one, and needs its own dedicated design plus a full 140-case regression pass rather than being folded in opportunistically. Logged as the next well-scoped fix candidate, not attempted.
+
+### Ledger update
+
+| # | Hypothesis | Verdict | Evidence | Fix commit | Status |
+|---|---|---|---|---|---|
+| 15 | THESIS-079 — compound bug: (a) `ENTITY_TOKEN_RE` misclassifies the generic adjective "USB" as a target entity, seeding a wrong decoy chunk; (b) `answerRelevanceScore`'s term-coverage weighting outranks the pool's highest-raw-score chunk in favor of unrelated chunks that coincidentally repeat more literal question words | CONFIRMED via the prepared raw-retrieval + selected-pack forensic capture | `test-results/context-os-real-backend/thesis-079-forensic/results.jsonl` (`forensic.rawRetrievalBlock` + `pack.selection`) | none — not yet fixed | **OPEN, root cause pinned, deliberately not fixed this session (cross-cutting scoring/classifier change, needs its own dedicated regression pass).** |
+
 ## 7. Diagnostic artifacts
 
 - `traces/golden-trace-refdoc.mjs`, `-refdoc-legacy.mjs`, `-resume-as-refdoc.mjs`, `-jd-fit-legacy.mjs`, `-jd-reqs-repro.mjs`, `-jd-payload-capture.mjs`, `-jd-console-capture.mjs` — all live-path E2E scripts, safe to keep and reuse in Phase 2/3's harness.
