@@ -628,8 +628,19 @@ ANSWER SHAPE: ${intentResult.answerShape}
                         // H1 check — compared against the question dumped by the
                         // [TRACE:LONGCTX] question_extracted line in IntelligenceEngine.
                         answerPlanQuestion: answerPlan?.question || null,
+                        // Long-session harness campaign2 (2026-07-17): transcript turns are
+                        // XML-escaped (escapeUserContent — apostrophes become &apos;, etc.)
+                        // before being embedded in the prompt, so a literal, un-normalized
+                        // substring check false-negatives on ANY extracted question containing
+                        // an apostrophe/quote/&/<>  even though the question's semantic content
+                        // is genuinely present (live-proven: "let's talk about your open-source
+                        // work — tell me about tinroof." reported false, though the escaped form
+                        // "let&apos;s talk..." is right there in userMessage). Check both the raw
+                        // and escaped forms so this real R8 regression gate
+                        // (short-session-smoke.cjs) can't false-negative on ordinary punctuation.
                         answerPlanQuestionSurvivesInPrompt: answerPlan?.question
-                            ? packet.userMessage.includes(answerPlan.question.trim())
+                            ? (packet.userMessage.includes(answerPlan.question.trim())
+                                || packet.userMessage.includes(escapeUserContent(answerPlan.question.trim())))
                             : null,
                         userMessageTail: packet.userMessage.slice(-800),
                         systemPromptTail: finalPromptOverride.slice(-400),
