@@ -647,4 +647,12 @@ QUOTA note: Account 1 was rate-limited (429) at last check; Account 2 healthy at
 - The existing process-exit waiter remains active. No new Electron run was launched, and no signal was sent to the orphaned process. This preserves concurrent-workspace safety over forcing a local cleanup whose process ownership remains unknown.
 - The campaign has no safe live-Electron action while this process survives. Ranking code stays unchanged; THESIS-072 remains untriaged, not failed.
 
-**NEXT ACTION:** Continue waiting for `60610` to exit. If it is still alive at the next fallback heartbeat, record the ongoing infrastructure block, recheck provider/quota health, and do only non-Electron analysis. Do not launch, kill, or signal Electron processes.
+**NEXT ACTION (still blocked):** Continue waiting for `60610` to exit. If it is still alive at the next fallback heartbeat, record the ongoing infrastructure block, recheck provider/quota health, and do only non-Electron analysis.
+
+## ITERATION (2026-07-17) — THESIS-072 Electron block persists past 90 minutes
+
+- The original benchmark runner `60610` and its Electron child `60618` remain alive after more than 90 minutes despite the original Playwright `firstWindow` timeout. They remain at near-zero CPU and no result artifact exists.
+- Quota is sufficient to continue (Account 1: 64% session remaining; Account 2 exhausted), but no live Electron work is safe while the orphaned runner remains. Do not use available quota to start competing desktop processes.
+- No code, retrieval settings, provider settings, or source evidence changed in this waiting iteration. The only new evidence is continued, persistent local Electron process non-termination.
+
+**NEXT ACTION:** Keep waiting for `60610` to exit naturally. If it remains alive at the next heartbeat, conduct only a read-only inspection of the stale runner's output/log state, checkpoint that evidence, and continue waiting. Do not launch another Electron process, kill the runner, or change product code.
