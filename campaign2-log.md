@@ -14,7 +14,7 @@ untouched and may still be active in a separate session).
 | 1 | H3 — follow-up misclassification: `FOLLOW_UP_MARKERS` requires ≤14 words, so realistic long callback questions ("going back to X you mentioned earlier...") are silently NOT flagged `isFollowUp` | CONFIRMED (live trace, 2 runs) | traces2/golden-longctx-18.txt: `"isFollowUp":false` for a 26-word unambiguous follow-up | `4b41e1d` | **FIXED** — split WEAK/STRONG marker tiers; first-draft STRONG tier was itself over-broad (skeptic pass caught 7 false-positive cases: bare "earlier", open-object "going back to", "the previous <career noun>"), narrowed to require explicit recall-phrase/conversation-shaped object. 49 unit tests + 189 consumer tests green. Live-reverified on real backend post-narrowing. |
 | 2 | H6 — long-range recall only covers proper-noun entities (sessionFollowupResolver memory model), not free-text topics/incidents | CONFIRMED (live trace, 2 runs, real MiniMax-M3) | run2: model itself says "the transcript does not contain that story"; run1: same root cause manifests as a silent null via the sentinel guard | `9c3b79b` | **FIXED** — new bounded lexical-recall fallback (`electron/llm/longRangeTranscriptRecall.ts`) fires only when isFollowUp && entity-recall empty. Skeptic pass found 2 real problems in the first draft (HIGH: no mode-boundary awareness, could leak comp figures into non-negotiation answers; MEDIUM: single-keyword scoring risked wrong-turn misattribution) — both fixed (comp value-gate mirroring SessionMemory's own gate; MIN_MATCH_SCORE raised 1→2). 13 unit tests, 263 consumer tests green, live-reverified twice on real backend post-narrowing. |
 | 3 | Amplifier — `isNonAnswerSentinel` discard (IntelligenceEngine.ts:2199) has NO fallback message; any model "nothing actionable" on a REAL press = completely silent null, greeting-failure-shaped UX | CONFIRMED (live trace, run 1) | traces2/golden-longctx-18.txt run1: `chars:29` provider response, `answer preview: (null)` | `77deb1e` | **FIXED** — manual (non-speculative) presses now get an honest, non-misleading fallback message instead of silent null; speculative path unchanged. Skeptic-approved (1 required test update applied). Live-reverified on real backend (fix fired: `[FIX:longsession-nonanswer-fallback]`). |
-| 4 | H7 — `SessionTracker.getContext(180)` is actually hard-capped at 120s regardless of caller's requested window (`contextWindowDuration=120` in `evictOldEntries`) | CONFIRMED (code read), not yet proven as direct cause of a live failure at this script's turn density | SessionTracker.ts:426-429 vs :698-706 | logged only, not yet a fix priority | logged |
+| 4 | H7 — `SessionTracker.getContext(180)` is actually hard-capped at 120s regardless of caller's requested window (`contextWindowDuration=120` in `evictOldEntries`) | CONFIRMED (live trace, real compiled SessionTracker) | `traces2/golden-trace-h7-context-window.mjs`: pre-fix `getContext(180)` and `getContext(120)` return IDENTICAL item counts (6) over a 180s-spanning transcript; post-fix `getContext(180)` returns 9 vs `getContext(120)`'s 6 | `9177463` | **FIXED** — raised `contextWindowDuration` 120→180 (single-constant change, no call-site signatures touched). No test hardcodes the old value (checked: `LiveTranscriptBrain.test.mjs`'s 120s references are its OWN `FakeSession` fixture, independent of the real class). Verified: typecheck clean; `LiveTranscriptBrain`/`DurableMemoryWiring`/`LiveBrainShadowWiring`/`SessionTrackerSurfaceIsolation`/`ManualContextFallback`/`IntelligenceEnginePreparedContext` — 46/46 green. R8 short-session smoke (real MiniMax-M3 backend): 11/11 green, no regression. |
 | 5 | H1 (question lost in prompt assembly under token-budget eviction) | REFUTED for realistic session lengths — sparsifyTranscript caps transcript at 12 turns BEFORE the 2000+-token assembler budget is ever approached (totalTokensUsed 433-566 of budget ~2300-2450, on a 128k-ctx cloud model) | traces2/golden-longctx-*.txt, all 4 presses: `answerPlanQuestionSurvivesInPrompt: true` | N/A | refuted |
 | 6 | H2 (system prompt eviction/dilution) | REFUTED same reasoning as H1 — systemPromptChars byte-identical (29961) across all 4 presses | traces2/golden-longctx-*.txt | N/A | refuted |
 | 7 | H8 (tokenization/counting drift) | REFUTED for cloud tier — `fitContextForCurrentModel` is a no-op when maxContextTokens>=100k | LLMHelper.ts:1141 | N/A | refuted |
@@ -261,3 +261,82 @@ thin:
 Either way: quota check before starting (§1.5, pre-check at 25% before an
 expensive full-benchmark run), and update this log's ANTI-THRASH LEDGER + SCORE
 HISTORY tables before ending the iteration.
+
+## ITERATION 5 (2026-07-17) — H7 fix landed, quota check, decision point
+
+Per the NEXT ACTION above, chose path (a) first (close the logged H7 finding
+before Phase 2 harness construction), same fix discipline as fixes #1-3.
+
+**Fix #4 (H7, commit `9177463`)**: read `SessionTracker.ts`'s `getContext`/
+`getContextWithInterim`/`evictOldEntries` per the prior NEXT ACTION's decision
+prompt. Verdict: `contextWindowDuration` should track the actually-INTENDED
+contract, not the accidental one — every live call site (`IntelligenceEngine.
+runWhatShouldISay`/`planSuggestionTrigger`, `LiveTranscriptBrain`'s
+`DEFAULT_ANSWER_WINDOW_SECONDS = 180`, `main.ts`'s comp-evidence provider) asks
+for 180s and `LiveTranscriptBrain.ts`'s own header comment documents
+`getContext(180)` as "the canonical live-answer window `IntelligenceEngine`
+already approximates" — so 180 is the intended contract, 120 was the bug.
+Made `contextWindowDuration` a plain 180 (simplest fix satisfying every real
+caller; did NOT thread it as a per-call parameter since no caller actually
+needs a window other than 180 today, and per R2/"touch least code" a broader
+refactor isn't justified by the evidence in hand).
+
+Live-proof: new `traces2/golden-trace-h7-context-window.mjs` drives the REAL
+compiled `SessionTracker` (not a fixture) — pre-fix, `getContext(180)` and
+`getContext(120)` return identical item counts (6) over a 180s-spanning
+synthetic transcript; post-fix, `getContext(180)` returns 9 vs `getContext
+(120)`'s 6, genuinely differing. Full before/after captured in the trace
+script's own output (kept as a permanent regression-reproduction script, not
+a temp file, since it directly exercises the compiled class rather than a
+`[TRACE:*]` log tag — R3's "shown firing in a benchmark run" is satisfied by
+this script's own two runs, before-fix and after-fix, both logged above).
+
+Checked whether any test hardcodes the old 120s value before changing it:
+`LiveTranscriptBrain.test.mjs` references `WINDOW = 120` but that's its OWN
+`FakeSession` fixture class (a hand-rolled mirror of the real eviction logic
+for isolated testing), completely independent of the real `SessionTracker`'s
+constant — confirmed by reading the fixture; changing the real class's value
+doesn't affect what that fixture asserts. No other test file pins 120 as an
+assertion.
+
+Verified: `npm run typecheck:electron` clean. Consumer suites hitting real
+`SessionTracker`/`LiveTranscriptBrain` behavior: `LiveTranscriptBrain.test.mjs`
++ `DurableMemoryWiring.test.mjs` + `LiveBrainShadowWiring.test.mjs` +
+`SessionTrackerSurfaceIsolation2026_07_14.test.mjs` +
+`ManualContextFallback2026_06_16.test.mjs` +
+`IntelligenceEnginePreparedContext.test.mjs` — 46/46 green. R8 short-session
+smoke suite (`test/harness-longsession/short-session-smoke.cjs`) run against
+the real `natively-api`/MiniMax-M3 backend: 11/11 checks green — no
+short-session regression (R8 satisfied).
+
+**Anti-thrash note**: this is a single-constant, minimal-blast-radius fix
+(no call-site signatures changed, no new parameters threaded) directly
+targeting the one line the forensic report already pinned as the mechanism —
+not a re-fix of any of fixes #1-3's patterns.
+
+**Shared-workspace note**: confirmed via `git branch --show-current` +
+`git status` immediately before staging that the branch was still
+`fix/longsession-campaign` and no new commits had landed since the last
+check (per the standing shared-workspace protocol from earlier iterations —
+always re-verify branch/status before any git operation, since concurrent
+sessions on this same working directory have moved HEAD before). Staged and
+committed ONLY `electron/SessionTracker.ts` + the new trace script — left
+every other concurrently-modified file (README.md, LLMHelper.ts,
+ipcHandlers.ts, ProfileEvidenceService.ts, intelligenceFlags.ts, various
+`__tests__` files, src/components/*) untouched and unstaged, since those
+belong to other in-flight sessions' work, not this fix.
+
+**Quota check** (iteration 5): Account 1 100% session (fresh window,
+resetAt not yet assigned) / Account 2 64% session, 70% weekly. Both well
+above the 25%/10% thresholds. Continuing.
+
+**NEXT ACTION**: Proceed to Phase 2 (path (b) above) — build the full
+30-minute, 3-script benchmark harness at `test/harness-longsession/`, reusing
+`golden-trace-driver.cjs` and `short-session-smoke.cjs`'s existing bootstrap
+(electron-stub/sqlite-shim, real-backend wiring, clock-fast-forward pattern)
+rather than rebuilding it. Start with Script A (SWE interview w/ resume+JD)
+since fixture/bootstrap infrastructure for it already exists from the smoke
+suite; then B (reference-PDF technical deep-dive) and C (adversarial/messy)
+per loop2.md §4's G1-G8 grading rubric. Quota check before starting (already
+done above, both accounts healthy) and re-check branch/status immediately
+before any further git operations per the shared-workspace protocol.
