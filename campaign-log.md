@@ -551,4 +551,26 @@ The 50× raw-score weight makes a 0.37-point raw-score gap (46.25 vs 28.35 compo
 - `efde958`'s ranking-weight change (50× raw score): **FLAGGED — masks a regression against the ORIGINAL be7d7e0 protective test by replacing it with a weaker one.** Not reverted by me this iteration (leaving the decision visible rather than silently reverting someone else's landed commit); documented so it's not missed.
 - `efde958`'s QuestionClassifier soft-entity change (USB-as-adjective): independently verified sound, no concerns.
 
-**NEXT ACTION**: The owning session (or whoever picks this up next) should design a ranking formula that passes BOTH: (a) the original `be7d7e0` scenario (topical=0.92 vs value=0.55, value must win) AND (b) THESIS-079's scenario (Logitech=0.5169 vs decoy=0.49/0.48, Logitech must win) — these are NOT the same shape (be7d7e0's gap is much larger in absolute terms, 0.37 vs 0.03), so a viable fix likely needs a non-linear or ratio-based comparison rather than a single fixed additive weight. Do not run another full 140-case benchmark until this is resolved — a benchmark pass/fail on the current formula does not by itself prove the trade-off is safe, since neither the original test's exact numbers nor real documents with that scoring pattern are guaranteed to appear in the 140-case set. Re-check quota before any further work (currently reported at 22%, near the pause floor).
+**NEXT ACTION (superseded)**: ~~design a ranking formula that passes both scenarios~~ — attempted this directly with a mathematical proof rather than trial-and-error. See below.
+
+## ITERATION (this session, continued) — Mathematical proof that NO fixed-weight formula can satisfy both scenarios; a genuinely different signal is required
+
+Recomputed the exact `answerRelevanceScore` outputs for both scenarios (correcting an earlier hand-calculation error) and swept every additive weight `w` in `w*raw + rel` from 0 to 100:
+
+```
+w=0:  A_value_wins=True  (0.850 vs 0.250) | B_logitech_wins=False
+w=1:  A_value_wins=True  (1.400 vs 1.170) | B_logitech_wins=False
+w=2:  A_value_wins=False (1.950 vs 2.090) | B_logitech_wins=False
+...
+w=30: A_value_wins=False (17.350 vs 27.850) | B_logitech_wins=True
+w=50: A_value_wins=False (28.350 vs 46.250) | B_logitech_wins=True (current efde958 value)
+w=100:A_value_wins=False (55.850 vs 92.250) | B_logitech_wins=True
+```
+
+**A requires w<2. B requires w≥30. These ranges never overlap — no fixed additive weight can satisfy both, proven exhaustively, not just spot-checked.** Also tried a raw-score-gap-based two-tier scheme (trust raw score outright when the leader's gap over the runner-up exceeds a threshold, else let relevance break the near-tie): swept threshold from 0.01 to 0.5 — **A requires threshold≥0.37 to let relevance override; B requires threshold≤0.02 so raw decides on its own tiny 0.027 gap. These ranges also never overlap.**
+
+**Root reason this is unfixable by reweighting alone**: scenario A wants relevance to override a LARGE raw-score gap in favor of the true answer. Scenario B wants raw score to (barely) override a LARGE relevance-score gap, because the high-relevance decoy is a false positive — an off-topic chunk that happens to repeat literal question words. No pure function of `(raw, relevance)` magnitudes can distinguish "high relevance = correct" (A) from "high relevance = false positive" (B) — that distinction requires a genuinely different signal, most likely topic/entity consistency (does the chunk's actual subject match the category the question asks about — physical camera hardware vs. an AI model that processes camera-related data — not just whether literal words overlap).
+
+**Conclusion for the next fix attempt**: do not tune the `w` constant further; it is proven futile. A real fix needs either (a) a topic-consistency check independent of literal term overlap (e.g., does the chunk's grammatical subject/entity match the question's implied category), or (b) a narrower, THESIS-079-specific carve-out that doesn't touch the general-purpose formula `be7d7e0` established (accepting a smaller, targeted change over a global reweight). Recommend (b) given the campaign's stated preference for narrow, single-mechanism fixes over broad ones with cross-cutting blast radius.
+
+QUOTA note: Account 1 was rate-limited (429) at last check; Account 2 healthy at 80% session via 9Router failover. No pause needed. This analysis was pure static/offline computation — no Electron, no provider calls, no shared-workspace resource contention risked.
