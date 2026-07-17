@@ -18,6 +18,7 @@ import {
     detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES,
     raceStreamWithDeadline, LIVE_INTER_TOKEN_STALL_MS, LIVE_TOTAL_HARD_TIMEOUT_MS,
     LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS, isLeakedSchemaStub,
+    isProviderTransportError,
     cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE,
     buildProfileJitPrompt, decideSessionWritePolicy
 } from './llm';
@@ -1939,6 +1940,61 @@ export class IntelligenceEngine extends EventEmitter {
                 fullAnswer = buildGracefulRetry(question || extractedQuestion.latestQuestion || lastInterviewerTurn);
             }
 
+            // LEAKED-SCHEMA-STUB GUARD + PROVIDER-TRANSPORT-ERROR GUARD — MUST run
+            // here, BEFORE validateAnswerStructure/repairCodingMarkdown and every
+            // other post-stream repair pass below, as a full EARLY RETURN (not just
+            // an earlier check). Campaign 2 skeptic-pass finding (longsession,
+            // 2026-07-17): a first draft moved the CHECK earlier but let fullAnswer
+            // keep flowing through validateAnswerStructure/repairCodingMarkdown —
+            // for a CODING-type answer (dsa_question_answer/coding_question_answer)
+            // that pipeline unconditionally wraps whatever fullAnswer holds (the
+            // raw stub/error text, OR a short replacement string) into a
+            // six-section markdown scaffold, since neither is valid coding
+            // structure. The scaffold then reached persistence with the original
+            // bug intact — reproduced live in the fix's own regression test before
+            // this early-return version was written. Mirrors the exact early-return
+            // shape `isNonAnswerSentinel` already uses a bit further down in this
+            // same method (fix#1 of this campaign) — same precedent, applied
+            // consistently rather than threading a skip-flag through every
+            // downstream repair site (fragile, easy to miss one).
+            if (fullAnswer && isLeakedSchemaStub(fullAnswer)) {
+                const stubFallback = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
+                    ? "I don't have enough context from the conversation to answer that yet."
+                    : "The model produced an invalid answer artifact, so I won't guess from your profile. Please try again.";
+                trace.mark('fallback_answer_used', { answerType: answerPlan.answerType, reason: 'leaked_schema_stub', finalGenerationMode: 'provider_error_no_answer' });
+                const stubWriteDecision = decideSessionWritePolicy({
+                    finalGenerationMode: 'provider_error_no_answer',
+                    validationOk: false,
+                    criticalViolations: ['leaked_schema_stub'],
+                });
+                if (openedStreamRow) emitChunk(stubFallback);
+                this.session.addAssistantMessage(stubFallback, stubWriteDecision, 'what_to_answer');
+                this.emit('suggested_answer', stubFallback, question || extractedQuestion.latestQuestion || 'inferred', confidence);
+                this.setMode('idle');
+                return stubFallback;
+            }
+            if (fullAnswer && isProviderTransportError(fullAnswer)) {
+                // Unlike the schema-stub guard, we do NOT rewrite fullAnswer here —
+                // the transport-error text itself is exactly what the user should
+                // see right now (it's actionable: check API keys/plan). Only its
+                // PERSISTENCE into session history is the bug (live-proven:
+                // traces2/harness-script-a-press-A12.txt — a poisoned
+                // `[ASSISTANT]: I couldn't reach the AI provider...` turn from an
+                // earlier press caused a LATER, unrelated press to answer as if
+                // resuming mid error-recovery instead of the fresh question).
+                trace.mark('fallback_answer_used', { answerType: answerPlan.answerType, reason: 'provider_transport_error', finalGenerationMode: 'provider_error_no_answer' });
+                const transportWriteDecision = decideSessionWritePolicy({
+                    finalGenerationMode: 'provider_error_no_answer',
+                    validationOk: false,
+                    criticalViolations: ['provider_transport_error'],
+                });
+                if (openedStreamRow) emitChunk(fullAnswer);
+                this.session.addAssistantMessage(fullAnswer, transportWriteDecision, 'what_to_answer');
+                this.emit('suggested_answer', fullAnswer, question || extractedQuestion.latestQuestion || 'inferred', confidence);
+                this.setMode('idle');
+                return fullAnswer;
+            }
+
             trace.mark('validation_started', { answerType: answerPlan.answerType });
             const structureValidation = validateAnswerStructure(answerPlan.answerType, fullAnswer);
             if (!structureValidation.ok && structureValidation.repaired) {
@@ -2392,23 +2448,13 @@ export class IntelligenceEngine extends EventEmitter {
                     this.emit('suggested_answer_token', fullAnswer, question || 'inferred', confidence, generationId);
                 }
             }
-            // LEAKED-SCHEMA-STUB GUARD (E2E MiniMax campaign, p08 Q3): the model
-            // sometimes returns ONLY a JSON-schema stub (```json {"type":"object"}```)
-            // instead of an answer — a generation artifact, not a real answer. Never
-            // surface it: substitute the grounded deterministic fallback if we have
-            // one, else the honest insufficient-context line. Narrow check (whole
-            // answer must BE the stub), so real answers containing JSON are untouched.
-            if (fullAnswer && isLeakedSchemaStub(fullAnswer)) {
-                trace.mark('fallback_answer_used', { answerType: answerPlan.answerType, reason: 'leaked_schema_stub', finalGenerationMode: 'provider_error_no_answer' });
-                fullAnswer = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
-                    ? "I don't have enough context from the conversation to answer that yet."
-                    : "The model produced an invalid answer artifact, so I won't guess from your profile. Please try again.";
-                wtaWriteDecision = decideSessionWritePolicy({
-                    finalGenerationMode: 'provider_error_no_answer',
-                    validationOk: false,
-                    criticalViolations: ['leaked_schema_stub'],
-                });
-            }
+            // (leaked-schema-stub / provider-transport-error guards now run much
+            // earlier — see the "MUST run here, BEFORE validateAnswerStructure"
+            // block above, right after the stream completes. Moved there per a
+            // Campaign 2 skeptic-pass finding: running them this late let the
+            // coding-repair pipeline (validateAnswerStructure/repairCodingMarkdown)
+            // mutate fullAnswer first, so the exact-match checks silently missed
+            // the mutated text for coding-type answers.)
             // OUTPUT SHAPE NORMALIZER (Phase 4 wiring, behind answer_diversity_guard_enabled):
             // the WTA path applies NO answer polish today (unlike the manual path), so empty
             // "*" bullets and visible scaffold labels in a default-style answer reach the UI
