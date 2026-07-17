@@ -72,6 +72,22 @@ test('Local Whisper keeps the shared ONNX slot until the worker exit event', () 
   assert.match(exitHandler, /slotRelease\s*\(/);
 });
 
+test('failed shutdown delivery still waits for the worker exit event', () => {
+  const body = extractMethodBody(localWhisperSource, 'beginWorkerTermination');
+  const catchStart = body.indexOf('catch (err)');
+  assert.notEqual(catchStart, -1, 'shutdown delivery must handle an unavailable worker');
+  const catchBody = body.slice(catchStart);
+  assert.doesNotMatch(catchBody, /slotRelease\s*\(/);
+  assert.doesNotMatch(catchBody, /finishWorkerShutdown\s*\(/);
+});
+
+test('Local Whisper shutdown wait is bounded without releasing the native slot', () => {
+  const body = extractMethodBody(localWhisperSource, 'waitForShutdown');
+  assert.match(body, /setTimeout\s*\(/);
+  assert.match(body, /reject\s*\(/);
+  assert.doesNotMatch(body, /slotRelease\s*\(/);
+});
+
 test('meeting teardown waits for Local Whisper workers to exit', () => {
   const body = extractMethodBody(mainSource, 'endMeeting');
   assert.match(body, /waitForShutdown\?\.\(\)/);
@@ -80,4 +96,17 @@ test('meeting teardown waits for Local Whisper workers to exit', () => {
 test('audio test waits for an in-flight meeting teardown', () => {
   const body = extractMethodBody(mainSource, 'startAudioTest');
   assert.match(body, /await\s+this\._pendingTeardown/);
+});
+
+test('audio test owns the start guard before waiting for teardown', () => {
+  const body = extractMethodBody(mainSource, 'startAudioTest');
+  const guardAt = body.indexOf('this._audioTestStarting = true');
+  const waitAt = body.indexOf('await this._pendingTeardown');
+  assert.ok(guardAt >= 0 && guardAt < waitAt, 'the concurrency guard must be acquired before the first await');
+});
+
+test('meeting persistence continues after a bounded Local Whisper shutdown failure', () => {
+  const body = extractMethodBody(mainSource, 'endMeeting');
+  assert.match(body, /waitForShutdown\?\.\(\)[\s\S]*\.catch\s*\(/);
+  assert.match(body, /intelligenceManager\.stopMeeting\s*\(\)/);
 });

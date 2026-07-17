@@ -103,6 +103,7 @@ export class LocalWhisperSTT extends EventEmitter {
     // stops sending audio before VAD's hangover completes.
     private gapFlushTimer: ReturnType<typeof setTimeout> | null = null;
     private static readonly GAP_FLUSH_MS = 400;
+    private static readonly SHUTDOWN_TIMEOUT_MS = 15_000;
     // Resolves only after the native ONNX worker has exited cooperatively.
     // New audio work waits on this barrier so old and new native sessions do
     // not overlap during teardown on Windows.
@@ -814,10 +815,10 @@ export class LocalWhisperSTT extends EventEmitter {
         try {
             w.postMessage({ type: 'shutdown' });
         } catch (err) {
-            // The worker may already have exited between stop() and this call.
+            // Do not release the shared slot or resolve the barrier here. A
+            // failed send does not prove that native ONNX teardown has ended;
+            // only the worker's exit event is authoritative.
             console.warn('[LocalWhisperSTT] Worker was already unavailable during shutdown:', err);
-            if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
-            this.finishWorkerShutdown();
         }
     }
 
@@ -831,7 +832,28 @@ export class LocalWhisperSTT extends EventEmitter {
     }
 
     public waitForShutdown(): Promise<void> {
-        return this.workerShutdownPromise ?? Promise.resolve();
+        const shutdown = this.workerShutdownPromise;
+        if (!shutdown) return Promise.resolve();
+
+        return new Promise<void>((resolve, reject) => {
+            const timer = setTimeout(() => {
+                reject(new Error(
+                    `Local Whisper worker did not exit within ${LocalWhisperSTT.SHUTDOWN_TIMEOUT_MS}ms`,
+                ));
+            }, LocalWhisperSTT.SHUTDOWN_TIMEOUT_MS);
+            timer.unref?.();
+
+            shutdown.then(
+                () => {
+                    clearTimeout(timer);
+                    resolve();
+                },
+                (err) => {
+                    clearTimeout(timer);
+                    reject(err);
+                },
+            );
+        });
     }
 
     private finishWorkerShutdown(): void {

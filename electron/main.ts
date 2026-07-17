@@ -4685,15 +4685,15 @@ export class AppState {
     if (this.isMeetingActive) {
       throw new Error('Audio test is unavailable while a meeting is active. End the meeting first, then test your microphone.');
     }
-    if (this._pendingTeardown) {
-      await this._pendingTeardown;
-    }
-    // A meeting may have started while the previous teardown was awaited.
-    if (this.isMeetingActive) {
-      throw new Error('Audio test is unavailable while a meeting is active. End the meeting first, then test your microphone.');
-    }
     this._audioTestStarting = true;
     try {
+      if (this._pendingTeardown) {
+        await this._pendingTeardown;
+      }
+      // A meeting may have started while the previous teardown was awaited.
+      if (this.isMeetingActive) {
+        throw new Error('Audio test is unavailable while a meeting is active. End the meeting first, then test your microphone.');
+      }
       await this._startAudioTestImpl(deviceId);
     } finally {
       this._audioTestStarting = false;
@@ -5426,7 +5426,12 @@ export class AppState {
         await Promise.all([
           (this.googleSTT as any)?.waitForShutdown?.(),
           (this.googleSTT_User as any)?.waitForShutdown?.(),
-        ]);
+        ]).catch((err) => {
+          // Preserve meeting persistence even if a native worker is wedged.
+          // The Local Whisper instance keeps ownership of its ONNX slot, so a
+          // later start can fail over without overlapping the stuck session.
+          console.error('[Main] Local Whisper shutdown did not complete:', err);
+        });
 
         // 3. Snapshot transcript + persist placeholder + queue title/summary LLM.
         //    intelligenceManager.stopMeeting itself runs LLM in background.
