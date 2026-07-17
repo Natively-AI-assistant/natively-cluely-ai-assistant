@@ -1085,3 +1085,58 @@ consistent with this campaign's own STRUCTURE (fixing the harness that
 measures the product, is in scope, same as building it was). If quota
 looks tight, skip straight to (a) since a REAL number, even against an
 imperfect grader, is worth more than another zero-benchmark iteration.
+
+## ITERATION 13 (2026-07-17) — Grading-harness fix#1 (G1 false-negative) landed; quota low
+
+Picked up option (b) from iteration 12's NEXT ACTION — grading-code fixes
+first, since they're cheap (no LLM calls) and quota was tight (Account1
+0%/exhausted, Account2 dropping through 24%→14% over this iteration).
+
+**Grading fix (commit `d9d880a`)**: `fuzzyQuestionMatch` in
+`test/harness-longsession/grading/gates.mjs` used a max-size-denominator
+Jaccard ratio that unfairly penalized a legitimately short extracted
+follow-up fragment against a much longer canonical question (the exact B6
+case iteration 12 found: "and what about english-to-french?" against "What
+BLEU score did the model achieve on WMT 2014 English-to-French?" — every
+fragment word appears in the canonical, but max-based ratio scored only
+0.27). Blended in a containment ratio (mirrors
+`IntelligenceEngine.jaccardSimilarity`'s existing Jaccard+containment
+pattern for the identical asymmetric-length problem), gated on BOTH a high
+containment ratio (>=0.6) AND a minimum absolute shared-word count (>=3) so
+a tiny 2-word coincidental overlap can't false-positive. Verified via direct
+reproduction against 5 cases (real B6 fix, genuinely-different-question
+rejection, scattered-2-word-coincidence rejection, exact match, normal
+full rewording) — all behave correctly. No LLM calls needed for this
+verification (pure local module testing), appropriate given quota state.
+
+**Scope decision**: did NOT attempt the second identified grading
+false-negative (G3/G5's exact-substring-not-tense-aware fact matching,
+e.g. "rolled back" vs "roll back") this iteration — a hand-rolled
+tense-variant list is fragile and a full stemmer is disproportionate for
+this harness; deserves its own dedicated design pass, not a rushed fix
+under low quota. Logged as still-open, not silently dropped.
+
+**Quota check**: Account1 still 0%/exhausted (unknown resetAt from this
+session's vantage — earlier resetAt timestamps have already passed,
+suggesting a fresh window may be active but 9Router's read still shows 0%
+or errors). Account2 dropped to 14%, BELOW the 25% pre-expensive-op
+threshold. Per §1.5, this means: continue only cheap/no-LLM work (this
+grading fix qualified); do NOT start an expensive full 3-script JUDGED
+benchmark run this iteration.
+
+**NEXT ACTION**: (a) once quota recovers (recheck via the documented §1.5
+method before any expensive op — target >=25% on the healthier account),
+run the FULL 3-script JUDGED benchmark (the real L4-measuring run) — this
+is now the single highest-value next step, since G1/G2/G4/G6/G7 all look
+strong across all 3 scripts (confirmed twice, iterations 11-12) and the
+G1 grading false-negative is now fixed, so this run should produce the
+cleanest, most-trustworthy numbers this campaign has seen; (b) if that run
+is still short of L4 targets, the dominant remaining gap is G3 answer
+completeness/precision (uniform across session length, likely
+Campaign-1-adjacent per iteration 11's A1 finding) and G5 long-range recall
+(currently only reliably tested on Script B's reference-doc recall, which
+scores 100% — Script A/C's recall cases are fewer and mostly hit the
+tense-matching grading gap, not a real recall failure); (c) the deferred
+G3/G5 tense-matching grading fix from this iteration is still available
+low-risk work if a future iteration wants a quick win before/instead of a
+full judged run.
