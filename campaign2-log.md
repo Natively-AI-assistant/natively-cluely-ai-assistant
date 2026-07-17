@@ -21,6 +21,7 @@ untouched and may still be active in a separate session).
 | 8 | New (iter 8) — a real provider-transport error (429/expired key/billing) yielded by `WhatToAnswerLLM.generateStream`'s catch block had no persistence guard, so its actionable error string got written into session history like a real answer, poisoning a LATER unrelated press | CONFIRMED (live trace, real 30-min benchmark run-003) | `traces2/harness-script-a-press-A12.txt`: poisoned `[ASSISTANT]: I couldn't reach the AI provider...` turn in the prompt; model answered as if mid error-recovery on an unrelated question | `cf45f3c` | **FIXED** — new `isProviderTransportError` detector + early-return guard (`do_not_store` write policy, ungated user-facing delivery). Skeptic pass found a real, live-reproduced gap in the first draft (guard placed too late — `repairCodingMarkdown` mutated the error text into a 6-section scaffold for coding-type questions before the exact-match check ran, silently missing it) — fixed by converting both this guard AND the sibling `isLeakedSchemaStub` guard into full early returns (mirrors the existing `isNonAnswerSentinel` precedent). 10 unit tests (incl. a coding-type regression reproducing the skeptic's exact failure), 94 consumer tests green, typecheck clean, R8 smoke green. NOT yet re-verified against the full real-backend benchmark this iteration — quota dropped to 11%/0% mid-verification; deferred to next iteration per §1.5. |
 | 9 | New (iter 15/16) — `extractTranscriptEntities` mis-tagged a skill/tech name (Kafka, RocksDB) as a `project` entity (two root causes: non-global `SKILL_RE` match dropped every skill after the first per turn; the cued-noun project rule's bare "on"/"to" triggers fired on tech names). `sessionFollowupResolver`'s bare-pronoun substitution then spliced the wrong entity into a LATER unrelated question, corrupting `answerPlan.question` — which is the literal retrieval query `WhatToAnswerLLM.ts` uses for document/RAG/mode-context search, not just a trace field | CONFIRMED (live trace, real 30-min JUDGED benchmark run-008) | `traces2/harness-script-a-press-A4.txt`/`A5.txt`/`A13.txt`/`A18.txt`: `answerPlanQuestion` reads "what did you own **Kafka**?" (real Q: "...own there?"), "...what made **RocksDB** migration challenging?" (real Q: "...that migration..."), "we'll cover **RocksDB** in the next round" (real Q: "...cover that..."); `run-008.json`'s G6 desync 22%/40%/70.6% (script a/c/b) is partly explained by this | `8d8d74a` | **FIXED** — collect every `SKILL_RE` match (not just the first) into a `skillTokens` set; exclude any matched skill token from all downstream project-tagging rules (CamelCase/cued-noun/short-answer); removed bare "on"/"to" from the cued-noun trigger list (kept "use"/"using"/"back to", which an existing fixture test relies on). Skeptic pass (code-reviewer subagent, independently re-derived + live-reproduced) found the fix's first draft left an IDENTICAL pre-existing gap open — the same bare "to"/"on" cues also mis-tag PERSON/company names ("reported to Priya" → later "that project" resolves to "Priya") — fixed in the same commit by narrowing the cue list rather than just excluding skill tokens. 10 new regression tests (both root causes + the skeptic's person-name finding, unit + end-to-end via `resolveLiveFollowup`); skeptic independently verified they're non-vacuous by reverting to HEAD and confirming 5/7 originally failed. Full consumer suite 198/198 green (SessionMemory, SessionFollowup, LiveSessionMemory, FollowUpResolver, ProjectEntityResolution, LongRangeTranscriptRecall, ContextFreeFollowup, RefinementFollowUp). Typecheck clean. NOT yet re-verified against a full real-backend benchmark run — a clean (uncontended) judged run is still pending per iteration 15's environmental-contention finding. |
 | 10 | Follow-up to #9 (iter 18) — same downstream splicing mechanism, but the mis-tagged CamelCase token isn't always a SKILL — "1.4k GitHub stars" and "SOC 2 / FedRAMP requirement" are neither skills nor projects, so fix#9's `isSkillToken` exclusion didn't cover them; both matched the bare CamelCase project rule directly | CONFIRMED (live trace, real 30-min JUDGED benchmark run-009, taken AFTER fix#9 landed) | `traces2/harness-script-a-press-A13.txt`/`A18.txt` (post-fix#9): `answerPlanQuestion` reads "...what made **GitHub** migration challenging?" (real Q: "...that migration...") and "we'll cover **FedRAMP** in the next round" (real Q: "...cover that...") — the extraction bug survived fix#9 for this token category | `fc3eed0` | **FIXED** — added a narrow `KNOWN_NON_PROJECT_PROPER_NOUNS` allowlist (GitHub, GitLab, Bitbucket, LinkedIn, YouTube, FedRAMP, HIPAA, SOC2, PCIDSS, GDPR), folded into the same `isSkillToken` exclusion check fix#9 introduced. Deliberately narrow (not a generic "any CamelCase = not a project" rule) to avoid swallowing genuine CamelCase project names like PillarStream/TalentScope. 3 new regression tests (both cases + an end-to-end `resolveLiveFollowup` reproduction). Full consumer suite re-run: 198/198 green, 13/13 in the extended test file. Typecheck clean. Re-verified on a fresh own judged run (run-012, iter 18) — A4/A5/A13/A18's `G1.extracted` all clean, no trace of ANY prior corruption pattern (Kafka/RocksDB/GitHub/FedRAMP) across 3 independent post-fix runs (run-010/011/012) from 2 different sessions. |
+| 11 | Follow-up to #9/#9b (iter 20) — the "use X"/"using X" cue, deliberately KEPT by fix#9's skeptic pass as "unambiguously about a tool/project being adopted", turned out ambiguous for a TOOL-LISTING sentence shape ("using Envoy and Istio for the mesh layer") vs a genuine single-project-adoption statement ("use TalentScope.") — the skeptic pass tested only the latter shape | CONFIRMED (live trace, real 30-min JUDGED benchmark run-013, launched AFTER a sustained ps aux quiescence check) | `traces2/harness-script-a-press-A18.txt`: `answerPlanQuestion` reads "we'll cover **Envoy** in the next round" (real Q: "...cover that...") — extraction corrupted even though this press's final ANSWER stayed on-topic (G6 passed for this specific press, unlike the more severe run-008 cases) | `d559b72` | **FIXED** — detect an "and &lt;CapitalizedWord&gt;" continuation immediately after a cued match (a genuine single-project-adoption statement never continues this way; a tool list almost always does) and skip the cue when present. Extended `KNOWN_NON_PROJECT_PROPER_NOUNS` with common non-CamelCase infra tool names (Envoy, Istio, Grafana, Jaeger, Prometheus, Terraform, Ansible, Jenkins, CircleCI) as defense-in-depth. 3 new tests, full consumer suite 214/214 green, typecheck clean. NOT independently skeptic-reviewed this iteration (judgment call under time pressure — 4th iteration on the same file same day, pattern well-understood, fix narrowly scoped). Structural note: fix#9/#9b/#9c all share the same root cause (project-tagging is permissive-by-default rather than requiring a strong positive signal) — see iteration 20's "Reflection" for why a full redesign was deferred rather than attempted. |
 
 ## SCORE HISTORY
 (benchmark run # / timestamp / greeting-failures / hallucination flags / question-extraction acc / answer quality / long-range recall)
@@ -1566,3 +1567,94 @@ expensive judged benchmark. Six checks 25s apart (a `for` loop with
 `sleep 25` inside a Monitor call) is a cheap, mechanical way to do this
 without burning real backend/LLM quota — it's pure local `ps aux`
 polling, zero cost beyond wall-clock time.
+
+## ITERATION 20 (2026-07-17) — run-013 (best result yet), fix#9c ("using X and Y" tool-listing), 4th recurrence of the same bug class
+
+**run-013 completed** — the judged benchmark launched after iteration
+19's sustained-quiescence check. Early-press latency (A1 4.4s, A4 1.7s,
+A8 4.4s, A13 2.6s) landed BETWEEN run-005's clean ~2s baseline and prior
+contended runs' 5-9s range — a partial improvement, not a fully clean
+run, suggesting the sustained-quiescence technique helps but doesn't
+fully eliminate contention invisible to local `ps aux` (e.g. remote
+API-level queuing from other sessions' cloud calls this workspace can't
+see locally).
+
+**Best overall result of the campaign so far**: G1 100%, G2 0 flags, G4
+**0 hallucination flags** (down from 1-3 in every prior judged run —
+first fully clean G4 result), G6 desync 48% (best yet; prior range was
+22-44%). Per-script breakdown is notably uneven: **script-b (doc-grounded
+technical deep-dive) scores G3 76.5% / G5 100% / G6 82.4%** — strong
+across the board — while script-a (profile-grounded SWE interview) and
+script-c (adversarial) remain weak (G3 11-20%, G6 27-33%). This is
+consistent with prior iterations' finding (8/11) that script-a/c's low
+G3 is dominated by profile/JD grounding-fidelity gaps outside this
+campaign's charter, while script-b's clean doc-grounded retrieval path
+shows the underlying answer-generation machinery is healthy when given
+solid grounding.
+
+**Found and fixed fix#9c while the run was in flight**: checked A18's
+live trace mid-run and found a FOURTH recurrence of the fix#9 corruption
+class — "I've operated 1.2k-node clusters in production, **using Envoy**
+and Istio for the mesh layer" mis-tagged "Envoy" as a project via the
+"use X"/"using X" cue. This is notable because fix#9's own skeptic pass
+explicitly examined and KEPT "use"/"using" as "unambiguously about a
+tool/project being adopted" — that assumption held for the skeptic's
+test cases (single-item statements: "use TalentScope.", "using Tinroof
+under the hood.") but not for a TOOL-LISTING sentence ("using X and Y for
+Z"), which is a materially different grammatical shape the skeptic pass
+didn't test.
+
+**Fixed (commit `d559b72`, ANTI-THRASH LEDGER — see below)**: detect the
+"and &lt;CapitalizedWord&gt;" continuation immediately after a cued match — a
+genuine single-project-adoption statement never continues this way, a
+tool list almost always does. Also extended
+`KNOWN_NON_PROJECT_PROPER_NOUNS` with common non-CamelCase infra tool
+names (Envoy, Istio, Grafana, Jaeger, Prometheus, Terraform, Ansible,
+Jenkins, CircleCI) as defense-in-depth for standalone mentions. 3 new
+tests, full consumer suite 214/214 green, typecheck clean. NOT yet
+independently skeptic-reviewed (4th iteration on the same file same day —
+judgment call to keep moving given the pattern is now well-understood and
+the fix is narrowly scoped, mirroring the established
+containment-then-explicit-guard structure of fix#9/#9b).
+
+**Reflection on the pattern — 4 recurrences in one day**: fix#9 (Kafka/
+RocksDB, non-global skill match), fix#9b (GitHub/FedRAMP, non-skill
+CamelCase nouns), fix#9c (Envoy/Istio, tool-listing ambiguity) all share
+the SAME root structural weakness: `extractTranscriptEntities`'s
+project-tagging rules are permissive-by-default (tag as project unless
+explicitly excluded) rather than restrictive-by-default (tag as project
+only with a strong positive signal). Each fix has added another
+exclusion, which closes the specific live-observed case but leaves the
+general shape of the bug (some future proper noun, in some future
+sentence shape, will again slip through) structurally open. A more
+durable fix would flip the default — require a genuinely strong signal
+(a CamelCase brand-shaped token AND an explicit "I built/created X"
+framing, not just "using X") before tagging `project` at all — but that
+is a bigger, riskier redesign (more false negatives on real project
+names) than this campaign's remaining time/quota budget likely supports;
+logging as a Phase-4-or-later architectural note rather than attempting
+it now under continued time pressure.
+
+**Quota check**: run-013 completed without a provider-error/quota-
+exhaustion signature in its log; treating as adequate evidence quota was
+fine for one full run. No pause triggered.
+
+**NEXT ACTION**: three real options, no single clearly-correct one: (a)
+declare the extraction-bug sub-thread done-enough (4 independent
+instances found and fixed, the underlying mechanism well-understood and
+documented even if not exhaustively future-proofed) and move to Phase 4
+hardening prep; (b) attempt ONE more judged run now that fix#9c has
+landed, to see whether G6 climbs further given script-a/c's remaining
+G6 failures are increasingly looking like genuine `onTopic` grading
+strictness or generation-quality issues rather than the pronoun-splicing
+bug (recommend AT MOST one more attempt, not open-ended retries — this
+campaign has now spent significant quota on largely-confirmatory reruns
+of the same underlying finding); (c) invest in the containsFact
+exact-substring-matching precision issue (flagged as open since
+iteration 13, cheap, no LLM calls, doesn't depend on backend
+contention) as a higher-value use of remaining effort than another
+judged run, since G3/G5's scores are known to be under-reporting real
+quality by an unknown but nonzero margin. Given script-b's clean 76.5%/
+100%/82.4% result this iteration, recommend (c) as the most information-
+dense next step if effort is available — it's the one lever left that's
+both cheap AND known-high-value.
