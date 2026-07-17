@@ -663,4 +663,12 @@ QUOTA note: Account 1 was rate-limited (429) at last check; Account 2 healthy at
 - The newly-created clean retry task was stopped immediately before `ensure-backend.sh` or Electron launch, after that preflight listing made the stale processes explicit. This did not start a third Electron instance and did not touch the existing processes.
 - No retrieval, provider, source, or product evidence was generated. THESIS-072 remains untriaged. The process ownership ambiguity and repeated non-termination prevent safe local repair or another live benchmark.
 
-**NEXT ACTION:** Continue waiting for the existing runner `60610` to exit. At the next heartbeat, only check its PID state and the pre-existing task output; do not put a retry command in the same shell invocation as an ambiguous process check. If it remains alive, log the persistent block and wait again. Do not signal it or start Electron.
+**NEXT ACTION (still blocked):** Continue waiting for the existing runner `60610` to exit. At the next heartbeat, only inspect its PID state and pre-existing output.
+
+## ITERATION (2026-07-18) — read-only stale-runner inspection confirms stuck harness process tree
+
+- Read-only process inspection now establishes the exact stale tree: shell `60607` → `node run-200q-benchmark.mjs` `60610` → Playwright-launched Electron `60618`. All three are sleeping at 0% CPU after more than two hours. This is consistent with the runner's exception path leaving the `electron.launch()` app process alive after `firstWindow()` throws, but that is a harness diagnosis only, not a product-path finding.
+- There is no completed `thesis-072-forensic` result artifact and no later retrieval/provider trace to analyze. The stopped duplicate retry did not create additional Electron work.
+- Per the campaign's shared-process safety rule, the known stale tree remains untouched. No destructive cleanup or new Electron launch was performed. A future harness hardening change may need to close the Playwright `app` in a `finally` block after launch failures, but do not apply it while this stale run remains active and the campaign requires process-exit gating.
+
+**NEXT ACTION:** Continue waiting for `60610` to exit naturally. At the next heartbeat, recheck only this process tree and record whether it remains. Do not signal the process, launch Electron, or modify product/harness code until the active stale run is gone.
