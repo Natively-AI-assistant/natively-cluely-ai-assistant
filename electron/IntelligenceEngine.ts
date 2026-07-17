@@ -2165,7 +2165,23 @@ export class IntelligenceEngine extends EventEmitter {
                         // builder doesn't know about).
                         const repairInstruction = pv.repairInstruction || buildProfileRepairInstruction(pv as any);
                         const safeCandidateProfile = IntelligenceEngine.sanitizeManualContextText(candidateProfile, 8000);
-                        const safeQuestion = IntelligenceEngine.sanitizeManualContextText(question || '', 1000);
+                        // Long-session harness campaign2 (2026-07-17): this used to read
+                        // ONLY the raw `question` parameter, which is undefined for the
+                        // auto-trigger/WTA path (the button press passes no question — the
+                        // engine derives it internally via extractLatestQuestion). The
+                        // repair prompt's <question> block therefore rendered EMPTY, so the
+                        // regeneration had no idea what was actually asked and could drift
+                        // to an unrelated topic (live-proven: press A12 "tell me about your
+                        // degree and school" repaired into a "Two Sum" coding-algorithm
+                        // answer — traces2/run-002 G6 desync). Mirrors the same fallback
+                        // chain already used for the doc-grounded repair's `docQuestion`
+                        // just above (line ~1970): answerPlan.question is already resolved
+                        // from question||extractedQuestion.latestQuestion||lastInterviewerTurn
+                        // at plan-build time, so reading it here restores the real question.
+                        const safeQuestion = IntelligenceEngine.sanitizeManualContextText(
+                            answerPlan.question || question || extractedQuestion.latestQuestion || lastInterviewerTurn || '',
+                            1000,
+                        );
                         // Wrap the repair directive in an explicit instruction block and
                         // put the OUTPUT command LAST. Previously the bare instruction
                         // led the prompt and MiniMax sometimes ECHOED it verbatim as the

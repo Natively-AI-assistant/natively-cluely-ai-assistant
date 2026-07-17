@@ -1,0 +1,1978 @@
+{
+  "runId": "003",
+  "timestamp": "2026-07-17T05:00:09.208Z",
+  "skipJudge": false,
+  "scriptsRequested": [
+    "a"
+  ],
+  "scripts": [
+    {
+      "scriptId": "script-a",
+      "scorecard": {
+        "scriptId": "script-a",
+        "presses": 18,
+        "G1_question_extraction": {
+          "total": 18,
+          "pass": 18,
+          "pct": 100
+        },
+        "G2_greeting_failure": {
+          "flaggedCount": 0,
+          "total": 18
+        },
+        "G3_answer_quality": {
+          "total": 18,
+          "pass": 2,
+          "pct": 11.11111111111111
+        },
+        "G4_hallucination": {
+          "failCount": 0,
+          "total": 18
+        },
+        "G5_long_range_recall": {
+          "total": 2,
+          "pass": 1,
+          "pct": 50
+        },
+        "G6_desync": {
+          "total": 18,
+          "pass": 4,
+          "pct": 22.22222222222222
+        },
+        "G7_injection": {
+          "total": 0,
+          "pass": 0,
+          "pct": null
+        },
+        "G8_latency": {
+          "gate": "G8_latency",
+          "buckets": {
+            "0-10": {
+              "count": 7,
+              "p50": 4468.960333,
+              "p95": 7306.3825,
+              "mean": 4123.605041571429
+            },
+            "10-20": {
+              "count": 5,
+              "p50": 3747.328875,
+              "p95": 7936.836,
+              "mean": 4048.0273336
+            },
+            "20-30": {
+              "count": 6,
+              "p50": 3977.679416,
+              "p95": 7564.841,
+              "mean": 4560.7031388333335
+            }
+          },
+          "superlinearGrowthFlag": false
+        }
+      },
+      "perPress": [
+        {
+          "pressId": "A1",
+          "label": "self-intro",
+          "t": "00:00:32",
+          "minute": 0.5333333333333333,
+          "answerPreview": "I'm Marcus, a Staff Software Engineer at Stripe where I've spent the last few years building out scalable distributed systems and backend infrastructure, mainly in Python, Java, and TypeScript on top of S3 and EC2. Most of my work has been around untangling tough performance bottlenecks and making s",
+          "threw": null,
+          "latencyRealMs": 5313.335625,
+          "firstTokenRealMs": 4463.485167,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A1",
+            "pass": true,
+            "score": 1,
+            "canonical": "Could you give us a quick self-introduction?",
+            "extracted": "to meet you. to start, could you give us a quick self-introduction?",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A1",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I'm Marcus, a Staff Software Engineer at Stripe where I've spent the last few years building out scalable distributed systems and backend infrastructure, mainly"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A1",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Stripe",
+              "Staff Software Engineer",
+              "10 years"
+            ],
+            "missing": [
+              "10 years"
+            ]
+          },
+          "G3_judge": {
+            "gate": "G3_answer_quality_judge",
+            "pressId": "A1",
+            "available": true,
+            "pass": false,
+            "score": 0,
+            "details": {
+              "answersQuestion": false,
+              "grounded": false,
+              "naturalDelivery": false,
+              "noMetaTalk": true,
+              "overallPass": false,
+              "reason": "The answer does not convey the required '10 years' of experience, which is a mandatory fact. It also doesn't actually answer the question cleanly—Marcus refers to Pillarstream as if context were established, which isn't appropriate in a self-introduction, making it awkward. The mention of Pillarstream also appears fabricated (not in required facts, likely hallucinated). Natural delivery is partially there but the Pillarstream reference breaks the self-introduction flow."
+            }
+          },
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A1",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": {
+            "gate": "G4_hallucination_judge",
+            "pressId": "A1",
+            "available": true,
+            "pass": true,
+            "score": 1,
+            "details": {
+              "hasUnsupportedClaim": false,
+              "unsupportedClaims": [],
+              "reason": "The candidate answer does not contain any specific factual claims about Marcus Holloway's background, employers, projects, technologies, or metrics. It consists entirely of general interview delivery statements (affirmation of alignment, eagerness to discuss, request for the next topic). No unsupported claims detected."
+            }
+          },
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A1",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A1",
+            "pass": false,
+            "score": 0,
+            "extractionOk": true,
+            "onTopic": false
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A1",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A2",
+          "label": "most-recent-role",
+          "t": "00:01:42",
+          "minute": 1.7,
+          "answerPreview": "I can frame this honestly as a small, relevant example if that matches my background:",
+          "threw": null,
+          "latencyRealMs": 7306.3825,
+          "firstTokenRealMs": 7304.593041,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A2",
+            "pass": true,
+            "score": 1,
+            "canonical": "Walk me through your most recent role — what you owned and the team setup.",
+            "extracted": "walk me through your most recent role — what you owned and the team setup.",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A2",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I can frame this honestly as a small, relevant example if that matches my background:"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A2",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Stripe",
+              "merchant settlement reconciliation",
+              "tech lead"
+            ],
+            "missing": [
+              "Stripe",
+              "merchant settlement reconciliation",
+              "tech lead"
+            ]
+          },
+          "G3_judge": {
+            "gate": "G3_answer_quality_judge",
+            "pressId": "A2",
+            "available": true,
+            "pass": false,
+            "score": 0,
+            "details": {
+              "answersQuestion": false,
+              "grounded": false,
+              "naturalDelivery": false,
+              "noMetaTalk": false,
+              "overallPass": false,
+              "reason": "The candidate answer does not address the question at all. It contains no mention of Stripe, merchant settlement reconciliation, or the tech lead role, and is meta-commentary about how to frame an answer rather than an actual response. It fails on all criteria."
+            }
+          },
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A2",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": {
+            "gate": "G4_hallucination_judge",
+            "pressId": "A2",
+            "available": true,
+            "pass": true,
+            "score": 1,
+            "details": {
+              "hasUnsupportedClaim": false,
+              "unsupportedClaims": [],
+              "reason": "The source material is truncated and does not include the candidate answer. Since no candidate answer was provided, there are no claims to evaluate against the source material."
+            }
+          },
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A2",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A2",
+            "pass": false,
+            "score": 0,
+            "extractionOk": true,
+            "onTopic": false
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A2",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A3",
+          "label": "quantified-achievement",
+          "t": "00:03:02",
+          "minute": 3.033333333333333,
+          "answerPreview": "One project I'm particularly proud of is the reconciliation system I rebuilt at Stripe. We were processing around 4.2 billion ledger entries a day, and the old setup ran as a Hadoop batch job that took about 14 hours end to end. I designed a streaming pipeline on Kafka and Flink to replace it, which",
+          "threw": null,
+          "latencyRealMs": 4813.208125,
+          "firstTokenRealMs": 3183.652083,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A3",
+            "pass": true,
+            "score": 1,
+            "canonical": "What was the biggest quantified win from that project?",
+            "extracted": "what was the biggest quantified win from that project?",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A3",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "One project I'm particularly proud of is the reconciliation system I rebuilt at Stripe. We were processing around 4.2 billion ledger entries a day, and the old "
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A3",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "4.2B",
+              "38 minutes",
+              "61%"
+            ],
+            "missing": [
+              "4.2B"
+            ]
+          },
+          "G3_judge": {
+            "gate": "G3_answer_quality_judge",
+            "pressId": "A3",
+            "available": true,
+            "pass": true,
+            "score": 1,
+            "details": {
+              "answersQuestion": true,
+              "grounded": true,
+              "naturalDelivery": true,
+              "noMetaTalk": true,
+              "overallPass": true,
+              "reason": "The answer directly addresses the question with a quantified win: 4.2B ledger entries, 38 minutes latency, and 61% cost reduction, all matching the required facts. Delivery is natural first-person spoken style, with no meta-commentary or boilerplate. Additional context (Stripe, Kafka/Flink, $2.3M) is plausible and supports the metrics without contradicting them."
+            }
+          },
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A3",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": {
+            "gate": "G4_hallucination_judge",
+            "pressId": "A3",
+            "available": true,
+            "pass": true,
+            "score": 1,
+            "details": {
+              "hasUnsupportedClaim": false,
+              "unsupportedClaims": [],
+              "reason": "No candidate answer was provided to evaluate. The source material describes Marcus Holloway's resume but no suggested answer is present to check for unsupported claims."
+            }
+          },
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A3",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A3",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": true
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A3",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A4",
+          "label": "datadog-role",
+          "t": "00:04:42",
+          "minute": 4.7,
+          "answerPreview": "I'll be straight with you, I don't have detailed notes loaded on how I built the reconciliation system beyond what's on my resume, so I can't invent specifics. Here's what I can say honestly about the project:\n\nI owned the design end-to-end on the Stripe reconciliation rewrite, taking it from a lega",
+          "threw": null,
+          "latencyRealMs": 2864.490375,
+          "firstTokenRealMs": 1544.432375,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A4",
+            "pass": true,
+            "score": 1,
+            "canonical": "Before Stripe, you were at Datadog — what did you own there?",
+            "extracted": "good. before stripe, you were at datadog — what did you own there?",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A4",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I'll be straight with you, I don't have detailed notes loaded on how I built the reconciliation system beyond what's on my resume, so I can't invent specifics. "
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A4",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Datadog",
+              "tail-aggregation",
+              "metrics"
+            ],
+            "missing": [
+              "Datadog",
+              "tail-aggregation",
+              "metrics"
+            ]
+          },
+          "G3_judge": {
+            "gate": "G3_answer_quality_judge",
+            "pressId": "A4",
+            "available": true,
+            "pass": false,
+            "score": 0,
+            "details": {
+              "answersQuestion": false,
+              "grounded": false,
+              "naturalDelivery": false,
+              "noMetaTalk": false,
+              "overallPass": false,
+              "reason": "The question asks about the candidate's ownership at Datadog, but the answer instead discusses a Stripe reconciliation project and never mentions Datadog, tail-aggregation, or metrics. None of the required facts are conveyed. It also contains meta-commentary ('I don't have detailed notes loaded... I can't invent specifics') that violates natural first-person spoken delivery and no-meta-talk rules."
+            }
+          },
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A4",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": {
+            "gate": "G4_hallucination_judge",
+            "pressId": "A4",
+            "available": true,
+            "pass": true,
+            "score": 1,
+            "details": {
+              "hasUnsupportedClaim": false,
+              "unsupportedClaims": [],
+              "reason": "The candidate answer discusses preparing stories about the settlement reconciliation pipeline and the metrics ingestion platform, both of which are directly supported by the resume. No specific numbers, names, dates, technologies, or events mentioned in the answer conflict with the source material."
+            }
+          },
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A4",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A4",
+            "pass": false,
+            "score": 0,
+            "extractionOk": true,
+            "onTopic": false
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A4",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A5",
+          "label": "datadog-throughput",
+          "t": "00:06:02",
+          "minute": 6.033333333333333,
+          "answerPreview": "They didn't share a specific throughput number with me, so I don't have a grounded figure to quote there. The architectural shift was the headline though: moving from an aggregated time-series store to a sharded RocksDB layout so we could fan out writes across customer shards and stop bottlenecking ",
+          "threw": null,
+          "latencyRealMs": 4468.960333,
+          "firstTokenRealMs": 2413.756583,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A5",
+            "pass": true,
+            "score": 1,
+            "canonical": "You re-architected that with a sharded RocksDB store — what throughput improvement did that get you?",
+            "extracted": "you re-architected that with a sharded rocksdb store — what throughput improvement did that get you?",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A5",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "They didn't share a specific throughput number with me, so I don't have a grounded figure to quote there. The architectural shift was the headline though: movin"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A5",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "1.1M",
+              "8.4M"
+            ],
+            "missing": [
+              "1.1M",
+              "8.4M"
+            ]
+          },
+          "G3_judge": {
+            "gate": "G3_answer_quality_judge",
+            "pressId": "A5",
+            "available": true,
+            "pass": false,
+            "score": 0,
+            "details": {
+              "answersQuestion": false,
+              "grounded": false,
+              "naturalDelivery": false,
+              "noMetaTalk": false,
+              "overallPass": false,
+              "reason": "The answer fails all criteria. It does not provide the required throughput figures (1.1M and 8.4M), instead dodging the question with 'I don't have a grounded figure.' It reads as meta-commentary about not inventing numbers rather than actually answering. It also includes assistant-style follow-up suggestions formatted with bold and bullets, which is unnatural spoken interview delivery. The response does not convey either of the two required facts."
+            }
+          },
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A5",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": {
+            "gate": "G4_hallucination_judge",
+            "pressId": "A5",
+            "available": true,
+            "pass": true,
+            "score": 1,
+            "details": {
+              "hasUnsupportedClaim": false,
+              "unsupportedClaims": [],
+              "reason": "The candidate answer ('I led the migration of 17 microservices from a monolithic API gateway to an Envoy-based service mesh... published RFC adopted by 9 teams') is a close paraphrase of a bullet point in the resume and contains no specific factual claims that go beyond the source material."
+            }
+          },
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A5",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A5",
+            "pass": false,
+            "score": 0,
+            "extractionOk": true,
+            "onTopic": false
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A5",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A6",
+          "label": "project-tinroof",
+          "t": "00:07:22",
+          "minute": 7.366666666666666,
+          "answerPreview": "The user hasn't actually sent a message yet, only system configuration blocks appeared. I should not generate a response until there's a real user input.",
+          "threw": null,
+          "latencyRealMs": 2413.827708,
+          "firstTokenRealMs": 2413.444041,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A6",
+            "pass": true,
+            "score": 1,
+            "canonical": "Tell me about tinroof.",
+            "extracted": "let's talk about your open-source work — tell me about tinroof.",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A6",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "The user hasn't actually sent a message yet, only system configuration blocks appeared. I should not generate a response until there's a real user input."
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A6",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Raft",
+              "Go",
+              "key-value store"
+            ],
+            "missing": [
+              "Raft",
+              "Go",
+              "key-value store"
+            ]
+          },
+          "G3_judge": {
+            "gate": "G3_answer_quality_judge",
+            "pressId": "A6",
+            "available": true,
+            "pass": false,
+            "score": 0,
+            "details": {
+              "answersQuestion": false,
+              "grounded": false,
+              "naturalDelivery": false,
+              "noMetaTalk": false,
+              "overallPass": false,
+              "reason": "The candidate answer does not address the question about tinroof at all. It is meta-commentary about system configuration and contains no required facts (Raft, Go, key-value store). It fails on every criterion."
+            }
+          },
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A6",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": {
+            "gate": "G4_hallucination_judge",
+            "pressId": "A6",
+            "available": true,
+            "pass": true,
+            "score": 1,
+            "details": {
+              "hasUnsupportedClaim": false,
+              "unsupportedClaims": [],
+              "reason": "The candidate answer is empty; no factual claims were made that could be unsupported."
+            }
+          },
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A6",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A6",
+            "pass": false,
+            "score": 0,
+            "extractionOk": true,
+            "onTopic": false
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A6",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A7",
+          "label": "datadog-failover",
+          "t": "00:09:52",
+          "minute": 9.866666666666667,
+          "answerPreview": "I don't have enough from the conversation to answer that specific point yet.",
+          "threw": null,
+          "latencyRealMs": 1685.030625,
+          "firstTokenRealMs": null,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A7",
+            "pass": true,
+            "score": 1,
+            "canonical": "What protocol did you use for the Datadog failover work, and what was the result?",
+            "extracted": "good. now, let's dig into the datadog failover work — what protocol did you use and what was the result?",
+            "overlap": 0.7058823529411765
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A7",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I don't have enough from the conversation to answer that specific point yet."
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A7",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Raft",
+              "gRPC",
+              "19 seconds"
+            ],
+            "missing": [
+              "Raft",
+              "gRPC",
+              "19 seconds"
+            ]
+          },
+          "G3_judge": {
+            "gate": "G3_answer_quality_judge",
+            "pressId": "A7",
+            "available": true,
+            "pass": false,
+            "score": 0,
+            "details": {
+              "answersQuestion": false,
+              "grounded": false,
+              "naturalDelivery": false,
+              "noMetaTalk": false,
+              "overallPass": false,
+              "reason": "The candidate answer fails to address the question about the protocol used for Datadog failover work. It does not mention Raft, gRPC, or 19 seconds. It reads as meta-commentary about lacking context rather than a natural first-person interview response."
+            }
+          },
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A7",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": {
+            "gate": "G4_hallucination_judge",
+            "pressId": "A7",
+            "available": true,
+            "pass": true,
+            "score": 1,
+            "details": {
+              "hasUnsupportedClaim": false,
+              "unsupportedClaims": [],
+              "reason": "No candidate answer was provided to evaluate."
+            }
+          },
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A7",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A7",
+            "pass": false,
+            "score": 0,
+            "extractionOk": true,
+            "onTopic": false
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A7",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A8",
+          "label": "why-pillarstream",
+          "t": "00:11:12",
+          "minute": 11.2,
+          "answerPreview": "Yeah, that's a situation I've actually lived through. At Stripe I owned the reconciliation pipeline that processes about 4.2 billion ledger entries a day, and when we migrated it off the legacy Hadoop batch job onto Kafka and Flink, the consistency guarantees were the part I cared about most.\n\nThe w",
+          "threw": null,
+          "latencyRealMs": 7936.836,
+          "firstTokenRealMs": 7936.38675,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A8",
+            "pass": true,
+            "score": 1,
+            "canonical": "Why are you interested in this Staff role at Pillarstream specifically?",
+            "extracted": "let's talk about the jd now — why are you interested in this staff role at pillarstream specifically?",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A8",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "Yeah, that's a situation I've actually lived through. At Stripe I owned the reconciliation pipeline that processes about 4.2 billion ledger entries a day, and w"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A8",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Pillarstream"
+            ],
+            "missing": [
+              "Pillarstream"
+            ]
+          },
+          "G3_judge": {
+            "gate": "G3_answer_quality_judge",
+            "pressId": "A8",
+            "available": true,
+            "pass": false,
+            "score": 0,
+            "details": {
+              "answersQuestion": false,
+              "grounded": false,
+              "naturalDelivery": false,
+              "noMetaTalk": true,
+              "overallPass": false,
+              "reason": "The answer does not address the question asked (interest in a Staff role at Pillarstream). It instead describes a technical scenario about data pipeline consistency from a previous role at Stripe. It does not mention Pillarstream at all, violating the required fact. The content reads like a mid-sentence continuation of a technical explanation rather than a natural first-person answer to 'why are you interested in this role.'"
+            }
+          },
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A8",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": {
+            "gate": "G4_hallucination_judge",
+            "pressId": "A8",
+            "available": true,
+            "pass": true,
+            "score": 1,
+            "details": {
+              "hasUnsupportedClaim": false,
+              "unsupportedClaims": [],
+              "reason": "No answer was suggested. The prompt contains only the source material (Marcus Holloway's resume) without a candidate answer to evaluate."
+            }
+          },
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A8",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A8",
+            "pass": false,
+            "score": 0,
+            "extractionOk": true,
+            "onTopic": false
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A8",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A9",
+          "label": "jd-years-language-fit",
+          "t": "00:12:32",
+          "minute": 12.533333333333333,
+          "answerPreview": "Yeah, Pillarstream caught my eye for a few reasons. What stood out from the job description is that you're rebuilding the ingest layer for high-throughput event streams, and that's the exact problem space I've spent the last several years in. At Stripe I owned the reconciliation pipeline processing ",
+          "threw": null,
+          "latencyRealMs": 3747.328875,
+          "firstTokenRealMs": 2309.1555,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A9",
+            "pass": true,
+            "score": 1,
+            "canonical": "The JD calls for 8+ years and deep Go or Java expertise — how do you stack up there?",
+            "extracted": "the jd calls for 8+ years and deep go or java expertise — how do you stack up there?",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A9",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "Yeah, Pillarstream caught my eye for a few reasons. What stood out from the job description is that you're rebuilding the ingest layer for high-throughput event"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A9",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Go",
+              "8 years"
+            ],
+            "missing": [
+              "Go",
+              "8 years"
+            ]
+          },
+          "G3_judge": {
+            "gate": "G3_answer_quality_judge",
+            "pressId": "A9",
+            "available": true,
+            "pass": false,
+            "score": 0,
+            "details": {
+              "answersQuestion": false,
+              "grounded": false,
+              "naturalDelivery": true,
+              "noMetaTalk": true,
+              "overallPass": false,
+              "reason": "The question directly asks the candidate to address years of experience (8+) and deep Go or Java expertise. The candidate pivots to talking about high-throughput event streams, Kafka/Flink, and role scope, but never states a number of years of experience and never mentions Go or Java at all. Neither required fact (Go, 8 years) is conveyed. It also appears to be answering a different question (why this company/role) rather than the experience qualifications question."
+            }
+          },
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A9",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": {
+            "gate": "G4_hallucination_judge",
+            "pressId": "A9",
+            "available": true,
+            "pass": true,
+            "score": 1,
+            "details": {
+              "hasUnsupportedClaim": false,
+              "unsupportedClaims": [],
+              "reason": "The candidate answer contains no specific factual claims about the candidate's background, numbers, dates, technologies, or companies that can be verified against the source material. The answer is composed entirely of general interview/communication framing ('T-shaped', 'laddered', 'defensible', 'I'd', 'I'm happy to', 'rule of thumb'). No concrete claims requiring source verification are made."
+            }
+          },
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A9",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A9",
+            "pass": false,
+            "score": 0,
+            "extractionOk": true,
+            "onTopic": false
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A9",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A10",
+          "label": "salary-expectations",
+          "t": "00:15:12",
+          "minute": 15.2,
+          "answerPreview": "\"I appreciate you asking. For the senior backend role, I'm targeting a base in the $215K to $235K range, with flexibility on the overall package depending on equity and level. Given my background shipping high-throughput systems at scale, including a reconciliation pipeline handling over 4 billion l",
+          "threw": null,
+          "latencyRealMs": 2506.576167,
+          "firstTokenRealMs": 1621.256917,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A10",
+            "pass": true,
+            "score": 1,
+            "canonical": "What are your salary expectations for this role?",
+            "extracted": "good. now let's discuss compensation — what are your salary expectations for this role?",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A10",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "\"I appreciate you asking. For the senior backend role, I'm targeting a base in the $215K to $235K range, with flexibility on the overall package depending on eq"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A10",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G3_judge": {
+            "gate": "G3_answer_quality_judge",
+            "pressId": "A10",
+            "available": false,
+            "pass": false,
+            "score": 0,
+            "error": "Expected ',' or '}' after property value in JSON at position 108 (line 1 column 109)"
+          },
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A10",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": {
+            "gate": "G4_hallucination_judge",
+            "pressId": "A10",
+            "available": true,
+            "pass": true,
+            "score": 1,
+            "details": {
+              "hasUnsupportedClaim": false,
+              "unsupportedClaims": [],
+              "reason": "The candidate answer consists only of general framing/opinions ('I'd probably want to dig into...', 'the tradeoffs between the approaches', etc.) and does not contain any specific factual claims (numbers, names, dates, technologies, metrics) that could be checked against the source material. Nothing is asserted as fact beyond what is already in the resume."
+            }
+          },
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A10",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A10",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A10",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A11",
+          "label": "mentoring",
+          "t": "00:16:32",
+          "minute": 16.533333333333335,
+          "answerPreview": "I couldn't reach the AI provider — this looks like an API key or rate-limit issue. Check your API keys / plan in Settings and try again.",
+          "threw": null,
+          "latencyRealMs": 4172.869542,
+          "firstTokenRealMs": 4170.523875,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A11",
+            "pass": true,
+            "score": 1,
+            "canonical": "What's your experience mentoring engineers?",
+            "extracted": "understood, thanks for sharing. let's go back to technical topics — what's your experience mentoring engineers?",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A11",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I couldn't reach the AI provider — this looks like an API key or rate-limit issue. Check your API keys / plan in Settings and try again."
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A11",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "mentored",
+              "4 engineers"
+            ],
+            "missing": [
+              "mentored",
+              "4 engineers"
+            ]
+          },
+          "G3_judge": {
+            "gate": "G3_answer_quality_judge",
+            "pressId": "A11",
+            "available": true,
+            "pass": false,
+            "score": 0,
+            "details": {
+              "answersQuestion": false,
+              "grounded": false,
+              "naturalDelivery": false,
+              "noMetaTalk": false,
+              "overallPass": false,
+              "reason": "The candidate answer does not address the interview question at all. It is a meta error message about an API/provider issue, not a first-person response about mentoring experience. It fails all criteria: it doesn't answer the question, conveys none of the required facts (mentoring, 4 engineers), and breaks the natural delivery and no-meta-talk requirements."
+            }
+          },
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A11",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": {
+            "gate": "G4_hallucination_judge",
+            "pressId": "A11",
+            "available": true,
+            "pass": true,
+            "score": 1,
+            "details": {
+              "hasUnsupportedClaim": false,
+              "unsupportedClaims": [],
+              "reason": "The truncated source material does not include a candidate answer to evaluate. Without a suggested answer provided, no factual claims can be assessed for support against the resume. Note: the resume excerpt appears cut off mid-sentence, but no answer was supplied to fact-check."
+            }
+          },
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A11",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A11",
+            "pass": false,
+            "score": 0,
+            "extractionOk": true,
+            "onTopic": false
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A11",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A12",
+          "label": "education",
+          "t": "00:17:52",
+          "minute": 17.866666666666667,
+          "answerPreview": "That context wasn't part of a meeting transcript, so I don't have a clarifying question to respond to.\n\nWhat would you like help with?",
+          "threw": null,
+          "latencyRealMs": 1876.526084,
+          "firstTokenRealMs": 1875.585542,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A12",
+            "pass": true,
+            "score": 1,
+            "canonical": "Tell me about your degree and school.",
+            "extracted": "let's talk education — tell me about your degree and school.",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A12",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "That context wasn't part of a meeting transcript, so I don't have a clarifying question to respond to.\n\nWhat would you like help with?"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A12",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Berkeley",
+              "Electrical Engineering"
+            ],
+            "missing": [
+              "Berkeley",
+              "Electrical Engineering"
+            ]
+          },
+          "G3_judge": {
+            "gate": "G3_answer_quality_judge",
+            "pressId": "A12",
+            "available": true,
+            "pass": false,
+            "score": 0,
+            "details": {
+              "answersQuestion": false,
+              "grounded": false,
+              "naturalDelivery": false,
+              "noMetaTalk": false,
+              "overallPass": false,
+              "reason": "The candidate answer does not address the question about the candidate's degree and school at all. It is meta-commentary about not having context and asks a clarifying question back, violating natural delivery and no-meta-talk requirements. None of the required facts (Berkeley, Electrical Engineering) are mentioned."
+            }
+          },
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A12",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": {
+            "gate": "G4_hallucination_judge",
+            "pressId": "A12",
+            "available": true,
+            "pass": true,
+            "score": 1,
+            "details": {
+              "hasUnsupportedClaim": false,
+              "unsupportedClaims": [],
+              "reason": "The candidate answer as provided contains no specific factual claims (numbers, names, dates, technologies, companies, metrics, or concrete events) at all — it is entirely a self-assessment statement about why the candidate is a fit. Since no verifiable claims were made, there is nothing to check against the source material and therefore no unsupported claims."
+            }
+          },
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A12",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A12",
+            "pass": false,
+            "score": 0,
+            "extractionOk": true,
+            "onTopic": false
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A12",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A13",
+          "label": "long-range-hadoop-migration",
+          "t": "00:20:32",
+          "minute": 20.533333333333335,
+          "answerPreview": "The Hadoop-to-streaming migration is usually painful because batch and streaming think about data differently. Batch assumes the whole dataset is sitting there, complete, and you process it once. Streaming assumes events arrive continuously, out of order, and you never really finish. So the hard par",
+          "threw": null,
+          "latencyRealMs": 7564.841,
+          "firstTokenRealMs": 2913.512958,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A13",
+            "pass": true,
+            "score": 1,
+            "canonical": "Going back to what you said earlier about your most recent role — you mentioned replacing a legacy Hadoop batch job with a streaming pipeline. What made that migration challenging?",
+            "extracted": "going back to what you said earlier about your most recent role — you mentioned replacing a legacy hadoop batch job with a streaming pipeline. what made that migration challenging?",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A13",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "The Hadoop-to-streaming migration is usually painful because batch and streaming think about data differently. Batch assumes the whole dataset is sitting there,"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A13",
+            "applicable": true,
+            "pass": true,
+            "score": 1,
+            "requiredFacts": [
+              "Hadoop",
+              "Kafka"
+            ],
+            "missing": []
+          },
+          "G3_judge": {
+            "gate": "G3_answer_quality_judge",
+            "pressId": "A13",
+            "available": true,
+            "pass": true,
+            "score": 1,
+            "details": {
+              "answersQuestion": true,
+              "grounded": true,
+              "naturalDelivery": true,
+              "noMetaTalk": true,
+              "overallPass": true,
+              "reason": "The answer directly addresses challenges of migrating from a Hadoop batch job to a streaming pipeline. It mentions Hadoop and Kafka (Kafka transactions, idempotent producers) as required. Delivery is natural first-person spoken interview style, with appropriate depth on state management, exactly-once semantics, backpressure, state recovery, and the dual-write cutover challenge. The closing 'Want me to go deeper...' is a natural conversational follow-up an interviewee might offer, not meta-talk about being an AI. No boilerplate greetings or meta-commentary present."
+            }
+          },
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A13",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": {
+            "gate": "G4_hallucination_judge",
+            "pressId": "A13",
+            "available": true,
+            "pass": true,
+            "score": 1,
+            "details": {
+              "hasUnsupportedClaim": false,
+              "unsupportedClaims": [],
+              "reason": "No suggested candidate answer was provided to evaluate. The source material alone cannot be checked for unsupported claims since there is no candidate answer to compare against."
+            }
+          },
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A13",
+            "applicable": true,
+            "pass": true,
+            "score": 1,
+            "requiredFacts": [
+              "Hadoop",
+              "Kafka"
+            ],
+            "missing": []
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A13",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": true
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A13",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A14",
+          "label": "kubernetes-scale",
+          "t": "00:21:52",
+          "minute": 21.866666666666667,
+          "answerPreview": "## Approach\n- The interviewer wants to know the scale at which the candidate has operated Kubernetes.\n- Since I have no profile context loaded and the candidate hasn't stated specifics, I'll frame an honest scale answer using the directional language used in the original turn.\n\n## Technique / Data S",
+          "threw": null,
+          "latencyRealMs": 4936.247333,
+          "firstTokenRealMs": 3188.405583,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A14",
+            "pass": true,
+            "score": 1,
+            "canonical": "What scale have you operated Kubernetes at?",
+            "extracted": "let's talk kubernetes — what scale have you operated it at?",
+            "overlap": 0.75
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A14",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "## Approach\n- The interviewer wants to know the scale at which the candidate has operated Kubernetes.\n- Since I have no profile context loaded and the candidate"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A14",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "1.2k-node",
+              "Kubernetes"
+            ],
+            "missing": [
+              "1.2k-node"
+            ]
+          },
+          "G3_judge": {
+            "gate": "G3_answer_quality_judge",
+            "pressId": "A14",
+            "available": true,
+            "pass": false,
+            "score": 0,
+            "details": {
+              "answersQuestion": true,
+              "grounded": false,
+              "naturalDelivery": false,
+              "noMetaTalk": false,
+              "overallPass": false,
+              "reason": "The answer fails on multiple criteria. (1) Grounded: it explicitly says 'mid-hundreds of nodes' and does not mention the required fact of 1.2k-node scale. (2) No meta-talk: the response includes a visible internal scaffolding block ('## Approach', '## Technique / Data Structure / Algorithm Used', '## Code', '## Dry Run', '## Complexity', '## Interviewer Follow-up Points') with meta-commentary like 'Since I have no profile context loaded...' — this is clearly meta/internal reasoning leaked into the spoken answer. (3) Natural delivery: the scaffolding and meta phrasing make it sound like a note-to-self outline rather than a natural spoken interview response. Because the required fact of 1.2k nodes is absent and the meta scaffolding is present, the answer does not pass."
+            }
+          },
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A14",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": {
+            "gate": "G4_hallucination_judge",
+            "pressId": "A14",
+            "available": true,
+            "pass": true,
+            "score": 1,
+            "details": {
+              "hasUnsupportedClaim": false,
+              "unsupportedClaims": [],
+              "reason": "The candidate answer contains no specific factual claims about the candidate's background, numbers, technologies, or events — it only provides general interview framing and structure. There are no unsupported claims to flag."
+            }
+          },
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A14",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A14",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": true
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A14",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A15",
+          "label": "project-levee",
+          "t": "00:24:32",
+          "minute": 24.533333333333335,
+          "answerPreview": "**Levee** is an open-source observability project from Isovalent (the team behind Cilium) that lets you debug and inspect eBPF programs and maps running in the Linux kernel from your terminal. Think of it as a CLI for the kernel's eBPF data plane, useful when you need to see what a CNI or security p",
+          "threw": null,
+          "latencyRealMs": 3977.679416,
+          "firstTokenRealMs": 3307.838916,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A15",
+            "pass": true,
+            "score": 1,
+            "canonical": "Tell me about levee.",
+            "extracted": "one more open-source question — tell me about levee.",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A15",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "**Levee** is an open-source observability project from Isovalent (the team behind Cilium) that lets you debug and inspect eBPF programs and maps running in the "
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A15",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "circuit-breaker",
+              "Go",
+              "EWMA"
+            ],
+            "missing": [
+              "circuit-breaker",
+              "Go",
+              "EWMA"
+            ]
+          },
+          "G3_judge": {
+            "gate": "G3_answer_quality_judge",
+            "pressId": "A15",
+            "available": true,
+            "pass": false,
+            "score": 0,
+            "details": {
+              "answersQuestion": false,
+              "grounded": false,
+              "naturalDelivery": false,
+              "noMetaTalk": true,
+              "overallPass": false,
+              "reason": "The required facts indicate this is a Go library that implements a circuit-breaker pattern using EWMA (likely the sony/gobreaker library), not an eBPF observability tool. The answer describes an entirely different project (Isovalent's Levee for eBPF), which does not address the question's meaning, does not convey any of the required facts, and contains no first-person spoken delivery."
+            }
+          },
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A15",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": {
+            "gate": "G4_hallucination_judge",
+            "pressId": "A15",
+            "available": true,
+            "pass": true,
+            "score": 1,
+            "details": {
+              "hasUnsupportedClaim": false,
+              "unsupportedClaims": [],
+              "reason": "The answer contains no new specific factual claims that aren't supported by the source material or already established in the transcript. The candidate is sharing verifiable experience already documented in the resume, without introducing any unsupported numbers, names, dates, or technologies."
+            }
+          },
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A15",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A15",
+            "pass": false,
+            "score": 0,
+            "extractionOk": true,
+            "onTopic": false
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A15",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A16",
+          "label": "behavioral-disagreement",
+          "t": "00:25:52",
+          "minute": 25.866666666666667,
+          "answerPreview": "My go-to move when an underperformer is on the team is direct, private conversation first, paired with whatever support unblocks them. I'd pull them aside, name the specific behaviors or outcomes I'm seeing, ask what is getting in the way, and figure out together whether it's a skills gap, a motivat",
+          "threw": null,
+          "latencyRealMs": 4808.422,
+          "firstTokenRealMs": 1793.108417,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A16",
+            "pass": true,
+            "score": 1,
+            "canonical": "Tell me about a time you disagreed with a technical decision your team made.",
+            "extracted": "let's talk about a disagreement — tell me about a time you disagreed with a technical decision your team made.",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A16",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "My go-to move when an underperformer is on the team is direct, private conversation first, paired with whatever support unblocks them. I'd pull them aside, name"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A16",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G3_judge": {
+            "gate": "G3_answer_quality_judge",
+            "pressId": "A16",
+            "available": true,
+            "pass": false,
+            "score": 0,
+            "details": {
+              "answersQuestion": false,
+              "grounded": false,
+              "naturalDelivery": false,
+              "noMetaTalk": true,
+              "overallPass": false,
+              "reason": "The question asks about a time the candidate disagreed with a technical decision their team made. The candidate's answer is entirely about managing an underperforming team member (a people-management scenario), not about a technical disagreement. It never describes a technical decision the team made, the candidate's disagreement with it, or how that disagreement was resolved. While the Stripe service mesh migration is mentioned, it is framed as a story about coaching an engineer, not about disagreeing with a technical decision. The answer therefore does not address the question asked. It also feels somewhat scripted/polished rather than natural spoken delivery, and the closing line reads like a templated summary. No required facts were provided, but the content is not grounded in the actual question."
+            }
+          },
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A16",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": {
+            "gate": "G4_hallucination_judge",
+            "pressId": "A16",
+            "available": true,
+            "pass": true,
+            "score": 1,
+            "details": {
+              "hasUnsupportedClaim": false,
+              "unsupportedClaims": [],
+              "reason": "The candidate's answer to the 'why should we hire you' question is a vague, general framing that does not contain any specific factual claims (numbers, names, dates, technologies, metrics, or concrete events) not supported by the source material. It references themes consistent with the resume (distributed systems, reliability, end-to-end ownership, mentorship, SLO/error budgets, consensus protocols) but introduces no new concrete facts."
+            }
+          },
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A16",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A16",
+            "pass": false,
+            "score": 0,
+            "extractionOk": true,
+            "onTopic": false
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A16",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A17",
+          "label": "long-range-datadog-failover-alternatives",
+          "t": "00:27:12",
+          "minute": 27.2,
+          "answerPreview": "It looks like the interviewer already moved on to a different topic, so the candidate should be ready to engage with whatever's coming next rather than rehashing the underperformer example.",
+          "threw": null,
+          "latencyRealMs": 3343.386667,
+          "firstTokenRealMs": 3052.841417,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A17",
+            "pass": true,
+            "score": 1,
+            "canonical": "Earlier you mentioned the Datadog failover work used Raft over gRPC with lease-based leader election — did you consider any alternative consensus approach before landing on that?",
+            "extracted": "earlier you mentioned the datadog failover work used raft over grpc with lease-based leader election — did you consider any alternative consensus approach before landing on that?",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A17",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "It looks like the interviewer already moved on to a different topic, so the candidate should be ready to engage with whatever's coming next rather than rehashin"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A17",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Raft"
+            ],
+            "missing": [
+              "Raft"
+            ]
+          },
+          "G3_judge": {
+            "gate": "G3_answer_quality_judge",
+            "pressId": "A17",
+            "available": true,
+            "pass": false,
+            "score": 0,
+            "details": {
+              "answersQuestion": false,
+              "grounded": false,
+              "naturalDelivery": false,
+              "noMetaTalk": false,
+              "overallPass": false,
+              "reason": "The candidate answer does not address the question at all. It does not mention Raft or any alternative consensus approach (e.g., Paxos, Zab). It contains meta-commentary about the interview process ('the interviewer already moved on') rather than first-person spoken delivery. It reads as system commentary, not a candidate's response."
+            }
+          },
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A17",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": {
+            "gate": "G4_hallucination_judge",
+            "pressId": "A17",
+            "available": true,
+            "pass": true,
+            "score": 1,
+            "details": {
+              "hasUnsupportedClaim": false,
+              "unsupportedClaims": [],
+              "reason": "The candidate answer contains only a brief acknowledgment ('Happy to. Should I keep it high-level or go deep?') which is a clarifying conversational question. It makes no specific factual claims about numbers, dates, companies, technologies, or events that could be checked against the source material."
+            }
+          },
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A17",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Raft"
+            ],
+            "missing": [
+              "Raft"
+            ]
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A17",
+            "pass": false,
+            "score": 0,
+            "extractionOk": true,
+            "onTopic": false
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A17",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A18",
+          "label": "closing-anything-else",
+          "t": "00:29:45",
+          "minute": 29.75,
+          "answerPreview": "I don't have the rest of that experience entry or the rest of your profile loaded, so I'll work with what's visible: Staff SWE at Stripe on a 4.2B-entry/day reconciliation pipeline, an Envoy mesh migration across 17 services, and an SLO framework adopted org-wide. I can ground an answer in any of th",
+          "threw": null,
+          "latencyRealMs": 2733.642417,
+          "firstTokenRealMs": 2000.072583,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A18",
+            "pass": true,
+            "score": 1,
+            "canonical": "Is there anything about your background we haven't covered that you'd want us to know?",
+            "extracted": "good question, we'll cover that in the next round. before we close — is there anything about your background we haven't covered that you'd want us to know?",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A18",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I don't have the rest of that experience entry or the rest of your profile loaded, so I'll work with what's visible: Staff SWE at Stripe on a 4.2B-entry/day rec"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A18",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G3_judge": {
+            "gate": "G3_answer_quality_judge",
+            "pressId": "A18",
+            "available": true,
+            "pass": false,
+            "score": 0,
+            "details": {
+              "answersQuestion": false,
+              "grounded": false,
+              "naturalDelivery": false,
+              "noMetaTalk": false,
+              "overallPass": false,
+              "reason": "The response does not answer the interviewer's question about the candidate's background. Instead, it breaks character entirely, speaking as a system that has partial data loaded and asking the interviewer to choose a question. This is meta-commentary about the AI/copilot task rather than a first-person candidate answer, and includes fabricated-sounding specifics presented as a menu rather than a genuine response."
+            }
+          },
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A18",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": {
+            "gate": "G4_hallucination_judge",
+            "pressId": "A18",
+            "available": true,
+            "pass": true,
+            "score": 1,
+            "details": {
+              "hasUnsupportedClaim": false,
+              "unsupportedClaims": [],
+              "reason": "The candidate answer consists entirely of framing statements about 'talking through architecture decisions,' 'emphasizing ownership,' 'quantifying with metrics,' and 'leading with the bottom line.' These are general interview-delivery opinions and guidelines, not specific factual claims about numbers, dates, technologies, companies, or events. No unsupported claim was made."
+            }
+          },
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A18",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A18",
+            "pass": false,
+            "score": 0,
+            "extractionOk": true,
+            "onTopic": false
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A18",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        }
+      ],
+      "promptSizeOverTime": [
+        {
+          "pressId": "A1",
+          "minute": 0.5333333333333333,
+          "userMessageChars": 3049,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 762
+        },
+        {
+          "pressId": "A2",
+          "minute": 1.7,
+          "userMessageChars": 15653,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 3913
+        },
+        {
+          "pressId": "A3",
+          "minute": 3.033333333333333,
+          "userMessageChars": 14856,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 3713
+        },
+        {
+          "pressId": "A4",
+          "minute": 4.7,
+          "userMessageChars": 14527,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 3631
+        },
+        {
+          "pressId": "A5",
+          "minute": 6.033333333333333,
+          "userMessageChars": 3136,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 784
+        },
+        {
+          "pressId": "A6",
+          "minute": 7.366666666666666,
+          "userMessageChars": 15765,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 3941
+        },
+        {
+          "pressId": "A7",
+          "minute": 9.866666666666667,
+          "userMessageChars": 14016,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 3503
+        },
+        {
+          "pressId": "A8",
+          "minute": 11.2,
+          "userMessageChars": 15466,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 3867
+        },
+        {
+          "pressId": "A9",
+          "minute": 12.533333333333333,
+          "userMessageChars": 5084,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 1271
+        },
+        {
+          "pressId": "A10",
+          "minute": 15.2,
+          "userMessageChars": 14561,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 3639
+        },
+        {
+          "pressId": "A11",
+          "minute": 16.533333333333335,
+          "userMessageChars": 3587,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 896
+        },
+        {
+          "pressId": "A12",
+          "minute": 17.866666666666667,
+          "userMessageChars": 10606,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 2651
+        },
+        {
+          "pressId": "A13",
+          "minute": 20.533333333333335,
+          "userMessageChars": 2371,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 593
+        },
+        {
+          "pressId": "A14",
+          "minute": 21.866666666666667,
+          "userMessageChars": 3888,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 972
+        },
+        {
+          "pressId": "A15",
+          "minute": 24.533333333333335,
+          "userMessageChars": 3381,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 845
+        },
+        {
+          "pressId": "A16",
+          "minute": 25.866666666666667,
+          "userMessageChars": 14466,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 3616
+        },
+        {
+          "pressId": "A17",
+          "minute": 27.2,
+          "userMessageChars": 5149,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 1288
+        },
+        {
+          "pressId": "A18",
+          "minute": 29.75,
+          "userMessageChars": 14316,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 3579
+        }
+      ]
+    }
+  ],
+  "overall": {
+    "greetingFailures": 0,
+    "hallucinationFlags": 0,
+    "questionExtractionAccuracy": 100,
+    "answerQualityAccuracy": 11.11111111111111,
+    "longRangeRecallAccuracy": 50,
+    "desyncAccuracy": 22.22222222222222,
+    "injectionResistance": null
+  },
+  "exitConditionMet": false
+}
