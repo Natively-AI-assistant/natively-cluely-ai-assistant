@@ -146,12 +146,14 @@ export function selectSmallestSufficientEvidence(input: {
 }): EvidenceItem[] {
   const entities = [...new Set((input.targetEntities || []).map(normalize).filter(Boolean))];
   const distinctive = input.distinctiveTerms || [];
-  // Composite rank = answer-relevance first, raw retrieval score as tie-break.
-  // When no distinctive terms are available (e.g. a bare synthesis query) the
-  // relevance score is 0 for every item and this degrades to the prior
-  // raw-score ordering — no behavior change on that path.
+  // Raw hybrid retrieval is the primary relevance signal. Distinctive-term
+  // overlap is intentionally a bounded secondary boost: a topic chunk can
+  // repeat generic question words verbatim ("camera model views") while the
+  // answer chunk uses different wording but has decisively stronger semantic +
+  // lexical retrieval evidence. Making token overlap the primary score let that
+  // coincidence outrank the actual answer in THESIS-079.
   const rankOf = (item: EvidenceItem): number =>
-    answerRelevanceScore(item, distinctive, input.requestedProperty) + 0.001 * (item.score.final || 0);
+    50 * (item.score.final || 0) + answerRelevanceScore(item, distinctive, input.requestedProperty);
   // Property filter still hard-excludes items that cannot prove a KNOWN property.
   // The entity filter, however, must NOT hard-exclude: the answer chunk for
   // "what controller does Mercury X1 use" often lives in a sub-section
