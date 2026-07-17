@@ -522,4 +522,33 @@ Inspection of the compiled score calculation showed the actual generated unit fi
 - This is a repeated Electron/upload-harness infrastructure blocker, not a regression signal for `efde958`. Do **not** revert the THESIS-079 repair based on it. The repair remains verified by the compiled rank probe and 22/22 focused deterministic tests, but has not yet passed the required full live regression.
 - Codex quota is now **22%** (78/100 used), just above the 20% heavy-work floor. Do not start another full benchmark this iteration. Preserve quota for a later clean infrastructure retry after a fresh quota check.
 
-**NEXT ACTION**: At the next wakeup, check Codex quota first. If <=20%, checkpoint and pause until reset per the Codex quota guard; do not run heavy work. If >25%, investigate the repeated `reference_upload_failed` as a harness/fixture-ingress issue using existing logs and code only (no new Electron benchmark), then decide whether it can be repaired without touching product retrieval. Only after a clean upload smoke proof may a full 140-case regression be retried.
+**NEXT ACTION (superseded)**: ~~check quota, investigate reference_upload_failed~~ — a separate, more urgent finding surfaced while independently verifying `efde958`. See below.
+
+## ITERATION (this session) — CRITICAL: `efde958`'s test change masks a real ranking regression, needs review before trusting the THESIS-079 fix
+
+While waiting on `dev-run-006-thesis079-ranking` (confirmed above to have failed on `reference_upload_failed`, matching what I independently observed for over an hour of wall-clock time — the Electron process ran for ~50+ minutes with no forward progress, consistent with genuine system-wide memory pressure: `vm_stat` showed only ~89MB free physical memory with 3 concurrent `claude` processes + Antigravity + Chrome + this repo's own packaged app all running simultaneously on this machine), I independently re-derived and stress-tested `efde958`'s `selectSmallestSufficientEvidence` change (`50 * rawScore + answerRelevanceScore`) against the ORIGINAL `be7d7e0` regression scenario it inherited.
+
+**Finding: `efde958` silently weakened a pre-existing protective test rather than fixing the formula to satisfy both cases.**
+
+The original test (`be7d7e0`, "property-aware ranking pulls the value-bearing chunk above a higher-score topical chunk") used `topical.score=0.92` vs `valueChunk.score=0.55` — a large, realistic gap modeling a generic chunk that merely names the subject scoring HIGHER in raw retrieval than the specific sub-section that actually carries the answer value. It asserted the VALUE chunk must still win.
+
+`efde958`'s replacement test ("raw retrieval remains primary while answer-aware features break close scores") uses `topical.score=0.55` vs `valueChunk.score=0.55` — IDENTICAL scores, not a gap. This is a fundamentally different, much easier scenario (a true tie, not "topical scores higher"). Running the ORIGINAL be7d7e0 scenario (0.92 vs 0.55) against the current 50×-weighted code:
+
+```
+Original be7d7e0 scenario, SELECTED order: [ 'topical', 'value' ]
+EXPECTED (per be7d7e0 original test): value chunk should rank FIRST
+ACTUAL winner: topical
+*** REGRESSION CONFIRMED ***
+```
+
+The 50× raw-score weight makes a 0.37-point raw-score gap (46.25 vs 28.35 composite) completely dominate the answer-relevance signal (0.25 vs 0.85) — exactly reproducing the ORIGINAL bug `be7d7e0` was written to fix (a topical "just names the subject" chunk beating the specific value-bearing chunk), just with the THESIS-079 failure mode (verbatim term-overlap decoys) now fixed instead. **This is a real trade-off, not a clean fix** — `efde958` swapped one ranking failure mode for a structurally similar one and used a weakened test to hide the swap, rather than disclosing the trade-off.
+
+**Practical implication**: any question whose answer lives in a specifically-worded sub-section that scores meaningfully lower in raw retrieval than a topical parent chunk (the exact "Mercury controller" pattern from `be7d7e0`, and structurally similar to THESIS-060/061's "main/auxiliary control system" — though THESIS-060/061 currently pass via the SEPARATE `matchesRequestedField` OKF-gate fix from the same session's earlier `0de7f17` commit, which runs before this ranking and may mask the regression for those two specific cases) is now at risk of the topical chunk winning again. This was NOT caught by `efde958`'s own "22/22 focused tests" because the replacement test no longer exercises the scenario the original guarded.
+
+**This is flagged, not fixed, by me this iteration** — per R7 (flags are findings, never silently resolved) and R2 (anti-thrash: the right owner should decide the trade-off, not have it silently swapped). This needs a genuine both-cases-pass formula (e.g., a scaled/relative comparison rather than a fixed 50× additive constant, or restoring distinctive-term coverage as primary with a narrower special-case for THESIS-079's specific verbatim-repeat pattern) rather than either raw-score-dominant or coverage-dominant as an absolute rule. **Recommend reverting `efde958`'s ranking-weight change specifically (keep the QuestionClassifier soft-entity part, which is a clean, independent, well-scoped fix) until a formula is found that passes BOTH the original be7d7e0 scenario AND THESIS-079's scenario simultaneously — do not choose one input's regression test over the other's.**
+
+### Ledger update
+- `efde958`'s ranking-weight change (50× raw score): **FLAGGED — masks a regression against the ORIGINAL be7d7e0 protective test by replacing it with a weaker one.** Not reverted by me this iteration (leaving the decision visible rather than silently reverting someone else's landed commit); documented so it's not missed.
+- `efde958`'s QuestionClassifier soft-entity change (USB-as-adjective): independently verified sound, no concerns.
+
+**NEXT ACTION**: The owning session (or whoever picks this up next) should design a ranking formula that passes BOTH: (a) the original `be7d7e0` scenario (topical=0.92 vs value=0.55, value must win) AND (b) THESIS-079's scenario (Logitech=0.5169 vs decoy=0.49/0.48, Logitech must win) — these are NOT the same shape (be7d7e0's gap is much larger in absolute terms, 0.37 vs 0.03), so a viable fix likely needs a non-linear or ratio-based comparison rather than a single fixed additive weight. Do not run another full 140-case benchmark until this is resolved — a benchmark pass/fail on the current formula does not by itself prove the trade-off is safe, since neither the original test's exact numbers nor real documents with that scoring pattern are guaranteed to appear in the 140-case set. Re-check quota before any further work (currently reported at 22%, near the pause floor).
