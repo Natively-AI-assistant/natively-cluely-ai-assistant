@@ -144,6 +144,40 @@ describe('EvidenceSufficiency', () => {
     assert.equal(selected[0].evidenceId, 'value', 'the controller-bearing chunk must rank first');
   });
 
+  test('THESIS-079: an explicit hardware-value statement beats unrelated camera-view model prose', () => {
+    // The real retrieval pool has a camera hardware fact expressed as a subject
+    // and value ("cameras are Logitech C920") plus lower-confidence OpenVLA-OFT
+    // prose that repeats camera/model/views without stating a camera model. The
+    // property-specific binding distinguishes those meanings without turning raw
+    // retrieval into the global primary rank and reopening the Mercury regression.
+    const answer = item({
+      id: 'logitech',
+      text: 'The two USB cameras are both Logitech C920 HD Webcams.',
+      property: 'hardware_component',
+      score: 0.5169,
+    });
+    const decoyA = item({
+      id: 'model-decoy-a',
+      text: 'The OpenVLA-OFT model processes camera views from multiple inputs.',
+      property: 'hardware_component',
+      score: 0.49,
+    });
+    const decoyB = item({
+      id: 'model-decoy-b',
+      text: 'The camera model supports multiple views during finetuning.',
+      property: 'hardware_component',
+      score: 0.48,
+    });
+    const selected = selectSmallestSufficientEvidence({
+      items: [answer, decoyA, decoyB],
+      requestedProperty: 'hardware_component',
+      answerShape: 'list',
+      targetEntities: [],
+      distinctiveTerms: ['camera', 'model', 'views'],
+    });
+    assert.equal(selected[0].evidenceId, 'logitech');
+  });
+
   test('dynamic stop: once every distinctive term is covered, no topical filler is added beyond the cap', () => {
     const answer = item({ id: 'answer', text: 'The learning rate schedule and the batch size are both specified here.', property: 'unknown', score: 0.6 });
     const fillerA = item({ id: 'filler-a', text: 'General discussion of the training loop and its stages.', property: 'unknown', score: 0.9 });

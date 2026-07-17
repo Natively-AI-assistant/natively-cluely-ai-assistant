@@ -100,13 +100,25 @@ const ANSWER_SHAPE_RES: readonly RegExp[] = [
   /\b[A-Z][A-Za-z0-9.+#-]*(?:\s+[A-Z0-9][A-Za-z0-9.+#-]*)+/u,
 ];
 
+// A hardware question needs a hardware fact, not merely incidental use of a
+// hardware-related word. This recognizes generic "device is value" statements,
+// such as "the cameras are Logitech C920 HD Webcams", while rejecting a model
+// architecture saying it processes "camera views". It is a ranking signal only:
+// ordinary hardware descriptions remain eligible when they lack this form.
+const HARDWARE_VALUE_BINDING_RE = /\b(?:cameras?|sensors?|actuators?|robots?|devices?|boards?)\b(?:\s+\w+){0,3}\s+(?:is|are|was|were|:)\s+(?:both\s+)?(?:an?\s+|the\s+)?[A-Z0-9][A-Za-z0-9.+#-]*(?:\s+[A-Z0-9][A-Za-z0-9.+#-]*){0,5}/u;
+
+const hasHardwareValueBinding = (item: EvidenceItem, requestedProperty: RequestedProperty): boolean =>
+  requestedProperty === 'hardware_component' && HARDWARE_VALUE_BINDING_RE.test(item.text);
+
 /**
  * Generic answer-bearing relevance of one evidence item for a question.
  * Combines (a) the fraction of the question's DISTINCTIVE terms the item
  * contains — the terms that actually pin the answer, not the topical entity
  * words — with (b) whether the item contains an answer-shaped token, and (c)
- * the property-proof flag. Pure + deterministic; every signal is derived from
- * the question and the item text, never from any hardcoded document value.
+ * the property-proof flag. It may exceed 1 when a property-specific binding
+ * adds information that literal coverage cannot express. Pure + deterministic;
+ * every signal is derived from the question and the item text, never from any
+ * hardcoded document value.
  */
 export function answerRelevanceScore(
   item: EvidenceItem,
@@ -121,10 +133,13 @@ export function answerRelevanceScore(
   const hasAnswerShape = ANSWER_SHAPE_RES.some((re) => re.test(item.text)) ? 1 : 0;
   const provesProperty = requestedProperty !== 'unknown'
     && (item.score.propertyMatch === 1 || item.supports.property === requestedProperty) ? 1 : 0;
-  // Weighted so distinctive-term coverage dominates (it is the strongest
-  // answer-bearing signal), answer-shape and property-proof are secondary
-  // tie-breakers. Bounded to [0, 1].
-  return Math.min(1, 0.6 * coverage + 0.25 * hasAnswerShape + 0.15 * provesProperty);
+  const hardwareValueBinding = hasHardwareValueBinding(item, requestedProperty) ? 1 : 0;
+  // Distinctive-term coverage dominates the general case, while an explicit
+  // hardware-subject-to-value binding breaks the otherwise indistinguishable
+  // literal-overlap decoy: "camera views" in model prose is not a camera-model
+  // answer. The binding is derived from the item text and requested property,
+  // never from document-specific terms.
+  return 0.6 * coverage + 0.25 * hasAnswerShape + 0.15 * provesProperty + 0.7 * hardwareValueBinding;
 }
 
 /**
