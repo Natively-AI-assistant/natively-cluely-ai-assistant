@@ -89,6 +89,7 @@ const main = async () => {
     NATIVELY_E2E_REFERENCE_ROOT: inputRoot,
     NATIVELY_CONTEXT_OS_BENCHMARK_AUDIT: '1',
     NATIVELY_CONTEXT_OS_PROMPT_AUDIT: '1',
+    NATIVELY_CONTEXT_OS_PROVIDER_CAPTURE: process.env.CTXOS_BENCHMARK_CAPTURE_RAW_RETRIEVAL === '1' ? '1' : undefined,
     NATIVELY_CONTEXT_OS: '1',
     NATIVELY_CONTEXT_OS_MANUAL_CHAT: '1',
     NATIVELY_CONTEXT_OS_WTA: '1',
@@ -228,6 +229,19 @@ const main = async () => {
     if (completed.has(testCase.id)) continue;
     await invoke('__e2e__:context-os-benchmark-audit-clear');
     await invoke('__e2e__:context-os-prompt-audit-clear');
+    if (process.env.CTXOS_BENCHMARK_CAPTURE_RAW_RETRIEVAL === '1') {
+      await app.evaluate(() => { globalThis.__contextOsProviderPayloadCapture = []; });
+    }
+    // E2E-only forensic aid: capture raw retrieval alongside the product's
+    // selected evidence pack for a single explicit case. This stays out of
+    // ordinary 140-case reports and does not alter runtime retrieval.
+    const rawInspection = process.env.CTXOS_BENCHMARK_CAPTURE_RAW_RETRIEVAL === '1'
+      ? await invoke('__e2e__:inspect-retrieval', {
+          modeId,
+          query: testCase.question,
+          forceDocumentGrounding: true,
+        })
+      : null;
     const startedAt = Date.now();
     const response = await askManual(testCase.question);
     const latencyMs = Date.now() - startedAt;
@@ -235,6 +249,9 @@ const main = async () => {
     const promptAudit = await invoke('__e2e__:context-os-prompt-audit');
     const records = audit?.records || [];
     const terminal = records.at(-1) || null;
+    const forensicCapture = process.env.CTXOS_BENCHMARK_CAPTURE_RAW_RETRIEVAL === '1'
+      ? await app.evaluate(() => globalThis.__contextOsProviderPayloadCapture || [])
+      : null;
     providerCalls += records.filter((record) => record.providerDispatch).length;
     const score = testCase.rubric ? scoreDeterministic(testCase, response?.answer || '') : null;
     const contamination = (terminal?.promptSources || []).some((kind) => !['reference_files'].includes(kind));
@@ -251,6 +268,11 @@ const main = async () => {
       timedOut: response?.timedOut === true,
       latencyMs,
       answer: String(response?.answer || '').slice(0, 12_000),
+      forensic: rawInspection ? {
+        rawRetrievalBlock: String(rawInspection.block || '').slice(0, 30_000),
+        rawRetrievalConfidence: rawInspection.retrievalConfidence,
+        providerPayloads: forensicCapture,
+      } : null,
       score,
       trace: terminal ? {
         turnId: terminal.turnId,
