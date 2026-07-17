@@ -437,4 +437,13 @@ The single-case known-good benchmark could not launch Electron within 60 seconds
 - Codex quota: **36%** session remaining (64/100 used); no quota pause condition.
 - The campaign's prepared, env-gated one-case forensic command remains the next action after these external Electron processes exit. The list-cap hypothesis remains unmodified.
 
-**NEXT ACTION**: On the next wakeup, re-check project Electron processes. If all descendants of the unrelated PIDs 37130 and 38618 have exited, run exactly one prepared single-case forensic command: `CTXOS_BENCHMARK_SPLITS=development CTXOS_BENCHMARK_CASE_IDS=THESIS-079 CTXOS_BENCHMARK_CAPTURE_RAW_RETRIEVAL=1 CTXOS_BENCHMARK_RUN_ID=thesis-079-forensic NODE_OPTIONS=--enable-source-maps node tests/context-os-real-backend/run-200q-benchmark.mjs`. If any remain, do not launch Electron; append a wait checkpoint and reschedule for 20 minutes. Never kill or signal concurrent-session processes.
+**NEXT ACTION (superseded by iteration-17 wait checkpoint)**: On the next wakeup, re-check project Electron processes. If all descendants of the unrelated PIDs 37130 and 38618 have exited, run exactly one prepared single-case forensic command: `CTXOS_BENCHMARK_SPLITS=development CTXOS_BENCHMARK_CASE_IDS=THESIS-079 CTXOS_BENCHMARK_CAPTURE_RAW_RETRIEVAL=1 CTXOS_BENCHMARK_RUN_ID=thesis-079-forensic NODE_OPTIONS=--enable-source-maps node tests/context-os-real-backend/run-200q-benchmark.mjs`. If any remain, do not launch Electron; append a wait checkpoint and reschedule for 20 minutes. Never kill or signal concurrent-session processes.
+
+## ITERATION 17 (2026-07-17) — Shared Electron resource still unavailable
+
+- Rechecked the explicit external blockers: PIDs `37130/37146` and `38618/38640` remain alive after ~17 hours; both are still unrelated WTA/service Electron test workers. A project Electron process remains present.
+- Per the repeated safety decision, did not launch the one-case benchmark, kill/signal those workers, or change product code. Repeated Electron launches would only continue failing before the product path and add no evidence.
+- Codex session quota remains **36%** (64/100 used), so this is not quota-related.
+- THESIS-079's list-cap hypothesis remains unmodified and unverified with current raw-vs-selected evidence. The prepared forensic harness remains ready.
+
+**NEXT ACTION**: On the next wakeup, first re-check whether every project Electron descendant of unrelated PIDs `37130` and `38618` has exited. If they have, run exactly one prepared single-case forensic command: `CTXOS_BENCHMARK_SPLITS=development CTXOS_BENCHMARK_CASE_IDS=THESIS-079 CTXOS_BENCHMARK_CAPTURE_RAW_RETRIEVAL=1 CTXOS_BENCHMARK_RUN_ID=thesis-079-forensic NODE_OPTIONS=--enable-source-maps node tests/context-os-real-backend/run-200q-benchmark.mjs`. If any remain, do not launch Electron, append a wait checkpoint, and reschedule 20 minutes. Never kill or signal concurrent-session processes.
