@@ -639,4 +639,12 @@ QUOTA note: Account 1 was rate-limited (429) at last check; Account 2 healthy at
 - The original timed-out runner (`60610`) and Electron child (`60618`) remain untouched because they predate this retry and their ownership is ambiguous. No retrieval, selection, or provider evidence was collected from either THESIS-072 attempt.
 - The campaign must not launch further Electron benchmarks while this orphaned runner remains alive. This is now a repeated infrastructure block, not a product finding.
 
-**NEXT ACTION:** Wait for the original THESIS-072 runner (`60610`) to exit naturally. On exit, run exactly one clean THESIS-072 forensic. If it still cannot create a window, commit a repeated-startup blocker and defer all live Electron work until the shared environment is repaired. Do not kill or signal the original runner.
+**NEXT ACTION (still blocked):** Wait for the original THESIS-072 runner (`60610`) to exit naturally before exactly one clean retry.
+
+## ITERATION (2026-07-17) — prolonged orphaned THESIS-072 Electron runner
+
+- Rechecked the original runner after more than one hour: both runner `60610` and Electron child `60618` are still alive, despite the benchmark's `firstWindow` timeout having already returned to the caller. No `results.jsonl` was produced.
+- The existing process-exit waiter remains active. No new Electron run was launched, and no signal was sent to the orphaned process. This preserves concurrent-workspace safety over forcing a local cleanup whose process ownership remains unknown.
+- The campaign has no safe live-Electron action while this process survives. Ranking code stays unchanged; THESIS-072 remains untriaged, not failed.
+
+**NEXT ACTION:** Continue waiting for `60610` to exit. If it is still alive at the next fallback heartbeat, record the ongoing infrastructure block, recheck provider/quota health, and do only non-Electron analysis. Do not launch, kill, or signal Electron processes.
