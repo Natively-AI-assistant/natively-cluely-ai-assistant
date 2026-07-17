@@ -655,4 +655,12 @@ QUOTA note: Account 1 was rate-limited (429) at last check; Account 2 healthy at
 - Quota is sufficient to continue (Account 1: 64% session remaining; Account 2 exhausted), but no live Electron work is safe while the orphaned runner remains. Do not use available quota to start competing desktop processes.
 - No code, retrieval settings, provider settings, or source evidence changed in this waiting iteration. The only new evidence is continued, persistent local Electron process non-termination.
 
-**NEXT ACTION:** Keep waiting for `60610` to exit naturally. If it remains alive at the next heartbeat, conduct only a read-only inspection of the stale runner's output/log state, checkpoint that evidence, and continue waiting. Do not launch another Electron process, kill the runner, or change product code.
+**NEXT ACTION (still blocked):** Keep waiting for `60610` to exit naturally. If it remains alive at the next heartbeat, conduct only a read-only inspection of the stale runner's output/log state, checkpoint that evidence, and continue waiting.
+
+## ITERATION (2026-07-18) — stale THESIS-072 runner survives overnight boundary
+
+- The original runner (`60610`) and Electron child (`60618`) remain alive after more than 1 hour 45 minutes, so the environment is still not clean despite an earlier process listing being ambiguous. A read-only `ps` embedded in a new forensic command confirmed their continued presence before setup completed.
+- The newly-created clean retry task was stopped immediately before `ensure-backend.sh` or Electron launch, after that preflight listing made the stale processes explicit. This did not start a third Electron instance and did not touch the existing processes.
+- No retrieval, provider, source, or product evidence was generated. THESIS-072 remains untriaged. The process ownership ambiguity and repeated non-termination prevent safe local repair or another live benchmark.
+
+**NEXT ACTION:** Continue waiting for the existing runner `60610` to exit. At the next heartbeat, only check its PID state and the pre-existing task output; do not put a retry command in the same shell invocation as an ambiguous process check. If it remains alive, log the persistent block and wait again. Do not signal it or start Electron.
