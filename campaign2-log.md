@@ -605,22 +605,88 @@ LLMHelper.ts, ipcHandlers.ts, intelligenceFlags.ts, ProfileEvidenceService.ts,
 various `__tests__`/`src/components/*` files — none of this iteration's
 concern).
 
-**NEXT ACTION**: L4 needs TWO consecutive green full-benchmark runs — run-002
-is NOT green (G1 still <98%, G3/answer-quality at 34%, G5/recall at 25%, G6/
-desync at 38%), so the loop continues. Highest-value next target per the
-run-002 findings above: **G3/G6 answer-quality gap** (not further extraction
-work — G1 is now close to target and diminishing-returns; the NEW dominant
-failure cluster is the model's ANSWER omitting required facts even when the
-question is correctly extracted). Recommended next steps: (1) quota
-pre-check per §1.5 before any expensive operation; (2) mini-forensics on 2-3
-representative G3-failing-but-G1-passing presses (e.g. A1 self-intro missing
-"10 years", A12 education press answering an unrelated coding problem instead
-of "Berkeley"/"Electrical Engineering") — read the FULL prompt composition in
-their `traces2/harness-script-a-press-{A1,A12}.txt` dumps to see whether the
-required facts were even IN the assembled prompt (a retrieval/grounding gap)
-or were present but the model ignored them (a generation-quality gap) — these
-have different fixes; (3) separately, the NEW C14 greeting-boilerplate finding
-above deserves its own smaller mini-forensics pass since it's a clean, isolated
-G2 regression-candidate; (4) after any fix: live-path proof, skeptic pass, R8
-smoke green, re-run the FULL 3-script benchmark, append to SCORE HISTORY,
-re-check L4 (needs 2 consecutive green runs, currently at 0).
+## ITERATION 8 (2026-07-17, ~10:3x local) — Fix #6 (backfilled log entry) + run-003 forensics
+
+**Housekeeping note**: this session picked up the campaign mid-flight after a
+long unattended stretch (Phase 2 harness build + run-001 + run-002 + fix#5,
+all already logged above, happened in prior iterations of the SAME
+autonomous loop). Commit `943222a` ("campaign2 fix#6: profile-repair
+regeneration missing the real question") landed on the branch but its log
+entry was never written — backfilling it here from the commit message +
+`run-003` report before continuing, so the ledger stays the single source of
+truth.
+
+**Fix #6 (commit `943222a`, backfilled)**: run-002's G6 desync investigation
+(press A12) surfaced a bug distinct from fix#5's extraction fix: even when
+extraction correctly identifies the education question, the FIRST-pass
+answer sometimes trips `ProfileOutputValidator`'s false-refusal check,
+triggering an intentional repair regeneration
+(`IntelligenceEngine.ts` ~line 2122-2229). That repair mechanism itself is
+correct — but its regeneration prompt's `<question>` block was built from
+ONLY the raw `question` parameter to `runWhatShouldISay`, which is `undefined`
+for every real WTA/auto-trigger press (the button press derives the question
+internally via `extractLatestQuestion`, never passes one explicitly).
+Confirmed via the harness calling with the same empty-opts shape production
+uses. So the repair's `<question>` rendered EMPTY, and A12 was repaired into
+an unrelated "Two Sum" hash-map coding answer. Root cause: the SIBLING
+doc-grounded repair 150 lines above already had the correct fallback chain
+(`answerPlan.question || question || extractedQuestion.latestQuestion ||
+lastInterviewerTurn`); the profile-repair path never got the same fix — same
+missing-fallback-chain PATTERN as prior `profile_jd` gating bugs, but a
+legitimate new pin (different variable, different purpose). Fix: applied the
+identical fallback chain. Verified: typecheck clean, build succeeds, 20/20
+consumer-suite regression green, R8 smoke 11/11 green. Honestly logged as
+NOT independently proven to fire correctly by its own live re-run (the
+repair path didn't happen to trigger in that particular run — real
+run-to-run model variance) — only proven to introduce zero regression to the
+surrounding path. This is the correct, non-overclaiming way to log a fix
+whose trigger condition is rare/hard to force deterministically.
+
+**run-003 (script-a only, real MiniMax-M3) — NOT green, and surfaced a NEW
+distinct finding**: G1 100% (18/18 — fix#5 holding), G2 0 flags, G4 0
+hallucination — but G3 answer quality only 11.1% (2/18), G5 recall 50%
+(1/2), G6 desync 22.2% (4/18). Read the full press dumps for the G3/G6
+failures per the standing NEXT ACTION below. One NEW finding stands out,
+not yet pinned:
+
+**NEW finding — press A6 ("tell me about tinroof"), NOT fixed this
+iteration**: the model's raw answer was *"The user hasn't actually sent a
+message yet, only system configuration blocks appeared. I should not
+generate a response until there's a real user input."* — a bizarre
+non-answer to a real, correctly-extracted question (G1 passed, 0.95 overlap).
+This did NOT trip G2 (greeting-pattern regex) because the phrasing doesn't
+match any greeting pattern — it's a distinct failure SHAPE from both fix#1's
+silent-null amplifier and C14's "how can I help you use it?" boilerplate.
+The trace (`traces2/harness-script-a-press-A6.txt`) shows the assembled
+prompt at this press has an unusually large `candidateProfileChars: 11060`
++ `assistant_history` block containing a PRIOR answer's markdown
+(`**follow-ups:**` bullet list) with heavy HTML-entity escaping
+(`&apos;`/`&quot;`) mixed into the transcript block — hypothesis (NOT yet
+confirmed): the model may be misreading the escaped-entity-heavy, markdown-
+formatted prior-answer content inside `<transcript>` as tool/config output
+rather than conversational turns, given its stated reasoning explicitly
+references "system configuration blocks." Needs dedicated mini-forensics
+(read the FULL prompt, not just the tail, to see exactly what precedes the
+model's confusion) before pinning a root cause — flagging now so it isn't
+lost, not claiming a diagnosis yet.
+
+**Quota check**: Account1 36% session / 87% weekly (still above 25%
+threshold). Account2 0% session / 64% weekly, 9Router routes around it.
+Continuing per §1.5.
+
+**NEXT ACTION**: L4 still needs TWO consecutive green full-benchmark runs;
+current run-to-run tally is 0. Continue the standing G3/G6 answer-quality
+investigation (run-002's NEXT ACTION, still valid) AND add the new A6
+finding above to the same mini-forensics pass, since both point at the same
+failure cluster (dominant answer-quality gap). Recommended order: (1) read
+the FULL (not tail-only) prompt dumps for A1/A12/A6 to determine for each
+whether the required facts were IN the assembled prompt (retrieval/grounding
+gap) or present-but-ignored (generation-quality gap) — these need different
+fixes; (2) specifically for A6, check whether other presses with heavy
+markdown/entity-escaped assistant-history content show the same
+"system configuration blocks" confusion pattern, to determine if this is a
+systemic prompt-formatting issue or a one-off model hiccup; (3) after any
+fix: live-path proof, skeptic pass (this campaign has now caught real
+regressions on 2 of 3 non-trivial fixes at the skeptic stage — budget for at
+least one narrowing round), R8 smoke green, re-run the FULL 3-script
+benchmark, append to SCORE HISTORY, re-check L4.
