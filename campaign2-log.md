@@ -3273,3 +3273,74 @@ failure families fully unaddressed (no-content-hallucination,
 JSON-leak — though the latter now has a precise, scoped fix path) and
 the other two (stock-refusal, scaffold-misfire) shipped but only
 partially validated by real recurrence data so far.
+
+## ITERATION 37 (2026-07-18) — JSON-envelope fix shipped after FIVE review-cycle catches, all 4 tracked families now have shipped fixes
+
+Implemented iteration 36's item: generalized JSON-leak detection past
+`isLeakedSchemaStub`'s narrow schema-vocabulary allowlist. Added
+`isLeakedJsonEnvelope` (shape-based: whole answer is JSON with no
+prose leaf anywhere) and `extractAnswerFromJsonEnvelope` (recovers
+real content under a literal `"answer"` key, since 2 of 6 instances —
+C2/A18 — wrapped substantive content rather than emitting nothing).
+
+**Two full skeptic-review rounds caught THREE real defects** before
+this shipped — the 5th and 6th distinct catches this session (after
+iterations 27, 29, 32's two, 35's one):
+1. `extractAnswerFromJsonEnvelope`'s length-only prose check would
+   have shipped a non-prose garbage token (hash/UUID/sentinel) as a
+   real answer — fixed to reuse the sibling function's stricter
+   `looksLikeProse` (length + whitespace) check.
+2. `isLeakedJsonEnvelope`'s shape-only heuristic can't distinguish a
+   hallucination from a real, terse, correct JSON answer to a
+   technical/system-design question (`{"status":"ok","code":200}` is
+   a legitimate complete answer) — fixed by scoping the call site away
+   from coding/technical answer types, mirroring the exact precedent
+   from iteration 32's `detectAndExtractScaffoldMisfire` fix.
+3. **Found while verifying fix #2**: a live integration test kept
+   failing even after the exclusion was added — traced to a bug in my
+   own earlier restructuring of `isLeakedSchemaStub`, which had it
+   silently, unconditionally call `isLeakedJsonEnvelope` internally,
+   completely bypassing fix #2's call-site scoping a layer down. Fixed
+   by making the two checks fully independent again, with only the
+   call site composing/scoping them — a reminder that a "helpful"
+   internal fallthrough between two functions can silently defeat a
+   caller's own careful scoping decision.
+
+47 tests pass (19 pure-function + 4 live-engine integration + 24
+pre-existing regression, zero failures). Committed as `2cfc6c57` (5
+files, 395 insertions). Verified isolation from 5 different
+concurrent-session artifacts present throughout this iteration
+(`campaign-log.md`, `RolloutFallback.test.mjs`,
+`ContextOsProductionDefaultRollout2026_07_18.test.mjs`, `package.json`
+— a new benchmark script addition, `natively-api` submodule pointer)
+— none touched.
+
+**Milestone**: all 4 failure families tracked across this session now
+have shipped fixes: harness auth wiring (iteration 25), stock-refusal
+leak (29), coding-scaffold misfire with 3 extraction patterns (32,
+35), and now the JSON-envelope leak (37). The free-form no-content
+hallucination family remains the one EXPLICITLY deferred as needing
+a semantic detector rather than pattern-matching (iteration 28's
+conclusion) — not abandoned, just correctly scoped as larger design
+work.
+
+**Running tally of adversarial-review catches this session: 6**
+distinct real defects across 5 separate fixes, every one of which
+would have made a real user's answer measurably worse had it shipped
+unreviewed. This is now a well-established, clearly value-proven
+practice for this specific class of work (live answer-generation-path
+changes) — worth carrying forward as standing practice for any future
+work on this codebase's WTA/answer-cleanup pipeline, not just this
+campaign.
+
+**NEXT ACTION**: launch a validation run to check whether the JSON-
+envelope fix reduces/recovers real instances in practice (same
+intermittency caveat as the scaffold-misfire fix — absence of
+recurrence in one run is not proof either way). Continue the standard
+health-check/judged-run loop per loop2.md. With all 4 tracked families
+now addressed at least partially, it's worth checking whether overall
+scorecard trends (G3/G5/G6) show any real movement across the next
+few runs, even though the campaign's original L4 exit bar (2
+consecutive fully-clean runs) remains distant — the free-form
+hallucination family alone is enough to keep G3/G6 below target until
+it gets its own dedicated design pass.
