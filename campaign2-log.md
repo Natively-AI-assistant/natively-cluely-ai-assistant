@@ -2840,3 +2840,83 @@ data on ITS frequency vs A10/C12's shape is available. Needs its own
 skeptic-reviewed implementation + tests before shipping, same
 discipline as iterations 27/29 — do not rush given this session's
 established pattern of first-draft fixes needing a review pass.
+
+## ITERATION 32 (2026-07-18) — scaffold-misfire fix implemented, TWO review rounds, shipped
+
+Implemented the extraction fix identified above (`detectAndExtractScaffoldMisfire`
+in `AnswerValidator.ts`, wired into `IntelligenceEngine.ts` right after
+`validateAnswerStructure`). Went through two full adversarial review
+rounds before shipping — this is now the THIRD time this session an
+independent skeptic pass caught a real defect in a first-draft fix
+(after iterations 27 and 29):
+
+**Round 1 (HIGH)**: first draft's trigger (≥2 generic headings —
+Approach/Code/Complexity/Answer) was not a strong enough signal. The
+reviewer constructed 4 plausible, real, substantive non-coding answers
+(negotiation framing, behavioral narrative with a stylistic `---`,
+experience talking points, a document-grounded lecture answer echoing
+a source paper's own section names like "Approach") and proved live
+against the compiled build that each would have had real content
+silently, permanently discarded — worse than the bug being fixed,
+since this repair runs BEFORE every other validator in the pipeline
+and nothing downstream has a signal a truncation happened. Fixed by
+requiring a coding-scaffold-SPECIFIC content fingerprint in the
+discarded portion (a near-unique heading — "Technique / Data
+Structure / Algorithm Used" or "Dry Run" — or explicit Big-O/
+complexity notation), not just any two generic headings. Real,
+accepted tradeoff: C12 (whose heading shape has no coding fingerprint)
+is no longer recovered — correctly treated as too ambiguous now,
+rather than guessed at.
+
+**Round 2 (MEDIUM)**: the chosen fingerprint (Big-O/complexity
+notation) is NATIVE, legitimate vocabulary for three live answer
+types — `technical_concept_answer`, `system_design_answer`,
+`debugging_question_answer` — where a real answer genuinely discusses
+complexity as its actual subject (e.g. a real answer to "explain
+Big-O to me"), not as a scaffold leak. The reviewer live-verified 3
+concrete repro strings (a real Big-O explanation, a rate-limiter
+system-design comparison, a STAR story about an O(n²)→O(n)
+optimization) that would still have been wrongly truncated. Fixed by
+excluding all three answer types at the call site entirely (a
+dedicated Set, alongside `isCodingAnswerType`'s own exclusion) —
+extraction now only runs on answer types where the fingerprint
+vocabulary has zero legitimate reason to appear at all (behavioral,
+negotiation, experience, JD-fit, lecture, general-meeting, etc.).
+
+176 tests pass (16 pure-function unit tests including the 4 round-1
+false-positive repros as permanent regression tests + a genuine-
+fingerprint sanity check that the gate doesn't over-correct into never
+firing; 3 live-engine integration tests including the round-2
+Big-O-survives-untouched regression; 157 pre-existing regression
+tests across `AnswerPlannerValidator`/`CodingContract`/
+`CodingContractExplicit` with zero failures). Committed as `28f1fcd1`
+(5 files, 497 insertions). Verified isolation from 4 concurrent-
+session files present throughout this iteration
+(`campaign-log.md`, `RolloutFallback.test.mjs`,
+`ContextOsProductionDefaultRollout2026_07_18.test.mjs`, `natively-api`
+submodule pointer) — none touched.
+
+**Scope honesty check**: this fix only recovers the A10-shaped repro
+(the full rigid 6-section contract with the specific fingerprint
+headings) — it does NOT recover A17-shaped (bulleted talking points,
+no clean split) or C12-shaped (generic Approach/Key-Reasoning/Answer,
+no coding fingerprint) misfires. Both remain open as accepted,
+documented gaps. This is a real but partial fix for the DSA-template-
+misfire family, not a complete solution — expect it to reduce but not
+eliminate the recurrence rate in the next judged run.
+
+**NEXT ACTION**: standard health-check-then-run loop — launch a judged
+run to measure whether A10-shaped repros are now being cleanly
+recovered in practice (check `repair_used` trace lines with
+`reason: 'scaffold_misfire_extracted'`), while confirming A17/C12-
+shaped misfires still recur unaddressed (expected, per the scope
+above) and that the new `technical_concept_answer`/
+`system_design_answer`/`debugging_question_answer` exclusion doesn't
+show any regression on those answer types. Continue per loop2.md's
+L1/L4 rules — with 2 of 3 originally-identified failure families now
+having shipped, validated fixes (harness auth, stock-refusal leak) and
+the third (DSA-template misfire) partially addressed, and the
+free-form no-content hallucination still fully open, L4 remains
+distant but real, measurable progress has accumulated across this
+session's 8 landed fixes (iterations 25, 27, 29, 32, plus the 4
+findings/investigations that preceded implementation).
