@@ -2510,3 +2510,88 @@ exception-swallowing bug that also explains part of (1) or (3).
 Continue the standing health-check/judged-run loop in parallel so data
 keeps accumulating, but L4 targets remain out of reach until at least
 one of these three is resolved for real.
+
+## ITERATION 29 (2026-07-18) — item (2) root-caused and fixed: real bug, TWO layers deep
+
+Investigated the highest-leverage item from iteration 28's NEXT ACTION:
+why `detectAssistantVoiceMisfire`/`sanitizeCandidateAnswer` don't
+reliably fire on the live WTA path despite passing correctly in
+isolated unit tests (A8/A9/C11 all shipped the bare stock refusal "I
+can't share that information." verbatim in run-023).
+
+**Root cause #1 (confirmed via direct code read, not guesswork)**: A9's
+answerType is `jd_fit_answer` — a `CANDIDATE_VOICE_ANSWER_TYPES`
+member, routed through `sanitizeCandidateAnswer` (NOT
+`detectAssistantVoiceMisfire`, which only covers a disjoint
+`ASSISTANT_VOICE_ANSWER_TYPES` set — my iteration-28 hypothesis that
+the assistant-voice guard itself was broken was WRONG; it correctly
+never applies to this answer type). `sanitizeCandidateAnswer("I can't
+share that information.")` correctly returns `needsFallback: true` —
+but `IntelligenceEngine.ts`'s call site only had an `if (repaired &&
+!needsFallback)` branch with NO `else`, so when `needsFallback` was
+true (the correct case here), `fullAnswer` was left completely
+untouched at the ORIGINAL raw refusal string. The block's own comment
+claimed "the non-answer-sentinel / live-fallback paths below handle
+the replacement" — false; neither `isNonAnswerSentinel` nor the
+iteration-27 `isFalseNoContentClaim` matches a stock refusal (a
+different failure family). The manual path (`ipcHandlers.ts`) already
+had the correct `else if (needsFallback)` branch for this exact
+function — mirrored it into `IntelligenceEngine.ts`.
+
+**Root cause #2 (found by a code-review skeptic pass on root cause
+#1's fix, BEFORE commit)**: wiring the `needsFallback` check into a
+NEW call site activated a second, previously-dormant bug in
+`sanitizeCandidateAnswer` itself. `needsFallback` was defined as
+`text.length < 15` alone — with NO check that anything was actually
+stripped. Live-reproduced: `sanitizeCandidateAnswer("Python.")` →
+`needsFallback: true` despite `removedMarkers: []` (nothing wrong with
+the answer at all — "Python." is a correct, complete, 7-character
+answer to "what's your primary language?"). My root-cause-#1 fix would
+have newly discarded every short-but-correct candidate answer and
+replaced it with a generic "I won't guess from your profile" fallback
+— a regression, not an improvement. Fixed at the true root
+(`ProfileOutputValidator.ts`): `needsFallback = removed.size > 0 &&
+text.length < 15`. This ALSO transparently fixes the identical latent
+bug on the manual path (`ipcHandlers.ts`), which shares the same
+function and has silently carried this exact bug since the sanitizer's
+original 2026-06-07c release — found "for free" by fixing at the root
+instead of only patching the new call site.
+
+Two adversarial code-review passes (first found root cause #2, second
+confirmed the fix for #2 is correct and doesn't reintroduce #1 or a
+new gap). 77 tests pass total: 72 pre-existing (`CandidateSanitizer
+2026_06_07c.test.mjs` + `ProfileOutputValidator.test.mjs`, unchanged
+behavior for all genuine all-meta/clean-answer cases) + 5 new live-path
+integration tests (stock-refusal repro, mixed real-content-plus-tail
+stripping, both short-genuine-answer regressions). Committed as
+`b5d91a23` (3 files, 166 insertions), verified isolation from 4
+different concurrent-session files/dirs present in the working tree at
+commit time (`campaign-log.md`, `RolloutFallback.test.mjs`,
+`ContextOsProductionDefaultRollout2026_07_18.test.mjs`, plus
+`natively-api` submodule pointer — none touched).
+
+**Pattern worth naming for this campaign's own methodology**: this
+is the SECOND time this session that an adversarial code-review pass
+caught a real bug in my own fix before it shipped (the first was
+iteration 27's unanchored-regex false positive). Both times, the
+review wasn't a formality — it found a genuine, live-reproducible
+defect that would have made things worse for a real user in a specific
+scenario. Continuing to dispatch a skeptic pass before every commit
+that touches the live answer-generation path remains clearly worth the
+overhead.
+
+**NEXT ACTION**: two of the three iteration-28 failure families are
+now addressed (the free-form no-content hallucination has a narrow,
+safe guard shipped even though it doesn't fully generalize per
+iteration 28's finding; the stock-refusal leak is now fully fixed at
+both the call-site and root-cause layers). Remaining:
+(1) the free-form "false no content" hallucination needs a semantic/
+structural detector to generalize beyond fixed phrase matching
+(iteration 28's conclusion, unaddressed);
+(2) the DSA-coding-template misfire on non-coding questions (A4/A5
+from run-022, B3 from run-023) — not yet investigated at all.
+Launch a fresh judged run to measure whether the stock-refusal fix
+(this iteration) actually eliminates A8/A9/C11-style raw-refusal
+leaks in practice, following the same standing health-check protocol
+(provider health, concurrent-harness check, branch confirmation)
+before launching, given this is a shared, actively-used branch.
