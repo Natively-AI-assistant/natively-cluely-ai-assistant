@@ -1936,3 +1936,51 @@ pure fast-forward, zero conflict risk, since it's a strict ancestor)
 would resolve it trivially. A future judged run should simply be run
 from `fix/grounding-campaign-h4` (or wherever its tip ends up next) —
 that already measures everything.
+
+## ITERATION 24 (2026-07-18) — Judged run aborted: total shared-provider outage, not contention
+
+Acted on the corrected NEXT ACTION: ran a 6-check sustained-quiescence
+poll (one transient blip at check 3, clean at 4/5/6), confirmed clear at
+launch, and started the first full judged benchmark run on
+`fix/grounding-campaign-h4` — the branch that (per this iteration's own
+correction above) already contains every fix this campaign has landed
+plus Campaign 1's grounding-fidelity work.
+
+**Aborted after Script A**: every single press from A4 onward returned
+the `provider_error_no_answer` fallback ("I couldn't reach the AI
+provider..."). This is qualitatively different from every prior
+"contention" pattern this campaign has documented (which showed SOME
+successful presses at elevated latency) — this was a TOTAL failure rate.
+Investigated: the local `natively-api` backend itself is up and fast
+(curl round-trip &lt;1ms), but 9Router shows BOTH MiniMax connections
+erroring (`502`/`429`) and BOTH of this agent's own Claude accounts
+separately rate-limited (`429`) at the same time; the run's own log also
+shows the Gemini embedding provider cycling through rate-limited keys
+(`key #0/#1/#2/#3 rate-limited (429)`). This points to genuinely heavy
+load across the ENTIRE shared provider pool (many concurrent sessions in
+this workspace drawing from the same pooled API keys) right now, not a
+narrow MiniMax-specific or local-machine issue — a `ps aux`-based
+quiescence check cannot detect this class of confound at all, since it
+only sees local processes, not remote API-level saturation.
+
+**Killed the run** (`kill` on both the `run-all.mjs` parent and its
+`run-script-a.mjs` child) rather than let Scripts B/C and the judge tier
+burn further quota against a guaranteed-100%-failure backend — continuing
+would produce a completely uninformative report (every press failing
+identically tells you nothing about the product's actual quality).
+
+**Quota check**: MiniMax 502/429 on both connections, Claude Account1/
+Account2 both 429. Per §1.5's spirit (even though this is a total-outage
+case the rule wasn't written for exactly): pausing is the correct call
+when NO path to a real answer exists, not just when one account is low.
+
+**NEXT ACTION**: wait for the shared provider pool to recover before
+attempting another judged run — there is no local action that fixes an
+external API-level outage/saturation. Re-check provider health via
+`curl -s http://localhost:20128/api/providers` (look for MiniMax
+`errorCode` clearing and Claude accounts returning to non-429) before
+the next attempt, not just `ps aux` — this iteration is proof that a
+clean local process check is NECESSARY but not SUFFICIENT when the
+whole workspace's shared credential pool is saturated. No product code
+or grading-harness changes are implicated by this failure; it is purely
+an external-service-availability event.
