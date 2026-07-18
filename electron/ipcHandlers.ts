@@ -3516,19 +3516,22 @@ export function initializeIpcHandlers(appState: AppState): void {
                       ].join('\n')
                     : reason === 'false_refusal'
                     ? [
-                        'You are synthesizing an answer from the document excerpts below.',
-                        'IMPORTANT: The excerpts DO contain relevant information for this question.',
-                        'The content may be phrased differently from the question — read carefully.',
-                        'Synthesize the answer directly from the excerpts. Do NOT say "not mentioned" — the information IS there.',
-                        'If multiple excerpts cover different parts of the answer, combine them.',
-                        'Answer in 2-4 natural sentences. Do not restate the question.',
+                        'You are re-checking a refusal by trying to synthesize an answer from the document excerpts below.',
+                        'This question is about a real topic in this document, so read carefully — the content may be phrased differently than the question',
+                        '(e.g. a different unit, a table row, or a synonym for the term the question uses).',
+                        'If the SPECIFIC fact asked for is genuinely present (even if phrased differently), synthesize it directly in 2-4 natural sentences.',
+                        'If, after a careful re-read, the specific fact asked for is still NOT actually present in these excerpts — even though the excerpts are',
+                        'from the right document/topic — say so honestly (e.g. "I could not find that specific detail in the retrieved sections").',
+                        'Do NOT invent, guess, or borrow a similar-sounding fact from an unrelated part of the excerpts (e.g. a different subsystem, model, or dataset)',
+                        'to avoid saying it is absent — an honest "not found" is always better than an unrelated or fabricated answer.',
+                        'Do not restate the question.',
                         '',
                         '## DOCUMENT EXCERPTS',
                         docContextBlock || '(no retrieved material)',
                         '',
                         `QUESTION: ${message}`,
                         '',
-                        'ANSWER (synthesize from the excerpts above):',
+                        'ANSWER (only from facts literally in the excerpts above; honest refusal if genuinely absent):',
                       ].join('\n')
                     : [
                         'You are answering a question strictly from the uploaded reference material below.',
