@@ -414,7 +414,7 @@ function detectIntentByPattern(lastInterviewerTurn: string): IntentResult | null
         return { intent: 'clarification', confidence: 0.9, answerShape: INTENT_ANSWER_SHAPES.clarification };
     }
 
-    // Follow-up patterns  
+    // Follow-up patterns
     if (/(what happened|then what|and after that|what.s next|how did that go)/i.test(text)) {
         return { intent: 'follow_up', confidence: 0.85, answerShape: INTENT_ANSWER_SHAPES.follow_up };
     }
@@ -424,10 +424,28 @@ function detectIntentByPattern(lastInterviewerTurn: string): IntentResult | null
         return { intent: 'deep_dive', confidence: 0.85, answerShape: INTENT_ANSWER_SHAPES.deep_dive };
     }
 
+    // Grounding-campaign2 fix (2026-07-17): "how do you stack up (there/against
+    // the JD)?" is the comparison IDIOM ("measure up"), not the data-structure
+    // noun — but the bare `\bstack\b` two lines below matched it anyway,
+    // classifying a JD-comparison question ("The JD calls for 8+ years and
+    // deep Go or Java expertise — how do you stack up there?") as `coding`
+    // intent at 0.95 confidence. That intent flows into AnswerPlanner.planAnswer
+    // (electron/llm/AnswerPlanner.ts:2596's `input.intentResult?.intent ===
+    // 'coding'` check), which OVERRIDES the otherwise-correct jd_fit_answer
+    // routing (see the AnswerPlanner-level "stack up" fix in the same
+    // campaign) and forces `coding_question_answer` — forbidding resume/jd
+    // entirely. Live-confirmed on the real backend (test/harness-longsession
+    // script-a press A9): `candidateProfileChars:0` persisted even after the
+    // AnswerPlanner and category-hint fixes for this exact question, traced
+    // to `[IntelligenceEngine] Temporal RAG { ..., intent: 'coding', ... }`.
+    // Same idiom-neutralization shape as the sibling fixes in
+    // AnswerPlanner.ts/IntentClassifier.ts (premium)/HybridSearchEngine.ts.
+    const textNoStackUpIdiom = text.replace(/\bstack(s|ed)?\s+up\b/g, 'measure$1 up');
+
     // DSA/coding interview patterns. Keep this deterministic and run it
     // BEFORE behavioral/example matching so prompts like "give me an example
     // React component in TypeScript" still route to the coding contract.
-    if (/(two\s*sum|longest substring|reverse (a )?linked list|detect a cycle|binary search|sliding window|two pointers?|hash\s?(map|set|table)|stack|queue|heap|trie|union[- ]find|dynamic programming|\bdp\b|backtracking|recursion|graph|tree|\bbfs\b|\bdfs\b|time complexity|space complexity|big[- ]?o)/i.test(text)) {
+    if (/(two\s*sum|longest substring|reverse (a )?linked list|detect a cycle|binary search|sliding window|two pointers?|hash\s?(map|set|table)|stack|queue|heap|trie|union[- ]find|dynamic programming|\bdp\b|backtracking|recursion|graph|tree|\bbfs\b|\bdfs\b|time complexity|space complexity|big[- ]?o)/i.test(textNoStackUpIdiom)) {
         return { intent: 'coding', confidence: 0.95, answerShape: INTENT_ANSWER_SHAPES.coding };
     }
 

@@ -996,6 +996,12 @@ const JD_FIT_PATTERNS = [
   // description", "tailor it to the JD") — a role-fit answer grounded in the JD
   // (Issue 7). The salary negation is handled separately so this stays jd_fit.
   /\b(use|using|with|from|tailor (it|the answer) to|against) (the )?(jd|job description)\b/i,
+  // "The JD calls for/requires X — how do you stack/measure up (there)?" — an
+  // explicit JD-requirement comparison (grounding-campaign2 fix, 2026-07-17).
+  // Matches both the raw idiom ("stack up") and its textNoTechStack-neutralized
+  // form ("measure up") so this fires whichever text this list happens to be
+  // tested against. Resume+JD grounded self-assessment, not a generic concept.
+  /\b(jd|role|position|job) (calls for|requires|wants|needs|is (looking|asking) for)\b.{0,80}\bhow (do|does|would) (you|i) (stack|measure)(s|ed)?\s+up\b/i,
 ];
 
 // GAP / weakness-for-the-role asks (release 2026-06-09). These must produce an HONEST
@@ -1129,7 +1135,20 @@ const SKILL_EXPERIENCE_PATTERNS = [
   // PEOPLE / a TEAM" is a behavioral STORY, not a skill — the negative lookahead lets those
   // fall through to BEHAVIORAL_PATTERNS (code-review caveat 2026-06-16). A tech object after
   // managed/handled (e.g. "have you managed a database/cluster") still routes to skills.
-  new RegExp(`\\bhave you (ever )?(?:(?:managed|handled|led)\\b(?!\\s+(?:a\\s+|an\\s+|the\\s+|your\\s+|some\\s+|any\\s+)?${PEOPLE_OR_CONFLICT_OBJECT}\\b)|(?:used|worked with|worked on|built|built with|written|coded in|programmed in|implemented|done|created|analy[sz]ed|normali[sz]ed|deployed|designed))\\b`, 'i'),
+  //
+  // Grounding-campaign2 fix (2026-07-17): "what scale have you OPERATED it at?"
+  // (script-a press A14, canonical: "What scale have you operated Kubernetes
+  // at?") fell through this whole pattern list — "operated" was missing from
+  // the verb group — and ended up at `general_meeting_answer` (forbids
+  // resume), giving candidateProfileChars:0 for a clearly candidate-directed
+  // operational-scale question. Live-confirmed on the real backend
+  // (test/harness-longsession script-a run-018): the answer was 92 ALL-CAPS
+  // words with no résumé grounding at all — a distinct symptom from the
+  // "stack up" idiom bugs (fix#14/#15/#17), but the same root shape (a
+  // legitimate candidate-experience verb missing from a keyword list).
+  // Added operated/run/scaled/maintained — common "have you run/scaled/
+  // maintained X at scale" interview phrasings for infra/ops experience.
+  new RegExp(`\\bhave you (ever )?(?:(?:managed|handled|led)\\b(?!\\s+(?:a\\s+|an\\s+|the\\s+|your\\s+|some\\s+|any\\s+)?${PEOPLE_OR_CONFLICT_OBJECT}\\b)|(?:used|worked with|worked on|built|built with|written|coded in|programmed in|implemented|done|created|analy[sz]ed|normali[sz]ed|deployed|designed|operated|run|scaled|maintained))\\b`, 'i'),
   /\bdo you (know|have experience (with|in)|use)\b/i,
   /\bare you (familiar|comfortable|proficient|experienced) (with|in)\b/i,
   // "Are you good/strong/skilled at X?", "are you any good with React?" — a
@@ -2190,9 +2209,23 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
   // Neutralize "tech stack" / "technology stack" AND bare "full-stack" so the
   // DSA `\bstack\b` data-structure pattern can't fire on them ("you said full
   // stack, but this is data analyst" must not become a stack/DSA question).
+  // Grounding-campaign2 fix (2026-07-17): "how do you stack up (there/against
+  // the JD)?" is the comparison IDIOM ("measure up"), not the data-structure
+  // noun — but the bare `\bstack\b` in DSA_PATTERNS/TECHNICAL_SUBJECT_PATTERNS
+  // matched it anyway, misrouting a JD-fit self-assessment question ("The JD
+  // calls for 8+ years and deep Go or Java expertise — how do you stack up
+  // there?") into technical_concept_answer. That answer type FORBIDS the
+  // resume/jd context layers (it's meant for "what is Redis?"-style neutral
+  // explanations), so the candidate's own profile/JD never reached the prompt
+  // and the model answered from CORE_IDENTITY's blanket "reveal internals"
+  // refusal instead ("I can't share that information.") — live-confirmed on
+  // run-014/verify_fix10 (press A9). Neutralize the idiom the same way the
+  // tech-stack/full-stack phrases are neutralized above, before any DSA/
+  // technical-concept pattern sees the text.
   const textNoTechStack = text
     .replace(/\b(tech|technology|technical)\s+stack\b/g, 'techstack')
-    .replace(/\bfull[- ]?stack\b/g, 'fullstack');
+    .replace(/\bfull[- ]?stack\b/g, 'fullstack')
+    .replace(/\bstack(s|ed)?\s+up\b/g, 'measure$1 up');
   const extractedType = input.extractedQuestion?.questionType;
   const documentGroundedCustomModeActive = input.activeMode?.documentGroundedCustomModeActive === true;
   const explicitDocumentModeCodingAsk = /\b(write|implement|code|coding interview|dsa|dry run|time complexity|space complexity|big[-\s]?o|algorithm(?:ic)?|solution code|source code)\b/i.test(text);
@@ -2547,11 +2580,18 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     answerType = 'technical_concept_answer';
   } else if (includesAny(text, TECHNICAL_CONCEPT_PATTERNS) &&
              !includesAny(text, CODING_PATTERNS) &&
-             (includesAny(textNoTechStack, DSA_PATTERNS) || isLikelyTechnicalConcept(text))) {
+             (includesAny(textNoTechStack, DSA_PATTERNS) || isLikelyTechnicalConcept(textNoTechStack))) {
     // "Explain BFS", "what is a deadlock", "difference between TCP and UDP" —
     // generic technical CONCEPT, NO profile (spec Case F). Checked before
     // DSA/coding: a DSA noun with explain/what-is framing and NO coding verb is a
     // concept, not a coding task.
+    // Grounding-campaign2 fix (2026-07-17): use the SAME textNoTechStack (which
+    // now also neutralizes the "stack up" idiom, see its definition above) that
+    // the DSA_PATTERNS check on this line already uses — isLikelyTechnicalConcept
+    // wraps TECHNICAL_SUBJECT_PATTERNS, which independently contains a bare
+    // \bstack\b, so calling it against the raw `text` let "how do you stack up
+    // there?" slip through this branch even after the DSA_PATTERNS check itself
+    // was fixed.
     answerType = 'technical_concept_answer';
   } else if (includesAny(textNoTechStack, DSA_PATTERNS)) {
     // Named DSA problem ("two sum", "reverse a linked list", "solve two sum").
@@ -2633,7 +2673,13 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     // context and cascades into route/voice failures. Route it to the nearest
     // SAFE profile answer type. Generic non-candidate questions still go to
     // unknown (profileContextPolicy 'allowed', no forced profile).
-    const fb = classifyUnmatchedFallback(text, input);
+    // Grounding-campaign2 fix (2026-07-17): pass textNoTechStack, not raw
+    // text — classifyUnmatchedFallback's own project-vs-jd_fit lean (below)
+    // has the SAME bare \bstack\b collision as DSA_PATTERNS/
+    // TECHNICAL_SUBJECT_PATTERNS above ("how do you stack up there?" tripped
+    // its project_answer branch via the "stack" keyword instead of the
+    // intended jd_fit_answer route for a JD-comparison question).
+    const fb = classifyUnmatchedFallback(textNoTechStack, input);
     answerType = fb;
     // MODE PRIOR (PI v3, W1): nothing explicit matched AND the profile-aware
     // fallback landed on a floor type (unknown/general). In a sales call that
