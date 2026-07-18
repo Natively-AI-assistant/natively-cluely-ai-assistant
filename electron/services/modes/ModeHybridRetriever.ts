@@ -19,6 +19,7 @@ import {
     computeDocumentAnswerabilityScore,
     computeEvidenceCoverage,
     isBroadDocumentQuery,
+    normalizeDocumentGroundedRetrievalQuery,
     type DocumentQuestionShape,
 } from '../../llm/documentGroundedPrompt';
 
@@ -975,8 +976,12 @@ export class ModeHybridRetriever {
             };
         }
 
-        // Get query words for FTS scoring
-        const queryText = query.trim();
+        // Keep the raw user question outside this retriever. Document-grounded
+        // ranking uses only its derived factual query so a conversational wrapper
+        // cannot dilute lexical, semantic, or section-planner relevance.
+        const queryText = (forceDocumentGrounding
+            ? normalizeDocumentGroundedRetrievalQuery(query)
+            : query).trim();
         const queryWords = new Set(wordsOf(queryText));
 
         // Zero-token query short-circuit: if the user input collapses to no
@@ -1081,7 +1086,10 @@ export class ModeHybridRetriever {
                 return map.hasToc ? resolveTargetSections(queryText, map) : [];
             });
             const uniqueSectionTargets = [...new Set(sectionTargets)];
-            markH4HybridStage('document_map_exit', { targetCount: uniqueSectionTargets.length });
+            markH4HybridStage('document_map_exit', {
+                targetCount: uniqueSectionTargets.length,
+                targets: uniqueSectionTargets,
+            });
 
             // Targeted-section restore (2026-07-13): resolveTargetSections is a
             // strong, precise routing signal — it maps "what working voltage is

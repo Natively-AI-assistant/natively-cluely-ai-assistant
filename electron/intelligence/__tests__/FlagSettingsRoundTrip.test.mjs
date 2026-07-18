@@ -106,6 +106,7 @@ const EXPECTED_KEYS = [
   'contextOsMemorySafetyEnabled',
   'contextOsEnforceSourceCapabilities',
   'contextOsPropertyValidation',
+  'contextOsMultiFamilyEvidenceEnabled',
 ];
 
 // All NATIVELY_* env vars these flags read — cleared before/after so a leaked env from the
@@ -180,6 +181,7 @@ const ALL_ENV_VARS = [
   'NATIVELY_CONTEXT_OS_MEMORY_SAFETY',
   'NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES',
   'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION',
+  'NATIVELY_CONTEXT_OS_MULTI_FAMILY_EVIDENCE',
 ];
 
 function clearAllEnv() {

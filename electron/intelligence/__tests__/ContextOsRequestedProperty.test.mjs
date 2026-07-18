@@ -54,6 +54,13 @@ const CASES = [
   ['What were the results?', 'result_metric'],
   ['What accuracy did the model reach?', 'result_metric'],
   ['What was the success rate?', 'result_metric'],
+  // field-specific physical measurements
+  ['What is the total weight of the robot?', 'physical_weight'],
+  ['How much does the humanoid robot weigh?', 'physical_weight'],
+  ['How much is the net weight of the drone?', 'physical_weight'],
+  ['What are the device dimensions?', 'physical_dimensions'],
+  ['What working voltage is listed for the robot?', 'working_voltage'],
+  ['What is the rated power requirement of the device?', 'power_requirement'],
   // hardware_component
   ['What hardware does the system use?', 'hardware_component'],
   ['Which sensors are mounted on the robot?', 'hardware_component'],
@@ -124,6 +131,27 @@ test('project description CANNOT prove cost_or_price', () => {
   const desc = 'The project delivers an autonomous delivery robot for campus environments.';
   assert.equal(textCanProveProperty(desc, 'cost_or_price'), false);
   assert.equal(textCanProveProperty('The total budget was $12,000 including sensors.', 'cost_or_price'), true);
+});
+
+test('physical measurement proof is field-specific and accepts ordinary spec prose', () => {
+  const topical = 'The robot has a lightweight carbon fiber shell and a dual-arm structure.';
+  assert.equal(textCanProveProperty(topical, 'physical_weight'), false);
+  assert.equal(textCanProveProperty('Total weight: 1,250 kilograms.', 'physical_weight'), true);
+  assert.equal(textCanProveProperty('The robot weighs approximately 55 kg.', 'physical_weight'), true);
+  assert.equal(textCanProveProperty('Overall dimensions (L x W x H): 500 x 300 x 200 mm.', 'physical_dimensions'), true);
+  assert.equal(textCanProveProperty('Working voltage (V): 24.', 'working_voltage'), true);
+  assert.equal(textCanProveProperty('The unit operates at 24V and draws up to 150W.', 'working_voltage'), true);
+  assert.equal(textCanProveProperty('The unit operates at 24V and draws up to 150W.', 'power_requirement'), true);
+  assert.equal(textCanProveProperty('Total weight: 55 kg.', 'working_voltage'), false);
+  assert.equal(textCanProveProperty('Working Voltage (V)', 'working_voltage'), false);
+  assert.equal(textCanProveProperty('Working voltage: 24 V.', 'physical_weight'), false);
+});
+
+test('ambiguous ML measurement nouns remain unknown rather than physical facts', () => {
+  assert.equal(detectRequestedProperty('What weight decay was used during training?'), 'unknown');
+  assert.equal(detectRequestedProperty('What is the depth of the neural network?'), 'unknown');
+  assert.equal(detectRequestedProperty('What is the embedding dimension of the model?'), 'unknown');
+  assert.equal(detectRequestedProperty('What is the width of the sliding window?'), 'unknown');
 });
 
 test('unknown property accepts any text (degrades to legacy behavior)', () => {

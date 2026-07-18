@@ -31,7 +31,7 @@ const ENV_KEYS = [
   'NATIVELY_CONTEXT_OS', 'NATIVELY_CONTEXT_OS_MANUAL_CHAT', 'NATIVELY_CONTEXT_OS_WTA',
   'NATIVELY_CONTEXT_OS_RECAP_FOLLOWUP', 'NATIVELY_CONTEXT_OS_EVIDENCE_PACK',
   'NATIVELY_CONTEXT_OS_MEMORY_SAFETY', 'NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES',
-  'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION',
+  'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION', 'NATIVELY_CONTEXT_OS_MULTI_FAMILY_EVIDENCE',
 ];
 
 // The full flag set — Meeting Notes V3 product flags intentionally ship default ON;
@@ -56,6 +56,7 @@ const ALL_FLAG_KEYS = [
   'contextOsEnabled', 'contextOsManualChatEnabled', 'contextOsWtaEnabled',
   'contextOsRecapFollowupEnabled', 'contextOsEvidencePackEnabled', 'contextOsMemorySafetyEnabled',
   'contextOsEnforceSourceCapabilities', 'contextOsPropertyValidation',
+  'contextOsMultiFamilyEvidenceEnabled',
 ];
 
 const DEFAULT_ON_KEYS = new Set([

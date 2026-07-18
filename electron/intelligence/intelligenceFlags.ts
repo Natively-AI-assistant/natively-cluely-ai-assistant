@@ -172,7 +172,9 @@ export type IntelligenceFlagKey =
   // Enforce capability-scoped retrieval (block, not just log, forbidden fetches).
   | 'contextOsEnforceSourceCapabilities'
   // Property-aware evidence validation gates generation (refuse on mismatch).
-  | 'contextOsPropertyValidation';
+  | 'contextOsPropertyValidation'
+  // Coordinate evidence from multiple explicitly-authorized source families.
+  | 'contextOsMultiFamilyEvidenceEnabled';
 
 interface FlagSpec {
   /** env var name (NATIVELY_* convention). */
@@ -346,6 +348,7 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   // rolled out."
   contextOsEnforceSourceCapabilities: { env: 'NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES', setting: 'contextOsEnforceSourceCapabilitiesEnabled', default: isInternalDevTestContext },
   contextOsPropertyValidation: { env: 'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION', setting: 'contextOsPropertyValidationEnabled', default: isInternalDevTestContext },
+  contextOsMultiFamilyEvidenceEnabled: { env: 'NATIVELY_CONTEXT_OS_MULTI_FAMILY_EVIDENCE', setting: 'contextOsMultiFamilyEvidenceEnabled', default: isInternalDevTestContext },
 };
 
 const ON_VALUES = new Set(['1', 'true', 'on', 'enabled', 'yes']);

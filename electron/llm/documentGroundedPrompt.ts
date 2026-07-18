@@ -347,6 +347,19 @@ function docWords(text: string): string[] {
     .filter(w => w.length > 2 && !DOC_STOPWORDS.has(w));
 }
 
+// Retrieval scoring must ignore a small set of sentence-initial conversational
+// wrappers, but the raw question remains authoritative for routing, contracts,
+// prompt assembly, and audits. Match a wrapper phrase only when it leaves a
+// factual interrogative payload; "Do you know React?" is deliberately preserved.
+const CONVERSATIONAL_RETRIEVAL_WRAPPER_RE = /^\s*(?:(?:hey|so|well|anyway|quick question)[,:]?\s+)*(?:(?:do you (?:happen to )?know|can you tell me|could you tell me|would you know|i(?:'m| am) curious|i was wondering|i(?:'d| would) like to know)[,:]?\s+)(?=(?:how|what|which|where|when|why)\b)/i;
+
+/** Normalize only the derived query used for document-grounded retrieval scoring. */
+export function normalizeDocumentGroundedRetrievalQuery(question: string): string {
+  const raw = String(question || '').trim();
+  const normalized = raw.replace(CONVERSATIONAL_RETRIEVAL_WRAPPER_RE, '').trim();
+  return normalized || raw;
+}
+
 function unique<T>(xs: T[]): T[] { return [...new Set(xs)]; }
 
 export function classifyDocumentQuestionShape(question: string, priorContext?: string): DocumentQuestionShape {
