@@ -1991,3 +1991,11 @@ still `429`. Same saturation, not a transient blip that already cleared.
 No harness process running, correct branch confirmed, own commits
 intact. Did not launch (would repeat iteration 24's identical
 all-presses-fail outcome). Rescheduling rather than retrying blind.
+
+**Re-check #2 (scheduled wakeup, ~30min after that)**: still down,
+trending slightly WORSE — Claude Account2's `testStatus` flipped from
+`active` to `unavailable` with a fresh `lastErrorAt`, MiniMax unchanged
+at `502`/`429`. Two consecutive checks (55min apart total) show no
+recovery trend. No harness activity, correct branch, commits intact.
+Not launching. Extending the next wait interval since short rechecks
+haven't caught a recovery window yet.
