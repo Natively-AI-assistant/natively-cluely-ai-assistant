@@ -2130,3 +2130,141 @@ answer correctness against required facts). Once this run completes,
 compare it against L4 targets for real, and specifically diff its
 A4/A5/A13/A18 answers against the corruption patterns fix#9/#9b/#9c
 targeted, now that real answers exist to check.
+
+## ITERATION 26 (2026-07-18) — run-022: the first real (post-fix) judged run, and a NEW major finding
+
+The full 3-script judged run launched at the end of iteration 25
+completed: `test/harness-longsession/reports/run-022.json`/`.md`, 50
+presses, real MiniMax-M3, real judge tier. This is the first run in
+this campaign's history where the harness auth bug (fixed in
+`ef8a5ca8`) does NOT explain the results — only 3/50 presses (6%) hit
+`No AI provider configured`, and those 3 traced to a real, ordinary
+transient event (`Natively API connect timeout (4s)` on the primary
+provider with no configured fallback provider for the harness's
+env — not the same synchronous pre-network throw as before). Confirmed
+via the log: those 3 press attempts show a real `requestId`, a real
+4002ms `durationMs`, and an actual attempted connection — this is
+normal single-provider flakiness, not the auth bug recurring.
+
+**Overall scorecard**: greetingFailures 0, hallucinationFlags 1,
+questionExtractionAccuracy 100%, answerQualityAccuracy 30%,
+longRangeRecallAccuracy 25%, desyncAccuracy 38%, injectionResistance
+100%. Far below L4 targets on G3/G5/G6 — but this time the low scores
+are measuring something REAL, and it is a genuinely new, previously
+undocumented failure mode for this campaign.
+
+**NEW FINDING — MiniMax-M3 intermittently emits a hallucinated
+"no question captured" / wrong-answer-type response despite a
+correctly-extracted, correctly-assembled prompt.** Read the raw
+per-press dumps (not just G1's extraction score, which only checks
+whether the QUESTION was extracted correctly — it says nothing about
+whether the ANSWER addressed it). Concrete repro, Script A, press A2
+("Walk me through your most recent role — what you owned and the team
+setup."): `[TRACE:LONGCTX] question_extracted` shows the correct
+question extracted with 0.8 confidence; `prompt_assembled`'s
+`userMessageTail` shows the correct question as the final transcript
+line and `answerPlanQuestionSurvivesInPrompt: true`; the model's raw
+answer was **"Hey Marcus, your phone's interviewer audio is coming
+through, but I haven't picked up any question yet. What's the next
+thing they asked?"** — a hallucinated claim that no question exists,
+directly contradicting the prompt it was just given. This is not
+boilerplate/UI copy (grepped the whole source tree for the exact
+phrase — zero matches); MiniMax-M3 generated it as real model output.
+
+**Cascading contamination confirmed**: A2's bad answer got written to
+`SessionTracker` (`policy: 'store_conversational_only'`) and appeared
+in A3's `previous_responses` block. A3's own question ("What was the
+biggest quantified win from that project?") was ALSO correctly
+extracted and present in the prompt, yet the model answered "There's
+nothing captured to summarize yet." — echoing A2's failure framing
+rather than answering the (correctly-provided) new question. This is
+the exact self-reinforcing degradation pattern this campaign was
+founded to find, except the root cause is model instruction-following
+reliability, not a truncation/eviction bug in the app's own context
+pipeline (which was this campaign's original hypothesis and Phase 0-1
+focus).
+
+**Scale of the problem**: manually classified all 50 `answerPreview`
+strings for the "hallucinated non-answer / wrong template" pattern
+("nothing captured", "haven't picked up", "I don't have enough from
+the conversation", a coding-contract `##` heading answering a
+non-coding question, or a leaked internal tag). Script A: 10/18
+(56%). Script B: 3/17 (18%). Script C: 5/15 (33%). Overall 18/50
+(36%) of all presses in this run show this pattern — this is now
+the dominant driver of the low G3/G5/G6 scores, far more than any
+single extraction or harness bug found so far this campaign.
+
+**Second distinct sub-finding — coding-contract template applied to
+non-coding questions.** Press A4 ("before Stripe, you were at Datadog
+— what did you own there?") and A5 (a Datadog throughput follow-up)
+both got answers formatted with the `## Approach` / `## Technique /
+Data Structure / Algorithm Used` / `## Code` / `## Dry Run` / `##
+Complexity` headings defined in `electron/llm/codingContract.ts`
+(`CODING_CONTRACT_TINY`) — a template reserved for `coding_question_
+answer`/`dsa_question_answer` types. Verified via a direct node REPL
+call to the compiled `AnswerPlanner.planAnswer()` with A4's exact
+question text: the DETERMINISTIC classifier correctly returns
+`answerType: 'project_followup_answer'`
+(`isCodingAnswerType('project_followup_answer') === false`), and the
+trace's own `systemPromptTail` shows only the generic formatting
+rules, not the coding contract — so the app-side answerType routing
+and prompt assembly are NOT at fault here. The model itself
+spontaneously chose to answer a behavioral/experience question using
+a DSA-interview template it was never instructed to use for this
+question. A4's raw answer even opens by addressing a DIFFERENT
+question entirely ("here are the strongest angles for answering 'Why
+do you want to leave Stripe?'") that was never asked in this
+transcript at all — this may be the same "hallucinated content" family
+as the A2/A3 finding, just manifesting as fabricated Q&A content
+instead of a fabricated "no question" claim.
+
+**Third distinct sub-finding — raw internal-looking markup leaking
+into user-facing answers** (Script C, adversarial/messy script,
+observed but not yet root-caused): C5's answer opens with `[Mode:
+answering as a neutral assistant, not the candidate. Resuming prior
+context.]` and C6's answer opens with `<conversation_state>\nNo active
+conversation yet. Waiting for the user to share what they need...`
+— both read like leaked internal state-tracking or mode-annotation
+text that should never reach the spoken answer surface, though
+neither matches any hardcoded string found in the source tree
+(`grep`ed, zero matches) — likely also model-hallucinated formatting
+rather than a real internal leak, but NOT yet confirmed either way.
+
+**What this means for the campaign**: this is a materially different
+finding than anything logged so far (fix#9/#9b/#9c were extraction/
+entity-tagging bugs; the security fix was a prompt-injection
+sanitization gap; the thousands-separator fix was a grading-harness
+bug; iteration 25's fix was a harness auth-wiring bug). This one is
+about MiniMax-M3's actual instruction-following reliability on the
+real production prompt — arguably the single most important thing
+this long-session campaign could uncover, since it directly explains
+why real answer-quality scores have never approached L4 targets even
+after every previously-found bug was fixed. This is NOT something a
+prompt-only or extraction-only fix can address; it may require
+prompt hardening (e.g., a stronger anti-hallucination instruction, a
+lower/adjusted temperature, or output validation that catches and
+retries a "no question captured" claim when the trace log proves a
+question WAS captured), a provider/model-routing change, or accepting
+this as a known MiniMax-M3 reliability ceiling to route around
+(e.g., failing over to a different model when the "no question
+captured" pattern is detected in output, similar to existing
+`isNonAnswerSentinel` handling — worth checking whether that
+mechanism already exists and simply isn't catching this specific
+phrasing).
+
+**NEXT ACTION**: this deserves focused investigation, not folded into
+a routine re-check cycle. Before another full judged run: (1) check
+whether `IntelligenceEngine.ts`'s `isNonAnswerSentinel` discard/retry
+path (referenced in this campaign's own Phase 0 instrumentation notes)
+already has logic for exactly this "no question captured despite one
+being present" pattern and if so why it didn't fire on A2/A3/A7 here;
+(2) collect a few more repro presses across script-b/c to see if the
+hallucination correlates with any prompt feature (assembler budget,
+profile size, previous_responses count, temperature/thinking-budget
+setting) rather than appearing purely random; (3) decide whether a
+retry-on-detected-non-answer mechanism is the right fix, versus a
+prompt-level change, before writing code. Do NOT attempt a quick
+prompt patch without first checking for an existing, disabled, or
+misconfigured guard — this campaign has repeatedly found that the
+better fix was closing a gap in existing machinery rather than adding
+new machinery from scratch.
