@@ -3094,3 +3094,71 @@ real hit-rate still at 0/3 recovered (though with 2 of 3 misses now
 explained as legitimately out-of-scope and the third having a
 concrete, scoped fix path), and the JSON-leak family newly confirmed
 and unaddressed.
+
+## ITERATION 35 (2026-07-18) — Pattern C shipped for C15's bold-marker gap, FOURTH review catch
+
+Implemented iteration 34's item (1): extended
+`detectAndExtractScaffoldMisfire` with a new Pattern C recognizing a
+bold-text final-answer marker (`**Direct Answer:**`-shaped), gated by
+the same coding-scaffold fingerprint requirement as Patterns A/B.
+Verified against C15's real raw text (copied from `traces2/` in
+run-026) that this correctly recovers the exact answer that was
+missed.
+
+**Skeptic pass caught a FOURTH real defect on this function** (after
+3 catches across iterations 27, 29, 32 on other functions/patterns):
+the first draft's bold-marker regex
+(`\*\*[^*\n]*answer[^*\n]*\*\*`) had no closed vocabulary — it matched
+ANY bold text on its own line merely containing the substring
+"answer" anywhere, unlike Pattern B's heading match (bounded to
+`SCAFFOLD_MISFIRE_HEADING_RE`'s short fixed word list). The reviewer
+constructed a real answer with its own internal bold rhetorical aside
+("**So what was the answer that finally worked?**") mid-narrative and
+proved everything before it — genuine, valuable narrative content —
+would be silently discarded, since the true earlier scaffold still
+satisfies the fingerprint gate regardless of where the wrong split
+point lands. Fixed by tightening to a closed set of short, label-
+shaped phrasings (`direct|final|spoken|the` + `answer`, optional
+parenthetical/colon), mirroring Pattern B's discipline exactly rather
+than just its stated intent. A follow-up review confirmed the fix:
+closes the found gap, preserves the original C15 extraction, and
+correctly rejects word-boundary-adjacent substrings (Unanswered/
+Answering/Answerable) with no explicit `\b` needed (the marker's own
+structure — `answer` bounded by `\s*` then `(`/`:`/`**` — inherently
+excludes trailing suffix letters).
+
+21 tests (5 new for Pattern C, including the original C15 repro and 2
+review-driven false-positive regressions), 178 tests total across the
+related suite, zero failures. Committed as `85b8067e` (2 files, 128
+insertions). Verified isolation from concurrent-session files
+(`campaign-log.md`, `RolloutFallback.test.mjs`,
+`ContextOsProductionDefaultRollout2026_07_18.test.mjs`, `natively-api`
+submodule pointer) — none touched.
+
+**Running tally of adversarial-review catches this session**: 4
+distinct real defects caught before shipping, each on a live-answer-
+path change: (1) iteration 27's unanchored false-no-content-claim
+regex matching "questions for us" pivot answers; (2) iteration 29's
+`needsFallback` false-positive on short genuine answers; (3) iteration
+32's generic-heading scaffold-extraction trigger discarding real
+negotiation/behavioral/lecture content, plus its own follow-up (the
+Big-O-fingerprint being legitimate vocabulary for 3 technical answer
+types); (4) this iteration's unbounded bold-marker substring match.
+Every one of these would have made a REAL user's answer WORSE, not
+better, had it shipped unreviewed — the review discipline has now
+paid for itself many times over across this session's fixes.
+
+**NEXT ACTION**: item (2) from iteration 34 remains open — the JSON/
+internal-object leak family (5 confirmed instances: C5/C6 run-022,
+C15 run-025, A11/C2 run-026) still needs root-cause investigation.
+Starting hypothesis unchanged: a tool-calling/structured-output code
+path bleeding into the plain conversational WTA surface (A11's exact
+shape `{"name": "noop", "arguments": {}}` looks like a raw
+function-call stub). Continue the standard health-check/judged-run
+loop per loop2.md — launch a validation run to confirm Pattern C
+recovers bold-marker misfires in practice when they next recur (same
+caveat as before: this failure family is intermittent, so a run with
+zero recurrence is inconclusive, not a negative signal). L4 remains
+distant: no-content-hallucination fully open, JSON-leak family fully
+open, and the scaffold-misfire fix (now with 3 patterns) still needs
+a live recurrence to confirm real-world recovery rate.
