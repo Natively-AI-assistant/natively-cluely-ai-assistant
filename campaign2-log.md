@@ -1841,3 +1841,79 @@ implementation (commit `c3e576d`, ANTI-THRASH LEDGER row 12, above) and
 security review both proceeded from this corrected understanding, not
 the original mischaracterization — no code was built on the wrong
 theory.
+
+## ITERATION 23 (2026-07-18) — BRANCH NOTE + recovered a stranded stash (fix#14/#17/#18)
+
+**Branch hazard hit directly this iteration**: this session's working
+directory was silently switched to `fix/grounding-campaign-h4` by a
+concurrent session between two of my own tool calls (confirmed via
+`git log`/`git branch --show-current` — no action of mine caused it).
+`fix/grounding-campaign-h4` diverged from `fix/longsession-campaign` at
+commit `c3a2d81` — BEFORE any of this session's Campaign 2 commits
+(fix#9/#9b/#9c, the grading-harness fix, the transcript-injection
+security fix; commits `8d8d74a` through `90e00e1`) landed. So
+`fix/grounding-campaign-h4` currently has NONE of those; they remain
+only on `fix/longsession-campaign` (and `origin/fix/longsession-
+campaign`). This log file (`campaign2-log.md`) is IDENTICAL between the
+two branches up through this point, so nothing has been lost — but be
+aware when reading this file that "current branch" may not be
+`fix/longsession-campaign`; a `git log`/`git branch --show-current`
+check is warranted before assuming which commits are actually present
+in the checked-out tree.
+
+**Also recovered, while investigating an unrelated "everything done?"
+check**: found `stash@{0}` ("WIP on fix/longsession-campaign:
+c3a2d81..."), containing MULTIPLE different concurrent sessions'
+unstaged work bundled together — including this campaign's own
+ANTI-THRASH LEDGER rows 13-18 (`generateCandidateIntro` years-of-
+experience, the "stack up" idiom collision across 3 files, `expertise`/
+`experience` synonym, mentoring-intent misroute, `operated`-verb gap —
+G3 grounding-fidelity forensics from a prior in-session investigation)
+which had never been committed to the ledger before this stash was
+created. Confirmed via direct inspection: the 5 test files for these
+fixes WERE already committed (via `a231663`, a "bundle working-tree
+cleanup" commit), but the actual SOURCE fixes in `electron/llm/
+AnswerPlanner.ts` and `electron/llm/IntentClassifier.ts` were NOT —
+leaving 5 committed tests FAILING against HEAD (confirmed directly:
+`JdFitStackUpIdiom` 3/5 failing, `OperatedScaleSkillExperience` 4/6
+failing). Extracted ONLY those two files' hunks from the stash via
+`git diff HEAD stash@{0} -- <file> | git apply` (NOT a blanket stash
+pop — the same stash bundles several other UNRELATED in-progress
+changes: an `ipcHandlers.ts` H4-diagnostic + document-QA prompt
+rewrite, `ProfileEvidenceService.ts` TurnEvidenceCoordinator work, a
+`manualProfileIntelligence.ts` compensation-hint formatting fix — all
+deliberately left untouched in the stash for their respective owning
+sessions to land). Verified: all 28 tests across the 6 fix-related
+files pass, `ProfileRoutingMatrix` 62/62, the broader 330-test consumer
+suite 326/330 (4 skips, 0 fails, consistent with the original session's
+own claimed 339/339), typecheck clean, R8 short-session smoke 11/11
+green. Committed as `36b12df` — ON `fix/grounding-campaign-h4` (the
+branch this session was actually on at commit time, not by choice).
+fix#13/#15/#16 (the premium-submodule parts of the same original
+iteration) were unaffected — already correctly committed via
+`premium`'s own commit `442b2d8`.
+
+**Reconciliation needed later, NOT attempted this iteration** (branch
+surgery — cherry-picking or merging — on an actively-multi-session-
+edited shared tree is higher-risk than leaving the fix in place;
+deferred to whoever next does a clean merge/rebase of these campaign
+branches): `36b12df`'s `AnswerPlanner.ts`/`IntentClassifier.ts` fix
+needs to also reach `fix/longsession-campaign` (or wherever the final
+merge target is) for this campaign's own L4 measurement to reflect it —
+right now a judged run on `fix/longsession-campaign` would NOT include
+this recovery; only a run on `fix/grounding-campaign-h4` would.
+
+**Quota check**: no real-backend calls beyond the R8 smoke test (which
+degraded gracefully through one transient provider-timeout mid-run,
+consistent with this workspace's ongoing contention, and still passed
+all 11 checks). No pause needed.
+
+**NEXT ACTION**: (a) whoever next has a clean moment should reconcile
+`fix/longsession-campaign` and `fix/grounding-campaign-h4` — a merge or
+cherry-pick of `36b12df` onto `fix/longsession-campaign` (or vice versa,
+depending which becomes the actual PR target) — so a future judged run
+measures ALL of this campaign's landed fixes together, not a subset
+depending on which branch happens to be checked out; (b) before any
+further work in this shared tree, ALWAYS run `git branch --show-current`
+first — this iteration is direct proof the checked-out branch can
+change without any action by the current session.
