@@ -189,6 +189,20 @@ async function bootstrap(opts = {}) {
   process.env.NATIVELY_TRACE_LONGCTX = process.env.NATIVELY_TRACE_LONGCTX || '1';
   process.env.NATIVELY_API_URL = process.env.NATIVELY_API_URL || 'http://localhost:3000';
 
+  // Fallback auth: if no real NATIVELY_API_KEY is set (nothing in this repo's
+  // .env provisions one — it's meant to come from the invoking shell), fall
+  // back to the same NATIVELY_E2E local-test bypass that LLMHelper.hasNatively()
+  // / generateWithNatively() / streamWithNatively() already support, and that
+  // test/harness/run-benchmark.mjs already relies on for its Playwright E2E
+  // runs. This only engages when NATIVELY_API_KEY is absent, so it can never
+  // change behavior for an invocation that does have a real key.
+  if (!process.env.NATIVELY_API_KEY && !process.env.NATIVELY_E2E) {
+    process.env.NATIVELY_E2E = '1';
+    process.env.NATIVELY_E2E_LOCAL_TEST_TOKEN = process.env.NATIVELY_E2E_LOCAL_TEST_TOKEN
+      || process.env.NATIVELY_LOCAL_TEST_TOKEN
+      || 'local-test';
+  }
+
   const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), opts.tmpPrefix || 'longsession-harness-'));
   installElectronStub(tmpUserData);
   require('node:sqlite');

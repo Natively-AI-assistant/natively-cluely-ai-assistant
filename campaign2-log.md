@@ -1999,3 +1999,134 @@ at `502`/`429`. Two consecutive checks (55min apart total) show no
 recovery trend. No harness activity, correct branch, commits intact.
 Not launching. Extending the next wait interval since short rechecks
 haven't caught a recovery window yet.
+
+**Re-check #3**: providers had partially recovered (MiniMax + Claude
+Account1 both showing recent successful `lastUsedAt` with no fresh
+`lastErrorAt` on two consecutive checks ~4min apart), so this session
+was ready to launch a fresh full judged run. But the local quiescence
+check (`ps aux`) found a CONCURRENT session had ALREADY launched
+`test/harness-longsession/run-all.mjs` (PID 15681) + `run-script-a.mjs`
+(PID 15684) ~1-2 minutes earlier — confirmed by fresh commits
+(`cc45a021`, `3c8016f8`) from a different investigation ("THESIS-091")
+appearing on this shared branch since the prior check, and actively-
+modified `traces2/harness-script-a-press-*.txt` files in `git status`.
+Per this campaign's collision-avoidance discipline (never launch a
+harness run when `ps aux` shows one already in flight, regardless of
+provider health), did NOT launch a second, colliding run — that would
+corrupt both this session's and the concurrent session's results via
+shared trace-file paths and shared backend contention. Waiting
+(background Monitor) for PID 15681 to finish before taking further
+action.
+
+**PID 15681 finished** and produced `test/harness-longsession/reports/
+run-020.json`/`.md` (all 3 scripts, real judge tier, timestamp
+2026-07-18T10:23:36Z). Read it before deciding whether to launch my
+own: **ALL 18/18 script-a presses returned the identical
+`provider_error_no_answer` fallback** ("I couldn't reach the AI
+provider..."), the same total-outage signature as iteration 24's
+aborted run — G3/G5/G6 all show 0% not because of a product regression
+but because every single answer was the same connectivity-failure
+string. This directly REFUTES what a naive 9Router `/api/providers`
+read suggested a moment earlier (MiniMax "te" and Claude Account1 both
+showed recent `lastUsedAt` with no fresh `lastErrorAt`, which looked
+like recovery) — those "successful" timestamps were actually just this
+failed run's own request attempts being logged as "used", not
+evidence of a completed real answer. **Lesson for this campaign**: a
+`lastUsedAt` timestamp on `/api/providers` is not sufficient evidence
+of provider health on its own — it only proves a request was
+attempted, not that it succeeded. Prefer reading a just-completed
+run's actual answer content (or `errorCode`/`lastError` specifically)
+over `lastUsedAt` recency when judging recovery. Not launching another
+run against a pool that just proved itself still fully saturated
+seconds ago — rescheduling instead.
+
+## ITERATION 25 (2026-07-18) — CORRECTION: the "total shared-provider outage" was a harness auth bug, not a real outage
+
+Re-checked 9Router health per the standing wakeup instruction: MiniMax
+now `active`/`backoffLevel:0` on both connections, Claude Account1
+`active`/`backoffLevel:0`. Only Claude Account2 (this campaign's
+secondary/failover, not the primary generation path) remained
+`unavailable`. No harness process running, correct branch
+(`fix/grounding-campaign-h4`), clean working tree. Launched a fresh
+judged run (background, monitored) — but before that finished, went
+back to actually READ `run-020.json`'s raw error text instead of
+trusting the "provider_error_no_answer" label alone, since something
+about "total failure with sub-500ms latencies" didn't fit a real
+upstream 429/502 (those normally show request latency, not instant
+synchronous rejection).
+
+**Found the real error**: every failed press's raw log line was not a
+9Router upstream error at all — it was `[WhatToAnswerLLM] Stream
+failed: Error: No AI provider configured. Please add at least one API
+key in Settings.`, thrown synchronously inside `LLMHelper.ts` (line
+~5710: `if (!nativelyKey && !e2eLocalToken) throw new Error(...)`)
+BEFORE any network call. All `latencyRealMs` values across
+run-020/019/018/017 were under ~500ms — far too fast for a real LLM
+round-trip — which was the tell I'd missed by only reading the
+`provider_error_no_answer` summary label instead of the underlying
+exception.
+
+**Root cause**: `test/harness-longsession/lib/bootstrap.cjs` calls
+`llmHelper.setNativelyKey(process.env.NATIVELY_API_KEY || null)`, but
+`NATIVELY_API_KEY` is not set anywhere — not in `.env` (grepped, zero
+matches), not in this shell's environment (`echo
+${NATIVELY_API_KEY:+YES}` → empty), and each harness run gets a FRESH
+temp `userData` dir (no persisted credential store to fall back to via
+`CredentialsManager`), so `LLMHelper.hasNatively()` was `false` on
+every single press of every harness run since this bootstrap module
+was written. Verified the real local `natively-api` backend was fully
+healthy the entire time via direct curl: `x-natively-key:
+natively_sk_testkey...` → `invalid_key_format` (expected, harness
+never had a real key), but `x-natively-local-test: local-test` (the
+running server's own `NATIVELY_LOCAL_TEST_AUTH=1` /
+`NATIVELY_LOCAL_TEST_TOKEN=local-test` bypass, visible in the running
+process's env via `ps eww`) → real `MiniMax-M3` response. `LLMHelper.ts`
+already has this exact bypass wired in (`e2eLocalToken`, gated on
+`NATIVELY_E2E=1` + `NATIVELY_E2E_LOCAL_TEST_TOKEN`) and
+`test/harness/run-benchmark.mjs` (a different, older Playwright E2E
+harness) already uses it — but `test/harness-longsession/lib/
+bootstrap.cjs` never wired it up.
+
+**This means iteration 24's "total shared-provider outage" diagnosis
+was WRONG** — or at minimum unverified and now unfalsifiable in
+hindsight, since the harness could never have produced a successful
+press regardless of real provider health from the moment this
+bootstrap module started being used. The `429`/`502` seen on 9Router
+`/api/providers` during iteration 24 were real (other concurrent
+sessions' load), but this harness's own 100%-failure-rate runs were
+not evidence of that outage — they'd have shown identical zeros on a
+fully healthy provider pool too. Every run this campaign has logged
+using this harness (at minimum run-017 through run-020, likely
+earlier ones too — not yet checked) has G3/G5/G6 scores that are
+uninterpretable as product-quality signal; they measure the harness's
+own auth wiring, not the LLM's answers.
+
+**Fix applied** (`test/harness-longsession/lib/bootstrap.cjs`): when
+`NATIVELY_API_KEY` is absent, fall back to setting
+`NATIVELY_E2E=1`/`NATIVELY_E2E_LOCAL_TEST_TOKEN=local-test` before
+constructing `LLMHelper`, engaging the same bypass path the server
+already accepts locally. Pure additive fallback — only fires when no
+real key is present, so it cannot change behavior for a future
+invocation that does set `NATIVELY_API_KEY`.
+
+**Verified the fix**: ran `--only=a --skip-judge` after the change —
+real `MiniMax-M3` answers streaming (`[NativelyAPI] stream completed
+... serverModel: 'MiniMax-M3'`), real answer content in
+`answerPreview` (e.g. "I'm Marcus, a Staff Software Engineer, L6, at
+Stripe..."), real latencies (1.1s-12s range, not sub-500ms), G6_desync
+back to 100/100, G5_long_range_recall 1/2 (50%, a real partial signal
+instead of a universal 0%).
+
+**NEXT ACTION**: launched a full 3-script judged run with the fix in
+place (background, monitored for `No AI provider configured`/error
+signatures and completion). This will be the FIRST run in this
+campaign's history to produce a genuinely interpretable G3/answer-
+quality/G5/G6 measurement against loop2.md's L4 targets — treat
+run-017 through run-020 as void for quality-gate purposes (G1/G2/G4/G7
+in those runs remain valid, since G1 extraction, G2 greeting-failure,
+G4 hallucination-forbidden-list, and G7 injection-compliance all
+inspect the extracted question / answer text or its absence, not
+answer correctness against required facts). Once this run completes,
+compare it against L4 targets for real, and specifically diff its
+A4/A5/A13/A18 answers against the corruption patterns fix#9/#9b/#9c
+targeted, now that real answers exist to check.
