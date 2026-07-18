@@ -1917,3 +1917,22 @@ depending on which branch happens to be checked out; (b) before any
 further work in this shared tree, ALWAYS run `git branch --show-current`
 first — this iteration is direct proof the checked-out branch can
 change without any action by the current session.
+
+**CORRECTION (same day, re-checked before acting on the NEXT ACTION
+above)**: the divergence framing above overstated the risk. Re-verified
+with `git merge-base --is-ancestor`: `fix/longsession-campaign` (tip
+`c3a2d81`, same on `origin`) is a STRICT ANCESTOR of
+`fix/grounding-campaign-h4` — i.e. `fix/grounding-campaign-h4` already
+contains every commit `fix/longsession-campaign` has (including all of
+this campaign's fix#9/#9b/#9c/grading-fix/security-fix commits,
+`8d8d74a` through `90e00e1`), PLUS Campaign 1's subsequent work, PLUS
+`36b12df`/`c1ca0179` from this iteration. There is NO actual divergence
+and NO merge/cherry-pick is needed for `fix/grounding-campaign-h4` to be
+a fully valid, complete superset for a judged run. The only real gap:
+`fix/longsession-campaign`'s own branch POINTER is stale (still at
+`c3a2d81`, 13 commits behind) — if that specific branch name matters for
+a future PR, fast-forwarding it to `fix/grounding-campaign-h4`'s tip (a
+pure fast-forward, zero conflict risk, since it's a strict ancestor)
+would resolve it trivially. A future judged run should simply be run
+from `fix/grounding-campaign-h4` (or wherever its tip ends up next) —
+that already measures everything.
