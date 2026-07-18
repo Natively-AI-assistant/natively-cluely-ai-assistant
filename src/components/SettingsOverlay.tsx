@@ -7,7 +7,7 @@ import {
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
     ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Settings, Activity, ExternalLink, Trash2,
     Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff, Folder,
-    Star, AlertCircle, Gift, Smartphone, Cpu, Shield
+    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2
 } from 'lucide-react';
 import { analytics } from '../lib/analytics/analytics.service';
 import { AboutSection } from './AboutSection';
@@ -402,6 +402,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const [verboseLogging, setVerboseLogging] = useState(false);
     const [meetingRetention, setMeetingRetention] = useState<'forever' | '7d' | '30d' | 'never'>('forever');
     const [showVerboseToast, setShowVerboseToast] = useState(false);
+    const [codeVerification, setCodeVerification] = useState(false);
     const verboseToastTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Close dropdown when clicking outside
@@ -415,6 +416,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             window.electronAPI?.getOverlayMousePassthrough?.().then(setIsMousePassthrough).catch(() => { });
             window.electronAPI?.getDisguise?.().then(setDisguiseMode).catch(() => { });
             window.electronAPI?.getVerboseLogging?.().then(setVerboseLogging).catch(() => { });
+            window.electronAPI?.getCodeVerification?.().then((v) => setCodeVerification(v === true)).catch(() => { });
             window.electronAPI?.getMeetingRetention?.().then(setMeetingRetention).catch(() => { });
         }
     }, [isOpen]);
@@ -1797,6 +1799,41 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         </motion.div>
                                                     )}
                                                 </AnimatePresence>
+
+                                                {/* Code Verification — runs LLM-generated code against test cases + one-shot correction */}
+                                                <div className="flex items-center justify-between px-4 py-3">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
+                                                            codeVerification
+                                                                ? isLight
+                                                                    ? 'border-blue-500/30 text-blue-600 bg-blue-50/50'
+                                                                    : 'border-blue-500/40 text-blue-400 bg-blue-500/5'
+                                                                : 'border-border-subtle text-text-tertiary'
+                                                        }`}>
+                                                            <Code2 size={20} />
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="text-sm font-bold text-text-primary">{t('Verify coding answers')}</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Run generated code against test cases and self-correct')}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div
+                                                        onClick={() => {
+                                                            const newState = !codeVerification;
+                                                            setCodeVerification(newState);
+                                                            // Swallow rejection: a missing handler (pre-rebuild) must not
+                                                            // spam the console with unhandledrejection noise like the
+                                                            // other toggle-style settings also use optional chaining.
+                                                            window.electronAPI?.setCodeVerification?.(newState)?.catch?.(() => { });
+                                                        }}
+                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer ${codeVerification ? 'bg-blue-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                        role="switch"
+                                                        aria-checked={codeVerification}
+                                                        aria-label={t('Verify coding answers')}
+                                                    >
+                                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${codeVerification ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                    </div>
+                                                </div>
 
                                                 {/* Interviewer Transcript */}
                                                 <div className="flex items-center justify-between px-4 py-3">

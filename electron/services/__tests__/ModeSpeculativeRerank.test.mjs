@@ -74,6 +74,9 @@ describe('Phase 3: live-path speculative rerank', () => {
     const { mockDb, mockVectorStore, mockEmbeddingPipeline } = mockDeps();
     const retriever = new ModeHybridRetriever(mockDb, mockVectorStore, mockEmbeddingPipeline);
 
+    // The rerank decision is normally score-distribution dependent. This test
+    // exercises the live-caller contract after that gate has opened.
+    retriever.computeConfidence = () => ({ lowConfidence: true });
     let observed = null;
     retriever.__setRerankerForTests({
       rerank: async (_q, passages) => {
@@ -87,6 +90,7 @@ describe('Phase 3: live-path speculative rerank', () => {
     const result = await retriever.retrieve({
       query: 'intro payload appendix', modeId: 'mode1', files: multiChunkFile(),
       tokenBudget: 4000, topK: 6, allowRerank: true, // live caller passes this when speculative flag on
+      forceDocumentGrounding: true,
     });
     assert.ok(observed, 'reranker consulted on the live path when allowRerank true');
     assert.ok(result.chunks[0].text.includes('payload'), 'payload chunk promoted');
@@ -107,6 +111,25 @@ describe('Phase 3: live-path speculative rerank', () => {
       tokenBudget: 4000, topK: 6, allowRerank: false,
     });
     assert.equal(called, false, 'live path must not rerank when allowRerank is false');
+  });
+
+  test('a stalled optional reranker cannot consume the manual-answer deadline', async () => {
+    process.env[RERANK] = '1';
+    const { ModeHybridRetriever } = await loadRetriever();
+    const { mockDb, mockVectorStore, mockEmbeddingPipeline } = mockDeps();
+    const retriever = new ModeHybridRetriever(mockDb, mockVectorStore, mockEmbeddingPipeline);
+    retriever.__setRerankerForTests({ rerank: async () => new Promise(() => {}) });
+
+    const result = await Promise.race([
+      retriever.retrieve({
+        query: 'intro payload appendix', modeId: 'mode1', files: multiChunkFile(),
+        tokenBudget: 4000, topK: 6, allowRerank: true,
+        forceDocumentGrounding: true,
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('rerank did not respect its latency budget')), 1800)),
+    ]);
+
+    assert.ok(result.chunks.length > 0, 'the lexical candidates remain usable when reranking stalls');
   });
 
   // (B) SOURCE-GUARDS — the live callsites forward the speculative flag.
@@ -137,9 +160,9 @@ describe('Phase 3: live-path speculative rerank', () => {
     test('prewarmModeReferenceIndex prewarms the reranker only when enabled', () => {
       const src = fs.readFileSync(path.resolve(__dirname, '../ModesManager.ts'), 'utf8');
       const fn = src.slice(src.indexOf('prewarmModeReferenceIndex'));
-      const body = fn.slice(0, 1200);
+      const body = fn.slice(0, 2200);
       assert.match(body, /isRagLocalRerankEnabled/, 'prewarm must check the reranker flag');
-      assert.match(body, /getLocalReranker\(\)\.prewarm/, 'prewarm must call reranker.prewarm()');
+      assert.match(body, /reranker\.prewarm/, 'prewarm must call reranker.prewarm()');
     });
   });
 });

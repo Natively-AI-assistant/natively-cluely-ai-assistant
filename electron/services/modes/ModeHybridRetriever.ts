@@ -1027,13 +1027,23 @@ export class ModeHybridRetriever {
 
         const usingLexicalForLocalManualQuery = this.shouldUseLexicalForLocalManualQuery(hasTranscript);
 
+        const h4StageTrace = process.env.NATIVELY_E2E === '1'
+            && process.env.NATIVELY_H4_STAGE_TRACE === '1';
+        const h4StartedAt = Date.now();
+        const markH4HybridStage = (stage: string, details: Record<string, unknown> = {}) => {
+            if (h4StageTrace) console.log('[TRACE:H4-HYBRID]', JSON.stringify({ stage, atMs: Date.now() - h4StartedAt, ...details }));
+        };
         // Try hybrid retrieval first, fall back to lexical-only. Keyless/manual
         // local-ONNX query embedding is intentionally treated like an unavailable
         // embedding provider to reduce crash-prone native memory pressure.
+        markH4HybridStage('ranking_enter', { embeddingAvailable: this.isEmbeddingAvailable(), usingLexicalForLocalManualQuery });
         if (this.isEmbeddingAvailable() && !usingLexicalForLocalManualQuery) {
             try {
+                markH4HybridStage('perform_hybrid_enter', { candidateCount: allCandidates.length });
                 candidates = await this.performHybridRetrieval(allCandidates, queryWords, queryText, adaptiveThreshold, files);
+                markH4HybridStage('perform_hybrid_exit', { candidateCount: candidates.length });
             } catch (error) {
+                markH4HybridStage('perform_hybrid_error', { message: error instanceof Error ? error.message : String(error) });
                 console.warn('[ModeHybridRetriever] Hybrid retrieval failed, falling back to lexical:', error);
                 this.emitFallbackTelemetry({
                     reason: 'hybrid_threw',
@@ -1059,16 +1069,19 @@ export class ModeHybridRetriever {
             candidates = this.performLexicalRetrieval(allCandidates, queryWords, adaptiveThreshold);
         }
 
+        markH4HybridStage('ranking_complete', { candidateCount: candidates.length });
         if (forceDocumentGrounding) {
             // Preserve the Document Map's structural routing in the hybrid path.
             // The lexical retriever already uses this advisory section signal; omitting
             // it here meant the canonical Context OS resolver could retrieve a
             // topically similar section while excluding the exact table/subsection.
+            markH4HybridStage('document_map_enter', { fileCount: files.length });
             const sectionTargets = files.flatMap((file) => {
                 const map = buildDocumentMap(file.content);
                 return map.hasToc ? resolveTargetSections(queryText, map) : [];
             });
             const uniqueSectionTargets = [...new Set(sectionTargets)];
+            markH4HybridStage('document_map_exit', { targetCount: uniqueSectionTargets.length });
 
             // Targeted-section restore (2026-07-13): resolveTargetSections is a
             // strong, precise routing signal — it maps "what working voltage is
@@ -1095,7 +1108,9 @@ export class ModeHybridRetriever {
                 }
             }
 
+            markH4HybridStage('answerability_enter', { candidateCount: candidates.length });
             candidates = this.applyAnswerabilityScores(candidates, queryText, queryShape, uniqueSectionTargets);
+            markH4HybridStage('answerability_exit', { candidateCount: candidates.length });
 
             // A Table of Contents is navigation evidence, not topical evidence.
             // It is excluded from routine section ranking above, then explicitly
@@ -1187,11 +1202,34 @@ export class ModeHybridRetriever {
         if (allowRerank) {
             const gate = confidence
                 ?? this.computeConfidence(candidates, queryWords.size, allCandidates.length, usedFallback);
-            if (gate.lowConfidence) {
-                const escalated = await this.maybeRerankCandidates(queryText, candidates);
-                if (escalated) {
-                    candidates = escalated;
-                    reranked = true;
+            const lowConfidence = gate.lowConfidence === true;
+            markH4HybridStage('rerank_gate', { lowConfidence, candidateCount: candidates.length });
+            if (lowConfidence) {
+                // A manual-chat answer has a fixed first-useful deadline. The local
+                // cross-encoder is optional ranking refinement, so it must never
+                // consume that whole deadline and prevent a lexical/evidence-pack
+                // answer from reaching the provider. Keep its late result isolated
+                // rather than awaiting it on the critical path.
+                const RERANK_BUDGET_MS = 1200;
+                markH4HybridStage('rerank_enter', { candidateCount: candidates.length, budgetMs: RERANK_BUDGET_MS });
+                const rerankPromise = this.maybeRerankCandidates(queryText, candidates);
+                let rerankTimer: NodeJS.Timeout | undefined;
+                const raced = await Promise.race([
+                    rerankPromise.then((value) => ({ value, timedOut: false })),
+                    new Promise<{ value: ChunkCandidate[] | null; timedOut: boolean }>((resolve) => {
+                        rerankTimer = setTimeout(() => resolve({ value: null, timedOut: true }), RERANK_BUDGET_MS);
+                    }),
+                ]);
+                if (rerankTimer) clearTimeout(rerankTimer);
+                if (raced.timedOut) {
+                    markH4HybridStage('rerank_timeout', { budgetMs: RERANK_BUDGET_MS });
+                    rerankPromise.catch(() => { /* late optional rerank never rejects the turn */ });
+                } else {
+                    markH4HybridStage('rerank_exit', { reranked: Boolean(raced.value), candidateCount: raced.value?.length ?? candidates.length });
+                    if (raced.value) {
+                        candidates = raced.value;
+                        reranked = true;
+                    }
                 }
             }
         }
@@ -1199,12 +1237,14 @@ export class ModeHybridRetriever {
         // Deduplicate: keep highest-scoring chunk per file (default), or per
         // section when document-grounded (preserves multi-section answers).
         const deduped = this.deduplicateChunks(candidates, reranked, forceDocumentGrounding);
+        markH4HybridStage('dedupe_complete', { candidateCount: deduped.length });
 
         // Enforce token budget. For document-grounded modes with MULTIPLE files,
         // guarantee each file contributes its best chunk so a large dataset can't
         // starve a small one out of the retrieved set.
         const guaranteePerFile = forceDocumentGrounding && files.length > 1;
         const selected = this.enforceTokenBudget(deduped, tokenBudget, reranked, topK, guaranteePerFile, forceDocumentGrounding);
+        markH4HybridStage('selection_complete', { chunkCount: selected.length });
 
         // Format output with citations
         const formattedContext = this.formatContext(selected);

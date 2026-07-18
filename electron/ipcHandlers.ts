@@ -4165,6 +4165,28 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
+  safeHandle('get-code-verification', async () => {
+    // Default OFF: code verification is currently disabled. Only true when the
+    // user has explicitly opted in via Settings → General or env override.
+    const v = SettingsManager.getInstance().get('codeVerificationEnabled');
+    return v === true;
+  });
+
+  safeHandle('set-code-verification', async (_, enabled: boolean) => {
+    if (typeof enabled !== 'boolean') {
+      return { success: false, error: 'invalid_type' };
+    }
+    SettingsManager.getInstance().set('codeVerificationEnabled', enabled);
+    try {
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) {
+          win.webContents.send('code-verification-changed', enabled);
+        }
+      });
+    } catch { /* broadcasting is best-effort */ }
+    return { success: true };
+  });
+
   safeHandle('get-meeting-retention', async () => {
     return SettingsManager.getInstance().get('meetingRetention') ?? 'forever';
   });

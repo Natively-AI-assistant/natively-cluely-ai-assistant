@@ -795,6 +795,8 @@ interface ElectronAPI {
   // Verbose / Debug Logging
   getVerboseLogging: () => Promise<boolean>;
   setVerboseLogging: (enabled: boolean) => Promise<{ success: boolean }>;
+  getCodeVerification: () => Promise<boolean>;
+  setCodeVerification: (enabled: boolean) => Promise<{ success: boolean }>;
   getMeetingRetention: () => Promise<'forever' | '7d' | '30d' | 'never'>;
   setMeetingRetention: (
     retention: 'forever' | '7d' | '30d' | 'never',
@@ -2345,6 +2347,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Verbose / Debug Logging
   getVerboseLogging: () => ipcRenderer.invoke('get-verbose-logging'),
   setVerboseLogging: (enabled: boolean) => ipcRenderer.invoke('set-verbose-logging', enabled),
+  getCodeVerification: () => ipcRenderer.invoke('get-code-verification'),
+  setCodeVerification: (enabled: boolean) => ipcRenderer.invoke('set-code-verification', enabled),
   getMeetingRetention: () => ipcRenderer.invoke('get-meeting-retention'),
   setMeetingRetention: (retention: 'forever' | '7d' | '30d' | 'never') =>
     ipcRenderer.invoke('set-meeting-retention', retention),

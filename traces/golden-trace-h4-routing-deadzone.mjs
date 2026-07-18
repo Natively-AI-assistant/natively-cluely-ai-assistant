@@ -92,9 +92,18 @@ const phrasings = [
 const results = [];
 for (const item of phrasings) {
   await R('__e2e__:context-os-prompt-audit-clear');
+  await R('__e2e__:context-os-benchmark-audit-clear');
+  await app.evaluate(() => { globalThis.__contextOsProviderPayloadCapture = []; });
   const response = await askManual(item.q);
   const audit = await R('__e2e__:context-os-prompt-audit');
   const auditEntry = audit?.audit?.[audit.audit.length - 1];
+  const benchmarkAudit = await R('__e2e__:context-os-benchmark-audit');
+  const terminalAudit = benchmarkAudit?.records?.[benchmarkAudit.records.length - 1];
+  const providerCaptures = await app.evaluate(() => {
+    const captures = globalThis.__contextOsProviderPayloadCapture;
+    return Array.isArray(captures) ? captures : [];
+  });
+  const matchingProviderPayloads = providerCaptures.filter((entry) => JSON.stringify(entry).includes(item.q));
   const hasFact = /55\s*kg/i.test(response?.answer || '');
   results.push({
     label: item.label,
@@ -104,6 +113,13 @@ for (const item of phrasings) {
     hasTypedEvidencePack: auditEntry?.hasTypedEvidencePack ?? null,
     hasRawUploadedReference: auditEntry?.hasRawUploadedReference ?? null,
     factualBlockCount: auditEntry?.factualBlockCount ?? null,
+    terminal: terminalAudit?.terminal ?? null,
+    terminalAnswerPolicy: terminalAudit?.pack?.answerPolicy ?? null,
+    terminalSelectedEvidenceCount: terminalAudit?.pack?.selectedEvidenceIds?.length ?? null,
+    terminalCandidateEvidenceCount: terminalAudit?.pack?.candidateEvidenceIds?.length ?? null,
+    matchingProviderPayloadCount: matchingProviderPayloads.length,
+    matchingPayloadHas55kg: matchingProviderPayloads.some((entry) => /55\s*kg/i.test(JSON.stringify(entry))),
+    matchingPayloadHasMercury: matchingProviderPayloads.some((entry) => /Mercury X1/i.test(JSON.stringify(entry))),
     hasFact,
   });
 }

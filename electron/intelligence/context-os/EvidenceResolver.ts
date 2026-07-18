@@ -62,6 +62,7 @@ import {
   isOkfHybridRetrievalEnabled,
   isRagConfidenceGateEnabled,
   isRagLocalRerankEnabled,
+  isRagSpeculativeRerankEnabled,
 } from '../intelligenceFlags';
 
 // ── Public types ─────────────────────────────────────────────────────────────
@@ -504,7 +505,14 @@ export class EvidenceResolver {
     const { question, turnId, requestedProperty, transcript, followUpReferentHint, relaxed } = request;
 
     let result: Awaited<ReturnType<HybridRetrieverLike['retrieveHybrid']>>;
+    const h4StageTrace = process.env.NATIVELY_E2E === '1'
+      && process.env.NATIVELY_H4_STAGE_TRACE === '1';
+    const h4StartedAt = Date.now();
+    const markH4ResolverStage = (stage: string, details: Record<string, unknown> = {}) => {
+      if (h4StageTrace) console.log('[TRACE:H4-RESOLVER]', JSON.stringify({ stage, atMs: Date.now() - h4StartedAt, ...details }));
+    };
     try {
+      markH4ResolverStage('hybrid_enter', { fileCount: files.length, requestedProperty });
       result = await this.deps.hybridRetriever.retrieveHybrid(mode, files, {
         query: question,
         transcript,
@@ -512,11 +520,17 @@ export class EvidenceResolver {
         // forceDocumentGrounding is true — pass undefined so it self-selects.
         tokenBudget: relaxed ? 5200 : undefined,
         topK: relaxed ? 24 : undefined,
-        allowRerank: isRagLocalRerankEnabled(),
+        // The governed manual-chat path has a fixed first-useful deadline. It
+        // only opts into the optional local reranker when the explicit
+        // speculative rollout gate is on; ragLocalRerank merely permits the
+        // model, while ragSpeculativeRerank permits this live path to await it.
+        allowRerank: isRagLocalRerankEnabled() && isRagSpeculativeRerankEnabled(),
         forceDocumentGrounding: true,
         followUpReferentHint,
       });
-    } catch {
+      markH4ResolverStage('hybrid_exit', { chunkCount: result.chunks?.length ?? 0, usedFallback: result.usedFallback });
+    } catch (error: any) {
+      markH4ResolverStage('hybrid_error', { message: error?.message || String(error) });
       return {
         pack: this.emptyPack(request, 'insufficient'),
         strategy: 'insufficient',

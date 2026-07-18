@@ -570,6 +570,8 @@ export interface ElectronAPI {
   // Verbose / Debug Logging
   getVerboseLogging: () => Promise<boolean>;
   setVerboseLogging: (enabled: boolean) => Promise<{ success: boolean }>;
+  getCodeVerification: () => Promise<boolean>;
+  setCodeVerification: (enabled: boolean) => Promise<{ success: boolean }>;
   getMeetingRetention: () => Promise<'forever' | '7d' | '30d' | 'never'>;
   setMeetingRetention: (retention: 'forever' | '7d' | '30d' | 'never') => Promise<{ success: boolean; error?: string }>;
   onMeetingRetentionChanged: (callback: (retention: 'forever' | '7d' | '30d' | 'never') => void) => () => void;

@@ -4612,6 +4612,14 @@ const isMultimodal = !!(imagePaths?.length);
       || routeOptions?.answerType === 'document_absent_fact_refusal'
       || routeOptions?.answerType === 'document_followup_answer';
     const shouldSkipModeInjection = skipModeInjection || (isUniversalOverride && !isModeScopedAnswer && !isActiveCustomMode);
+    // Temporary H4 forensic trace: E2E-only, opt-in, and removed after this
+    // one-question stage capture. It separates resolver latency from final prompt
+    // rendering and provider dispatch without logging reference content.
+    const h4StageTrace = process.env.NATIVELY_E2E === '1'
+      && process.env.NATIVELY_H4_STAGE_TRACE === '1';
+    const markH4Stage = (stage: string, details: Record<string, unknown> = {}) => {
+      if (h4StageTrace) console.log('[TRACE:H4-STAGE]', JSON.stringify({ stage, atMs: Date.now() - _t0, ...details }));
+    };
 
     if (!shouldSkipModeInjection) {
       try {
@@ -4650,12 +4658,17 @@ const isMultimodal = !!(imagePaths?.length);
         let resolvedViaEvidenceResolver = false;
         let governedEvidenceResolutionStarted = false;
         let governedTurnQuestion: string | null = null;
+        markH4Stage('mode_injection_enter', {
+          forceDocumentGrounding,
+          hasContextOsGeneration: Boolean(routeOptions?.contextOsGeneration),
+        });
         try {
           const _cogEarly = routeOptions?.contextOsGeneration as import('./intelligence/context-os').ContextOsGenerationContext | undefined;
           const { isIntelligenceFlagEnabled: _isFlagOn } = require('./intelligence/intelligenceFlags');
           if (_cogEarly && _cogEarly.govern && forceDocumentGrounding && _isFlagOn('contextOsEvidencePackEnabled')) {
             governedEvidenceResolutionStarted = true;
             governedTurnQuestion = _cogEarly.turnQuestion?.trim() || null;
+            markH4Stage('resolver_enter', { hasTurnQuestion: Boolean(governedTurnQuestion) });
             if (!governedTurnQuestion) throw new Error('governed turn missing immutable turn question');
             if (_cogEarly.evidencePack) {
               modeContextBlock = _cogEarly.evidencePack.items
@@ -4702,6 +4715,11 @@ const isMultimodal = !!(imagePaths?.length);
               });
               (_cogEarly as any).evidencePack = resolution.pack;
               (_cogEarly as any).resolutionStrategy = resolution.strategy;
+              markH4Stage('resolver_exit', {
+                strategy: resolution.strategy,
+                itemCount: resolution.pack.items.length,
+                answerPolicy: resolution.pack.answerPolicy,
+              });
               // Render the SAME pack into the legacy string shape so downstream
               // telemetry/budget-check code (unchanged below) keeps working —
               // this is the ONLY place the pack is turned into text, and it is
@@ -4725,6 +4743,7 @@ const isMultimodal = !!(imagePaths?.length);
             }
           }
         } catch (_evidenceResolverErr: any) {
+          markH4Stage('resolver_error', { message: _evidenceResolverErr?.message || String(_evidenceResolverErr) });
           const _cogEarly = routeOptions?.contextOsGeneration as import('./intelligence/context-os').ContextOsGenerationContext | undefined;
           if (governedEvidenceResolutionStarted && _cogEarly) {
             const { emptyEvidencePack } = require('./intelligence/context-os/evidencePack') as typeof import('./intelligence/context-os/evidencePack');
@@ -5213,6 +5232,10 @@ const isMultimodal = !!(imagePaths?.length);
     // keys, or full prompt) to a process-global ring the E2E harness reads. Used
     // to assert the typed pack GOVERNS and no raw legacy factual block leaks.
     // Never enabled in production; content is never logged.
+    markH4Stage('prompt_ready', {
+      governedByTypedPack: Boolean(contextOsGoverningBlock),
+      userContentLength: userContent.length,
+    });
     if (process.env.NATIVELY_CONTEXT_OS_PROMPT_AUDIT === '1') {
       try {
         const crypto = require('crypto') as typeof import('crypto');
@@ -5255,6 +5278,7 @@ const isMultimodal = !!(imagePaths?.length);
         });
       }
     }
+    markH4Stage('provider_dispatch_start', { model: this.currentModelId });
     _stage(`provider dispatch START (sysPrompt=${finalSystemPrompt.length}c, userContent=${userContent.length}c, model=${this.currentModelId})`);
 
     // ── UNIFIED MULTIMODAL PATH ────────────────────────────────────────────
