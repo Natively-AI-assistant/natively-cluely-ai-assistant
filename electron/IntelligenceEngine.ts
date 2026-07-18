@@ -2357,14 +2357,37 @@ export class IntelligenceEngine extends EventEmitter {
 
             // Release 2026-06-07c: FINAL candidate-answer sanitizer on the WTA path —
             // strip an assistant-meta tail ("as an AI assistant", "I'm Natively", "I
-            // can't share") from a candidate-voice answer. If stripping empties it, the
-            // non-answer-sentinel / live-fallback paths below handle the replacement.
+            // can't share") from a candidate-voice answer.
             if (CANDIDATE_VOICE_ANSWER_TYPES.has(answerPlan.answerType)) {
                 try {
                     const sani = sanitizeCandidateAnswer(fullAnswer);
                     if (sani.repaired && !sani.needsFallback) {
                         fullAnswer = sani.text;
                         trace.mark('repair_used', { reason: 'candidate_sanitizer', markers: sani.removedMarkers.length });
+                    } else if (sani.needsFallback) {
+                        // Campaign 2 longsession run-023 finding (2026-07-18): the
+                        // comment this replaces claimed "the non-answer-sentinel /
+                        // live-fallback paths below handle the replacement" when the
+                        // WHOLE answer is assistant-meta (e.g. the bare stock refusal
+                        // "I can't share that information.") — that claim was never
+                        // true. Neither isNonAnswerSentinel nor isFalseNoContentClaim
+                        // matches a stock refusal (a different failure family), so
+                        // fullAnswer silently stayed as the raw, un-repaired refusal
+                        // all the way to the user (live-reproduced: press A9/A8, both
+                        // manual, both candidate-voice `jd_fit_answer`/`sales_answer`-
+                        // family types, both shipped "I can't share that information."
+                        // verbatim). The manual path (ipcHandlers.ts, same sanitizer)
+                        // already has this exact `needsFallback` branch — mirrored here.
+                        trace.mark('repair_used', { reason: 'candidate_sanitizer_needs_fallback', markers: sani.removedMarkers.length });
+                        if (documentGroundedCustomModeActive) {
+                            // Custom-Mode Source Isolation (2026-07-06): never fall back
+                            // to resume/JD prose in a document-grounded session — that
+                            // would inject candidate facts a contract forbids. Leave
+                            // fullAnswer as-is; the doc-grounded validators downstream
+                            // own this surface, not the profile sanitizer.
+                        } else {
+                            fullAnswer = "The model produced an invalid assistant-identity answer, so I won't guess from your profile. Please try again.";
+                        }
                     }
                 } catch (saniErr: any) {
                     console.warn('[IntelligenceEngine] candidate sanitizer skipped:', saniErr?.message);
