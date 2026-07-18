@@ -2327,3 +2327,74 @@ data keeps accumulating, but do not expect G3/G5/G6 to approach L4
 targets until this is fixed — it is now the single largest known
 contributor to those scores being low, larger than any harness or
 extraction bug fixed so far.
+
+## ITERATION 27 (2026-07-18) — false-no-content-claim guard implemented, reviewed, committed
+
+Did the focused implementation work deferred at the end of iteration
+26. Before writing code, re-verified the run-022 raw press data more
+carefully via `[TRACE:LONGCTX] nonanswer_sentinel_discard` presence/
+absence per press, and this changed the diagnosis: iteration 26's
+"18/50 hallucination" tally over-counted. A17/A18/C3/C9 (4 of the 18)
+actually show the raw model answer WAS the literal `"Nothing
+actionable right now."` sentinel, correctly caught and converted by
+the PRE-EXISTING `isNonAnswerSentinel` guard — that's the guard
+working as designed, not a bug. The corrected, narrower set of genuine
+unguarded raw hallucinations is A2, A3, A7, A12, C14 (5/50 = 10%) —
+still real and still the same underlying model-reliability problem,
+just smaller in count than first reported. (A4/A5's DSA-template
+misfire and C5/C6's leaked markup remain separate, not-yet-fixed
+findings — out of scope for this guard.)
+
+Added `IntelligenceEngine.isFalseNoContentClaim` + a call-site gate on
+`extractedQuestion.latestQuestion && extractedQuestion.confidence >=
+0.6`, normalizing a match to the existing sentinel string so it
+inherits `isNonAnswerSentinel`'s already-tested manual-press/
+speculative-path handling instead of duplicating logic. Wrote 6
+regression tests reproducing the exact A2/A3/A12 phrasings plus a
+negative test for the genuinely-empty-transcript case.
+
+**Skeptic pass (code-reviewer subagent) caught a CRITICAL bug in the
+first draft before commit**: the draft's regex used unanchored
+substring matching, which matched the FIRST CLAUSE of a real,
+extremely common candidate answer to "do you have any questions for
+us?" (e.g. "I don't have a specific question right now, but I'd love
+to hear more about..."). The reviewer reproduced this LIVE against the
+compiled engine — the real, substantive answer was silently discarded
+end-to-end and replaced with the generic fallback, zero tokens ever
+shown to the user. This is the exact defect class this guard exists to
+prevent, reintroduced by the guard itself. Rewrote the regex to
+require the ENTIRE trimmed answer (minus at most one short trailing
+question, needed for A2's exact phrasing) to match one of five
+near-exact anchored patterns, mirroring `isNonAnswerSentinel`'s own
+match discipline instead of substring matching. Added 4 more tests
+covering both false-positive scenarios the reviewer found, a length-
+boundary case, and a confidence-boundary case (10 tests total).
+
+**Second skeptic pass** (fresh code-reviewer subagent, adversarially
+targeting the same failure class plus the new trailing-question-strip
+logic) approved the rewrite — could not construct a new false
+positive, confirmed all 22 tests pass (10 new + 8 sentinel + 4 lecture
+carve-out), flagged one LOW-severity residual edge case (a candidate
+literally answering "there's nothing captured yet" to an interview
+question that happens to be ABOUT capture/logging state) as
+acceptable given how narrow and rare that alignment is, bounded by the
+same confidence gate.
+
+Committed as `e3641b96` (2 files: `IntelligenceEngine.ts` +
+new test file, 297 insertions). Verified isolation from concurrent
+sessions before staging (only these 2 files, despite
+`electron/intelligence/__tests__/RolloutFallback.test.mjs` being
+mid-edit by another session throughout this iteration — left
+untouched).
+
+**NEXT ACTION**: launch a fresh judged run to measure whether this fix
+actually moves G3/G5/G6 in the expected direction (should reduce raw-
+hallucination-driven failures from ~10% toward closer to 0%, though
+A4/A5's DSA-template misfire and C5/C6's leaked-markup findings remain
+unaddressed and will still suppress full recovery to L4 targets).
+Standard health check first (provider health, concurrent-harness
+check, branch confirmation) since this is a shared, actively-used
+branch. After the run, compare run-022's per-press classification
+against the new run's — specifically confirm A2/A3/A7/A12/C14's exact
+scenarios (or their re-generated equivalents at similar transcript
+positions) no longer produce the untouched raw hallucination text.
