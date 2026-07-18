@@ -324,15 +324,33 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   jitFinalAnswerEnforced: { env: 'NATIVELY_JIT_FINAL_ANSWER_ENFORCED', setting: 'jitFinalAnswerEnforcedEnabled', default: true },
   // ── Context OS / Source Authority Kernel (2026-07-10) ────────────────────
   // Rollout ladder (docs/context-os/): observe → shadow-block → enforce, per
-  // surface. Everything default OFF in production; the umbrella + observe-only
-  // surfaces default ON in dev/test so the contamination suite exercises the
-  // real path (same convention as okfProfilePacks).
-  contextOsEnabled: { env: 'NATIVELY_CONTEXT_OS', setting: 'contextOsEnabled', default: isInternalDevTestContext },
-  contextOsManualChatEnabled: { env: 'NATIVELY_CONTEXT_OS_MANUAL_CHAT', setting: 'contextOsManualChatEnabled', default: isInternalDevTestContext },
-  contextOsWtaEnabled: { env: 'NATIVELY_CONTEXT_OS_WTA', setting: 'contextOsWtaEnabled', default: isInternalDevTestContext },
-  contextOsRecapFollowupEnabled: { env: 'NATIVELY_CONTEXT_OS_RECAP_FOLLOWUP', setting: 'contextOsRecapFollowupEnabled', default: isInternalDevTestContext },
-  contextOsEvidencePackEnabled: { env: 'NATIVELY_CONTEXT_OS_EVIDENCE_PACK', setting: 'contextOsEvidencePackEnabled', default: isInternalDevTestContext },
-  contextOsMemorySafetyEnabled: { env: 'NATIVELY_CONTEXT_OS_MEMORY_SAFETY', setting: 'contextOsMemorySafetyEnabled', default: isInternalDevTestContext },
+  // surface. Originally everything defaulted OFF in production pending
+  // telemetry validation; the umbrella + observe-only surfaces defaulted ON
+  // in dev/test so the contamination suite exercised the real path (same
+  // convention as okfProfilePacks).
+  //
+  // PROMOTED TO PRODUCTION DEFAULT-ON (2026-07-18, grounding campaign): this
+  // is the "telemetry validation" the original decision was waiting on. This
+  // campaign's live-Electron traces (real MiniMax-M3, real thesis document,
+  // no mocking) exercised this exact pipeline end-to-end and found it
+  // correct: H4 routing dead zone refuted (all 10 phrasings route
+  // correctly), NEW-3 false-refusal fabrication found+fixed, THESIS-091
+  // query-dependent recall gap found+fixed, C8 rapid-fire desync tested
+  // clean (3/3 runs, zero cross-contamination). The stricter invariant this
+  // flag enables (one typed EvidencePack before the provider, no
+  // unrestricted raw-retrieval fallback, final-prompt validation) is a
+  // hallucination-prevention improvement over the legacy path, promoted ON
+  // per explicit user instruction after this evidence was presented.
+  // contextOsEnforceSourceCapabilities / contextOsPropertyValidation are
+  // SEPARATE, stricter enforcement flags not covered by this promotion — see
+  // their own comment below; they remain dev/test-only pending their own
+  // dedicated rollout decision.
+  contextOsEnabled: { env: 'NATIVELY_CONTEXT_OS', setting: 'contextOsEnabled', default: true },
+  contextOsManualChatEnabled: { env: 'NATIVELY_CONTEXT_OS_MANUAL_CHAT', setting: 'contextOsManualChatEnabled', default: true },
+  contextOsWtaEnabled: { env: 'NATIVELY_CONTEXT_OS_WTA', setting: 'contextOsWtaEnabled', default: true },
+  contextOsRecapFollowupEnabled: { env: 'NATIVELY_CONTEXT_OS_RECAP_FOLLOWUP', setting: 'contextOsRecapFollowupEnabled', default: true },
+  contextOsEvidencePackEnabled: { env: 'NATIVELY_CONTEXT_OS_EVIDENCE_PACK', setting: 'contextOsEvidencePackEnabled', default: true },
+  contextOsMemorySafetyEnabled: { env: 'NATIVELY_CONTEXT_OS_MEMORY_SAFETY', setting: 'contextOsMemorySafetyEnabled', default: true },
   // Real-custom-mode-repair (2026-07-11), Phase 7: these two flags gate the
   // ONLY code paths that actually ACT on the kernel's decision (the
   // clarification short-circuit and the hard capability gate). Before this

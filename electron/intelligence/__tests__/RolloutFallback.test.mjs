@@ -24,6 +24,18 @@ const DEFAULT_ON_KEYS = new Set([
   // production policy, not a dev/test-only experiment), restored 2026-07-14
   // after the 2026-07-09 stability rollback was resolved.
   'jitFinalAnswerEnforced',
+  // Context OS core pipeline — promoted from dev/test-only to unconditional
+  // production default-ON (2026-07-18, grounding campaign) after live
+  // verification (H4/NEW-3/THESIS-091/C8 traces, real MiniMax-M3, real
+  // documents). contextOsEnforceSourceCapabilities/contextOsPropertyValidation/
+  // contextOsMultiFamilyEvidenceEnabled are SEPARATE stricter flags not
+  // covered by this promotion — they stay dev/test-only (isInternalDevTestContext).
+  'contextOsEnabled',
+  'contextOsManualChatEnabled',
+  'contextOsWtaEnabled',
+  'contextOsRecapFollowupEnabled',
+  'contextOsEvidencePackEnabled',
+  'contextOsMemorySafetyEnabled',
 ]);
 
 const expectedDefault = (key) => DEFAULT_ON_KEYS.has(key) ? true : false;
