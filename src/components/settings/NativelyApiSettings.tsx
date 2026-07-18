@@ -15,6 +15,7 @@ import {
   Zap,
 } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useT } from '../../i18n';
 import { NativelyLogoMark } from '../NativelyLogoMark';
 import { FreeTrialModal } from '../trial/FreeTrialModal';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
@@ -376,6 +377,7 @@ interface NativelyApiSettingsProps {
 }
 
 export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initialIsSaved = false }) => {
+  const t = useT();
   const [apiKey, setApiKey] = useState(() => (initialIsSaved ? MASKED_NATIVELY_KEY : ''));
   const [isSaved, setIsSaved] = useState(initialIsSaved);
   const [isLoading, setIsLoading] = useState(!initialIsSaved);
@@ -974,7 +976,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
       {/* ── Page title ───────────────────────────────────── */}
       <header className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-bold text-text-primary mb-1">Natively API</h3>
+          <h3 className="text-lg font-bold text-text-primary mb-1">{t('Natively API')}</h3>
           <p className="text-xs text-text-secondary mb-5">
             Managed transcription, AI &amp; search
           </p>

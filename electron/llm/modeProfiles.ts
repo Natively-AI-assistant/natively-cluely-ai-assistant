@@ -22,6 +22,7 @@
 // trivially testable and safe on the hot path.
 
 import type { AnswerType, AnswerSource } from './AnswerPlanner';
+import type { ModeSourceContract } from '../services/modeSourceContract';
 
 /** Mirror of ModesManager's ModeTemplateType (kept local so this module stays
  *  pure and AnswerPlanner never imports from services/). Structurally identical
@@ -53,6 +54,8 @@ export interface ActiveModeInfo {
      * files authoritative and at least one reference file is available.
      */
     documentGroundedCustomModeActive?: boolean;
+    /** The mode's persisted, explicit source policy (real-custom-mode-repair). */
+    sourceContract?: ModeSourceContract;
 }
 
 export interface ModeContextProfile {

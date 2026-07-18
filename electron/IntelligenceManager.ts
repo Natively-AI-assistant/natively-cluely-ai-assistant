@@ -9,7 +9,7 @@
 
 import { EventEmitter } from 'events';
 import { LLMHelper } from './LLMHelper';
-import { SessionTracker } from './SessionTracker';
+import { SessionTracker, type ConversationSurface } from './SessionTracker';
 import { IntelligenceEngine } from './IntelligenceEngine';
 import { MeetingPersistence } from './MeetingPersistence';
 import { ScreenContext } from './services/screen/ScreenContextService';
@@ -112,16 +112,20 @@ export class IntelligenceManager extends EventEmitter {
         }
     }
 
-    addAssistantMessage(text: string, writeDecision?: { policy?: 'store_conversational_only' | 'store_non_authoritative' | 'do_not_store'; reason?: string; blockedFromSessionTracker?: boolean }): void {
-        this.session.addAssistantMessage(text, writeDecision);
+    addAssistantMessage(
+        text: string,
+        writeDecision?: { policy?: 'store_conversational_only' | 'store_non_authoritative' | 'do_not_store'; reason?: string; blockedFromSessionTracker?: boolean },
+        surface?: ConversationSurface,
+    ): void {
+        this.session.addAssistantMessage(text, writeDecision, surface);
     }
 
     getContext(lastSeconds: number = 120) {
         return this.session.getContext(lastSeconds);
     }
 
-    getLastAssistantMessage(): string | null {
-        return this.session.getLastAssistantMessage();
+    getLastAssistantMessage(surface?: ConversationSurface): string | null {
+        return this.session.getLastAssistantMessage(surface);
     }
 
     getFormattedContext(lastSeconds: number = 120): string {

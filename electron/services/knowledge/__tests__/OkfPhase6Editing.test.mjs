@@ -63,8 +63,13 @@ test('OkfCardEditor: isCardRetrievable excludes only rejected cards', () => {
 });
 
 test('OkfRetriever: queryOkfCards excludes rejected cards from all retrieval paths (synthesis and scored)', () => {
+  // Rejection is filtered ONCE at the source; both the synthesis path (which
+  // further narrows to content cards) and the scored path derive from that set.
   assert.match(retrieverSrc, /const retrievableCards = pack\.cards\.filter\(\(c\) => c\.approvalStatus !== 'rejected'\);/);
-  assert.match(retrieverSrc, /retrievableCards\.slice\(0, topN\)/);
+  // Synthesis path narrows retrievableCards to non-metadata content, then slices.
+  assert.match(retrieverSrc, /retrievableCards\.filter\(\(c\) => c\.type !== 'metadata'\)/);
+  assert.match(retrieverSrc, /\.slice\(0, topN\)/);
+  // Scored path maps over retrievableCards.
   assert.match(retrieverSrc, /retrievableCards\.map\(\(card\) => \(\{/);
 });
 

@@ -222,11 +222,24 @@ export class LocalWhisperSTT extends EventEmitter {
         this.isActive = true;
         this.vad = new VadProcessor();
         this.spawnWorker().catch((err) => {
-            // Gate refusal or worker spawn failure. The streaming loop will
-            // stall on `!workerReady` until a retry succeeds; surface as an
-            // error event so the UI can fall back to cloud STT.
+            // Gate refusal or worker spawn failure (e.g. insufficient memory for
+            // the ONNX session). There is NO retry path, so we must NOT leave a
+            // live streaming loop + VAD churning with worker=null — that silently
+            // drops every audio segment (dispatchFinal early-returns on !worker)
+            // and leaks a self-chaining 12s streaming timer for the whole session.
+            // Tear the instance back down to a clean inactive no-op (write() then
+            // no-ops on !isActive/!vad) and surface the error so the supervisor
+            // can fall back to cloud STT.
             console.error('[LocalWhisperSTT] spawnWorker failed:', err);
-            this.emit('error', err);
+            this.stopStreamingLoop();
+            if (this.gapFlushTimer) {
+                clearTimeout(this.gapFlushTimer);
+                this.gapFlushTimer = null;
+            }
+            this.vad = null;
+            this.isActive = false;
+            this.workerReady = false;
+            this.emit('error', err instanceof Error ? err : new Error(String(err)));
         });
         this.startStreamingLoop();
     }
@@ -617,9 +630,9 @@ export class LocalWhisperSTT extends EventEmitter {
         // is latency-critical (~750ms real-time streaming) and would deadlock
         // behind a queued embedding batch.
         if (!hasEnoughMemoryForOnnxSession()) {
-            const freeGB = (process.memoryUsage().heapUsed / 1024 ** 3).toFixed(1);
+            const heapGB = (process.memoryUsage().heapUsed / 1024 ** 3).toFixed(1);
             throw new Error(
-                `[LocalWhisperSTT] insufficient free memory (<${getMinFreeGBForOnnxSession()}GB) — Whisper init refused (heaped=${freeGB}GB)`,
+                `[LocalWhisperSTT] insufficient available memory (<${getMinFreeGBForOnnxSession()}GB) — Whisper init refused (heaped=${heapGB}GB)`,
             );
         }
 

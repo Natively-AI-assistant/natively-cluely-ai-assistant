@@ -54,8 +54,16 @@ export interface DocumentMap {
     sections: DocumentSection[];
     /** Total [Page N] markers seen — the real page count. */
     pageCount: number;
-    /** Number of ToC lines excluded from the corpus. */
+    /** Number of ToC lines excluded from ordinary section bodies. */
     tocLinesRemoved: number;
+    /** A normalized, separately-retrievable table of contents. Keeping this
+     * separate prevents navigation entries from polluting topical retrieval while
+     * retaining legitimate structural questions such as chapter titles/pages. */
+    tableOfContents?: {
+        pageStart: number;
+        pageEnd: number;
+        entries: string[];
+    };
     /** True if a recognisable Table of Contents was detected and excluded AND
      *  enough real sections were found to chunk by section. */
     hasToc: boolean;
@@ -82,6 +90,82 @@ const BIBLIO_RE = /\bet al\b|\b[A-Z]\.\s?[A-Z]?\.?\s+[A-Z][a-z]+|\b[A-Z][a-z]+\s
 
 function hasDottedLeader(line: string): boolean {
     return DOTTED_LEADER_RE.test(line);
+}
+
+// A space-aligned two-column table ROW extracted from a PDF: a short label phrase
+// followed by a value, e.g. "Working Voltage 24 V", "Control System NVIDIA Jetson
+// Xavier (main), Jetson Nano (aux)". PDF text extraction drops the column gap to a
+// single space, so a row is "<1-4 Title-cased/hyphenated label words> <value>".
+// We require the label to be short, Title-cased-ish, and NOT end in sentence
+// punctuation (prose sentences do). The value must be non-empty. This is a
+// heuristic used ONLY to preserve row boundaries inside a detected table run — it
+// never changes which section a line belongs to.
+const TABLE_ROW_RE = /^((?:[A-Z][A-Za-z0-9/+-]*)(?:\s+(?:of|and|&|the|per|[A-Z][A-Za-z0-9/+-]*)){0,4})\s+([^\s].*?)\s*$/;
+// A short label is at most this many words — beyond it the line is prose.
+const TABLE_LABEL_MAX_WORDS = 5;
+
+function isProbableTableRow(line: string): { label: string; value: string } | null {
+    const t = line.trim();
+    if (!t || t.length > 90) return null;               // long lines are prose
+    if (/[.:;]$/.test(t)) return null;                   // sentence-terminated → prose
+    if (hasDottedLeader(t)) return null;
+    const m = t.match(TABLE_ROW_RE);
+    if (!m) return null;
+    const label = m[1].trim();
+    const value = m[2].trim();
+    if (!label || !value) return null;
+    if (label.split(/\s+/).length > TABLE_LABEL_MAX_WORDS) return null;
+    // The value should not itself be a whole sentence (a heuristic: a value rarely
+    // contains 12+ words). This keeps "Weight 55 kg (net)" but rejects a prose line
+    // that happens to start with a capitalized word.
+    if (value.split(/\s+/).length > 12) return null;
+    return { label, value };
+}
+
+/**
+ * Reformat a section body so that a run of space-aligned table rows (a PDF spec
+ * table like "Working Voltage 24 V\nBattery Life Up to 8 hours") keeps each row on
+ * its own line, while ordinary prose is whitespace-collapsed as before. Without
+ * this, `.replace(/\s+/g,' ')` fused every row into an ambiguous blob ("Working
+ * Voltage 24 V Battery Life Up to 8 hours …") from which the model could not
+ * reliably map a label to its value. Pure + deterministic; references no document,
+ * entity, or field name.
+ */
+export function formatBodyPreservingTables(rawLines: string[]): string {
+    // Strip page markers and blanks for run detection but keep original order.
+    const lines = rawLines.map((l) => l.replace(PAGE_MARKER_RE, '').trim()).filter((l) => l.length > 0);
+    const out: string[] = [];
+    let i = 0;
+    while (i < lines.length) {
+        // Look ahead: how many consecutive lines from i look like table rows?
+        let j = i;
+        const rows: Array<{ label: string; value: string; raw: string }> = [];
+        while (j < lines.length) {
+            const row = isProbableTableRow(lines[j]);
+            if (!row) break;
+            rows.push({ ...row, raw: lines[j] });
+            j++;
+        }
+        // A real table is a RUN of at least 3 rows. Fewer than that is likely
+        // incidental prose that happens to start capitalized, so leave it to prose
+        // flattening.
+        if (rows.length >= 3) {
+            // Preserve each row on its ORIGINAL line — keep the row boundary, but do
+            // NOT re-split into "Label: Value". PDF column gaps are ambiguous (a
+            // multi-word label vs a multi-word value cannot be told apart reliably),
+            // so a forced colon mangled front-matter rows like "Date 21 June 2025
+            // Number of pages 67 Language English". Keeping the raw line intact fixes
+            // the real defect (rows fused into one blob) without inventing a wrong
+            // split point — the model reads a labelled row either way.
+            for (const r of rows) out.push(r.raw);
+            i = j;
+            continue;
+        }
+        out.push(lines[i]);
+        i++;
+    }
+    // Collapse remaining intra-line whitespace but KEEP the row newlines we set.
+    return out.map((l) => l.replace(/\s+/g, ' ').trim()).join('\n').trim();
 }
 
 // Within the ToC region, a "N.N Title <page>" line is navigation.
@@ -129,7 +213,17 @@ function detectTocRegion(lines: string[]): { start: number; end: number; count: 
         }
     }
     if (count < 5) return null; // a real ToC is many dotted lines; <5 is incidental
-    return { start: first, end: last, count };
+    // Extend the region backward over any leading "N.N Title <page>" entry lines
+    // that precede the first dotted leader (a ToC often opens with a few
+    // leaderless numbered entries before the dots begin).
+    let start = first;
+    for (let i = first - 1; i >= 0; i--) {
+        const t = lines[i].trim();
+        if (t === '' || PAGE_MARKER_RE.test(lines[i])) continue;
+        if (isTocEntryLine(lines[i])) { start = i; continue; }
+        break;
+    }
+    return { start, end: last, count };
 }
 
 /**
@@ -150,9 +244,15 @@ export function buildDocumentMap(content: string): DocumentMap {
     let curPage = 1;
     let maxPage = 1;
     let tocLinesRemoved = 0;
+    const tocEntries: string[] = [];
+    let tocPageStart: number | null = null;
+    let tocPageEnd: number | null = null;
 
     const flush = () => {
-        const body = current.body.join('\n').replace(/\s+/g, ' ').trim();
+        // formatBodyPreservingTables keeps space-aligned table rows on their own
+        // lines (a PDF spec table) while whitespace-collapsing prose, so a value
+        // like "Working Voltage 24 V" stays mappable to its label.
+        const body = formatBodyPreservingTables(current.body);
         if (body || current.heading) {
             sections.push({
                 num: current.num,
@@ -179,6 +279,9 @@ export function buildDocumentMap(content: string): DocumentMap {
         // ToC region) are navigation, not content.
         if (hasDottedLeader(line) || (inToc && isTocEntryLine(line))) {
             tocLinesRemoved++;
+            if (tocPageStart === null) tocPageStart = curPage;
+            tocPageEnd = curPage;
+            tocEntries.push(line.trim());
             continue;
         }
         const h = parseHeading(line);
@@ -215,8 +318,11 @@ export function buildDocumentMap(content: string): DocumentMap {
     const isPathB = !isPathA && numberedSections >= 5 && hasMultiLevel;
     const hasToc = isPathA || isPathB;
     const hasTocPath: 'A' | 'B' | null = isPathA ? 'A' : isPathB ? 'B' : null;
+    const tableOfContents = tocEntries.length > 0
+        ? { pageStart: tocPageStart ?? 1, pageEnd: tocPageEnd ?? tocPageStart ?? 1, entries: tocEntries }
+        : undefined;
 
-    return { sections, pageCount: maxPage, tocLinesRemoved, hasToc, hasTocPath };
+    return { sections, pageCount: maxPage, tocLinesRemoved, tableOfContents, hasToc, hasTocPath };
 }
 
 /**
@@ -321,6 +427,45 @@ export function sentenceAwareWindows(text: string, targetWords: number, overlapW
     return windows.filter((w, idx) => idx === 0 || w !== windows[idx - 1]);
 }
 
+/**
+ * Select the Table-of-Contents entries most relevant to a STRUCTURAL query
+ * ("what is the title of chapter 3?", "what page does the methodology begin?").
+ * Returns the matching ToC entry lines, or [] when the query is not structural /
+ * nothing matches. Generic — no document-specific headings are hardcoded; scoring
+ * is derived from the query's own content words against each entry.
+ */
+export function selectTableOfContentsEntries(query: string, map: DocumentMap): string[] {
+    const entries = map.tableOfContents?.entries ?? [];
+    if (entries.length === 0) return [];
+    const normalized = String(query || '').toLowerCase();
+    // "chapter N" → the entry whose number starts with N.
+    const chapter = normalized.match(/\bchapter\s+(\d{1,2})\b/);
+    if (chapter) {
+        const chapterRe = new RegExp(`^\\s*${chapter[1]}(?:\\s|\\.)`);
+        return entries.filter((entry) => chapterRe.test(entry));
+    }
+    const queryWords = new Set(
+        normalized.replace(/[^a-z0-9#-]+/g, ' ').split(/\s+/).filter((word) => word.length > 2 && !(new Set([
+            'according', 'contents', 'table', 'what', 'which', 'where', 'when', 'does',
+            'page', 'begin', 'begins', 'section', 'chapter', 'title', 'thesis', 'document',
+            'paper', 'listed', 'start', 'starts',
+        ])).has(word)),
+    );
+    if (queryWords.size === 0) {
+        return /\btable of contents\b/i.test(query) ? entries : [];
+    }
+    const scored = entries.map((entry) => {
+        const entryWords = new Set(entry.toLowerCase().match(/[a-z0-9#-]{3,}/g) ?? []);
+        const hits = [...queryWords].filter((word) => entryWords.has(word)).length;
+        return { entry, hits, score: hits / Math.sqrt(Math.max(1, entryWords.size)) };
+    }).filter(({ hits }) => hits > 0);
+    if (scored.length === 0) return [];
+    scored.sort((a, b) => b.score - a.score || b.hits - a.hits);
+    const best = scored[0];
+    if (best.hits < 2 && best.score < 0.22) return [];
+    return scored.filter((item) => item.hits === best.hits && item.score >= best.score * 0.8).map((item) => item.entry);
+}
+
 export function sectionAwareChunksFromMap(
     map: DocumentMap,
     chunkWords: number,
@@ -328,6 +473,15 @@ export function sectionAwareChunksFromMap(
 ): string[] | null {
     if (!map.hasToc) return null;
     const chunks: string[] = [];
+    // Prepend the Table of Contents as its own retrievable chunk so structural
+    // questions (chapter titles, "what page does X begin") can resolve it without
+    // it polluting topical section retrieval.
+    if (map.tableOfContents?.entries.length) {
+        const pageRange = map.tableOfContents.pageEnd === map.tableOfContents.pageStart
+            ? `${map.tableOfContents.pageStart}`
+            : `${map.tableOfContents.pageStart}-${map.tableOfContents.pageEnd}`;
+        chunks.push(`[Table of Contents | p${pageRange}]\n${map.tableOfContents.entries.join('\n')}`);
+    }
     for (const section of map.sections) {
         const body = section.body.trim();
         if (!body) continue;

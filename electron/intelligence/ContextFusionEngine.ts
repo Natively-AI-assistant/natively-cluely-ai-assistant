@@ -249,9 +249,15 @@ function looksIdentityShaped(text: string): boolean {
 // untrusted block carrying an instruction is neutralized even when phrased with
 // extra words ("ignore ALL PREVIOUS instructions") the canonical regex misses. The
 // PromptAssembler escapes these too; this is the earlier, fusion-level guard.
+//
+// Security fix (campaign2, longsession, 2026-07-17): even this "broader" set missed
+// a possessive pronoun between the verb and "previous/prior" — "Ignore YOUR
+// previous instructions" (the exact literal phrasing in this campaign's own
+// adversarial benchmark fixture) matched none of these. Added `(?:my|your|our)\s+`
+// as an additional optional prefix alongside the existing all/any/the options.
 const FUSION_INJECTION_PATTERNS: RegExp[] = [
-  /\bignore\s+(?:all\s+|any\s+|the\s+)?(?:previous|prior|above|earlier)\s+(?:instructions?|prompts?|messages?)\b/i,
-  /\bdisregard\s+(?:all\s+|any\s+|the\s+)?(?:previous|prior|above)\s+(?:instructions?|prompts?)\b/i,
+  /\bignore\s+(?:all\s+|any\s+|the\s+|my\s+|your\s+|our\s+)?(?:previous|prior|above|earlier)\s+(?:instructions?|prompts?|messages?)\b/i,
+  /\bdisregard\s+(?:all\s+|any\s+|the\s+|my\s+|your\s+|our\s+)?(?:previous|prior|above)\s+(?:instructions?|prompts?)\b/i,
   /\b(?:reveal|show|print|repeat|leak)\s+(?:the\s+|your\s+)?(?:system|developer)\s+prompt\b/i,
   /\byou\s+are\s+now\s+(?:a|an|the)\b/i,
   /\bact\s+as\s+(?:if|a|an|the)\b/i,

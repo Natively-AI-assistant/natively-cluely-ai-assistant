@@ -517,10 +517,17 @@ export class CodexCliService {
 
       let response: Response;
       try {
+        const serializedBody = JSON.stringify(body);
+        require('../llm/providerPayloadCapture').captureProviderPayload({
+          provider: 'codex',
+          classification: 'exact_serialized_provider_payload',
+          payload: body,
+          serializedPayload: serializedBody,
+        });
         response = await fetch(CODEX_RESPONSES_URL, {
           method: 'POST',
           headers: merged,
-          body: JSON.stringify(body),
+          body: serializedBody,
           signal,
         });
       } catch (e: any) {

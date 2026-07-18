@@ -33,6 +33,21 @@
  * better-sqlite3.
  */
 (() => {
+  // ESCAPE HATCH: this gate's only failure mode of last resort is a
+  // FALSE POSITIVE — misclassifying a healthy `.node` as wrong-arch and
+  // showing a fatal modal + app.exit(1) BEFORE any window exists, which
+  // permanently locks the user out of boot with no in-app recovery. A
+  // packaging or `file`-classification regression is exactly the kind of
+  // thing that has bricked a shipped build before. NATIVELY_SKIP_ARCH_GATE=1
+  // disables the gate entirely so a false positive can never trap a user;
+  // worst case without the gate is a clear dlopen error later, not a silent
+  // lockout. (The gate remains ON by default — this is a support-desk
+  // "run this and reopen" lever, not a normal-operation flag.)
+  if (process.env.NATIVELY_SKIP_ARCH_GATE === '1') {
+    try { console.warn('[nativeArch] NATIVELY_SKIP_ARCH_GATE=1 — boot arch gate DISABLED'); } catch { /* best-effort */ }
+    return;
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const path = require('path');
   // eslint-disable-next-line @typescript-eslint/no-var-requires

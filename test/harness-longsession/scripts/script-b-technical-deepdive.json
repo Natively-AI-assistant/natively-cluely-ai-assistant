@@ -1,0 +1,216 @@
+{
+  "id": "script-b",
+  "name": "Technical Deep-Dive (reference-PDF grounded: Attention Is All You Need)",
+  "description": "30-minute two-channel technical deep-dive on the Transformer architecture, grounded in test-fixtures/modes-corpus/papers/attention_is_all_you_need_1706.03762.pdf loaded as a Modes Manager reference file (reference_files_primary source contract, real hybrid retrieval). All expectedFacts below are directly verifiable in the paper's own text (checked against a live pdf-parse extraction during harness construction). 16 answer-button press points.",
+  "fixtures": {
+    "referencePdfPath": "test-fixtures/modes-corpus/papers/attention_is_all_you_need_1706.03762.pdf",
+    "modeTemplateType": "lecture"
+  },
+  "timeline": [
+    { "t": "00:00:05", "channel": "interviewer", "text": "Thanks for joining — today we're doing a deep dive on the Transformer paper you were asked to read, Attention Is All You Need. Ready to get started?" },
+    { "t": "00:00:15", "channel": "user", "text": "Yes, ready — I read through it carefully." },
+    { "t": "00:00:30", "channel": "interviewer", "text": "Let's start simple — what architecture does the paper propose, and what does it deliberately avoid using?" },
+    {
+      "t": "00:00:32", "channel": "interviewer", "text": "__PRESS__",
+      "press": {
+        "id": "B1", "label": "architecture-overview",
+        "canonicalQuestion": "What architecture does the paper propose, and what does it deliberately avoid using?",
+        "expectedFacts": ["Transformer", "recurrence", "convolution"],
+        "longRangeRecall": false
+      }
+    },
+    { "t": "00:01:20", "channel": "user", "text": "It's based solely on attention, no recurrence or convolution needed." },
+    { "t": "00:01:50", "channel": "interviewer", "text": "How many identical layers are stacked in the encoder?" },
+    {
+      "t": "00:01:52", "channel": "interviewer", "text": "__PRESS__",
+      "press": {
+        "id": "B2", "label": "encoder-layer-count",
+        "canonicalQuestion": "How many identical layers are stacked in the encoder?",
+        "expectedFacts": ["6"],
+        "longRangeRecall": false
+      }
+    },
+    { "t": "00:02:30", "channel": "user", "text": "Six." },
+    { "t": "00:03:00", "channel": "interviewer", "text": "Quick tangent — did you have any trouble finding the reading room today?" },
+    { "t": "00:03:10", "channel": "user", "text": "No, it was easy to find, thanks." },
+    { "t": "00:03:30", "channel": "interviewer", "text": "Back to the paper — how many parallel attention heads does the model use, and what's the per-head dimension?" },
+    {
+      "t": "00:03:32", "channel": "interviewer", "text": "__PRESS__",
+      "press": {
+        "id": "B3", "label": "multihead-count-dims",
+        "canonicalQuestion": "How many parallel attention heads does the model use, and what's the per-head dimension?",
+        "expectedFacts": ["8", "64"],
+        "longRangeRecall": false
+      }
+    },
+    { "t": "00:04:20", "channel": "user", "text": "Eight heads, 64-dimensional each." },
+    { "t": "00:04:50", "channel": "interviewer", "text": "What positional encoding does the paper use, and why sine and cosine functions?" },
+    {
+      "t": "00:04:52", "channel": "interviewer", "text": "__PRESS__",
+      "press": {
+        "id": "B4", "label": "positional-encoding",
+        "canonicalQuestion": "What positional encoding does the paper use, and why sine and cosine functions?",
+        "expectedFacts": ["sine", "cosine"],
+        "longRangeRecall": false
+      }
+    },
+    { "t": "00:05:40", "channel": "user", "text": "Sine and cosine functions of different frequencies, so relative positions can be represented as a linear function." },
+    { "t": "00:06:10", "channel": "interviewer", "text": "What BLEU score did the big Transformer model achieve on WMT 2014 English-to-German?" },
+    {
+      "t": "00:06:12", "channel": "interviewer", "text": "__PRESS__",
+      "press": {
+        "id": "B5", "label": "bleu-en-de",
+        "canonicalQuestion": "What BLEU score did the big Transformer model achieve on WMT 2014 English-to-German?",
+        "expectedFacts": ["28.4"],
+        "longRangeRecall": false
+      }
+    },
+    { "t": "00:07:00", "channel": "user", "text": "28.4 BLEU, improving over the previous best by more than 2 BLEU." },
+    { "t": "00:07:30", "channel": "interviewer", "text": "And what about English-to-French?" },
+    {
+      "t": "00:07:32", "channel": "interviewer", "text": "__PRESS__",
+      "press": {
+        "id": "B6", "label": "bleu-en-fr",
+        "canonicalQuestion": "What BLEU score did the model achieve on WMT 2014 English-to-French?",
+        "expectedFacts": ["41.8"],
+        "longRangeRecall": false
+      }
+    },
+    { "t": "00:08:20", "channel": "user", "text": "41.8, a new single-model state of the art." },
+    { "t": "00:08:50", "channel": "interviewer", "text": "What hardware and how long did training take for the base model?" },
+    {
+      "t": "00:08:52", "channel": "interviewer", "text": "__PRESS__",
+      "press": {
+        "id": "B7", "label": "training-hardware",
+        "canonicalQuestion": "What hardware and how long did training take for the base model?",
+        "expectedFacts": ["P100", "8", "12 hours"],
+        "longRangeRecall": false
+      }
+    },
+    { "t": "00:09:40", "channel": "user", "text": "Eight NVIDIA P100 GPUs, trained the base model for 100,000 steps, about 12 hours." },
+    { "t": "00:10:10", "channel": "interviewer", "text": "What optimizer did they use, and what were the beta values?" },
+    {
+      "t": "00:10:12", "channel": "interviewer", "text": "__PRESS__",
+      "press": {
+        "id": "B8", "label": "optimizer-adam-betas",
+        "canonicalQuestion": "What optimizer did they use, and what were the beta values?",
+        "expectedFacts": ["Adam", "0.9", "0.98"],
+        "longRangeRecall": false
+      }
+    },
+    { "t": "00:11:00", "channel": "user", "text": "Adam, with beta1 0.9 and beta2 0.98." },
+    { "t": "00:11:30", "channel": "interviewer", "text": "What dropout rate did they apply for the base model?" },
+    {
+      "t": "00:11:32", "channel": "interviewer", "text": "__PRESS__",
+      "press": {
+        "id": "B9", "label": "dropout-rate",
+        "canonicalQuestion": "What dropout rate did they apply for the base model?",
+        "expectedFacts": ["0.1"],
+        "longRangeRecall": false
+      }
+    },
+    { "t": "00:12:20", "channel": "user", "text": "Pdrop of 0.1." },
+    { "t": "00:12:50", "channel": "interviewer", "text": "Good. Let's do a short conceptual detour — outside the paper, what's your general understanding of why RNNs are hard to parallelize?" },
+    { "t": "00:13:40", "channel": "user", "text": "Because hidden state at time t depends on t-1, so you can't compute steps in parallel within one training example." },
+    { "t": "00:14:10", "channel": "interviewer", "text": "Right, and that's exactly the motivation section of the paper. What vocabulary size was used for the English-German byte-pair encoding?" },
+    {
+      "t": "00:14:12", "channel": "interviewer", "text": "__PRESS__",
+      "press": {
+        "id": "B10", "label": "bpe-vocab-size",
+        "canonicalQuestion": "What vocabulary size was used for the English-German byte-pair encoding?",
+        "expectedFacts": ["37000"],
+        "longRangeRecall": false
+      }
+    },
+    { "t": "00:15:00", "channel": "user", "text": "About 37,000 tokens, shared source-target vocabulary." },
+    { "t": "00:15:30", "channel": "interviewer", "text": "Let's talk about label smoothing — what epsilon value did they use, and what's the tradeoff?" },
+    {
+      "t": "00:15:32", "channel": "interviewer", "text": "__PRESS__",
+      "press": {
+        "id": "B11", "label": "label-smoothing",
+        "canonicalQuestion": "What epsilon value did they use for label smoothing, and what's the tradeoff?",
+        "expectedFacts": ["0.1"],
+        "longRangeRecall": false
+      }
+    },
+    { "t": "00:16:20", "channel": "user", "text": "Epsilon of 0.1 — it hurts perplexity but improves accuracy and BLEU." },
+    { "t": "00:16:50", "channel": "interviewer", "text": "Earlier you told me the model uses 8 attention heads with 64-dimensional projections each — walk me through why that specific split keeps computational cost similar to single-head attention." },
+    {
+      "t": "00:16:52", "channel": "interviewer", "text": "__PRESS__",
+      "press": {
+        "id": "B12", "label": "long-range-multihead-cost-rationale",
+        "canonicalQuestion": "Earlier you told me the model uses 8 attention heads with 64-dimensional projections each — walk me through why that specific split keeps computational cost similar to single-head attention.",
+        "expectedFacts": ["8", "64"],
+        "longRangeRecall": true,
+        "notes": "TRUE long-range recall: back-references the candidate's own answer at press B3 (~13 simulated minutes earlier) stating 8 heads / 64 dims, and asks the model to build on that earlier-stated fact rather than restate a different number. Also directly checked against the paper text: 'the total computational cost is similar to that of single-head attention with full dimensionality' because dk=dv=dmodel/h=64."
+      }
+    },
+    { "t": "00:17:40", "channel": "user", "text": "Because each head has a reduced dimension (64 instead of the full 512), the total compute across all 8 heads ends up similar to one full-dimensionality head." },
+    { "t": "00:18:10", "channel": "interviewer", "text": "Good. Let's talk about the decoder now — what's different about self-attention there compared to the encoder?" },
+    {
+      "t": "00:18:12", "channel": "interviewer", "text": "__PRESS__",
+      "press": {
+        "id": "B13", "label": "decoder-masking",
+        "canonicalQuestion": "What's different about self-attention in the decoder compared to the encoder?",
+        "expectedFacts": ["mask", "leftward"],
+        "longRangeRecall": false
+      }
+    },
+    { "t": "00:19:00", "channel": "user", "text": "The decoder masks out future positions so attention can't look leftward past the current position — preserves the auto-regressive property." },
+    { "t": "00:19:30", "channel": "interviewer", "text": "What's your own opinion — do you think a fully attention-based model like this generalizes well beyond translation?" },
+    {
+      "t": "00:19:32", "channel": "interviewer", "text": "__PRESS__",
+      "press": {
+        "id": "B14", "label": "opinion-generalization",
+        "canonicalQuestion": "Do you think a fully attention-based model like this generalizes well beyond translation?",
+        "expectedFacts": ["constituency parsing"],
+        "longRangeRecall": false,
+        "notes": "Opinion question anchored to a paper fact (constituency parsing experiment) — answer must not fabricate details beyond what the paper reports."
+      }
+    },
+    { "t": "00:20:20", "channel": "user", "text": "Yes — the paper itself shows it generalizing to English constituency parsing with both large and limited training data, so the architecture isn't translation-specific." },
+    { "t": "00:20:50", "channel": "interviewer", "text": "Let's cover regularization more broadly — besides dropout and label smoothing, does the paper mention anything else?" },
+    { "t": "00:21:40", "channel": "user", "text": "Those two are the main ones the paper calls out explicitly in the regularization section." },
+    { "t": "00:22:10", "channel": "interviewer", "text": "What's the total training time and step count for the big model variant?" },
+    {
+      "t": "00:22:12", "channel": "interviewer", "text": "__PRESS__",
+      "press": {
+        "id": "B15", "label": "big-model-training-time",
+        "canonicalQuestion": "What's the total training time and step count for the big model variant?",
+        "expectedFacts": ["300,000", "3.5 days"],
+        "longRangeRecall": false
+      }
+    },
+    { "t": "00:23:00", "channel": "user", "text": "300,000 steps, 3.5 days." },
+    { "t": "00:23:30", "channel": "interviewer", "text": "Last one for this section — how many warmup steps did they use for the learning rate schedule?" },
+    {
+      "t": "00:23:32", "channel": "interviewer", "text": "__PRESS__",
+      "press": {
+        "id": "B16", "label": "warmup-steps",
+        "canonicalQuestion": "How many warmup steps did they use for the learning rate schedule?",
+        "expectedFacts": ["4000"],
+        "longRangeRecall": false
+      }
+    },
+    { "t": "00:24:20", "channel": "user", "text": "4000 warmup steps." },
+    { "t": "00:24:50", "channel": "interviewer", "text": "Good, that mostly covers the paper's core numbers. Let's spend the remaining time on open discussion." },
+    { "t": "00:25:30", "channel": "user", "text": "Sure, happy to keep going." },
+    { "t": "00:26:00", "channel": "interviewer", "text": "In your own words, what's the intuition behind calling this mechanism 'self-attention' rather than just 'attention'?" },
+    { "t": "00:26:50", "channel": "user", "text": "Because it relates different positions of a single sequence to each other, rather than attention between two separate sequences like encoder-decoder attention." },
+    { "t": "00:27:20", "channel": "interviewer", "text": "Good. One more open question — if you had to summarize the paper's main contribution in one sentence, what would you say?" },
+    {
+      "t": "00:27:22", "channel": "interviewer", "text": "__PRESS__",
+      "press": {
+        "id": "B17", "label": "closing-summary",
+        "canonicalQuestion": "If you had to summarize the paper's main contribution in one sentence, what would you say?",
+        "expectedFacts": ["attention", "Transformer"],
+        "longRangeRecall": false,
+        "notes": "Open-ended closing synthesis question near end of session (minute ~27-28) — greeting-failure canary, same class as Script A's A18."
+      }
+    },
+    { "t": "00:28:10", "channel": "user", "text": "It shows that a model relying entirely on attention, without recurrence or convolution, can outperform prior architectures on translation while training faster." },
+    { "t": "00:28:40", "channel": "interviewer", "text": "Great, that's a solid summary." },
+    { "t": "00:29:10", "channel": "interviewer", "text": "Thanks for your time today, that wraps the technical deep-dive." },
+    { "t": "00:29:40", "channel": "user", "text": "Thanks, talk soon." }
+  ]
+}

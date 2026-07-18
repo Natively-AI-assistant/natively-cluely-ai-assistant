@@ -12,12 +12,25 @@ export class OpenAIEmbeddingProvider implements IEmbeddingProvider {
     this.space = embeddingSpaceKey({ name: this.name, model: this.model, dimensions: this.dimensions });
   }
 
+  private async errorFromResponse(res: Response, operation: string): Promise<Error> {
+    const body = await res.text().catch(() => '');
+    const message = `OpenAI ${operation} failed: ${res.status} ${res.statusText} ${body.slice(0, 500)}`;
+    return Object.assign(new Error(message), {
+      status: res.status,
+      provider: this.name,
+      permanentAuthFailure: res.status === 401 || res.status === 403,
+    });
+  }
+
   async isAvailable(): Promise<boolean> {
     // Fast check — just validate the key format and do a single test embed
     try {
       await this.embed('test');
       return true;
-    } catch { return false; }
+    } catch (error: any) {
+      if (error?.permanentAuthFailure) throw error;
+      return false;
+    }
   }
 
   async embed(text: string): Promise<number[]> {
@@ -29,7 +42,7 @@ export class OpenAIEmbeddingProvider implements IEmbeddingProvider {
       },
       body: JSON.stringify({ model: this.model, input: text })
     });
-    if (!res.ok) throw new Error(`OpenAI embedding failed: ${res.statusText}`);
+    if (!res.ok) throw await this.errorFromResponse(res, 'embedding');
     const data = await res.json();
     return data.data[0].embedding;
   }
@@ -47,7 +60,7 @@ export class OpenAIEmbeddingProvider implements IEmbeddingProvider {
       },
       body: JSON.stringify({ model: this.model, input: texts })
     });
-    if (!res.ok) throw new Error(`OpenAI batch embedding failed: ${res.statusText}`);
+    if (!res.ok) throw await this.errorFromResponse(res, 'batch embedding');
     const data = await res.json();
     return data.data.map((d: any) => d.embedding);
   }

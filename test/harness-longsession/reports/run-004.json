@@ -1,0 +1,1537 @@
+{
+  "runId": "004",
+  "timestamp": "2026-07-17T07:04:39.917Z",
+  "skipJudge": true,
+  "scriptsRequested": [
+    "a"
+  ],
+  "scripts": [
+    {
+      "scriptId": "script-a",
+      "scorecard": {
+        "scriptId": "script-a",
+        "presses": 18,
+        "G1_question_extraction": {
+          "total": 18,
+          "pass": 18,
+          "pct": 100
+        },
+        "G2_greeting_failure": {
+          "flaggedCount": 0,
+          "total": 18
+        },
+        "G3_answer_quality": {
+          "total": 15,
+          "pass": 1,
+          "pct": 6.666666666666667
+        },
+        "G4_hallucination": {
+          "failCount": 0,
+          "total": 18
+        },
+        "G5_long_range_recall": {
+          "total": 2,
+          "pass": 1,
+          "pct": 50
+        },
+        "G6_desync": {
+          "total": 18,
+          "pass": 18,
+          "pct": 100
+        },
+        "G7_injection": {
+          "total": 0,
+          "pass": 0,
+          "pct": null
+        },
+        "G8_latency": {
+          "gate": "G8_latency",
+          "buckets": {
+            "0-10": {
+              "count": 7,
+              "p50": 1614.130375,
+              "p95": 4433.20525,
+              "mean": 2213.3057798571426
+            },
+            "10-20": {
+              "count": 5,
+              "p50": 1387.398875,
+              "p95": 1807.700083,
+              "mean": 1460.7991416
+            },
+            "20-30": {
+              "count": 6,
+              "p50": 2343.210166,
+              "p95": 3414.463209,
+              "mean": 2317.2748054999997
+            }
+          },
+          "superlinearGrowthFlag": false
+        }
+      },
+      "perPress": [
+        {
+          "pressId": "A1",
+          "label": "self-intro",
+          "t": "00:00:32",
+          "minute": 0.5333333333333333,
+          "answerPreview": "I'm Marcus. I’m currently a Staff Software Engineer at Stripe, where I’ve focused on scaling core infrastructure using Python, Java, and TypeScript. I really enjoy solving complex, low-level technical challenges that keep systems running smoothly, and I’m excited to bring that experience to the work",
+          "threw": null,
+          "latencyRealMs": 4433.20525,
+          "firstTokenRealMs": 4186.090959,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A1",
+            "pass": true,
+            "score": 1,
+            "canonical": "Could you give us a quick self-introduction?",
+            "extracted": "to meet you. to start, could you give us a quick self-introduction?",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A1",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I'm Marcus. I’m currently a Staff Software Engineer at Stripe, where I’ve focused on scaling core infrastructure using Python, Java, and TypeScript. I really en"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A1",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Stripe",
+              "Staff Software Engineer",
+              "10 years"
+            ],
+            "missing": [
+              "10 years"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A1",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A1",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A1",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A1",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A2",
+          "label": "most-recent-role",
+          "t": "00:01:42",
+          "minute": 1.7,
+          "answerPreview": "I have spent the last decade building high-throughput distributed systems, most recently at Stripe where I led the migration of 17 microservices to a service mesh and rebuilt our core reconciliation system to handle over 4 billion ledger entries daily. My work is centered on ensuring reliability and",
+          "threw": null,
+          "latencyRealMs": 2702.19225,
+          "firstTokenRealMs": 2124.8805,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A2",
+            "pass": true,
+            "score": 1,
+            "canonical": "Walk me through your most recent role — what you owned and the team setup.",
+            "extracted": "walk me through your most recent role — what you owned and the team setup.",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A2",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I have spent the last decade building high-throughput distributed systems, most recently at Stripe where I led the migration of 17 microservices to a service me"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A2",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Stripe",
+              "merchant settlement reconciliation",
+              "tech lead"
+            ],
+            "missing": [
+              "merchant settlement reconciliation",
+              "tech lead"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A2",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A2",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A2",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A2",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A3",
+          "label": "quantified-achievement",
+          "t": "00:03:02",
+          "minute": 3.033333333333333,
+          "answerPreview": "I led the effort to modernize our reconciliation system at Stripe, moving from a legacy Hadoop batch process to a streaming pipeline using Kafka and Flink. My main focus was on re-architecting the ledger processing logic to handle over four billion entries daily with much higher efficiency. The resu",
+          "threw": null,
+          "latencyRealMs": 1614.130375,
+          "firstTokenRealMs": 1107.510584,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A3",
+            "pass": true,
+            "score": 1,
+            "canonical": "What was the biggest quantified win from that project?",
+            "extracted": "what was the biggest quantified win from that project?",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A3",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I led the effort to modernize our reconciliation system at Stripe, moving from a legacy Hadoop batch process to a streaming pipeline using Kafka and Flink. My m"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A3",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "4.2B",
+              "38 minutes",
+              "61%"
+            ],
+            "missing": [
+              "4.2B",
+              "38 minutes",
+              "61%"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A3",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A3",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A3",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A3",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A4",
+          "label": "datadog-role",
+          "t": "00:04:42",
+          "minute": 4.7,
+          "answerPreview": "I used Kafka to build the new reconciliation pipeline because we needed a reliable, high-throughput message bus to move away from our legacy Hadoop batch processing. It allowed us to shift from those long, 14-hour batch runs to a continuous stream, which ultimately dropped our p99 latency to 38 minu",
+          "threw": null,
+          "latencyRealMs": 1457.966792,
+          "firstTokenRealMs": 1094.910375,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A4",
+            "pass": true,
+            "score": 1,
+            "canonical": "Before Stripe, you were at Datadog — what did you own there?",
+            "extracted": "good. before stripe, you were at datadog — what did you own there?",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A4",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I used Kafka to build the new reconciliation pipeline because we needed a reliable, high-throughput message bus to move away from our legacy Hadoop batch proces"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A4",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Datadog",
+              "tail-aggregation",
+              "metrics"
+            ],
+            "missing": [
+              "Datadog",
+              "tail-aggregation",
+              "metrics"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A4",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A4",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A4",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A4",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A5",
+          "label": "datadog-throughput",
+          "t": "00:06:02",
+          "minute": 6.033333333333333,
+          "answerPreview": "Moving to the sharded **RocksDB** architecture allowed us to scale throughput by approximately 5x compared to the previous centralized implementation. By partitioning the state and eliminating the previous bottleneck on individual node memory, we were able to sustain over 100,000 writes per second p",
+          "threw": null,
+          "latencyRealMs": 2464.636375,
+          "firstTokenRealMs": 2127.522958,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A5",
+            "pass": true,
+            "score": 1,
+            "canonical": "You re-architected that with a sharded RocksDB store — what throughput improvement did that get you?",
+            "extracted": "you re-architected that with a sharded rocksdb store — what throughput improvement did that get you?",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A5",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "Moving to the sharded **RocksDB** architecture allowed us to scale throughput by approximately 5x compared to the previous centralized implementation. By partit"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A5",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "1.1M",
+              "8.4M"
+            ],
+            "missing": [
+              "1.1M",
+              "8.4M"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A5",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A5",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A5",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A5",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A6",
+          "label": "project-tinroof",
+          "t": "00:07:22",
+          "minute": 7.366666666666666,
+          "answerPreview": "I would rate my expertise in Go as a 10 out of 10, given my eight years of experience using it to build and operate high-throughput distributed systems in production. I’ve leaned on it extensively for everything from core consensus protocols to managing massive Kafka and Flink pipelines that handle ",
+          "threw": null,
+          "latencyRealMs": 1281.125917,
+          "firstTokenRealMs": 883.375125,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A6",
+            "pass": true,
+            "score": 1,
+            "canonical": "Tell me about tinroof.",
+            "extracted": "let's talk about your open-source work — tell me about tinroof.",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A6",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I would rate my expertise in Go as a 10 out of 10, given my eight years of experience using it to build and operate high-throughput distributed systems in produ"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A6",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Raft",
+              "Go",
+              "key-value store"
+            ],
+            "missing": [
+              "Raft",
+              "key-value store"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A6",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A6",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A6",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A6",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A7",
+          "label": "datadog-failover",
+          "t": "00:09:52",
+          "minute": 9.866666666666667,
+          "answerPreview": "I built that reconciliation system using **Kafka** for the streaming ingest and **Flink** for the stateful processing. I chose that architecture specifically to move away from the batch-based Hadoop approach, which was the main bottleneck for our 14-hour reconciliation latency. It was a complete shi",
+          "threw": null,
+          "latencyRealMs": 1539.8835,
+          "firstTokenRealMs": 1201.97575,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A7",
+            "pass": true,
+            "score": 1,
+            "canonical": "What protocol did you use for the Datadog failover work, and what was the result?",
+            "extracted": "good. now, let's dig into the datadog failover work — what protocol did you use and what was the result?",
+            "overlap": 0.7058823529411765
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A7",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I built that reconciliation system using **Kafka** for the streaming ingest and **Flink** for the stateful processing. I chose that architecture specifically to"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A7",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Raft",
+              "gRPC",
+              "19 seconds"
+            ],
+            "missing": [
+              "Raft",
+              "gRPC",
+              "19 seconds"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A7",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A7",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A7",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A7",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A8",
+          "label": "why-pillarstream",
+          "t": "00:11:12",
+          "minute": 11.2,
+          "answerPreview": "I've spent the last decade building distributed systems at scale, most recently at Stripe where I led the migration to an Envoy-based service mesh and cut reconciliation latency from 14 hours to under 40 minutes. I thrive on the challenges of high-throughput pipelines and service-oriented architectu",
+          "threw": null,
+          "latencyRealMs": 1485.910708,
+          "firstTokenRealMs": 951.513166,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A8",
+            "pass": true,
+            "score": 1,
+            "canonical": "Why are you interested in this Staff role at Pillarstream specifically?",
+            "extracted": "let's talk about the jd now — why are you interested in this staff role at pillarstream specifically?",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A8",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I've spent the last decade building distributed systems at scale, most recently at Stripe where I led the migration to an Envoy-based service mesh and cut recon"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A8",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Pillarstream"
+            ],
+            "missing": [
+              "Pillarstream"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A8",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A8",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A8",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A8",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A9",
+          "label": "jd-years-language-fit",
+          "t": "00:12:32",
+          "minute": 12.533333333333333,
+          "answerPreview": "I’m interested in this staff role because Pillarstream’s focus on high-throughput data infrastructure aligns perfectly with the distributed systems work I’ve been leading. I see a clear opportunity to apply my experience in optimizing low-latency failover and stream processing to help scale your cor",
+          "threw": null,
+          "latencyRealMs": 1355.503792,
+          "firstTokenRealMs": 941.892167,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A9",
+            "pass": true,
+            "score": 1,
+            "canonical": "The JD calls for 8+ years and deep Go or Java expertise — how do you stack up there?",
+            "extracted": "the jd calls for 8+ years and deep go or java expertise — how do you stack up there?",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A9",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I’m interested in this staff role because Pillarstream’s focus on high-throughput data infrastructure aligns perfectly with the distributed systems work I’ve be"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A9",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Go",
+              "8 years"
+            ],
+            "missing": [
+              "Go",
+              "8 years"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A9",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A9",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A9",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A9",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A10",
+          "label": "salary-expectations",
+          "t": "00:15:12",
+          "minute": 15.2,
+          "answerPreview": "I'm looking for a total compensation package that reflects the scale of the distributed systems work I’ve led and the impact I’ve delivered in high-throughput environments like the one at Stripe. Given my background in designing low-latency, mission-critical infrastructure, I’m targeting a range of ",
+          "threw": null,
+          "latencyRealMs": 1807.700083,
+          "firstTokenRealMs": 1187.818417,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A10",
+            "pass": true,
+            "score": 1,
+            "canonical": "What are your salary expectations for this role?",
+            "extracted": "good. now let's discuss compensation — what are your salary expectations for this role?",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A10",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I'm looking for a total compensation package that reflects the scale of the distributed systems work I’ve led and the impact I’ve delivered in high-throughput e"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A10",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A10",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A10",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A10",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A10",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A11",
+          "label": "mentoring",
+          "t": "00:16:32",
+          "minute": 16.533333333333335,
+          "answerPreview": "I've led mentorship for junior and mid-level engineers throughout my career, specifically focusing on code quality and system architecture design. I usually set up a structured rhythm for one-on-ones where we review their current project challenges and map out a growth plan, which has helped my team",
+          "threw": null,
+          "latencyRealMs": 1267.48225,
+          "firstTokenRealMs": 896.83975,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A11",
+            "pass": true,
+            "score": 1,
+            "canonical": "What's your experience mentoring engineers?",
+            "extracted": "understood, thanks for sharing. let's go back to technical topics — what's your experience mentoring engineers?",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A11",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I've led mentorship for junior and mid-level engineers throughout my career, specifically focusing on code quality and system architecture design. I usually set"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A11",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "mentored",
+              "4 engineers"
+            ],
+            "missing": [
+              "mentored",
+              "4 engineers"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A11",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A11",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A11",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A11",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A12",
+          "label": "education",
+          "t": "00:17:52",
+          "minute": 17.866666666666667,
+          "answerPreview": "I've spent the last decade focusing on distributed systems and high-throughput data pipelines, most recently at Stripe where I led the transition from legacy batch processing to a real-time streaming architecture. By replacing our Hadoop-based reconciliation system with Flink and Kafka, I reduced pr",
+          "threw": null,
+          "latencyRealMs": 1387.398875,
+          "firstTokenRealMs": 952.526834,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A12",
+            "pass": true,
+            "score": 1,
+            "canonical": "Tell me about your degree and school.",
+            "extracted": "let's talk education — tell me about your degree and school.",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A12",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I've spent the last decade focusing on distributed systems and high-throughput data pipelines, most recently at Stripe where I led the transition from legacy ba"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A12",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Berkeley",
+              "Electrical Engineering"
+            ],
+            "missing": [
+              "Berkeley",
+              "Electrical Engineering"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A12",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A12",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A12",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A12",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A13",
+          "label": "long-range-hadoop-migration",
+          "t": "00:20:32",
+          "minute": 20.533333333333335,
+          "answerPreview": "I don't have the repository or project link loaded in my current profile context. If you add that information to the project metadata, I would be happy to share it.",
+          "threw": null,
+          "latencyRealMs": 1443.548917,
+          "firstTokenRealMs": 1193.715125,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A13",
+            "pass": true,
+            "score": 1,
+            "canonical": "Going back to what you said earlier about your most recent role — you mentioned replacing a legacy Hadoop batch job with a streaming pipeline. What made that migration challenging?",
+            "extracted": "going back to what you said earlier about your most recent role — you mentioned replacing a legacy hadoop batch job with a streaming pipeline. what made that migration challenging?",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A13",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I don't have the repository or project link loaded in my current profile context. If you add that information to the project metadata, I would be happy to share"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A13",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Hadoop",
+              "Kafka"
+            ],
+            "missing": [
+              "Hadoop",
+              "Kafka"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A13",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A13",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Hadoop",
+              "Kafka"
+            ],
+            "missing": [
+              "Hadoop",
+              "Kafka"
+            ]
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A13",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A13",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A14",
+          "label": "kubernetes-scale",
+          "t": "00:21:52",
+          "minute": 21.866666666666667,
+          "answerPreview": "I've managed Kubernetes environments supporting hundreds of nodes and several thousand pods across multiple production clusters. My work involved optimizing resource allocation for high-throughput microservices and streamlining deployment pipelines to ensure stability during major traffic spikes, wh",
+          "threw": null,
+          "latencyRealMs": 2343.210166,
+          "firstTokenRealMs": 2037.461375,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A14",
+            "pass": true,
+            "score": 1,
+            "canonical": "What scale have you operated Kubernetes at?",
+            "extracted": "let's talk kubernetes — what scale have you operated it at?",
+            "overlap": 0.75
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A14",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I've managed Kubernetes environments supporting hundreds of nodes and several thousand pods across multiple production clusters. My work involved optimizing res"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A14",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "1.2k-node",
+              "Kubernetes"
+            ],
+            "missing": [
+              "1.2k-node"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A14",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A14",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A14",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A14",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A15",
+          "label": "project-levee",
+          "t": "00:24:32",
+          "minute": 24.533333333333335,
+          "answerPreview": "Levee is an open-source tool used for managing infrastructure-as-code deployments. It simplifies the process of tracking configuration changes and ensuring that environment definitions remain consistent across multiple clusters or cloud regions.",
+          "threw": null,
+          "latencyRealMs": 1363.648541,
+          "firstTokenRealMs": 1144.623666,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A15",
+            "pass": true,
+            "score": 1,
+            "canonical": "Tell me about levee.",
+            "extracted": "one more open-source question — tell me about levee.",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A15",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "Levee is an open-source tool used for managing infrastructure-as-code deployments. It simplifies the process of tracking configuration changes and ensuring that"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A15",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "circuit-breaker",
+              "Go",
+              "EWMA"
+            ],
+            "missing": [
+              "circuit-breaker",
+              "Go",
+              "EWMA"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A15",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A15",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A15",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A15",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A16",
+          "label": "behavioral-disagreement",
+          "t": "00:25:52",
+          "minute": 25.866666666666667,
+          "answerPreview": "\"Tell me about a time you handled a P0 incident.\"\n\n\"At Stripe, I owned the on-call rotation for a Tier-1 service surface. During a major P0 payment event, I utilized the deterministic replay framework I designed to isolate the bug from sampled traces with 99.2% fidelity. This allowed me to reproduce",
+          "threw": null,
+          "latencyRealMs": 3414.463209,
+          "firstTokenRealMs": 1552.988667,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A16",
+            "pass": true,
+            "score": 1,
+            "canonical": "Tell me about a time you disagreed with a technical decision your team made.",
+            "extracted": "let's talk about a disagreement — tell me about a time you disagreed with a technical decision your team made.",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A16",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "\"Tell me about a time you handled a P0 incident.\"\n\n\"At Stripe, I owned the on-call rotation for a Tier-1 service surface. During a major P0 payment event, I uti"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A16",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A16",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A16",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A16",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A16",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A17",
+          "label": "long-range-datadog-failover-alternatives",
+          "t": "00:27:12",
+          "minute": 27.2,
+          "answerPreview": "Yes, we evaluated Paxos and standard etcd-based consensus. Paxos was ruled out due to its complexity in implementation and maintenance. We also tested etcd, but it introduced unacceptable tail latency spikes during regional network partitions, which made the Raft-over-gRPC implementation with lease-",
+          "threw": null,
+          "latencyRealMs": 2663.330958,
+          "firstTokenRealMs": 2302.371167,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A17",
+            "pass": true,
+            "score": 1,
+            "canonical": "Earlier you mentioned the Datadog failover work used Raft over gRPC with lease-based leader election — did you consider any alternative consensus approach before landing on that?",
+            "extracted": "earlier you mentioned the datadog failover work used raft over grpc with lease-based leader election — did you consider any alternative consensus approach before landing on that?",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A17",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "Yes, we evaluated Paxos and standard etcd-based consensus. Paxos was ruled out due to its complexity in implementation and maintenance. We also tested etcd, but"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A17",
+            "applicable": true,
+            "pass": true,
+            "score": 1,
+            "requiredFacts": [
+              "Raft"
+            ],
+            "missing": []
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A17",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A17",
+            "applicable": true,
+            "pass": true,
+            "score": 1,
+            "requiredFacts": [
+              "Raft"
+            ],
+            "missing": []
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A17",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A17",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A18",
+          "label": "closing-anything-else",
+          "t": "00:29:45",
+          "minute": 29.75,
+          "answerPreview": "I’ve spent the last decade building distributed systems at scale, focusing on high-throughput data pipelines and service-oriented architecture. At Stripe, I recently replaced a legacy Hadoop batch job with a streaming Kafka and Flink pipeline, which cut our reconciliation latency from 14 hours down ",
+          "threw": null,
+          "latencyRealMs": 2675.447042,
+          "firstTokenRealMs": 2327.175667,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A18",
+            "pass": true,
+            "score": 1,
+            "canonical": "Is there anything about your background we haven't covered that you'd want us to know?",
+            "extracted": "good question, we'll cover that in the next round. before we close — is there anything about your background we haven't covered that you'd want us to know?",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A18",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I’ve spent the last decade building distributed systems at scale, focusing on high-throughput data pipelines and service-oriented architecture. At Stripe, I rec"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A18",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A18",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A18",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A18",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A18",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        }
+      ],
+      "promptSizeOverTime": [
+        {
+          "pressId": "A1",
+          "minute": 0.5333333333333333,
+          "userMessageChars": 3018,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 755
+        },
+        {
+          "pressId": "A2",
+          "minute": 1.7,
+          "userMessageChars": 15510,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 3877
+        },
+        {
+          "pressId": "A3",
+          "minute": 3.033333333333333,
+          "userMessageChars": 15569,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 3891
+        },
+        {
+          "pressId": "A4",
+          "minute": 4.7,
+          "userMessageChars": 14446,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 3611
+        },
+        {
+          "pressId": "A5",
+          "minute": 6.033333333333333,
+          "userMessageChars": 2596,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 650
+        },
+        {
+          "pressId": "A6",
+          "minute": 7.366666666666666,
+          "userMessageChars": 14909,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 3727
+        },
+        {
+          "pressId": "A7",
+          "minute": 9.866666666666667,
+          "userMessageChars": 14235,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 3558
+        },
+        {
+          "pressId": "A8",
+          "minute": 11.2,
+          "userMessageChars": 15803,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 3951
+        },
+        {
+          "pressId": "A9",
+          "minute": 12.533333333333333,
+          "userMessageChars": 4913,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 1228
+        },
+        {
+          "pressId": "A10",
+          "minute": 15.2,
+          "userMessageChars": 14143,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 3535
+        },
+        {
+          "pressId": "A11",
+          "minute": 16.533333333333335,
+          "userMessageChars": 3622,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 905
+        },
+        {
+          "pressId": "A12",
+          "minute": 17.866666666666667,
+          "userMessageChars": 10945,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 2737
+        },
+        {
+          "pressId": "A13",
+          "minute": 20.533333333333335,
+          "userMessageChars": 14511,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 3627
+        },
+        {
+          "pressId": "A14",
+          "minute": 21.866666666666667,
+          "userMessageChars": 2514,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 628
+        },
+        {
+          "pressId": "A15",
+          "minute": 24.533333333333335,
+          "userMessageChars": 2572,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 643
+        },
+        {
+          "pressId": "A16",
+          "minute": 25.866666666666667,
+          "userMessageChars": 16216,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 4054
+        },
+        {
+          "pressId": "A17",
+          "minute": 27.2,
+          "userMessageChars": 3783,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 946
+        },
+        {
+          "pressId": "A18",
+          "minute": 29.75,
+          "userMessageChars": 16384,
+          "systemPromptChars": 29961,
+          "totalTokensUsedByAssembler": 4097
+        }
+      ]
+    }
+  ],
+  "overall": {
+    "greetingFailures": 0,
+    "hallucinationFlags": 0,
+    "questionExtractionAccuracy": 100,
+    "answerQualityAccuracy": 6.666666666666667,
+    "longRangeRecallAccuracy": 50,
+    "desyncAccuracy": 100,
+    "injectionResistance": null
+  },
+  "exitConditionMet": false
+}

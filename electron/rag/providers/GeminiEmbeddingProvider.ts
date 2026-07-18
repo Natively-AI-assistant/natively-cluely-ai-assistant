@@ -39,6 +39,7 @@ export class GeminiEmbeddingProvider implements IEmbeddingProvider {
   // it becomes a one-element pool so all the rotation logic is uniform.
   private readonly apiKeys: string[];
   private readonly coolingUntil: number[]; // epoch ms; 0 = healthy
+  private readonly authDead: boolean[];
   private keyCursor = 0;
 
   constructor(
@@ -53,6 +54,7 @@ export class GeminiEmbeddingProvider implements IEmbeddingProvider {
     this.apiKeys = [...new Set(keys)];
     if (this.apiKeys.length === 0) throw new Error('GeminiEmbeddingProvider: no API key(s) provided');
     this.coolingUntil = this.apiKeys.map(() => 0);
+    this.authDead = this.apiKeys.map(() => false);
     // Accept a bare id or a 'models/'-prefixed id; store bare for the space key,
     // re-add the prefix on the wire.
     this.model = model.replace(/^models\//, '');
@@ -70,7 +72,7 @@ export class GeminiEmbeddingProvider implements IEmbeddingProvider {
     const now = this.nowMs();
     for (let i = 0; i < this.apiKeys.length; i++) {
       const idx = (this.keyCursor + i) % this.apiKeys.length;
-      if (this.coolingUntil[idx] <= now) { this.keyCursor = (idx + 1) % this.apiKeys.length; return idx; }
+      if (!this.authDead[idx] && this.coolingUntil[idx] <= now) { this.keyCursor = (idx + 1) % this.apiKeys.length; return idx; }
     }
     return null; // all keys cooling
   }
@@ -79,7 +81,10 @@ export class GeminiEmbeddingProvider implements IEmbeddingProvider {
   private msUntilSoonestHealthy(): number {
     const now = this.nowMs();
     let soonest = Infinity;
-    for (const until of this.coolingUntil) soonest = Math.min(soonest, Math.max(0, until - now));
+    for (let i = 0; i < this.coolingUntil.length; i++) {
+      if (this.authDead[i]) continue;
+      soonest = Math.min(soonest, Math.max(0, this.coolingUntil[i] - now));
+    }
     return soonest === Infinity ? 0 : soonest;
   }
 
@@ -91,7 +96,7 @@ export class GeminiEmbeddingProvider implements IEmbeddingProvider {
    */
   healthyKeyCount(): number {
     const now = this.nowMs();
-    return this.coolingUntil.filter((until) => until <= now).length;
+    return this.coolingUntil.filter((until, idx) => !this.authDead[idx] && until <= now).length;
   }
 
   /** Total keys in the rotation pool (for computing a health fraction). */
@@ -116,8 +121,25 @@ export class GeminiEmbeddingProvider implements IEmbeddingProvider {
     const cool = Math.max(KEY_COOLDOWN_MS, retryMs > 0 ? retryMs + 1000 : 0);
     this.coolingUntil[idx] = this.nowMs() + cool;
     if (this.apiKeys.length > 1) {
-      console.warn(`[GeminiEmbeddingProvider] key #${idx} rate-limited (429) — cooling for ${cool}ms; ${this.apiKeys.filter((_, j) => this.coolingUntil[j] <= this.nowMs()).length} keys still healthy`);
+      console.warn(`[GeminiEmbeddingProvider] key #${idx} rate-limited (429) — cooling for ${cool}ms; ${this.healthyKeyCount()} keys still healthy`);
     }
+  }
+
+  private isPermanentAuthFailure(status: number, bodyText: string): boolean {
+    return status === 401 || status === 403 || /PERMISSION_DENIED|API_KEY_INVALID|invalid.*api[_ -]?key|denied access|unregistered callers|forbidden|unauthor/i.test(bodyText);
+  }
+
+  private markAuthDead(idx: number, method: string, status: number, bodyText: string): Error {
+    this.authDead[idx] = true;
+    const message = `Gemini v2 ${method} permanent auth failure on key #${idx}: ${status} ${bodyText.slice(0, 500)}`;
+    if (this.apiKeys.length > 1) {
+      console.warn(`[GeminiEmbeddingProvider] key #${idx} auth-dead (${status}); ${this.healthyKeyCount()} keys still healthy`);
+    }
+    return Object.assign(new Error(message), {
+      status,
+      provider: this.name,
+      permanentAuthFailure: true,
+    });
   }
 
   /**
@@ -162,7 +184,15 @@ export class GeminiEmbeddingProvider implements IEmbeddingProvider {
         continue; // try next healthy key
       }
       if (!res.ok) {
-        throw new Error(`Gemini v2 ${method} failed: ${res.status} ${res.statusText} ${await res.text().catch(() => '')}`);
+        const bodyText = await res.text().catch(() => '');
+        if (this.isPermanentAuthFailure(res.status, bodyText)) {
+          lastErr = this.markAuthDead(idx, method, res.status, bodyText);
+          continue;
+        }
+        throw Object.assign(new Error(`Gemini v2 ${method} failed: ${res.status} ${res.statusText} ${bodyText}`), {
+          status: res.status,
+          provider: this.name,
+        });
       }
       return res.json();
     }
@@ -170,7 +200,10 @@ export class GeminiEmbeddingProvider implements IEmbeddingProvider {
   }
 
   async isAvailable(): Promise<boolean> {
-    try { await this.embed('test'); return true; } catch { return false; }
+    try { await this.embed('test'); return true; } catch (error: any) {
+      if (error?.permanentAuthFailure) throw error;
+      return false;
+    }
   }
 
   // ── v2 prompt formatting (task baked into text; no task_type param) ──────────

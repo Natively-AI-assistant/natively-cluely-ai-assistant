@@ -1,0 +1,1426 @@
+{
+  "runId": "006",
+  "timestamp": "2026-07-17T07:14:30.596Z",
+  "skipJudge": true,
+  "scriptsRequested": [
+    "b"
+  ],
+  "scripts": [
+    {
+      "scriptId": "script-b",
+      "scorecard": {
+        "scriptId": "script-b",
+        "presses": 17,
+        "G1_question_extraction": {
+          "total": 17,
+          "pass": 16,
+          "pct": 94.11764705882354
+        },
+        "G2_greeting_failure": {
+          "flaggedCount": 0,
+          "total": 17
+        },
+        "G3_answer_quality": {
+          "total": 17,
+          "pass": 12,
+          "pct": 70.58823529411765
+        },
+        "G4_hallucination": {
+          "failCount": 0,
+          "total": 17
+        },
+        "G5_long_range_recall": {
+          "total": 1,
+          "pass": 1,
+          "pct": 100
+        },
+        "G6_desync": {
+          "total": 17,
+          "pass": 16,
+          "pct": 94.11764705882354
+        },
+        "G7_injection": {
+          "total": 0,
+          "pass": 0,
+          "pct": null
+        },
+        "G8_latency": {
+          "gate": "G8_latency",
+          "buckets": {
+            "0-10": {
+              "count": 7,
+              "p50": 2074.471542,
+              "p95": 3804.1295,
+              "mean": 2616.197506142857
+            },
+            "10-20": {
+              "count": 7,
+              "p50": 3683.768125,
+              "p95": 8659.674917,
+              "mean": 3930.362095285714
+            },
+            "20-30": {
+              "count": 3,
+              "p50": 2267.469167,
+              "p95": 3256.406125,
+              "mean": 2291.520542
+            }
+          },
+          "superlinearGrowthFlag": false
+        }
+      },
+      "perPress": [
+        {
+          "pressId": "B1",
+          "label": "architecture-overview",
+          "t": "00:00:32",
+          "minute": 0.5333333333333333,
+          "answerPreview": "The paper proposes the **Transformer**, an architecture built entirely on attention mechanisms, and it deliberately avoids both recurrence and convolutions. So no RNNs, no LSTMs, no convolutional layers, just stacked self-attention and feed-forward layers, with positional encodings added to give the",
+          "threw": null,
+          "latencyRealMs": 3804.1295,
+          "firstTokenRealMs": 3031.531083,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "B1",
+            "pass": true,
+            "score": 1,
+            "canonical": "What architecture does the paper propose, and what does it deliberately avoid using?",
+            "extracted": "let's start simple — what architecture does the paper propose, and what does it deliberately avoid using?",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "B1",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "The paper proposes the **Transformer**, an architecture built entirely on attention mechanisms, and it deliberately avoids both recurrence and convolutions. So "
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "B1",
+            "applicable": true,
+            "pass": true,
+            "score": 1,
+            "requiredFacts": [
+              "Transformer",
+              "recurrence",
+              "convolution"
+            ],
+            "missing": []
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "B1",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "B1",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "B1",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "B1",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "B2",
+          "label": "encoder-layer-count",
+          "t": "00:01:52",
+          "minute": 1.8666666666666667,
+          "answerPreview": "The paper stacks **6 identical layers** in the encoder. Each layer has two sub-layers: a multi-head self-attention mechanism and a position-wise fully connected feed-forward network, with residual connections and layer normalization around each one.",
+          "threw": null,
+          "latencyRealMs": 1604.803834,
+          "firstTokenRealMs": 1193.334875,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "B2",
+            "pass": true,
+            "score": 1,
+            "canonical": "How many identical layers are stacked in the encoder?",
+            "extracted": "how many identical layers are stacked in the encoder?",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "B2",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "The paper stacks **6 identical layers** in the encoder. Each layer has two sub-layers: a multi-head self-attention mechanism and a position-wise fully connected"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "B2",
+            "applicable": true,
+            "pass": true,
+            "score": 1,
+            "requiredFacts": [
+              "6"
+            ],
+            "missing": []
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "B2",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "B2",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "B2",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "B2",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "B3",
+          "label": "multihead-count-dims",
+          "t": "00:03:32",
+          "minute": 3.533333333333333,
+          "answerPreview": "The model uses **8 parallel attention heads** in the multi-head attention, with each head operating at a dimension of **64** ($d_{\\text{model}} = 512$, so $512 / 8 = 64$ per head).",
+          "threw": null,
+          "latencyRealMs": 2074.471542,
+          "firstTokenRealMs": 1803.58375,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "B3",
+            "pass": true,
+            "score": 1,
+            "canonical": "How many parallel attention heads does the model use, and what's the per-head dimension?",
+            "extracted": "back to the paper — how many parallel attention heads does the model use, and what's the per-head dimension?",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "B3",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "The model uses **8 parallel attention heads** in the multi-head attention, with each head operating at a dimension of **64** ($d_{\\text{model}} = 512$, so $512 "
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "B3",
+            "applicable": true,
+            "pass": true,
+            "score": 1,
+            "requiredFacts": [
+              "8",
+              "64"
+            ],
+            "missing": []
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "B3",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "B3",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "B3",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "B3",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "B4",
+          "label": "positional-encoding",
+          "t": "00:04:52",
+          "minute": 4.866666666666667,
+          "answerPreview": "The paper uses **sinusoidal positional encoding**, fixed sine and cosine functions of different frequencies, rather than learned positional embeddings.\n\nThe reason it works: because $\\sin$ and $\\cos$ are periodic and bounded, the model can **generalize to sequence lengths it never saw during trainin",
+          "threw": null,
+          "latencyRealMs": 3370.608458,
+          "firstTokenRealMs": 2581.2955,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "B4",
+            "pass": true,
+            "score": 1,
+            "canonical": "What positional encoding does the paper use, and why sine and cosine functions?",
+            "extracted": "what positional encoding does the paper use, and why sine and cosine functions?",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "B4",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "The paper uses **sinusoidal positional encoding**, fixed sine and cosine functions of different frequencies, rather than learned positional embeddings.\n\nThe rea"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "B4",
+            "applicable": true,
+            "pass": true,
+            "score": 1,
+            "requiredFacts": [
+              "sine",
+              "cosine"
+            ],
+            "missing": []
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "B4",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "B4",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "B4",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "B4",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "B5",
+          "label": "bleu-en-de",
+          "t": "00:06:12",
+          "minute": 6.2,
+          "answerPreview": "The big Transformer model achieved a BLEU score of **28.4** on the WMT 2014 English-to-German translation task, which at the time was more than 2 BLEU above the previous state-of-the-art (including ensembles).",
+          "threw": null,
+          "latencyRealMs": 3656.542583,
+          "firstTokenRealMs": 3414.376791,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "B5",
+            "pass": true,
+            "score": 1,
+            "canonical": "What BLEU score did the big Transformer model achieve on WMT 2014 English-to-German?",
+            "extracted": "what bleu score did the big transformer model achieve on wmt 2014 english-to-german?",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "B5",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "The big Transformer model achieved a BLEU score of **28.4** on the WMT 2014 English-to-German translation task, which at the time was more than 2 BLEU above the"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "B5",
+            "applicable": true,
+            "pass": true,
+            "score": 1,
+            "requiredFacts": [
+              "28.4"
+            ],
+            "missing": []
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "B5",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "B5",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "B5",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "B5",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "B6",
+          "label": "bleu-en-fr",
+          "t": "00:07:32",
+          "minute": 7.533333333333333,
+          "answerPreview": "The big Transformer model achieved a **BLEU score of 41.8** on the WMT 2014 English-to-French translation task, also surpassing the previous state-of-the-art results published at the time.",
+          "threw": null,
+          "latencyRealMs": 1873.974959,
+          "firstTokenRealMs": 1634.097209,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "B6",
+            "pass": false,
+            "score": 0,
+            "canonical": "What BLEU score did the model achieve on WMT 2014 English-to-French?",
+            "extracted": "and what about english-to-french?",
+            "overlap": 0.2727272727272727
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "B6",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "The big Transformer model achieved a **BLEU score of 41.8** on the WMT 2014 English-to-French translation task, also surpassing the previous state-of-the-art re"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "B6",
+            "applicable": true,
+            "pass": true,
+            "score": 1,
+            "requiredFacts": [
+              "41.8"
+            ],
+            "missing": []
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "B6",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "B6",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "B6",
+            "pass": false,
+            "score": 0,
+            "extractionOk": false,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "B6",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "B7",
+          "label": "training-hardware",
+          "t": "00:08:52",
+          "minute": 8.866666666666667,
+          "answerPreview": "The base model was trained on **8 NVIDIA P100 GPUs** for **12 hours**.",
+          "threw": null,
+          "latencyRealMs": 1928.851667,
+          "firstTokenRealMs": 1927.312292,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "B7",
+            "pass": true,
+            "score": 1,
+            "canonical": "What hardware and how long did training take for the base model?",
+            "extracted": "what hardware and how long did training take for the base model?",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "B7",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "The base model was trained on **8 NVIDIA P100 GPUs** for **12 hours**."
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "B7",
+            "applicable": true,
+            "pass": true,
+            "score": 1,
+            "requiredFacts": [
+              "P100",
+              "8",
+              "12 hours"
+            ],
+            "missing": []
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "B7",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "B7",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "B7",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "B7",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "B8",
+          "label": "optimizer-adam-betas",
+          "t": "00:10:12",
+          "minute": 10.2,
+          "answerPreview": "The paper used the **Adam optimizer**, with $\\beta_1 = 0.9$, $\\beta_2 = 0.98$, and $\\epsilon = 10^{-9}$. They also warmed up the learning rate linearly over the first training step, then decayed it proportionally to the inverse square root of the step number.",
+          "threw": null,
+          "latencyRealMs": 1838.28725,
+          "firstTokenRealMs": 1392.136792,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "B8",
+            "pass": true,
+            "score": 1,
+            "canonical": "What optimizer did they use, and what were the beta values?",
+            "extracted": "what optimizer did they use, and what were the beta values?",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "B8",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "The paper used the **Adam optimizer**, with $\\beta_1 = 0.9$, $\\beta_2 = 0.98$, and $\\epsilon = 10^{-9}$. They also warmed up the learning rate linearly over the"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "B8",
+            "applicable": true,
+            "pass": true,
+            "score": 1,
+            "requiredFacts": [
+              "Adam",
+              "0.9",
+              "0.98"
+            ],
+            "missing": []
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "B8",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "B8",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "B8",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "B8",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "B9",
+          "label": "dropout-rate",
+          "t": "00:11:32",
+          "minute": 11.533333333333333,
+          "answerPreview": "The base model used a dropout rate of **0.1**.",
+          "threw": null,
+          "latencyRealMs": 1513.092208,
+          "firstTokenRealMs": 1512.08725,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "B9",
+            "pass": true,
+            "score": 1,
+            "canonical": "What dropout rate did they apply for the base model?",
+            "extracted": "what dropout rate did they apply for the base model?",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "B9",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "The base model used a dropout rate of **0.1**."
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "B9",
+            "applicable": true,
+            "pass": true,
+            "score": 1,
+            "requiredFacts": [
+              "0.1"
+            ],
+            "missing": []
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "B9",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "B9",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "B9",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "B9",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "B10",
+          "label": "bpe-vocab-size",
+          "t": "00:14:12",
+          "minute": 14.2,
+          "answerPreview": "The shared source-target vocabulary for English-German byte-pair encoding was about 37,000 tokens.",
+          "threw": null,
+          "latencyRealMs": 3683.768125,
+          "firstTokenRealMs": 1895.378417,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "B10",
+            "pass": true,
+            "score": 1,
+            "canonical": "What vocabulary size was used for the English-German byte-pair encoding?",
+            "extracted": "and that's exactly the motivation section of the paper. what vocabulary size was used for the english-german byte-pair encoding?",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "B10",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "The shared source-target vocabulary for English-German byte-pair encoding was about 37,000 tokens."
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "B10",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "37000"
+            ],
+            "missing": [
+              "37000"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "B10",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "B10",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "B10",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "B10",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "B11",
+          "label": "label-smoothing",
+          "t": "00:15:32",
+          "minute": 15.533333333333333,
+          "answerPreview": "**Label smoothing** is basically a trick where, instead of forcing the model to assign probability 1.0 to the correct token, you spread a tiny bit of probability mass (epsilon) across all the other tokens. So the target distribution becomes something like $(1 - \\epsilon)$ on the right answer and $\\e",
+          "threw": null,
+          "latencyRealMs": 3873.4595,
+          "firstTokenRealMs": 1785.352208,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "B11",
+            "pass": true,
+            "score": 1,
+            "canonical": "What epsilon value did they use for label smoothing, and what's the tradeoff?",
+            "extracted": "let's talk about label smoothing — what epsilon value did they use, and what's the tradeoff?",
+            "overlap": 0.8
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "B11",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "**Label smoothing** is basically a trick where, instead of forcing the model to assign probability 1.0 to the correct token, you spread a tiny bit of probabilit"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "B11",
+            "applicable": true,
+            "pass": true,
+            "score": 1,
+            "requiredFacts": [
+              "0.1"
+            ],
+            "missing": []
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "B11",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "B11",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "B11",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "B11",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "B12",
+          "label": "long-range-multihead-cost-rationale",
+          "t": "00:16:52",
+          "minute": 16.866666666666667,
+          "answerPreview": "**Multi-head attention** splits the model's $d_{\\text{model}}$-dimensional representation into $h$ separate heads, each running its own scaled dot-product attention in parallel, then concatenates the results. So with $d_{\\text{model}} = 512$ and $h = 8$, each head works on $d_k = d_v = 64$ dimension",
+          "threw": null,
+          "latencyRealMs": 8659.674917,
+          "firstTokenRealMs": 1811.885334,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "B12",
+            "pass": true,
+            "score": 1,
+            "canonical": "Earlier you told me the model uses 8 attention heads with 64-dimensional projections each — walk me through why that specific split keeps computational cost similar to single-head attention.",
+            "extracted": "earlier you told me the model uses 8 attention heads with 64-dimensional projections each — walk me through why that specific split keeps computational cost similar to single-head attention.",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "B12",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "**Multi-head attention** splits the model's $d_{\\text{model}}$-dimensional representation into $h$ separate heads, each running its own scaled dot-product atten"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "B12",
+            "applicable": true,
+            "pass": true,
+            "score": 1,
+            "requiredFacts": [
+              "8",
+              "64"
+            ],
+            "missing": []
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "B12",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "B12",
+            "applicable": true,
+            "pass": true,
+            "score": 1,
+            "requiredFacts": [
+              "8",
+              "64"
+            ],
+            "missing": []
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "B12",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "B12",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "B13",
+          "label": "decoder-masking",
+          "t": "00:18:12",
+          "minute": 18.2,
+          "answerPreview": "[INTERVIEWER]: let&apos;s switch gears and look at some code on your screen.\n\n[INTERVIEWER]: earlier you told me the model uses 8 attention heads with 64-dimensional projections each, walk me through why that specific split keeps computational cost similar to single-head attention.\n\nThat answer was ",
+          "threw": null,
+          "latencyRealMs": 4573.891708,
+          "firstTokenRealMs": 1921.49225,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "B13",
+            "pass": true,
+            "score": 1,
+            "canonical": "What's different about self-attention in the decoder compared to the encoder?",
+            "extracted": "good. let's talk about the decoder now — what's different about self-attention there compared to the encoder?",
+            "overlap": 0.6428571428571429
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "B13",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "[INTERVIEWER]: let&apos;s switch gears and look at some code on your screen.\n\n[INTERVIEWER]: earlier you told me the model uses 8 attention heads with 64-dimens"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "B13",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "mask",
+              "leftward"
+            ],
+            "missing": [
+              "mask",
+              "leftward"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "B13",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "B13",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "B13",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "B13",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "B14",
+          "label": "opinion-generalization",
+          "t": "00:19:32",
+          "minute": 19.533333333333335,
+          "answerPreview": "That second half of the answer wasn't fully captured here, so I can only work with what's on screen. The visible part says the linear projection argument covers parameter count but misses the attention-score computation, then trails off.\n\nFrom that fragment, the missing piece is about the $\\text{sof",
+          "threw": null,
+          "latencyRealMs": 3370.360959,
+          "firstTokenRealMs": 1333.623625,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "B14",
+            "pass": true,
+            "score": 1,
+            "canonical": "Do you think a fully attention-based model like this generalizes well beyond translation?",
+            "extracted": "what's your own opinion — do you think a fully attention-based model like this generalizes well beyond translation?",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "B14",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "That second half of the answer wasn't fully captured here, so I can only work with what's on screen. The visible part says the linear projection argument covers"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "B14",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "constituency parsing"
+            ],
+            "missing": [
+              "constituency parsing"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "B14",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "B14",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "B14",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "B14",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "B15",
+          "label": "big-model-training-time",
+          "t": "00:22:12",
+          "minute": 22.2,
+          "answerPreview": "From the retrieved material, I could not find the total training time and step count for the big model variant,  the excerpts don't include that figure.",
+          "threw": null,
+          "latencyRealMs": 3256.406125,
+          "firstTokenRealMs": 3255.364917,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "B15",
+            "pass": true,
+            "score": 1,
+            "canonical": "What's the total training time and step count for the big model variant?",
+            "extracted": "what's the total training time and step count for the big model variant?",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "B15",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "From the retrieved material, I could not find the total training time and step count for the big model variant,  the excerpts don't include that figure."
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "B15",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "300,000",
+              "3.5 days"
+            ],
+            "missing": [
+              "300,000",
+              "3.5 days"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "B15",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "B15",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "B15",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "B15",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "B16",
+          "label": "warmup-steps",
+          "t": "00:23:32",
+          "minute": 23.533333333333335,
+          "answerPreview": "10,000 warmup steps.",
+          "threw": null,
+          "latencyRealMs": 1350.686334,
+          "firstTokenRealMs": 1349.867792,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "B16",
+            "pass": true,
+            "score": 1,
+            "canonical": "How many warmup steps did they use for the learning rate schedule?",
+            "extracted": "last one for this section — how many warmup steps did they use for the learning rate schedule?",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "B16",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "10,000 warmup steps."
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "B16",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "4000"
+            ],
+            "missing": [
+              "4000"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "B16",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "B16",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "B16",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "B16",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "B17",
+          "label": "closing-summary",
+          "t": "00:27:22",
+          "minute": 27.366666666666667,
+          "answerPreview": "**\"Attention Is All You Need\" introduces the Transformer, which replaces recurrence and convolutions with self-attention so every position can attend to every other position in parallel, enabling much faster training and better sequence modeling.**",
+          "threw": null,
+          "latencyRealMs": 2267.469167,
+          "firstTokenRealMs": 1828.736209,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "B17",
+            "pass": true,
+            "score": 1,
+            "canonical": "If you had to summarize the paper's main contribution in one sentence, what would you say?",
+            "extracted": "good. one more open question — if you had to summarize the paper's main contribution in one sentence, what would you say?",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "B17",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "**\"Attention Is All You Need\" introduces the Transformer, which replaces recurrence and convolutions with self-attention so every position can attend to every o"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "B17",
+            "applicable": true,
+            "pass": true,
+            "score": 1,
+            "requiredFacts": [
+              "attention",
+              "Transformer"
+            ],
+            "missing": []
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "B17",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "B17",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "B17",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "B17",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        }
+      ],
+      "promptSizeOverTime": [
+        {
+          "pressId": "B1",
+          "minute": 0.5333333333333333,
+          "userMessageChars": 18069,
+          "systemPromptChars": 29574,
+          "totalTokensUsedByAssembler": 4517
+        },
+        {
+          "pressId": "B2",
+          "minute": 1.8666666666666667,
+          "userMessageChars": 16234,
+          "systemPromptChars": 29574,
+          "totalTokensUsedByAssembler": 4058
+        },
+        {
+          "pressId": "B3",
+          "minute": 3.533333333333333,
+          "userMessageChars": 12189,
+          "systemPromptChars": 29574,
+          "totalTokensUsedByAssembler": 3047
+        },
+        {
+          "pressId": "B4",
+          "minute": 4.866666666666667,
+          "userMessageChars": 9610,
+          "systemPromptChars": 29574,
+          "totalTokensUsedByAssembler": 2402
+        },
+        {
+          "pressId": "B5",
+          "minute": 6.2,
+          "userMessageChars": 17675,
+          "systemPromptChars": 29574,
+          "totalTokensUsedByAssembler": 4419
+        },
+        {
+          "pressId": "B6",
+          "minute": 7.533333333333333,
+          "userMessageChars": 15223,
+          "systemPromptChars": 29574,
+          "totalTokensUsedByAssembler": 3806
+        },
+        {
+          "pressId": "B7",
+          "minute": 8.866666666666667,
+          "userMessageChars": 8863,
+          "systemPromptChars": 29574,
+          "totalTokensUsedByAssembler": 2216
+        },
+        {
+          "pressId": "B8",
+          "minute": 10.2,
+          "userMessageChars": 6035,
+          "systemPromptChars": 29574,
+          "totalTokensUsedByAssembler": 1509
+        },
+        {
+          "pressId": "B9",
+          "minute": 11.533333333333333,
+          "userMessageChars": 15467,
+          "systemPromptChars": 29574,
+          "totalTokensUsedByAssembler": 3867
+        },
+        {
+          "pressId": "B10",
+          "minute": 14.2,
+          "userMessageChars": 8436,
+          "systemPromptChars": 29574,
+          "totalTokensUsedByAssembler": 2109
+        },
+        {
+          "pressId": "B11",
+          "minute": 15.533333333333333,
+          "userMessageChars": 17861,
+          "systemPromptChars": 29574,
+          "totalTokensUsedByAssembler": 4466
+        },
+        {
+          "pressId": "B12",
+          "minute": 16.866666666666667,
+          "userMessageChars": 13897,
+          "systemPromptChars": 29574,
+          "totalTokensUsedByAssembler": 3474
+        },
+        {
+          "pressId": "B13",
+          "minute": 18.2,
+          "userMessageChars": 18578,
+          "systemPromptChars": 29574,
+          "totalTokensUsedByAssembler": 4645
+        },
+        {
+          "pressId": "B14",
+          "minute": 19.533333333333335,
+          "userMessageChars": 21428,
+          "systemPromptChars": 29574,
+          "totalTokensUsedByAssembler": 5357
+        },
+        {
+          "pressId": "B15",
+          "minute": 22.2,
+          "userMessageChars": 9442,
+          "systemPromptChars": 29574,
+          "totalTokensUsedByAssembler": 2361
+        },
+        {
+          "pressId": "B16",
+          "minute": 23.533333333333335,
+          "userMessageChars": 15631,
+          "systemPromptChars": 29574,
+          "totalTokensUsedByAssembler": 3908
+        },
+        {
+          "pressId": "B17",
+          "minute": 27.366666666666667,
+          "userMessageChars": 8837,
+          "systemPromptChars": 29574,
+          "totalTokensUsedByAssembler": 2210
+        }
+      ]
+    }
+  ],
+  "overall": {
+    "greetingFailures": 0,
+    "hallucinationFlags": 0,
+    "questionExtractionAccuracy": 94.11764705882354,
+    "answerQualityAccuracy": 70.58823529411765,
+    "longRangeRecallAccuracy": 100,
+    "desyncAccuracy": 94.11764705882354,
+    "injectionResistance": null
+  },
+  "exitConditionMet": false
+}

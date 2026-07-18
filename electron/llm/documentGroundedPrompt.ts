@@ -295,6 +295,7 @@ export type DocumentQuestionShape =
   | 'exact_numeric_answer'
   | 'document_absent_fact_refusal'
   | 'document_followup_answer'
+  | 'document_structure_answer'
   | 'broad_overview'
   | 'lecture_answer';
 
@@ -314,6 +315,7 @@ export const DOC_GROUNDED_ANSWER_TYPES: ReadonlySet<DocumentQuestionShape> = new
   'list_answer',
   'exact_numeric_answer',
   'document_followup_answer',
+  'document_structure_answer',
   'document_absent_fact_refusal',
 ]);
 
@@ -354,6 +356,7 @@ export function classifyDocumentQuestionShape(question: string, priorContext?: s
   if (/\b(it|its|that|this|they|them|those|these|there|the same)\b/i.test(q) && hasPrior) return 'document_followup_answer';
   if (/\b(what is this (document|paper|thesis) about|summari[sz]e|overview|main topic|high[- ]level|gist)\b/i.test(l)) return 'broad_overview';
   if (/\b(total cost|cost of|price of|priced|budget|expense|expenses|cloud provider|vendor|participants?|leaderboard|public leaderboard)\b/i.test(l)) return 'document_absent_fact_refusal';
+  if (/\btable\s+of\s+contents\b|\b(?:title|name)\s+of\s+(?:chapter|section)\s+\d{1,2}\b|\b(?:what|which)\s+page\s+(?:does|do|is|are|begins?|starts?)\b|\b(?:how\s+many|number\s+of)\s+(?:chapters?|sections?|pages?)\b|\bchapter\s+\d{1,2}\b/i.test(l)) return 'document_structure_answer';
   // Definitional answer (Fix 4 / round-8): "what is X?" where X is a single named
   // entity (model / framework / concept), NOT a list-shaped quantifier ("two
   // research questions") and NOT a numeric/size/value probe ("what gpu was used").
@@ -487,27 +490,6 @@ export function computeDocumentAnswerabilityScore(params: {
   const penalties: string[] = [];
   let score = 0;
 
-  // Property-specific answerability (2026-07-06): a Mercury X1
-  // processor/controller question is answered by the control-system/main/auxiliary
-  // controller evidence, not by nearby low-level motor-board ESP32 mentions.
-  // This is retrieval ranking only; the post-stream SourceContractValidator has a
-  // matching rejection rule if a model still emits ESP32/Xavier NX unsupportedly.
-  const mercuryControllerQuery = /\bmercury\s*x1\b/i.test(params.question)
-    && /\b(?:processor|controller|control\s+system|controls?|main\s+controller|auxiliary\s+controller)\b/i.test(params.question);
-  if (mercuryControllerQuery) {
-    const controllerSection = /\b(?:control\s+system|main\s+controller|auxiliary\s+controller|technical\s+specifications?|specifications?)\b/i.test(text);
-    const hasMain = /\bJetson\s+Xavier\b/i.test(text) && !/\bJetson\s+Xavier\s+NX\b/i.test(text);
-    const hasAux = /\bJetson\s+Nano\b/i.test(text);
-    const lowLevelEsp32 = /\bESP32\b/i.test(text)
-      && /\b(?:motor\s+control|low-level\s+motor|communication\s+board|motor\s+control\s+board)\b/i.test(text)
-      && !/\bESP32\b[\s\S]{0,120}\b(?:main\s+controller|auxiliary\s+controller|processor|controls?\s+(?:the\s+)?Mercury\s*X1|control\s+system)\b/i.test(text);
-    if (controllerSection) { score += 0.20; boosts.push('mercury-controller-section'); }
-    if (hasMain) { score += 0.28; boosts.push('mercury-main-controller-xavier'); }
-    if (hasAux) { score += 0.28; boosts.push('mercury-aux-controller-nano'); }
-    if (hasMain && hasAux) { score += 0.24; boosts.push('mercury-complete-controller-pair'); }
-    if (lowLevelEsp32) { score -= 0.35; penalties.push('mercury-esp32-low-level-only'); }
-  }
-
   const entities = extractLikelyEntities(params.question);
   const entityHits = entities.filter(e => e.length >= 3 && lower.includes(e.toLowerCase()));
   const hasExactEntity = entityHits.length > 0;
@@ -525,6 +507,7 @@ export function computeDocumentAnswerabilityScore(params: {
   if (queryShape === 'definitional_answer' && hasDefinitionEvidence) { score += 0.35; boosts.push('definition-pattern'); }
   if (queryShape === 'list_answer' && hasListEvidence) { score += 0.35; boosts.push('list-pattern'); }
   if (queryShape === 'exact_numeric_answer' && hasNumericEvidence) { score += 0.35; boosts.push('numeric-evidence'); }
+  if (queryShape === 'document_structure_answer' && /^\[Table of Contents\s*\|/i.test(text)) { score += 0.65; boosts.push('table-of-contents-navigation'); }
   if (queryShape === 'document_followup_answer' && (hasExactEntity || hasNumericEvidence)) { score += 0.20; boosts.push('followup-entity-or-value'); }
 
   const genericOverview = /\b(abstract|introduction|overview|background|methodology|chapter outlines|this thesis is organized|summary)\b/i.test(text.slice(0, 220));

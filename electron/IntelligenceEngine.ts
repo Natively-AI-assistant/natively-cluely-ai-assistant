@@ -10,7 +10,7 @@ import {
     FollowUpQuestionsLLM, WhatToAnswerLLM,
     prepareTranscriptForWhatToAnswer, buildTemporalContext,
     AssistantResponse as LLMAssistantResponse, classifyIntent, planNextAssistantAction, PlannerDecision,
-    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCodingAnswerType, resolveFollowUp, resolveFollowUpOrClarify,
+    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
     isLiveSessionMemoryEnabled, resolveLiveFollowup, toMemoryMode, toSurface, effectiveMemoryMode,
     resolveLiveSessionMemoryConfig, piTelemetry, ageBucket,
     buildContextRoute, summarizeContextRoute, shouldThrottleTrigger,
@@ -18,6 +18,7 @@ import {
     detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES,
     raceStreamWithDeadline, LIVE_INTER_TOKEN_STALL_MS, LIVE_TOTAL_HARD_TIMEOUT_MS,
     LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS, isLeakedSchemaStub,
+    isProviderTransportError,
     cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE,
     buildProfileJitPrompt, decideSessionWritePolicy
 } from './llm';
@@ -821,7 +822,7 @@ export class IntelligenceEngine extends EventEmitter {
                     return null;
                 }
                 if (answer) {
-                    this.session.addAssistantMessage(answer);
+                    this.session.addAssistantMessage(answer, undefined, 'what_to_answer');
                     this.emit('suggested_answer', answer, question || 'inferred', confidence);
                     this.setMode('idle');
                     return answer;
@@ -863,7 +864,7 @@ export class IntelligenceEngine extends EventEmitter {
                 timestamp: item.timestamp
             }));
 
-            const preparedTranscript = prepareTranscriptForWhatToAnswer(transcriptTurns, 12);
+            let preparedTranscript = prepareTranscriptForWhatToAnswer(transcriptTurns, 12);
 
             const temporalContext = buildTemporalContext(
                 contextItems,
@@ -896,8 +897,11 @@ export class IntelligenceEngine extends EventEmitter {
             ).catch((): { intent: 'general'; confidence: number; answerShape: string } => (
                 { intent: 'general', confidence: 0.4, answerShape: 'Concise, direct answer to the question.' }
             ));
-            const modeContextPromise: Promise<string> = options?.activeSkill
-                ? Promise.resolve('') // skill mode skips mode retrieval entirely
+            // Governed document turns resolve through EvidenceResolver inside
+            // WhatToAnswerLLM. Do not start the legacy prefetch in parallel: even
+            // an ignored retrieval is an unauthorized competing evidence path.
+            const modeContextPromise: Promise<string> = options?.activeSkill || documentGroundedCustomModeActive
+                ? Promise.resolve('') // skill/governed-document mode skips legacy retrieval
                 : (async () => {
                     try {
                         const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
@@ -925,6 +929,28 @@ export class IntelligenceEngine extends EventEmitter {
                     } catch { return ''; }
                 })();
             const extractedQuestion = extractLatestQuestion(transcriptTurns);
+
+            // [TRACE:LONGCTX] Campaign 2 forensics (temporary, R10: removed before
+            // production). Dumps transcript-window size + extraction result at every
+            // WTA press so the Golden Trace driver can diff minute-2 vs minute-24.
+            if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
+                try {
+                    const rawCharLen = transcriptTurns.reduce((n, t) => n + (t.text?.length || 0), 0);
+                    console.log('[TRACE:LONGCTX] question_extracted', JSON.stringify({
+                        contextItemsCount: contextItems.length,
+                        transcriptTurnsCount: transcriptTurns.length,
+                        rawTranscriptChars: rawCharLen,
+                        preparedTranscriptChars: preparedTranscript.length,
+                        latestQuestion: extractedQuestion.latestQuestion,
+                        questionType: extractedQuestion.questionType,
+                        detectedSpeaker: extractedQuestion.detectedSpeaker,
+                        confidence: extractedQuestion.confidence,
+                        isFollowUp: extractedQuestion.isFollowUp,
+                        sessionStartTime: this.session.getSessionStartTime(),
+                        nowMs: Date.now(),
+                    }));
+                } catch (e) { console.warn('[TRACE:LONGCTX] question_extracted logging failed', e); }
+            }
 
             // LIVE TRANSCRIPT BRAIN (Phase 6 wiring, SHADOW/PARITY behind live_transcript_brain_enabled):
             // the WTA path already builds the hot window inline (getContext(180) + interim
@@ -1030,7 +1056,7 @@ export class IntelligenceEngine extends EventEmitter {
                     // profile). No prior context exists, so there's nothing to answer.
                     if (fr.isClarification && fr.clarificationText && !isSpeculative) {
                         piTelemetry.emit('wta_context_free_clarification', { surface: 'what_to_answer', via: (fr as any).resolvedVia ?? 'clarification' });
-                        this.session.addAssistantMessage(fr.clarificationText);
+                        this.session.addAssistantMessage(fr.clarificationText, undefined, 'what_to_answer');
                         this.emit('suggested_answer', fr.clarificationText, extractedQuestion.latestQuestion || 'inferred', 0.9);
                         this.setMode('idle');
                         trace.mark('repair_used', { reason: 'context_free_clarification' });
@@ -1048,6 +1074,73 @@ export class IntelligenceEngine extends EventEmitter {
                             ageBucket: ageBucket((fr as any).recalledAgeSeconds),
                             reason: fr.reason,
                         });
+                    }
+                    // LONG-RANGE LEXICAL RECALL FALLBACK (Campaign 2, H6 fix,
+                    // 2026-07-16): SessionMemory/resolveLiveFollowup above only
+                    // recall EXPLICITLY-NOTED proper-noun entities (projects,
+                    // companies, skills, a small fixed algorithm/CS topic list) —
+                    // a free-text incident/story mentioned once in prose ("a
+                    // memory leak in a long-running consumer process") is never
+                    // captured there, so a later paraphrased callback
+                    // ("the memory leak you mentioned earlier") finds nothing to
+                    // recall even though the extractor correctly flagged
+                    // isFollowUp=true (fix#2, H3). Live-proven on the real
+                    // backend (traces2/forensic-report.md H6): the model either
+                    // honestly said the transcript doesn't contain the story, or
+                    // (pre fix#1) emitted the "nothing actionable" sentinel.
+                    // Fire ONLY when: the extractor already thinks this is a
+                    // follow-up, AND entity-based recall did NOT already resolve
+                    // it (never runs redundantly, never overrides a real entity
+                    // match), AND we're not already just answering a typed
+                    // question. Bounded, deterministic, no LLM — real transcript
+                    // text only, so zero fabrication risk (R5): either the
+                    // model gets the ACTUAL earlier turn or nothing changes.
+                    const entityRecallSucceeded = Boolean(fr && !fr.isClarification && fr.confidence >= 0.7 && (fr as any).recalledEntity);
+                    if (!question && extractedQuestion.isFollowUp && !entityRecallSucceeded) {
+                        try {
+                            const { recallLongRangeContext } = require('./llm/longRangeTranscriptRecall') as typeof import('./llm/longRangeTranscriptRecall');
+                            const durableWindow = this.session.getDurableContext(this.LIVE_MEMORY_WINDOW_SECONDS);
+                            const recentWindowCutoffMs = transcriptTurns.length > 0 ? transcriptTurns[0].timestamp : Date.now();
+                            // Mode-boundary gate (skeptic-pass finding, 2026-07-16): mirror
+                            // effectiveMemoryMode's own "is this turn's INTENT a comp
+                            // question" derivation (line ~1029 above) so a comp figure
+                            // discussed earlier can only ever be recalled back into another
+                            // comp/negotiation question — never leaked into an unrelated
+                            // technical/coding/general follow-up via this lexical fallback.
+                            let isNegotiationTurn = false;
+                            try {
+                                isNegotiationTurn = planAnswer({
+                                    question: extractedQuestion.latestQuestion,
+                                    source: 'what_to_answer',
+                                    speakerPerspective: 'interviewer',
+                                    activeMode: snapshotModeInfo,
+                                }).answerType === 'negotiation_answer';
+                            } catch { /* default: not negotiation → comp stays gated */ }
+                            const recall = recallLongRangeContext(
+                                extractedQuestion.latestQuestion,
+                                durableWindow,
+                                recentWindowCutoffMs,
+                                Date.now(),
+                                isNegotiationTurn,
+                            );
+                            if (recall.block) {
+                                preparedTranscript = `${recall.block}\n\n${preparedTranscript}`;
+                                trace.mark('repair_used', { reason: 'long_range_lexical_recall', matchCount: recall.matchCount });
+                                piTelemetry.emit('session_memory_recall_attempted', {
+                                    via: 'lexical_transcript_fallback',
+                                    matchCount: recall.matchCount,
+                                    ageBucket: ageBucket(recall.bestAgeSeconds ?? undefined),
+                                });
+                                if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
+                                    console.log('[TRACE:LONGCTX] long_range_recall_fired', JSON.stringify({
+                                        question: extractedQuestion.latestQuestion,
+                                        matchCount: recall.matchCount,
+                                        bestAgeSeconds: recall.bestAgeSeconds,
+                                        blockChars: recall.block.length,
+                                    }));
+                                }
+                            }
+                        } catch { /* fallback is best-effort; never blocks the answer */ }
                     }
                 } catch { /* keep extractor result */ }
             }
@@ -1069,13 +1162,74 @@ export class IntelligenceEngine extends EventEmitter {
             //      get its candidate contextBlock (projects/experience/skills).
             // We take only the FACTS (contextBlock); the orchestrator's
             // systemPromptInjection (first-person persona) is intentionally
+            // Canonical Knowledge Source gate (2026-07-16): resolve the
+            // lossless per-turn decision ONCE, before any candidate-profile
+            // fetches below. A JD-only or reference_files-only turn must
+            // never trigger the résumé orchestrator. We hoist this BEFORE
+            // the groundable-question block (line 1081) so both candidate-
+            // profile gates consult the SAME canonical decision.
+            let _wtaTurnSourceDecision:
+                import('./llm/turnSourceDecision').TurnSourceDecision | null = null;
+            try {
+                const _wtaQHoist = extractedQuestion.latestQuestion || lastInterviewerTurn || '';
+                const _wtaOrchAvail = this.llmHelper.getKnowledgeOrchestrator?.();
+                const _wtaSourceContract = (snapshotModeInfo as any)?.sourceContract ?? null;
+                if (_wtaSourceContract) {
+                    const { resolveExplicitSourceRequests: _r, resolveTurnSourceDecision: _d } = require('./intelligence/context-os/explicitSourceSwitch') as typeof import('./intelligence/context-os/explicitSourceSwitch')
+                        & { resolveTurnSourceDecision?: unknown };
+                    const _tsd = require('./llm/turnSourceDecision');
+                    const _explicitRequests = _r(String(_wtaQHoist));
+                    _wtaTurnSourceDecision = _tsd.resolveTurnSourceDecision({
+                        sourceContract: _wtaSourceContract,
+                        persistedSourceAuthority: _wtaSourceContract.sourceAuthority,
+                        explicitRequest: null,
+                        explicitRequests: _explicitRequests,
+                        availability: {
+                            hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
+                            hasProfileFacts: Boolean((_wtaOrchAvail as any)?.activeResume?.structured_data),
+                            hasJobDescription: Boolean((_wtaOrchAvail as any)?.activeJD?.structured_data),
+                            hasLiveTranscript: true,
+                            hasMeetingRag: false,
+                        },
+                    });
+                }
+            } catch { /* leave null; legacy gate runs */ }
+            // Candidate-profile gate (never-retrieve): JD-only / reference_files-
+            // only / transcript-only turns must NEVER trigger the résumé
+            // orchestrator. Default true (no decision = legacy gate below).
+            let wtaDecisionAllowsCandidateProfile = true;
+            if (_wtaTurnSourceDecision) {
+                wtaDecisionAllowsCandidateProfile = _wtaTurnSourceDecision.outcome === 'default'
+                    || _wtaTurnSourceDecision.outcome === 'explicit_granted';
+                if (_wtaTurnSourceDecision.allowedEvidenceKinds.length > 0) {
+                    // Grounding-campaign fix (2026-07-16): this check previously
+                    // omitted 'profile_jd', so a JD-only-granted turn (e.g.
+                    // jd_requirements_answer, outcome='explicit_granted',
+                    // allowedEvidenceKinds=['profile_jd']) always computed false
+                    // here, even though the canonical decision explicitly granted
+                    // JD access. That blocked orchestrator.processQuestion() from
+                    // ever running, so the model received the answer contract
+                    // (requiredContextLayers: jd) with ZERO grounding evidence and
+                    // confidently fabricated plausible-sounding requirements absent
+                    // from the real JD — a live hallucination on the WTA/meeting-
+                    // overlay path. Mirrors the identical fix already applied to
+                    // the manual-chat path's equivalent gate in ipcHandlers.ts's
+                    // _contractAllowsProfile (Evidence-execution-repair, 2026-07-11).
+                    wtaDecisionAllowsCandidateProfile = wtaDecisionAllowsCandidateProfile
+                        && (_wtaTurnSourceDecision.allowedEvidenceKinds.includes('profile_resume')
+                            || _wtaTurnSourceDecision.allowedEvidenceKinds.includes('projects')
+                            || _wtaTurnSourceDecision.allowedEvidenceKinds.includes('profile_jd'));
+                }
+            }
+
             // ignored so it can't fight UNIVERSAL_WHAT_TO_ANSWER_PROMPT's voice
             // rules. Negotiation/coaching are NOT pulled here — salary stays on
             // its own gated channel. Fully dynamic; resume-derived.
             let candidateProfile = '';
             try {
                 const orchestrator = this.llmHelper.getKnowledgeOrchestrator?.();
-                if (orchestrator?.isKnowledgeMode?.() && !documentGroundedCustomModeActive) {
+                if (orchestrator?.isKnowledgeMode?.() && !documentGroundedCustomModeActive
+                    && wtaDecisionAllowsCandidateProfile) {
                     const extracted = extractedQuestion;
                     // Only ground question types that resolve to the candidate's
                     // own plain facts. jd_alignment/company questions are
@@ -1095,6 +1249,25 @@ export class IntelligenceEngine extends EventEmitter {
                     // non-profile (e.g. negotiation) results, so widening the type
                     // set here only ADDS legitimate candidate grounding; it cannot
                     // pull salary/coaching into a plain answer.
+                    // Grounding-campaign fix (2026-07-17): 'negotiation' is normally
+                    // excluded here so genuine salary-coaching questions never pull
+                    // résumé/JD facts into a coaching answer (coaching has its own
+                    // gated channel). But transcriptQuestionExtractor.classifyType's
+                    // negotiation match is a bare keyword scan ("compensation",
+                    // "salary") with no JD-frame awareness — it also fires on a pure
+                    // FACTUAL lookup like "what's the compensation range for THIS
+                    // ROLE?", which AnswerPlanner's own (more precise) classifier
+                    // correctly resolves to jd_fact_answer, not negotiation_answer.
+                    // Confirmed live (test/harness case C4-002): excluding this
+                    // question from grounding entirely left the model with no real
+                    // JD evidence, so it falsely claimed the JD "does not specify"
+                    // facts that were literally present. isJdFactualLookupNotNegotiationAdvice
+                    // reuses the exact JD-reference + negotiation-advice cues
+                    // AnswerPlanner's resolveJdSourceType already relies on, so a
+                    // genuine "how should I negotiate my salary" ask still routes
+                    // through the existing negotiation-exclusion, untouched.
+                    const isNegotiationButActuallyJdFact = extracted.questionType === 'negotiation'
+                        && isJdFactualLookupNotNegotiationAdvice(extracted.latestQuestion || '');
                     const groundable = extracted.detectedSpeaker === 'interviewer'
                         && extracted.confidence >= 0.6
                         && (extracted.questionType === 'identity'
@@ -1102,7 +1275,8 @@ export class IntelligenceEngine extends EventEmitter {
                             || extracted.questionType === 'behavioral'
                             || extracted.questionType === 'jd_alignment'
                             || extracted.questionType === 'general'
-                            || extracted.questionType === 'follow_up');
+                            || extracted.questionType === 'follow_up'
+                            || isNegotiationButActuallyJdFact);
                     // Grounding runs when NO explicit typed question was supplied
                     // (pure transcript-driven), OR when the supplied `question` IS
                     // the transcript's latest interviewer question — i.e. the LIVE
@@ -1221,18 +1395,83 @@ export class IntelligenceEngine extends EventEmitter {
             // legacy `!documentGroundedCustomModeActive` guard if the resolver
             // throws (never more permissive).
             let wtaProfileAllowed = !documentGroundedCustomModeActive;
+            // Evidence-execution-repair (2026-07-12): hoisted so the Context-OS
+            // clarification short-circuit below (a separate try block, ~line
+            // 1459) can consult the SAME legacy ownership decision this block
+            // computes — see that short-circuit's comment for why.
+            let wtaOwnershipDecision: import('./llm/sourceOwnership').SourceOwnershipDecision | null = null;
+            // Canonical Knowledge Source gate (2026-07-16): the lossless
+            // per-turn decision is the authority for whether the candidate
+            // profile orchestrator may even RUN this turn. A JD-only
+            // decision (allowedEvidenceKinds=['profile_jd']) must NEVER
+            // trigger the résumé/prefetch path. The legacy `wtaProfileAllowed`
+            // boolean is kept for callers that consult the contract caps
+            // directly, but the candidate-profile fetch is gated on
+            // wtaDecisionAllowsCandidateProfile alone (already hoisted
+            // above so the legacy orchestrator gate can consult it).
             try {
                 const { buildCustomModeExecutionContract } = require('./llm/customModeExecutionContract');
                 const { resolveSourceOwnership } = require('./llm/sourceOwnership');
                 const { getSourceOwnerEnforcementStage } = require('./intelligence/intelligenceFlags');
+                const { buildTurnContractIfEnabled, allowsEvidence: coAllowsEvidence } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
                 const _wtaQ = extractedQuestion.latestQuestion || lastInterviewerTurn || '';
-                const _wtaHasProfile = Boolean((this.llmHelper.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data);
+                const _wtaOrchForAvail = this.llmHelper.getKnowledgeOrchestrator?.();
+                const _wtaHasProfile = Boolean((_wtaOrchForAvail as any)?.activeResume?.structured_data);
+                const _wtaHasJd = Boolean((_wtaOrchForAvail as any)?.activeJD?.structured_data);
                 const _wtaPlan = planAnswer({
                     question: String(_wtaQ),
                     source: 'what_to_answer',
                     speakerPerspective: 'interviewer',
                     activeMode: snapshotModeInfo,
                 });
+                // Evidence-execution-repair (2026-07-11) + canonical-gate (2026-07-16):
+                // resolve BOTH the legacy scalar AND the multi-request list so
+                // comparison turns ("compare my résumé with the JD") can grant
+                // every requested family. The multi-request list is the
+                // lossless input to the canonical decision; the scalar is the
+                // legacy adapter for callers that haven't been migrated.
+                const { resolveExplicitSourceRequest: _wtaResolveSwitch, resolveExplicitSourceRequests: _wtaResolveSwitches, toLegacyUserExplicitSource: _wtaToLegacySwitch } = require('./intelligence/context-os/explicitSourceSwitch');
+                const _wtaExplicitSwitch = _wtaResolveSwitch(String(_wtaQ));
+                const _wtaExplicitRequests = _wtaResolveSwitches(String(_wtaQ));
+                // JD folds onto the profile family at the legacy layer; the
+                // canonical decision keeps them distinct.
+                const _wtaUserExplicitSource = _wtaExplicitSwitch === 'job_description'
+                    ? 'profile'
+                    : _wtaExplicitSwitch;
+                const _wtaSourceContract = (snapshotModeInfo as any)?.sourceContract ?? null;
+                // The canonical decision is the authority for capability
+                // issuance. It is null only when no persisted contract exists
+                // (e.g. mid-boot) — the legacy path then runs.
+                const _wtaTurnSourceDecision = _wtaSourceContract
+                    ? require('./llm/turnSourceDecision').resolveTurnSourceDecision({
+                        sourceContract: _wtaSourceContract,
+                        persistedSourceAuthority: _wtaSourceContract.sourceAuthority,
+                        explicitRequest: _wtaExplicitSwitch,
+                        explicitRequests: _wtaExplicitRequests,
+                        availability: {
+                            hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
+                            hasProfileFacts: _wtaHasProfile,
+                            hasJobDescription: _wtaHasJd,
+                            hasLiveTranscript: true,
+                            hasMeetingRag: false,
+                        },
+                    })
+                    : null;
+                // Candidate-profile gate: a turn whose decision is JD-only (or
+                // transcript-only / reference_files) must NEVER trigger the
+                // résumé orchestrator. The boolean is the OR of: the decision
+                // is null (legacy fallback allowed) OR the decision explicitly
+                // grants profile_resume / projects.
+                if (_wtaTurnSourceDecision) {
+                    wtaDecisionAllowsCandidateProfile =
+                        _wtaTurnSourceDecision.outcome === 'default'
+                        || _wtaTurnSourceDecision.outcome === 'explicit_granted';
+                    if (_wtaTurnSourceDecision.allowedEvidenceKinds.length > 0) {
+                        wtaDecisionAllowsCandidateProfile = wtaDecisionAllowsCandidateProfile
+                            && (_wtaTurnSourceDecision.allowedEvidenceKinds.includes('profile_resume')
+                                || _wtaTurnSourceDecision.allowedEvidenceKinds.includes('projects'));
+                    }
+                }
                 const _wtaContract = buildCustomModeExecutionContract({
                     question: String(_wtaQ),
                     streamRoute: 'wta_live',
@@ -1247,6 +1486,12 @@ export class IntelligenceEngine extends EventEmitter {
                     hasProfileFacts: _wtaHasProfile,
                     hasMeetingRag: false,
                     hasLongTermMemory: false,
+                    // Real-custom-mode-repair: the mode snapshot's PERSISTED
+                    // contract is authoritative — see
+                    // docs/context-os/real-custom-mode-repair/06_ROOT_CAUSE_REPORT.md.
+                    persistedSourceAuthority: (snapshotModeInfo as any)?.sourceContract?.sourceAuthority ?? null,
+                    userExplicitSource: _wtaUserExplicitSource,
+                    turnSourceDecision: _wtaTurnSourceDecision,
                 });
                 const _wtaOwn = resolveSourceOwnership({
                     question: String(_wtaQ),
@@ -1254,14 +1499,47 @@ export class IntelligenceEngine extends EventEmitter {
                     profileContextPolicy: _wtaPlan.profileContextPolicy,
                     answerType: _wtaPlan.answerType,
                     hasProfileFacts: _wtaHasProfile,
+                    turnSourceDecision: _wtaTurnSourceDecision,
                 });
+                wtaOwnershipDecision = _wtaOwn;
                 // Staged enforcement (plan §6): `off` restores the legacy
                 // doc-grounded guard; every other stage honors the resolver.
                 wtaProfileAllowed = getSourceOwnerEnforcementStage() === 'off'
                     ? !documentGroundedCustomModeActive
                     : _wtaOwn.profileAllowed;
+
+                // ── CONTEXT OS M1 (never-retrieve) ──────────────────────────
+                // The architecture requires never-retrieve, not retrieve-then-
+                // clear. Compute the Context OS capability HERE — before the
+                // profile grounding fetch below — and AND it into the gate, so
+                // selectManualProfileEvidence is never invoked when the contract
+                // forbids profile. Null contract (flag off) → legacy gate alone.
+                const _wtaEarlyContract = buildTurnContractIfEnabled({
+                    surface: 'what_to_answer',
+                    question: String(_wtaQ),
+                    activeModeId: snapshotModeId ?? null,
+                    activeModeName: snapshotModeInfo?.name ?? null,
+                    sourceAuthority: _wtaContract.sourceAuthority,
+                    answerType: _wtaPlan.answerType,
+                    plannerVoicePerspective: _wtaPlan.voicePerspective,
+                    hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
+                    hasProfileFacts: _wtaHasProfile,
+                    hasLiveTranscript: true,
+                    userExplicitSource: _wtaUserExplicitSource,
+                    turnSourceDecision: _wtaTurnSourceDecision,
+                });
+                if (_wtaEarlyContract) {
+                    // Candidate-profile (NOT JD) gate. A JD-only decision may
+                    // legitimately grant profile_jd, but never profile_resume
+                    // or projects — so the orchestrator prefetch MUST stay
+                    // silent. This is the new (correct) narrowing vs the
+                    // historical _contractAllowsProfile shape that leaked JD.
+                    const contractAllowsCandidateProfileEarly = coAllowsEvidence(_wtaEarlyContract, 'profile_resume')
+                        || coAllowsEvidence(_wtaEarlyContract, 'profile_project');
+                    wtaProfileAllowed = wtaProfileAllowed && contractAllowsCandidateProfileEarly;
+                }
             } catch { /* keep legacy doc-grounded guard */ }
-            if (!candidateProfile && wtaProfileAllowed) {
+            if (!candidateProfile && wtaProfileAllowed && wtaDecisionAllowsCandidateProfile) {
                 try {
                     const orch = this.llmHelper.getKnowledgeOrchestrator?.();
                     const resume = (orch as any)?.activeResume?.structured_data ?? null;
@@ -1328,6 +1606,139 @@ export class IntelligenceEngine extends EventEmitter {
             const contextRoute = buildContextRoute(answerPlan);
             trace.mark('context_selected', summarizeContextRoute(contextRoute));
 
+            // ── CONTEXT OS (Phase 8, 2026-07-10) ────────────────────────────
+            // Build the WTA TurnContextContract from the SAME mode-derived
+            // sourceAuthority the legacy arbiter computes. Null when Context OS
+            // is off (flag) or the kernel fails — every consumer treats null as
+            // legacy behavior. Consumers below: (a) candidateProfile suppression
+            // when the contract denies profile evidence (doc-grounded WTA), and
+            // (b) the profile-repair gate (closes the WTA regen leak where the
+            // repair re-opened profile in doc-grounded turns — baseline §5.5).
+            // Narrowing only: the contract can only REMOVE context, never add.
+            let wtaTurnContract: import('./intelligence/context-os').TurnContextContract | null = null;
+            // One immutable WTA question must drive contract classification,
+            // resolver retrieval, and provider prompting. Never re-derive it in
+            // downstream request assembly.
+            const wtaTurnQuestion = question || extractedQuestion.latestQuestion || lastInterviewerTurn || '';
+            try {
+                const { buildCustomModeExecutionContract: _bldC } = require('./llm/customModeExecutionContract');
+                const { buildTurnContractIfEnabled } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                const _wtaQ2 = wtaTurnQuestion;
+                const _hasProfile2 = Boolean((this.llmHelper.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data);
+                const { resolveExplicitSourceRequest: _wtaResolveSwitch2, toLegacyUserExplicitSource: _wtaToLegacySwitch2 } = require('./intelligence/context-os/explicitSourceSwitch');
+                const _wtaUserExplicitSource2 = _wtaToLegacySwitch2(_wtaResolveSwitch2(String(_wtaQ2)));
+                const _legacyContract2 = _bldC({
+                    question: String(_wtaQ2),
+                    streamRoute: 'wta_live',
+                    modeId: snapshotModeId ?? null,
+                    modeUniqueId: snapshotModeId ?? null,
+                    answerType: answerPlan.answerType,
+                    isCustomMode: snapshotModeInfo?.isCustom === true,
+                    isDocGroundedCustomModeActive: documentGroundedCustomModeActive,
+                    hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
+                    hasCustomPrompt: Boolean((snapshotModeInfo as any)?.hasCustomPrompt),
+                    hasLiveTranscript: true,
+                    hasProfileFacts: _hasProfile2,
+                    hasMeetingRag: false,
+                    hasLongTermMemory: false,
+                    persistedSourceAuthority: (snapshotModeInfo as any)?.sourceContract?.sourceAuthority ?? null,
+                    userExplicitSource: _wtaUserExplicitSource2,
+                });
+                wtaTurnContract = buildTurnContractIfEnabled({
+                    surface: 'what_to_answer',
+                    question: String(_wtaQ2),
+                    activeModeId: snapshotModeId ?? null,
+                    activeModeName: snapshotModeInfo?.name ?? null,
+                    sourceAuthority: _legacyContract2.sourceAuthority,
+                    answerType: answerPlan.answerType,
+                    plannerVoicePerspective: answerPlan.voicePerspective,
+                    hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
+                    hasProfileFacts: _hasProfile2,
+                    hasLiveTranscript: true,
+                    userExplicitSource: _wtaUserExplicitSource2,
+                });
+                if (wtaTurnContract) {
+                    const { allowsEvidence } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                    // Evidence-execution-repair (2026-07-11): third occurrence of
+                    // the same profile_jd gap fixed above — see
+                    // docs/context-os/evidence-execution-repair/07_SOURCE_SWITCH_RESULTS.md.
+                    const contractAllowsProfileWta = allowsEvidence(wtaTurnContract, 'profile_resume')
+                        || allowsEvidence(wtaTurnContract, 'profile_project')
+                        || allowsEvidence(wtaTurnContract, 'profile_jd');
+                    if (!contractAllowsProfileWta && candidateProfile) {
+                        // Doc-grounded / transcript-owned WTA turn: the candidate
+                        // profile grounding must not reach the prompt at all.
+                        candidateProfile = '';
+                        trace.mark('context_selected', { via: 'context_os_profile_suppressed', sourceOwner: wtaTurnContract.sourceOwner } as any);
+                    }
+                    if (isIntelligenceFlagEnabled('trace')) {
+                        const { buildContextOsTrace, logContextOsTrace } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                        logContextOsTrace(buildContextOsTrace({
+                            contract: wtaTurnContract,
+                            sourceAuthority: _legacyContract2.sourceAuthority,
+                            question: String(_wtaQ2),
+                            finalAction: 'answer',
+                        }));
+                    }
+                }
+            } catch (contextOsWtaErr: any) {
+                // Context OS is additive — a kernel failure must never break WTA.
+                if (isIntelligenceFlagEnabled('trace')) {
+                    console.warn('[CONTEXT-OS] WTA contract build skipped (non-fatal):', contextOsWtaErr?.message);
+                }
+            }
+
+            // ── CONTEXT OS CLARIFICATION SHORT-CIRCUIT (Phase 5, invariant 14) ──
+            // When the kernel resolves sourceOwner='clarify', WTA must ASK which
+            // source universe the user means instead of guessing. Short-circuits
+            // BEFORE the provider call (no generation). Gated on
+            // contextOsPropertyValidation (default OFF) + a non-speculative turn
+            // (a speculative pre-emission must never surface a clarification).
+            // Flag OFF / null contract → legacy behavior (answer generated).
+            if (wtaTurnContract
+                && wtaTurnContract.sourceOwner === 'clarify'
+                && isIntelligenceFlagEnabled('contextOsPropertyValidation')
+                && !isSpeculative) {
+                try {
+                    const { buildSourceClarification, buildContextOsTrace, logContextOsTrace } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                    // Evidence-execution-repair (2026-07-12): prefer the legacy,
+                    // mode-aware sourceOwnership.resolveSourceOwnership() decision
+                    // (computed above as wtaOwnershipDecision) when it has a
+                    // SPECIFIC reason to clarify — an explicit source switch the
+                    // mode's authority denies. Its message names the requested
+                    // source and explains how to switch, which is strictly more
+                    // informative than the kernel's generic multi-universe
+                    // disambiguation below. See the identical fix + comment on
+                    // the manual-chat path (ipcHandlers.ts, same short-circuit
+                    // pattern) for the full rationale.
+                    const clarify = wtaOwnershipDecision?.shouldClarifyInsteadOfProfile
+                        ? require('./llm/sourceOwnership').buildSourceSwitchClarification(wtaOwnershipDecision.owner)
+                        : buildSourceClarification({
+                            hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
+                            hasProfileFacts: Boolean((this.llmHelper.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data),
+                            hasLiveTranscript: true, // WTA is always transcript-driven
+                        });
+                    this.session.addAssistantMessage(clarify, undefined, 'what_to_answer');
+                    this.emit('suggested_answer', clarify, extractedQuestion.latestQuestion || question || 'inferred', 0.9);
+                    trace.mark('repair_used', { reason: 'context_os_clarification' });
+                    if (isIntelligenceFlagEnabled('trace')) {
+                        logContextOsTrace(buildContextOsTrace({
+                            contract: wtaTurnContract,
+                            sourceAuthority: wtaTurnContract.reason,
+                            question: String(extractedQuestion.latestQuestion || question || ''),
+                            usedSources: [],
+                            finalAction: 'clarify',
+                        }));
+                    }
+                    this.setMode('idle');
+                    return clarify;
+                } catch (clarErr: any) {
+                    if (isIntelligenceFlagEnabled('trace')) {
+                        console.warn('[CONTEXT-OS] WTA clarification short-circuit skipped (non-fatal):', clarErr?.message);
+                    }
+                }
+            }
+
             const screenContext = options?.screenContext;
             console.log('[IntelligenceEngine] Temporal RAG', {
                 previousResponses: temporalContext.previousResponses.length,
@@ -1372,6 +1783,26 @@ export class IntelligenceEngine extends EventEmitter {
             // It carries the t0 mode (so WTA's prompt builders read the SAME mode the
             // plan above used — #6), the correlation ids (#9), and the generationId
             // stamped onto every live token (#3).
+            // CONTEXT OS H1: build a generation context for the WTA typed pack
+            // when the flag is on and this is a doc-grounded WTA turn with a
+            // contract. The pack is built inside WhatToAnswerLLM from the mode
+            // block (no double retrieval) and governs the factual prompt.
+            let wtaContextOsGeneration: import('./intelligence/context-os').ContextOsGenerationContext | undefined;
+            if (wtaTurnContract
+                && documentGroundedCustomModeActive
+                && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
+                wtaContextOsGeneration = {
+                    contract: wtaTurnContract,
+                    turnQuestion: wtaTurnQuestion,
+                    evidencePack: null,
+                    modeSnapshot: {
+                        modeId: snapshotModeId ?? null,
+                        modeName: snapshotModeInfo?.name ?? null,
+                        sourceAuthority: wtaTurnContract.reason,
+                    },
+                    govern: true,
+                };
+            }
             const requestSnapshot: WhatToAnswerRequestSnapshot = Object.freeze({
                 activeModeInfo: snapshotModeInfo,
                 modeId: snapshotModeId,
@@ -1381,6 +1812,7 @@ export class IntelligenceEngine extends EventEmitter {
                 meetingId: meetingMarker,
                 surface: 'what_to_answer' as const,
                 generationId,
+                ...(wtaContextOsGeneration ? { contextOsGeneration: wtaContextOsGeneration } : {}),
             });
 
             // RC-03 fix: hold a reference to the generator so we can call .return()
@@ -1508,6 +1940,61 @@ export class IntelligenceEngine extends EventEmitter {
                 fullAnswer = buildGracefulRetry(question || extractedQuestion.latestQuestion || lastInterviewerTurn);
             }
 
+            // LEAKED-SCHEMA-STUB GUARD + PROVIDER-TRANSPORT-ERROR GUARD — MUST run
+            // here, BEFORE validateAnswerStructure/repairCodingMarkdown and every
+            // other post-stream repair pass below, as a full EARLY RETURN (not just
+            // an earlier check). Campaign 2 skeptic-pass finding (longsession,
+            // 2026-07-17): a first draft moved the CHECK earlier but let fullAnswer
+            // keep flowing through validateAnswerStructure/repairCodingMarkdown —
+            // for a CODING-type answer (dsa_question_answer/coding_question_answer)
+            // that pipeline unconditionally wraps whatever fullAnswer holds (the
+            // raw stub/error text, OR a short replacement string) into a
+            // six-section markdown scaffold, since neither is valid coding
+            // structure. The scaffold then reached persistence with the original
+            // bug intact — reproduced live in the fix's own regression test before
+            // this early-return version was written. Mirrors the exact early-return
+            // shape `isNonAnswerSentinel` already uses a bit further down in this
+            // same method (fix#1 of this campaign) — same precedent, applied
+            // consistently rather than threading a skip-flag through every
+            // downstream repair site (fragile, easy to miss one).
+            if (fullAnswer && isLeakedSchemaStub(fullAnswer)) {
+                const stubFallback = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
+                    ? "I don't have enough context from the conversation to answer that yet."
+                    : "The model produced an invalid answer artifact, so I won't guess from your profile. Please try again.";
+                trace.mark('fallback_answer_used', { answerType: answerPlan.answerType, reason: 'leaked_schema_stub', finalGenerationMode: 'provider_error_no_answer' });
+                const stubWriteDecision = decideSessionWritePolicy({
+                    finalGenerationMode: 'provider_error_no_answer',
+                    validationOk: false,
+                    criticalViolations: ['leaked_schema_stub'],
+                });
+                if (openedStreamRow) emitChunk(stubFallback);
+                this.session.addAssistantMessage(stubFallback, stubWriteDecision, 'what_to_answer');
+                this.emit('suggested_answer', stubFallback, question || extractedQuestion.latestQuestion || 'inferred', confidence);
+                this.setMode('idle');
+                return stubFallback;
+            }
+            if (fullAnswer && isProviderTransportError(fullAnswer)) {
+                // Unlike the schema-stub guard, we do NOT rewrite fullAnswer here —
+                // the transport-error text itself is exactly what the user should
+                // see right now (it's actionable: check API keys/plan). Only its
+                // PERSISTENCE into session history is the bug (live-proven:
+                // traces2/harness-script-a-press-A12.txt — a poisoned
+                // `[ASSISTANT]: I couldn't reach the AI provider...` turn from an
+                // earlier press caused a LATER, unrelated press to answer as if
+                // resuming mid error-recovery instead of the fresh question).
+                trace.mark('fallback_answer_used', { answerType: answerPlan.answerType, reason: 'provider_transport_error', finalGenerationMode: 'provider_error_no_answer' });
+                const transportWriteDecision = decideSessionWritePolicy({
+                    finalGenerationMode: 'provider_error_no_answer',
+                    validationOk: false,
+                    criticalViolations: ['provider_transport_error'],
+                });
+                if (openedStreamRow) emitChunk(fullAnswer);
+                this.session.addAssistantMessage(fullAnswer, transportWriteDecision, 'what_to_answer');
+                this.emit('suggested_answer', fullAnswer, question || extractedQuestion.latestQuestion || 'inferred', confidence);
+                this.setMode('idle');
+                return fullAnswer;
+            }
+
             trace.mark('validation_started', { answerType: answerPlan.answerType });
             const structureValidation = validateAnswerStructure(answerPlan.answerType, fullAnswer);
             if (!structureValidation.ok && structureValidation.repaired) {
@@ -1569,7 +2056,23 @@ export class IntelligenceEngine extends EventEmitter {
                             );
                         };
 
-                        let docContextBlock = await buildDocContext(false);
+                        // Evidence-execution-repair (2026-07-11): when this turn was
+                        // governed by EvidenceResolver/typed-pack generation inside
+                        // WhatToAnswerLLM (wtaContextOsGeneration.evidencePack was
+                        // populated during the stream — see WhatToAnswerLLM.ts H1
+                        // block), reuse that SAME pack for the validator's initial
+                        // check instead of re-retrieving. This was an independent
+                        // second retrieval with different relaxed/topK params, run
+                        // AFTER the answer already streamed — the validator could
+                        // see evidence the answer was never grounded in. The relaxed
+                        // retry below (a genuinely different, WIDER query) still
+                        // runs on validation failure regardless of governance —
+                        // that is a deliberate second attempt at repair, not a
+                        // duplicate of the first-pass retrieval.
+                        const _governedPack = wtaContextOsGeneration?.evidencePack;
+                        let docContextBlock = (_governedPack && _governedPack.items.length > 0)
+                            ? _governedPack.items.map((it) => `[Section: ${it.pointer?.section || it.sourceId}]\n${it.text}`).join('\n\n')
+                            : await buildDocContext(false);
                         const hasOkfEvidence = /STRUCTURED KNOWLEDGE CARDS|Direct quote|knowledge_card/i.test(docContextBlock);
                         const firstCheck = validateDocumentGroundedAnswer({
                             question: docQuestion,
@@ -1654,7 +2157,25 @@ export class IntelligenceEngine extends EventEmitter {
             // the happy path adds ZERO latency.
             try {
                 const profileLoaded = Boolean(candidateProfile && candidateProfile.trim().length > 0);
-                if (profileLoaded && answerPlan.voicePerspective === 'first_person_candidate') {
+                // CONTEXT OS (Phase 8): the profile REPAIR may not re-open a
+                // source the contract denied (WTA regen leak — baseline §5.5).
+                // candidateProfile is already cleared above when the contract
+                // denies profile, so profileLoaded is false; this explicit
+                // check is defense-in-depth against future re-population.
+                const contractPermitsProfileRepair = (() => {
+                    if (!wtaTurnContract) return true;
+                    try {
+                        const { allowsEvidence } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                        // Grounding-campaign fix (2026-07-16): same missing-profile_jd
+                        // gap as wtaDecisionAllowsCandidateProfile above — kept in sync
+                        // so a JD-only-granted turn isn't treated inconsistently by the
+                        // repair gate vs the initial fetch gate.
+                        return allowsEvidence(wtaTurnContract, 'profile_resume')
+                            || allowsEvidence(wtaTurnContract, 'profile_project')
+                            || allowsEvidence(wtaTurnContract, 'profile_jd');
+                    } catch { return true; }
+                })();
+                if (profileLoaded && contractPermitsProfileRepair && answerPlan.voicePerspective === 'first_person_candidate') {
                     // PI v3 (W6a): EVIDENCE-composing validation on the LIVE path —
                     // upgrades the output-only check to also flag FABRICATED
                     // metrics ("improved retention by 25%") absent from the
@@ -1700,7 +2221,23 @@ export class IntelligenceEngine extends EventEmitter {
                         // builder doesn't know about).
                         const repairInstruction = pv.repairInstruction || buildProfileRepairInstruction(pv as any);
                         const safeCandidateProfile = IntelligenceEngine.sanitizeManualContextText(candidateProfile, 8000);
-                        const safeQuestion = IntelligenceEngine.sanitizeManualContextText(question || '', 1000);
+                        // Long-session harness campaign2 (2026-07-17): this used to read
+                        // ONLY the raw `question` parameter, which is undefined for the
+                        // auto-trigger/WTA path (the button press passes no question — the
+                        // engine derives it internally via extractLatestQuestion). The
+                        // repair prompt's <question> block therefore rendered EMPTY, so the
+                        // regeneration had no idea what was actually asked and could drift
+                        // to an unrelated topic (live-proven: press A12 "tell me about your
+                        // degree and school" repaired into a "Two Sum" coding-algorithm
+                        // answer — traces2/run-002 G6 desync). Mirrors the same fallback
+                        // chain already used for the doc-grounded repair's `docQuestion`
+                        // just above (line ~1970): answerPlan.question is already resolved
+                        // from question||extractedQuestion.latestQuestion||lastInterviewerTurn
+                        // at plan-build time, so reading it here restores the real question.
+                        const safeQuestion = IntelligenceEngine.sanitizeManualContextText(
+                            answerPlan.question || question || extractedQuestion.latestQuestion || lastInterviewerTurn || '',
+                            1000,
+                        );
                         // Wrap the repair directive in an explicit instruction block and
                         // put the OUTPUT command LAST. Previously the bare instruction
                         // led the prompt and MiniMax sometimes ECHOED it verbatim as the
@@ -1819,16 +2356,54 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             if (IntelligenceEngine.isNonAnswerSentinel(fullAnswer)) {
+                // [TRACE:LONGCTX] Campaign 2, F-longsession-1 (2026-07-16): the
+                // "Nothing actionable right now." escape hatch in the WTA prompts is
+                // meant for the SPECULATIVE/auto-trigger path (ambient chatter, small
+                // talk — nothing should interrupt the user). Golden-Trace forensics
+                // (traces2/forensic-report.md, pinned amplifier #3) proved this same
+                // sentinel also fires on a MANUAL button press against a REAL
+                // interviewer question the model genuinely lacks grounding for (e.g.
+                // a long-range follow-up referencing content evicted from the
+                // transcript window — H6). Previously that silently returned null
+                // with no visible message — a real question, a well-formed prompt,
+                // and zero user-facing output: the same SHAPE as the greeting-failure
+                // defect class, even though the literal text differs. A manual press
+                // is explicit user intent; the user must always see SOMETHING. The
+                // speculative path is unaffected — small talk still shows nothing.
+                if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
+                    try {
+                        console.log('[TRACE:LONGCTX] nonanswer_sentinel_discard', JSON.stringify({
+                            question: question || extractedQuestion.latestQuestion || lastInterviewerTurn || null,
+                            rawAnswer: fullAnswer,
+                            answerType: answerPlan?.answerType,
+                            isSpeculative,
+                        }));
+                    } catch (e) { console.warn('[TRACE:LONGCTX] nonanswer_sentinel_discard logging failed', e); }
+                }
+                if (!isSpeculative) {
+                    const honestFallback = "I don't have enough from the conversation to answer that specific point yet.";
+                    fullAnswer = honestFallback;
+                    console.log('[FIX:longsession-nonanswer-fallback]', JSON.stringify({
+                        answerType: answerPlan?.answerType,
+                        reason: 'manual_press_nonanswer_sentinel',
+                    }));
+                    trace.mark('fallback_answer_used', { answerType: answerPlan?.answerType, finalGenerationMode: 'nonanswer_sentinel_fallback' });
+                    if (openedStreamRow) {
+                        emitChunk(honestFallback);
+                    }
+                    this.session.addAssistantMessage(honestFallback, undefined, 'what_to_answer');
+                    this.emit('suggested_answer', honestFallback, question || extractedQuestion.latestQuestion || 'inferred', 0.9);
+                    this.setMode('idle');
+                    return honestFallback;
+                }
                 // Declined as a non-answer. Discard any open streaming row so it
                 // isn't left as an orphaned partial on the auto path (the manual
                 // path also resolves null via the renderer, but the discard is
                 // idempotent and covers the auto-trigger path too).
                 if (openedStreamRow) this.emit('suggested_answer_discard', 'no_answer');
-                if (isSpeculative) {
-                    this.speculativeText = null;
-                    this.speculativeTextExpiry = Infinity;
-                    this.lastTriggerTime = Date.now();
-                }
+                this.speculativeText = null;
+                this.speculativeTextExpiry = Infinity;
+                this.lastTriggerTime = Date.now();
                 this.setMode('idle');
                 return null;
             }
@@ -1873,23 +2448,13 @@ export class IntelligenceEngine extends EventEmitter {
                     this.emit('suggested_answer_token', fullAnswer, question || 'inferred', confidence, generationId);
                 }
             }
-            // LEAKED-SCHEMA-STUB GUARD (E2E MiniMax campaign, p08 Q3): the model
-            // sometimes returns ONLY a JSON-schema stub (```json {"type":"object"}```)
-            // instead of an answer — a generation artifact, not a real answer. Never
-            // surface it: substitute the grounded deterministic fallback if we have
-            // one, else the honest insufficient-context line. Narrow check (whole
-            // answer must BE the stub), so real answers containing JSON are untouched.
-            if (fullAnswer && isLeakedSchemaStub(fullAnswer)) {
-                trace.mark('fallback_answer_used', { answerType: answerPlan.answerType, reason: 'leaked_schema_stub', finalGenerationMode: 'provider_error_no_answer' });
-                fullAnswer = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
-                    ? "I don't have enough context from the conversation to answer that yet."
-                    : "The model produced an invalid answer artifact, so I won't guess from your profile. Please try again.";
-                wtaWriteDecision = decideSessionWritePolicy({
-                    finalGenerationMode: 'provider_error_no_answer',
-                    validationOk: false,
-                    criticalViolations: ['leaked_schema_stub'],
-                });
-            }
+            // (leaked-schema-stub / provider-transport-error guards now run much
+            // earlier — see the "MUST run here, BEFORE validateAnswerStructure"
+            // block above, right after the stream completes. Moved there per a
+            // Campaign 2 skeptic-pass finding: running them this late let the
+            // coding-repair pipeline (validateAnswerStructure/repairCodingMarkdown)
+            // mutate fullAnswer first, so the exact-match checks silently missed
+            // the mutated text for coding-type answers.)
             // OUTPUT SHAPE NORMALIZER (Phase 4 wiring, behind answer_diversity_guard_enabled):
             // the WTA path applies NO answer polish today (unlike the manual path), so empty
             // "*" bullets and visible scaffold labels in a default-style answer reach the UI
@@ -1935,7 +2500,7 @@ export class IntelligenceEngine extends EventEmitter {
                 }
             } catch { /* normalizer never blocks the answer */ }
 
-            this.session.addAssistantMessage(finalWtaAnswer, wtaWriteDecision);
+            this.session.addAssistantMessage(finalWtaAnswer, wtaWriteDecision, 'what_to_answer');
 
             // Full-JIT write-gating law (§6): a provider-error/no-answer WTA
             // fallback (deadline timeout, leaked-schema-stub) carries a
@@ -2111,12 +2676,37 @@ export class IntelligenceEngine extends EventEmitter {
             const context = this.buildPreparedTranscriptContext(120) || this.session.getFormattedContextWithInterim(60);
             const refinementRequest = userRequest || intent;
 
+            // CONTEXT OS (Phase 11, 2026-07-10): follow-up is no longer
+            // mode-blind. Build a contract for THIS surface from the active
+            // mode's authority; the refinement inherits the prior answer's
+            // source ownership ("make it shorter" after a doc-grounded answer
+            // must not introduce profile facts). An explicit source-switch ask
+            // gets a source-honest line instead of silently switching. Flag-
+            // gated + best-effort: null contract → legacy byte-for-byte.
+            let followUpContractRule: string | undefined;
+            try {
+                const contextOs = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                const fuContract = this.buildRecapFollowUpContract('follow_up', String(refinementRequest || ''));
+                if (fuContract) {
+                    const switchTo = contextOs.detectFollowUpSourceSwitch(String(refinementRequest || ''));
+                    if (switchTo && switchTo !== (fuContract.sourceOwner === 'reference_files' ? 'reference_files' : fuContract.sourceOwner)) {
+                        const line = 'Switching sources needs a fresh question — ask it directly and I\'ll answer from ' +
+                            (switchTo === 'profile' ? 'your profile.' : switchTo === 'reference_files' ? 'the uploaded material.' : 'the conversation.');
+                        this.emit('refined_answer', line, intent);
+                        this.setMode('idle');
+                        return line;
+                    }
+                    followUpContractRule = contextOs.buildFollowUpContractRule(fuContract);
+                }
+            } catch { /* Context OS is additive — never break follow-up */ }
+
             const generationId = ++this.currentGenerationId;
             let fullRefined = "";
             const stream = this.followUpLLM.generateStream(
                 lastMsg,
                 refinementRequest,
-                context
+                context,
+                followUpContractRule ? { contractRule: followUpContractRule } : undefined
             );
             let streamAborted = false;
 
@@ -2132,7 +2722,7 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             if (!streamAborted && fullRefined) {
-                this.session.addAssistantMessage(fullRefined);
+                this.session.addAssistantMessage(fullRefined, undefined, 'what_to_answer');
                 this.emit('refined_answer', fullRefined, intent);
 
                 const intentMap: Record<string, string> = {
@@ -2166,6 +2756,57 @@ export class IntelligenceEngine extends EventEmitter {
     }
 
     /**
+     * CONTEXT OS (Phase 11) — build the recap/follow-up TurnContextContract
+     * from the active mode's authority (the same SourceArbiter path every
+     * other surface uses). Returns null when Context OS is off for the
+     * recap/follow-up surface, on any error, or mid-boot — callers treat null
+     * as "legacy mode-blind behavior".
+     */
+    private buildRecapFollowUpContract(
+        surface: 'recap' | 'follow_up',
+        question: string,
+    ): import('./intelligence/context-os').TurnContextContract | null {
+        try {
+            const { buildCustomModeExecutionContract } = require('./llm/customModeExecutionContract');
+            const { buildTurnContractIfEnabled } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+            const { ModesManager } = require('./services/ModesManager');
+            const modeInfo = ModesManager.getInstance().getActiveModeInfo?.() ?? null;
+            const docInfo = ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.() ?? null;
+            const hasProfile = Boolean((this.llmHelper.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data);
+            const legacy = buildCustomModeExecutionContract({
+                question,
+                streamRoute: 'unknown',
+                modeId: modeInfo?.id ?? null,
+                modeUniqueId: modeInfo?.id ?? null,
+                answerType: 'follow_up_answer',
+                isCustomMode: modeInfo?.isCustom === true,
+                isDocGroundedCustomModeActive: docInfo?.documentGroundedCustomModeActive === true,
+                hasReferenceFiles: Boolean(docInfo?.hasReferenceFiles),
+                hasCustomPrompt: Boolean(docInfo?.hasCustomPrompt),
+                hasLiveTranscript: true,
+                hasProfileFacts: hasProfile,
+                hasMeetingRag: false,
+                hasLongTermMemory: false,
+                persistedSourceAuthority: docInfo?.sourceContract?.sourceAuthority ?? null,
+            });
+            return buildTurnContractIfEnabled({
+                surface,
+                question,
+                activeModeId: modeInfo?.id ?? null,
+                activeModeName: modeInfo?.name ?? null,
+                sourceAuthority: legacy.sourceAuthority,
+                answerType: 'follow_up_answer',
+                plannerVoicePerspective: 'assistant_explanation',
+                hasReferenceFiles: Boolean(docInfo?.hasReferenceFiles),
+                hasProfileFacts: hasProfile,
+                hasLiveTranscript: true,
+            });
+        } catch {
+            return null;
+        }
+    }
+
+    /**
      * MODE 4: Recap (Summary)
      * Neutral conversation summary
      */
@@ -2187,9 +2828,19 @@ export class IntelligenceEngine extends EventEmitter {
                 return null;
             }
 
+            // CONTEXT OS (Phase 11, 2026-07-10): recap is no longer mode-blind.
+            // The contract's rule keeps profile/document/memory facts out of a
+            // transcript summary. Flag-gated; null → legacy byte-for-byte.
+            let recapContractRule: string | undefined;
+            try {
+                const contextOs = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                const recapContract = this.buildRecapFollowUpContract('recap', 'Recap the conversation so far');
+                if (recapContract) recapContractRule = contextOs.buildRecapContractRule(recapContract);
+            } catch { /* Context OS is additive — never break recap */ }
+
             const generationId = ++this.currentGenerationId;
             let fullSummary = "";
-            const stream = this.recapLLM.generateStream(context);
+            const stream = this.recapLLM.generateStream(context, recapContractRule ? { contractRule: recapContractRule } : undefined);
             let streamAborted = false;
 
             for await (const token of stream) {
@@ -2210,7 +2861,7 @@ export class IntelligenceEngine extends EventEmitter {
                 // Track recap as an assistant message so "make it shorter" / other
                 // refinements can target it via FollowUpLLM (which reads the last
                 // assistant message).
-                this.session.addAssistantMessage(fullSummary);
+                this.session.addAssistantMessage(fullSummary, undefined, 'what_to_answer');
 
                 this.session.pushUsage({
                     type: 'chat',
@@ -2276,7 +2927,7 @@ export class IntelligenceEngine extends EventEmitter {
             // Only update history and emit final if not aborted
             if (fullClarification && this.currentGenerationId === generationId) {
                 this.emit('clarify', fullClarification);
-                this.session.addAssistantMessage(fullClarification);
+                this.session.addAssistantMessage(fullClarification, undefined, 'what_to_answer');
 
                 this.session.pushUsage({
                     type: 'chat',
@@ -2400,7 +3051,12 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             if (answer) {
-                this.session.addAssistantMessage(answer);
+                // MODE 5: Manual Answer (Fallback) — a manual-chat submission
+                // (submit-manual-question IPC), NOT a WTA suggestion. Was
+                // mistagged 'what_to_answer' (code-review round 2, 2026-07-14);
+                // fixed to match this function's own source: 'manual_input'
+                // plan and the pushUsage({source: 'manual_chat'}) call below.
+                this.session.addAssistantMessage(answer, undefined, 'manual_chat');
                 this.emit('manual_answer_result', answer, question);
 
                 this.session.pushUsage({
@@ -2489,7 +3145,7 @@ export class IntelligenceEngine extends EventEmitter {
                 fullHint = "I couldn't detect any code in the screenshot. Try screenshotting your code editor directly.";
             }
 
-            this.session.addAssistantMessage(fullHint);
+            this.session.addAssistantMessage(fullHint, undefined, 'screenshot');
             this.session.pushUsage({
                 type: 'assist',
                 timestamp: Date.now(),
@@ -2534,7 +3190,7 @@ export class IntelligenceEngine extends EventEmitter {
             if (!context.trim() && !resolvedProblem && (!imagePaths || imagePaths.length === 0)) {
                 this.setMode('idle');
                 const msg = "There's nothing to brainstorm right now. Make sure your question is visible or spoken aloud, then try again.";
-                this.session.addAssistantMessage(msg);
+                this.session.addAssistantMessage(msg, undefined, 'screenshot');
                 this.emit('suggested_answer', msg, 'Brainstorming Approaches', 1.0);
                 return msg;
             }
@@ -2567,7 +3223,7 @@ export class IntelligenceEngine extends EventEmitter {
                 fullResult = "I couldn't generate brainstorm approaches. Make sure your question is visible and try again.";
             }
 
-            this.session.addAssistantMessage(fullResult);
+            this.session.addAssistantMessage(fullResult, undefined, 'screenshot');
             this.session.pushUsage({
                 type: 'assist',
                 timestamp: Date.now(),

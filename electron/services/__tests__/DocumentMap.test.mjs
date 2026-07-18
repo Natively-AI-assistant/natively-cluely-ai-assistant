@@ -114,19 +114,93 @@ test('real headings with "pose" or a year survive (review HIGH fixes)', async ()
   assert.ok(yearMap.sections.some(s => s.num === '2.4'), '"2.4 ImageNet-2012 Pretraining" must survive');
 });
 
-test('sectionAwareChunksFromMap excludes ToC and tags sections (shared chunker)', async () => {
+test('sectionAwareChunksFromMap keeps ToC navigation in one labelled chunk and excludes it from section bodies', async () => {
   const { buildDocumentMap, sectionAwareChunksFromMap } = await loadMap();
   const map = buildDocumentMap(THESIS);
   const chunks = sectionAwareChunksFromMap(map, 140, 30);
   assert.ok(Array.isArray(chunks) && chunks.length > 0, 'structured doc must yield section chunks');
-  assert.equal(
-    chunks.filter(c => /\.\s?\.\s?\.\s?\./.test(c)).length, 0,
-    'no chunk may contain ToC dotted leaders (this is what the hybrid path regressed on)',
+  const tocChunks = chunks.filter(c => c.startsWith('[Table of Contents |'));
+  assert.equal(tocChunks.length, 1, 'the full ToC is retained as one dedicated navigation chunk');
+  assert.match(tocChunks[0], /2\.1\.2 OpenVLA-OFT/, 'navigation chunk retains structural entries');
+  assert.ok(
+    chunks.filter(c => !c.startsWith('[Table of Contents |')).every(c => !/\.\s?\.\s?\.\s?\./.test(c)),
+    'ToC dotted leaders never leak into normal section chunks',
   );
-  assert.ok(chunks.every(c => /^\[(Section [\d.]+|p\d)/.test(c)), 'every chunk carries a [Section|p] provenance tag');
+  assert.ok(chunks.every(c => /^\[(Table of Contents|Section [\d.]+|p\d)/.test(c)), 'every chunk carries a provenance tag');
   // A flat-prose doc (no ToC) returns null so the caller keeps its word chunker.
   const flat = buildDocumentMap('Mercury X1 has 19 DOF. Sensors include LiDAR.');
   assert.equal(sectionAwareChunksFromMap(flat, 140, 30), null, 'flat prose → null (no section chunking)');
+});
+
+test('Table of Contents remains retrievable without becoming a document section', async () => {
+  const { buildDocumentMap } = await loadMap();
+  const map = buildDocumentMap(THESIS);
+  assert.deepEqual(map.sections.filter(s => s.num === '2.1.2').map(s => s.heading), ['2.1.2 OpenVLA-OFT'], 'ToC entries do not create duplicate sections');
+  assert.ok(map.tableOfContents, 'classic ToC documents retain a navigation representation');
+  assert.match(map.tableOfContents.entries.join('\n'), /2\.1\.2 OpenVLA-OFT/, 'ToC entries retain their text');
+  assert.equal(map.tableOfContents.pageStart, 5, 'ToC page provenance is retained');
+});
+
+test('selectTableOfContentsEntries returns direct structural navigation without leaking into topical routing', async () => {
+  const { buildDocumentMap, selectTableOfContentsEntries } = await loadMap();
+  const map = buildDocumentMap(THESIS);
+  assert.match(
+    selectTableOfContentsEntries('What is the title of Chapter 1?', map).join('\n'),
+    /^1 Introduction/m,
+    'chapter ordinal selects its explicit navigation entry',
+  );
+  assert.match(
+    selectTableOfContentsEntries('According to the table of contents, what page begins ROS#?', map).join('\n'),
+    /^2\.4\.2 ROS#/m,
+    'section-title query selects its navigation entry',
+  );
+  assert.deepEqual(
+    selectTableOfContentsEntries('What controller does the robot use?', map),
+    [],
+    'ordinary topical questions do not promote the Table of Contents',
+  );
+});
+
+// Regression (2026-07-13): a top-level chapter entry printed with a SHORT title
+// often carries no dotted leader — e.g. "1 Introduction 7" sitting directly above
+// "1.1 Research Questions . . . 8". The ToC region previously began at the first
+// dotted-leader line, so that chapter entry fell OUTSIDE it, was mis-parsed as a
+// section heading, and never entered the navigation set — leaving "the title of
+// Chapter 1" unanswerable while chapters 2+ (inside the region) resolved. The
+// region must extend backward across contiguous "N Title <page>" navigation lines.
+test('leading chapter entry with no dotted leader is captured as ToC navigation (Chapter-1 regression)', async () => {
+  const { buildDocumentMap, selectTableOfContentsEntries } = await loadMap();
+  const doc = [
+    '[Page 5]',
+    'Contents',
+    '1 Introduction 7',                                   // no dotted leader — the failing shape
+    '1.1 Research Questions . . . . . . . . . . . . . . 8',
+    '1.2 Thesis Objectives . . . . . . . . . . . . . . . 8',
+    '2 State of The Art and Background Overview 10',       // also leaderless, inside the block
+    '2.1 Visual-Language-Action Models . . . . . . . . 10',
+    '2.1.1 OpenVLA . . . . . . . . . . . . . . . . . . 12',
+    '3 Research Methodology 25',
+    '3.1 Robotic Raw Data Acquisition . . . . . . . . . 27',
+    // Real section BODIES follow the ToC (as in any document) so the numbered-
+    // section count reflects a real corpus, not just the navigation block.
+    '[Page 7]',
+    '1 Introduction',
+    'This thesis studies Agentic AI frameworks for embodied robotic systems.',
+    '[Page 10]',
+    '2 State of The Art and Background Overview',
+    'Prior work spans vision-language-action models and agentic systems.',
+    '[Page 25]',
+    '3 Research Methodology',
+    'We describe the data acquisition and finetuning procedure.',
+  ].join('\n');
+  const map = buildDocumentMap(doc);
+  const entries = map.tableOfContents?.entries ?? [];
+  assert.ok(entries.some(e => /^1 Introduction 7$/.test(e)), 'the leaderless "1 Introduction 7" chapter entry must be captured as navigation');
+  const chapter1 = selectTableOfContentsEntries('What is the title of Chapter 1?', map).join('\n');
+  assert.match(chapter1, /^1 Introduction 7$/m, 'chapter-1 ordinal must select its own explicit navigation entry, not only subsections');
+  // The real §1 Introduction body on page 7 must NOT be swallowed into the ToC.
+  const introBody = map.sections.find(s => /Introduction/i.test(s.heading) && s.pageStart === 7);
+  assert.ok(introBody && /Agentic AI frameworks/.test(introBody.body), 'the real chapter-1 body on page 7 must remain a section, not a ToC entry');
 });
 
 test('prose ending in a number is NOT dropped as a ToC line', async () => {
@@ -386,4 +460,48 @@ test('resolveTargetSections returns empty for an unmatched query (global fallbac
   const map = buildDocumentMap(THESIS);
   const targets = resolveTargetSections('xyzzy plugh nonsense', map);
   assert.equal(targets.length, 0, 'no confident section match → empty → caller falls back to global');
+});
+
+// Regression (2026-07-13): a space-aligned PDF spec table extracts as one row per
+// line ("Working Voltage 24 V\nBattery Life Up to 8 hours"). The section flush used
+// to whitespace-collapse the whole body, fusing every row into an ambiguous blob
+// from which the model could not map a label to its value. formatBodyPreservingTables
+// keeps each row on its own labelled line while collapsing ordinary prose.
+test('formatBodyPreservingTables keeps space-aligned table rows on separate labelled lines', async () => {
+  const { formatBodyPreservingTables } = await loadMap();
+  const body = [
+    'The following table summarizes the specifications:',
+    'Specification Value',
+    'Height 1.18 m',
+    'Weight 55 kg',
+    'Working Voltage 24 V',
+    'Battery Life 8 hours',
+    'Repeatability 0.05 mm',
+    'Storage Space 15 L',
+  ];
+  const out = formatBodyPreservingTables(body);
+  // Each spec value must remain on the SAME line as its label (row boundary kept),
+  // not fused with the next row. Rows keep their ORIGINAL text (no forced colon
+  // split — PDF column gaps are ambiguous), so the assertion is on the raw row.
+  assert.match(out, /Working Voltage 24 V/, 'voltage row preserved intact');
+  assert.match(out, /Storage Space 15 L/, 'storage row preserved intact');
+  // The rows must be on DISTINCT lines (the blob-fusion bug put them all on one).
+  const lines = out.split('\n');
+  assert.ok(lines.some(l => /^Working Voltage 24 V$/.test(l)), 'voltage is its own line');
+  assert.ok(lines.some(l => /^Battery Life 8 hours$/.test(l)), 'battery is its own line');
+  assert.ok(lines.length >= 6, `table rows kept on separate lines, got ${lines.length}`);
+});
+
+test('formatBodyPreservingTables leaves ordinary prose whitespace-collapsed (no false table)', async () => {
+  const { formatBodyPreservingTables } = await loadMap();
+  const body = [
+    'The Mercury X1 is composed of two primary components. The robot',
+    'features a total of 19 degrees of freedom, with each arm contributing',
+    'to its dexterity. The arms use a lightweight carbon fiber shell.',
+  ];
+  const out = formatBodyPreservingTables(body);
+  // Prose (no ≥3-row Label/Value run) must collapse to a single flowing block —
+  // never gain spurious "Label: Value" colons.
+  assert.doesNotMatch(out, /:\s/, 'prose must not be reshaped into label:value rows');
+  assert.match(out, /19 degrees of freedom/, 'prose content preserved');
 });

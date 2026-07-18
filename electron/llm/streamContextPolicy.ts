@@ -39,6 +39,15 @@ export interface StreamRouteOptions {
    * fact about the previously-named subject. Absent → legacy behavior.
    */
   followUpReferentHint?: string;
+  /**
+   * Context OS (H1): when present AND `contextOsEvidencePackEnabled`, the typed
+   * EvidencePack GOVERNS the factual provider prompt — the raw retrieved
+   * document block is replaced by the rendered contract + evidence pack, and
+   * the legacy factual `context` is suppressed. Carried as `unknown` to avoid a
+   * circular import (LLMHelper → streamContextPolicy → context-os); LLMHelper
+   * narrows it to `ContextOsGenerationContext` at the use site. Absent → legacy.
+   */
+  contextOsGeneration?: unknown;
 }
 
 /**
@@ -73,6 +82,7 @@ export function modeAnswerType(route?: StreamRouteOptions): AnswerType {
   if (answerType === 'definitional_answer'
       || answerType === 'list_answer'
       || answerType === 'exact_numeric_answer'
+      || answerType === 'document_structure_answer'
       || answerType === 'document_absent_fact_refusal'
       || answerType === 'document_followup_answer') {
     // Execution paths that predate these document-specific subtypes still gate

@@ -18,6 +18,12 @@ export interface AppAPIConfig {
   // for a future bump). Default to gemini-embedding-2 @ 768d when omitted.
   geminiEmbeddingModel?: string;
   geminiEmbeddingDims?: number;
+  /**
+   * True when config came from the Settings UI credential store. In that mode,
+   * clearing a key must actually remove that provider; shell/.env keys should not
+   * silently keep it alive and make the UI lie about provider availability.
+   */
+  explicitKeyManagement?: boolean;
 }
 
 export class EmbeddingProviderResolver {
@@ -49,8 +55,10 @@ export class EmbeddingProviderResolver {
     const add = (k?: string) => { const v = (k || '').trim(); if (v) pool.push(v); };
     for (const k of config.geminiKeys || []) add(k);
     add(config.geminiKey);
-    for (const name of ['GEMINI_API_KEY', 'GEMINI_API_KEY_2', 'GEMINI_API_KEY_3', 'GEMINI_API_KEY_4', 'GEMINI_API_KEY_5', 'GEMINI_API_KEY_6', 'GOOGLE_API_KEY']) {
-      add(process.env[name]);
+    if (!config.explicitKeyManagement) {
+      for (const name of ['GEMINI_API_KEY', 'GEMINI_API_KEY_2', 'GEMINI_API_KEY_3', 'GEMINI_API_KEY_4', 'GEMINI_API_KEY_5', 'GEMINI_API_KEY_6', 'GOOGLE_API_KEY']) {
+        add(process.env[name]);
+      }
     }
     return [...new Set(pool)];
   }
@@ -59,7 +67,15 @@ export class EmbeddingProviderResolver {
     const isCloud = EmbeddingProviderResolver.CLOUD_PROVIDER_NAMES.has(provider.name);
     const attempts = isCloud ? EmbeddingProviderResolver.CLOUD_PROBE_ATTEMPTS : 1;
     for (let i = 1; i <= attempts; i++) {
-      if (await provider.isAvailable()) return true;
+      try {
+        if (await provider.isAvailable()) return true;
+      } catch (error: any) {
+        if (error?.permanentAuthFailure || error?.status === 401 || error?.status === 403) {
+          console.warn(`[EmbeddingProviderResolver] ${provider.name} unavailable due to permanent auth failure — demoting immediately.`);
+          return false;
+        }
+        throw error;
+      }
       if (i < attempts) {
         console.log(`[EmbeddingProviderResolver] ${provider.name} probe ${i}/${attempts} failed — retrying (avoids spurious space-thrash demotion)...`);
         await new Promise(r => setTimeout(r, EmbeddingProviderResolver.CLOUD_PROBE_BACKOFF_MS * i));

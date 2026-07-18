@@ -46,6 +46,77 @@ if (!app.isPackaged) {
   require('dotenv').config();
 }
 
+// ============================================================================
+// FONTATIONS RENDERER-CRASH MITIGATION (2026-07-10) — user crash report on
+// macOS 27.0 (26A5378j), Electron 33.4.11 / Chromium 130.
+//
+// Chromium's Rust "Fontations" font backend (font hinting + variable-font
+// normalized-coordinate path) traps with EXC_BREAKPOINT / SIGTRAP on the
+// renderer's main thread (CrRendererMain) while shaping text on macOS 26/27.
+// Faulting frames from the real crash report:
+//   fontations_ffi$cxxbridge1$BridgeHintingInstance$operator$sizeof
+//   fontations_ffi$cxxbridge1$BridgeNormalizedCoords$operator$sizeof
+// Disabling the feature falls Chromium back to the legacy CoreText path, which
+// is stable. Related upstream: electron/electron#49522 (no upstream fix).
+//
+// TIMING: this MUST run before app.whenReady() / before the first GPU+renderer
+// command line is assembled, or Chromium ignores the switch. This is bundle
+// load (top of main), which satisfies it. Do NOT move it next to the
+// disable-background-timer-throttling switch later in initializeApp() — that
+// runs AFTER whenReady and is too late for a feature flag.
+//
+// SCOPE: darwin + macOS 26+ only (Darwin kernel major >= 25 — same mapping as
+// ipcHandlers.ts get-os-name). Sequoia (macOS 15 / Darwin 24) and Windows keep
+// the faster Rust backend.
+//
+// ESCAPE HATCH (NATIVELY_* convention):
+//   NATIVELY_DISABLE_FONTATIONS=0 → force-KEEP Fontations even on macOS 26+
+//   NATIVELY_DISABLE_FONTATIONS=1 → force-DISABLE on any platform/version
+//   (unset)                       → auto: disable on darwin macOS 26+ only
+// ============================================================================
+try {
+  const fontationsOverride = process.env.NATIVELY_DISABLE_FONTATIONS;
+  let shouldDisableFontations: boolean;
+  if (fontationsOverride === '0') {
+    shouldDisableFontations = false;
+  } else if (fontationsOverride === '1') {
+    shouldDisableFontations = true;
+  } else {
+    const darwinMajor =
+      process.platform === 'darwin'
+        ? parseInt(os.release().split('.')[0] || '0', 10)
+        : 0;
+    shouldDisableFontations = darwinMajor >= 25; // Darwin 25 = macOS 26
+  }
+  if (shouldDisableFontations) {
+    // NOTE: this is the ONLY disable-features append in the codebase
+    // (verified 2026-07-10). Chromium keeps only the LAST --disable-features
+    // value, so if a second disabled feature is ever added it MUST be combined
+    // into one comma-separated value here rather than a second appendSwitch.
+    //
+    // FEATURE NAMES (verified 2026-07-10 via `strings` on the Electron
+    // 33.4.11 framework binary): the base::Feature names are
+    // "FontationsFontBackend" (the full Rust backend) and
+    // "FontationsForSelectedFormats" (routes selected font formats — incl.
+    // variable fonts, the BridgeNormalizedCoords crash path — through Rust
+    // even when the full backend is off). A bare "Fontations" feature does
+    // NOT exist; Chromium silently ignores unknown names, so passing
+    // 'Fontations' here was a no-op. Both must be disabled together.
+    app.commandLine.appendSwitch(
+      'disable-features',
+      'FontationsFontBackend,FontationsForSelectedFormats'
+    );
+    console.log(
+      '[Fontations] disable-features=FontationsFontBackend,FontationsForSelectedFormats applied ' +
+      `(platform=${process.platform} release=${os.release()} override=${fontationsOverride ?? 'auto'})`
+    );
+  }
+} catch {
+  // Never let the mitigation itself break boot. Worst case: Fontations stays
+  // enabled and the (rare) font crash remains possible — the render-process-gone
+  // auto-reload handler recovers it.
+}
+
 /**
  * Whether THIS build carries a real Developer ID signature.
  *
@@ -146,13 +217,59 @@ process.on('uncaughtException', (err) => {
   logToFile('[CRITICAL] Uncaught Exception: ' + redactArgsForLog([err]));
 });
 
+// Crash-loop guard for unhandledRejection, mirroring the render-process-gone
+// recovery pattern above (RENDERER_RELOAD_MAX / RENDERER_RELOAD_WINDOW_MS).
+//
+// REGRESSION FIX (2026-07-11): unlike uncaughtException / SIGTERM / SIGINT /
+// render-process-gone (all of which either exit the process or are already
+// gated to only close the DB on a genuinely TERMINAL path), this handler used
+// to call emergencyCloseDatabase() unconditionally on EVERY unhandled
+// rejection — and emergencyCloseDatabase() is irreversible (it nulls the
+// DatabaseManager singleton with no reopen path; see its own docstring).
+// Node does NOT terminate the process after 'unhandledRejection' when a
+// listener is registered (this handler never calls process.exit()), so the
+// app kept running for the rest of the session with a permanently dead
+// database after the FIRST stray unhandled rejection ANYWHERE in the
+// codebase — a missing .catch() on any fire-and-forget promise, in this file
+// or any IPC handler. Every meeting save / transcript persist / credential
+// lookup silently no-ops from that point on, with no user-facing signal
+// (DatabaseManager.isAvailable() is never surfaced to the renderer). This is
+// silent, permanent, session-wide data loss triggered by a routine, commonly
+// non-fatal JS error class.
+//
+// Fix: treat an ISOLATED unhandled rejection as recoverable (log it, keep the
+// DB open — main's DatabaseManager instance is unaffected by a rejected
+// promise elsewhere in the process). Only escalate to the terminal,
+// DB-closing path if rejections repeat rapidly within a short window — that
+// pattern (not a single stray rejection) is the actual signal of systemic
+// failure the original code was trying to protect against.
+const unhandledRejectionHistory: number[] = [];
+const UNHANDLED_REJECTION_MAX = 5;            // max unhandled rejections ...
+const UNHANDLED_REJECTION_WINDOW_MS = 60_000; // ... within this rolling window before treating it as terminal
+
 process.on('unhandledRejection', (reason, promise) => {
   logCrashEvent('unhandledRejection', {
     reason: formatCrashError(reason),
     promise: String(promise),
   });
   logToFile('[CRITICAL] Unhandled Rejection: ' + redactArgsForLog([reason]));
-  emergencyCloseDatabase('unhandledRejection');
+
+  const now = Date.now();
+  while (unhandledRejectionHistory.length > 0 && now - unhandledRejectionHistory[0] >= UNHANDLED_REJECTION_WINDOW_MS) {
+    unhandledRejectionHistory.shift();
+  }
+  unhandledRejectionHistory.push(now);
+
+  if (unhandledRejectionHistory.length >= UNHANDLED_REJECTION_MAX) {
+    // Rapid-fire unhandled rejections in a short window is a genuine signal
+    // of systemic failure (not a single stray missing .catch()) — treat it
+    // as terminal, matching the render-process-gone-loop-giveup path.
+    logCrashConsole('unhandledRejection-loop-giveup', {
+      rejectionsInWindow: unhandledRejectionHistory.length,
+      windowMs: UNHANDLED_REJECTION_WINDOW_MS,
+    });
+    emergencyCloseDatabase('unhandledRejection-loop-giveup');
+  }
 });
 
 // OS-level shutdown signals. macOS / Linux ship SIGTERM to apps before
@@ -358,20 +475,34 @@ function emergencyCloseDatabase(reason: string): void {
   try {
     const { DatabaseManager } = require('./db/DatabaseManager');
     const dbMgr = DatabaseManager.getInstance();
-    let checkpointOk = true;
-    try { dbMgr.checkpoint?.(); } catch (e: any) {
-      checkpointOk = false;
-      logToFile(`[DB-EMERGENCY] checkpoint failed during ${reason}: ${e?.message || e}`);
-    }
-    try { dbMgr.close?.(); } catch (e: any) {
-      // If checkpoint succeeded but close failed, the WAL is flushed but
-      // the lock isn't released — don't latch the flag; a later crash path
-      // can still try the close alone.
+    // REGRESSION FIX (2026-07-10): do NOT wal_checkpoint(TRUNCATE) here.
+    // This function runs ONLY from crash paths (uncaughtException,
+    // unhandledRejection, SIGTERM/SIGINT, SIGHUP, render/child/gpu-process-gone,
+    // initializeApp-failed). A TRUNCATE checkpoint fired from a crashing or
+    // half-initialized process — or interrupted by the macOS SIGTERM→SIGKILL
+    // race — can leave natively.db-wal/-shm half-truncated, which then BLOCKS
+    // the next `new Database()` open and bricks every subsequent launch on both
+    // macOS and Windows (the "loads once, crashes, then never opens again" bug).
+    // We now ONLY release the handle (drop the OS lock) and let SQLite's own
+    // automatic WAL recovery replay the log safely on the next clean open —
+    // exactly how v2.7.0 (which never checkpointed on crash) behaved. The clean
+    // quit path (checkpointDatabase / before-quit / will-quit) still checkpoints
+    // because there the process is HEALTHY.
+    try {
+      if (typeof dbMgr.closeWithoutCheckpoint === 'function') {
+        dbMgr.closeWithoutCheckpoint();
+      } else {
+        // Defensive fallback for an older manager shape — close is still
+        // better than leaving the handle open, even if it checkpoints.
+        dbMgr.close?.();
+      }
+    } catch (e: any) {
       logToFile(`[DB-EMERGENCY] close failed during ${reason}: ${e?.message || e}`);
-      if (checkpointOk) return;
+      // Don't latch — a later crash path can retry the close.
+      return;
     }
     _emergencyDbClosed = true;
-    logToFile(`[DB-EMERGENCY] closed during ${reason}`);
+    logToFile(`[DB-EMERGENCY] closed (no checkpoint) during ${reason}`);
   } catch (e: any) {
     // Even if the require itself fails (manager not yet bootstrapped),
     // we still want the breadcrumb so triage can see we tried. Don't latch
@@ -916,12 +1047,17 @@ try {
 
 import { CredentialsManager } from "./services/CredentialsManager"
 import { SettingsManager } from "./services/SettingsManager"
-import { PhoneMirrorService } from "./services/PhoneMirrorService"
+import { PhoneMirrorService, shouldStartPhoneMirrorOnBoot } from "./services/PhoneMirrorService"
 import { setVerboseLoggingFlag } from "./verboseLog"
 import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
 import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
+import { NativeOomTrace } from './utils/NativeOomTrace'
+
+// Opt-in only: this trace writes allowlisted process metadata and IPC byte estimates
+// for a copied-profile native OOM investigation. It is inert unless explicitly enabled.
+const nativeOomTrace = new NativeOomTrace()
 
 // Valid disguise modes. The persisted setting is untyped on disk and historical
 // builds wrote values that are no longer part of the union (e.g. 'service'),
@@ -953,7 +1089,27 @@ export class AppState {
   private ragManager: RAGManager | null = null
   private modeReferenceRetryPromise: Promise<void> | null = null
   private stabilityHeartbeatTimer: NodeJS.Timeout | null = null
+  // Diagnostic-only, independently paced native-memory sampler. Normal product
+  // heartbeats remain at 30 seconds; this exists only for a short-lived OOM run.
+  private nativeOomTraceTimer: NodeJS.Timeout | null = null
   private knowledgeOrchestrator: any = null
+
+  public recordNativeOomTrace(event: string, data: Record<string, unknown> = {}): void {
+    nativeOomTrace.record(event, data)
+  }
+
+  public recordNativeOomOutboundIpc(webContentsId: number, channel: string, args: unknown[]): void {
+    nativeOomTrace.recordOutboundIpc(webContentsId, channel, args)
+  }
+
+  public armNativeOomContentTrace(launcherPid: number): void {
+    nativeOomTrace.armContentTrace(launcherPid)
+  }
+
+  public stopNativeOomContentTrace(reason: string): void {
+    void nativeOomTrace.stopContentTrace(reason)
+  }
+
   private tray: Tray | null = null
   private updateAvailable: boolean = false
   private updateDownloadState: 'idle' | 'available' | 'downloading' | 'downloaded' = 'idle'
@@ -1329,14 +1485,10 @@ export class AppState {
           // timing gap. The invoke path used by generalHandlers.takeScreenshot() is
           // already proven to work for UI-button screenshots; reuse it here.
           const mainWindow = this.getMainWindow();
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('global-shortcut', { action: 'takeScreenshot' });
-          }
+          this.sendToWindow(mainWindow, 'global-shortcut', { action: 'takeScreenshot' });
         } else if (actionId === 'general:selective-screenshot') {
           const mainWindow = this.getMainWindow();
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('global-shortcut', { action: 'selectiveScreenshot' });
-          }
+          this.sendToWindow(mainWindow, 'global-shortcut', { action: 'selectiveScreenshot' });
         } else if (actionId === 'general:capture-and-process') {
           // Single-trigger: capture current screen then immediately request AI analysis
           await this.captureScreenAndProcess();
@@ -1392,9 +1544,7 @@ export class AppState {
           // (no rebuild yet, no Accessibility permission, or non-macOS).
           this.showMainWindow(true);
           const overlay = this.windowHelper.getOverlayWindow();
-          if (overlay && !overlay.isDestroyed()) {
-            overlay.webContents.send('ensure-expanded');
-          }
+          this.sendToWindow(overlay, 'ensure-expanded');
 
           if (process.platform === 'darwin') {
             const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
@@ -1407,7 +1557,7 @@ export class AppState {
 
           // Fallback: panel-safe focus on macOS without tap, brief focus on Win.
           if (overlay && !overlay.isDestroyed()) {
-            overlay.webContents.send('global-shortcut', { action: 'focusInput' });
+            this.sendToWindow(overlay, 'global-shortcut', { action: 'focusInput' });
             overlay.focus();
           }
         } else if (
@@ -1497,17 +1647,6 @@ export class AppState {
         serviceTier: settingsManager.get('codexCliServiceTier') || 'default',
         modelReasoningEffort: settingsManager.get('codexCliModelReasoningEffort'),
       });
-      // Restore custom notes and persona for non-premium path
-      try {
-        const savedNotes = DatabaseManager.getInstance().getCustomNotes();
-        if (savedNotes) {
-          llmHelper.setCustomNotes(savedNotes);
-        }
-        const savedPersona = DatabaseManager.getInstance().getPersona();
-        if (savedPersona) {
-          llmHelper.setPersonaPrompt(savedPersona);
-        }
-      } catch (_) {}
     }
 
     // Initialize RAGManager (requires database to be ready)
@@ -1543,6 +1682,7 @@ export class AppState {
     this.setupAutoUpdater()
 
     this.startStabilityHeartbeat();
+    this.startNativeOomTraceSampling();
   }
 
   private startStabilityHeartbeat(): void {
@@ -1559,6 +1699,50 @@ export class AppState {
           jitFinalAnswerEnforced: isIntelligenceFlagEnabled('jitFinalAnswerEnforced'),
           hindsightMemory: isIntelligenceFlagEnabled('hindsightMemory'),
         };
+        // PER-PROCESS memory breakdown (2026-07-10 leak diagnosis): the
+        // main-process RSS above cannot tell us WHICH process is growing.
+        // app.getAppMetrics() reports RSS per Chromium process (Browser=main,
+        // GPU, Tab=renderer, Utility). This makes a native RSS climb
+        // attributable: if the GPU process is the one ballooning on Windows,
+        // the "Browser"/main RSS and the "GPU" RSS diverge here. Guarded so a
+        // failure never breaks the heartbeat.
+        let procMem: Array<{ type: string; rssMB: number; pid: number; win?: string }> = [];
+        try {
+          const { app: eApp, BrowserWindow, webContents } = require('electron');
+          // Build a pid → window-label map so a leaking "Tab" (renderer) is
+          // attributable to a SPECIFIC window (launcher / overlay / cropper /
+          // settings / model-selector). getAppMetrics() only reports the process
+          // TYPE + pid, not which renderer it is — so on the Windows repro we
+          // couldn't tell WHICH renderer ballooned. Match each live webContents'
+          // OS process id to its window URL's ?window= param.
+          const pidToWin: Record<number, string> = {};
+          try {
+            for (const wc of (webContents?.getAllWebContents?.() || [])) {
+              try {
+                if (wc.isDestroyed?.()) continue;
+                const ospid = wc.getOSProcessId?.();
+                if (!ospid) continue;
+                const url = wc.getURL?.() || '';
+                const m = /[?&]window=([a-z-]+)/.exec(url);
+                let label = m ? m[1] : (url.includes('index.html') || url.includes('localhost') ? 'launcher?' : 'renderer');
+                // Devtools / about:blank helpers
+                if (url.startsWith('devtools://')) label = 'devtools';
+                pidToWin[ospid] = pidToWin[ospid] ? `${pidToWin[ospid]}+${label}` : label;
+              } catch { /* per-wc best effort */ }
+            }
+          } catch { /* webContents enumeration best effort */ }
+          procMem = (eApp.getAppMetrics?.() || [])
+            .map((m: any) => ({
+              type: m.type,
+              rssMB: m.memory?.workingSetSize ? Math.round(m.memory.workingSetSize / 1024) : 0, // KB→MB
+              pid: m.pid,
+              ...(pidToWin[m.pid] ? { win: pidToWin[m.pid] } : {}),
+            }))
+            .sort((a: any, b: any) => b.rssMB - a.rssMB);
+        } catch { /* getAppMetrics unavailable pre-ready — skip */ }
+
+        this.sampleNativeOomTrace(mem);
+
         console.log('[StabilityHeartbeat]', {
           rssMB: mb(mem.rss),
           heapUsedMB: mb(mem.heapUsed),
@@ -1571,6 +1755,8 @@ export class AppState {
           isMeetingActive: this.isMeetingActive,
           flags,
           wal: collectWalSnapshot(),
+          // Per-process working-set RSS (MB) — leak-attribution / stability signal.
+          procMem,
         });
       } catch (e: any) {
         console.warn('[StabilityHeartbeat] skipped:', e?.message || e);
@@ -1581,9 +1767,45 @@ export class AppState {
     this.stabilityHeartbeatTimer.unref?.();
   }
 
+  private sampleNativeOomTrace(memory = process.memoryUsage()): void {
+    if (!nativeOomTrace.isEnabled()) return;
+    nativeOomTrace.sample(
+      memory,
+      (() => {
+        try {
+          return (app.getAppMetrics?.() || []) as unknown as Array<Record<string, unknown>>;
+        } catch {
+          return [];
+        }
+      })(),
+      (() => {
+        const launcher = this.windowHelper?.getLauncherWindow?.();
+        if (!launcher || launcher.isDestroyed()) return undefined;
+        const pid = launcher.webContents.getOSProcessId();
+        return pid > 0 ? { webContentsId: launcher.webContents.id, pid } : undefined;
+      })(),
+      { freeMemory: os.freemem(), totalMemory: os.totalmem() },
+    );
+  }
+
+  private startNativeOomTraceSampling(): void {
+    if (!nativeOomTrace.isEnabled() || this.nativeOomTraceTimer) return;
+    // A prior incident rose from 497 MB to more than 2 GB in roughly four
+    // seconds; the ordinary 30-second heartbeat cannot observe that onset.
+    this.nativeOomTraceTimer = setInterval(() => this.sampleNativeOomTrace(), 1000);
+    this.nativeOomTraceTimer.unref?.();
+  }
+
+  public stopNativeOomTraceSampling(): void {
+    if (!this.nativeOomTraceTimer) return;
+    clearInterval(this.nativeOomTraceTimer);
+    this.nativeOomTraceTimer = null;
+  }
+
   private sendToWindow(win: BrowserWindow | null | undefined, channel: string, ...args: any[]): boolean {
     if (!win || win.isDestroyed()) return false;
     try {
+      nativeOomTrace.recordOutboundIpc(win.webContents.id, channel, args);
       win.webContents.send(channel, ...args);
       return true;
     } catch {
@@ -1614,8 +1836,8 @@ export class AppState {
   /** Push a transcript payload to the launcher + overlay rolling-transcript bar. */
   private emitTranscriptToSurfaces(payload: { speaker: string; text: string; timestamp: number; final: boolean; confidence: number }): void {
     const helper = this.getWindowHelper();
-    helper.getLauncherWindow()?.webContents.send('native-audio-transcript', payload);
-    helper.getOverlayWindow()?.webContents.send('native-audio-transcript', payload);
+    this.sendToWindow(helper.getLauncherWindow(), 'native-audio-transcript', payload);
+    this.sendToWindow(helper.getOverlayWindow(), 'native-audio-transcript', payload);
   }
 
   /**
@@ -1893,12 +2115,18 @@ export class AppState {
         // We await waitForReady() so uploads during boot wait for the pipeline
         // instead of immediately throwing 'not ready'.
         const self = this;
-        this.knowledgeOrchestrator.setEmbedFn(async (text: string) => {
+        const embedWithProducerMetadata = async (text: string) => {
           const pipeline = self.ragManager?.getEmbeddingPipeline();
           if (!pipeline) throw new Error('RAG pipeline not available');
           await pipeline.waitForReady();
-          return await pipeline.getEmbedding(text);
+          return await pipeline.getEmbeddingWithFallback(text);
+        };
+        this.knowledgeOrchestrator.setEmbedFn(async (text: string) => {
+          return (await embedWithProducerMetadata(text)).embedding;
         });
+        if (typeof this.knowledgeOrchestrator.setEmbedWithMetadataFn === 'function') {
+          this.knowledgeOrchestrator.setEmbedWithMetadataFn(embedWithProducerMetadata);
+        }
         // Report the active document-embedder's composite space so the orchestrator
         // can detect knowledge nodes embedded in an OLD space (e.g. after a
         // gemini-embedding-001 → -2 upgrade) and re-embed them, instead of silently
@@ -2002,25 +2230,6 @@ export class AppState {
           if (this.knowledgeOrchestrator.isKnowledgeMode()) {
             llmHelper.prewarmPromptCache().catch((_e: any): void => {});
           }
-        }
-
-        // Restore custom notes so orchestrator has them from first request
-        const savedNotes = DatabaseManager.getInstance().getCustomNotes();
-        if (savedNotes) {
-          this.knowledgeOrchestrator.setCustomNotes(savedNotes);
-          llmHelper.setCustomNotes(savedNotes);
-          console.log('[AppState] Custom notes restored');
-        }
-
-        // Restore persona prompt so it is active from first request (not just after the UI mounts)
-        try {
-          const savedPersona = DatabaseManager.getInstance().getPersona();
-          if (savedPersona) {
-            llmHelper.setPersonaPrompt(savedPersona);
-            console.log('[AppState] Persona prompt restored');
-          }
-        } catch (personaErr: any) {
-          console.warn('[AppState] Persona restore failed, continuing without it:', personaErr?.message);
         }
 
         console.log('[AppState] KnowledgeOrchestrator initialized');
@@ -2767,8 +2976,8 @@ export class AppState {
       stt.on('languageDetected', (bcp47: string) => {
         console.log(`[Main] STT language auto-detected (${speaker}): ${bcp47}`);
         const helper = this.getWindowHelper();
-        helper.getMainWindow()?.webContents.send('stt-language-auto-detected', bcp47);
-        helper.getLauncherWindow()?.webContents.send('stt-language-auto-detected', bcp47);
+        this.sendToWindow(helper.getMainWindow(), 'stt-language-auto-detected', bcp47);
+        this.sendToWindow(helper.getLauncherWindow(), 'stt-language-auto-detected', bcp47);
       });
 
       // Persistent-reconnect signal: NativelyProSTT now retries indefinitely
@@ -4595,7 +4804,7 @@ export class AppState {
         if (targets.length === 0) return;
         const level = computeRmsLevel(chunk);
         for (const target of targets) {
-          target.webContents.send('audio-test-level', level);
+          this.sendToWindow(target, 'audio-test-level', level);
         }
       });
 
@@ -4614,13 +4823,13 @@ export class AppState {
         if (targets.length === 0) return;
         const level = computeRmsLevel(chunk);
         for (const target of targets) {
-          target.webContents.send('audio-test-system-level', level);
+          this.sendToWindow(target, 'audio-test-system-level', level);
         }
       });
       capture.on('error', (err: Error) => {
         console.error('[Main] AudioTest System Error:', err);
         for (const target of broadcastTargets()) {
-          target.webContents.send('audio-test-system-error', err.message || String(err));
+          this.sendToWindow(target, 'audio-test-system-error', err.message || String(err));
         }
       });
     };
@@ -4662,7 +4871,8 @@ export class AppState {
       }
       if (screenCapability.effectiveDenied) {
         for (const target of broadcastTargets()) {
-          target.webContents.send(
+          this.sendToWindow(
+            target,
             'audio-test-system-error',
             screenCapability.message ?? formatPermissionMessage('screen-recording-denied'),
           );
@@ -4708,7 +4918,8 @@ export class AppState {
           } catch (probeErr: any) {
             console.warn('[Main] Deferred system-audio probe failed to start:', probeErr);
             for (const target of broadcastTargets()) {
-              target.webContents.send(
+              this.sendToWindow(
+                target,
                 'audio-test-system-error',
                 probeErr?.message || 'System audio probe failed to start.',
               );
@@ -4719,7 +4930,8 @@ export class AppState {
     } catch (sysErr: any) {
       console.warn('[Main] Failed to start system-audio probe:', sysErr);
       for (const target of broadcastTargets()) {
-        target.webContents.send(
+        this.sendToWindow(
+          target,
           'audio-test-system-error',
           sysErr?.message || 'System audio probe failed to start.',
         );
@@ -4893,8 +5105,8 @@ export class AppState {
     } catch { /* non-fatal */ }
 
     // Emit session reset to clear UI state immediately
-    this.getWindowHelper().getOverlayWindow()?.webContents.send('session-reset');
-    this.getWindowHelper().getLauncherWindow()?.webContents.send('session-reset');
+    this.sendToWindow(this.getWindowHelper().getOverlayWindow(), 'session-reset');
+    this.sendToWindow(this.getWindowHelper().getLauncherWindow(), 'session-reset');
 
     // LOCAL-MODEL WARMUP: if the active model is a local Ollama model, warm + pin
     // it now (fire-and-forget) so the cold weight-load (8-12s for a 7-9B model)
@@ -5113,7 +5325,7 @@ export class AppState {
     // The start-side session-reset (in startMeeting) is kept as a safety net
     // for the cold-start / crash-recovery path where endMeeting never ran; on
     // the normal Stop→Start path it is now a no-op (state already clean).
-    this.getWindowHelper().getOverlayWindow()?.webContents.send('session-reset');
+    this.sendToWindow(this.getWindowHelper().getOverlayWindow(), 'session-reset');
 
     // ─── UX STATE FLIP — SYNCHRONOUS ───────────────────────────────────────
     // Now flip the UX-facing meeting flag and broadcast. The launcher's
@@ -5232,7 +5444,7 @@ export class AppState {
           console.log(`[Main] Reverting model to default: ${defaultModel}`);
           this.processingHelper.getLLMHelper().setModel(defaultModel, all);
           BrowserWindow.getAllWindows().forEach(win => {
-            if (!win.isDestroyed()) win.webContents.send('model-changed', defaultModel);
+            this.sendToWindow(win, 'model-changed', defaultModel);
           });
         } catch (e) {
           console.error('[Main] Failed to revert model:', e);
@@ -5355,7 +5567,7 @@ export class AppState {
       if (!win) { tokenBatches.clear(); return; }
       for (const [kind, items] of tokenBatches.entries()) {
         if (items.length > 0) {
-          win.webContents.send('intelligence-token-batch', { kind, items });
+          this.sendToWindow(win, 'intelligence-token-batch', { kind, items });
         }
       }
       tokenBatches.clear();
@@ -5384,16 +5596,16 @@ export class AppState {
     this.intelligenceManager.on('assist_update', (insight: string) => {
       // Send to both if both exist, though mostly overlay needs it
       const helper = this.getWindowHelper();
-      helper.getLauncherWindow()?.webContents.send('intelligence-assist-update', { insight });
-      helper.getOverlayWindow()?.webContents.send('intelligence-assist-update', { insight });
+      this.sendToWindow(helper.getLauncherWindow(), 'intelligence-assist-update', { insight });
+      this.sendToWindow(helper.getOverlayWindow(), 'intelligence-assist-update', { insight });
     })
 
     // Phase 3 — Cluely-style dynamic action card. Forward to all open windows
     // (launcher + overlay) so whichever surface the user has up shows the card.
     this.intelligenceManager.on('dynamic_action_emitted', (action: any) => {
       const helper = this.getWindowHelper();
-      helper.getLauncherWindow()?.webContents.send('intelligence-dynamic-action', { action });
-      helper.getOverlayWindow()?.webContents.send('intelligence-dynamic-action', { action });
+      this.sendToWindow(helper.getLauncherWindow(), 'intelligence-dynamic-action', { action });
+      this.sendToWindow(helper.getOverlayWindow(), 'intelligence-dynamic-action', { action });
       // Phase 6 — telemetry: log detection (sanitized: NO transcript text, NO
       // evidence body — only ids, type, mode, confidence). The TelemetryService
       // sanitizer also strips transcript-shaped fields defensively.
@@ -5417,9 +5629,7 @@ export class AppState {
     this.intelligenceManager.on('suggested_answer', (answer: string, question: string, confidence: number) => {
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-suggested-answer', { answer, question, confidence })
-      }
+      this.sendToWindow(win, 'intelligence-suggested-answer', { answer, question, confidence })
 
     })
 
@@ -5438,9 +5648,7 @@ export class AppState {
     this.intelligenceManager.on('suggested_answer_discard', (reason: string) => {
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-suggested-answer-discard', { reason })
-      }
+      this.sendToWindow(win, 'intelligence-suggested-answer-discard', { reason })
     })
 
     // Verified code execution (background): a ✓ badge when the shown code passed
@@ -5448,12 +5656,12 @@ export class AppState {
     // re-verified fix was produced. Both arrive AFTER the answer was shown.
     this.intelligenceManager.on('code_verified', (info: { question: string; passed: number; total: number; language: string }) => {
       const win = mainWindow()
-      if (win) win.webContents.send('intelligence-code-verified', info)
+      this.sendToWindow(win, 'intelligence-code-verified', info)
     })
     this.intelligenceManager.on('code_correction', (info: { question: string; answer: string; note: string; reVerified: boolean }) => {
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      if (win) win.webContents.send('intelligence-code-correction', info)
+      this.sendToWindow(win, 'intelligence-code-correction', info)
     })
 
     // Sprint 7: dedicated negotiation-coaching channel. Engine emits this
@@ -5465,9 +5673,7 @@ export class AppState {
       // sees them before the coaching card swap.
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-negotiation-coaching', { payload })
-      }
+      this.sendToWindow(win, 'intelligence-negotiation-coaching', { payload })
     })
 
     this.intelligenceManager.on('refined_answer_token', (token: string, intent: string) => {
@@ -5478,18 +5684,14 @@ export class AppState {
     this.intelligenceManager.on('refined_answer', (answer: string, intent: string) => {
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-refined-answer', { answer, intent })
-      }
+      this.sendToWindow(win, 'intelligence-refined-answer', { answer, intent })
 
     })
 
     this.intelligenceManager.on('recap', (summary: string) => {
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-recap', { summary })
-      }
+      this.sendToWindow(win, 'intelligence-recap', { summary })
     })
 
     this.intelligenceManager.on('recap_token', (token: string) => {
@@ -5500,9 +5702,7 @@ export class AppState {
     this.intelligenceManager.on('clarify', (clarification: string) => {
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-clarify', { clarification })
-      }
+      this.sendToWindow(win, 'intelligence-clarify', { clarification })
     })
 
     this.intelligenceManager.on('clarify_token', (token: string) => {
@@ -5513,9 +5713,7 @@ export class AppState {
     this.intelligenceManager.on('follow_up_questions_update', (questions: string) => {
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-follow-up-questions-update', { questions })
-      }
+      this.sendToWindow(win, 'intelligence-follow-up-questions-update', { questions })
     })
 
     this.intelligenceManager.on('follow_up_questions_token', (token: string) => {
@@ -5525,32 +5723,24 @@ export class AppState {
 
     this.intelligenceManager.on('manual_answer_started', () => {
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-manual-started')
-      }
+      this.sendToWindow(win, 'intelligence-manual-started')
     })
 
     this.intelligenceManager.on('manual_answer_result', (answer: string, question: string) => {
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-manual-result', { answer, question })
-      }
+      this.sendToWindow(win, 'intelligence-manual-result', { answer, question })
 
     })
 
     this.intelligenceManager.on('mode_changed', (mode: string) => {
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-mode-changed', { mode })
-      }
+      this.sendToWindow(win, 'intelligence-mode-changed', { mode })
     })
 
     this.intelligenceManager.on('error', (error: Error, mode: string) => {
       console.error(`[IntelligenceManager] Error in ${mode}:`, error)
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-error', { error: error.message, mode })
-      }
+      this.sendToWindow(win, 'intelligence-error', { error: error.message, mode })
     })
   }
 
@@ -5726,9 +5916,7 @@ export class AppState {
     } else {
       // In overlay mode, send toggle-expand IPC to expand/collapse the UI
       const targetWindow = this.windowHelper.getOverlayWindow();
-      if (targetWindow && !targetWindow.isDestroyed()) {
-        targetWindow.webContents.send('toggle-expand');
-      }
+      this.sendToWindow(targetWindow, 'toggle-expand');
     }
   }
 
@@ -5886,12 +6074,10 @@ export class AppState {
       app.dock.hide();
     }
     const mainWindow = this.getMainWindow();
-    if (mainWindow) {
-      mainWindow.webContents.send("capture-and-process", {
-        path: screenshotPath,
-        preview
-      });
-    }
+    this.sendToWindow(mainWindow, 'capture-and-process', {
+      path: screenshotPath,
+      preview,
+    });
   }
 
   public async takeSelectiveScreenshot(restoreFocus: boolean = true): Promise<string> {
@@ -6041,12 +6227,10 @@ export class AppState {
             const screenshotPath = await this.takeScreenshot()
             const preview = await this.getImagePreview(screenshotPath)
             const mainWindow = this.getMainWindow()
-            if (mainWindow) {
-              mainWindow.webContents.send("screenshot-taken", {
-                path: screenshotPath,
-                preview
-              })
-            }
+            this.sendToWindow(mainWindow, 'screenshot-taken', {
+              path: screenshotPath,
+              preview,
+            })
           } catch (error) {
             console.error("Error taking screenshot from tray:", error)
           }
@@ -6285,15 +6469,53 @@ export class AppState {
   // reset sharingType) and drive the dock to hidden, retrying against the OS
   // ground truth so a late ready-to-show dock re-show is corrected.
   public applyInitialUndetectableState(): void {
-    if (process.platform !== 'darwin') return;
-    if (!this.isUndetectable) return;
-    this.reassertAllContentProtection();
-    const focusWindow = this.windowHelper.getMainWindow();
     // Longer retry budget than the toggle path (~2.5s vs ~0.8s): at startup the
     // dock re-show lands at the launcher's ready-to-show, which on a cold launch
     // can arrive later than the toggle path's 6-retry window. Extra isVisible()
     // re-checks are cheap and stop early via the isUndetectable guard.
-    this._enforceDockState(true, focusWindow, 0, 18);
+    this.reassertUndetectableStealth(18);
+  }
+
+  // Re-drive the app back to a fully-stealth state after any operation that can
+  // silently undo it — used by both startup convergence (above) and, critically,
+  // every launcher window show (WindowHelper.switchToLauncher).
+  //
+  // WHY launcher shows leak stealth: the launcher is a REGULAR macOS window (no
+  // `type: 'panel'`, no skipTaskbar — unlike the overlay NSPanel). Calling
+  // .show()+.focus() on it while the app is in accessory policy with the dock
+  // tile hidden re-activates the app as a foreground app, which makes macOS
+  // re-register it and REVEAL the dock tile — silently undoing app.dock.hide().
+  // This is the "Natively icon appears in the dock after Stop meeting" bug:
+  // endMeeting() swaps overlay→launcher, the activating show re-shows the tile,
+  // and nothing re-asserted stealth afterward. It is intermittent because macOS
+  // asynchronously coalesces and sometimes drops activation-policy/dock calls.
+  //
+  // This routes through the SAME self-verifying _enforceDockState() loop the
+  // toggle path uses: it polls app.dock.isVisible() (the OS ground truth) and
+  // re-applies dock.hide() + content protection until reality matches intent,
+  // so it cannot be defeated by a dropped call or a late re-show. Cheap and safe
+  // to call redundantly — it no-ops immediately off-darwin or when not
+  // undetectable, and stops early via the isUndetectable guard inside the loop.
+  public reassertUndetectableStealth(maxAttempts: number = 10): void {
+    if (process.platform !== 'darwin') return;
+    if (!this.isUndetectable) return;
+    // Collapse any in-flight enforcement chain from a PRIOR re-assert before
+    // starting a fresh one — same discipline as setUndetectable(). Without this,
+    // a burst of launcher shows (rapid Stop→Start→Stop, or a cold-start
+    // convergence overlapping a ready-to-show switchToLauncher) would spawn
+    // several overlapping _enforceDockState chains. They are idempotent and
+    // self-cancelling (all want dock hidden; each stops early once app.dock
+    // reports hidden or the isUndetectable guard flips), so this is not a
+    // correctness fix — it just avoids redundant isVisible() polling. The newest
+    // re-assert owns the dock; the intent (want-hidden) is unchanged, so
+    // cancelling the older timers loses nothing.
+    for (const timer of this._dockReassertTimers) {
+      clearTimeout(timer);
+    }
+    this._dockReassertTimers = [];
+    this.reassertAllContentProtection();
+    const focusWindow = this.windowHelper.getMainWindow();
+    this._enforceDockState(true, focusWindow, 0, maxAttempts);
   }
 
   // --- Mouse Passthrough (Adapted from public PR #113 — verify premium interaction) ---
@@ -6487,19 +6709,19 @@ export class AppState {
     const launcher = this.windowHelper.getLauncherWindow();
     if (launcher && !launcher.isDestroyed()) {
       launcher.setTitle(appName.trim());
-      launcher.webContents.send('disguise-changed', mode);
+      this.sendToWindow(launcher, 'disguise-changed', mode);
     }
 
     const overlay = this.windowHelper.getOverlayWindow();
     if (overlay && !overlay.isDestroyed()) {
       overlay.setTitle(appName.trim());
-      overlay.webContents.send('disguise-changed', mode);
+      this.sendToWindow(overlay, 'disguise-changed', mode);
     }
 
     const settingsWin = this.settingsWindowHelper.getSettingsWindow();
     if (settingsWin && !settingsWin.isDestroyed()) {
       settingsWin.setTitle(appName.trim());
-      settingsWin.webContents.send('disguise-changed', mode);
+      this.sendToWindow(settingsWin, 'disguise-changed', mode);
     }
 
     // Cancel any stale forceUpdate timeouts from previous disguise changes
@@ -6538,7 +6760,7 @@ export class AppState {
     for (const win of windows) {
       if (win && !win.isDestroyed() && !sent.has(win.id)) {
         sent.add(win.id);
-        win.webContents.send(channel, ...args);
+        this.sendToWindow(win, channel, ...args);
       }
     }
   }
@@ -6617,7 +6839,41 @@ async function initializeApp() {
   // 2. Wait for app to be ready
   logStartupPhase('before-app-whenReady');
   await app.whenReady()
+  nativeOomTrace.initialize()
+  nativeOomTrace.record('app-ready', {
+    pid: process.pid,
+    platform: process.platform,
+    electron: process.versions.electron,
+  })
   logStartupPhase('after-app-whenReady', { userData: app.getPath('userData') });
+
+  // 2a-verify. Context OS flag-parity assertion (2026-07-14 real-app
+  // source-switch repair): no-op unless NATIVELY_VERIFICATION_MODE=1 is
+  // explicitly set (internal benchmark/CI/soak runs only). Fails fast and
+  // loudly if this Electron process's effective flags don't match what a
+  // verification run assumes — the exact class of drift that let the
+  // benchmark and the real app silently exercise different Context OS
+  // behavior on the same build.
+  //
+  // HARD EXIT (code-review 2026-07-14 round 2): a throw here would otherwise
+  // propagate into initializeApp()'s generic top-level .catch(), which logs
+  // but never exits — leaving a half-initialized, windowless process alive
+  // indefinitely. That defeats the whole point for a CI/soak harness, which
+  // needs an unambiguous nonzero exit code, not a hang it has to time out on.
+  // Mirrors the existing [nativeArch] gate precedent (main.ts ~line 219):
+  // print the reason, then app.exit(1) (or process.exit(1) if Electron's
+  // app isn't available, e.g. under a bare-Node verification harness).
+  try {
+    const { assertVerificationFlagsOrThrow } = require('./intelligence/intelligenceFlags') as typeof import('./intelligence/intelligenceFlags');
+    assertVerificationFlagsOrThrow();
+  } catch (verifyErr: any) {
+    console.error('[ContextOS] verification flag assertion failed — exiting:', verifyErr?.message || verifyErr);
+    if (typeof app?.exit === 'function') {
+      app.exit(1);
+    } else {
+      process.exit(1);
+    }
+  }
 
   // 2a. PRE-EMPTIVE dock hide / activation-policy clamp: must happen before ANY
   // operation that causes macOS to register a dock entry (app.setName, the
@@ -6913,6 +7169,19 @@ if (process.env.THINKING_MATRIX === '1') {
     windowCount: BrowserWindow.getAllWindows().length,
   });
 
+  // Opt-in: NATIVELY_LOG_GPU_STATUS=1 logs Chromium's GPU feature status once
+  // at boot (whether gpu_compositing/rasterization are 'enabled' vs.
+  // 'software'/'disabled') — useful when diagnosing a renderer that freezes
+  // or fails to composite. Off by default to avoid unconditional boot noise.
+  if (process.env.NATIVELY_LOG_GPU_STATUS === '1') {
+    try {
+      const status = app.getGPUFeatureStatus();
+      console.log('[GPU] featureStatus', JSON.stringify(status));
+    } catch (e: any) {
+      console.warn('[GPU] getGPUFeatureStatus failed:', e?.message || e);
+    }
+  }
+
   // Run the local-fallback preflight AFTER the launcher paints. We schedule
   // it via setTimeout so the visible launch is not blocked by:
   //   - native module requires (onnxruntime-node, sqlite-vec)
@@ -7008,10 +7277,26 @@ if (process.env.THINKING_MATRIX === '1') {
 
   // Restore Phone Mirror service if it was enabled in a previous session.
   // Failure here is non-fatal — the user can re-enable from Settings.
-  if (SettingsManager.getInstance().get('phoneMirrorEnabled')) {
+  //
+  // DIAGNOSTIC (2026-07-11): NATIVELY_DISABLE_PHONE_MIRROR=1 stops the PhoneMirror
+  // WebSocket server from ever starting. On the Windows repro, the launcher
+  // renderer's native RSS explodes (497→2008MB in ~4s, flat JS heap) within
+  // seconds of `[PhoneMirror] companion extension connected` — the same trigger
+  // in 3 separate logs. This flag lets the (frozen) user boot WITHOUT the WS
+  // server so the phone/companion extension can't connect. If the leak vanishes,
+  // PhoneMirror connect is confirmed as the trigger.
+  const disablePhoneMirrorOnBoot = process.env.NATIVELY_DISABLE_PHONE_MIRROR === '1';
+  if (
+    shouldStartPhoneMirrorOnBoot({
+      disablePhoneMirror: disablePhoneMirrorOnBoot,
+      phoneMirrorEnabled: !!SettingsManager.getInstance().get('phoneMirrorEnabled'),
+    })
+  ) {
     PhoneMirrorService.getInstance()
       .start({ exposeOnLan: !!SettingsManager.getInstance().get('phoneMirrorExposeOnLan'), persist: false })
       .catch((err) => console.error('[Init] PhoneMirror auto-start failed:', err));
+  } else if (disablePhoneMirrorOnBoot) {
+    console.warn('[LeakTest] NATIVELY_DISABLE_PHONE_MIRROR=1 → PhoneMirror WS server NOT started this run');
   }
 
   // One-time macOS screen recording permission prompt.
@@ -7193,19 +7478,118 @@ if (process.env.THINKING_MATRIX === '1') {
   }
 
   app.on('will-quit', () => {
+    appState.stopNativeOomTraceSampling();
+    nativeOomTrace.stop('will-quit');
     stopAppManagedHindsight('will-quit');
     checkpointDatabase('will-quit');
   });
 
+  // Crash-loop guard: reload timestamps per webContentsId.
+  const rendererReloadHistory = new Map<number, number[]>();
+  const RENDERER_RELOAD_MAX = 3;            // max auto-reloads ...
+  const RENDERER_RELOAD_WINDOW_MS = 60_000; // ... within this rolling window
+
   app.on('render-process-gone', (_event, webContents, details) => {
+    const urlNow = (() => { try { return webContents?.getURL?.() || ''; } catch { return ''; } })();
     logCrashConsole('render-process-gone', {
       details,
       webContentsId: webContents?.id,
-      webContentsUrl: (() => { try { return webContents?.getURL?.(); } catch { return null; } })(),
+      webContentsUrl: urlNow || null,
     });
     console.warn('[main] render-process-gone:', details);
     stopAppManagedHindsight('render-process-gone');
-    emergencyCloseDatabase('render-process-gone');
+
+    // RECOVERY (2026-07-10): a renderer crash (e.g. the Fontations font trap on
+    // macOS 26/27 — see the disable-features mitigation at top-of-module) kills
+    // only the render process; the BrowserWindow and the main process survive.
+    // Previously we only logged + closed the DB, leaving a blank/dead launcher
+    // that the user reads as "the app crashed and won't come back." Now we
+    // reload the dead webContents with a crash-loop backoff.
+    //
+    // CRITICAL: do NOT emergencyCloseDatabase on the RECOVER path. That call is
+    // irreversible (it nulls the singleton DB with no reopen path), so closing
+    // it here would hand the reloaded renderer a dead main-process DB (no
+    // history/modes/persistence). The renderer does not own the DB — main does,
+    // synchronously — so a renderer crash cannot corrupt it. We only close the
+    // DB on TERMINAL paths (quit / non-crash / give-up).
+    const reason = details?.reason;
+    const isCrash = reason === 'crashed' || reason === 'abnormal-exit';
+
+    // Never fight an intentional teardown, and don't reload a clean/intentional
+    // exit or an intentional kill — treat those as terminal (preserve the
+    // original crash-path behavior so the WAL lock is released cleanly).
+    if (!isCrash || appState.isQuitting?.()) {
+      emergencyCloseDatabase('render-process-gone');
+      return;
+    }
+
+    // Only auto-reload real user-facing windows. Transient/hidden helpers
+    // (cropper = screenshot overlay; model-selector = hidden preload with a
+    // known forceRestartOllama side-effect) should NOT be blindly reloaded —
+    // they get recreated on next open. Reload launcher / settings / overlay.
+    const isRecoverableWindow =
+      urlNow === '' /* URL unavailable — assume the main launcher */ ||
+      /[?&]window=(launcher|settings|overlay)\b/.test(urlNow) ||
+      !/[?&]window=/.test(urlNow) /* no window tag → the default launcher */;
+    if (!isRecoverableWindow) {
+      logToFile(`[main] render-process-gone: not auto-reloading transient window (${urlNow})`);
+      return;
+    }
+
+    const id = webContents?.id;
+    if (typeof id !== 'number' || !webContents || webContents.isDestroyed?.()) {
+      // WebContents gone entirely — recreate the launcher via the existing
+      // helper (idempotent: no-ops if a launcher already exists). Keep the DB
+      // OPEN so the recreated renderer is fully functional.
+      try {
+        appState.createWindow();
+        logToFile('[main] render-process-gone: webContents destroyed, recreated launcher window');
+      } catch (e: any) {
+        logToFile(`[main] render-process-gone: window recreate failed: ${e?.message || e}`);
+      }
+      return;
+    }
+
+    const now = Date.now();
+    const history = (rendererReloadHistory.get(id) || []).filter(
+      (t) => now - t < RENDERER_RELOAD_WINDOW_MS
+    );
+
+    if (history.length >= RENDERER_RELOAD_MAX) {
+      // Crash loop: stop reloading. NOW it is terminal — release the DB cleanly
+      // and surface a single dialog. Do not loop.
+      rendererReloadHistory.delete(id);
+      logCrashConsole('render-process-gone-loop-giveup', {
+        webContentsId: id,
+        reloadsInWindow: history.length,
+        windowMs: RENDERER_RELOAD_WINDOW_MS,
+      });
+      emergencyCloseDatabase('render-process-gone-loop-giveup');
+      try {
+        // dialog is not imported at module top — require it lazily (matches
+        // the native-arch gate handler's pattern above).
+        const { dialog } = require('electron');
+        dialog.showErrorBox(
+          'Natively — display error',
+          'A window keeps crashing while rendering. Please restart Natively. ' +
+          'If this continues, update to the latest version.'
+        );
+      } catch { /* dialog best-effort */ }
+      return;
+    }
+
+    // Under the cap → reload. Keep the DB OPEN (main owns it; it is healthy).
+    history.push(now);
+    rendererReloadHistory.set(id, history);
+    logToFile(
+      `[main] render-process-gone: auto-reloading webContents ${id} ` +
+      `(attempt ${history.length}/${RENDERER_RELOAD_MAX} within ${RENDERER_RELOAD_WINDOW_MS}ms)`
+    );
+    try {
+      webContents.reloadIgnoringCache();
+    } catch (e: any) {
+      logToFile(`[main] render-process-gone: reload failed: ${e?.message || e}`);
+    }
   });
 
   app.on('child-process-gone', (_event, details) => {

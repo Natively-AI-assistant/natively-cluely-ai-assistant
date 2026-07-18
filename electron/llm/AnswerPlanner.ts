@@ -40,6 +40,7 @@ export type AnswerType =
   | 'definitional_answer'
   | 'list_answer'
   | 'exact_numeric_answer'
+  | 'document_structure_answer'
   | 'document_absent_fact_refusal'
   | 'document_followup_answer'
   | 'follow_up_answer'
@@ -410,6 +411,7 @@ const DOCUMENT_DEFINITION_TEMPLATE = `Answer from the uploaded document evidence
 const DOCUMENT_LIST_TEMPLATE = `Answer from the uploaded document evidence only. Return the complete list the question asks for. Scan every retrieved excerpt before answering; include all listed items, phases, questions, models, objects, or components that are literally present. Do not stop at the first matching excerpt and do not invent missing list items.`;
 const DOCUMENT_NUMERIC_TEMPLATE = `Answer from the uploaded document evidence only. Report exact values with units and the entity they belong to. If multiple related values are present (training/peak/inference, control/sampling, per-model rates), include all of them. Do not infer numbers that are not written in the evidence.`;
 const DOCUMENT_ABSENT_FACT_TEMPLATE = `Answer from the uploaded document evidence only. If the requested fact is not supported by the selected evidence after retrieval, say exactly and briefly that it is not directly mentioned in the uploaded seminar material. Do not provide a plausible estimate or use general knowledge.`;
+const DOCUMENT_STRUCTURE_TEMPLATE = `Answer from the uploaded document's table-of-contents / heading evidence only. These are navigation questions — a chapter or section title, the page a section begins on, or how many chapters/sections/pages there are. Report the exact title or number as written in the evidence. Do not summarize the section's content and do not infer a title or page that is not literally present.`;
 const DOCUMENT_FOLLOWUP_TEMPLATE = `Answer the follow-up from the uploaded document evidence only. Resolve pronouns like "it", "that", and "they" using the immediately previous topic, but treat the prior answer only as a referent hint — facts must come from the retrieved document excerpts.`;
 
 // Generic technical-concept answers (what is Redis / JWT / CORS / caching / REST) were
@@ -547,15 +549,43 @@ const COMMON_CODING_PROBLEM_PATTERNS = [
   /\banagram\b|\bsubarray\b|\bsubstring\b/i,
   /\bmerge (?:two )?(?:sorted )?(?:arrays?|lists?)\b/i,
   /\b(?:detect|find)\b.*\bcycle\b|\blinked list cycle\b/i,
-  /\blevel order\b|\bin\s?order\b|\bpre\s?order\b|\bpost\s?order\b|\btraversal\b/i,
+  // Grounding-campaign fix (2026-07-17): bare "in order"/"level order"/etc.
+  // false-positived on ordinary English ("what companies have you worked at,
+  // IN ORDER?", "list your certifications in order of date") — a confirmed
+  // live incident where a résumé question got misrouted to
+  // coding_question_answer (which forbids the resume context layer per spec
+  // §8.3), so the model got zero evidence for a "coding" answer type and
+  // fabricated a fictional employment history instead of grounding correctly.
+  // "traversal" alone is unambiguous DSA vocabulary and stays a bare match;
+  // the order-word variants now require an explicit tree/traversal-adjacent
+  // co-occurrence (checked via lookahead so word order in the sentence
+  // doesn't matter), mirroring the class/method narrowing above in this file.
+  /\btraversal\b/i,
+  /(?=.*\b(?:tree|node|binary|bst)\b)(?=.*\b(?:level|in|pre|post)\s?order\b)/i,
   /\bgcd\b|\blcm\b|\bgreatest common divisor\b/i,
   /\bbubble sort\b|\bquick\s?sort\b|\bmerge sort\b|\binsertion sort\b/i,
 ];
 
 const CODING_PATTERNS = [
-  /\b(write|implement|code|program|function|class|method|solve)\b/i,
+  // Real-custom-mode-repair (2026-07-11): dropped bare `method` and `class`
+  // from this line — both are extremely common non-coding English nouns
+  // ("What fine-tuning METHOD was used?", "teaching method", "what CLASS of
+  // algorithm is this", "business class") and produced a confirmed P0
+  // incident (a document-grounded thesis question about a fine-tuning
+  // method was misrouted to coding_question_answer and answered with an
+  // unrelated Two Sum LeetCode solution — see docs/context-os/
+  // real-custom-mode-repair/06_ROOT_CAUSE_REPORT.md). `class`/`method` alone
+  // are now handled ONLY by the paired-with-coding-object pattern two lines
+  // below (e.g. "write a class for X", "implement a method to Y") — bare
+  // occurrence of either word no longer trips the coding route on its own.
+  /\b(write|implement|code|program|solve)\b/i,
   /\bcode for\b|\bprogram for\b|\bfunction for\b|\balgorithm for\b/i,
   /\balgorithm\b|\bdebug this\b|\bfix (this|the) bug\b/i,
+  // `class`/`method` count as a coding signal ONLY when paired with an
+  // explicit coding verb or a function/algorithm noun in the same clause —
+  // "write a class that…", "implement the method for sorting…" — never bare.
+  /\b(write|implement|code|create|define)\b[\w ,'-]{0,20}\b(class|method|function)\b/i,
+  /\b(class|method|function)\b[\w ,'-]{0,20}\bto\s+(sort|search|traverse|reverse|parse|compute|calculate|return)\b/i,
   // A bare language name is NOT a coding signal on its own — "how would you use
   // SQL", "explain SQL", "have you used Python" are concept/experience asks, not
   // "write code" tasks. Only treat a language as coding when paired with an
@@ -1060,6 +1090,28 @@ const NEGOTIATION_ADVICE_CUE_RE = /\b(how\s+(should|do|would|can)\s+i\s+(negotia
 const hasJdReferenceCue = (text: string): boolean => JD_REFERENCE_CUE_RE.test(text);
 /** Does the question claim first-person candidate ownership? */
 const hasCandidateOwnershipCue = (text: string): boolean => CANDIDATE_OWNERSHIP_CUE_RE.test(text);
+
+// Grounding-campaign fix (2026-07-17): a bare comp keyword ("compensation",
+// "salary") in a question that ALSO frames the JD as the source ("what's the
+// compensation range for THIS ROLE?") is a factual JD lookup — planAnswer's
+// own resolveJdSourceType correctly routes it to jd_fact_answer. But
+// IntelligenceEngine.ts's live WTA grounding gate uses a separate, cruder
+// classifier (transcriptQuestionExtractor.classifyType) that has no JD-frame
+// awareness and routes ANY comp keyword straight to 'negotiation' —
+// excluding ALL candidate-profile/JD grounding for that turn, including a
+// pure "what does the document literally state" lookup. Confirmed live
+// (test/harness case C4-002): the model then falsely claimed the JD "does
+// not specify the company name" and "does not state a salary range" when
+// both were literally present in the real JD text.
+// This helper reuses the SAME jd-reference-cue + negotiation-advice-cue
+// signals resolveJdSourceType already relies on, without duplicating its
+// full JD-shape resolution logic — narrowly answering just the one question
+// IntelligenceEngine.ts's gate needs: "is this JD-framed and NOT asking for
+// negotiation advice/strategy?" A true negotiation-coaching ask ("how should
+// I negotiate my salary", "what should I counter with") still routes through
+// the existing negotiation channel untouched.
+export const isJdFactualLookupNotNegotiationAdvice = (text: string): boolean =>
+  hasJdReferenceCue(text) && !NEGOTIATION_ADVICE_CUE_RE.test(text);
 // A PEOPLE / leadership / conflict OBJECT after a lead/manage/handle verb marks a behavioral
 // STORY (not a skill probe). This ONE source is interpolated into the behavioral matcher AND
 // its two skill-side guards so the guard is always a superset of the matcher and the three lists
@@ -1607,6 +1659,8 @@ const templateFor = (answerType: AnswerType): string => {
       return DOCUMENT_LIST_TEMPLATE;
     case 'exact_numeric_answer':
       return DOCUMENT_NUMERIC_TEMPLATE;
+    case 'document_structure_answer':
+      return DOCUMENT_STRUCTURE_TEMPLATE;
     case 'document_absent_fact_refusal':
       return DOCUMENT_ABSENT_FACT_TEMPLATE;
     case 'document_followup_answer':
@@ -1678,6 +1732,7 @@ const requiredLayersFor = (answerType: AnswerType, documentGroundedCustomModeAct
     case 'definitional_answer':
     case 'list_answer':
     case 'exact_numeric_answer':
+    case 'document_structure_answer':
     case 'document_absent_fact_refusal':
     case 'document_followup_answer':
       return ['live_transcript', 'screen_context', 'reference_files', 'active_mode'];
@@ -1771,6 +1826,7 @@ const forbiddenLayersFor = (answerType: AnswerType): ContextLayer[] => {
     case 'definitional_answer':
     case 'list_answer':
     case 'exact_numeric_answer':
+    case 'document_structure_answer':
     case 'document_absent_fact_refusal':
     case 'document_followup_answer':
       // Document/lecture answers must not pull resume/JD/negotiation.
@@ -1839,6 +1895,7 @@ export const profileContextPolicyFor = (answerType: AnswerType): ProfileContextP
     case 'definitional_answer':
     case 'list_answer':
     case 'exact_numeric_answer':
+    case 'document_structure_answer':
     case 'document_absent_fact_refusal':
     case 'document_followup_answer':
     case 'general_meeting_answer':

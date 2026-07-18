@@ -1600,6 +1600,20 @@ export function pickTargetExtensionIndex(
   return best;
 }
 
+/**
+ * Pure decision for whether PhoneMirror should auto-start on boot, given the
+ * `NATIVELY_DISABLE_PHONE_MIRROR` kill switch (env.disablePhoneMirror) and the
+ * persisted `phoneMirrorEnabled` setting. Extracted from main.ts's boot
+ * sequence so the decision itself — not just its source text — is testable.
+ */
+export function shouldStartPhoneMirrorOnBoot(opts: {
+  disablePhoneMirror: boolean;
+  phoneMirrorEnabled: boolean;
+}): boolean {
+  if (opts.disablePhoneMirror) return false;
+  return opts.phoneMirrorEnabled;
+}
+
 /** True for IPv4/IPv6 loopback remote addresses (gates the /pair endpoint). */
 function isLoopbackAddress(addr: string): boolean {
   if (!addr) return false;
