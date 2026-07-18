@@ -14,7 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distRoot = path.resolve(__dirname, '../../../dist-electron/electron');
 
 const { planAnswer } = await import(pathToFileURL(path.join(distRoot, 'llm/AnswerPlanner.js')).href);
-const { isTranscriptBoundManualQuestion, shouldAutoAttachManualTranscriptContext } = await import(
+const { extractLatestPriorAssistantTurn, isTranscriptBoundManualQuestion, shouldAutoAttachManualTranscriptContext } = await import(
   pathToFileURL(path.join(distRoot, 'llm/manualTranscriptContextPolicy.js')).href
 );
 
@@ -32,6 +32,14 @@ describe('manual transcript context policy', () => {
     assert.equal(attaches('what is a call stack?'), false);
     assert.equal(attaches('explain class in JavaScript'), false);
     assert.equal(attaches('how do I design a meeting scheduler?'), false);
+    assert.equal(attaches('is it safe to use eval?'), false);
+    assert.equal(attaches('what time is it in Tokyo?'), false);
+    assert.equal(attaches('can this API be cached?'), false);
+    assert.equal(attaches('and how do I build a cache?'), false);
+    assert.equal(attaches('what are the next steps to migrate to React 19?'), false);
+    assert.equal(attaches('give me the takeaways from this article'), false);
+    assert.equal(attaches('can you recap the plot of Hamlet?'), false);
+    assert.equal(attaches('what are the action items for the migration?'), false);
   });
 
   test('standalone technical explanations do not pull meeting transcript by default', () => {
@@ -56,6 +64,8 @@ describe('manual transcript context policy', () => {
     assert.equal(attaches('from the transcript, what did Alex say?'), true);
     assert.equal(attaches('in the meeting, what did we decide?'), true);
     assert.equal(attaches('recap the call'), true);
+    assert.equal(attaches('give me the takeaways from the meeting'), true);
+    assert.equal(attaches('what are the next steps from our discussion?'), true);
   });
 
   test('bare live follow-ups keep transcript context', () => {
@@ -76,6 +86,20 @@ describe('manual transcript context policy', () => {
     assert.equal(isTranscriptBoundManualQuestion('summarize BFS'), false);
   });
 
+  test('refinements can recover only the latest prior assistant answer', () => {
+    const snapshot = [
+      '[INTERVIEWER]: Explain the migration plan.',
+      '[ASSISTANT (PREVIOUS SUGGESTION)]: First answer',
+      'with a second line.',
+      '[ME]: Ask for another version.',
+      '[ASSISTANT (PREVIOUS SUGGESTION)]: Latest answer',
+      'continued here.',
+      '[INTERVIEWER]: Unrelated live meeting speech.',
+    ].join('\n');
+    assert.equal(extractLatestPriorAssistantTurn(snapshot), 'Latest answer\ncontinued here.');
+    assert.equal(extractLatestPriorAssistantTurn('[INTERVIEWER]: No prior answer'), undefined);
+  });
+
   test('mode-scoped sales prompts do not receive transcript context by default', () => {
     const salesMode = { id: 'm', templateType: 'sales', name: 'Sales', isCustom: false };
     assert.equal(attaches('how do you compare with Cluely?', salesMode), false);
@@ -91,6 +115,8 @@ describe('manual transcript context policy wiring', () => {
       /else if \(!context && autoContextSnapshot && shouldAutoAttachManualTranscriptContext\(message, answerPlan\)\) \{[\s\S]*let snapshotForContext = autoContextSnapshot;[\s\S]*stripPriorAssistantTurns\(autoContextSnapshot\);[\s\S]*context = snapshotForContext;/,
     );
     assert.match(ipcSrc, /Skipped 100s transcript context for standalone manual chat/);
+    assert.match(ipcSrc, /extractLatestPriorAssistantTurn\(autoContextSnapshot\)/);
+    assert.match(ipcSrc, /Injected latest prior assistant answer for manual refinement; rolling transcript excluded/);
   });
 
   test('phone chat uses the same policy before attaching rolling transcript', () => {
@@ -99,5 +125,7 @@ describe('manual transcript context policy wiring', () => {
     assert.match(ipcSrc, /activeMode: phoneActiveMode/);
     assert.match(ipcSrc, /shouldAutoAttachManualTranscriptContext\(message, phoneAnswerPlan\)/);
     assert.match(ipcSrc, /\[PhoneMirror\] Skipped 100s transcript context for standalone manual chat/);
+    assert.match(ipcSrc, /extractLatestPriorAssistantTurn\(snap\)/);
+    assert.match(ipcSrc, /\[PhoneMirror\] Injected latest prior assistant answer for refinement; rolling transcript excluded/);
   });
 });

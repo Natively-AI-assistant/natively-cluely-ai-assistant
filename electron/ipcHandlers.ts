@@ -38,7 +38,7 @@ import { routeContext, isBackwardLookingQuery } from './intelligence/ContextRout
 import { SearchOrchestrator, type SearchCandidate } from './intelligence/SearchOrchestrator';
 import { CHAT_MODE_PROMPT } from './llm/prompts';
 import { isAssistantIdentityQuestion, profileFactsReady } from './llm/manualProfileIntelligence';
-import { shouldAutoAttachManualTranscriptContext } from './llm/manualTranscriptContextPolicy';
+import { extractLatestPriorAssistantTurn, shouldAutoAttachManualTranscriptContext } from './llm/manualTranscriptContextPolicy';
 import { buildManualProfileEvidenceRoute } from './llm/profileAnswerBackend';
 import { DOC_GROUNDED_TOKEN_BUDGET } from './services/ModeContextRetriever';
 import { detectIncompleteNumericAnswer, completenessRegenFabricates, isDocGroundedAnswerType } from './llm/documentGroundedPrompt';
@@ -1845,6 +1845,17 @@ export function initializeIpcHandlers(appState: AppState): void {
           console.log('[IPC] Answer-contract enforced; rolling context excluded', {
             answerType: answerPlan.answerType,
           });
+        } else if (!context && autoContextSnapshot && isRefinementFollowUp(message)
+            && (!turnContract || turnContract.memoryReadPolicy.allowPriorAssistantFacts)) {
+          // A refinement needs the answer it is editing, not the full rolling
+          // meeting transcript. ConversationMemoryV2 supplies this when enabled;
+          // this bounded snapshot fallback preserves default-off behavior while
+          // keeping unrelated ME/INTERVIEWER turns isolated.
+          const priorAssistant = extractLatestPriorAssistantTurn(autoContextSnapshot);
+          if (priorAssistant) {
+            context = `PRIOR ANSWER IN THIS CONVERSATION (the user wants you to EDIT this exact answer, not produce a new one):\nPrevious answer:\n${priorAssistant}\n\nApply the user's new instruction ("${message}") to THAT answer — keep the same facts, change only what was asked. Do not start over or re-list everything.`;
+            console.log('[IPC] Injected latest prior assistant answer for manual refinement; rolling transcript excluded');
+          }
         } else if (!context && autoContextSnapshot && shouldAutoAttachManualTranscriptContext(message, answerPlan)) {
           // Document-grounded custom mode (audit 2026-06-27, real-path fix):
           // strip prior ASSISTANT turns from the rolling snapshot before it
@@ -10342,7 +10353,13 @@ export function initializeIpcHandlers(appState: AppState): void {
       let context: string | undefined;
       try {
         const snap = intelligenceManager.getFormattedContext(100);
-        if (snap && snap.trim().length > 0 && shouldAutoAttachManualTranscriptContext(message, phoneAnswerPlan)) {
+        if (snap && snap.trim().length > 0 && isRefinementFollowUp(message) && !phoneDocGrounded) {
+          const priorAssistant = extractLatestPriorAssistantTurn(snap);
+          if (priorAssistant) {
+            context = `PRIOR ANSWER IN THIS CONVERSATION (the user wants you to EDIT this exact answer, not produce a new one):\nPrevious answer:\n${priorAssistant}\n\nApply the user's new instruction ("${message}") to THAT answer — keep the same facts, change only what was asked. Do not start over or re-list everything.`;
+            console.log('[PhoneMirror] Injected latest prior assistant answer for refinement; rolling transcript excluded');
+          }
+        } else if (snap && snap.trim().length > 0 && shouldAutoAttachManualTranscriptContext(message, phoneAnswerPlan)) {
           context = phoneDocGrounded ? stripPriorAssistantTurns(snap) : snap;
           if (phoneDocGrounded && context.trim().length === 0) context = undefined;
         } else if (snap && snap.trim().length > 0) {
