@@ -17,7 +17,7 @@ import {
     validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, sanitizeCandidateAnswer, CANDIDATE_VOICE_ANSWER_TYPES,
     detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES,
     raceStreamWithDeadline, LIVE_INTER_TOKEN_STALL_MS, LIVE_TOTAL_HARD_TIMEOUT_MS,
-    LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS, isLeakedSchemaStub,
+    LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS, isLeakedSchemaStub, isLeakedJsonEnvelope, extractAnswerFromJsonEnvelope,
     isProviderTransportError, isLeakedInternalTagBlock,
     cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE,
     buildProfileJitPrompt, decideSessionWritePolicy
@@ -2008,7 +2008,42 @@ export class IntelligenceEngine extends EventEmitter {
             // same method (fix#1 of this campaign) — same precedent, applied
             // consistently rather than threading a skip-flag through every
             // downstream repair site (fragile, easy to miss one).
-            if (fullAnswer && isLeakedSchemaStub(fullAnswer)) {
+            // JSON-ENVELOPE RECOVERY (campaign2 longsession runs 022/025/026/027,
+            // 2026-07-18): before treating a leaked JSON envelope as unrecoverable
+            // (the isLeakedSchemaStub/isLeakedJsonEnvelope blanking guard right
+            // below), check whether it's the ONE observed shape that actually
+            // carries real content — {"answer": "...", ...} — and recover it,
+            // rather than discarding real content the model did produce. Narrow
+            // and confident: only fires on the literal "answer" key holding a
+            // real prose string; every other JSON shape falls through to the
+            // blanking guard unchanged.
+            if (fullAnswer) {
+                const recoveredAnswer = extractAnswerFromJsonEnvelope(fullAnswer);
+                if (recoveredAnswer) {
+                    trace.mark('repair_used', { reason: 'json_envelope_answer_recovered', answerType: answerPlan.answerType });
+                    fullAnswer = recoveredAnswer;
+                }
+            }
+
+            // Code-review 2026-07-18 HIGH fix: isLeakedJsonEnvelope's shape-only
+            // heuristic (no genuine prose value anywhere) has no way to
+            // distinguish a hallucinated envelope from a real, correct, terse
+            // JSON-shaped answer to a question that legitimately expects one
+            // (e.g. "what's a typical response shape for this endpoint" on a
+            // technical/coding answer type — {"status":"ok","code":200} is a
+            // real, complete answer with no long prose value). Scope the NEW
+            // isLeakedJsonEnvelope check away from the answer types where a
+            // short JSON-shaped answer is expected content, mirroring the exact
+            // precedent already used a few lines below for scaffold-misfire
+            // extraction's TECHNICAL_ANSWER_TYPES_EXCLUDED_FROM_SCAFFOLD_EXTRACTION.
+            // isLeakedSchemaStub (the narrower, pre-existing, already-proven-safe
+            // check) remains unconditional — only the newly-added broader
+            // isLeakedJsonEnvelope branch is scoped.
+            const jsonAnswerLikelyAnswerTypes = isCodingAnswerType(answerPlan.answerType)
+                || answerPlan.answerType === 'technical_concept_answer'
+                || answerPlan.answerType === 'system_design_answer'
+                || answerPlan.answerType === 'debugging_question_answer';
+            if (fullAnswer && (isLeakedSchemaStub(fullAnswer) || (!jsonAnswerLikelyAnswerTypes && isLeakedJsonEnvelope(fullAnswer)))) {
                 const stubFallback = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
                     ? "I don't have enough context from the conversation to answer that yet."
                     : "The model produced an invalid answer artifact, so I won't guess from your profile. Please try again.";

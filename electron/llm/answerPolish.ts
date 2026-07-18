@@ -36,6 +36,102 @@ const CODE_FENCE_RE = /```[\s\S]*?```/g;
  *  the stub. Deliberately narrow: only fires when the ENTIRE payload is the stub,
  *  never when JSON is part of a real answer. */
 const SCHEMA_STUB_RE = /^\s*(?:```(?:json)?\s*)?\{\s*"(?:type|\$schema|properties|required)"\s*:[\s\S]*?\}\s*(?:```)?\s*$/i;
+
+/**
+ * Campaign 2 longsession runs 022/025/026/027 (2026-07-18): a SIBLING
+ * failure to the JSON-SCHEMA stub above — MiniMax-M3 also occasionally
+ * leaks a plausible-looking, syntactically valid JSON "API response"
+ * ENVELOPE instead of prose (6 live instances, no two using the same
+ * keys: `{"key_facts": []}`, `{"name": "noop", "arguments": {}}`,
+ * `{"answer": "Skipping this turn, bro.", "chat_id": 0}`, etc.). Grepped the
+ * entire source tree for every distinctive key across all 6 instances —
+ * zero matches anywhere in the app's own code, ruling out a real internal-
+ * schema/prompt leak; this is model hallucination of a generic JSON shape,
+ * the same general failure class as the coding-scaffold misfire (defaulting
+ * to a wrong-but-plausible OUTPUT FORMAT instead of free text), just with a
+ * different attractor. `isLeakedSchemaStub`'s key-name allowlist
+ * (type/$schema/properties/etc.) is the wrong tool for this — there is no
+ * fixed key set to enumerate. Detects the SHAPE instead: the entire trimmed
+ * answer parses as a JSON object/array with no genuine human-facing prose
+ * value anywhere in it (recursively) — i.e. every leaf is empty, a short
+ * enum-like token, a number, or a nested no-prose container. A string long
+ * enough and shaped like natural language (has a space-separated multi-word
+ * run past PROSE_MIN_CHARS) counts as real content and blocks the match, so
+ * a genuine answer that happens to legitimately discuss/quote JSON survives.
+ */
+const PROSE_MIN_CHARS = 20;
+const looksLikeProse = (value: unknown): boolean => {
+  if (typeof value === 'string') return value.trim().length >= PROSE_MIN_CHARS && /\s/.test(value.trim());
+  if (Array.isArray(value)) return value.some(looksLikeProse);
+  if (value && typeof value === 'object') return Object.values(value).some(looksLikeProse);
+  return false;
+};
+
+export function isLeakedJsonEnvelope(text: string): boolean {
+  if (!text) return false;
+  const t = text.trim();
+  if (t.length > 240) return false; // real answers with JSON are longer than a bare envelope
+  const inner = t.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+  if (!/^[[{]/.test(inner) || !/[\]}]$/.test(inner)) return false; // must look like a whole JSON value
+  try {
+    const parsed = JSON.parse(inner);
+    if (!parsed || typeof parsed !== 'object') return false;
+    return !looksLikeProse(parsed);
+  } catch {
+    return false; // not valid JSON — SCHEMA_STUB_RE's near-miss handling covers malformed schema stubs; this generalized check requires a clean parse to avoid false-firing on non-JSON text that merely starts with a brace.
+  }
+}
+
+/**
+ * Companion to isLeakedJsonEnvelope: TWO live instances (run-026 C2,
+ * run-027 A18) wrapped a REAL, on-topic, substantive answer inside a JSON
+ * envelope with an "answer" key (`{"answer": "...", "chat_id": 0}`) rather
+ * than emitting no real content at all. Unlike the empty/no-prose envelopes
+ * isLeakedJsonEnvelope detects (which the caller should blank and fall back
+ * on), these have genuine content worth recovering — matching this
+ * campaign's established preference (see the coding-scaffold-misfire
+ * extraction) for extracting real content over discarding it whenever a
+ * confident, narrow extraction exists. Deliberately narrow: only recognizes
+ * the literal key "answer" (the one real, observed shape) holding a string
+ * that itself looks like prose; returns null (no guessing) for every other
+ * JSON shape, including the genuinely-empty envelopes above.
+ */
+export function extractAnswerFromJsonEnvelope(text: string): string | null {
+  if (!text) return null;
+  const t = text.trim();
+  if (t.length > 4000) return null; // real answers are usually well under this; avoids parsing huge unrelated JSON blobs
+  const inner = t.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+  if (!/^\{/.test(inner) || !/\}$/.test(inner)) return null;
+  try {
+    const parsed = JSON.parse(inner);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    const answer = (parsed as Record<string, unknown>).answer;
+    // Code-review 2026-07-18 HIGH fix: use the SAME prose test as
+    // isLeakedJsonEnvelope (looksLikeProse, which requires whitespace — i.e.
+    // real multi-word text) rather than a bare length check. A length-only
+    // check would extract and ship a non-prose garbage/placeholder token
+    // (a hash, UUID, snake_case sentinel) under "answer" as if it were a
+    // real answer — exactly the kind of hallucinated-token value this
+    // failure family already produces elsewhere in the same envelope
+    // (observed: "name":"noop", "chat_id":0).
+    if (typeof answer === 'string' && looksLikeProse(answer)) return answer.trim();
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Restructured 2026-07-18 to the same `if (test) { ... }` shape as the code
+// that follows it, but deliberately kept INDEPENDENT of isLeakedJsonEnvelope
+// — an earlier draft had this fall through to `isLeakedJsonEnvelope(t)`
+// unconditionally, which silently defeated the call site's own scoping of
+// that broader, riskier check away from technical/coding answerTypes (see
+// IntelligenceEngine.ts's jsonAnswerLikelyAnswerTypes gate) — a real
+// terse-JSON technical answer got blanked via THIS function even though the
+// call site correctly excluded the isLeakedJsonEnvelope branch, because this
+// function called it anyway internally. Each check must stay independently
+// callable so the caller's own scoping decision is the only one that
+// applies — not duplicated or bypassed a layer down.
 export function isLeakedSchemaStub(text: string): boolean {
   if (!text) return false;
   const t = text.trim();
