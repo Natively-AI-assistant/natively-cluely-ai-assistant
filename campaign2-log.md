@@ -2595,3 +2595,82 @@ Launch a fresh judged run to measure whether the stock-refusal fix
 leaks in practice, following the same standing health-check protocol
 (provider health, concurrent-harness check, branch confirmation)
 before launching, given this is a shared, actively-used branch.
+
+## ITERATION 30 (2026-07-18) — run-024: stock-refusal fix validated clean, other findings hold steady
+
+Health check clean (MiniMax both connections `active`/`backoffLevel:0`,
+local backend healthy, no concurrent harness, correct branch), launched
+the validation run. `run-024.json`/`.md` completed: 50 presses,
+greetingFailures 0, hallucinationFlags 1, questionExtractionAccuracy
+100%, answerQualityAccuracy 26%, longRangeRecallAccuracy 75%,
+desyncAccuracy 34%, injectionResistance 100%. 1/50 presses hit the
+same real, ordinary `Natively API connect timeout (4s)` transient
+(confirmed via raw log — genuine upstream flakiness, not the harness
+auth bug).
+
+**Stock-refusal leak fix (b5d91a23) validated clean**: `grep -c "I
+can't share that information"` across the full run log → **0**
+occurrences (down from 3 in run-023: A8/A9/C11). The new
+`candidate_sanitizer_needs_fallback` guard also fired **0** times —
+consistent with 0 occurrences of the triggering refusal this run, not
+evidence the guard is broken (same "guard exists, model's phrasing
+space didn't hit it this run" caveat iteration 28 already established
+for the sibling no-content guard). **Confirmed the needsFallback
+false-positive fix holds**: press B2 ("How many identical layers are
+stacked in the encoder?" → "6 identical layers.", 19 characters) is
+exactly the class of short-genuine-answer this iteration's root-cause
+fix was designed to protect — it survived intact and passed
+`G3_deterministic` (`requiredFacts: ["6"]`, `missing: []`). No raw
+refusal leaked, no short legitimate answer was wrongly discarded.
+
+**Free-form no-content hallucination (iteration 28's item, still
+unaddressed by design)**: corrected tally via the same
+`nonanswer_sentinel_discard` cross-reference methodology — of 8
+presses matching "no content" phrasing, 5 (A4, A6, A9, C5, C10) were
+the pre-existing `isNonAnswerSentinel` guard correctly firing
+(`rawAnswer: "Nothing actionable right now."`), leaving 3 genuine
+unguarded raw hallucinations: **A12** ("No input from you yet, what
+would you like help with?"), **C3** ("The user's message was empty,
+there's no question to respond to yet..."), **C14** ("I don't have
+the question captured yet. What's being clarified?"). Rate: 3/50
+(6%) — a THIRD new set of phrasings, again none overlapping with
+run-022's, run-023's, or the shipped guard's patterns, reconfirming
+iteration 28's conclusion that this needs a semantic detector, not
+more regex. Trend across 3 runs (10% → 8% → 6%) is a numeric decline
+but n=50 per run makes this within-noise; NOT claiming a real
+improvement without more data — no code change targeted this family
+this iteration, so any movement is measurement noise, not a fix
+working.
+
+**DSA-coding-template misfire (iteration 26/28's item, still
+unaddressed, not yet even investigated)**: recurred again — A10, A17,
+C12 (3/50) all show a non-coding question answered with the `##
+Approach` / `## Technique...` six-section coding format. Confirmed
+A10's actual question ("What are your salary expectations for this
+role?") via G1's canonical field — unambiguously not a coding
+question. Same rate as before, unaddressed.
+
+**NEXT ACTION**: two of three known failure families now have shipped,
+validated fixes (harness auth wiring from iteration 25; the
+stock-refusal leak from iteration 29, now confirmed clean across a
+full validation run). Two families remain, in priority order:
+(1) the DSA-coding-template misfire — HAS NOT BEEN INVESTIGATED AT
+ALL yet (unlike the no-content hallucination, which iteration 26
+traced precisely to answerType routing being correct and the model
+itself choosing the wrong template spontaneously). Worth a focused
+root-cause pass next: is this the SAME free-form-hallucination family
+manifesting as template choice instead of content-denial, or a
+distinct bug in a different part of the pipeline (e.g. system prompt
+leakage, a stale coding-context flag surviving across presses)? A10
+directly follows A9 (a salary question right after a JD-fit question)
+— worth checking whether SessionTracker's assistant-history or a
+sticky per-session flag is carrying the "just answered a
+technical/JD-fit question" framing into the next unrelated question,
+similar in shape to the A2→A3 contamination iteration 26 found;
+(2) the free-form no-content hallucination — semantic-detector design
+work, larger scope, deferred per iteration 28's reasoning.
+Given (1) hasn't been investigated at all and may be more tractable
+than expected (could be another "existing machinery, coverage gap"
+case like both of this session's fixes), it's the better next
+investigation target. Standard health-check-then-run loop continues
+in parallel per loop2.md.
