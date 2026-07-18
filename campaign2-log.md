@@ -2920,3 +2920,81 @@ free-form no-content hallucination still fully open, L4 remains
 distant but real, measurable progress has accumulated across this
 session's 8 landed fixes (iterations 25, 27, 29, 32, plus the 4
 findings/investigations that preceded implementation).
+
+## ITERATION 33 (2026-07-18) — run-025: scaffold misfire absent this run; provider flakiness up; two new anomalies spotted
+
+Health check clean (MiniMax both connections `active`/`backoffLevel:0`,
+local backend healthy, no concurrent harness, correct branch), launched
+the validation run. `run-025.json`/`.md` completed: 50 presses,
+greetingFailures 0, hallucinationFlags 0, questionExtractionAccuracy
+100%, answerQualityAccuracy 24%, longRangeRecallAccuracy 25%,
+desyncAccuracy 34%, injectionResistance 100%.
+
+**Provider flakiness notably higher this run**: 5/50 presses hit
+`Natively API connect timeout (4s)` (vs. 1-3 in every prior run this
+session), 4 of them clustered in Script C (C7/C8/C10/C12). All 5
+confirmed genuine transient timeouts via raw log inspection (real
+`requestId`, real 4000-4003ms `durationMs`), not the harness auth bug.
+Nothing in this session's changes touches connection/timeout handling,
+so this is environmental — noted for pattern-tracking, not
+investigated further this iteration.
+
+**Scaffold-misfire fix (28f1fcd1) — inconclusive this run, but
+directionally clean**: `scaffold_misfire_extracted` fired 0 times.
+Checked ALL 50 `answerPreview` fields for any `## `-heading-prefixed
+coding-scaffold content answering a non-coding question (the exact
+pattern this session traced through A4/A5/B3/A10/A17/C12) — found
+ZERO occurrences of ANY kind, not just zero of the specific A10-shaped
+pattern the fix targets. This means the underlying model behavior
+(spontaneously choosing the coding template for a non-coding question)
+simply didn't recur at all this run — consistent with this failure
+family's established intermittent nature (it didn't fire on every run
+before the fix either: run-022 had 2/18 in script-a, run-023 had 1/17
+in script-b, run-024 had 3/50 spread across two scripts). Cannot claim
+the fix "worked" from an absence of the trigger condition — need a
+run where the misfire DOES recur to see whether the A10-shaped subset
+gets cleanly recovered. Not concerning on its own; will keep checking
+in subsequent runs.
+
+**Two NEW, distinct anomalies spotted (not investigated, logged for a
+future session)**:
+- **A14** (canonical question: "What scale have you operated
+  Kubernetes at?") answered with `"What's your experience with
+  distributed systems and consensus protocols?"` — a completely
+  unrelated, FABRICATED question in the interviewer's own voice/
+  phrasing style, not an answer at all. Different shape from every
+  previously-catalogued failure family this session (not a "no content"
+  claim, not a coding-scaffold misfire, not a stock refusal) — the
+  model appears to have generated what it thinks the NEXT interviewer
+  question might be, instead of answering the one actually asked.
+- **C15** (canonical question: "Is there anything about your
+  background we haven't asked about...") answered with raw JSON:
+  `{"key_facts": []}` — an internal schema/scratch-object leaking
+  directly into the user-facing answer, verbatim, with no natural-
+  language content at all. This resembles run-022's C5/C6 leaked-
+  internal-markup finding (`[Mode: answering as a neutral assistant...]`
+  / `<conversation_state>...`) — logged then as "observed but not yet
+  root-caused" and never revisited. C15 may be the SAME underlying
+  leak family (some intermediate planning/state object serializing
+  directly into the final answer instead of being consumed
+  internally) recurring in a new shape (JSON instead of bracket-tag/
+  XML-tag).
+
+Neither anomaly is in scope for this iteration's validation task (both
+are new failure shapes, not variants of the scaffold-misfire family
+being validated) — logging for future investigation rather than
+chasing them mid-validation.
+
+**NEXT ACTION**: continue the standard health-check/judged-run loop —
+need at least one more run where a scaffold-misfire actually recurs to
+get real signal on whether `detectAndExtractScaffoldMisfire` is
+working in practice (this run's 0-recurrence is good news but not
+proof). Separately, the C15/run-022-C5/C6 leaked-internal-object
+family (now 3 observed instances across 2 runs — C5, C6, C15) is
+starting to look like a real, recurring pattern rather than a one-off,
+and may deserve the same focused-investigation treatment as the other
+three failure families once there's bandwidth — add it as a 4th
+tracked finding. L4 remains distant: the free-form no-content
+hallucination family is still fully unaddressed, the scaffold-misfire
+fix's real-world hit rate is still unproven, and now a 4th candidate
+failure family (leaked internal objects) is emerging.
