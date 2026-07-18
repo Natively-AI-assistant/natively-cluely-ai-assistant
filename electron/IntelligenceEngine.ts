@@ -207,6 +207,57 @@ export class IntelligenceEngine extends EventEmitter {
             || normalized === 'nothing to capture right now';
     }
 
+    /**
+     * Campaign 2 longsession run-022 finding (2026-07-18): MiniMax-M3
+     * occasionally emits a FALSE "no question captured" / "nothing in the
+     * transcript" claim as its raw answer even when the prompt it was just
+     * given contains a correctly-extracted, real interviewer question
+     * (verified via `[TRACE:LONGCTX] question_extracted`/`prompt_assembled`
+     * on the exact repro presses — the claim is untrue relative to what was
+     * actually sent). This is DISTINCT from `isNonAnswerSentinel`, which
+     * catches the model's INTENTIONALLY PROMPTED escape hatch
+     * ("Nothing actionable right now.") for genuinely empty/near-empty
+     * transcripts (electron/llm/prompts.ts's lecture/meeting carve-out,
+     * pinned by LectureSummarizeCarveOut.test.mjs) — that phrase is often
+     * TRUE and must keep working exactly as-is. This guard instead
+     * recognizes the SHAPE of a spontaneous, unprompted "I didn't hear/see
+     * anything yet" claim (several distinct phrasings observed; none of
+     * them appear anywhere in prompts.ts, confirming they are not an
+     * instructed fallback) and is the caller's job to gate on whether a
+     * real question was actually extracted before treating a match as a
+     * misfire — see call site below.
+     */
+    private static isFalseNoContentClaim(answer: string): boolean {
+        const t = answer.trim();
+        if (!t || t.length > 220) return false;
+        // ANCHORED, whole-answer matching only — mirrors isNonAnswerSentinel's
+        // near-exact-match discipline rather than substring/mid-sentence
+        // matching. Code-review 2026-07-18 CRITICAL: an earlier draft used
+        // unanchored substring patterns (e.g. bare `don't have a specific
+        // question ... right now`), which matched the FIRST CLAUSE of a real,
+        // substantive candidate answer to "do you have any questions for
+        // us?" — one of the most common real interview closing prompts (e.g.
+        // "I don't have a specific question right now, but I'd love to hear
+        // more about how success is measured..."). Requiring the trigger
+        // phrase to consume the WHOLE answer (optionally followed only by a
+        // short trailing clarifying question, since two of the live repros —
+        // A2/A12 — end with one) excludes any answer that pivots into real
+        // content with a comma/continuation, since none of the actual
+        // hallucinated repros in run-022 have a substantive tail.
+        const sentinelBody = t
+            // Strip ONE optional short trailing question the hallucination
+            // itself asks (e.g. A2's "...yet. What's the next thing they
+            // asked?") — never strips more than one sentence, and never
+            // strips anything before the FIRST sentence boundary.
+            .replace(/^([^.!?]*[.!?])\s*[A-Z][^.!?]{0,60}\?$/, '$1')
+            .trim();
+        return /^(?:hey\s+\w+,\s*)?(?:your\s+)?phone'?s?\s+interviewer\s+audio\s+is\s+coming\s+through,?\s*but\s+i\s+haven'?t\s+picked\s+up\s+(?:any|a)\s+question\s+yet\.?$/i.test(sentinelBody)
+            || /^there'?s\s+nothing\s+captured\s+to\s+summarize\s+yet\.?$/i.test(sentinelBody)
+            || /^i\s+don'?t\s+have\s+a\s+specific\s+question\s+or\s+topic\s+to\s+clarify\s+from\s+what'?s\s+captured\s+right\s+now\.?$/i.test(sentinelBody)
+            || /^i\s+haven'?t\s+(?:picked\s+up|caught|heard)\s+(?:any|a)\s+question\s+yet\.?$/i.test(sentinelBody)
+            || /^no\s+question\s+has\s+been\s+captured\s+yet\.?$/i.test(sentinelBody);
+    }
+
     private static escapeXmlText(text: string): string {
         return text
             .replace(/&/g, '&amp;')
@@ -2353,6 +2404,39 @@ export class IntelligenceEngine extends EventEmitter {
                 } catch (avErr: any) {
                     console.warn('[IntelligenceEngine] assistant-voice guard skipped:', avErr?.message);
                 }
+            }
+
+            // FALSE-NO-CONTENT-CLAIM GUARD (campaign2 longsession run-022,
+            // 2026-07-18): the model's raw answer spontaneously claims no
+            // question/content was captured while `extractedQuestion` proves a
+            // real, reasonably-confident question WAS extracted from this exact
+            // prompt. Gated strictly on extraction evidence so a genuinely
+            // empty/near-empty transcript (where the claim is TRUE) is never
+            // touched — that case is `isNonAnswerSentinel`'s intentional escape
+            // hatch below, left untouched. Folded into the same fullAnswer
+            // variable so every downstream repair/persistence/emit step already
+            // in this function treats it exactly like the sentinel case.
+            if (!IntelligenceEngine.isNonAnswerSentinel(fullAnswer)
+                && IntelligenceEngine.isFalseNoContentClaim(fullAnswer)
+                && extractedQuestion.latestQuestion
+                && extractedQuestion.confidence >= 0.6) {
+                if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
+                    try {
+                        console.log('[TRACE:LONGCTX] false_no_content_claim_discard', JSON.stringify({
+                            question: question || extractedQuestion.latestQuestion || lastInterviewerTurn || null,
+                            rawAnswer: fullAnswer,
+                            answerType: answerPlan?.answerType,
+                            extractionConfidence: extractedQuestion.confidence,
+                            isSpeculative,
+                        }));
+                    } catch (e) { console.warn('[TRACE:LONGCTX] false_no_content_claim_discard logging failed', e); }
+                }
+                // Normalize to the existing sentinel string so the block below
+                // (which already branches correctly on isSpeculative) handles
+                // both the manual-press honest-fallback substitution and the
+                // speculative silent-discard path identically to the
+                // intentionally-prompted case.
+                fullAnswer = 'Nothing actionable right now.';
             }
 
             if (IntelligenceEngine.isNonAnswerSentinel(fullAnswer)) {
