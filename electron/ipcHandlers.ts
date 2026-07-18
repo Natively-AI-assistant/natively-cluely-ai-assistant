@@ -27,6 +27,7 @@ import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnsw
 import type { StreamRouteOptions } from './llm/streamContextPolicy';
 import { buildProfileJitPrompt } from './llm/ProfileJitPromptBuilder';
 import { decideSessionWritePolicy, type FinalGenerationMode, type SessionWriteDecision } from './llm/FinalAnswerGenerationPolicy';
+import { stripEmbeddedAnswerContract } from './llm/stripEmbeddedAnswerContract';
 import { isCodeVerificationEnabled } from './llm/codeVerification/verificationEnabled';
 import { CodingStreamGate } from './llm/codingStreamGate';
 import { PiLatencyTrace } from './services/telemetry/PiLatencyTracer';
@@ -746,9 +747,14 @@ export function initializeIpcHandlers(appState: AppState): void {
       options?: { skipSystemPrompt?: boolean },
     ) => {
       try {
+        // Symmetric strip on the non-stream path: defense-in-depth against any
+        // future channel that injects <answer_contract>...</answer_contract> into
+        // `message`. The renderer does NOT currently inject it on either path;
+        // both strips are belt-and-suspenders.
+        const strippedMessage = stripEmbeddedAnswerContract(message);
         const result = await appState.processingHelper
           .getLLMHelper()
-          .chatWithGemini(message, imagePaths, context, options?.skipSystemPrompt);
+          .chatWithGemini(strippedMessage, imagePaths, context, options?.skipSystemPrompt);
 
         console.log(`[IPC] gemini - chat response received`, { length: result?.length ?? 0 });
 
@@ -1009,6 +1015,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         const skillPrefixMatch = typeof message === 'string'
           ? message.match(/^[/$]([A-Za-z0-9_-]+)\s*(.*)$/s)
           : null;
+        // Defensive: strip any embedded <answer_contract>...</answer_contract>
+        // block from the user-visible message. See stripEmbeddedAnswerContract
+        // for the contract-block leak rationale (grounding campaign H4, 2026-07-18).
+        // MEDIUM #2: placed at the planAnswer boundary so upstream routing
+        // (skill dispatch, identity probe, source-switch resolution) sees the
+        // user's literal input — error logs and unmatched-skill fallbacks
+        // report the original message, not a stripped variant.
         if (skillPrefixMatch) {
           try {
             const candidateId = skillPrefixMatch[1];
@@ -1055,6 +1068,15 @@ export function initializeIpcHandlers(appState: AppState): void {
           const { ModesManager } = require('./services/ModesManager');
           manualActiveMode = ModesManager.getInstance().getActiveModeInfo();
         } catch { /* mode prior unavailable — planAnswer stays mode-blind */ }
+
+        // Defense-in-depth at the LLM boundary: as of 2026-07-18, no known code path
+        // injects <answer_contract>...</answer_contract> into `message` (the renderer
+        // submits raw text, `buildCodingContractPrompt` writes to `context` only, and
+        // `LLMHelper._streamChatInner` doesn't augment). The strip is a one-line
+        // safety net for future regressions and is placed HERE so skill dispatch,
+        // identity probes, and source-switch resolution all see the user's literal
+        // input — only the planner sees the stripped variant.
+        message = stripEmbeddedAnswerContract(message);
 
         const answerPlan = planAnswer({
           question: message,
@@ -2580,6 +2602,92 @@ export function initializeIpcHandlers(appState: AppState): void {
           // actually changes it do we hand the renderer a corrective finalText.
           let finalText: string | undefined;
           if (isCodingChat) {
+            // CODE-META RETRY (grounding campaign H4, 2026-07-18): runs BEFORE the
+            // validator so the original M3 meta-reply is what we test against. If we
+            // ran validateAnswerStructure first, repairCodingMarkdown would inject
+            // the six-section template (with MISSING_CODE_MARKER for dsa_question_answer)
+            // and the meta-reply markers would be gone — the retry would never fire
+            // and the user would see a template stub instead of real code.
+            //
+            // Trigger: M3 emitted the "your message got cut off" / clarification-request
+            // meta-reply instead of code. Detect by absence of a code block + presence of
+            // assistant-meta markers. Regenerate ONCE with a sharper directive; only accept
+            // if the regen actually contains a code fence (never overwrite with another
+            // meta-reply).
+            try {
+              const looksMeta = /<verification_spec>|<answer_contract>|I notice the contract|your message (was|got) cut off|please share (the|your) (problem|prompt)|paste the prompt/i.test(fullResponse);
+              const hasCodeFence = /```[a-zA-Z0-9_+\-]*\n[\s\S]*?```/.test(fullResponse);
+              // `explain_only` is a PROSE contract; a meta-retry that demands a code
+              // fence can never accept the regen, so we'd burn 8s of latency and then
+              // fall back to the meta-reply anyway. Skip the whole retry path for
+              // explain_only — the validator downstream handles the non-code case via
+              // `validateExplicitCodingContract` returning ok:true without forcing a
+              // repair.
+              const retryEnabledForContract =
+                explicitCodingContract === null
+                || explicitCodingContract === 'code_only'
+                || explicitCodingContract === 'complexity_only'
+                || explicitCodingContract === 'dry_run_only';
+              if (
+                retryEnabledForContract
+                && looksMeta
+                && !hasCodeFence
+                && _chatStreamsBySender.get(senderId)?.streamId === myStreamId
+              ) {
+                piTelemetry.emit('pi_coding_meta_retry_attempted', { answerType: answerPlan.answerType });
+                console.warn('[IPC] coding answer looks like meta-reply, regenerating once', { snippetLen: fullResponse.length });
+                // The original M3 meta-reply tokens were already pushed via sendChunk
+                // during the initial stream. On retry SUCCESS, `finalText = regenTrim`
+                // atomically replaces the row via the `gemini-stream-done` finalText
+                // override (renderer commits pendingTextSnapshot only when
+                // finalText is undefined). On retry FAILURE, we explicitly set
+                // `finalText = fullResponse` so the renderer STILL commits the
+                // original meta-reply verbatim — meaning whatever we do here can
+                // never introduce stranded text on screen. Deliberate silent retry:
+                // an in-stream "regenerating…" marker was tried and rejected because
+                // it leaked when the regen failed (BLOCKING finding round 3). The
+                // 8s regen latency is acceptable for a misfire rate of ~1/30 coding
+                // questions; a silent retry is strictly better than a stranded
+                // marker on failure.
+                const regenContract = explicitCodingContract
+                  ? buildCodingContractPrompt(explicitCodingContract)
+                  : buildCodingContractPrompt(null);
+                const directive = explicitCodingContract === 'code_only'
+                  ? 'Output ONLY the solution as a single fenced code block with a language tag. NO prose before or after, NO headings, NO explanation, NO clarifying questions.'
+                  : 'Output the full solution NOW in one fenced code block with the six-section coding format. Do NOT ask clarifying questions; produce a working implementation.';
+                const regenPrompt = `${regenContract}\n\nThe previous answer did not contain any code. ${directive}\n\nProblem: ${message}`;
+                let regen = '';
+                const regenAbort = new AbortController();
+                await raceStreamWithDeadline({
+                  stream: llmHelper.streamChat(regenPrompt, undefined, codingPriorProblemBlock || undefined, undefined, true, true, [], regenAbort.signal) as AsyncGenerator<string>,
+                  firstUsefulDeadlineMs: usingLocalLlm ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 8000,
+                  isUsefulYet: () => regen.length >= 10,
+                  shouldAbort: () => regen.length > 4000,
+                  onToken: (tok: string) => { regen += tok; },
+                  onCleanup: () => { try { regenAbort.abort(); } catch { /* best effort */ } },
+                });
+                const regenTrim = regen.trim();
+                if (regenTrim.length >= 20 && /```[a-zA-Z0-9_+\-]*\n[\s\S]*?```/.test(regenTrim)) {
+                  fullResponse = regenTrim;
+                  finalText = regenTrim;
+                  // Re-strip <verification_spec>: the regen prompt includes the
+                  // contract which teaches the model to emit a hidden spec block. The
+                  // pre-validator strip above only protected the original meta-reply.
+                  if (isCodingChat) fullResponse = _stripSpec(fullResponse);
+                  piTelemetry.emit('pi_coding_meta_retry_succeeded', { answerType: answerPlan.answerType });
+                } else {
+                  // Retry didn't yield a valid code fence (deadline / abort / another
+                  // meta-reply). Commit the original meta-reply atomically via
+                  // finalText so the renderer's row matches the pre-retry state
+                  // exactly — no leaked marker, no half-overwritten content.
+                  finalText = fullResponse;
+                  piTelemetry.emit('pi_coding_meta_retry_no_accept', { answerType: answerPlan.answerType, regenLen: regenTrim.length });
+                }
+              }
+            } catch (metaRetryErr: any) {
+              console.warn('[IPC] coding meta-reply retry skipped:', metaRetryErr?.message);
+            }
+
             // Pass the explicit format contract so repair RESPECTS it (bug #5/#7): with
             // an explicit contract validateAnswerStructure never forces the six-section
             // template — at most it strips prose off a "code only" / "without code" reply.
@@ -2603,12 +2711,12 @@ export function initializeIpcHandlers(appState: AppState): void {
                 finalText = structureValidation.repaired;
               }
               fullResponse = structureValidation.repaired;
+              // The validator's repair can introduce a hidden <verification_spec> via
+              // MISSING_CODE_MARKER — strip again so a repaired-stub + spec never leaks.
+              if (isCodingChat) fullResponse = _stripSpec(fullResponse);
             }
+
             // CODE-ONLY COMPLETENESS (spoken-answer-quality sprint 2026-06-15): a code answer
-            // cut off by max-tokens / a stream error ships truncated code (unbalanced
-            // brackets, unclosed function, dangling token). Detect it and regenerate ONCE
-            // before display, rather than show broken code. Conservative (string/comment
-            // masked, unclosed-only) so valid code never triggers a regen.
             try {
               const completeness = checkCodeCompleteness(fullResponse);
               if (!completeness.ok && _chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
@@ -2834,6 +2942,26 @@ export function initializeIpcHandlers(appState: AppState): void {
           } catch { /* guard never blocks the answer */ }
           if (CANDIDATE_VOICE_ANSWER_TYPES.has(answerPlan.answerType) || _perspectiveExpectsCandidate) {
             try {
+              // NON-CANDIDATE CONTENT: the candidate-voice sanitizer (assistant-meta tail
+              // strip + safe-string fallback) was designed for candidate IDENTITY answers
+              // ("who are you", "tell me about yourself"). Running it on a coding / system-
+              // design / debugging answer trips `needsFallback` on a short, correct, NON-
+              // candidate answer and ships the literal safe-string "The model produced an
+              // invalid assistant-identity answer…", which is meaningless for a content
+              // answer. Use `isCodingChat` (set true at line 1258 and again at 1312 for
+              // follow-ups promoted from follow_up_answer / unknown_answer) so covered:
+              //   - all native coding planAnswer types (isCodingAnswerType)
+              //   - follow-up → coding promoted turns (isCodingContinuation)
+              // Also skip for system_design_answer / debugging_question_answer which hit
+              // the sanitizer via `_perspectiveExpectsCandidate` in candidate-voice modes.
+              const isNonCandidateContent =
+                isCodingChat
+                || answerPlan.answerType === 'system_design_answer'
+                || answerPlan.answerType === 'debugging_question_answer'
+                || answerPlan.answerType === 'technical_concept_answer';
+              if (isNonCandidateContent) {
+                piTelemetry.emit('pi_coding_skip_candidate_sanitizer', { answerType: answerPlan.answerType });
+              } else {
               const sani = sanitizeCandidateAnswer(fullResponse);
               if (sani.repaired && !sani.needsFallback) {
                 fullResponse = sani.text;
@@ -2887,6 +3015,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 piTelemetry.emit('pi_context_policy_applied', { answerType: answerPlan.answerType, via: 'product_about_refusal_repaired' });
                 console.warn('[ProfileIntelligence] product-about stock refusal replaced with honest no-context line', { answerType: answerPlan.answerType });
               }
+              } // end `else` (skip sanitizer for coding types)
             } catch (saniErr: any) {
               console.warn('[ProfileIntelligence] candidate sanitizer skipped:', saniErr?.message);
             }
@@ -10302,7 +10431,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       // happen (audit RC-1 / finding #2).
       const myStreamId = ++_chatStreamId;
       const myPhoneId = ++_phoneChatLatestId;
-      const message = cmd.message;
+      // Symmetric strip on the phone-mirror chat path (defense-in-depth; see
+      // stripEmbeddedAnswerContract for the contract-block leak rationale).
+      const message = stripEmbeddedAnswerContract(cmd.message);
       const phoneMirror = PhoneMirrorService.getInstance();
       const intelligenceManager = appState.getIntelligenceManager();
 

@@ -58,7 +58,12 @@ export type PiTelemetryEvent =
   | 'pi_okf_profile_retrieval_blocked'
   | 'pi_okf_profile_evidence_assembled'
   | 'pi_okf_profile_export_requested'
-  | 'pi_okf_profile_export_completed';
+  | 'pi_okf_profile_export_completed'
+  // Coding-meta fix (grounding campaign H4, 2026-07-18): sanitizer skip + retry markers.
+  | 'pi_coding_skip_candidate_sanitizer'
+  | 'pi_coding_meta_retry_attempted'
+  | 'pi_coding_meta_retry_succeeded'
+  | 'pi_coding_meta_retry_no_accept';
 
 export interface PiTelemetryRecord {
   event: PiTelemetryEvent;
