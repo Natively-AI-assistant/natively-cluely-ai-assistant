@@ -2998,3 +2998,99 @@ tracked finding. L4 remains distant: the free-form no-content
 hallucination family is still fully unaddressed, the scaffold-misfire
 fix's real-world hit rate is still unproven, and now a 4th candidate
 failure family (leaked internal objects) is emerging.
+
+## ITERATION 34 (2026-07-18) — run-026: real signal on the scaffold-misfire fix, a genuine gap found, and the JSON-leak family confirmed real
+
+Second consecutive validation run (health check clean, MiniMax active
+both connections, no concurrent harness, correct branch). `run-026.json`/
+`.md` completed: 50 presses, greetingFailures 0, hallucinationFlags 1,
+questionExtractionAccuracy 100%, answerQualityAccuracy 28%,
+longRangeRecallAccuracy 0%, desyncAccuracy 38%, injectionResistance
+100%. 2/50 connect-timeouts, both confirmed genuine (back to the
+normal 1-3 range after run-025's elevated 5).
+
+**First real data on the scaffold-misfire fix (28f1fcd1) — three
+recurrences this run, ZERO recovered, but for legitimate,
+now-understood reasons in 2 of 3 cases, and a real, scoped gap found
+in the third:**
+
+- **A13** (Hadoop-migration challenge, `general_meeting_answer`): a
+  FULL, complete, internally-consistent coding-interview answer (real
+  Python/PyFlink implementation, real Dry Run, real Big-O) to a
+  behavioral question — no `---` separator, no final "answer" heading
+  anywhere. This is a FOURTH distinct scaffold-misfire sub-variant
+  (after A10's scaffold+real-answer, A17's bulleted-talking-points,
+  C12's generic-heading-no-fingerprint): the model didn't produce a
+  scaffold THEN a real answer — it fully committed to treating the
+  entire response as a coding artifact with no separate "real content"
+  to recover. `detectAndExtractScaffoldMisfire` correctly returns
+  `null` here (no clean split point exists) — this is accurately
+  unrecoverable BY DESIGN, not a bug.
+- **B13** (Transformer decoder self-attention question,
+  `general_meeting_answer`, NOT in the excluded technical-types set):
+  the raw answer is the LITERAL, VERBATIM `CODING_CONTRACT` template
+  PLACEHOLDER TEXT from `codingContract.ts` itself ("Name the core DSA
+  concept/data structure/algorithm (e.g. two pointers...)", "Walk
+  through ONE sample input step by step...") — the model echoed the
+  INSTRUCTIONS back as if they were the answer, not even attempting
+  real content. This is a materially different, more severe failure
+  than the scaffold-misfire family this fix targets (that family has
+  real content in the wrong format; this one has NO real content at
+  all, just leaked system-prompt template text). Correctly returns
+  `null` (no fingerprint content beyond the template's own words, no
+  split point) — but this deserves its own distinct tracking, not
+  folding into the scaffold-misfire family.
+- **C15** (closing "anything else" question, `experience_answer`): a
+  REAL, GENUINE scaffold-misfire with the coding fingerprint present
+  (`## Technique / Data Structure / Algorithm Used`, `## Dry Run`,
+  `O(n)`/`O(u)` complexity notation) AND a clean, complete, well-
+  written final answer section — but under a **`**Direct Answer:**`
+  bold-text marker**, not a `## ` markdown heading. Confirmed via
+  direct `detectAndExtractScaffoldMisfire()` call that this returns
+  `null` purely because `SCAFFOLD_MISFIRE_HEADING_RE`/the extraction
+  patterns only recognize `#{1,3}` line-start headings, not
+  bold-text (`**...**`) section markers. **This is a real, scoped,
+  well-understood gap in the shipped fix** — not a design flaw, just
+  an unhandled heading-style variant. The exact same "fingerprint
+  present + clean final section" shape the fix was built to recover,
+  just formatted differently.
+
+**JSON/internal-object leak family (proposed in iteration 33) now
+CONFIRMED real and recurring — 5 total instances across 3 runs**: two
+NEW instances this run — **A11** (a completely benign "mentoring
+experience" question answered with the raw tool-call stub
+`{"name": "noop", "arguments": {}}` — a leak of internal
+function-calling/tool-invocation machinery syntax, arguably more
+alarming than the JSON-data-object leaks seen before) and **C2** (a
+JSON-wrapped answer: `{"answer": "Sure, here's a classic shape..."}`
+— the real answer content IS present, just wrapped in an unparsed
+JSON envelope instead of delivered as plain text). Combined with
+run-022's C5/C6 and run-025's C15, this family is now well past the
+"maybe a one-off" threshold — 5 instances is a real, recurring
+pattern deserving the same focused-investigation treatment given to
+the other three families.
+
+**NEXT ACTION**: two concrete, well-scoped follow-ups identified from
+real data this iteration, in priority order:
+(1) extend `detectAndExtractScaffoldMisfire`'s Pattern B (final-
+heading extraction) to also recognize a bold-text `**Direct Answer:**`
+-style marker in addition to `## ` headings — C15's exact case proves
+this is a real, recoverable gap, not speculative; small, bounded
+change to an already-shipped, already-tested function (add an
+additional regex alternative, add C15's real raw text as a regression
+test, no new architecture);
+(2) the JSON/internal-object leak family (5 instances: C5/C6/C15-run025/
+A11/C2) is now confirmed real and warrants its own root-cause
+investigation — starting hypothesis: some tool-calling/structured-
+output code path (note A11's exact tool-call shape `{"name":...,
+"arguments":...}`) is occasionally selected or bleeding through for
+the plain conversational WTA path, which should never emit
+tool-call-shaped output at all.
+Both are now real, data-backed, scoped candidates for the next focused
+implementation pass — continue the standard health-check/judged-run
+loop per loop2.md in the meantime; L4 remains distant with the no-
+content-hallucination family fully open, the scaffold-misfire fix's
+real hit-rate still at 0/3 recovered (though with 2 of 3 misses now
+explained as legitimately out-of-scope and the third having a
+concrete, scoped fix path), and the JSON-leak family newly confirmed
+and unaddressed.
