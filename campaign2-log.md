@@ -2268,3 +2268,62 @@ prompt patch without first checking for an existing, disabled, or
 misconfigured guard — this campaign has repeatedly found that the
 better fix was closing a gap in existing machinery rather than adding
 new machinery from scratch.
+
+**Follow-up investigation (same iteration)**: checked item (1) from the
+NEXT ACTION above. Found TWO existing guards, both with the right
+SHAPE for this but a coverage gap:
+
+- `IntelligenceEngine.isNonAnswerSentinel` (line ~204): exact-matches
+  only `'nothing actionable right now'` / `'nothing to capture right
+  now'`. None of A2/A3/A7/A12/A17/A18/C3/C9/C14's actual phrasings
+  match (verbatim collected: "Hey Marcus, your phone's interviewer
+  audio is coming through, but I haven't picked up any question yet...",
+  "There's nothing captured to summarize yet.", "I don't have a
+  specific question or topic to clarify from what's captured right
+  now.", "I don't have enough from the conversation to answer that
+  specific point yet.").
+- `ProfileOutputValidator.ts`'s `detectAssistantVoiceMisfire`
+  (applies to `ASSISTANT_VOICE_ANSWER_TYPES`, confirmed A2's
+  `general_meeting_answer` is a member via a direct
+  `AnswerPlanner.planAnswer()` call) and `sanitizeCandidateAnswer`'s
+  `CANDIDATE_META_MARKERS` (applies to `CANDIDATE_VOICE_ANSWER_TYPES`,
+  confirmed A3's `project_answer` is a member) — both only pattern-match
+  identity leaks ("I'm an AI assistant") and stock refusals ("I can't
+  share that information"). Neither has ANY pattern for a "no question
+  captured" claim.
+
+**Important complication found before writing a fix**: "There's
+nothing captured to summarize yet" is NOT always a bug — it's an
+intentionally prompted phrase. `electron/llm/prompts.ts` (lines ~28,
+~2128) explicitly instructs the model to say exactly this when the
+meeting/lecture just started and there is genuinely no transcript yet
+(the "lecture summarize carve-out", has its own regression test
+`LectureSummarizeCarveOut.test.mjs`). A blanket ban on this phrase
+would break that legitimate case and likely regress a previously-fixed
+bug. The actual defect is CONTEXT-DEPENDENT: the phrase is correct
+when the transcript is empty/near-empty, and a hallucination when the
+transcript demonstrably contains a real, correctly-extracted question
+(as in A2/A3/A7/etc., where `question_extracted`'s
+`preparedTranscriptChars` was 600-1300+ chars and a real question was
+present). A correct fix needs to compare the "nothing captured"
+claim against the ACTUAL extracted-question/transcript state at the
+call site (data IntelligenceEngine already has — `extractedQuestion`,
+`preparedTranscriptChars`, `question`) rather than pattern-matching
+the answer text in isolation. This is more involved than a one-line
+regex addition to an existing marker list, so NOT implemented this
+iteration — needs a careful, testable design (likely a new guard
+alongside `isNonAnswerSentinel`/`detectAssistantVoiceMisfire`,
+gated on "answer claims no-content AND a real question/transcript
+was actually present", with its own regression tests reproducing
+A2/A3's exact scenario) rather than a rushed patch mid-loop.
+
+**NEXT ACTION (revised)**: design and implement a
+"claimed-no-content-but-content-existed" guard as a follow-up task,
+separate from the routine re-check/reschedule loop — this is
+substantial enough to warrant its own focused work session with
+tests, not a quick fix squeezed into a wakeup cycle. In the meantime,
+continue the standing campaign loop (health checks, judged runs) so
+data keeps accumulating, but do not expect G3/G5/G6 to approach L4
+targets until this is fixed — it is now the single largest known
+contributor to those scores being low, larger than any harness or
+extraction bug fixed so far.
