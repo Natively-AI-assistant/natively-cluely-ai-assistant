@@ -482,6 +482,41 @@ export const detectAndExtractScaffoldMisfire = (answerType: AnswerType, answer: 
     if (hasCodingScaffoldFingerprint(head) && tail.length >= 20) return tail;
   }
 
+  // Pattern C: content under a trailing BOLD-TEXT final-answer marker,
+  // e.g. "**Direct Answer:**" (run-026 C15's shape — the model used real
+  // `## ` headings for the scaffold portion but switched to a bold-text
+  // marker for the final answer instead of another `## ` heading, so
+  // Pattern B's line-start-heading match never fired even though the exact
+  // same "fingerprinted scaffold, then a clean final answer" shape is
+  // present).
+  //
+  // Code-review 2026-07-18 HIGH fix: the first draft's regex
+  // (`\*\*[^*\n]*answer[^*\n]*\*\*`) matched ANY bold-wrapped text on its own
+  // line merely CONTAINING "answer" anywhere — no closed vocabulary, unlike
+  // Pattern B's heading match (which can only ever match
+  // SCAFFOLD_MISFIRE_HEADING_RE's short, fixed word list). A skeptic pass
+  // constructed a real answer containing its own internal bold rhetorical
+  // aside mid-narrative ("**So what was the answer that finally worked?**")
+  // and proved everything before it — genuine, valuable answer content, not
+  // scaffold — would be silently discarded, since `.pop()` always takes the
+  // LAST such match and the true scaffold earlier in the text still
+  // satisfies the fingerprint gate regardless of where the wrong split
+  // point lands. Fixed by restricting the marker to a closed set of short,
+  // label-shaped phrasings (mirroring Pattern B's own closed-vocabulary
+  // discipline exactly, not just its stated intent) — a marker must be
+  // ONLY a label like "Direct Answer" / "Final Answer" / "Answer (spoken)",
+  // never an arbitrary sentence or question that happens to contain the
+  // word "answer".
+  const BOLD_ANSWER_MARKER_RE = /^\s*\*\*\s*(?:direct|final|spoken|the)?\s*answer\s*(?:\([^)]{0,40}\))?\s*:?\s*\*\*:?\s*$/im;
+  const boldMarkerMatch = [...text.matchAll(new RegExp(BOLD_ANSWER_MARKER_RE.source, 'gim'))].pop();
+  if (boldMarkerMatch && boldMarkerMatch.index !== undefined) {
+    const head = text.slice(0, boldMarkerMatch.index);
+    const tail = text.slice(boldMarkerMatch.index + boldMarkerMatch[0].length).trim();
+    if (hasCodingScaffoldFingerprint(head) && tail.length >= 20 && !SCAFFOLD_MISFIRE_HEADING_RE.test(tail.split('\n')[0])) {
+      return tail;
+    }
+  }
+
   return null;
 };
 

@@ -226,3 +226,96 @@ This is the real spoken answer that should be recovered in full, since the disca
     assert.match(extracted, /real spoken answer/);
   });
 });
+
+// ── run-026 finding: C15 has the exact same "fingerprinted scaffold, then a
+//    clean final answer" shape Pattern A/B already recover, but the model
+//    used a BOLD-TEXT marker ("**Direct Answer:**") for the final section
+//    instead of another "## " heading, so neither Pattern A (no trailing
+//    ---) nor Pattern B (no matching heading) fired. Pattern C recognizes
+//    this markup variant while requiring the exact same fingerprint gate. ──
+describe('detectAndExtractScaffoldMisfire — Pattern C: bold-text final-answer marker (run-026 C15)', () => {
+  test('C15 (mentoring/closing question): extracts the real answer under a bold "**Direct Answer:**" marker', () => {
+    const raw = `## Approach
+- Walk through the replacement reconciliation system: streaming pipeline over Kafka + Flink replacing a Hadoop batch job.
+
+## Technique / Data Structure / Algorithm Used
+- Stream processing with exactly-once semantics, windowed aggregations, idempotent sinks keyed off ledger entry IDs.
+
+## Code
+\`\`\`python
+class ReconciliationProcessor:
+    def process(self, entries):
+        pass
+\`\`\`
+
+## Dry Run
+- Entry arrives, hash computed, lookup performed, discrepancy emitted if amounts differ.
+
+## Complexity
+- Time Complexity: O(n) over the entry stream.
+- Space Complexity: O(u) where u is the count of unique entries.
+
+## Interviewer Follow-up Points
+- How do you bound memory across a multi-day window?
+
+**Direct Answer:**
+I owned the design and rollout of a streaming reconciliation pipeline on Kafka and Flink that processes 4.2 billion ledger entries a day, replacing a legacy Hadoop batch job. End-to-end p99 latency came down from 14 hours to about 38 minutes.`;
+    const extracted = detectAndExtractScaffoldMisfire('experience_answer', raw);
+    assert.ok(extracted, 'should extract the real answer, not null');
+    assert.match(extracted, /streaming reconciliation pipeline on Kafka and Flink/);
+    assert.doesNotMatch(extracted, /## Approach/);
+    assert.doesNotMatch(extracted, /## Technique/);
+    assert.doesNotMatch(extracted, /\*\*Direct Answer:\*\*/);
+  });
+
+  test('a bold marker without the coding fingerprint in the head is not extracted', () => {
+    const raw = `**My Approach:**
+I would negotiate collaboratively rather than adversarially.
+
+**My Answer:**
+I would target the top of the band given my experience and the scope of this role.`;
+    assert.equal(detectAndExtractScaffoldMisfire('negotiation_answer', raw), null);
+  });
+
+  test('a legitimate answer that merely bolds the word "answer" for emphasis is never touched', () => {
+    const raw = 'I think the **answer** here is that communication matters more than perfect code, and that is the lesson I carry into every incident review.';
+    assert.equal(detectAndExtractScaffoldMisfire('behavioral_interview_answer', raw), null);
+  });
+
+  // ── Code-review 2026-07-18 HIGH fix: the first draft's bold-marker regex
+  //    matched ANY bold text merely CONTAINING "answer" anywhere, no closed
+  //    vocabulary (unlike Pattern B's heading match, which can only match
+  //    SCAFFOLD_MISFIRE_HEADING_RE's short fixed word list). A skeptic pass
+  //    proved a real answer's own internal bold rhetorical aside
+  //    ("**So what was the answer that finally worked?**") would silently
+  //    discard everything before it — genuine narrative content, not
+  //    scaffold — since the true earlier scaffold still satisfies the
+  //    fingerprint gate regardless of where the wrong split point lands.
+  //    Fixed by restricting the marker to a closed set of short, label-
+  //    shaped phrasings (mirroring Pattern B's own discipline exactly). ────
+  test('a real answer containing its own internal bold rhetorical aside mentioning "answer" is never truncated', () => {
+    const raw = `## Approach
+Frame this around ownership and de-escalation.
+
+## Dry Run
+Input: conflict with a peer. Output: resolution timeline. O(1) extra steps needed.
+
+When my teammate and I disagreed on the rollout strategy, I first made sure I understood their concern fully before pushing back, since I have found most conflicts are really about unstated risk tolerance.
+
+**So what was the answer that finally worked?**
+We agreed to a canary rollout with an automatic rollback trigger, which satisfied their risk concern and my speed concern at the same time.`;
+    assert.equal(detectAndExtractScaffoldMisfire('behavioral_interview_answer', raw), null);
+  });
+
+  test('a bold marker matching only via a substring ("Unanswered", not "Answer") is never treated as a final-answer marker', () => {
+    const raw = `## Approach
+Some coaching text.
+
+## Dry Run
+step by step trace. O(1) time.
+
+**Still Unanswered Questions:**
+This part should never be treated as the real final answer.`;
+    assert.equal(detectAndExtractScaffoldMisfire('behavioral_interview_answer', raw), null);
+  });
+});
