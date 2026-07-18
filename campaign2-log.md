@@ -2674,3 +2674,169 @@ than expected (could be another "existing machinery, coverage gap"
 case like both of this session's fixes), it's the better next
 investigation target. Standard health-check-then-run loop continues
 in parallel per loop2.md.
+
+## ITERATION 31 (2026-07-18) — DSA-template misfire root-caused (not yet fixed)
+
+Investigated iteration 30's priority item. Findings, in order:
+
+1. **Ruled out session contamination for 2 of 3 repro cases**: checked
+   each of run-024's DSA-misfire presses (A10, A17, C12) for a nearby
+   coding-flavored prior turn. A10 DOES follow a real "design a URL
+   shortener" system-design turn 2 exchanges earlier in the same
+   transcript window — a plausible contamination trigger. But A17
+   ("did you consider any alternative consensus approach") and C12
+   ("how did the team decide to roll back rather than fix forward") have
+   NO recent coding/system-design turn nearby at all — C12 in
+   particular is a pure behavioral/incident-response question with zero
+   technical vocabulary. Contamination from a nearby real coding
+   question is a plausible CONTRIBUTING factor for some cases but not
+   the root cause — it can't explain C12.
+
+2. **Confirmed (again, via direct `AnswerPlanner.planAnswer()` calls)
+   that app-side routing is correct for all three**: A10 →
+   `negotiation_answer`, A17 → `general_meeting_answer`, C12 →
+   `general_meeting_answer`. None are `isCodingAnswerType`. The bug is
+   not in answerType classification — reconfirms iteration 26's finding
+   from the ORIGINAL A4/A5 repro, now true across 5 total repro cases
+   (A4/A5 from run-022, B3 from run-023, A10/A17/C12 from run-024) with
+   zero exceptions.
+
+3. **Found the likely real mechanism**: `electron/llm/prompts.ts`'s
+   `SHARED_CODING_RULES` constant (interpolated unconditionally into
+   `WHAT_TO_ANSWER_PROMPT` and virtually every other mode prompt — 21
+   separate interpolation sites in the file, confirmed via grep) always
+   includes the full `CODING_CONTRACT` text
+   (`electron/llm/codingContract.ts`) in every system prompt sent to
+   the model, regardless of whether the current question is a coding
+   question. The contract text uses extremely forceful, salient
+   imperative language ("Every heading is mandatory... Even a
+   small/local model must emit every heading... A missing/renamed
+   heading... is a format failure"). This is architecturally correct
+   (the model needs the contract available for when a REAL coding
+   question does arrive, and the surrounding instruction text — "For a
+   CODING, DSA, ALGORITHM, SQL, DEBUGGING, or SYSTEM DESIGN question...
+   structure is mandatory" — is properly scoped/conditional in its own
+   wording), but it means the six coding headings are always sitting
+   in the model's context as heavily-emphasized text, giving MiniMax-M3
+   a plausible attractor to misapply even when the actual question
+   isn't coding-related — the same general failure shape already
+   documented and partially mitigated elsewhere in this codebase for a
+   DIFFERENT over-application bug
+   (`ASSISTANT_IDENTITY_MISFIRE_RE`/`detectAssistantVoiceMisfire`'s own
+   doc comment: "Smaller models over-apply the prompt's ... instruction
+   to short, context-free questions").
+
+4. **Found the exact coverage gap, mirroring both of this session's
+   prior two fixes**: `AnswerValidator.ts`'s `validateAnswerStructure`
+   (the function that DOES check coding-answer structure against
+   `answerPlan.answerType`) opens with `if (!isCodingType(answerType))
+   { return { ok: true, ... } }` (line 407) — for any NON-coding
+   answerType, it immediately returns `ok: true` and never inspects the
+   answer's actual content at all. There is currently NO validator
+   anywhere in the pipeline that checks "did a NON-coding-type answer
+   accidentally use the six coding headings" — the validator only ever
+   checks the reverse direction (did a coding-type answer correctly use
+   them). This is architecturally the same shape as both of this
+   session's already-shipped fixes (iteration 27: a guard existed but
+   its pattern list didn't cover the observed phrasings; iteration 29:
+   a guard existed, correctly detected the problem via `needsFallback`,
+   but the caller had no branch to act on it) — existing machinery,
+   real coverage hole, not something requiring new architecture from
+   scratch.
+
+**NOT fixed this iteration** — deliberately deferred implementation.
+Unlike iterations 27/29 (narrow, well-bounded fixes with an obvious
+correct behavior), this one has a real design question before writing
+code: what should happen when a non-coding answer is caught using the
+coding template? Candidates: (a) strip the six `##` headings and
+re-flow the prose as plain text (risks mangling real content if the
+prose itself references "the approach" or "the technique" legitimately
+as English words, not as section markers); (b) treat it as a full
+misfire and substitute a deterministic fallback like the stock-refusal
+fix (risks being needlessly harsh — A10's actual answer body under the
+misapplied headings may still contain a real, usable, on-topic salary
+answer, unlike the earlier stock-refusal case which had zero real
+content); (c) a targeted regeneration request back to the model with
+an explicit "do not use the coding format" instruction (adds latency
+and a second round-trip on the live path, which this campaign has
+previously flagged as costly — see the `raceStreamWithDeadline`/
+Autopilot-PI context in memory). Needs a decision before implementation,
+not a rushed pattern-match fix — this campaign has now twice shipped a
+first-draft fix that a skeptic pass caught as unsafe; better to design
+the repair strategy deliberately upfront here given the added
+ambiguity about WHAT the correct repaired output should even be (unlike
+iterations 27/29 where the correct fallback text was obvious).
+
+**NEXT ACTION**: decide the repair strategy for this finding (likely
+option (a), stripping headings and re-flowing to prose, since it best
+preserves real answer content and matches this campaign's general bias
+toward not discarding real content when avoidable — but needs a closer
+look at whether A10/A17/C12's actual prose under the headings is usable
+once de-templated, or whether it's ALSO restructured/hedged in a way
+that reads badly without the headings). Read the full raw answer text
+for A10/A17/C12 (not just the 100-char preview) before deciding. In
+parallel, continue the standing health-check/judged-run loop per
+loop2.md — L4 remains out of reach with this and the no-content-
+hallucination family both still open.
+
+**UPDATE (same iteration) — read the full raw trace dumps, which
+changes the fix design significantly**: `traces2/harness-script-*-
+press-*.txt` has the FULL raw model output (the `answerPreview` field
+in the JSON report is truncated ~100-150 chars, which was hiding the
+real shape of this bug). Read A10/A17/C12 in full:
+
+- **A10**: full, rigid 6-section coding template (`## Approach` / `##
+  Technique...` / `## Code` (containing "Not applicable. This is a
+  live compensation answer, not a coding question.") / `## Dry Run` /
+  `## Complexity` (literally "Time O(1). Space O(1)." on a salary
+  question) / `## Interviewer Follow-up Points`) — but CRITICALLY,
+  after a `---` separator, the model appends a real, complete,
+  well-formed, first-person spoken candidate answer ("Polite opening:
+  I'd love to throw out a range, but I want to make sure I'm doing it
+  the right way for this role...", ~120 words, fully usable as-is).
+  **The model is internally self-aware this isn't a coding question**
+  (its own `## Code` section says so explicitly) yet forces itself
+  through the template scaffold ANYWAY before finally answering for
+  real. This is not lost content — it's wasted tokens/latency
+  producing throwaway scaffold text, with the real answer intact and
+  trivially extractable at the end.
+- **C12**: a different 3-section variant (`## Approach` / `## Key
+  Reasoning` / `## Answer (spoken, ~22s)`) — NOT the rigid 6-section
+  contract, but clearly inspired by its heading style. Same shape:
+  real, complete, well-formed spoken answer cleanly present under the
+  final heading, trivially extractable.
+- **A17**: a THIRD distinct variant (`## Approach` / `## Technique /
+  Data Structure / Algorithm Used` / invented `## Key Talking Points
+  (speak naturally, not as bullets)` / `## Interviewer Follow-up
+  Points`) — genuinely substantive, technically accurate content about
+  Raft/Paxos/Zab tradeoffs, but formatted as interviewer-coaching
+  bullet points rather than first-person spoken prose, with NO clean
+  final "here's the actual answer" section to extract — the real
+  content IS the bulleted talking points, just in the wrong voice/
+  format.
+
+**Revised assessment**: this is not one bug with one fix — it's the
+model choosing from at least 3 different self-invented "planning
+scaffold" structures, loosely coding-template-flavored, applied to
+non-coding technical/behavioral questions. Two of three cases (A10,
+C12) have trivially-extractable real answers (strip everything up to
+and including the LAST heading, keep what follows) — a much safer,
+more mechanical repair than initially assessed, closer to
+iterations 27/29's "obvious correct fallback" shape than first
+thought. The third case (A17) has no such clean split and would need
+either a reformatting/regeneration pass or acceptance that the
+bulleted content, while substantively correct, ships in a non-ideal
+voice.
+
+**Revised NEXT ACTION**: a tractable FIRST fix exists — detect when a
+non-coding answerType's raw answer contains coding-contract-style `##`
+headings (a structural signal, not content-guessing) AND a clear final
+section (last heading, or a trailing `---`-separated block) that reads
+as a real first-person answer; strip everything before it. This alone
+would fully repair A10/C12's shape (2 of 3 repros) with a mechanical,
+low-risk transformation, leaving A17-style bulleted-coaching-without-
+clean-split as a smaller residual case to assess separately once real
+data on ITS frequency vs A10/C12's shape is available. Needs its own
+skeptic-reviewed implementation + tests before shipping, same
+discipline as iterations 27/29 — do not rush given this session's
+established pattern of first-draft fixes needing a review pass.
