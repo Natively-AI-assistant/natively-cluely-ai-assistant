@@ -563,7 +563,6 @@ const NAV_ITEMS = [
     { id: 'insights',    label: 'Profile',            Icon: FileText },
     { id: 'company',     label: 'Company Intel',      Icon: Building2 },
     { id: 'coverletter', label: 'Cover Letter',       Icon: Mail },
-    { id: 'negotiation', label: 'Negotiation Script', Icon: Gift },
     { id: 'tavily',      label: 'Tavily Search',      Icon: Globe },
 ];
 
@@ -623,11 +622,6 @@ export function ProfileIntelligenceSettings({
     const [companyDossier, setCompanyDossier] = useState<any>(null);
     const [companySearchQuotaExhausted, setCompanySearchQuotaExhausted] = useState(false);
 
-    // Negotiation
-    const [negotiationScript, setNegotiationScript] = useState<any>(null);
-    const [negotiationGenerating, setNegotiationGenerating] = useState(false);
-    const [negotiationError, setNegotiationError] = useState('');
-
     // Cover Letter
     const [coverLetter, setCoverLetter] = useState<any>(null);
     const [coverLetterGenerating, setCoverLetterGenerating] = useState(false);
@@ -664,7 +658,6 @@ export function ProfileIntelligenceSettings({
         window.electronAPI?.profileGetStatus?.().then(setProfileStatus).catch(() => {});
         window.electronAPI?.profileGetProfile?.().then((data: any) => {
             setProfileData(data);
-            if (data?.negotiationScript) setNegotiationScript(data.negotiationScript);
             if (data?.coverLetter) setCoverLetter(data.coverLetter);
             // Rehydrate the cached company-research dossier on mount so it persists
             // across app restarts (engine saves every successful research to the
@@ -699,12 +692,7 @@ export function ProfileIntelligenceSettings({
         } catch { /**/ }
     };
 
-    const visibleNav = NAV_ITEMS.filter(n => {
-        // Cover Letter & Company Intel: always visible — the panel's empty state
-        // explains what's missing instead of hiding the tab.
-        if (n.id === 'negotiation') return !!(profileData?.hasActiveJD);
-        return true;
-    });
+    const visibleNav = NAV_ITEMS;
 
     // ── Upload helpers ────────────────────────────────────────────────────────
     const doResumeUpload = async (filePath: string) => {
@@ -1040,22 +1028,11 @@ export function ProfileIntelligenceSettings({
     };
 
     const renderInsights = () => {
-        // Empty state — no resume yet.
-        if (!profileStatus.hasProfile) {
-            return (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                    <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(129,140,248,0.08)', border: '1px solid rgba(129,140,248,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <FileText size={18} style={{ color: 'var(--pi-accent)' }} />
-                    </div>
-                    <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>No resume yet</div>
-                        <div style={{ fontSize: 12, color: 'var(--pi-secondary)', lineHeight: 1.6, maxWidth: 260 }}>
-                            Add your resume in <strong style={{ color: 'var(--pi-primary)' }}>Identity</strong> and I'll summarize it here.
-                        </div>
-                    </div>
-                </div>
-            );
-        }
+        // Header is always shown (Cover Letter / Company Intel parity) — empty-
+        // state card renders below it instead of replacing it. This way the
+        // "Your profile" section is visible (and explainable) the moment the
+        // user opens the tab, even before a resume is uploaded.
+        const hasProfile = profileStatus.hasProfile;
 
         // ── Data (all optional; guard every access) ──
         const experienceCount: number = profileData?.experienceCount ?? 0;
@@ -1141,6 +1118,29 @@ export function ProfileIntelligenceSettings({
                     </p>
                 </div>
 
+                {/* No resume yet — surface as a card below the header so the
+                    "Your profile" title still reads (Cover Letter parity) and
+                    the user gets a clear next step. */}
+                {!hasProfile && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(129,140,248,0.08)', border: '1px solid rgba(129,140,248,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <FileText size={18} style={{ color: 'var(--pi-accent)' }} />
+                        </div>
+                        <div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>No resume yet</div>
+                            <div style={{ fontSize: 12, color: 'var(--pi-secondary)', lineHeight: 1.6, maxWidth: 260 }}>
+                                Add your resume in <strong style={{ color: 'var(--pi-primary)' }}>Identity</strong> and I'll summarize it here.
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Profile body — gated on hasProfile so the empty-state card
+                    above stays the only thing shown when there's no resume yet.
+                    Mirrors how Cover Letter / Company Intel hide their content
+                    cards while still rendering the section header. */}
+                {hasProfile && (
+                <>
                 {/* Quiet notice — only when the resume was read without AI */}
                 {profileStatus.extractionMode === 'heuristic' && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24, padding: '10px 12px', borderRadius: 'var(--pi-r-md)', border: '1px solid rgba(245,158,11,0.20)', background: 'rgba(245,158,11,0.06)' }}>
@@ -1307,6 +1307,8 @@ export function ProfileIntelligenceSettings({
                         </div>
                     </div>
                 )}
+                </>
+            )}
             </>
         );
     };
@@ -1376,38 +1378,9 @@ export function ProfileIntelligenceSettings({
         const hasJD = !!profileData?.hasActiveJD;
         const companyName = profileData?.activeJD?.company?.trim();
 
-        // Empty-state branches — this tab is always visible (Cover Letter parity).
-        // Company research keys off the active JD's company, not the resume.
-        if (!hasJD) {
-            return (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                    <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(217,167,232,0.08)', border: '1px solid rgba(217,167,232,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Building2 size={18} style={{ color: '#D9A7E8' }} />
-                    </div>
-                    <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>No job description yet</div>
-                        <div style={{ fontSize: 12, color: 'var(--pi-secondary)', lineHeight: 1.6, maxWidth: 260 }}>
-                            Upload a job description in <strong style={{ color: 'var(--pi-primary)' }}>Identity</strong> so I can research the target company.
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-        if (!companyName) {
-            return (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                    <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(217,167,232,0.08)', border: '1px solid rgba(217,167,232,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Building2 size={18} style={{ color: '#D9A7E8' }} />
-                    </div>
-                    <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>Company name not detected</div>
-                        <div style={{ fontSize: 12, color: 'var(--pi-secondary)', lineHeight: 1.6, maxWidth: 260 }}>
-                            Your JD didn't name a company clearly. Re-upload a JD with the company in the first few lines, or ask for company research directly.
-                        </div>
-                    </div>
-                </div>
-            );
-        }
+        // Header is always shown (Cover Letter parity) — empty-state cards
+        // render below it instead of replacing it. Company research keys off
+        // the active JD's company, not the resume.
         const loaded = !!companyDossier;
         return (
             <>
@@ -1418,7 +1391,9 @@ export function ProfileIntelligenceSettings({
                     <div>
                         <h3 className="pi-section-label" style={{ margin: 0 }}>Company Intel</h3>
                         <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: '4px 0 0', lineHeight: 1.5 }}>
-                            Culture, salary, hiring signal and interview difficulty for {companyName}.
+                            {companyName
+                                ? <>Culture, salary, hiring signal and interview difficulty for {companyName}.</>
+                                : <>Culture, salary, hiring signal and interview difficulty for the target company.</>}
                         </p>
                     </div>
                     {loaded && (
@@ -1429,13 +1404,45 @@ export function ProfileIntelligenceSettings({
                     )}
                 </div>
 
+                {/* No JD — surface this as its own card so the header still reads
+                    (Cover Letter parity), but the user gets a clear next step. */}
+                {!hasJD && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(217,167,232,0.08)', border: '1px solid rgba(217,167,232,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Building2 size={18} style={{ color: '#D9A7E8' }} />
+                        </div>
+                        <div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>No job description yet</div>
+                            <div style={{ fontSize: 12, color: 'var(--pi-secondary)', lineHeight: 1.6, maxWidth: 260 }}>
+                                Upload a job description in <strong style={{ color: 'var(--pi-primary)' }}>Identity</strong> so I can research the target company.
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* JD present but no company name extracted — same pattern: header
+                    stays, the missing-name card explains the gap. */}
+                {hasJD && !companyName && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(217,167,232,0.08)', border: '1px solid rgba(217,167,232,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Building2 size={18} style={{ color: '#D9A7E8' }} />
+                        </div>
+                        <div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>Company name not detected</div>
+                            <div style={{ fontSize: 12, color: 'var(--pi-secondary)', lineHeight: 1.6, maxWidth: 260 }}>
+                                Your JD didn't name a company clearly. Re-upload a JD with the company in the first few lines, or ask for company research directly.
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {companySearchQuotaExhausted && (
                     <div style={{ display: 'flex', gap: 8, padding: '8px 12px', borderRadius: 8, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', marginBottom: 12, fontSize: 11, color: '#f59e0b', lineHeight: 1.5 }}>
                         <span style={{ flexShrink: 0 }}>⚠</span>
                         Web search credits exhausted — showing AI-only research.
                     </div>
                 )}
-                {!companyDossier && !companyResearching && (
+                {!companyDossier && !companyResearching && companyName && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
                         <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(217,167,232,0.08)', border: '1px solid rgba(217,167,232,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <Building2 size={18} style={{ color: '#D9A7E8' }} />
@@ -1455,7 +1462,7 @@ export function ProfileIntelligenceSettings({
                         </button>
                     </div>
                 )}
-                {companyResearching && (
+                {companyResearching && companyName && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                         {/* Work Culture skeleton — overall rating + 4 sub-ratings grid.
                             Card shell is solid (no pulse); only the inner text placeholders breathe. */}
@@ -1584,7 +1591,7 @@ export function ProfileIntelligenceSettings({
                         </div>
                     </div>
                 )}
-                {companyDossier && !companyResearching && (
+                {companyDossier && !companyResearching && companyName && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                         {companyDossier.culture_ratings && (
                             <div>
@@ -1808,137 +1815,6 @@ export function ProfileIntelligenceSettings({
         );
     };
 
-    const renderNegotiation = () => {
-        const doGenerate = async (regen: boolean) => {
-            setNegotiationGenerating(true); setNegotiationError('');
-            try {
-                const result = await window.electronAPI?.profileGenerateNegotiation?.(regen);
-                if (result?.success && result.script) setNegotiationScript(result.script);
-                else setNegotiationError(result?.error || 'Generation failed');
-            } catch { setNegotiationError('Generation failed'); }
-            finally { setNegotiationGenerating(false); }
-        };
-
-        const STEPS = [
-            { step: '01', label: 'Opening',        hint: 'When asked about salary',      field: 'opening_line',          accent: '#10b981', bg: 'rgba(16,185,129,0.06)',  border: 'rgba(16,185,129,0.16)'  },
-            { step: '02', label: 'Justify',         hint: 'Link your record to the ask',  field: 'justification',          accent: '#818cf8', bg: 'rgba(129,140,248,0.06)', border: 'rgba(129,140,248,0.16)' },
-            { step: '03', label: 'Counter & Hold',  hint: 'If they push back',            field: 'counter_offer_fallback', accent: '#fb923c', bg: 'rgba(251,146,60,0.06)',  border: 'rgba(251,146,60,0.16)'  },
-        ];
-
-        return (
-            <>
-                {/* Header */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                    <div>
-                        <h3 className="pi-section-label" style={{ margin: 0 }}>Negotiation Script</h3>
-                        <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: '4px 0 0', lineHeight: 1.5 }}>
-                            AI-crafted salary negotiation based on your resume & JD.
-                        </p>
-                    </div>
-                    {negotiationScript && (
-                        <button className="pi-pill-btn pi-press" disabled={negotiationGenerating} onClick={() => doGenerate(true)}>
-                            <RefreshCw size={12} className={negotiationGenerating ? 'pi-spinner' : ''} />
-                            Regenerate
-                        </button>
-                    )}
-                </div>
-
-                {/* Error */}
-                {negotiationError && (
-                    <div style={{ fontSize: 11, color: 'var(--pi-danger)', padding: '8px 12px', borderRadius: 8, background: 'var(--pi-danger-bg)', border: '1px solid rgba(239,68,68,0.2)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <AlertCircle size={12} style={{ flexShrink: 0 }} /> {negotiationError}
-                    </div>
-                )}
-
-                {/* Skeleton while generating fresh */}
-                {negotiationGenerating && !negotiationScript && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        {/* salary skeleton */}
-                        <div className="pi-skeleton" style={{ height: 72, borderRadius: 10, background: 'var(--pi-btn-bg)' }} />
-                        {/* step skeletons */}
-                        {[1,2,3].map(i => (
-                            <div key={i} className="pi-skeleton" style={{ height: 88, borderRadius: 10, background: 'var(--pi-btn-bg)', opacity: 1 - i * 0.12 }} />
-                        ))}
-                    </div>
-                )}
-
-                {/* Empty state */}
-                {!negotiationScript && !negotiationGenerating && (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Gift size={18} style={{ color: '#34d399' }} />
-                        </div>
-                        <div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>Ready to negotiate</div>
-                            <div style={{ fontSize: 12, color: 'var(--pi-secondary)', lineHeight: 1.6, maxWidth: 260 }}>
-                                Generate a personalised salary script with opening line, justification, and counter-offer phrasing.
-                            </div>
-                        </div>
-                        <button
-                            className="pi-pill-btn pi-press"
-                            style={{ color: '#34d399', borderColor: 'rgba(52,211,153,0.25)', background: 'rgba(52,211,153,0.08)', fontWeight: 600, padding: '8px 20px' }}
-                            onClick={() => doGenerate(false)}
-                        >
-                            Generate Script
-                        </button>
-                    </div>
-                )}
-
-                {/* Script output */}
-                {negotiationScript && (
-                    <div style={{ opacity: negotiationGenerating ? 0.45 : 1, transition: 'opacity 0.3s', pointerEvents: negotiationGenerating ? 'none' : 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
-
-                        {/* Salary range card */}
-                        {negotiationScript.salary_range && (() => {
-                            const { currency, min, max } = negotiationScript.salary_range;
-                            const prefix = currency ? `${currency} ` : '';
-                            const range = `${prefix}${min?.toLocaleString()} – ${max?.toLocaleString()}`;
-                            return (
-                                <div style={{ borderRadius: 12, padding: '14px 18px', background: 'var(--pi-btn-bg)', border: '1px solid var(--pi-btn-border)', marginBottom: 2 }}>
-                                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.1em', color: 'var(--pi-tertiary)', marginBottom: 6 }}>Target Compensation</div>
-                                    <div style={{ fontSize: 22, fontWeight: 800, color: '#34d399', letterSpacing: '-0.02em', lineHeight: 1, whiteSpace: 'nowrap' }}>
-                                        {range}
-                                    </div>
-                                </div>
-                            );
-                        })()}
-
-                        {/* Step cards */}
-                        {STEPS.filter(s => negotiationScript[s.field]).map(s => {
-                            const text = (negotiationScript[s.field] as string).replace(/^["'"']+|["'"']+$/g, '').trim();
-                            return (
-                                <div key={s.step} style={{ borderRadius: 12, overflow: 'hidden', border: `1px solid ${s.border}`, background: s.bg }}>
-                                    {/* Card header */}
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 8px', borderBottom: `1px solid ${s.border}` }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                            <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', color: s.accent, background: `${s.accent}18`, padding: '2px 7px', borderRadius: 20 }}>
-                                                {s.step}
-                                            </span>
-                                            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)' }}>{s.label}</span>
-                                            <span style={{ fontSize: 11, color: 'var(--pi-tertiary)' }}>· {s.hint}</span>
-                                        </div>
-                                        <button
-                                            onClick={() => navigator.clipboard?.writeText(text)}
-                                            className="pi-press-soft"
-                                            style={{ fontSize: 11, color: 'var(--pi-tertiary)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, padding: '2px 6px', borderRadius: 6 }}
-                                            onMouseEnter={e => (e.currentTarget.style.color = 'var(--pi-primary)')}
-                                            onMouseLeave={e => (e.currentTarget.style.color = 'var(--pi-tertiary)')}
-                                        >
-                                            <Check size={11} /> Copy
-                                        </button>
-                                    </div>
-                                    {/* Quote body */}
-                                    <p style={{ fontSize: 13, lineHeight: 1.65, color: 'var(--pi-primary)', padding: '12px 14px', margin: 0, fontStyle: s.step !== '02' ? 'italic' : 'normal' }}>
-                                        {text}
-                                    </p>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </>
-        );
-    };
 
     const renderCoverLetter = () => {
         const doGenerate = async (regen: boolean) => {
@@ -2144,7 +2020,6 @@ export function ProfileIntelligenceSettings({
         insights: renderInsights,
         tavily: renderTavily,
         company: renderCompany,
-        negotiation: renderNegotiation,
         coverletter: renderCoverLetter,
     };
 
