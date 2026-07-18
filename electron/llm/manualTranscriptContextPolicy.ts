@@ -13,9 +13,17 @@ const TRANSCRIPT_REFERENCE_PATTERNS = [
   /\b(?:meeting|call|conversation|discussion|transcript|lecture|class) (?:said|asked|discussed|decided|mentioned|covered|agreed|concluded)\b/i,
   /\b(?:action items?|next steps?|takeaways?) (?:from|in|of) (?:the |this |that |our )?(?:meeting|call|conversation|discussion|transcript|lecture|class)\b/i,
   /\b(?:recap|catch me up (?:on|about)) (?:the |this |that |our )?(?:meeting|call|conversation|discussion|transcript|lecture|class)\b/i,
+  /^(?:what are )?(?:the )?(?:action items?|next steps?|to-?dos?|takeaways?)[?.!]*$/i,
+  /^(?:recap|catch me up)[?.!]*$/i,
   /\bsummari[sz]e (?:it|this|that|the (?:meeting|call|conversation|discussion|transcript|lecture|class)|our (?:meeting|call|conversation|discussion|lecture|class))\b/i,
+  /\bsummari[sz]e (?:the )?(?:last|previous|past)(?:\s+\w+){0,3}\s+(?:seconds?|minutes?|hours?|meeting|call|discussion|conversation)\b/i,
+  /^(?:write|draft|send) (?:a |the )?(?:follow[- ]?up|recap|summary|meeting) (?:email|note|message|mail)[?.!]*$/i,
+  /^(?:what are|whats?) the (?:exam|key) (?:points?|takeaways?)[?.!]*$/i,
+  /^(?:make (?:me )?notes?|take notes?|class notes?)[?.!]*$/i,
   /\bwhat did (we|they|the (?:interviewer|client|customer|participant|speaker|professor))\b/i,
-  /\bwhat (?:was|were|is|are) (?:the )?(?:interviewer|client|customer|participant|speaker|professor)\b/i,
+  /\bwhat (?:was|were|is|are) (?:the )?(?:interviewer|client|customer|participant|speaker|professor) (?:asking|saying|discussing|explaining|presenting|referring to|talking about|meaning)\b/i,
+  /^what (?:was|were) (?:decided|agreed|discussed|concluded|covered)[?.!]*$/i,
+  /^what (?:decisions?|agreements?|conclusions?) (?:was|were) (?:made|reached)[?.!]*$/i,
   /\b(?:we|they|the (?:interviewer|client|customer|participant|speaker|professor)) (?:said|asked|discussed|decided|mentioned|covered|agreed|concluded|meant|raised)\b/i,
 ];
 
@@ -33,7 +41,7 @@ function isShortTopicShiftFollowUp(message: string): boolean {
   // an unrelated rolling transcript merely because they contain "it" or "this".
   const topicShift = /^(?:what|how) about\s+\S+/i.test(text);
   const shortAddend = /^(?:and|also|then)\s+(?!(?:how|why|when|where|who|which|what|can|could|should|would|do|does|did|is|are|was|were|will|has|have|had)\b)\S+/i.test(text);
-  const responsePrompt = /^what should i (?:say|answer|do|respond)(?:\s+(?:to|about)\s+(?:that|this|it|them))?[?.!]*$/i.test(text);
+  const responsePrompt = /^what should i (?:say|answer|do|respond)(?:(?:\s+(?:to|about)\s+(?:that|this|it|them))|\s+next)?[?.!]*$/i.test(text);
   const demonstrativeFollowUp = /^(?:(?:can|could|would) you (?:explain|expand on|elaborate on) (?:that|this|it)|tell me more about (?:that|this|it)|what (?:does|did) (?:that|this|it) mean|how does (?:that|this|it) work)[?.!]*$/i.test(text);
   return topicShift || shortAddend || responsePrompt || demonstrativeFollowUp;
 }

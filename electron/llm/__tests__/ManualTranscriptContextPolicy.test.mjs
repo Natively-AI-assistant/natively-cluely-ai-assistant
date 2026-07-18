@@ -30,6 +30,14 @@ describe('manual transcript context policy', () => {
     assert.equal(attaches('how do I schedule a meeting?'), false);
     assert.equal(attaches('what is a transcript?'), false);
     assert.equal(attaches('what is a call stack?'), false);
+    assert.equal(attaches('what is the client state?'), false);
+    assert.equal(attaches('what is IT?'), false);
+    assert.equal(attaches('what should I do if my app crashes?'), false);
+    assert.equal(attaches('what was covered by my insurance?'), false);
+    assert.equal(attaches('what was decided by the Supreme Court?'), false);
+    assert.equal(attaches('what agreements were reached in the treaty?'), false);
+    assert.equal(attaches('what decisions were made in Brown v. Board?'), false);
+    assert.equal(attaches('summarize the last commit'), false);
     assert.equal(attaches('explain class in JavaScript'), false);
     assert.equal(attaches('how do I design a meeting scheduler?'), false);
     assert.equal(attaches('is it safe to use eval?'), false);
@@ -60,6 +68,14 @@ describe('manual transcript context policy', () => {
     assert.equal(isTranscriptBoundManualQuestion('summarize that'), true);
     assert.equal(isTranscriptBoundManualQuestion('summarise the call'), true);
     assert.equal(attaches('what did they say about client state?'), true);
+    assert.equal(attaches('what was the client asking?'), true);
+    assert.equal(attaches('what decisions were made?'), true);
+    assert.equal(attaches('what was covered?'), true);
+    assert.equal(attaches('what agreements were reached?'), true);
+    assert.equal(attaches('summarize the last five minutes'), true);
+    assert.equal(attaches('write a follow-up email'), true);
+    assert.equal(attaches('make notes'), true);
+    assert.equal(attaches('what are the exam points?'), true);
     assert.equal(attaches('what did the professor mean by this slide?'), true);
     assert.equal(attaches('from the transcript, what did Alex say?'), true);
     assert.equal(attaches('in the meeting, what did we decide?'), true);
@@ -72,6 +88,9 @@ describe('manual transcript context policy', () => {
     assert.equal(attaches('why?'), true);
     assert.equal(attaches('explain'), true);
     assert.equal(attaches('what should I say?'), true);
+    assert.equal(attaches('what should I do?'), true);
+    assert.equal(attaches('what should I say next?'), true);
+    assert.equal(attaches('what should I do next?'), true);
     assert.equal(attaches('what about client state?'), true);
     assert.equal(attaches('and pricing?'), true);
     assert.equal(attaches('can you explain that?'), true);
@@ -100,9 +119,16 @@ describe('manual transcript context policy', () => {
     assert.equal(extractLatestPriorAssistantTurn('[INTERVIEWER]: No prior answer'), undefined);
   });
 
-  test('mode-scoped sales prompts do not receive transcript context by default', () => {
+  test('active modes do not turn standalone typed questions into transcript follow-ups', () => {
     const salesMode = { id: 'm', templateType: 'sales', name: 'Sales', isCustom: false };
+    const meetingMode = { id: 'm', templateType: 'team-meet', name: 'Team Meeting', isCustom: false };
+    const lectureMode = { id: 'm', templateType: 'lecture', name: 'Lecture', isCustom: false };
     assert.equal(attaches('how do you compare with Cluely?', salesMode), false);
+    assert.equal(attaches('what is UI policy?', meetingMode), false);
+    assert.equal(attaches('how do I schedule a meeting?', meetingMode), false);
+    assert.equal(attaches('what is UI policy?', lectureMode), false);
+    assert.equal(attaches('what did we decide about UI policy?', meetingMode), true);
+    assert.equal(attaches('what did the professor mean by this slide?', lectureMode), true);
   });
 });
 
@@ -124,6 +150,7 @@ describe('manual transcript context policy wiring', () => {
     assert.match(ipcSrc, /const phoneAnswerPlan = planAnswer\(/);
     assert.match(ipcSrc, /activeMode: phoneActiveMode/);
     assert.match(ipcSrc, /shouldAutoAttachManualTranscriptContext\(message, phoneAnswerPlan\)/);
+    assert.match(ipcSrc, /const _pMode = phoneActiveMode;/);
     assert.match(ipcSrc, /\[PhoneMirror\] Skipped 100s transcript context for standalone manual chat/);
     assert.match(ipcSrc, /extractLatestPriorAssistantTurn\(snap\)/);
     assert.match(ipcSrc, /\[PhoneMirror\] Injected latest prior assistant answer for refinement; rolling transcript excluded/);
