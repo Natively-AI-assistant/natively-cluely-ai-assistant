@@ -10,7 +10,7 @@ import {
     FollowUpQuestionsLLM, WhatToAnswerLLM,
     prepareTranscriptForWhatToAnswer, buildTemporalContext,
     AssistantResponse as LLMAssistantResponse, classifyIntent, planNextAssistantAction, PlannerDecision,
-    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
+    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, detectAndExtractScaffoldMisfire, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
     isLiveSessionMemoryEnabled, resolveLiveFollowup, toMemoryMode, toSurface, effectiveMemoryMode,
     resolveLiveSessionMemoryConfig, piTelemetry, ageBucket,
     buildContextRoute, summarizeContextRoute, shouldThrottleTrigger,
@@ -2098,6 +2098,44 @@ export class IntelligenceEngine extends EventEmitter {
                 trace.mark('repair_used', { answerType: answerPlan.answerType });
             } else {
                 trace.mark('validation_completed', { ok: structureValidation.ok });
+            }
+
+            // SCAFFOLD-MISFIRE EXTRACTION (campaign2 longsession run-022/023/024,
+            // 2026-07-18): validateAnswerStructure above deliberately no-ops for
+            // non-coding answerTypes — it only checks the OPPOSITE direction (did a
+            // coding answer follow the contract). detectAndExtractScaffoldMisfire
+            // catches a non-coding answer that used the coding-contract's heading
+            // style anyway (confirmed via direct AnswerPlanner calls on every live
+            // repro that answerType routing itself was correct — this is the model
+            // spontaneously choosing the wrong template, not an app-side bug), and
+            // extracts the real, complete spoken answer that — in every case seen so
+            // far — is still cleanly present after the scaffold. Only fires on a
+            // strong structural signal (≥2 recognized headings, plus a coding-
+            // scaffold-specific content fingerprint — see the function's own doc
+            // comment); returns null (no change) for a shape it isn't confident
+            // about rather than guessing.
+            //
+            // Code-review 2026-07-18 MEDIUM: the fingerprint itself (Big-O/
+            // complexity notation, "Dry Run") is native, legitimate vocabulary for
+            // technical_concept_answer / system_design_answer / debugging_
+            // question_answer (e.g. a real answer to "explain Big-O" or a rate-
+            // limiter design comparing O(1) vs O(n) genuinely discusses complexity
+            // as its actual subject, not as a scaffold leak). Excluding these three
+            // types here — in ADDITION to isCodingAnswerType's coding_question_
+            // answer/dsa_question_answer exclusion — keeps this extraction scoped
+            // to the answer types where the fingerprint vocabulary has no
+            // legitimate reason to appear at all (behavioral, negotiation,
+            // experience, JD-fit, lecture, general-meeting, etc.).
+            const TECHNICAL_ANSWER_TYPES_EXCLUDED_FROM_SCAFFOLD_EXTRACTION = new Set([
+                'technical_concept_answer', 'system_design_answer', 'debugging_question_answer',
+            ]);
+            if (!isCodingAnswerType(answerPlan.answerType)
+                && !TECHNICAL_ANSWER_TYPES_EXCLUDED_FROM_SCAFFOLD_EXTRACTION.has(answerPlan.answerType)) {
+                const extracted = detectAndExtractScaffoldMisfire(answerPlan.answerType, fullAnswer);
+                if (extracted) {
+                    trace.mark('repair_used', { reason: 'scaffold_misfire_extracted', answerType: answerPlan.answerType });
+                    fullAnswer = extracted;
+                }
             }
 
             // Document-grounded WTA validator parity (seminar hardening 2026-07-06).
