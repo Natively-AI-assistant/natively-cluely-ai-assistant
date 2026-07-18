@@ -53,7 +53,8 @@ const RERANK = 'NATIVELY_RAG_LOCAL_RERANK';
 const SPEC = 'NATIVELY_RAG_SPECULATIVE_RERANK';
 
 function multiChunkFile() {
-  const filler = (w) => new Array(140).fill(w).join(' ');
+  // Exceed the production chunk window so the reranker has multiple candidates.
+  const filler = (w) => new Array(700).fill(w).join(' ');
   const content = [filler('intro'), filler('payload'), filler('appendix')].join(' ');
   return [{ id: 'fileA', modeId: 'mode1', fileName: 'doc.txt', content, createdAt: new Date().toISOString() }];
 }
