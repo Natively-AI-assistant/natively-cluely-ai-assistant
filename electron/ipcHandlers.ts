@@ -1638,6 +1638,43 @@ export function initializeIpcHandlers(appState: AppState): void {
         const sourceOwnershipAllowsProfile = ((manualOwnership && !_ownerEnforcementOff)
           ? manualOwnership.profileAllowed
           : legacyDocGuardEligible) && _contractAllowsProfile;
+        // TurnEvidenceCoordinator wiring gap fix (grounding campaign, 2026-07-18):
+        // this legacy fast path and the coordinator below (`coordinatorInScopeKinds`,
+        // ~line 2179) previously raced with no reconciliation. When the canonical
+        // decision requires BOTH reference_files AND a profile family (a genuinely
+        // mixed turn — "what's my education, and what does the doc say about X?"),
+        // this fast path could still fire first (it's gated only on the OLDER
+        // manualOwnership/legacyDocGuard verdict, which has no concept of "also
+        // needs reference files"), populate `selectedProfileEvidence`, and then
+        // BLOCK the coordinator via its own `!selectedProfileEvidence` guard — so
+        // the reference-file family silently never reached the pack. Live-confirmed
+        // via traces/golden-trace-turn-evidence-coordinator.mjs: a résumé+thesis
+        // mixed question governed a pack containing ONLY the 12 reference chunks,
+        // with the loaded résumé's evidence entirely absent, even though the
+        // canonical decision explicitly required it.
+        //
+        // Fix: defer to the coordinator (skip this fast path) whenever the
+        // coordinator would actually be reachable for this turn AND the decision
+        // requires reference_files alongside a profile family — a profile-only
+        // (or profile+JD, no reference_files) decision has no second family to
+        // lose, so this fast path keeps handling those exactly as before (the
+        // coordinator's own `!selectedProfileEvidence` guard already lets it
+        // no-op harmlessly on those). Mirrors `KNOWN_COORDINATOR_KINDS`/
+        // `coordinatorInScopeKinds` below (kept duplicated rather than hoisted,
+        // since this fast path also needs to run unchanged when the coordinator
+        // itself is unreachable — flag off, decision missing, an out-of-scope
+        // required kind like live_transcript).
+        const KNOWN_COORDINATOR_KINDS_EARLY = new Set(['reference_files', 'profile_resume', 'projects', 'profile_jd']);
+        const coordinatorWouldHandleMixedTurn = Boolean(manualTurnSourceDecision)
+          && manualTurnSourceDecision!.requiredEvidenceKinds.length > 0
+          && manualTurnSourceDecision!.requiredEvidenceKinds.every((k) => KNOWN_COORDINATOR_KINDS_EARLY.has(k))
+          && manualTurnSourceDecision!.requiredEvidenceKinds.includes('reference_files')
+          && manualTurnSourceDecision!.requiredEvidenceKinds.some((k) => (
+            k === 'profile_resume' || k === 'projects' || k === 'profile_jd'
+          ));
+        const coordinatorReachableForThisTurn = coordinatorWouldHandleMixedTurn
+          && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')
+          && isIntelligenceFlagEnabled('contextOsMultiFamilyEvidenceEnabled');
         const profileEvidenceEligible = !imagePaths?.length && !isCodingChat
           && !isAssistantIdentityQuestion(message)
           && !isStealthChat
@@ -1645,7 +1682,8 @@ export function initializeIpcHandlers(appState: AppState): void {
           && answerPlan.answerType !== 'project_link_answer'
           && answerPlan.answerType !== 'source_code_evidence_answer'
           && answerPlan.answerType !== 'project_about_answer'
-          && sourceOwnershipAllowsProfile;
+          && sourceOwnershipAllowsProfile
+          && !coordinatorReachableForThisTurn;
 
         let finalGenerationMode: FinalGenerationMode = 'jit_llm';
         let sessionWriteDecision: SessionWriteDecision = decideSessionWritePolicy({
