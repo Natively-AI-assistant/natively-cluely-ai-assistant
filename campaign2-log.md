@@ -2398,3 +2398,115 @@ branch. After the run, compare run-022's per-press classification
 against the new run's — specifically confirm A2/A3/A7/A12/C14's exact
 scenarios (or their re-generated equivalents at similar transcript
 positions) no longer produce the untouched raw hallucination text.
+
+## ITERATION 28 (2026-07-18) — run-023: guard validation shows the fix does NOT generalize, and why
+
+Health check clean (MiniMax + both Claude accounts `active`/
+`backoffLevel:0`, local backend healthy, no concurrent harness, correct
+branch), launched the validation judged run. `run-023.json`/`.md`
+completed: 50 presses, greetingFailures 0, hallucinationFlags 3,
+questionExtractionAccuracy 100%, answerQualityAccuracy 26%,
+longRangeRecallAccuracy 50%, desyncAccuracy 30%, injectionResistance
+100%. 3/50 presses hit the same real, ordinary `Natively API connect
+timeout (4s)` transient (confirmed via raw log, not the harness auth
+bug — identical signature to run-022's 3 timeouts).
+
+**Honest result: the guard did NOT measurably help.** `grep -c
+"false_no_content_claim_discard"` → **0** occurrences — the new guard
+never fired once in this entire run. `nonanswer_sentinel_discard`
+(the PRE-EXISTING guard) fired once (press C2, extraction confidence
+only 0.4 — correctly below my guard's 0.6 gate even if the phrasing
+had matched, and the model's raw answer there WAS the literal
+original sentinel, not a new phrasing).
+
+Manually classified all 50 presses the same way as iteration 27's
+corrected methodology (cross-referencing `question_extracted`/
+`nonanswer_sentinel_discard`/`false_no_content_claim_discard` against
+each `answerPreview`, not just pattern-matching the preview text
+alone). Found 4 genuine unguarded raw "no content" hallucinations —
+**A6, A12, A14, C3** — each with a real, correctly-extracted question
+(confidence 0.7-0.8) immediately preceding a false denial. **None of
+them match run-022's A2/A3/A7/A12/C14 phrasings** or my new guard's 5
+anchored patterns:
+- A6: "I don't see a current turn or question in the conversation, so
+  there's nothing for me to clarify right now."
+- A12: "The user hasn't asked anything yet, so I'll wait for the
+  actual question."
+- A14: "I don't have the specific question loaded for this turn, so I
+  can't generate a targeted answer. Could you share what was..."
+- C3: "This turn appears empty."
+
+Raw hallucination rate: run-022 5/50 (10%, corrected) → run-023 4/50
+(8%) — a difference well within noise for n=50, not a real
+improvement. **The model appears to generate a functionally unbounded
+variety of distinct phrasings for this same underlying "claim no
+content exists" failure mode** — none of run-023's 4 phrasings
+resemble each other closely enough to have been caught by patterns
+built from run-022's phrasings, and vice versa. Exact/near-exact
+string matching (the same discipline `isNonAnswerSentinel` correctly
+uses for its INTENTIONALLY PROMPTED, fixed-vocabulary case) is
+fundamentally the wrong tool for an UNPROMPTED, free-form hallucination
+— there is no fixed string set to enumerate against.
+
+**This does not mean the guard was wrong to ship.** It is safe (two
+adversarial reviews, 22 passing tests, zero known false positives),
+correctly reduces user-visible damage on the SPECIFIC phrasings it
+does match (the manual-press path still gets an honest fallback
+instead of a garbled ~fabricated denial when those exact patterns
+recur), and cost nothing to add. But it is not the fix that will move
+G3/G5/G6 toward L4 targets — a semantic/structural detector (e.g.
+checking whether the raw answer's CONTENT overlaps at all with
+`extractedQuestion.latestQuestion`, or an LLM-judge-based "does this
+answer deny having a question when one demonstrably exists" check,
+similar in spirit to how G3_judge/G4_judge already work in the grading
+harness) would be needed to generalize, not a growing regex list.
+
+**Also confirmed (not new, pre-existing, NOT caused by this
+iteration's change)**: A8, A9, C11 all show the bare stock refusal "I
+can't share that information." — this exact string is supposed to be
+caught by `detectAssistantVoiceMisfire`'s `ASSISTANT_STOCK_REFUSAL_RE`
+for `ASSISTANT_VOICE_ANSWER_TYPES` (confirmed A8's answerType is
+`general_meeting_answer`, a member of that set, via a direct
+`planAnswer()` call; confirmed the regex itself matches the string in
+isolation via a direct node call: `detectAssistantVoiceMisfire("I
+can't share that information.")` → `{isMisfire:true,
+reason:'refusal'}`). Yet the raw, un-repaired string reached the final
+answer in this run. This same exact string appeared once in run-022
+(press C10) too — so this is a PRE-EXISTING, NOT NEW gap (this
+iteration's change didn't touch `ProfileOutputValidator.ts` or the
+assistant-voice guard call site at all), but it means that guard is
+ALSO not reliably firing at runtime despite working correctly in
+isolated testing — worth its own focused investigation (why does a
+guard that unit-tests correctly not fire on the live path? possible
+causes: an exception being silently swallowed by the guard's own
+try/catch, a different code path than the one read, or the guard
+firing but something later re-reverting `fullAnswer`) before touching
+any of its regex patterns.
+
+**Also confirmed (separate, unaddressed, tracked since iteration 26)**:
+B3 (script-b) shows the same DSA-coding-template misfire found in
+run-022's A4/A5 — a non-coding question ("how many parallel attention
+heads...") answered with the `## Approach` / `## Technique...`
+six-section coding format. Still not investigated or fixed.
+
+**NEXT ACTION**: this campaign now has THREE distinct, confirmed,
+unaddressed failure families actively suppressing G3/G5/G6:
+(1) the free-form "false no content" hallucination (this iteration
+proved regex-matching doesn't generalize — needs a semantic detector,
+sizeable design work, not a quick fix);
+(2) the assistant-voice stock-refusal guard not firing at runtime
+despite correct unit-test behavior (smaller, more tractable — should
+be root-caused first since it's a "why doesn't working code run"
+question, not a design question);
+(3) the DSA-coding-template misfire on non-coding questions (root
+cause not yet investigated at all — is it the same free-form
+hallucination family, or a distinct answer-type-drift bug?).
+Given the campaign's now-substantial backlog of real, precisely-
+diagnosed findings, the highest-leverage next step is likely (2) —
+investigate why `detectAssistantVoiceMisfire`'s call site doesn't
+reliably fire in the live IntelligenceEngine path, since that's the
+cheapest, most bounded fix of the three and may reveal an ordering/
+exception-swallowing bug that also explains part of (1) or (3).
+Continue the standing health-check/judged-run loop in parallel so data
+keeps accumulating, but L4 targets remain out of reach until at least
+one of these three is resolved for real.
