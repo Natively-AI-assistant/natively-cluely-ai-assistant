@@ -18,7 +18,7 @@ import {
     detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES,
     raceStreamWithDeadline, LIVE_INTER_TOKEN_STALL_MS, LIVE_TOTAL_HARD_TIMEOUT_MS,
     LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS, isLeakedSchemaStub,
-    isProviderTransportError,
+    isProviderTransportError, isLeakedInternalTagBlock,
     cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE,
     buildProfileJitPrompt, decideSessionWritePolicy
 } from './llm';
@@ -2044,6 +2044,44 @@ export class IntelligenceEngine extends EventEmitter {
                 this.emit('suggested_answer', fullAnswer, question || extractedQuestion.latestQuestion || 'inferred', confidence);
                 this.setMode('idle');
                 return fullAnswer;
+            }
+            // LEAKED-INTERNAL-TAG-BLOCK GUARD — same early-return discipline as
+            // the two guards above. Campaign 2, run-023 press A7 root-cause work
+            // (2026-07-18) surfaced a SIBLING bug to the think-tag leak fixed in
+            // natively-api: the model sometimes opens its ENTIRE visible answer
+            // with a leaked internal instruction/state-tracking block instead of
+            // a real spoken answer — either a REAL prompt-structure tag name
+            // (`<injected_context>`, `<active_mode>`, `<answer_contract>`,
+            // `<conversation_state>`, `<rewrite_instructions>` — all genuinely
+            // defined in prompts.ts/AnswerPlanner.ts/the repair-prompt builders
+            // above) or an INVENTED one in the same style
+            // (`<answerShapeSpec>`, `<rewrite_directive>`,
+            // `<rewrite_rules_for_self_check>` — none exist anywhere in this
+            // codebase). Confirmed across 12 live occurrences spanning
+            // test/harness-longsession/reports/ runs 001-023: in every case the
+            // ENTIRE visible answer is meta/instructional content, never a
+            // leaked tag followed by a genuine spoken answer — so, like the
+            // schema-stub guard, full replacement (not partial stripping) is
+            // correct here. Most acute instance: press A7 (see the natively-api
+            // fix) fabricated a complete unrelated candidate identity inside
+            // exactly this shape of leak; that specific case is now caught
+            // upstream by the think-tag stripper, but this guard covers every
+            // OTHER shape (no think-close tag present) that stripper can't see.
+            if (fullAnswer && isLeakedInternalTagBlock(fullAnswer)) {
+                const tagLeakFallback = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
+                    ? "I don't have enough context from the conversation to answer that yet."
+                    : "The model produced an invalid answer artifact, so I won't guess from your profile. Please try again.";
+                trace.mark('fallback_answer_used', { answerType: answerPlan.answerType, reason: 'leaked_internal_tag_block', finalGenerationMode: 'provider_error_no_answer' });
+                const tagLeakWriteDecision = decideSessionWritePolicy({
+                    finalGenerationMode: 'provider_error_no_answer',
+                    validationOk: false,
+                    criticalViolations: ['leaked_internal_tag_block'],
+                });
+                if (openedStreamRow) emitChunk(tagLeakFallback);
+                this.session.addAssistantMessage(tagLeakFallback, tagLeakWriteDecision, 'what_to_answer');
+                this.emit('suggested_answer', tagLeakFallback, question || extractedQuestion.latestQuestion || 'inferred', confidence);
+                this.setMode('idle');
+                return tagLeakFallback;
             }
 
             trace.mark('validation_started', { answerType: answerPlan.answerType });

@@ -55,6 +55,50 @@ export function isLeakedSchemaStub(text: string): boolean {
   return false;
 }
 
+/** A whole answer that OPENS with a leaked internal instruction/state block —
+ *  a snake_case/underscore-shaped pseudo-XML tag the model reproduced from its
+ *  own prompt scaffolding (real examples seen live: `<injected_context>`,
+ *  `<active_mode>`, `<answer_contract>`, `<conversation_state>`,
+ *  `<rewrite_instructions>`, `<context_intelligence_check>`) OR invented in
+ *  the same style (`<answerShapeSpec>`, `<rewrite_directive>`,
+ *  `<rewrite_rules_for_self_check>` — none of these literal names exist
+ *  anywhere in this codebase's prompts, yet the model produced them). A
+ *  CLOSED list of known real tag names is the wrong tool here: at least 9 of
+ *  12 live-caught occurrences across `test/harness-longsession/reports/`
+ *  runs 001-023 used a tag name that is NOT one of the real prompt-structure
+ *  blocks — the model is reliably reproducing the SHAPE (a leading
+ *  snake_case/camelCase pseudo-tag followed by meta/instructional prose) even
+ *  when it doesn't recall the exact name. Detection keys on that shape
+ *  instead: the first non-whitespace content is an opening tag whose name
+ *  looks like an internal identifier (snake_case or camelCase, never a plain
+ *  HTML element name a real spoken answer would use), AND either the tag is
+ *  self-closing-with-body-then-more-tags or the immediately following prose
+ *  reads like meta-instruction rather than a spoken first-person answer. Kept
+ *  deliberately narrow to the OPENING position only — a real answer that
+ *  later happens to mention or discuss a tag in prose is untouched, matching
+ *  the same leading-only precedent `isLeakedSchemaStub` and the meta-preamble
+ *  stripper above already use. */
+const SNAKE_KEBAB_TAG_RE = /^[a-z][a-z0-9]*(?:[_-][a-z0-9]+)+$/i;    // injected_context, active-mode
+const CAMEL_CASE_TAG_RE = /^[a-z]+[A-Z][a-zA-Z0-9]*$/;                // answerShapeSpec
+const KNOWN_SINGLE_WORD_INTERNAL_TAGS = new Set(['resume', 'persona']);
+export function isLeakedInternalTagBlock(text: string): boolean {
+  if (!text) return false;
+  const t = text.trim();
+  const m = t.match(/^<([a-zA-Z][a-zA-Z0-9_:-]*)\b[^>]*>/);
+  if (!m) return false;
+  const rawTagName = m[1]; // case preserved for camelCase check
+  const tagName = rawTagName.toLowerCase();
+  const looksInternal = SNAKE_KEBAB_TAG_RE.test(rawTagName)
+    || CAMEL_CASE_TAG_RE.test(rawTagName)
+    || KNOWN_SINGLE_WORD_INTERNAL_TAGS.has(tagName);
+  if (!looksInternal) return false;
+  // Never a real spoken answer's opener — real answers in this app are
+  // first-person prose, not markup. The rest of the answer being long/short
+  // doesn't matter; ANY answer whose first token is an internal-shaped tag is
+  // a leak, since a genuine speakable answer never legitimately opens this way.
+  return true;
+}
+
 /** The exact provider-transport-error message WhatToAnswerLLM.generateStream's
  *  catch block yields when the stream itself fails (expired key, 429 rate
  *  limit, billing) — see WhatToAnswerLLM.ts's `isProviderFailure` branch. This
