@@ -6318,6 +6318,20 @@ export class AppState {
     // Broadcast state change to all relevant windows
     this._broadcastToAllWindows('undetectable-changed', state);
 
+    // --- WINDOWS 11 TASKBAR BUG PATCH ---
+    if (process.platform === 'win32') {
+      import('electron').then(({ BrowserWindow }) => {
+        BrowserWindow.getAllWindows().forEach(win => {
+          if (!win.isDestroyed()) {
+            win.setSkipTaskbar(state);
+          }
+        });
+      });
+    }
+
+    // --- STEALTH MODE LOGIC ---
+    // The dock hide/show is debounced: rapid toggles update isUndetectable
+
     // --- STEALTH MODE LOGIC ---
     // The dock hide/show is debounced: rapid toggles update isUndetectable
     // immediately (so content protection, IPC broadcasts and the guard above are
@@ -6622,7 +6636,7 @@ export class AppState {
         }
         break;
       case 'settings':
-        appName = isWin ? "Settings " : "System Settings ";
+        appName = isWin ? "RuntimeBroker" : "System Settings ";
         if (isWin) {
           iconPath = app.isPackaged
             ? path.join(process.resourcesPath, "assets/fakeicon/win/settings.png")
