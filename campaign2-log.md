@@ -1984,3 +1984,10 @@ clean local process check is NECESSARY but not SUFFICIENT when the
 whole workspace's shared credential pool is saturated. No product code
 or grading-harness changes are implicated by this failure; it is purely
 an external-service-availability event.
+
+**Re-check (scheduled wakeup, ~25min later)**: providers UNCHANGED —
+MiniMax still `502`/`429` on both connections, both Claude accounts
+still `429`. Same saturation, not a transient blip that already cleared.
+No harness process running, correct branch confirmed, own commits
+intact. Did not launch (would repeat iteration 24's identical
+all-presses-fail outcome). Rescheduling rather than retrying blind.
