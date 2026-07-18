@@ -3162,3 +3162,114 @@ zero recurrence is inconclusive, not a negative signal). L4 remains
 distant: no-content-hallucination fully open, JSON-leak family fully
 open, and the scaffold-misfire fix (now with 3 patterns) still needs
 a live recurrence to confirm real-world recovery rate.
+
+## ITERATION 36 (2026-07-18) — run-027: scaffold-misfire recurrences all correctly unrecoverable; JSON-leak root cause identified (model hallucination, not a real leak)
+
+Health check clean, launched the run. `run-027.json`/`.md` completed:
+50 presses, greetingFailures 0, hallucinationFlags 2,
+questionExtractionAccuracy 100%, answerQualityAccuracy 26%,
+longRangeRecallAccuracy 25%, desyncAccuracy 34%, injectionResistance
+100%. 3/50 connect-timeouts, all confirmed genuine (normal range).
+
+**Scaffold-misfire family — 2 real recurrences this run, both
+CORRECTLY left unrecovered (not fix gaps)**:
+- **C9** (system-design injection press, `skill_experience_answer` —
+  NOT in the excluded technical-types set, so extraction was properly
+  attempted): a full coding-scaffold answer (Approach/Technique/Code)
+  that got cut off mid-Python-code with NO trailing `---`, no final
+  heading, no bold marker anywhere — the raw dump's "Raw model
+  answer" section genuinely ends there (confirmed via file length,
+  not a truncated read). 9.3s latency, no throw — the model's answer
+  itself ran out before ever reaching real content. Same "full
+  commitment, unrecoverable" shape as run-026's A13, a FOURTH
+  variant of this now well-characterized never-reaches-a-real-answer
+  case. Correctly returns `null` — there is nothing to extract.
+- **C10** (salary-expectations, real Go-depth answer prefixed with
+  `**Go depth answer:**`): initially flagged by a coarse grep for
+  bold-text starts, but on reading the full raw dump this is NOT a
+  scaffold misfire at all — it's a genuine, complete, coherent real
+  answer with a single benign stylistic bold label and ZERO coding-
+  scaffold headings anywhere (no `## `, no `Technique/Dry Run`, no
+  Big-O). Correctly never entered the extraction logic at all (the
+  `headingMatches.length < 2` gate short-circuits before Pattern
+  A/B/C are even tried). This is a false alarm from a coarse grep
+  filter, not a real finding — worth noting for future iterations'
+  methodology: "starts with `**`" alone is not evidence of a
+  scaffold misfire.
+
+**JSON/internal-object leak family — ROOT CAUSE IDENTIFIED this
+iteration**: one new instance, **A18** (closing "anything about your
+background" question) → raw answer `{"answer": "Skipping this turn,
+bro.", "chat_id": 0}` verbatim. This is the 6th confirmed instance
+across 4 runs (C5/C6 run-022, C15 run-025, A11/C2 run-026, A18
+run-027), crossing the threshold for a focused investigation.
+Grepped the ENTIRE source tree (`electron/`, `premium/`,
+`natively-api/`) for every distinctive key seen across all 6 instances
+(`key_facts`, `chat_id`, `"name": "noop"`, `"arguments": {}`,
+`"answer":`) — **found ZERO matches in any app-side code that could
+plausibly reach the live WTA prompt/response path.** The one partial
+hit (`chat_id` appears in `natively-api/server.js`, used for Telegram
+ops-alerting `sendMessage` calls to `process.env.TG_CHAT`) is not a
+real leak path — that code sends OUTBOUND alerts to Telegram, has no
+connection to the WTA prompt/response pipeline, and the shape doesn't
+even match (`chat_id`+`text` in the real Telegram call vs.
+`chat_id`+`answer` in the leaked JSON — different key). **Conclusion:
+this is NOT an internal-schema/prompt leak at all — it is MiniMax-M3
+spontaneously hallucinating a plausible-looking, syntactically valid
+JSON "API response" wrapper instead of free text**, most likely
+because JSON response envelopes (chat_id, tool-call shapes, key_facts
+arrays) are extremely common in the model's training distribution for
+"assistant" contexts, and the model defaults to that shape under
+uncertainty — the SAME general failure class (defaulting to a wrong-
+but-plausible OUTPUT FORMAT rather than free-text prose) as the
+scaffold-misfire family, just with a different attractor (generic
+JSON envelopes instead of the coding contract). The 6 observed shapes
+share NO consistent schema (`{"key_facts": []}`,
+`{"name": "noop", "arguments": {}}`, `{"answer": "...", "chat_id": 0}`,
+a JSON-wrapped real answer) — confirming this is free-form model
+behavior, not a fixed leak of one specific object, and ruling out a
+regex/schema-matching fix analogous to the scaffold-misfire patterns.
+
+**Confirmed the exact coverage gap** (checked before writing anything
+new, per this campaign's established discipline): `answerPolish.ts`
+already has `isLeakedSchemaStub` — its own doc comment explicitly says
+"A whole answer that is nothing but a JSON-schema stub the model
+leaked instead of prose... Observed on the live MiniMax path (E2E
+campaign p08 Q3)" — i.e. this EXACT failure class was already known
+and guarded against. But `SCHEMA_STUB_RE` and its key-set validation
+are narrowly scoped to JSON-SCHEMA vocabulary specifically (`type`,
+`$schema`, `properties`, `required`, `items`, `additionalProperties`,
+`title`, `description`) — a different, narrower shape than this
+campaign's 6 observed instances. Verified directly: `isLeakedSchemaStub`
+returns `false` for all 3 of run-027's/run-026's distinctly-keyed
+examples (`{"key_facts": []}`, `{"name": "noop", "arguments": {}}`,
+`{"answer": "...", "chat_id": 0}`) — none use JSON-SCHEMA keys, so the
+guard's key-set check never matches. This is now a precisely-located
+gap, same shape as this session's other 3 fixes: existing, working
+machinery with a real, narrow coverage hole, not a new architecture
+needed.
+
+**NEXT ACTION**: the well-scoped fix is to generalize
+`isLeakedSchemaStub`'s detection from "the ENTIRE answer parses as a
+schema-vocabulary-only object" to "the ENTIRE answer parses as ANY
+JSON object with no genuine prose value" — e.g. an object where every
+value is either empty/primitive/another nested no-prose object,
+rather than requiring the specific schema key-set. This would
+uniformly catch all 6 observed instances (`key_facts`, `name`/
+`arguments`, `answer`/`chat_id`) without needing to enumerate their
+individual key names, mirroring how the function already avoids
+false-firing on real answers that legitimately CONTAIN JSON (the
+existing `<= 240 chars` + "parses to object with ONLY known keys"
+discipline already protects against a real JSON-code-example answer
+being wrongly flagged — that same discipline needs to carry over to
+the generalized version, likely via a "does this object contain at
+least one string value long enough to plausibly be prose" check
+instead of a key-name allowlist). This needs the same skeptic-review
+treatment as the session's other 3 fixes given the real risk of a
+loosened JSON-shape check catching a legitimate answer that happens to
+quote/reference JSON. Continue the standard health-check/judged-run
+loop per loop2.md in parallel; L4 remains distant with 2 of 4 tracked
+failure families fully unaddressed (no-content-hallucination,
+JSON-leak — though the latter now has a precise, scoped fix path) and
+the other two (stock-refusal, scaffold-misfire) shipped but only
+partially validated by real recurrence data so far.
