@@ -1203,7 +1203,7 @@ export class ModeHybridRetriever {
             const gate = confidence
                 ?? this.computeConfidence(candidates, queryWords.size, allCandidates.length, usedFallback);
             const lowConfidence = gate.lowConfidence === true;
-            markH4HybridStage('rerank_gate', { lowConfidence, candidateCount: candidates.length });
+            markH4HybridStage('rerank_gate', { lowConfidence, candidateCount: candidates.length, hasOverride: Boolean(this.rerankerOverride) });
             if (lowConfidence) {
                 // A manual-chat answer has a fixed first-useful deadline. The local
                 // cross-encoder is optional ranking refinement, so it must never

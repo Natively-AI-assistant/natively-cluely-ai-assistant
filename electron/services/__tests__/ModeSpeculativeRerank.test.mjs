@@ -54,7 +54,7 @@ const SPEC = 'NATIVELY_RAG_SPECULATIVE_RERANK';
 
 function multiChunkFile() {
   // Exceed the production chunk window so the reranker has multiple candidates.
-  const filler = (w) => new Array(700).fill(w).join(' ');
+  const filler = (w) => new Array(700).fill(`${w}.`).join(' ');
   const content = [filler('intro'), filler('payload'), filler('appendix')].join(' ');
   return [{ id: 'fileA', modeId: 'mode1', fileName: 'doc.txt', content, createdAt: new Date().toISOString() }];
 }
@@ -93,7 +93,7 @@ describe('Phase 3: live-path speculative rerank', () => {
       tokenBudget: 4000, topK: 6, allowRerank: true, // live caller passes this when speculative flag on
       forceDocumentGrounding: true,
     });
-    assert.ok(observed, 'reranker consulted on the live path when allowRerank true');
+    assert.ok(observed, `reranker consulted on the live path when allowRerank true; chunks=${result.chunks.length}`);
     assert.ok(result.chunks[0].text.includes('payload'), 'payload chunk promoted');
   });
 
