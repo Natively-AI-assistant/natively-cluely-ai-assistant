@@ -604,10 +604,12 @@ export function intelligenceFlagKeys(): IntelligenceFlagKey[] {
 // silently, for internal verification builds only.
 
 /**
- * The flags a verification build expects to be ON (mirrors the dev/test
- * defaults these flags were designed to have). Kept as a short, explicit list
- * rather than "every isInternalDevTestContext() flag" so this assertion is
- * legible and doesn't silently grow/shrink as unrelated flags are added.
+ * The flags a verification build expects to be ON. Kept as a short, explicit
+ * list rather than "every isInternalDevTestContext() flag" so this assertion is
+ * legible and doesn't silently grow/shrink as unrelated flags are added. The
+ * Context OS core entries are production-default-ON; the retrieval/OKF entries
+ * remain a verification-only expectation because production deliberately keeps
+ * those higher-cost augmentations opt-in.
  */
 export const REQUIRED_CONTEXT_OS_FLAGS_FOR_VERIFICATION: IntelligenceFlagKey[] = [
   'ragConfidenceGate',
@@ -615,6 +617,12 @@ export const REQUIRED_CONTEXT_OS_FLAGS_FOR_VERIFICATION: IntelligenceFlagKey[] =
   'okfKnowledgePacks',
   'okfHybridRetrieval',
   'jitFinalAnswerEnforced',
+  'contextOsEnabled',
+  'contextOsManualChatEnabled',
+  'contextOsWtaEnabled',
+  'contextOsRecapFollowupEnabled',
+  'contextOsEvidencePackEnabled',
+  'contextOsMemorySafetyEnabled',
 ];
 
 /**

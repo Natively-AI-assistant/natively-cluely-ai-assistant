@@ -42,6 +42,15 @@ const RESTORED_ENV_KEYS = [
   'NATIVELY_OKF_KNOWLEDGE_PACKS',
   'NATIVELY_OKF_HYBRID_RETRIEVAL',
   'NATIVELY_JIT_FINAL_ANSWER_ENFORCED',
+  'NATIVELY_CONTEXT_OS',
+  'NATIVELY_CONTEXT_OS_MANUAL_CHAT',
+  'NATIVELY_CONTEXT_OS_WTA',
+  'NATIVELY_CONTEXT_OS_RECAP_FOLLOWUP',
+  'NATIVELY_CONTEXT_OS_EVIDENCE_PACK',
+  'NATIVELY_CONTEXT_OS_MEMORY_SAFETY',
+  'NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES',
+  'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION',
+  'NATIVELY_CONTEXT_OS_MULTI_FAMILY_EVIDENCE',
   'NATIVELY_VERIFICATION_MODE',
   'NODE_ENV',
   'BENCHMARK_MODEL',
@@ -69,7 +78,7 @@ describe('flag-parity verification (2026-07-14)', () => {
     assert.equal(isIntelligenceFlagEnabled('jitFinalAnswerEnforced'), true);
   });
 
-  test('outside a dev/test/benchmark context (production-like), the 4 context-gated flags resolve to false; jitFinalAnswerEnforced stays true', () => {
+  test('outside a dev/test/benchmark context, core Context OS flags are production-on while costly retrieval augmentation stays off', () => {
     // No NODE_ENV, no BENCHMARK_MODEL, no NATIVELY_INTERNAL/DEV → production-like.
     assert.equal(isIntelligenceFlagEnabled('ragConfidenceGate'), false);
     assert.equal(isIntelligenceFlagEnabled('ragLocalRerank'), false);
@@ -77,6 +86,30 @@ describe('flag-parity verification (2026-07-14)', () => {
     assert.equal(isIntelligenceFlagEnabled('okfHybridRetrieval'), false);
     assert.equal(isIntelligenceFlagEnabled('jitFinalAnswerEnforced'), true,
       'jitFinalAnswerEnforced is the intended production policy, not a dev/test experiment');
+    for (const key of [
+      'contextOsEnabled',
+      'contextOsManualChatEnabled',
+      'contextOsWtaEnabled',
+      'contextOsRecapFollowupEnabled',
+      'contextOsEvidencePackEnabled',
+      'contextOsMemorySafetyEnabled',
+    ]) {
+      assert.equal(isIntelligenceFlagEnabled(key), true, `${key} is production-default-on`);
+    }
+    for (const key of [
+      'contextOsEnforceSourceCapabilities',
+      'contextOsPropertyValidation',
+      'contextOsMultiFamilyEvidenceEnabled',
+    ]) {
+      assert.equal(isIntelligenceFlagEnabled(key), false, `${key} remains production-default-off`);
+    }
+  });
+
+  test('an explicit OFF remains an immediate kill switch for a production-default Context OS surface', () => {
+    process.env.NATIVELY_CONTEXT_OS = '0';
+    assert.equal(isIntelligenceFlagEnabled('contextOsEnabled'), false);
+    process.env.NATIVELY_CONTEXT_OS_MANUAL_CHAT = 'off';
+    assert.equal(isIntelligenceFlagEnabled('contextOsManualChatEnabled'), false);
   });
 
   test('an explicit env override still wins over the restored default (both directions)', () => {
@@ -110,11 +143,30 @@ describe('flag-parity verification (2026-07-14)', () => {
     assert.doesNotThrow(() => assertVerificationFlagsOrThrow());
   });
 
-  test('the required-flags list is exactly the 5 flags named in the divergence report — a real, legible list, not "every flag"', () => {
+  test('the required-flags list explicitly includes the promoted core pipeline without absorbing strict enforcement gates', () => {
     assert.deepEqual(
       new Set(REQUIRED_CONTEXT_OS_FLAGS_FOR_VERIFICATION),
-      new Set(['ragConfidenceGate', 'ragLocalRerank', 'okfKnowledgePacks', 'okfHybridRetrieval', 'jitFinalAnswerEnforced']),
+      new Set([
+        'ragConfidenceGate',
+        'ragLocalRerank',
+        'okfKnowledgePacks',
+        'okfHybridRetrieval',
+        'jitFinalAnswerEnforced',
+        'contextOsEnabled',
+        'contextOsManualChatEnabled',
+        'contextOsWtaEnabled',
+        'contextOsRecapFollowupEnabled',
+        'contextOsEvidencePackEnabled',
+        'contextOsMemorySafetyEnabled',
+      ]),
     );
+    for (const strictFlag of [
+      'contextOsEnforceSourceCapabilities',
+      'contextOsPropertyValidation',
+      'contextOsMultiFamilyEvidenceEnabled',
+    ]) {
+      assert.equal(REQUIRED_CONTEXT_OS_FLAGS_FOR_VERIFICATION.includes(strictFlag), false);
+    }
   });
 
   test('intelligenceFlagSnapshot: snapshot reflects the exact same resolution as isIntelligenceFlagEnabled for every flag', () => {
