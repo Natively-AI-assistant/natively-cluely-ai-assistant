@@ -75,6 +75,12 @@ QUOTA (iteration 1, 2026-07-19 ~13:43 local): Account1 81% session / 15% weekly 
 ~11:00 UTC rolling). Account2 29% session / 84% weekly. Both above 20% pre-benchmark gate;
 neither fully out → continuing normally per §9.
 
+QUOTA (iteration 2, 2026-07-19 ~16:25 local, after TurnPlanner module + 16 tests + dist build):
+Account1 52% session / 10% weekly. Account2 0% session / 81% weekly (fully out, but 9Router
+fails over to Account1). Account1 session 52% > 10% threshold → continuing per §9. Weekly 10%
+is tight but the next iteration is a small wire-up (not a full benchmark) — pause only if a
+full benchmark is queued and weekly is below 15%.
+
 ## GOLDEN TRACE — "BEFORE" STATE (5 micro-suite questions vs current code)
 Run: `CTXOS_HARNESS_CASE_IDS=C3M-001..C3M-005` on live WTA path (real Electron +
 real natively-api MiniMax-M3 backend, 47–52s/case). Commit 3c0621f6. Saved to
