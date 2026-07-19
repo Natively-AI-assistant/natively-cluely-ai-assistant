@@ -531,3 +531,47 @@ per founder §8.
 3. **Once regression suites pass**: re-run the matrix suite in live
    mode (it already has a unit-test equivalent; the live version
    exercises the full Electron + backend stack).
+
+### ITERATION 9 (2026-07-19) — SourceBadge wired into IPC types + overlay render
+
+Wires SourceBadge (founder §2.6) into the renderer surface.
+
+**Changes:**
+- `electron/preload.ts`: extends `onSuggestionGenerated` type signature
+  to include optional `sourceLabel?: string` on the payload (both API
+  surface sites; backward-compatible).
+- `src/components/SuggestionOverlay.tsx`: extends `GeneratedSuggestion`
+  interface with optional `sourceLabel`; renders a small pill under the
+  suggestion text with the label, falling back to `'General knowledge'`
+  when the emitter doesn't carry the field.
+
+**Sender TODO (next iter):** The renderer is correctly set up to display
+the badge. The main-process emitter (`webContents.send('suggestion-generated',
+…)`) doesn't currently exist in the codebase — once it's added (one
+line at the existing `emit('suggested_answer', …)` call site), the badge
+appears immediately.
+
+**Results (regression check):**
+- Unit suites: **59/59** (TurnPlanner core 16 + matrix 14 + PromptBuilder
+  6 + SourceBadge 14 + Seminar 9). No regressions.
+- Micro-suite live: **5/5** (regression-checked post-wiring).
+
+**Commit:** `2103f94e`.
+
+## NEXT ACTION (iteration 9 → 10):
+1. **PAUSED FOR QUOTA** (founder §9): Acct2 session 5% (below 10%
+   pause gate) while Acct1 72% session (not out). Per §9: "Pause ONLY
+   when one account is out AND the other ≤10% session" — this matches.
+   Schedule a delayed wakeup at Acct2's session reset + 2min (no
+   polling). Re-check on resume; if still ≤10% session, schedule
+   another 15min wakeup. Never run heavy benchmarks below 15%.
+2. While paused: ship code-only polish. The next cheapest, quota-free
+   item is the `webContents.send('suggestion-generated', …)` emitter
+   wiring in the main process — a single line at the existing
+   `emit('suggested_answer', …)` call site that carries `sourceLabel`
+   through. This is iter-10 work and completes the source-badge UX
+   end-to-end without any quota cost.
+
+QUOTA (iteration 9, 2026-07-19 ~21:00 local): Acct1 72% session / 4%
+weekly. **Acct2 5% session / 71% weekly** (session dropped below 10%
+pause gate). Per §9 paused.
